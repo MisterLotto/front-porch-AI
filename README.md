@@ -43,13 +43,20 @@ A powerful, cross-platform desktop application designed to streamline the manage
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- **OS**: Windows (primary support), Linux, or macOS.
-- **KoboldCPP**: The app can download this for you, or you can point it to your existing executable.
-- **Hardware**: A GPU is recommended for the best experience, but CPU inference is supported.
+### 📦 For Regular Users
+If you just want to use the app, simply head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page and download the latest `.zip` or `.exe` for your platform (Windows/macOS/Linux). No setup required!
 
-### Installation
+---
 
+### 🛠️ For Developers & Tinkerers
+If you want to modify the code or build from source, follow these steps:
+
+#### Prerequisites
+- **Flutter Environment**: You must have the [Flutter SDK](https://docs.flutter.dev/get-started/install) installed and configured on your system.
+- **Git**: To clone the repository.
+- **OS**: Windows, Linux, or macOS.
+
+#### Installation
 1.  **Clone the Repository**:
     ```bash
     git clone https://github.com/linux4life1/front-porch-ai.git
@@ -63,9 +70,8 @@ A powerful, cross-platform desktop application designed to streamline the manage
 
 3.  **Run the App**:
     ```bash
-    flutter run -d windows
+    flutter run
     ```
-    *(Replace `windows` with `linux` or `macos` as needed)*
 
 ### Building for Release
 To create a standalone executable:
