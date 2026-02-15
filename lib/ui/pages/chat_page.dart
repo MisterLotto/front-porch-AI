@@ -442,15 +442,21 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
           const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.send, color: Colors.blueAccent),
-            onPressed: () {
-               if (_controller.text.isNotEmpty && !chatService.isGenerating) {
-                  chatService.sendMessage(_controller.text);
-                  _controller.clear();
-               }
-            },
-          ),
+          chatService.isGenerating
+            ? IconButton(
+                icon: const Icon(Icons.stop_circle, color: Colors.redAccent),
+                tooltip: 'Stop Generation',
+                onPressed: () => chatService.stopGeneration(),
+              )
+            : IconButton(
+                icon: const Icon(Icons.send, color: Colors.blueAccent),
+                onPressed: () {
+                   if (_controller.text.isNotEmpty && !chatService.isGenerating) {
+                      chatService.sendMessage(_controller.text);
+                      _controller.clear();
+                   }
+                },
+              ),
         ],
       ),
     );
@@ -710,6 +716,16 @@ class _MessageBubble extends StatelessWidget {
                       if (!message.isUser) const Spacer(),
                       if (message.sender != 'System') 
                         IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.white38),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Edit message',
+                          onPressed: () => _showEditDialog(context, index),
+                        ),
+                      if (message.sender != 'System')
+                        const SizedBox(width: 8),
+                      if (message.sender != 'System') 
+                        IconButton(
                           icon: const Icon(Icons.delete_outline, size: 16, color: Colors.white38),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -761,6 +777,49 @@ class _MessageBubble extends StatelessWidget {
       ),
     );
   }
+
+  void _showEditDialog(BuildContext context, int index) {
+    final chatService = Provider.of<ChatService>(context, listen: false);
+    final controller = TextEditingController(text: message.text);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('Edit Message'),
+        content: SizedBox(
+          width: 500,
+          child: TextField(
+            controller: controller,
+            maxLines: 10,
+            minLines: 3,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF374151),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              chatService.editMessage(index, controller.text);
+              Navigator.of(context).pop();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _StyledChatMessage extends StatelessWidget {
@@ -771,57 +830,47 @@ class _StyledChatMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Regex for:
-    // 1. Text inside quotes: "..."
-    // 2. Text inside asterisks: *...*
-    final regExp = RegExp(r'("[^"]*")|(\*[^*]*\*)');
-    final matches = regExp.allMatches(text);
+    // Two-pass approach:
+    // Pass 1: Split on asterisk blocks *...*
+    // Pass 2: Within each segment, colorize quoted dialogue "..."
+    // This ensures quotes inside asterisk blocks still get yellow treatment
 
-    if (matches.isEmpty) {
+    const plainStyle = TextStyle(color: Colors.white);
+    const dialogueStyle = TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.w500);
+    const actionStyle = TextStyle(color: Color(0xFF90CAF9));
+
+    final asteriskRegex = RegExp(r'\*[^*]+\*');
+    final quoteRegex = RegExp(r'"[^"]*"');
+
+    List<TextSpan> spans = [];
+
+    // Pass 1: Split by asterisk blocks
+    int lastEnd = 0;
+    for (final match in asteriskRegex.allMatches(text)) {
+      // Process plain text before this asterisk block
+      if (match.start > lastEnd) {
+        _addColorizedQuotes(spans, text.substring(lastEnd, match.start), plainStyle, dialogueStyle, quoteRegex);
+      }
+
+      // Process the asterisk block — colorize inner quotes as yellow, rest as blue
+      final blockText = match.group(0)!;
+      _addColorizedQuotes(spans, blockText, actionStyle, dialogueStyle, quoteRegex);
+
+      lastEnd = match.end;
+    }
+
+    // Process remaining text after last asterisk block
+    if (lastEnd < text.length) {
+      _addColorizedQuotes(spans, text.substring(lastEnd), plainStyle, dialogueStyle, quoteRegex);
+    }
+
+    if (spans.isEmpty) {
       return SelectionArea(
         child: Text(
           text,
           style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
         ),
       );
-    }
-
-    List<TextSpan> spans = [];
-    int lastMatchEnd = 0;
-
-    for (final match in matches) {
-      // Add plain text before match
-      if (match.start > lastMatchEnd) {
-        spans.add(TextSpan(
-          text: text.substring(lastMatchEnd, match.start),
-          style: const TextStyle(color: Colors.white),
-        ));
-      }
-
-      final matchText = match.group(0)!;
-      if (matchText.startsWith('"')) {
-        // Dialogue (Yellow)
-        spans.add(TextSpan(
-          text: matchText,
-          style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.w500),
-        ));
-      } else if (matchText.startsWith('*')) {
-        // Action (Blue)
-        spans.add(TextSpan(
-          text: matchText,
-          style: const TextStyle(color: Color(0xFF90CAF9)), // Light Blue 200
-        ));
-      }
-
-      lastMatchEnd = match.end;
-    }
-
-    // Add remaining plain text
-    if (lastMatchEnd < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastMatchEnd),
-        style: const TextStyle(color: Colors.white),
-      ));
     }
 
     return SelectionArea(
@@ -832,6 +881,22 @@ class _StyledChatMessage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Splits a segment of text by quoted dialogue and adds spans.
+  /// Non-quoted text gets [baseStyle], quoted text gets [dialogueStyle].
+  void _addColorizedQuotes(List<TextSpan> spans, String segment, TextStyle baseStyle, TextStyle dialogueStyle, RegExp quoteRegex) {
+    int lastEnd = 0;
+    for (final match in quoteRegex.allMatches(segment)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: segment.substring(lastEnd, match.start), style: baseStyle));
+      }
+      spans.add(TextSpan(text: match.group(0)!, style: dialogueStyle));
+      lastEnd = match.end;
+    }
+    if (lastEnd < segment.length) {
+      spans.add(TextSpan(text: segment.substring(lastEnd), style: baseStyle));
+    }
   }
 }
 

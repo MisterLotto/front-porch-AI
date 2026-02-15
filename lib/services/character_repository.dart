@@ -58,20 +58,60 @@ class CharacterRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteCharacter(CharacterCard character) async {
+    // Remove from in-memory list
+    _characters.remove(character);
+    notifyListeners();
+    
+    // Delete the PNG file from disk
+    if (character.imagePath != null) {
+      try {
+        final file = File(character.imagePath!);
+        if (await file.exists()) {
+          await file.delete();
+          print('AG_DEBUG: Deleted character file: ${character.imagePath}');
+        }
+      } catch (e) {
+        print('Error deleting character file: $e');
+      }
+    }
+  }
+
   Future<void> importCharacter(File file) async {
     _isLoading = true;
     notifyListeners();
     try {
-      // Stub implementation for now - just adds a dummy character
-      // In real implementation, this would parse the PNG/JSON
-      await Future.delayed(const Duration(seconds: 1)); // Simulate work
+      final v2Service = V2CardService();
       
-      final newChar = CharacterCard(
-        name: 'Imported Character',
-        description: 'Imported from ${file.path}',
-        imagePath: file.path,
-      );
-      addCharacter(newChar);
+      // Parse the V2 card data from the PNG tEXt chunk
+      CharacterCard? card = await v2Service.readCard(file.path);
+      
+      // Fallback if no V2 data found in the PNG
+      if (card == null) {
+        final fileName = file.path.split('/').last.split('.').first;
+        card = CharacterCard(
+          name: fileName,
+          description: '',
+          imagePath: file.path,
+        );
+      }
+      
+      // Copy the file to the app's characters directory
+      final directory = await getApplicationDocumentsDirectory();
+      final charDir = Directory('${directory.path}/KoboldManager/Characters');
+      if (!await charDir.exists()) {
+        await charDir.create(recursive: true);
+      }
+      
+      // Use the character name for the filename, sanitized
+      final safeName = card.name.replaceAll(RegExp(r'[^\w\s\-]'), '').replaceAll(' ', '_');
+      final destPath = '${charDir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.png';
+      await file.copy(destPath);
+      
+      // Update the imagePath to point to the local copy
+      card.imagePath = destPath;
+      
+      addCharacter(card);
       
     } catch (e) {
       rethrow;

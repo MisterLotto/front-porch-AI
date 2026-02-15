@@ -20,17 +20,22 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _gpuLayersController = TextEditingController(text: '0');
-  final _contextSizeController = TextEditingController(text: '4096');
+  final _contextSizeController = TextEditingController(text: '8192');
+  double _contextSizeValue = 8192;
   final _apiController = TextEditingController();
   bool _useVulkan = false;
   bool _useCublas = false;
   bool _useMetal = false;
   String? _selectedModelPath;
+  late final TextEditingController _systemPromptController;
 
   @override
   void initState() {
     super.initState();
     _apiController.text = Provider.of<KoboldService>(context, listen: false).baseUrl;
+    _systemPromptController = TextEditingController(
+      text: Provider.of<StorageService>(context, listen: false).systemPrompt,
+    );
     
     // Sync local state with storage
     final storage = Provider.of<StorageService>(context, listen: false);
@@ -105,9 +110,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
          if (changed) {
             setState(() {});
-            final msg = hw?.vendor == 'Nvidia' 
-              ? 'NVIDIA GPU detected: CuBLAS enabled.'
-              : 'Non-NVIDIA GPU detected: Vulkan enabled.';
+            final String msg;
+            if (hw?.vendor == 'Nvidia') {
+              msg = 'NVIDIA GPU detected: CuBLAS enabled.';
+            } else if (Platform.isMacOS) {
+              msg = 'Apple Silicon detected: Metal enabled.';
+            } else {
+              msg = 'Non-NVIDIA GPU detected: Vulkan enabled.';
+            }
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
          } else {
             // Just update UI to match loaded persistence
@@ -359,7 +369,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _buildSectionHeader('Model Instructions', context),
           const SizedBox(height: 8),
           TextField(
-            controller: TextEditingController(text: storageService.systemPrompt),
+            controller: _systemPromptController,
             maxLines: 5,
             style: theme.textTheme.bodyMedium,
             decoration: InputDecoration(
@@ -536,6 +546,12 @@ class _SettingsPageState extends State<SettingsPage> {
            _buildSlider('Rep Pen Tokens', storageService.repeatPenaltyTokens.toDouble(), 0, 512, (val) => storageService.setRepeatPenaltyTokens(val.toInt()), context, divisions: 512),
            _buildSlider('Max Output Tokens', storageService.maxLength.toDouble(), 16, 2048, (val) => storageService.setMaxLength(val.toInt()), context, divisions: 2048 - 16),
            _buildSlider('Min Output Tokens', storageService.minLength.toDouble(), 0, 512, (val) => storageService.setMinLength(val.toInt()), context, divisions: 512),
+            _buildSlider('Context Size', _contextSizeValue, 4098, 15000, (val) {
+              setState(() {
+                _contextSizeValue = val;
+                _contextSizeController.text = val.toInt().toString();
+              });
+            }, context, divisions: 15000 - 4098),
            
            Row(
              children: [
@@ -588,15 +604,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: _buildTextField(
                     label: 'GPU Layers',
                     controller: _gpuLayersController,
-                    context: context,
-                    isNumber: true,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTextField(
-                    label: 'Context Size',
-                    controller: _contextSizeController,
                     context: context,
                     isNumber: true,
                   ),

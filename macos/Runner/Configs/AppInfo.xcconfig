@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = kobold_character_card_manager
+PRODUCT_NAME = front_porch_ai
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.antigravity.koboldCharacterCardManager
+PRODUCT_BUNDLE_IDENTIFIER = com.linux4life1.frontPorchAi
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.antigravity. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Front Porch AI. All rights reserved.

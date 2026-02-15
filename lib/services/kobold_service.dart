@@ -99,15 +99,23 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
     ];
 
     if (useVulkan) args.add('--usevulkan');
-    if (useCublas) args.add('--usecublas');
-    if (useMetal) args.add('--usecoreml');
+    if (useCublas) args.add('--usecuda');
+    // Note: Metal is used automatically on macOS Apple Silicon, no flag needed
 
     try {
+      print('AG_DEBUG: === STARTING KOBOLDCPP ===');
+      print('AG_DEBUG: Executable: $executablePath');
+      print('AG_DEBUG: Args: ${args.join(' ')}');
+      print('AG_DEBUG: Working dir: ${path.dirname(executablePath)}');
+      print('AG_DEBUG: File exists: ${File(executablePath).existsSync()}');
+      print('AG_DEBUG: Model exists: ${File(modelPath).existsSync()}');
+      
       _process = await Process.start(
         executablePath,
         args,
         workingDirectory: path.dirname(executablePath),
       );
+      print('AG_DEBUG: Process started successfully! PID: ${_process!.pid}');
       _isRunning = true;
       _addLog('Starting Koboldcpp...');
       _addLog('Command: $executablePath ${args.join(' ')}');
@@ -135,7 +143,10 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
         _addLog('Process exited with code $code');
         notifyListeners();
       });
-    } catch (e) {
+    } catch (e, stack) {
+      print('AG_DEBUG: === KOBOLDCPP START FAILED ===');
+      print('AG_DEBUG: Error: $e');
+      print('AG_DEBUG: Stack: $stack');
       _addLog('Failed to start process: $e');
       _isRunning = false;
       notifyListeners();

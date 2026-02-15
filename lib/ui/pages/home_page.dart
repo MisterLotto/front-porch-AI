@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:kobold_character_card_manager/providers/app_state.dart';
@@ -54,10 +55,21 @@ class HomePage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: () => _openBrowser(),
-                  icon: const Icon(Icons.public, color: Colors.blueAccent),
-                  label: const Text('Browse Repository', style: TextStyle(color: Colors.blueAccent)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _openBrowser(context),
+                      icon: const Icon(Icons.public, color: Colors.blueAccent),
+                      label: const Text('AI Character Cards', style: TextStyle(color: Colors.blueAccent)),
+                    ),
+                    const SizedBox(width: 16),
+                    TextButton.icon(
+                      onPressed: () => _showChubWarning(context),
+                      icon: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                      label: const Text('Chub.ai', style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -79,11 +91,18 @@ class HomePage extends StatelessWidget {
                    ),
                    const SizedBox(width: 8),
                    ElevatedButton.icon(
-                     onPressed: () => _openBrowser(),
+                     onPressed: () => _openBrowser(context),
                      icon: const Icon(Icons.public),
-                     label: const Text('Get Cards'),
+                     label: const Text('AI Cards'),
                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showChubWarning(context),
+                      icon: const Icon(Icons.warning_amber_rounded),
+                      label: const Text('Chub.ai'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                    ),
                  ],
                ),
              ),
@@ -149,11 +168,13 @@ class HomePage extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  character.formattedDescription,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                Flexible(
+                                  child: Text(
+                                    character.formattedDescription,
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                             ),
@@ -187,6 +208,14 @@ class HomePage extends StatelessWidget {
                               child: Icon(Icons.upload, color: Colors.white, size: 20),
                             ),
                           ),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () => _confirmDeleteCharacter(context, character),
+                            child: const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -211,6 +240,59 @@ class HomePage extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: Colors.white24),
+      ),
+    );
+  }
+
+  void _confirmDeleteCharacter(BuildContext context, CharacterCard character) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1111),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 2),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            SizedBox(width: 8),
+            Text(
+              'Delete Character',
+              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete "${character.name}"?\n\nThis will permanently remove the character card and its image file. This action cannot be undone.',
+          style: const TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              final repo = Provider.of<CharacterRepository>(context, listen: false);
+              await repo.deleteCharacter(character);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${character.name} has been deleted.'),
+                    backgroundColor: Colors.red.shade800,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
   }
@@ -286,14 +368,214 @@ class HomePage extends StatelessWidget {
     }
   }
 
-  Future<void> _openBrowser() async {
+  Future<void> _openBrowser(BuildContext context) async {
+    // Capture references before async gap so they're available in the callback
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    
     final webview = await WebviewWindow.create(
       configuration: CreateConfiguration(
         title: 'Browse Character Cards',
         titleBarTopPadding: Platform.isMacOS ? 20 : 0,
       ),
     );
+    
+    // Shared download handler for both platforms
+    Future<void> handleDownloadUrl(String url) async {
+      debugPrint('AG_DEBUG: Download card intercepted: $url');
+      
+      try {
+        final httpClient = HttpClient();
+        final request = await httpClient.getUrl(Uri.parse(url));
+        final httpResponse = await request.close();
+        
+        // Follow redirects and get final response bytes
+        final bytes = <int>[];
+        await for (final chunk in httpResponse) {
+          bytes.addAll(chunk);
+        }
+        
+        httpClient.close();
+        
+        // Save to characters directory
+        final directory = await getApplicationDocumentsDirectory();
+        final charDir = Directory('${directory.path}/KoboldManager/Characters');
+        if (!await charDir.exists()) {
+          await charDir.create(recursive: true);
+        }
+        
+        // Create a filename from the URL or use a timestamp
+        final uri = Uri.parse(url);
+        String fileName;
+        if (uri.pathSegments.isNotEmpty && uri.pathSegments.last.endsWith('.png')) {
+          fileName = uri.pathSegments.last;
+        } else {
+          fileName = 'card_${DateTime.now().millisecondsSinceEpoch}.png';
+        }
+        final tempFile = File('${charDir.path}/$fileName');
+        await tempFile.writeAsBytes(bytes);
+        
+        // Auto-import the character
+        await repo.importCharacter(tempFile);
+        
+        // Close the webview and show success
+        webview.close();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Character card downloaded and imported!'),
+            backgroundColor: Colors.green.shade800,
+          ),
+        );
+      } catch (e) {
+        debugPrint('AG_DEBUG: Download error: $e');
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
+    }
+    
+    // Platform-specific message handler registration
+    if (Platform.isMacOS) {
+      // macOS: WKWebView uses registerJavaScriptMessageHandler
+      webview.registerJavaScriptMessageHandler('downloadCard', (name, body) async {
+        await handleDownloadUrl(body.toString());
+      });
+    } else if (Platform.isWindows) {
+      // Windows: WebView2 uses web message callbacks
+      webview.addOnWebMessageReceivedCallback((message) async {
+        // Messages prefixed with 'DOWNLOAD:' are download URLs
+        if (message.startsWith('DOWNLOAD:')) {
+          final url = message.substring('DOWNLOAD:'.length);
+          await handleDownloadUrl(url);
+        }
+      });
+    }
+    
+    // Inject JavaScript to intercept download card links
+    // The download button on aicharactercards.com uses URLs like:
+    // https://aicharactercards.com/?download_card_image=true&post_id=XXXX
+    // Use platform-specific messaging API
+    final String jsSendMessage = Platform.isMacOS
+        ? 'window.webkit.messageHandlers.downloadCard.postMessage(href)'
+        : 'window.chrome.webview.postMessage("DOWNLOAD:" + href)';
+    
+    webview.addScriptToExecuteOnDocumentCreated('''
+      (function() {
+        // Intercept clicks on download links
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+          // Walk up the DOM to find an anchor tag
+          while (target && target.tagName !== 'A') {
+            target = target.parentElement;
+          }
+          if (target && target.href) {
+            var href = target.href;
+            // Check if this is a download card link
+            if (href.includes('download_card_image=true') || 
+                (href.endsWith('.png') && !href.includes('aicharactercards.com/wp-content/uploads'))) {
+              e.preventDefault();
+              e.stopPropagation();
+              // Send the URL to Flutter via platform-specific message handler
+              $jsSendMessage;
+              return false;
+            }
+          }
+        }, true);
+      })();
+    ''');
+    
     webview.launch('https://aicharactercards.com/');
+  }
+
+  Future<void> _openChubBrowser() async {
+    final webview = await WebviewWindow.create(
+      configuration: CreateConfiguration(
+        title: 'Chub.ai - Character Hub',
+        titleBarTopPadding: Platform.isMacOS ? 20 : 0,
+      ),
+    );
+    webview.launch('https://chub.ai/');
+  }
+
+  void _showChubWarning(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1111),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 2),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            SizedBox(width: 8),
+            Text(
+              '⚠️ TRAVELER, BEWARE ⚠️',
+              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/images/eye_bleach.jpg',
+                  height: 200,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'You are about to enter Chub.ai — a land where content '
+                'moderation is more of a suggestion than a rule.',
+                style: TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'You WILL encounter NSFW and potentially NSFL content. '
+                'There is no "safe" section. There is no lifeguard on duty. '
+                'Eye bleach is strongly advised — and may still not be enough.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 13, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Browse at your own discretion. '
+                'We are not responsible for what you find... '
+                'or what finds you. 👁️',
+                style: TextStyle(color: Colors.white60, fontSize: 12, fontStyle: FontStyle.italic, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Nope, I Choose Life', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _openChubBrowser();
+            },
+            child: const Text('I Fear Nothing. Proceed.'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

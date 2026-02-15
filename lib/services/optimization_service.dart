@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:kobold_character_card_manager/services/hardware_service.dart';
 
 class OptimizationResult {
@@ -18,8 +19,12 @@ class OptimizationService {
   static OptimizationResult calculateSettings(HardwareInfo hardware, {int modelSizeMb = 0}) {
     int vram = hardware.vramMb;
     
-    // Default to Vulkan for non-Nvidia
-    bool useVulkan = hardware.vendor != 'Nvidia'; 
+    // Default to Vulkan for non-Nvidia, non-Mac (Mac uses Metal)
+    bool useVulkan = hardware.vendor != 'Nvidia' && !Platform.isMacOS;
+    bool useMetal = Platform.isMacOS;
+
+    // Build the backend suffix for reasoning messages
+    String backendNote = useMetal ? ' Using Metal.' : useVulkan ? ' Using Vulkan.' : '';
 
     // Basic heuristic: if VRAM is generous, offload everything
     if (vram > modelSizeMb + 1000) {
@@ -27,14 +32,14 @@ class OptimizationService {
         gpuLayers: 99, // Offload all
         contextSize: 8192,
         useVulkan: useVulkan,
-        reasoning: 'High VRAM detected. Offloading all layers to GPU.${useVulkan ? " Using Vulkan." : ""}',
+        reasoning: 'High VRAM detected. Offloading all layers to GPU.$backendNote',
       );
     } else if (vram > 4000) {
        return OptimizationResult(
         gpuLayers: 20,
         contextSize: 4096,
         useVulkan: useVulkan,
-        reasoning: 'Moderate VRAM. Offloading some layers.${useVulkan ? " Using Vulkan." : ""}',
+        reasoning: 'Moderate VRAM. Offloading some layers.$backendNote',
       );
     } else {
       return OptimizationResult(

@@ -46,6 +46,7 @@ class ChatService extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
   bool _isGenerating = false;
   bool _isLoadingSession = false;
+  bool _cancelRequested = false;
   String? _currentSessionId;
   double _generationProgress = 0.0;
   int _tokensGenerated = 0;
@@ -388,6 +389,7 @@ class ChatService extends ChangeNotifier {
         final isUserTarget = _messages.last.isUser;
 
         await for (final token in stream) {
+          if (_cancelRequested) break;
           accumulatedResponse += token;
           _tokensGenerated++;
           _generationProgress = _maxTokens > 0 ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0) : 0.0;
@@ -424,6 +426,7 @@ class ChatService extends ChangeNotifier {
         ));
         
         await for (final token in stream) {
+          if (_cancelRequested) break;
           accumulatedResponse += token;
           _tokensGenerated++;
           _generationProgress = _maxTokens > 0 ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0) : 0.0;
@@ -456,6 +459,7 @@ class ChatService extends ChangeNotifier {
       }
 
       _isGenerating = false;
+      _cancelRequested = false;
       _generationProgress = 0.0;
       notifyListeners();
 
@@ -472,6 +476,7 @@ class ChatService extends ChangeNotifier {
 
     } catch (e) {
       _isGenerating = false;
+      _cancelRequested = false;
       _generationProgress = 0.0;
       _messages.add(ChatMessage(
         text: "Error: $e", 
@@ -588,6 +593,25 @@ class ChatService extends ChangeNotifier {
   void deleteMessage(int index) async {
     if (index >= 0 && index < _messages.length) {
       _messages.removeAt(index);
+      await _saveChat();
+      notifyListeners();
+    }
+  }
+
+  void stopGeneration() {
+    if (_isGenerating) {
+      _cancelRequested = true;
+    }
+  }
+
+  void editMessage(int index, String newText) async {
+    if (index >= 0 && index < _messages.length) {
+      final old = _messages[index];
+      _messages[index] = ChatMessage(
+        text: newText,
+        sender: old.sender,
+        isUser: old.isUser,
+      );
       await _saveChat();
       notifyListeners();
     }

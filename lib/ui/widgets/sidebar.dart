@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:kobold_character_card_manager/providers/app_state.dart';
 
@@ -74,10 +75,26 @@ class Sidebar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Icon(Icons.discord, size: 20, color: Colors.white54),
-                Icon(Icons.close, size: 20, color: Colors.white54), // Placeholder for X
-                Icon(Icons.reddit, size: 20, color: Colors.white54), 
-                Icon(Icons.video_library, size: 20, color: Colors.white54), // Youtube
+                Tooltip(
+                  message: 'Join our Discord Server',
+                  child: GestureDetector(
+                    onTap: () => launchUrl(Uri.parse('https://discord.gg/EqJrJPjdT')),
+                    child: const MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Icon(Icons.discord, size: 20, color: Colors.white54),
+                    ),
+                  ),
+                ),
+                Tooltip(
+                  message: 'Join our Matrix Server',
+                  child: GestureDetector(
+                    onTap: () => launchUrl(Uri.parse('https://matrix.dreamersai.art')),
+                    child: const MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Icon(Icons.grid_view_rounded, size: 20, color: Colors.white54),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

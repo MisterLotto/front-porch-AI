@@ -17,7 +17,7 @@ class ModelSettingsDialog extends StatefulWidget {
 
 class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
   final _gpuLayersController = TextEditingController(text: '0');
-  final _contextSizeController = TextEditingController(text: '4096');
+  final _contextSizeController = TextEditingController(text: '8192');
   bool _useVulkan = false;
   bool _useCublas = false;
   bool _useMetal = false;

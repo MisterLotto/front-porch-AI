@@ -57,6 +57,11 @@ class BackendManager extends ChangeNotifier {
       if (!Platform.isWindows) {
         await Process.run('chmod', ['+x', _backendPath!]);
       }
+      // On macOS, clear quarantine attribute that sandbox sets on downloaded binaries
+      if (Platform.isMacOS) {
+        await Process.run('xattr', ['-cr', _backendPath!]);
+        print('AG_DEBUG: Cleared quarantine on $_backendPath');
+      }
     } else {
       _backendPath = null;
       _statusMessage = 'Not Installed';
