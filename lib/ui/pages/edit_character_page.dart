@@ -25,6 +25,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   late TabController _tabController;
   List<LorebookEntry> _loreEntries = [];
   List<String> _selectedWorldNames = [];
+  List<TextEditingController> _altGreetingControllers = [];
+  List<String> _tags = [];
+  final _tagController = TextEditingController();
 
   @override
   void initState() {
@@ -47,6 +50,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
 
     _selectedWorldNames = List.from(widget.character.worldNames);
 
+    _altGreetingControllers = widget.character.alternateGreetings
+        .map((g) => TextEditingController(text: g))
+        .toList();
+
+    _tags = List.from(widget.character.tags);
+
     _tabController = TabController(length: 3, vsync: this);
   }
 
@@ -57,6 +66,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _personalityController.dispose();
     _scenarioController.dispose();
     _firstMessageController.dispose();
+    for (final c in _altGreetingControllers) {
+      c.dispose();
+    }
+    _tagController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -68,6 +81,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     widget.character.personality = _personalityController.text;
     widget.character.scenario = _scenarioController.text;
     widget.character.firstMessage = _firstMessageController.text;
+    widget.character.alternateGreetings = _altGreetingControllers
+        .map((c) => c.text)
+        .where((t) => t.isNotEmpty)
+        .toList();
+    widget.character.tags = List.from(_tags);
     widget.character.worldNames = _selectedWorldNames;
     
     // Update Lorebook
@@ -266,6 +284,122 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             controller: _firstMessageController,
             label: 'First Message',
             maxLines: 5,
+          ),
+          const SizedBox(height: 24),
+          // Alternate greetings section
+          Row(
+            children: [
+              const Text('Alternate Greetings', 
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white70)),
+              const Spacer(),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add'),
+                onPressed: () {
+                  setState(() {
+                    _altGreetingControllers.add(TextEditingController());
+                  });
+                },
+              ),
+            ],
+          ),
+          ..._altGreetingControllers.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final controller = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: controller,
+                      label: 'Greeting ${idx + 2}',
+                      maxLines: 4,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                    tooltip: 'Remove this greeting',
+                    onPressed: () {
+                      setState(() {
+                        _altGreetingControllers[idx].dispose();
+                        _altGreetingControllers.removeAt(idx);
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+          // Tags section
+          Row(
+            children: [
+              const Icon(Icons.label_outline, color: Colors.amber, size: 18),
+              const SizedBox(width: 8),
+              const Text('Tags', 
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white70)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_tags.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _tags.map((tag) => Chip(
+                label: Text(tag, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                backgroundColor: const Color(0xFF374151),
+                deleteIcon: const Icon(Icons.close, size: 16, color: Colors.white54),
+                onDeleted: () => setState(() => _tags.remove(tag)),
+                side: BorderSide.none,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              )).toList(),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _tagController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Add a tag...',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    filled: true,
+                    fillColor: const Color(0xFF374151),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  onSubmitted: (value) {
+                    final trimmed = value.trim().toLowerCase();
+                    if (trimmed.isNotEmpty && !_tags.contains(trimmed)) {
+                      setState(() {
+                        _tags.add(trimmed);
+                        _tagController.clear();
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.add, color: Colors.amber),
+                tooltip: 'Add tag',
+                onPressed: () {
+                  final trimmed = _tagController.text.trim().toLowerCase();
+                  if (trimmed.isNotEmpty && !_tags.contains(trimmed)) {
+                    setState(() {
+                      _tags.add(trimmed);
+                      _tagController.clear();
+                    });
+                  }
+                },
+              ),
+            ],
           ),
         ],
       ),

@@ -6,7 +6,10 @@ class CharacterCard {
   String personality;
   String scenario;
   String firstMessage;
+  List<String> alternateGreetings;
+  List<String> tags;
   String? imagePath;
+  String? folderId;
   Lorebook? lorebook;
   List<String> worldNames;
 
@@ -16,10 +19,20 @@ class CharacterCard {
     this.personality = '',
     this.scenario = '',
     this.firstMessage = '',
+    this.alternateGreetings = const [],
+    this.tags = const [],
     this.imagePath,
+    this.folderId,
     this.lorebook,
     this.worldNames = const [],
   });
+
+  /// All greetings: primary first message + alternates
+  List<String> get allGreetings {
+    final greetings = <String>[firstMessage];
+    greetings.addAll(alternateGreetings);
+    return greetings.where((g) => g.isNotEmpty).toList();
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -28,6 +41,8 @@ class CharacterCard {
       'personality': personality,
       'scenario': scenario,
       'first_mes': firstMessage,
+      'alternate_greetings': alternateGreetings,
+      'tags': tags,
       'character_book': lorebook?.toJson(),
       'world_names': worldNames,
     };
@@ -35,8 +50,10 @@ class CharacterCard {
 
   String get formattedDescription {
     if (description.isEmpty) return '';
-    // Case-insensitive replacement of {{char}} with name
-    return description.replaceAll(RegExp(r'\{\{char\}\}', caseSensitive: false), name);
+    // Replace {{char}} and {{user}} placeholders with actual name
+    return description
+        .replaceAll('{{char}}', name)
+        .replaceAll('{{user}}', 'You');
   }
 
   // V2 spec fields can be added here later (e.g., character_book, etc.)

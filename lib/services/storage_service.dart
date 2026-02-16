@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +17,8 @@ class StorageService extends ChangeNotifier {
   Directory get worldsDir => Directory(path.join(_rootPath ?? '', 'worlds'));
 
   // Settings
-  String _systemPrompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request.";
+  static const String defaultSystemPrompt = "You are an immersive roleplay partner. Embody {{char}} completely — personality, appearance, thought processes, emotions, behaviors, and speech patterns. You may also roleplay as any side characters introduced.\n\nEngage with {{user}} by depicting {{char}}'s actions, emotions, and dialogue. Develop the plot slowly and organically while driving the scenario forward. Never write {{user}}'s speech, actions, or decisions — allow them full control of their character.\n\nWrite in a vivid, creative, varied, and descriptive style. Use rich sensory detail for the environment, people, and events. Make each reply unique and end with an action or dialogue to keep momentum.\n\nMaintain consistency with established details — clothing, time of day, location, and prior events. Stay in character at all times.";
+  String _systemPrompt = defaultSystemPrompt;
   double _minP = 0.1;
   double _temperature = 0.7;
   double _repeatPenalty = 1.1;
@@ -30,7 +32,11 @@ class StorageService extends ChangeNotifier {
   int _minLength = 0;
   bool _autostartBackend = true;
   String? _lastUsedModelPath;
+  int _gpuLayers = 0;
+  int _contextSize = 8192;
   List<String> _stopSequences = ["\nUser:", "\n###", "\nScenario:", "<END>", "\nSystem:", "\n(Note:", "\n[Note:", "\n{Note:"];
+  double _textScale = 1.0;
+  List<Map<String, String>> _savedPrompts = [];
 
 
   // Getters
@@ -48,7 +54,11 @@ class StorageService extends ChangeNotifier {
   int get minLength => _minLength;
   bool get autostartBackend => _autostartBackend;
   String? get lastUsedModelPath => _lastUsedModelPath;
+  int get gpuLayers => _gpuLayers;
+  int get contextSize => _contextSize;
   List<String> get stopSequences => List.unmodifiable(_stopSequences);
+  double get textScale => _textScale;
+  List<Map<String, String>> get savedPrompts => List.unmodifiable(_savedPrompts);
 
   StorageService() {
     _init();
@@ -81,7 +91,22 @@ class StorageService extends ChangeNotifier {
     _minLength = _prefs?.getInt('min_length') ?? _minLength;
     _autostartBackend = _prefs?.getBool('autostart_backend') ?? _autostartBackend;
     _lastUsedModelPath = _prefs?.getString('last_used_model_path');
+    _gpuLayers = _prefs?.getInt('gpu_layers') ?? _gpuLayers;
+    _contextSize = _prefs?.getInt('context_size') ?? _contextSize;
     _stopSequences = _prefs?.getStringList('stop_sequences') ?? _stopSequences;
+    _textScale = _prefs?.getDouble('text_scale') ?? 1.0;
+
+    // Load saved prompts
+    final promptsJson = _prefs?.getString('saved_prompts');
+    if (promptsJson != null) {
+      final decoded = jsonDecode(promptsJson) as List;
+      _savedPrompts = decoded.map((e) => Map<String, String>.from(e as Map)).toList();
+    }
+    // Always ensure the built-in default preset exists
+    if (!_savedPrompts.any((p) => p['name'] == 'Immersive Roleplay')) {
+      _savedPrompts.insert(0, {'name': 'Immersive Roleplay', 'content': defaultSystemPrompt});
+      await _persistPrompts();
+    }
 
     notifyListeners();
   }
@@ -97,6 +122,31 @@ class StorageService extends ChangeNotifier {
     _systemPrompt = value;
     await _prefs?.setString('system_prompt', value);
     notifyListeners();
+  }
+
+  Future<void> savePrompt(String name, String content) async {
+    // Remove existing with same name to overwrite
+    _savedPrompts.removeWhere((p) => p['name'] == name);
+    _savedPrompts.add({'name': name, 'content': content});
+    await _persistPrompts();
+    notifyListeners();
+  }
+
+  Future<void> deleteSavedPrompt(String name) async {
+    _savedPrompts.removeWhere((p) => p['name'] == name);
+    await _persistPrompts();
+    notifyListeners();
+  }
+
+  void loadSavedPrompt(String name) {
+    final prompt = _savedPrompts.firstWhere((p) => p['name'] == name, orElse: () => {});
+    if (prompt.containsKey('content')) {
+      setSystemPrompt(prompt['content']!);
+    }
+  }
+
+  Future<void> _persistPrompts() async {
+    await _prefs?.setString('saved_prompts', jsonEncode(_savedPrompts));
   }
 
   Future<void> setMinP(double value) async {
@@ -181,6 +231,18 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setGpuLayers(int value) async {
+    _gpuLayers = value;
+    await _prefs?.setInt('gpu_layers', value);
+    notifyListeners();
+  }
+
+  Future<void> setContextSize(int value) async {
+    _contextSize = value;
+    await _prefs?.setInt('context_size', value);
+    notifyListeners();
+  }
+
   Future<void> setStopSequences(List<String> value) async {
     _stopSequences = value;
     await _prefs?.setStringList('stop_sequences', value);
@@ -200,5 +262,11 @@ class StorageService extends ChangeNotifier {
       await _prefs?.setStringList('stop_sequences', _stopSequences);
       notifyListeners();
     }
+  }
+
+  Future<void> setTextScale(double value) async {
+    _textScale = value;
+    await _prefs?.setDouble('text_scale', value);
+    notifyListeners();
   }
 }

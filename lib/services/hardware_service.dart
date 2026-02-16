@@ -10,6 +10,7 @@ class HardwareInfo {
   final bool hasCuda;
   final bool hasRocm;
   final bool hasMetal;
+  final bool isSharedMemory; // Intel ARC iGPU, AMD APU, etc.
 
   HardwareInfo({
     required this.gpuName,
@@ -19,10 +20,11 @@ class HardwareInfo {
     this.hasCuda = false,
     this.hasRocm = false,
     this.hasMetal = false,
+    this.isSharedMemory = false,
   });
 
   @override
-  String toString() => '$gpuName (VRAM: ${vramMb}MB, RAM: ${ramMb}MB) [CUDA: $hasCuda, ROCm: $hasRocm, Metal: $hasMetal]';
+  String toString() => '$gpuName (VRAM: ${vramMb}MB, RAM: ${ramMb}MB, Shared: $isSharedMemory) [CUDA: $hasCuda, ROCm: $hasRocm, Metal: $hasMetal]';
 }
 
 class HardwareService extends ChangeNotifier {
@@ -31,6 +33,12 @@ class HardwareService extends ChangeNotifier {
 
   HardwareInfo? get hardwareInfo => _hardwareInfo;
   bool get isDetecting => _isDetecting;
+
+  HardwareService() {
+    // Auto-detect hardware at creation so it's available everywhere,
+    // not just when the settings page is opened
+    detectHardware();
+  }
 
   Future<void> detectHardware() async {
     _isDetecting = true;
@@ -286,7 +294,7 @@ class HardwareService extends ChangeNotifier {
       print('Windows GPU detection failed: $e');
     }
 
-    // Detect RAM (Existing logic)
+    // Detect RAM
     final ramResult = await Process.run('powershell', [
       '-command',
       'Get-CimInstance Win32_ComputerSystem | Select-Object TotalPhysicalMemory | ConvertTo-Json'
@@ -302,6 +310,44 @@ class HardwareService extends ChangeNotifier {
        }
     }
 
+    // Detect shared memory GPUs (Intel ARC iGPU, AMD APU, etc.)
+    // These GPUs dynamically borrow from system RAM and WMI only reports
+    // the small dedicated portion. Query SharedSystemMemory to detect this.
+    bool isSharedMemory = false;
+    try {
+      final sharedResult = await Process.run('powershell', [
+        '-command',
+        'Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, SharedSystemMemory | ConvertTo-Json'
+      ]);
+      if (sharedResult.exitCode == 0) {
+        final output = sharedResult.stdout.toString().trim();
+        if (output.isNotEmpty) {
+          var json = jsonDecode(output);
+          if (json is! List) json = [json];
+          // Find the GPU that matches our detected name
+          for (var item in json) {
+            final name = item['Name'] ?? '';
+            if (name == gpuName || gpuName == 'Unknown GPU') {
+              final sharedMem = (item['SharedSystemMemory'] ?? 0) as int;
+              final dedicatedMem = (item['AdapterRAM'] ?? 0) as int;
+              final sharedMb = (sharedMem / (1024 * 1024)).round();
+              final dedicatedMb = (dedicatedMem / (1024 * 1024)).round();
+              // If shared memory is significantly larger than dedicated,
+              // this is an iGPU/APU that borrows from system RAM
+              if (sharedMb > dedicatedMb && sharedMb > 1024) {
+                isSharedMemory = true;
+                // Use dedicated + shared as the effective VRAM
+                vramMb = dedicatedMb + sharedMb;
+              }
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Shared memory detection error: $e');
+    }
+
     _hardwareInfo = HardwareInfo(
       gpuName: gpuName,
       vramMb: vramMb,
@@ -310,6 +356,7 @@ class HardwareService extends ChangeNotifier {
       hasCuda: _hasCuda,
       hasRocm: _hasRocm,
       hasMetal: false,
+      isSharedMemory: isSharedMemory,
     );
   }
 

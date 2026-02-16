@@ -1,5 +1,6 @@
 class LorebookEntry {
-  String key; // Keywords to trigger this entry
+  String name; // Display name for the entry
+  String key; // Keywords to trigger this entry (comma-separated)
   String content; // The actual lore content
   bool enabled;
   bool isTriggered; // Runtime state for UI indication
@@ -8,6 +9,7 @@ class LorebookEntry {
   int remainingDepth; // Runtime counter
 
   LorebookEntry({
+    this.name = '',
     required this.key,
     required this.content,
     this.enabled = true,
@@ -17,9 +19,18 @@ class LorebookEntry {
     this.remainingDepth = 0,
   });
 
+  /// Display label: name if available, otherwise key, otherwise 'Unnamed Entry'
+  String get displayName {
+    if (name.isNotEmpty) return name;
+    if (key.isNotEmpty) return key;
+    return 'Unnamed Entry';
+  }
+
   Map<String, dynamic> toJson() {
     return {
+      'name': name,
       'key': key,
+      'keys': key.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toList(),
       'content': content,
       'enabled': enabled,
       'constant': constant,
@@ -28,12 +39,21 @@ class LorebookEntry {
   }
 
   factory LorebookEntry.fromJson(Map<String, dynamic> json) {
+    // Handle V2 'keys' (array) or V1 'key' (string)
+    String keyStr = '';
+    if (json['keys'] != null && json['keys'] is List && (json['keys'] as List).isNotEmpty) {
+      keyStr = (json['keys'] as List).map((k) => k.toString()).join(', ');
+    } else {
+      keyStr = json['key']?.toString() ?? '';
+    }
+
     return LorebookEntry(
-      key: json['key'] ?? '',
-      content: json['content'] ?? '',
+      name: json['name']?.toString() ?? '',
+      key: keyStr,
+      content: json['content']?.toString() ?? '',
       enabled: json['enabled'] ?? true,
       constant: json['constant'] ?? false,
-      stickyDepth: json['sticky_depth'] ?? 1,
+      stickyDepth: json['sticky_depth'] ?? json['insertion_order'] ?? 1,
     );
   }
 }

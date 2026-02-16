@@ -6,6 +6,8 @@ import 'package:kobold_character_card_manager/models/character_card.dart';
 import 'package:kobold_character_card_manager/ui/dialogs/edit_character_dialog.dart';
 import 'package:kobold_character_card_manager/ui/dialogs/chat_settings_dialog.dart';
 import 'package:kobold_character_card_manager/ui/dialogs/model_settings_dialog.dart';
+import 'package:kobold_character_card_manager/services/user_persona_service.dart';
+import 'package:kobold_character_card_manager/ui/dialogs/user_persona_dialog.dart';
 
 class _StyledTextController extends TextEditingController {
   static final _pattern = RegExp(r'("[^"]*")|(\*[^*]*\*)');
@@ -357,6 +359,30 @@ class _ChatPageState extends State<ChatPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // Persona Switcher
+          Consumer<UserPersonaService>(
+            builder: (context, personaService, _) {
+              final persona = personaService.persona;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0, bottom: 6),
+                child: GestureDetector(
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (_) => const UserPersonaDialog(),
+                  ),
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.white24,
+                    backgroundImage: persona.avatarPath != null ? FileImage(File(persona.avatarPath!)) : null,
+                    child: persona.avatarPath == null 
+                      ? const Icon(Icons.person, size: 18, color: Colors.white70) 
+                      : null,
+                  ),
+                ),
+              );
+            },
+          ),
+
           // Hamburger Menu
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu, color: Colors.white70),
@@ -588,7 +614,7 @@ class _ChatPageState extends State<ChatPage> {
                                const SizedBox(width: 8),
                                Expanded(
                                  child: Text(
-                                   entry.key.isEmpty && entry.constant ? 'Always Active' : entry.key, 
+                                   entry.key.isEmpty && entry.constant ? 'Always Active' : entry.displayName, 
                                    style: TextStyle(
                                      color: (entry.isTriggered || entry.constant) ? Colors.white : Colors.white54,
                                      fontSize: 12
@@ -735,6 +761,51 @@ class _MessageBubble extends StatelessWidget {
                   ),
                   if (!message.isUser) const SizedBox(height: 4),
                   _StyledChatMessage(text: message.text, isUser: message.isUser),
+                  // Swipe arrows for alternate greetings on first message
+                  if (index == 0 && !message.isUser)
+                    Consumer<ChatService>(
+                      builder: (context, chatService, _) {
+                        final character = chatService.activeCharacter;
+                        if (character == null) return const SizedBox.shrink();
+                        final allGreetings = character.allGreetings;
+                        if (allGreetings.length <= 1) return const SizedBox.shrink();
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              InkWell(
+                                onTap: () => chatService.cycleGreeting(-1),
+                                borderRadius: BorderRadius.circular(12),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(Icons.chevron_left, size: 20, color: Colors.white54),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${chatService.greetingIndex + 1}/${allGreetings.length}',
+                                style: const TextStyle(
+                                  color: Colors.orangeAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              InkWell(
+                                onTap: () => chatService.cycleGreeting(1),
+                                borderRadius: BorderRadius.circular(12),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(Icons.chevron_right, size: 20, color: Colors.white54),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
@@ -742,10 +813,21 @@ class _MessageBubble extends StatelessWidget {
           
           if (message.isUser) const SizedBox(width: 12),
            if (message.isUser) 
-            const CircleAvatar(
-              backgroundColor: Colors.purple,
-              child: Icon(Icons.person, color: Colors.white),
-              radius: 16,
+            Consumer<UserPersonaService>(
+              builder: (context, service, _) {
+                final persona = service.personas.where((p) => p.name == message.sender).firstOrNull;
+                if (persona?.avatarPath != null) {
+                  return CircleAvatar(
+                    backgroundImage: FileImage(File(persona!.avatarPath!)),
+                    radius: 16,
+                  );
+                }
+                return const CircleAvatar(
+                  backgroundColor: Colors.purple,
+                  child: Icon(Icons.person, color: Colors.white),
+                  radius: 16,
+                );
+              },
             ),
         ],
       ),

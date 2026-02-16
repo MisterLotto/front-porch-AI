@@ -5,21 +5,38 @@ import 'package:provider/provider.dart';
 import 'package:kobold_character_card_manager/providers/app_state.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
-import 'package:path/path.dart' as path; 
 import 'package:kobold_character_card_manager/services/character_repository.dart';
+import 'package:kobold_character_card_manager/services/world_repository.dart';
+import 'package:kobold_character_card_manager/services/folder_service.dart';
 import 'package:kobold_character_card_manager/ui/pages/chat_page.dart';
 import 'package:kobold_character_card_manager/services/chat_service.dart';
 import 'package:kobold_character_card_manager/services/v2_card_service.dart';
 import 'package:kobold_character_card_manager/ui/pages/edit_character_page.dart';
+import 'package:kobold_character_card_manager/ui/dialogs/tag_dialog.dart';
 import 'package:kobold_character_card_manager/models/character_card.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  String _searchQuery = '';
+  String? _activeFolderId; // null = top level view
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Consumer<CharacterRepository>(
-      builder: (context, repo, child) {
+    return Consumer2<CharacterRepository, FolderService>(
+      builder: (context, repo, folderService, child) {
         if (repo.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -48,7 +65,7 @@ class HomePage extends StatelessWidget {
                     const SizedBox(width: 16),
                     ElevatedButton.icon(
                       onPressed: () => _importCharacter(context),
-                      icon: const Icon(Icons.download), // Changed to download/import
+                      icon: const Icon(Icons.download),
                       label: const Text('Import Card'),
                       style: _buttonStyle(),
                     ),
@@ -76,161 +93,532 @@ class HomePage extends StatelessWidget {
           );
         }
 
+        // Filter characters based on search and active folder
+        final filteredCharacters = _getFilteredCharacters(repo, folderService);
+
         return Column(
           children: [
-             Padding(
-               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-               child: Row(
-                 children: [
-                   Text('My Characters', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                   const Spacer(),
-                   IconButton(
-                     tooltip: 'Import Card',
-                     icon: const Icon(Icons.download), // Changed to download/import
-                     onPressed: () => _importCharacter(context),
-                   ),
-                   const SizedBox(width: 8),
-                   ElevatedButton.icon(
-                     onPressed: () => _openBrowser(context),
-                     icon: const Icon(Icons.public),
-                     label: const Text('AI Cards'),
-                     style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
-                   ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: () => _showChubWarning(context),
-                      icon: const Icon(Icons.warning_amber_rounded),
-                      label: const Text('Chub.ai'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-                    ),
-                 ],
-               ),
-             ),
-             Expanded(
-               child: GridView.builder(
-          padding: const EdgeInsets.all(24),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 300,
-            childAspectRatio: 0.7,
-            crossAxisSpacing: 24,
-            mainAxisSpacing: 24,
-          ),
-          itemCount: repo.characters.length,
-          itemBuilder: (context, index) {
-            final character = repo.characters[index];
-            return Card(
-              color: Theme.of(context).cardColor,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1)),
-              ),
-              child: Stack( // Changed to Stack for positioning Export button
+            // Header row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Row(
                 children: [
-                  InkWell(
-                    onTap: () async {
-                       final chatService = Provider.of<ChatService>(context, listen: false);
-                       await chatService.setActiveCharacter(character);
-                       if (context.mounted) {
-                         Navigator.of(context).push(
-                           MaterialPageRoute(builder: (_) => const ChatPage()),
-                         );
-                       }
-                    },
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: character.imagePath != null
-                              ? Image.file(
-                                  File(character.imagePath!),
-                                  fit: BoxFit.cover,
-                                )
-                              : Container(
-                                  color: Colors.grey.shade800,
-                                  child: const Icon(Icons.person, size: 64, color: Colors.white24),
-                                ),
-                        ),
-                        Expanded(
-                          flex: 1,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  character.name,
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Flexible(
-                                  child: Text(
-                                    character.formattedDescription,
-                                    style: Theme.of(context).textTheme.bodySmall,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                  if (_activeFolderId != null) ...[
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back to all characters',
+                      onPressed: () => setState(() => _activeFolderId = null),
                     ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _getActiveFolderName(folderService),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ] else
+                    Text('My Characters', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  if (_activeFolderId == null)
+                    IconButton(
+                      tooltip: 'New Folder',
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                      onPressed: () => _createFolder(context, folderService),
+                    ),
+                  IconButton(
+                    tooltip: 'Import Card',
+                    icon: const Icon(Icons.download),
+                    onPressed: () => _importCharacter(context),
                   ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Material(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          InkWell(
-                            borderRadius: BorderRadius.circular(20),
-                            onTap: () => _editCharacter(context, character),
-                            child: const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Icon(Icons.edit, color: Colors.white, size: 20),
-                            ),
-                          ),
-                          InkWell(
-                            borderRadius: BorderRadius.circular(20),
-                            onTap: () => _exportCharacter(context, character),
-                            child: const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Icon(Icons.upload, color: Colors.white, size: 20),
-                            ),
-                          ),
-                          InkWell(
-                            borderRadius: BorderRadius.circular(20),
-                            onTap: () => _confirmDeleteCharacter(context, character),
-                            child: const Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: Icon(Icons.delete, color: Colors.redAccent, size: 20),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _openBrowser(context),
+                    icon: const Icon(Icons.public),
+                    label: const Text('AI Cards'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showChubWarning(context),
+                    icon: const Icon(Icons.warning_amber_rounded),
+                    label: const Text('Chub.ai'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
                   ),
                 ],
               ),
-            );
-          },
+            ),
+
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Search by name or tag...',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.white38),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onChanged: (value) => setState(() => _searchQuery = value),
               ),
+            ),
+            const SizedBox(height: 12),
+
+            // Grid with folders and characters
+            Expanded(
+              child: _buildGrid(context, repo, folderService, filteredCharacters),
             ),
           ],
         );
       },
     );
   }
+
+  List<CharacterCard> _getFilteredCharacters(CharacterRepository repo, FolderService folderService) {
+    List<CharacterCard> characters;
+
+    if (_activeFolderId != null) {
+      // Show only characters in this folder
+      final folderPaths = folderService.getCharactersInFolder(_activeFolderId!);
+      characters = repo.characters.where((c) => folderPaths.contains(c.imagePath)).toList();
+    } else {
+      characters = repo.characters.toList();
+    }
+
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      characters = characters.where((c) {
+        if (c.name.toLowerCase().contains(query)) return true;
+        if (c.tags.any((t) => t.toLowerCase().contains(query))) return true;
+        return false;
+      }).toList();
+    }
+
+    return characters;
+  }
+
+  String _getActiveFolderName(FolderService folderService) {
+    if (_activeFolderId == null) return 'My Characters';
+    final folder = folderService.folders.where((f) => f.id == _activeFolderId).firstOrNull;
+    return folder?.name ?? 'Folder';
+  }
+
+  Widget _buildGrid(BuildContext context, CharacterRepository repo, FolderService folderService, List<CharacterCard> filteredCharacters) {
+    // At top level and not searching, show folder cards + unfoldered characters
+    final showFolders = _activeFolderId == null && _searchQuery.isEmpty;
+    final folders = showFolders ? folderService.folders : <CharacterFolder>[];
+
+    // At top level, show unfoldered characters only (unless searching)
+    List<CharacterCard> displayCharacters;
+    if (showFolders) {
+      final folderedPaths = folderService.getUnfolderedCharacterPaths();
+      displayCharacters = filteredCharacters.where((c) => !folderedPaths.contains(c.imagePath)).toList();
+    } else {
+      displayCharacters = filteredCharacters;
+    }
+
+    final totalItems = folders.length + displayCharacters.length;
+    if (totalItems == 0) {
+      return Center(
+        child: Text(
+          _searchQuery.isNotEmpty ? 'No characters match "$_searchQuery"' : 'This folder is empty',
+          style: const TextStyle(color: Colors.white38, fontSize: 16),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(24),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 300,
+        childAspectRatio: 0.7,
+        crossAxisSpacing: 24,
+        mainAxisSpacing: 24,
+      ),
+      itemCount: totalItems,
+      itemBuilder: (context, index) {
+        // Render folder cards first
+        if (index < folders.length) {
+          return _buildFolderCard(context, folders[index], folderService, repo);
+        }
+        // Then character cards
+        final character = displayCharacters[index - folders.length];
+        return _buildCharacterCard(context, character, folderService);
+      },
+    );
+  }
+
+  Widget _buildFolderCard(BuildContext context, CharacterFolder folder, FolderService folderService, CharacterRepository repo) {
+    final charCount = folder.characterPaths.length;
+
+    return DragTarget<CharacterCard>(
+      onAcceptWithDetails: (details) async {
+        await folderService.addToFolder(folder.id, details.data.imagePath!);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final isHovering = candidateData.isNotEmpty;
+        return Card(
+          color: isHovering ? Colors.amber.shade900.withOpacity(0.4) : const Color(0xFF1E293B),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isHovering ? Colors.amber : Colors.white.withOpacity(0.1),
+              width: isHovering ? 2 : 1,
+            ),
+          ),
+          child: InkWell(
+            onTap: () => setState(() => _activeFolderId = folder.id),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.folder,
+                  size: 72,
+                  color: isHovering ? Colors.amber : Colors.amber.shade700,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  folder.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$charCount character${charCount == 1 ? '' : 's'}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                // Folder action buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.white54, size: 18),
+                      tooltip: 'Rename',
+                      onPressed: () => _renameFolder(context, folder, folderService),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.redAccent, size: 18),
+                      tooltip: 'Delete folder',
+                      onPressed: () => _deleteFolder(context, folder, folderService),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCharacterCard(BuildContext context, CharacterCard character, FolderService folderService) {
+    return LongPressDraggable<CharacterCard>(
+      data: character,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: 150,
+          height: 200,
+          child: Card(
+            color: const Color(0xFF1E293B),
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: character.imagePath != null
+                ? Image.file(File(character.imagePath!), fit: BoxFit.cover)
+                : const Icon(Icons.person, size: 64, color: Colors.white24),
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: _buildCharacterCardInner(context, character, folderService),
+      ),
+      child: _buildCharacterCardInner(context, character, folderService),
+    );
+  }
+
+  Widget _buildCharacterCardInner(BuildContext context, CharacterCard character, FolderService folderService) {
+    return Card(
+      color: Theme.of(context).cardColor,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1)),
+      ),
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () async {
+              final chatService = Provider.of<ChatService>(context, listen: false);
+              await chatService.setActiveCharacter(character);
+              if (context.mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ChatPage()),
+                );
+              }
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: character.imagePath != null
+                      ? Image.file(
+                          File(character.imagePath!),
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          color: Colors.grey.shade800,
+                          child: const Icon(Icons.person, size: 64, color: Colors.white24),
+                        ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          character.name,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // Tag chips (show first 3 tags)
+                        if (character.tags.isNotEmpty)
+                          Flexible(
+                            child: Wrap(
+                              spacing: 4,
+                              runSpacing: 2,
+                              children: character.tags.take(3).map((tag) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade900.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  tag,
+                                  style: TextStyle(color: Colors.amber.shade300, fontSize: 10),
+                                ),
+                              )).toList(),
+                            ),
+                          )
+                        else
+                          Flexible(
+                            child: Text(
+                              character.formattedDescription,
+                              style: Theme.of(context).textTheme.bodySmall,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Material(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => _editCharacter(context, character),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.edit, color: Colors.white, size: 20),
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => _exportCharacter(context, character),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.upload, color: Colors.white, size: 20),
+                    ),
+                  ),
+                  // Remove from folder button (only when inside a folder)
+                  if (_activeFolderId != null)
+                    InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () async {
+                        await folderService.removeFromFolder(_activeFolderId!, character.imagePath!);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Icon(Icons.folder_off, color: Colors.amber, size: 20),
+                      ),
+                    ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => _confirmDeleteCharacter(context, character),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Folder Actions ─────────────────────────────────────────────
+
+  void _createFolder(BuildContext context, FolderService folderService) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('New Folder', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Folder name...',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              folderService.createFolder(value.trim());
+              Navigator.pop(ctx);
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                folderService.createFolder(controller.text.trim());
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade700),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _renameFolder(BuildContext context, CharacterFolder folder, FolderService folderService) {
+    final controller = TextEditingController(text: folder.name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('Rename Folder', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              folderService.renameFolder(folder.id, value.trim());
+              Navigator.pop(ctx);
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                folderService.renameFolder(folder.id, controller.text.trim());
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade700),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteFolder(BuildContext context, CharacterFolder folder, FolderService folderService) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1111),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 2),
+        ),
+        title: const Text('Delete Folder', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Delete "${folder.name}"?\n\nCharacters inside will NOT be deleted — they\'ll return to the top level.',
+          style: const TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              folderService.deleteFolder(folder.id);
+              Navigator.pop(ctx);
+              if (_activeFolderId == folder.id) {
+                setState(() => _activeFolderId = null);
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Character Actions ──────────────────────────────────────────
 
   ButtonStyle _buttonStyle() {
     return ElevatedButton.styleFrom(
@@ -280,7 +668,8 @@ class HomePage extends StatelessWidget {
             onPressed: () async {
               Navigator.of(context).pop();
               final repo = Provider.of<CharacterRepository>(context, listen: false);
-              await repo.deleteCharacter(character);
+              final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+              await repo.deleteCharacter(character, worldRepo: worldRepo);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -302,7 +691,6 @@ class HomePage extends StatelessWidget {
        context,
        MaterialPageRoute(builder: (context) => EditCharacterPage(character: character)),
      );
-     // Refresh repo after edit
      if (context.mounted) {
        Provider.of<CharacterRepository>(context, listen: false).loadCharacters();
      }
@@ -318,9 +706,19 @@ class HomePage extends StatelessWidget {
       if (!context.mounted) return;
       final file = File(result.files.single.path!);
       try {
-        await Provider.of<CharacterRepository>(context, listen: false).importCharacter(file);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Character imported successfully!')));
+        final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+        final repo = Provider.of<CharacterRepository>(context, listen: false);
+        final card = await repo.importCharacter(file, worldRepo: worldRepo);
+        if (context.mounted && card != null) {
+          // Show tag dialog
+          final tags = await TagDialog.show(context, card);
+          if (tags != null && context.mounted) {
+            card.tags = List.from(tags);
+            await repo.updateCharacter(card);
+          }
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Character imported successfully!')));
+          }
         }
       } catch (e) {
         if (context.mounted) {
@@ -344,16 +742,6 @@ class HomePage extends StatelessWidget {
        }
 
        try {
-         // Use V2CardService to save
-         // We need to import it first, but for now assuming it's available via easy access or we inject it
-         // Since I cannot easily add imports in this replace block seamlessly without context, 
-         // I will assume V2CardService is available or I will add the import in a separate step if missing.
-         // Wait, I can't assume. I should have added the import. 
-         // I will add the logic here.
-         
-         // Assuming V2CardService is in services/v2_card_service.dart
-         // I'll need to update imports in a separate step if I missed it.
-         // For now, let's implement the call.
          final v2Service = Provider.of<V2CardService>(context, listen: false);
          await v2Service.saveCardAsPng(character, outputFile, character.imagePath);
 
@@ -368,9 +756,11 @@ class HomePage extends StatelessWidget {
     }
   }
 
+  // ─── Browser Integrations ──────────────────────────────────────
+
   Future<void> _openBrowser(BuildContext context) async {
-    // Capture references before async gap so they're available in the callback
     final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final worldRepo = Provider.of<WorldRepository>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     
     final webview = await WebviewWindow.create(
@@ -380,7 +770,6 @@ class HomePage extends StatelessWidget {
       ),
     );
     
-    // Shared download handler for both platforms
     Future<void> handleDownloadUrl(String url) async {
       debugPrint('AG_DEBUG: Download card intercepted: $url');
       
@@ -389,7 +778,6 @@ class HomePage extends StatelessWidget {
         final request = await httpClient.getUrl(Uri.parse(url));
         final httpResponse = await request.close();
         
-        // Follow redirects and get final response bytes
         final bytes = <int>[];
         await for (final chunk in httpResponse) {
           bytes.addAll(chunk);
@@ -397,14 +785,12 @@ class HomePage extends StatelessWidget {
         
         httpClient.close();
         
-        // Save to characters directory
         final directory = await getApplicationDocumentsDirectory();
         final charDir = Directory('${directory.path}/KoboldManager/Characters');
         if (!await charDir.exists()) {
           await charDir.create(recursive: true);
         }
         
-        // Create a filename from the URL or use a timestamp
         final uri = Uri.parse(url);
         String fileName;
         if (uri.pathSegments.isNotEmpty && uri.pathSegments.last.endsWith('.png')) {
@@ -415,14 +801,22 @@ class HomePage extends StatelessWidget {
         final tempFile = File('${charDir.path}/$fileName');
         await tempFile.writeAsBytes(bytes);
         
-        // Auto-import the character
-        await repo.importCharacter(tempFile);
+        final card = await repo.importCharacter(tempFile, worldRepo: worldRepo);
         
-        // Close the webview and show success
         webview.close();
+        
+        // Show tag dialog after webview closes
+        if (card != null && context.mounted) {
+          final tags = await TagDialog.show(context, card);
+          if (tags != null && context.mounted) {
+            card.tags = List.from(tags);
+            await repo.updateCharacter(card);
+          }
+        }
+
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Character card downloaded and imported!'),
+            content: const Text('Character card downloaded and imported!'),
             backgroundColor: Colors.green.shade800,
           ),
         );
@@ -437,16 +831,12 @@ class HomePage extends StatelessWidget {
       }
     }
     
-    // Platform-specific message handler registration
     if (Platform.isMacOS) {
-      // macOS: WKWebView uses registerJavaScriptMessageHandler
       webview.registerJavaScriptMessageHandler('downloadCard', (name, body) async {
         await handleDownloadUrl(body.toString());
       });
     } else if (Platform.isWindows) {
-      // Windows: WebView2 uses web message callbacks
       webview.addOnWebMessageReceivedCallback((message) async {
-        // Messages prefixed with 'DOWNLOAD:' are download URLs
         if (message.startsWith('DOWNLOAD:')) {
           final url = message.substring('DOWNLOAD:'.length);
           await handleDownloadUrl(url);
@@ -454,31 +844,23 @@ class HomePage extends StatelessWidget {
       });
     }
     
-    // Inject JavaScript to intercept download card links
-    // The download button on aicharactercards.com uses URLs like:
-    // https://aicharactercards.com/?download_card_image=true&post_id=XXXX
-    // Use platform-specific messaging API
     final String jsSendMessage = Platform.isMacOS
         ? 'window.webkit.messageHandlers.downloadCard.postMessage(href)'
         : 'window.chrome.webview.postMessage("DOWNLOAD:" + href)';
     
     webview.addScriptToExecuteOnDocumentCreated('''
       (function() {
-        // Intercept clicks on download links
         document.addEventListener('click', function(e) {
           var target = e.target;
-          // Walk up the DOM to find an anchor tag
           while (target && target.tagName !== 'A') {
             target = target.parentElement;
           }
           if (target && target.href) {
             var href = target.href;
-            // Check if this is a download card link
             if (href.includes('download_card_image=true') || 
                 (href.endsWith('.png') && !href.includes('aicharactercards.com/wp-content/uploads'))) {
               e.preventDefault();
               e.stopPropagation();
-              // Send the URL to Flutter via platform-specific message handler
               $jsSendMessage;
               return false;
             }
@@ -490,20 +872,126 @@ class HomePage extends StatelessWidget {
     webview.launch('https://aicharactercards.com/');
   }
 
-  Future<void> _openChubBrowser() async {
+  Future<void> _openChubBrowser(BuildContext context) async {
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    
     final webview = await WebviewWindow.create(
       configuration: CreateConfiguration(
         title: 'Chub.ai - Character Hub',
         titleBarTopPadding: Platform.isMacOS ? 20 : 0,
       ),
     );
+
+    Future<void> handleChubDownload(String url) async {
+      debugPrint('AG_DEBUG: Chub download intercepted: $url');
+      
+      try {
+        final httpClient = HttpClient();
+        final request = await httpClient.getUrl(Uri.parse(url));
+        final httpResponse = await request.close();
+        
+        final bytes = <int>[];
+        await for (final chunk in httpResponse) {
+          bytes.addAll(chunk);
+        }
+        
+        httpClient.close();
+        
+        final directory = await getApplicationDocumentsDirectory();
+        final charDir = Directory('${directory.path}/KoboldManager/Characters');
+        if (!await charDir.exists()) {
+          await charDir.create(recursive: true);
+        }
+        
+        final uri = Uri.parse(url);
+        String fileName;
+        if (uri.pathSegments.isNotEmpty && uri.pathSegments.last.endsWith('.png')) {
+          fileName = uri.pathSegments.last;
+        } else {
+          fileName = 'chub_card_${DateTime.now().millisecondsSinceEpoch}.png';
+        }
+        final tempFile = File('${charDir.path}/$fileName');
+        await tempFile.writeAsBytes(bytes);
+        
+        final card = await repo.importCharacter(tempFile, worldRepo: worldRepo);
+        
+        webview.close();
+
+        // Show tag dialog — Chub.ai cards likely have tags already
+        if (card != null && context.mounted) {
+          final tags = await TagDialog.show(context, card);
+          if (tags != null && context.mounted) {
+            card.tags = List.from(tags);
+            await repo.updateCharacter(card);
+          }
+        }
+
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text('Chub character downloaded and imported!'),
+            backgroundColor: Colors.green.shade800,
+          ),
+        );
+      } catch (e) {
+        debugPrint('AG_DEBUG: Chub download error: $e');
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Chub download failed: $e'),
+            backgroundColor: Colors.red.shade800,
+          ),
+        );
+      }
+    }
+
+    if (Platform.isMacOS) {
+      webview.registerJavaScriptMessageHandler('downloadCard', (name, body) async {
+        await handleChubDownload(body.toString());
+      });
+    } else if (Platform.isWindows) {
+      webview.addOnWebMessageReceivedCallback((message) async {
+        if (message.startsWith('DOWNLOAD:')) {
+          final url = message.substring('DOWNLOAD:'.length);
+          await handleChubDownload(url);
+        }
+      });
+    }
+
+    final String jsSendMessage = Platform.isMacOS
+        ? 'window.webkit.messageHandlers.downloadCard.postMessage(href)'
+        : 'window.chrome.webview.postMessage("DOWNLOAD:" + href)';
+
+    webview.addScriptToExecuteOnDocumentCreated('''
+      (function() {
+        document.addEventListener('click', function(e) {
+          var target = e.target;
+          while (target && target.tagName !== 'A') {
+            target = target.parentElement;
+          }
+          if (target && target.href) {
+            var href = target.href;
+            if (href.endsWith('.png') || 
+                href.includes('/download') ||
+                href.includes('characterhub.org/characters/download') ||
+                (target.hasAttribute('download') && href.includes('.png'))) {
+              e.preventDefault();
+              e.stopPropagation();
+              $jsSendMessage;
+              return false;
+            }
+          }
+        }, true);
+      })();
+    ''');
+
     webview.launch('https://chub.ai/');
   }
 
   void _showChubWarning(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF2D1111),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -559,7 +1047,7 @@ class HomePage extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Nope, I Choose Life', style: TextStyle(color: Colors.white70)),
           ),
           ElevatedButton(
@@ -568,8 +1056,8 @@ class HomePage extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
             onPressed: () {
-              Navigator.pop(context);
-              _openChubBrowser();
+              Navigator.pop(dialogContext);
+              _openChubBrowser(context);
             },
             child: const Text('I Fear Nothing. Proceed.'),
           ),
@@ -578,4 +1066,3 @@ class HomePage extends StatelessWidget {
     );
   }
 }
-

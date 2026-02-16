@@ -366,7 +366,57 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 16),
+          _buildSlider(
+            'Font Size Scale',
+            storageService.textScale,
+            0.7,
+            2.0,
+            (val) => storageService.setTextScale(val),
+            context,
+            divisions: 13,
+          ),
+          const SizedBox(height: 16),
           _buildSectionHeader('Model Instructions', context),
+          const SizedBox(height: 8),
+          // Prompt library row
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: null,
+                  isExpanded: true,
+                  hint: const Text('Load saved prompt...', style: TextStyle(fontSize: 13)),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: theme.cardColor,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: storageService.savedPrompts.map((p) => DropdownMenuItem<String>(
+                    value: p['name'],
+                    child: Text(p['name']!, overflow: TextOverflow.ellipsis),
+                  )).toList(),
+                  onChanged: (name) {
+                    if (name != null) {
+                      storageService.loadSavedPrompt(name);
+                      _systemPromptController.text = storageService.systemPrompt;
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Save current prompt',
+                icon: const Icon(Icons.save, color: Colors.amber),
+                onPressed: () => _showSavePromptDialog(context, storageService),
+              ),
+              IconButton(
+                tooltip: 'Delete a saved prompt',
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                onPressed: () => _showDeletePromptDialog(context, storageService),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _systemPromptController,
@@ -832,6 +882,92 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showSavePromptDialog(BuildContext context, StorageService storageService) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('Save Prompt', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Prompt name...',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              storageService.savePrompt(value.trim(), storageService.systemPrompt);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Prompt "${value.trim()}" saved!')),
+              );
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade700),
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                storageService.savePrompt(controller.text.trim(), storageService.systemPrompt);
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Prompt "${controller.text.trim()}" saved!')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeletePromptDialog(BuildContext context, StorageService storageService) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        title: const Text('Delete Saved Prompt', style: TextStyle(color: Colors.white)),
+        content: SizedBox(
+          width: 300,
+          child: storageService.savedPrompts.isEmpty
+              ? const Text('No saved prompts.', style: TextStyle(color: Colors.white54))
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: storageService.savedPrompts.map((p) => ListTile(
+                    title: Text(p['name']!, style: const TextStyle(color: Colors.white)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                      onPressed: () {
+                        storageService.deleteSavedPrompt(p['name']!);
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Prompt "${p['name']}" deleted.')),
+                        );
+                      },
+                    ),
+                    dense: true,
+                  )).toList(),
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close', style: TextStyle(color: Colors.white54)),
+          ),
+        ],
+      ),
     );
   }
 }

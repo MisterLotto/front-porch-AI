@@ -13,7 +13,7 @@ import 'package:kobold_character_card_manager/models/world.dart';
 enum GenerationMode { normal, continue_, impersonate }
 
 class ChatMessage {
-  final String text;
+  String text;
   final String sender;
   final bool isUser;
 
@@ -60,6 +60,8 @@ class ChatService extends ChangeNotifier {
   double get generationProgress => _generationProgress;
   int get tokensGenerated => _tokensGenerated;
   int get maxTokens => _maxTokens;
+  int _greetingIndex = 0;
+  int get greetingIndex => _greetingIndex;
 
   ChatService(this._koboldService, this._userPersonaService, this._storageService, this._worldRepository);
 
@@ -240,6 +242,7 @@ class ChatService extends ChangeNotifier {
     if (_activeCharacter == null) return;
 
     _messages.clear();
+    _greetingIndex = 0;
     if (_activeCharacter!.firstMessage.isNotEmpty) {
       _messages.add(ChatMessage(
         text: _buildFirstMessage(_activeCharacter!),
@@ -254,9 +257,29 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _buildFirstMessage(CharacterCard character) {
-    // Replace {{user}} and {{char}} placeholders
-    String msg = character.firstMessage;
+  /// Cycle the first message through alternate greetings
+  Future<void> cycleGreeting(int direction) async {
+    if (_activeCharacter == null || _messages.isEmpty) return;
+    final allGreetings = _activeCharacter!.allGreetings;
+    if (allGreetings.length <= 1) return;
+
+    _greetingIndex = (_greetingIndex + direction) % allGreetings.length;
+    if (_greetingIndex < 0) _greetingIndex += allGreetings.length;
+
+    // Replace the first message text
+    final greeting = allGreetings[_greetingIndex];
+    _messages[0] = ChatMessage(
+      text: _buildFirstMessage(_activeCharacter!, greetingText: greeting),
+      sender: _activeCharacter!.name,
+      isUser: false,
+    );
+    
+    await _saveChat();
+    notifyListeners();
+  }
+
+  String _buildFirstMessage(CharacterCard character, {String? greetingText}) {
+    String msg = greetingText ?? character.firstMessage;
     msg = msg.replaceAll('{{char}}', character.name);
     msg = msg.replaceAll('{{user}}', _userPersonaService.persona.name); 
     return msg;
@@ -265,7 +288,8 @@ class ChatService extends ChangeNotifier {
   Future<void> sendMessage(String text) async {
     if (_activeCharacter == null || text.trim().isEmpty) return;
 
-    _messages.add(ChatMessage(text: text, sender: 'User', isUser: true));
+    final senderName = _userPersonaService.persona.name;
+    _messages.add(ChatMessage(text: text, sender: senderName, isUser: true));
     await _saveChat();
     notifyListeners();
 

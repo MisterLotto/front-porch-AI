@@ -4,11 +4,13 @@ class World {
   String name;
   String description;
   Lorebook lorebook;
+  String? linkedCharacterName; // If set, this world was auto-created from a character import
 
   World({
     required this.name,
     this.description = '',
     required this.lorebook,
+    this.linkedCharacterName,
   });
 
   Map<String, dynamic> toJson() {
@@ -16,6 +18,7 @@ class World {
       'name': name,
       'description': description,
       'lorebook': lorebook.toJson(),
+      if (linkedCharacterName != null) 'linked_character_name': linkedCharacterName,
     };
   }
 
@@ -26,6 +29,7 @@ class World {
       lorebook: json['lorebook'] != null 
           ? Lorebook.fromJson(json['lorebook'])
           : Lorebook(entries: []),
+      linkedCharacterName: json['linked_character_name'],
     );
   }
 }

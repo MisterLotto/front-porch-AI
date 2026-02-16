@@ -137,7 +137,33 @@ class _WorldCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        title: Text(world.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(world.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            if (world.linkedCharacterName != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.link, size: 14, color: Colors.blueAccent),
+                    const SizedBox(width: 4),
+                    Text(
+                      world.linkedCharacterName!,
+                      style: const TextStyle(color: Colors.blueAccent, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
         subtitle: Text(
           '${world.lorebook.entries.length} Entries • ${world.description.isEmpty ? "No description" : world.description}',
           maxLines: 1,
@@ -155,10 +181,18 @@ class _WorldCard extends StatelessWidget {
               icon: const Icon(Icons.edit, size: 20),
               onPressed: () => _editWorld(context),
             ),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
-              onPressed: () => _confirmDelete(context),
-            ),
+            world.linkedCharacterName != null
+              ? Tooltip(
+                  message: 'Cannot delete: linked to ${world.linkedCharacterName}',
+                  child: IconButton(
+                    icon: Icon(Icons.delete, size: 20, color: Colors.grey.shade600),
+                    onPressed: null,
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
+                  onPressed: () => _confirmDelete(context),
+                ),
           ],
         ),
       ),

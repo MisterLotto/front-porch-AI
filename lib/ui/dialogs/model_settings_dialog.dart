@@ -31,10 +31,8 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
     _useVulkan = storage.useVulkan == true;
     _useMetal = storage.useMetal == true;
     _selectedModelPath = storage.lastUsedModelPath;
-    
-    // Attempt to load current settings if running, or defaults
-    // In a real scenario, we might want to query the running service for its config if possible, 
-    // but for now we rely on user input/defaults.
+    _gpuLayersController.text = storage.gpuLayers.toString();
+    _contextSizeController.text = storage.contextSize.toString();
   }
 
   @override
@@ -101,9 +99,18 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       return;
     }
 
+    // Save all settings for auto-launch on next startup
+    final storage = Provider.of<StorageService>(context, listen: false);
+    storage.setLastUsedModelPath(_selectedModelPath);
+    storage.setGpuLayers(int.tryParse(_gpuLayersController.text) ?? 0);
+    storage.setContextSize(int.tryParse(_contextSizeController.text) ?? 8192);
+    storage.setUseCublas(_useCublas);
+    storage.setUseVulkan(_useVulkan);
+    storage.setUseMetal(_useMetal);
+
     koboldService.stopKobold();
     
-    // Give it a moment to stop before restarting (optional, but safer)
+    // Give it a moment to stop before restarting
     Future.delayed(const Duration(milliseconds: 500), () {
       if (!mounted) return;
       koboldService.startKobold(
@@ -201,7 +208,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildInfoRow('GPU', hardwareService.hardwareInfo!.gpuName),
-                          _buildInfoRow('VRAM', '${hardwareService.hardwareInfo!.vramMb} MB'),
+                          _buildInfoRow('VRAM', '${hardwareService.hardwareInfo!.vramMb} MB${hardwareService.hardwareInfo!.isSharedMemory ? ' (Shared)' : ''}'),
                         ],
                       ),
               ),

@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kobold_character_card_manager/models/character_card.dart';
+import 'package:kobold_character_card_manager/models/lorebook.dart';
+import 'package:kobold_character_card_manager/models/world.dart';
 import 'package:kobold_character_card_manager/services/v2_card_service.dart';
+import 'package:kobold_character_card_manager/services/world_repository.dart';
 
 class CharacterRepository extends ChangeNotifier {
   final List<CharacterCard> _characters = [];
@@ -10,6 +13,16 @@ class CharacterRepository extends ChangeNotifier {
 
   List<CharacterCard> get characters => List.unmodifiable(_characters);
   bool get isLoading => _isLoading;
+
+  /// All unique tags across all characters (for autocomplete)
+  List<String> get allTags {
+    final tags = <String>{};
+    for (final c in _characters) {
+      tags.addAll(c.tags);
+    }
+    final sorted = tags.toList()..sort();
+    return sorted;
+  }
 
   CharacterRepository() {
     loadCharacters();
@@ -58,7 +71,7 @@ class CharacterRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteCharacter(CharacterCard character) async {
+  Future<void> deleteCharacter(CharacterCard character, {WorldRepository? worldRepo}) async {
     // Remove from in-memory list
     _characters.remove(character);
     notifyListeners();
@@ -75,9 +88,19 @@ class CharacterRepository extends ChangeNotifier {
         print('Error deleting character file: $e');
       }
     }
+    
+    // Remove any linked world
+    if (worldRepo != null) {
+      final linkedWorld = worldRepo.worlds.where(
+        (w) => w.linkedCharacterName == character.name
+      ).toList();
+      for (final world in linkedWorld) {
+        await worldRepo.deleteWorld(world);
+      }
+    }
   }
 
-  Future<void> importCharacter(File file) async {
+  Future<CharacterCard?> importCharacter(File file, {WorldRepository? worldRepo}) async {
     _isLoading = true;
     notifyListeners();
     try {
@@ -111,7 +134,19 @@ class CharacterRepository extends ChangeNotifier {
       // Update the imagePath to point to the local copy
       card.imagePath = destPath;
       
+      // Auto-create a linked world if the card has a lorebook
+      if (card.lorebook != null && card.lorebook!.entries.isNotEmpty && worldRepo != null) {
+        final world = World(
+          name: "${card.name}'s Lorebook",
+          description: 'Auto-imported from character card: ${card.name}',
+          lorebook: Lorebook(entries: List.from(card.lorebook!.entries)),
+          linkedCharacterName: card.name,
+        );
+        await worldRepo.saveWorld(world);
+      }
+      
       addCharacter(card);
+      return card;
       
     } catch (e) {
       rethrow;

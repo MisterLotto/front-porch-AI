@@ -17,6 +17,7 @@ import 'package:kobold_character_card_manager/services/chat_service.dart';
 import 'package:kobold_character_card_manager/services/user_persona_service.dart';
 import 'package:kobold_character_card_manager/services/world_repository.dart';
 import 'package:kobold_character_card_manager/services/setup_service.dart';
+import 'package:kobold_character_card_manager/services/folder_service.dart';
 import 'package:kobold_character_card_manager/ui/widgets/setup_overlay.dart';
 
 void main(List<String> args) async {
@@ -51,6 +52,7 @@ void main(List<String> args) async {
         ChangeNotifierProvider(create: (_) => HardwareService()),
         ChangeNotifierProvider(create: (_) => CharacterRepository()),
         ChangeNotifierProvider(create: (_) => UserPersonaService()),
+        ChangeNotifierProvider(create: (_) => FolderService()),
         ChangeNotifierProxyProvider<StorageService, WorldRepository>(
           create: (context) => WorldRepository(Provider.of<StorageService>(context, listen: false)),
           update: (context, storage, previous) => previous ?? WorldRepository(storage),
@@ -110,11 +112,30 @@ class MyApp extends StatelessWidget {
             ),
             useMaterial3: true,
           ),
-          home: Stack(
-            children: [
-              const MainLayout(),
-              const SetupOverlay(),
-            ],
+          home: Builder(
+            builder: (context) {
+              final storage = Provider.of<StorageService>(context);
+              final width = MediaQuery.of(context).size.width;
+              
+              // Scale text relative to base design width of 1280px
+              // Clamp responsive base between 0.85 and 1.5
+              final responsiveScale = (width / 1280).clamp(0.85, 1.5);
+              
+              // Combine with user preference
+              final effectiveScale = responsiveScale * storage.textScale;
+              
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(effectiveScale),
+                ),
+                child: Stack(
+                  children: [
+                    const MainLayout(),
+                    const SetupOverlay(),
+                  ],
+                ),
+              );
+            },
           ),
         );
       },
