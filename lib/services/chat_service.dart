@@ -57,6 +57,7 @@ class ChatService extends ChangeNotifier {
   final List<String> _tokenBuffer = [];
   Timer? _drainTimer;
   int _displayedTokenCount = 0;
+  final List<DateTime> _tokenTimestamps = []; // Rolling window for TPS measurement
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -68,10 +69,20 @@ class ChatService extends ChangeNotifier {
   int get maxTokens => _maxTokens;
   bool get isBuffering => _isBuffering;
   double get tokensPerSecond {
-    if (_generationStartTime == null || _tokensGenerated == 0) return 0.0;
-    final elapsed = DateTime.now().difference(_generationStartTime!).inMilliseconds / 1000.0;
-    if (elapsed <= 0) return 0.0;
-    return _tokensGenerated / elapsed;
+    if (_tokenTimestamps.length < 2) return 0.0;
+    // Use rolling window: tokens in the last 3 seconds
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(seconds: 3));
+    final recent = _tokenTimestamps.where((t) => t.isAfter(cutoff)).length;
+    if (recent < 2) {
+      // Fallback to overall average
+      if (_generationStartTime == null || _tokensGenerated == 0) return 0.0;
+      final elapsed = now.difference(_generationStartTime!).inMilliseconds / 1000.0;
+      return elapsed > 0 ? _tokensGenerated / elapsed : 0.0;
+    }
+    final windowStart = _tokenTimestamps.where((t) => t.isAfter(cutoff)).first;
+    final windowElapsed = now.difference(windowStart).inMilliseconds / 1000.0;
+    return windowElapsed > 0 ? recent / windowElapsed : 0.0;
   }
   int _greetingIndex = 0;
   int get greetingIndex => _greetingIndex;
@@ -431,6 +442,7 @@ class ChatService extends ChangeNotifier {
       bool stopFound = false;
       _tokenBuffer.clear();
       _displayedTokenCount = 0;
+      _tokenTimestamps.clear();
       bool streamDone = false;
 
       // Determine message identity
@@ -490,6 +502,7 @@ class ChatService extends ChangeNotifier {
         if (_cancelRequested) break;
         accumulatedResponse += token;
         _tokensGenerated++;
+        _tokenTimestamps.add(DateTime.now());
         _generationProgress = _maxTokens > 0 ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0) : 0.0;
 
         // Client-side safety trim check (mid-stream)
@@ -513,28 +526,39 @@ class ChatService extends ChangeNotifier {
         }
 
         if (bufferEnabled) {
-          // Adaptive buffer: calculate minimum buffer needed for uninterrupted display
-          // Formula: bufferNeeded = maxLength × (1 - genTps / targetTps)
-          // This is the earliest we can start displaying without ever running dry
-          if (_drainTimer == null && _tokensGenerated >= 10) {
-            final elapsed = DateTime.now().difference(_generationStartTime!).inMilliseconds / 1000.0;
-            final currentTps = elapsed > 0 ? _tokensGenerated / elapsed : 0.0;
+          // Calculate current rolling TPS (last 3 seconds)
+          final now = DateTime.now();
+          final cutoff = now.subtract(const Duration(seconds: 3));
+          final recentCount = _tokenTimestamps.where((t) => t.isAfter(cutoff)).length;
+          final windowStart = _tokenTimestamps.where((t) => t.isAfter(cutoff)).firstOrNull ?? _generationStartTime!;
+          final windowElapsed = now.difference(windowStart).inMilliseconds / 1000.0;
+          final currentTps = (recentCount >= 2 && windowElapsed > 0) ? recentCount / windowElapsed : (_tokensGenerated > 0 ? _tokensGenerated / (now.difference(_generationStartTime!).inMilliseconds / 1000.0) : 0.0);
 
+          if (_drainTimer == null && _tokensGenerated >= 10) {
+            // Not yet draining — calculate when to start
             int bufferTarget;
             if (currentTps >= targetTps) {
-              // Generation keeps up — small safety buffer (2 seconds worth)
               bufferTarget = (targetTps * 2).round().clamp(30, 120);
-            } else {
-              // Generation slower than display — calculate optimal start point
-              final ratio = currentTps / targetTps; // e.g., 1.7/30 = 0.057
+            } else if (currentTps > 0) {
+              final ratio = currentTps / targetTps;
               bufferTarget = (_maxTokens * (1.0 - ratio)).ceil();
-              // Add small safety margin (5%) to account for TPS fluctuations
               bufferTarget = (bufferTarget * 1.05).ceil().clamp(10, _maxTokens);
+            } else {
+              bufferTarget = _maxTokens; // Can't estimate, wait for all
             }
 
             if (_tokenBuffer.length >= bufferTarget) {
               _isBuffering = false;
               _startDrainTimer();
+            }
+          } else if (_drainTimer != null) {
+            // Already draining — check if buffer is running low
+            final remaining = _tokenBuffer.length - _displayedTokenCount;
+            if (remaining <= 3 && !streamDone) {
+              // Buffer critically low — pause drain to rebuild
+              _drainTimer?.cancel();
+              _drainTimer = null;
+              _isBuffering = true;
             }
           }
         } else {
