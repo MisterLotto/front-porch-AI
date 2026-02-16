@@ -4,6 +4,19 @@
 ![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 
+## 🔓 Why Open Source?
+
+Proprietary software lives and dies at the discretion of its creators. When a company moves on, shuts down, or simply loses interest, the tools you depend on become frozen in time — no updates, no fixes, no future.
+
+Front Porch AI is proudly licensed under the **GPL v3** because we believe your tools should belong to the community that uses them. If this project is ever abandoned, anyone can fork it, improve it, and keep it alive. Open source isn't just a license — it's a promise that the software will always have a future.
+
+## 💬 Join the Community
+
+Have questions, feedback, or just want to hang out? Connect with us:
+
+- **Discord**: [Join our server](https://discord.gg/EqJrJPjdT)
+- **Matrix**: [matrix.dreamersai.art](https://matrix.dreamersai.art)
+
 <p align="center">
   <img src="docs/screenshots/home.png" width="800" alt="Home Page - Character Grid with Folders">
 </p>
