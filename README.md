@@ -4,8 +4,6 @@
 ![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 
-## 📸 Screenshots
-
 <p align="center">
   <img src="docs/screenshots/home.png" width="800" alt="Home Page - Character Grid with Folders">
 </p>
@@ -13,25 +11,13 @@
   <em>Organize your collection with virtual folders and comprehensive search</em>
 </p>
 
-<p align="center">
-  <img src="docs/screenshots/chat.png" width="800" alt="Immersive Chat Interface">
-</p>
-<p align="center">
-  <em>Immersive chat with rich text styling, streaming, and editing</em>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/editor.png" width="800" alt="Character Editor">
-</p>
-<p align="center">
-  <em>Powerful metadata editor with tag management and V2 support</em>
-</p>
-
 A powerful, cross-platform desktop application designed to streamline the management of AI character cards and provide a seamless chat experience with **KoboldCPP**. Organize your collection, edit metadata, build worlds, and chat with your favorite characters in a modern, intuitive interface.
 
 ## ✨ Features
 
 ### 📇 Character Management
+<img src="docs/screenshots/editor.png" width="800" alt="Character Editor">
+
 - **V2 Spec Support**: Fully compatible with the V2 character card specification (PNG & JSON).
 - **Import & Export**: Easily import cards from other frontends or export your creations to share.
 - **Metadata Editor**: Edit names, descriptions, personalities, scenarios, and first messages with a clean UI.
@@ -51,6 +37,8 @@ Create detailed character cards (V2 spec compatible) with a user-friendly form U
 - Avatar image upload
 
 ### 💬 Immersive Chat Experience
+<img src="docs/screenshots/chat.png" width="800" alt="Immersive Chat Interface">
+
 - **Real-Time Streaming**: Tokens appear instantly as they are generated, eliminating perceived latency.
 - **Rich Text Styling**: 
   - **Dialogue** is highlighted in amber for easy reading.
