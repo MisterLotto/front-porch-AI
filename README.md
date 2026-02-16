@@ -52,7 +52,12 @@ Create detailed character cards (V2 spec compatible) with a user-friendly form U
 ### 💬 Immersive Chat Experience
 <img src="docs/screenshots/chat.png" width="800" alt="Immersive Chat Interface">
 
-- **Real-Time Streaming**: Tokens appear instantly as they are generated, eliminating perceived latency.
+- **Smooth Output Buffer**: An intelligent buffering system that delivers text at a consistent, readable pace — no matter how fast or slow your hardware generates tokens.
+  - **Adaptive TPS Measurement**: Continuously monitors generation speed using a rolling 3-second window and calculates the optimal buffer size to start displaying as early as possible without interruptions.
+  - **Configurable Display Speed**: Set your preferred reading speed (default: ~250 WPM / 6 tokens/sec) via a slider from 5–60 t/s. Tokens are dripped onto the screen at your pace, not your GPU's pace.
+  - **No-Buffer Mode**: Prefer raw streaming? Toggle the buffer off for instant token-by-token display as they arrive.
+  - **Auto-Pause & Rebuild**: If generation speed drops mid-response, the buffer automatically pauses display and rebuilds to maintain a seamless flow.
+  - **Real-Time TPS Counter**: The generation bar shows live tokens-per-second, buffering status, and progress percentage.
 - **Rich Text Styling**: 
   - **Dialogue** is highlighted in amber for easy reading.
   - *Actions* and narrative text are subtly styled in grey.
