@@ -42,7 +42,7 @@ class StorageService extends ChangeNotifier {
   double _textScale = 1.0;
   List<Map<String, String>> _savedPrompts = [];
   bool _displayBufferEnabled = true;
-  double _targetDisplayTps = 30.0;
+  double _targetDisplayTps = 6.0; // ~250 WPM average human reading speed
 
 
   // Getters
