@@ -138,6 +138,8 @@ class MockBackendManager extends ChangeNotifier implements BackendManager {
   Future<void> downloadBackend() async {}
   @override
   String get statusMessage => '';
+  @override
+  bool get useRocm => false;
 }
 
 class MockModelManager extends ChangeNotifier implements ModelManager {

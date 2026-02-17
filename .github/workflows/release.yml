@@ -69,13 +69,88 @@ jobs:
       - name: Package Linux
         if: matrix.platform == 'linux'
         run: |
+          # 1. Prepare AppImage
+          mkdir -p AppDir/usr/bin
+          cp -r ${{ matrix.build_path }}/* AppDir/usr/bin/
+          
+          # Create Desktop file
+          cat <<EOF > AppDir/front_porch_ai.desktop
+          [Desktop Entry]
+          Name=Front Porch AI
+          Exec=front_porch_ai
+          Icon=front_porch_ai
+          Type=Application
+          Categories=Utility;
+          EOF
+          
+          # Use local icon if exists, otherwise placeholder
+          if [ -f "assets/images/front_porch_ai_icon.png" ]; then
+            cp assets/images/front_porch_ai_icon.png AppDir/front_porch_ai.png
+          else
+            # Minimal placeholder icon creation if no icon found
+            touch AppDir/front_porch_ai.png
+          fi
+          
+          ln -s usr/bin/front_porch_ai AppDir/AppRun
+          
+          # Download and use appimagetool
+          curl -L https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -o appimagetool
+          chmod +x appimagetool
+          ./appimagetool AppDir Front_Porch_AI-Linux.AppImage
+          
+          # 2. Prepare .deb
+          mkdir -p deb/usr/bin
+          mkdir -p deb/DEBIAN
+          cp -r ${{ matrix.build_path }}/* deb/usr/bin/
+          cat <<EOF > deb/DEBIAN/control
+          Package: front-porch-ai
+          Version: 0.0.3.4
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Front Porch AI Team
+          Description: A chilled out frontend for KoboldCPP.
+          EOF
+          dpkg-deb --build deb Front_Porch_AI-Linux.deb
+          
+          # 3. Prepare .rpm
+          sudo apt-get install -y rpm
+          mkdir -p rpmroot/{BUILD,RPMS,SOURCES,SPECS,SRPMS,INSTALL}
+          cat <<EOF > rpmroot/SPECS/front-porch-ai.spec
+          Name:           front-porch-ai
+          Version:        0.0.3.4
+          Release:        1%{?dist}
+          Summary:        Front Porch AI Frontend
+          License:        MIT
+          URL:            https://github.com/linux4life1/front-porch-AI
+          
+          %description
+          A chilled out frontend for KoboldCPP.
+          
+          %install
+          mkdir -p %{buildroot}/usr/bin
+          cp -r ${{ matrix.build_path }}/* %{buildroot}/usr/bin/
+          
+          %files
+          /usr/bin/*
+          
+          %changelog
+          EOF
+          rpmbuild --define "_topdir $(pwd)/rpmroot" --define "_buildrootdir $(pwd)/rpmroot/INSTALL" -ba rpmroot/SPECS/front-porch-ai.spec
+          cp rpmroot/RPMS/x86_64/*.rpm Front_Porch_AI-Linux.rpm
+          
+          # 4. Standard tar.gz
           cd ${{ matrix.build_path }}
           tar -czvf ../../../../../${{ matrix.asset_name }} .
 
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.asset_name }}
+          files: |
+            ${{ matrix.asset_name }}
+            Front_Porch_AI-Linux.AppImage
+            Front_Porch_AI-Linux.deb
+            Front_Porch_AI-Linux.rpm
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

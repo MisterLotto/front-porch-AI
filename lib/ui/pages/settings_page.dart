@@ -9,6 +9,7 @@ import 'package:kobold_character_card_manager/services/storage_service.dart';
 import 'package:kobold_character_card_manager/services/hardware_service.dart';
 import 'package:kobold_character_card_manager/services/optimization_service.dart';
 import 'package:kobold_character_card_manager/ui/widgets/log_view.dart';
+import 'package:kobold_character_card_manager/ui/dialogs/rocm_guidance_dialog.dart';
 import 'package:kobold_character_card_manager/providers/app_state.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -110,14 +111,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
          if (changed) {
             setState(() {});
-            final String msg;
-            if (hw?.vendor == 'Nvidia') {
-              msg = 'NVIDIA GPU detected: CuBLAS enabled.';
-            } else if (Platform.isMacOS) {
-              msg = 'Apple Silicon detected: Metal enabled.';
-            } else {
-              msg = 'Non-NVIDIA GPU detected: Vulkan enabled.';
-            }
+             final String msg;
+             if (hw?.vendor == 'Nvidia') {
+               msg = 'NVIDIA GPU detected: CuBLAS enabled.';
+             } else if (Platform.isMacOS) {
+               msg = 'Apple Silicon detected: Metal enabled.';
+             } else if (hw?.vendor == 'AMD' && Platform.isLinux && hw?.hasRocm == false) {
+               msg = 'AMD GPU detected: Vulkan enabled. Install ROCm for better performance.';
+               // Show ROCm guidance dialog
+               showRocmGuidanceDialog(context, hw!.linuxDistro);
+             } else {
+               msg = 'Non-NVIDIA GPU detected: Vulkan enabled.';
+             }
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
          } else {
             // Just update UI to match loaded persistence

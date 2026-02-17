@@ -76,3 +76,11 @@ analyze_results.txt
 .flutter-plugins
 .flutter-plugins-dependencies
 windows/flutter/ephemeral/
+
+# AppImage artifacts
+AppDir/
+*.AppImage
+appimagetool
+front_porch_ai.desktop
+front_porch_ai.png
+

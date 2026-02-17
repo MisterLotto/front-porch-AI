@@ -13,6 +13,9 @@ class BackendManager extends ChangeNotifier {
 
   String _statusMessage = '';
   String _arch = 'x64';
+  bool _useRocm = false;
+
+  bool get useRocm => _useRocm;
 
   bool get isDownloading => _isDownloading;
   double get downloadProgress => _downloadProgress;
@@ -40,6 +43,17 @@ class BackendManager extends ChangeNotifier {
          }
       } catch (_) {}
     }
+    // Detect ROCm availability on Linux
+    if (Platform.isLinux) {
+      try {
+        final res = await Process.run('rocminfo', []);
+        _useRocm = res.exitCode == 0;
+        print('AG_DEBUG: ROCm detected: $_useRocm');
+      } catch (_) {
+        _useRocm = false;
+        print('AG_DEBUG: ROCm not found (rocminfo not available)');
+      }
+    }
     await checkBackendAvailability();
   }
 
@@ -50,8 +64,21 @@ class BackendManager extends ChangeNotifier {
     final executableName = _getExecutableName();
     final file = File(path.join(binDir.path, executableName));
 
+    // Also check for the other variant (user may have switched ROCm availability)
+    final altName = Platform.isLinux
+        ? (_useRocm ? 'koboldcpp-linux-x64' : 'koboldcpp-linux-x64-rocm')
+        : null;
+    final altFile = altName != null ? File(path.join(binDir.path, altName)) : null;
+
+    File? foundFile;
     if (await file.exists()) {
-      _backendPath = file.path;
+      foundFile = file;
+    } else if (altFile != null && await altFile.exists()) {
+      foundFile = altFile;
+    }
+
+    if (foundFile != null) {
+      _backendPath = foundFile.path;
       _statusMessage = 'Ready';
       // On Linux/Mac, ensure executable permission
       if (!Platform.isWindows) {
@@ -158,6 +185,8 @@ class BackendManager extends ChangeNotifier {
         print('AG_DEBUG: Stream verified complete. Received: $received bytes.');
       } catch (e) {
         print('AG_DEBUG: Stream error: $e');
+        // Clean up partial download on error
+        try { await file.delete(); } catch (_) {}
         rethrow;
       } finally {
         print('AG_DEBUG: Closing file sink...');
@@ -165,6 +194,23 @@ class BackendManager extends ChangeNotifier {
         await sink.close();
         client.close();
         print('AG_DEBUG: File sink closed.');
+      }
+
+      // Verify download integrity
+      if (contentLength > 0 && received < contentLength) {
+        print('AG_DEBUG: Download incomplete! Expected $contentLength bytes but received $received bytes.');
+        try { await file.delete(); } catch (_) {}
+        throw Exception('Download incomplete: received $received of $contentLength bytes. Please try again.');
+      }
+
+      // Verify the file actually exists and has content
+      final downloadedFile = File(savePath);
+      final fileSize = await downloadedFile.length();
+      print('AG_DEBUG: Final file size on disk: $fileSize bytes');
+      if (fileSize < 1024 * 1024) { // Sanity check: backend should be > 1MB
+        print('AG_DEBUG: File suspiciously small ($fileSize bytes), deleting.');
+        try { await downloadedFile.delete(); } catch (_) {}
+        throw Exception('Downloaded file is too small ($fileSize bytes). The download may have failed.');
       }
 
       _isDownloading = false;
@@ -207,7 +253,9 @@ class BackendManager extends ChangeNotifier {
 
   String _getExecutableName() {
     if (Platform.isWindows) return 'koboldcpp.exe';
-    if (Platform.isLinux) return 'koboldcpp-linux-x64';
+    if (Platform.isLinux) {
+      return _useRocm ? 'koboldcpp-linux-x64-rocm' : 'koboldcpp-linux-x64';
+    }
     if (Platform.isMacOS) {
       return _arch == 'arm64' ? 'koboldcpp-mac-arm64' : 'koboldcpp-mac-x64';
     }
@@ -216,7 +264,11 @@ class BackendManager extends ChangeNotifier {
 
   String _getDownloadUrl() {
     if (Platform.isWindows) return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp.exe';
-    if (Platform.isLinux) return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64';
+    if (Platform.isLinux) {
+      return _useRocm
+          ? 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64-rocm'
+          : 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64';
+    }
     if (Platform.isMacOS) {
        return _arch == 'arm64' 
            ? 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-mac-arm64'

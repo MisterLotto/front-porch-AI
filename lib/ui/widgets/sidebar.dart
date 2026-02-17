@@ -107,7 +107,7 @@ class Sidebar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Text(
-              'v0.0.3.2', // Updated version
+              'v0.0.3.5', // Updated version
               style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
             ),
           ),

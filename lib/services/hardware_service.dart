@@ -11,6 +11,7 @@ class HardwareInfo {
   final bool hasRocm;
   final bool hasMetal;
   final bool isSharedMemory; // Intel ARC iGPU, AMD APU, etc.
+  final String linuxDistro; // 'arch', 'ubuntu', 'debian', 'fedora', 'rhel', 'opensuse', 'unknown'
 
   HardwareInfo({
     required this.gpuName,
@@ -21,10 +22,11 @@ class HardwareInfo {
     this.hasRocm = false,
     this.hasMetal = false,
     this.isSharedMemory = false,
+    this.linuxDistro = 'unknown',
   });
 
   @override
-  String toString() => '$gpuName (VRAM: ${vramMb}MB, RAM: ${ramMb}MB, Shared: $isSharedMemory) [CUDA: $hasCuda, ROCm: $hasRocm, Metal: $hasMetal]';
+  String toString() => '$gpuName (VRAM: ${vramMb}MB, RAM: ${ramMb}MB, Shared: $isSharedMemory, Distro: $linuxDistro) [CUDA: $hasCuda, ROCm: $hasRocm, Metal: $hasMetal]';
 }
 
 class HardwareService extends ChangeNotifier {
@@ -67,6 +69,9 @@ class HardwareService extends ChangeNotifier {
     int vramMb = 0;
     int ramMb = 0;
     String vendor = 'Unknown';
+
+    // Detect Linux distro
+    final distro = await _detectLinuxDistro();
 
     // Detect RAM
     try {
@@ -112,8 +117,7 @@ class HardwareService extends ChangeNotifier {
     else if (lowerName.contains('amd') || lowerName.contains('ati')) vendor = 'AMD';
     else if (lowerName.contains('intel')) vendor = 'Intel';
 
-    // VRAM is hard on Linux without specific tools.
-    // Try nvidia-smi if vendor is Nvidia
+    // VRAM detection
     if (vendor == 'Nvidia') {
       try {
         final res = await Process.run('nvidia-smi', ['--query-gpu=memory.total', '--format=csv,noheader,nounits']);
@@ -121,9 +125,25 @@ class HardwareService extends ChangeNotifier {
           vramMb = int.tryParse(res.stdout.toString().trim()) ?? 0;
         }
       } catch (_) {}
-    } 
-    // For AMD, try looking at /sys/class/drm/card0/device/mem_info_vram_total (if available, amdgpu driver)
-    // Or just fallback to safe default if unknown
+    } else if (vendor == 'AMD') {
+      // Try sysfs for AMD VRAM (amdgpu driver exposes this)
+      try {
+        final drmDir = Directory('/sys/class/drm');
+        if (await drmDir.exists()) {
+          final cards = await drmDir.list().toList();
+          for (final card in cards) {
+            final vramFile = File('${card.path}/device/mem_info_vram_total');
+            if (await vramFile.exists()) {
+              final vramBytes = int.tryParse((await vramFile.readAsString()).trim()) ?? 0;
+              final cardVramMb = (vramBytes / (1024 * 1024)).round();
+              if (cardVramMb > vramMb) vramMb = cardVramMb;
+            }
+          }
+        }
+      } catch (e) {
+        print('AMD VRAM sysfs detection error: $e');
+      }
+    }
     
     _hardwareInfo = HardwareInfo(
       gpuName: gpuName,
@@ -133,7 +153,46 @@ class HardwareService extends ChangeNotifier {
       hasCuda: _hasCuda,
       hasRocm: _hasRocm,
       hasMetal: false,
+      linuxDistro: distro,
     );
+  }
+
+  /// Detects the Linux distribution family by reading /etc/os-release.
+  Future<String> _detectLinuxDistro() async {
+    try {
+      final file = File('/etc/os-release');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final lines = content.split('\n');
+        String id = '';
+        String idLike = '';
+        for (final line in lines) {
+          if (line.startsWith('ID=')) {
+            id = line.substring(3).replaceAll('"', '').trim().toLowerCase();
+          } else if (line.startsWith('ID_LIKE=')) {
+            idLike = line.substring(8).replaceAll('"', '').trim().toLowerCase();
+          }
+        }
+        // Match distro families
+        if (id == 'arch' || id == 'manjaro' || id == 'endeavouros' || id == 'garuda' || idLike.contains('arch')) {
+          return 'arch';
+        } else if (id == 'ubuntu' || id == 'linuxmint' || id == 'pop' || idLike.contains('ubuntu')) {
+          return 'ubuntu';
+        } else if (id == 'debian' || idLike.contains('debian')) {
+          return 'debian';
+        } else if (id == 'fedora' || idLike.contains('fedora')) {
+          return 'fedora';
+        } else if (id == 'rhel' || id == 'centos' || id == 'rocky' || id == 'almalinux' || idLike.contains('rhel')) {
+          return 'rhel';
+        } else if (id == 'opensuse-tumbleweed' || id == 'opensuse-leap' || idLike.contains('suse')) {
+          return 'opensuse';
+        }
+        return id.isNotEmpty ? id : 'unknown';
+      }
+    } catch (e) {
+      print('Linux distro detection error: $e');
+    }
+    return 'unknown';
   }
 
   Future<void> _detectMac() async {

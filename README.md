@@ -85,7 +85,13 @@ Create detailed character cards (V2 spec compatible) with a user-friendly form U
 ## 🚀 Getting Started
 
 ### 📦 For Regular Users
-If you just want to use the app, simply head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page and download the latest `.zip` or `.exe` for your platform (Windows/macOS/Linux). No setup required!
+If you just want to use the app, simply head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page and download the installer for your platform:
+
+- **Windows**: `.exe` installer
+- **Linux**: `.AppImage` (universal), `.deb` (Debian/Ubuntu), or `.rpm` (Fedora/RHEL)
+- **macOS**: `.dmg` disk image
+
+No setup required!
 
 ---
 
@@ -96,6 +102,26 @@ If you want to modify the code or build from source, follow these steps:
 - **Flutter Environment**: You must have the [Flutter SDK](https://docs.flutter.dev/get-started/install) installed and configured on your system.
 - **Git**: To clone the repository.
 - **OS**: Windows, Linux, or macOS.
+
+#### 🐧 Linux Dependencies
+
+If you are on Linux, you'll need a few extra packages to compile the desktop embedding:
+
+**Ubuntu/Debian**:
+```bash
+sudo apt-get update
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+```
+
+**Arch Linux**:
+```bash
+sudo pacman -S clang cmake ninja pkgconf gtk3 xz
+```
+
+**Fedora**:
+```bash
+sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel
+```
 
 #### Installation
 1.  **Clone the Repository**:
