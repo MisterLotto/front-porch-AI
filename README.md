@@ -12,12 +12,12 @@ Front Porch AI is proudly licensed under the **GPL v3** because we believe your 
 
 ## 🆕 What's New in V0.0.4
 
+- 🚀 **External API Support — Chat with Cloud Models!** Front Porch AI now supports **OpenRouter** and **Nano-GPT** as full backend providers! Seamlessly switch between your local KoboldCPP instance and powerful cloud models like Claude, GPT-4, Gemini, DeepSeek, and more — all from the same interface. Includes a complete provider switching system, per-model configuration, and streaming support. Your local-first workflow just got a whole lot more powerful.
 - **Swipe Navigation**: Cycle through regenerated message variations with left/right arrows and a position counter (e.g. 2/3)
-- **Collapsible Thought Chip**: Model thinking (`<think>` blocks) is automatically hidden behind a collapsible "Thought 💡" chip — no more raw thinking text in the conversation
-- **Continue Generation**: Down-arrow button on the last AI message to prompt the model to continue its response
+- **Collapsible Thought Chip**: Model thinking (`<think>` blocks) is automatically hidden behind a collapsible "Thought 💡" chip — no more raw thinking text cluttering the conversation
+- **Continue Generation**: Down-arrow button on the last AI message to prompt the model to keep going
 - **Chat Import/Export**: Import and export chats in SillyTavern-compatible JSON format
-- **Linux Browser Fallback**: Graceful fallback to external browser for character card downloads on Linux (due to WPE WebKit rendering limitations)
-- **External API Groundwork**: Architecture for OpenRouter/Nano-GPT integration (abstract LLM service layer, provider switching)
+- **Linux Browser Fallback**: Graceful fallback to external browser for character card downloads on Linux
 - **User Persona Enhancements**: Improved persona dialog and avatar support
 
 ## 💬 Join the Community
