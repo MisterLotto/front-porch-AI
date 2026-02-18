@@ -20,8 +20,10 @@ class UpdateService extends ChangeNotifier {
   bool _updateAvailable = false;
   bool _checking = false;
   bool _downloading = false;
+  bool _downloadComplete = false;
   double _downloadProgress = 0.0;
   bool _autoCheckEnabled = true;
+  String? _pendingInstallerPath;
 
   String get currentVersion => _currentVersion;
   String get latestVersion => _latestVersion;
@@ -29,8 +31,10 @@ class UpdateService extends ChangeNotifier {
   bool get updateAvailable => _updateAvailable;
   bool get checking => _checking;
   bool get downloading => _downloading;
+  bool get downloadComplete => _downloadComplete;
   double get downloadProgress => _downloadProgress;
   bool get autoCheckEnabled => _autoCheckEnabled;
+  bool get hasPendingInstaller => _pendingInstallerPath != null;
 
   /// Whether this platform supports self-update
   static bool get isSupported => Platform.isWindows;
@@ -105,16 +109,17 @@ class UpdateService extends ChangeNotifier {
     }
   }
 
-  /// Download the installer and run it silently.
-  Future<void> downloadAndInstall() async {
+  /// Download the installer to a temp directory.
+  /// Does NOT run it — call installNow() or let installOnClose() handle it.
+  Future<void> downloadUpdate() async {
     if (!isSupported || _downloadUrl.isEmpty || _downloading) return;
 
     _downloading = true;
+    _downloadComplete = false;
     _downloadProgress = 0.0;
     notifyListeners();
 
     try {
-      // Download to temp directory
       final tempDir = Directory.systemTemp;
       final installerPath = '${tempDir.path}\\$_installerAsset';
       final file = File(installerPath);
@@ -136,24 +141,39 @@ class UpdateService extends ChangeNotifier {
       }
       await sink.close();
 
-      // Launch installer with silent upgrade flags
-      // /VERYSILENT = no UI, /SUPPRESSMSGBOXES = no dialogs
-      // /NORESTART = don't restart system, /CLOSEAPPLICATIONS = close running instance
-      await Process.start(installerPath, [
-        '/VERYSILENT',
-        '/SUPPRESSMSGBOXES',
-        '/NORESTART',
-        '/CLOSEAPPLICATIONS',
-      ]);
-
-      // Exit the app so the installer can replace files
-      exit(0);
+      _pendingInstallerPath = installerPath;
+      _downloadComplete = true;
+      _downloading = false;
+      notifyListeners();
     } catch (e) {
-      debugPrint('Download/install error: $e');
+      debugPrint('Download error: $e');
       _downloading = false;
       _downloadProgress = 0.0;
       notifyListeners();
     }
+  }
+
+  /// Run the installer immediately and exit the app.
+  Future<void> installNow() async {
+    if (_pendingInstallerPath == null) return;
+    await _launchInstaller(_pendingInstallerPath!);
+    exit(0);
+  }
+
+  /// Run the pending installer on app close.
+  /// Call this from the window close handler.
+  Future<void> installOnClose() async {
+    if (_pendingInstallerPath == null) return;
+    await _launchInstaller(_pendingInstallerPath!);
+  }
+
+  Future<void> _launchInstaller(String path) async {
+    await Process.start(path, [
+      '/VERYSILENT',
+      '/SUPPRESSMSGBOXES',
+      '/NORESTART',
+      '/CLOSEAPPLICATIONS',
+    ]);
   }
 
   /// Compare version strings (e.g. "0.0.4.1" vs "0.0.4")

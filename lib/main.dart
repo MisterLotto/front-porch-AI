@@ -122,8 +122,32 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WindowListener {
   bool _updateChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    // Run pending installer if user deferred the update
+    if (UpdateService.isSupported) {
+      final updateService = Provider.of<UpdateService>(context, listen: false);
+      if (updateService.hasPendingInstaller) {
+        await updateService.installOnClose();
+      }
+    }
+    await windowManager.destroy();
+  }
 
   @override
   Widget build(BuildContext context) {

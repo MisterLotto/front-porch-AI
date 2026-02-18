@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:kobold_character_card_manager/services/update_service.dart';
 
 /// Dialog shown when a new version is available.
-/// User can choose to update or dismiss — never forced.
+/// Three stages: prompt → downloading → ready to install.
+/// User can always dismiss — never forced.
 class UpdateDialog extends StatelessWidget {
   const UpdateDialog({super.key});
 
@@ -22,6 +23,9 @@ class UpdateDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<UpdateService>(
       builder: (context, service, _) {
+        if (service.downloadComplete) {
+          return _buildReadyToInstallDialog(context, service);
+        }
         if (service.downloading) {
           return _buildDownloadingDialog(context, service);
         }
@@ -30,6 +34,7 @@ class UpdateDialog extends StatelessWidget {
     );
   }
 
+  /// Stage 1: "A new version is available, would you like to download?"
   Widget _buildPromptDialog(BuildContext context, UpdateService service) {
     return AlertDialog(
       backgroundColor: const Color(0xFF1E293B),
@@ -59,13 +64,8 @@ class UpdateDialog extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Would you like to update now?',
+            'Would you like to download the update?',
             style: TextStyle(color: Colors.white, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'The app will close briefly while the update installs.',
-            style: TextStyle(color: Colors.white38, fontSize: 12),
           ),
         ],
       ),
@@ -75,9 +75,9 @@ class UpdateDialog extends StatelessWidget {
           child: const Text('Not Now', style: TextStyle(color: Colors.white54)),
         ),
         ElevatedButton.icon(
-          onPressed: () => service.downloadAndInstall(),
+          onPressed: () => service.downloadUpdate(),
           icon: const Icon(Icons.download, size: 18),
-          label: const Text('Update'),
+          label: const Text('Download'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.greenAccent.shade700,
             foregroundColor: Colors.white,
@@ -87,6 +87,7 @@ class UpdateDialog extends StatelessWidget {
     );
   }
 
+  /// Stage 2: Download in progress
   Widget _buildDownloadingDialog(BuildContext context, UpdateService service) {
     return AlertDialog(
       backgroundColor: const Color(0xFF1E293B),
@@ -107,6 +108,51 @@ class UpdateDialog extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// Stage 3: Download complete — "Ready to install now?"
+  Widget _buildReadyToInstallDialog(BuildContext context, UpdateService service) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.greenAccent, size: 28),
+          const SizedBox(width: 12),
+          const Text('Ready to Install', style: TextStyle(color: Colors.white)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'The update has been downloaded. Would you like to install it now?',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'If you choose "Later", the update will install automatically when you close the app.',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Later', style: TextStyle(color: Colors.white54)),
+        ),
+        ElevatedButton.icon(
+          onPressed: () => service.installNow(),
+          icon: const Icon(Icons.install_desktop, size: 18),
+          label: const Text('Install Now'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.greenAccent.shade700,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
     );
   }
 }
