@@ -20,6 +20,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
   late TextEditingController _personalityController;
   late TextEditingController _scenarioController;
   late TextEditingController _firstMessageController;
+  late TextEditingController _mesExampleController;
+  List<TextEditingController> _altGreetingControllers = [];
 
   late TabController _tabController;
   List<LorebookEntry> _loreEntries = [];
@@ -33,11 +35,15 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     _personalityController = TextEditingController(text: widget.character.personality);
     _scenarioController = TextEditingController(text: widget.character.scenario);
     _firstMessageController = TextEditingController(text: widget.character.firstMessage);
+    _mesExampleController = TextEditingController(text: widget.character.mesExample);
+
+    _altGreetingControllers = widget.character.alternateGreetings
+        .map((g) => TextEditingController(text: g))
+        .toList();
 
     if (widget.character.lorebook != null) {
       _loreEntries = List.from(widget.character.lorebook!.entries);
     } else {
-      // Don't modify the actual character's lorebook until save
        _loreEntries = [];
     }
 
@@ -52,8 +58,81 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     _personalityController.dispose();
     _scenarioController.dispose();
     _firstMessageController.dispose();
+    _mesExampleController.dispose();
+    for (final c in _altGreetingControllers) {
+      c.dispose();
+    }
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _openExpandedEditor(String title, TextEditingController controller, {String? hintText}) {
+    final expandedController = TextEditingController(text: controller.text);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: const Color(0xFF1a1a2e),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: double.infinity,
+          height: double.infinity,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_note, color: Colors.white70, size: 22),
+                    const SizedBox(width: 8),
+                    Text(title, style: const TextStyle(
+                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    TextButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Done'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.greenAccent),
+                      onPressed: () {
+                        controller.text = expandedController.text;
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Colors.white12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: TextField(
+                    controller: expandedController,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
+                    decoration: InputDecoration(
+                      hintText: hintText,
+                      hintStyle: const TextStyle(color: Colors.white24),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.blueAccent),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveCharacter() async {
@@ -63,6 +142,11 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     widget.character.personality = _personalityController.text;
     widget.character.scenario = _scenarioController.text;
     widget.character.firstMessage = _firstMessageController.text;
+    widget.character.mesExample = _mesExampleController.text;
+    widget.character.alternateGreetings = _altGreetingControllers
+        .map((c) => c.text)
+        .where((t) => t.isNotEmpty)
+        .toList();
     widget.character.worldNames = _selectedWorldNames;
 
     // Update Lorebook
@@ -76,7 +160,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
       await Provider.of<CharacterRepository>(context, listen: false)
           .updateCharacter(widget.character);
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate saved
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -111,7 +195,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
        builder: (context) => StatefulBuilder(
          builder: (context, setStateDialog) {
            return AlertDialog(
-             backgroundColor: const Color(0xFF1E293B), // Match dialog theme
+             backgroundColor: const Color(0xFF1E293B),
              title: const Text('Edit Lorebook Entry'),
              content: SingleChildScrollView(
                child: Column(
@@ -208,7 +292,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
       backgroundColor: const Color(0xFF1F2937),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 800, // Fixed width for comfortable editing
+        width: 800,
         height: 700,
         padding: const EdgeInsets.all(0),
         child: Column(
@@ -295,13 +379,72 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
         children: [
           _buildTextField(controller: _nameController, label: 'Name'),
           const SizedBox(height: 16),
-          _buildTextField(controller: _descriptionController, label: 'Description', maxLines: 3),
+          _buildTextField(controller: _descriptionController, label: 'Description', maxLines: 3, expandable: true),
           const SizedBox(height: 16),
-          _buildTextField(controller: _personalityController, label: 'Personality', maxLines: 3),
+          _buildTextField(controller: _personalityController, label: 'Personality', maxLines: 3, expandable: true),
           const SizedBox(height: 16),
-          _buildTextField(controller: _scenarioController, label: 'Scenario', maxLines: 3),
+          _buildTextField(controller: _scenarioController, label: 'Scenario', maxLines: 3, expandable: true),
           const SizedBox(height: 16),
-          _buildTextField(controller: _firstMessageController, label: 'First Message', maxLines: 5),
+          _buildTextField(controller: _firstMessageController, label: 'First Message', maxLines: 5, expandable: true),
+          const SizedBox(height: 24),
+          // Alternate Greetings
+          Row(
+            children: [
+              const Text('Alternate Greetings',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white70)),
+              const Spacer(),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16, color: Colors.white70),
+                label: const Text('Add', style: TextStyle(color: Colors.white70)),
+                onPressed: () {
+                  setState(() {
+                    _altGreetingControllers.add(TextEditingController());
+                  });
+                },
+              ),
+            ],
+          ),
+          ..._altGreetingControllers.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final controller = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: controller,
+                      label: 'Greeting ${idx + 2}',
+                      maxLines: 3,
+                      expandable: true,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                    tooltip: 'Remove',
+                    padding: const EdgeInsets.only(top: 24),
+                    onPressed: () {
+                      setState(() {
+                        _altGreetingControllers[idx].dispose();
+                        _altGreetingControllers.removeAt(idx);
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+          // Example Dialogues
+          _buildTextField(
+            controller: _mesExampleController,
+            label: 'Example Dialogues',
+            maxLines: 5,
+            expandable: true,
+            hintText: '(Examples of chat dialog. Begin each example with <START> on a new line.)',
+          ),
         ],
       ),
     );
@@ -403,18 +546,50 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     required TextEditingController controller,
     required String label,
     int maxLines = 1,
+    bool expandable = false,
+    String? hintText,
   }) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54),
-        filled: true,
-        fillColor: Colors.black26,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.white54,
+              ),
+            ),
+            if (expandable) ...[
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () => _openExpandedEditor(label, controller, hintText: hintText),
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(2),
+                  child: Icon(Icons.open_in_full, size: 14, color: Colors.white30),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          maxLines: maxLines,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(color: Colors.white24),
+            filled: true,
+            fillColor: Colors.black26,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.all(12),
+          ),
+        ),
+      ],
     );
   }
 }
