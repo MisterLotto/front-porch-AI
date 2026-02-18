@@ -63,6 +63,24 @@ class ContextViewerDialog extends StatelessWidget {
             ),
 
             // Total usage bar
+            if (budget.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: Column(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.white24, size: 32),
+                    SizedBox(height: 10),
+                    Text('Send a message to populate the context budget.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white38, fontSize: 13)),
+                    SizedBox(height: 4),
+                    Text('Budget is captured each time a prompt is assembled.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white24, fontSize: 11)),
+                  ],
+                ),
+              )
+            else
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: Column(
