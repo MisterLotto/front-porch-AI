@@ -417,12 +417,14 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             controller: _descriptionController,
             label: 'Description',
             maxLines: 3,
+            expandable: true,
           ),
           const SizedBox(height: 16),
           _buildTextField(
             controller: _personalityController,
             label: 'Personality',
             maxLines: 3,
+            expandable: true,
           ),
           const SizedBox(height: 16),
           _buildTextField(

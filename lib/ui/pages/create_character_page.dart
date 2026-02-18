@@ -313,6 +313,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                           label: 'Description',
                           hint: 'Physical description and traits...',
                           maxLines: 3,
+                          expandable: true,
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
@@ -320,6 +321,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                           label: 'Personality',
                           hint: 'Mind, traits, and behavior...',
                           maxLines: 3,
+                          expandable: true,
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
