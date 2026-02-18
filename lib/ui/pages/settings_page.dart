@@ -1017,6 +1017,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   _contextSizeValue = val;
                   _contextSizeController.text = val.toInt().toString();
                 });
+                storageService.setContextSize(val.toInt());
               }, context, divisions: (maxCtx - 4098).toInt());
             }),
            
