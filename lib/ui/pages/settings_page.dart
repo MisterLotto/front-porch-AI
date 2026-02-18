@@ -13,6 +13,7 @@ import 'package:kobold_character_card_manager/services/open_router_service.dart'
 import 'package:kobold_character_card_manager/ui/widgets/log_view.dart';
 import 'package:kobold_character_card_manager/ui/dialogs/rocm_guidance_dialog.dart';
 import 'package:kobold_character_card_manager/providers/app_state.dart';
+import 'package:kobold_character_card_manager/services/update_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -378,6 +379,20 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          if (UpdateService.isSupported)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Check for Updates', style: theme.textTheme.titleMedium),
+                Consumer<UpdateService>(
+                  builder: (context, updateService, _) => Switch(
+                    value: updateService.autoCheckEnabled,
+                    onChanged: (val) => updateService.setAutoCheckEnabled(val),
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: 16),
           _buildSlider(
             'Font Size Scale',

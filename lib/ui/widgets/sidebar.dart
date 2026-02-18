@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:kobold_character_card_manager/providers/app_state.dart';
+import 'package:kobold_character_card_manager/services/update_service.dart';
+import 'package:kobold_character_card_manager/ui/dialogs/update_dialog.dart';
 
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key});
@@ -106,9 +108,30 @@ class Sidebar extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Text(
-              'v0.0.3.5', // Updated version
-              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
+            child: Consumer<UpdateService>(
+              builder: (context, updateService, _) {
+                final version = updateService.currentVersion.isNotEmpty
+                    ? 'v${updateService.currentVersion}'
+                    : 'v0.0.0';
+                return Row(
+                  children: [
+                    Text(
+                      version,
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
+                    ),
+                    if (updateService.updateAvailable) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => UpdateDialog.show(context),
+                        child: const Tooltip(
+                          message: 'Update available!',
+                          child: Icon(Icons.arrow_circle_up, size: 18, color: Colors.greenAccent),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ],

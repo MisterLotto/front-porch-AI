@@ -20,7 +20,9 @@ import 'package:kobold_character_card_manager/services/user_persona_service.dart
 import 'package:kobold_character_card_manager/services/world_repository.dart';
 import 'package:kobold_character_card_manager/services/setup_service.dart';
 import 'package:kobold_character_card_manager/services/folder_service.dart';
+import 'package:kobold_character_card_manager/services/update_service.dart';
 import 'package:kobold_character_card_manager/ui/widgets/setup_overlay.dart';
+import 'package:kobold_character_card_manager/ui/dialogs/update_dialog.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,16 +108,23 @@ void main(List<String> args) async {
           update: (context, storage, backend, kobold, previous) => 
               previous ?? SetupService(storage, backend, kobold),
         ),
+        ChangeNotifierProvider(create: (_) => UpdateService()),
       ],
       child: const MyApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _updateChecked = false;
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AppState>(
@@ -136,6 +145,14 @@ class MyApp extends StatelessWidget {
           ),
           home: Builder(
             builder: (context) {
+              // Trigger update check once after first build
+              if (!_updateChecked) {
+                _updateChecked = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _checkForUpdates(context);
+                });
+              }
+
               final storage = Provider.of<StorageService>(context);
               final width = MediaQuery.of(context).size.width;
               
@@ -162,5 +179,19 @@ class MyApp extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    if (!UpdateService.isSupported) return;
+
+    final updateService = Provider.of<UpdateService>(context, listen: false);
+    await updateService.initialize();
+
+    if (!updateService.autoCheckEnabled) return;
+
+    final hasUpdate = await updateService.checkForUpdate();
+    if (hasUpdate && context.mounted) {
+      UpdateDialog.show(context);
+    }
   }
 }
