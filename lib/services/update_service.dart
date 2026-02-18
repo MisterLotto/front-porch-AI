@@ -36,8 +36,14 @@ class UpdateService extends ChangeNotifier {
   bool get autoCheckEnabled => _autoCheckEnabled;
   bool get hasPendingInstaller => _pendingInstallerPath != null;
 
-  /// Whether this platform supports self-update
-  static bool get isSupported => Platform.isWindows;
+  /// Whether this platform supports self-update.
+  /// Returns true only on Windows AND when installed via the installer
+  /// (not from the portable zip). The installer creates a .installed marker file.
+  static bool get isSupported {
+    if (!Platform.isWindows) return false;
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    return File('$exeDir\\.installed').existsSync();
+  }
 
   Future<void> initialize() async {
     if (!isSupported) return;
