@@ -472,6 +472,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       controller: controller,
                       label: 'Greeting ${idx + 2}',
                       maxLines: 4,
+                      expandable: true,
                     ),
                   ),
                   IconButton(

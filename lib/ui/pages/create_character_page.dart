@@ -372,6 +372,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                                     label: 'Greeting ${idx + 2}',
                                     hint: 'Another opening line...',
                                     maxLines: 4,
+                                    expandable: true,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
