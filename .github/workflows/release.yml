@@ -90,6 +90,7 @@ jobs:
           choco install innosetup -y --no-progress
           $ISCC = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           & $ISCC /DMyAppVersion="$VERSION" /DMyAppBuildDir="${{ github.workspace }}\${{ matrix.build_path }}" /DMyAppLicenseFile="${{ github.workspace }}\LICENSE" /DMyAppIconFile="${{ github.workspace }}\windows\runner\resources\app_icon.ico" "installers\windows\setup.iss"
+          Copy-Item "installers\windows\Front_Porch_AI_Setup_Alpha.exe" -Destination "."
         shell: pwsh
 
       - name: Package MacOS (DMG)
