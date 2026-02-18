@@ -44,7 +44,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev libsecret-1-dev libwebkit2gtk-4.1-dev ninja-build pkg-config cmake libwpewebkit-1.0-dev
+          sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev libsecret-1-dev libwebkit2gtk-4.1-dev ninja-build pkg-config cmake libwpewebkit-1.0-dev libwpebackend-fdo-1.0-dev
 
       - name: Sync Version from Tag
         shell: bash
