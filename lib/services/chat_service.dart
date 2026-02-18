@@ -849,10 +849,25 @@ class ChatService extends ChangeNotifier {
         suffix = ""; 
       }
 
+      // Build example dialogues block
+      String mesExampleBlock = '';
+      if (_activeGroup != null) {
+        final examples = _groupCharacters
+            .where((ch) => ch.mesExample.isNotEmpty)
+            .map((ch) => ch.replacePlaceholders(ch.mesExample, userName: userName))
+            .toList();
+        if (examples.isNotEmpty) {
+          mesExampleBlock = '${examples.join('\n')}\n';
+        }
+      } else if (speakingCharacter.mesExample.isNotEmpty) {
+        mesExampleBlock = '${speakingCharacter.replacePlaceholders(speakingCharacter.mesExample, userName: userName)}\n';
+      }
+
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
           "Scenario: $scenario\n"
+          "$mesExampleBlock"
           "<START>\n"
           "$history"
           "$suffix";

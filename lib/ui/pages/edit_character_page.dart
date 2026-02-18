@@ -21,6 +21,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   late TextEditingController _personalityController;
   late TextEditingController _scenarioController;
   late TextEditingController _firstMessageController;
+  late TextEditingController _mesExampleController;
 
   late TabController _tabController;
   List<LorebookEntry> _loreEntries = [];
@@ -28,6 +29,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   List<TextEditingController> _altGreetingControllers = [];
   List<String> _tags = [];
   final _tagController = TextEditingController();
+  int _estimatedTokens = 0;
 
   @override
   void initState() {
@@ -40,6 +42,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _scenarioController = TextEditingController(text: widget.character.scenario);
     _firstMessageController =
         TextEditingController(text: widget.character.firstMessage);
+    _mesExampleController =
+        TextEditingController(text: widget.character.mesExample);
 
     if (widget.character.lorebook != null) {
       _loreEntries = List.from(widget.character.lorebook!.entries);
@@ -57,6 +61,22 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _tags = List.from(widget.character.tags);
 
     _tabController = TabController(length: 3, vsync: this);
+
+    // Listen for token count updates
+    for (final c in [
+      _nameController,
+      _descriptionController,
+      _personalityController,
+      _scenarioController,
+      _firstMessageController,
+      _mesExampleController,
+    ]) {
+      c.addListener(_updateTokenCount);
+    }
+    for (final c in _altGreetingControllers) {
+      c.addListener(_updateTokenCount);
+    }
+    _updateTokenCount();
   }
 
   @override
@@ -66,12 +86,107 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _personalityController.dispose();
     _scenarioController.dispose();
     _firstMessageController.dispose();
+    _mesExampleController.dispose();
     for (final c in _altGreetingControllers) {
       c.dispose();
     }
     _tagController.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _updateTokenCount() {
+    int totalChars = _nameController.text.length +
+        _descriptionController.text.length +
+        _personalityController.text.length +
+        _scenarioController.text.length +
+        _firstMessageController.text.length +
+        _mesExampleController.text.length;
+    for (final c in _altGreetingControllers) {
+      totalChars += c.text.length;
+    }
+    setState(() {
+      _estimatedTokens = (totalChars / 4).ceil();
+    });
+  }
+
+  Color _tokenCountColor() {
+    if (_estimatedTokens >= 2000) return Colors.redAccent;
+    if (_estimatedTokens >= 1500) return Colors.amber;
+    return Colors.white54;
+  }
+
+  void _openExpandedEditor(String title, TextEditingController controller) {
+    final expandedController = TextEditingController(text: controller.text);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: const Color(0xFF1a1a2e),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: double.infinity,
+          height: double.infinity,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_note, color: Colors.white70, size: 22),
+                    const SizedBox(width: 8),
+                    Text(title, style: const TextStyle(
+                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    TextButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Done'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.greenAccent),
+                      onPressed: () {
+                        controller.text = expandedController.text;
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Colors.white12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: TextField(
+                    controller: expandedController,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
+                    decoration: InputDecoration(
+                      hintText: title == 'Example Dialogues'
+                          ? '(Examples of chat dialog. Begin each example with <START> on a new line.)'
+                          : 'The character\'s opening line...',
+                      hintStyle: const TextStyle(color: Colors.white24),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveCharacter() async {
@@ -81,6 +196,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     widget.character.personality = _personalityController.text;
     widget.character.scenario = _scenarioController.text;
     widget.character.firstMessage = _firstMessageController.text;
+    widget.character.mesExample = _mesExampleController.text;
     widget.character.alternateGreetings = _altGreetingControllers
         .map((c) => c.text)
         .where((t) => t.isNotEmpty)
@@ -241,12 +357,47 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildDetailsTab(),
-          _buildLorebookTab(),
-          _buildWorldsTab(),
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildDetailsTab(),
+              _buildLorebookTab(),
+              _buildWorldsTab(),
+            ],
+          ),
+          // Token counter - bottom right
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1a1a2e).withOpacity(0.95),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _tokenCountColor().withOpacity(0.4),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.token_outlined, size: 16, color: _tokenCountColor()),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$_estimatedTokens tokens',
+                    style: TextStyle(
+                      color: _tokenCountColor(),
+                      fontSize: 13,
+                      fontWeight: _estimatedTokens >= 1500 ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -284,6 +435,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             controller: _firstMessageController,
             label: 'First Message',
             maxLines: 5,
+            expandable: true,
           ),
           const SizedBox(height: 24),
           // Alternate greetings section
@@ -297,7 +449,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 label: const Text('Add', style: TextStyle(color: Colors.white70)),
                 onPressed: () {
                   setState(() {
-                    _altGreetingControllers.add(TextEditingController());
+                    final c = TextEditingController();
+                    c.addListener(_updateTokenCount);
+                    _altGreetingControllers.add(c);
                   });
                 },
               ),
@@ -332,6 +486,15 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
             );
           }),
+          const SizedBox(height: 24),
+          // Example Dialogues section
+          _buildTextField(
+            controller: _mesExampleController,
+            label: 'Example Dialogues',
+            maxLines: 6,
+            expandable: true,
+            hintText: '(Examples of chat dialog. Begin each example with <START> on a new line.)',
+          ),
           const SizedBox(height: 24),
           // Tags section
           Row(
@@ -493,17 +656,34 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     required TextEditingController controller,
     required String label,
     int maxLines = 1,
+    bool expandable = false,
+    String? hintText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-            color: Colors.white70,
-          ),
+        Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                color: Colors.white70,
+              ),
+            ),
+            if (expandable) ...[
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () => _openExpandedEditor(label, controller),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.open_in_full, size: 16, color: Colors.white38),
+                ),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 8),
         TextField(
@@ -511,6 +691,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           maxLines: maxLines,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(color: Colors.white24),
             filled: true,
             fillColor: Colors.white.withOpacity(0.05),
             border: OutlineInputBorder(
