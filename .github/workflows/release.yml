@@ -180,7 +180,7 @@ jobs:
           %install
           mkdir -p %{buildroot}/opt/front-porch-ai
           mkdir -p %{buildroot}/usr/bin
-          cp -r ${{ matrix.build_path }}/* %{buildroot}/opt/front-porch-ai/
+          cp -r ${GITHUB_WORKSPACE}/${{ matrix.build_path }}/* %{buildroot}/opt/front-porch-ai/
           ln -s /opt/front-porch-ai/front_porch_ai %{buildroot}/usr/bin/front-porch-ai
           
           %files
