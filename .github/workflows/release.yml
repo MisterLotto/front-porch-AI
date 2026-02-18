@@ -112,6 +112,8 @@ jobs:
           $ISCC = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           & $ISCC /DMyAppVersion="$VERSION" /DMyAppBuildDir="${{ github.workspace }}\${{ matrix.build_path }}" /DMyAppLicenseFile="${{ github.workspace }}\LICENSE" /DMyAppIconFile="${{ github.workspace }}\windows\runner\resources\app_icon.ico" "installers\windows\setup.iss"
           Copy-Item "installers\windows\Front_Porch_AI_Setup.exe" -Destination "."
+          # Transitional: also publish under the old Alpha name so existing installs can find the update
+          Copy-Item "installers\windows\Front_Porch_AI_Setup.exe" -Destination ".\Front_Porch_AI_Setup_Alpha.exe"
         shell: pwsh
 
       - name: Package MacOS (DMG)
@@ -253,6 +255,7 @@ jobs:
             Front_Porch_AI-Linux.deb
             Front_Porch_AI-Linux.rpm
             Front_Porch_AI_Setup.exe
+            Front_Porch_AI_Setup_Alpha.exe
             Front_Porch_AI.dmg
           generate_release_notes: true
         env:

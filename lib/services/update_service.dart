@@ -10,7 +10,7 @@ import 'package:front_porch_ai/app_version.dart';
 class UpdateService extends ChangeNotifier {
   static const String _repoOwner = 'linux4life1';
   static const String _repoName = 'front-porch-AI';
-  static const String _installerAsset = 'Front_Porch_AI_Setup_Alpha.exe';
+  static const String _installerAsset = 'Front_Porch_AI_Setup.exe';
   static const String _prefsKeyAutoCheck = 'update_auto_check';
 
   String _currentVersion = '';
