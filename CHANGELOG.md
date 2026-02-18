@@ -2,6 +2,34 @@
 
 All notable changes to Front Porch AI will be documented in this file.
 
+## [V0.6.0] - 2026-02-18
+
+### ✨ New Features
+- **Per-Character System Prompts**: Characters can now carry their own system prompt and post-history instructions, giving you fine-grained control over how each character behaves without changing global settings.
+  - Priority chain: Character → Group → Global → Backend Default.
+  - **Post-History Instructions**: Inject character-specific guidance *after* the chat history for powerful steering (e.g., "Always end your reply with an action").
+  - New fields available in the character creator, editor, and in-chat edit dialog.
+- **Author's Note / Memory**: A per-session note injected into the prompt at a configurable depth (1–20 messages from the bottom).
+  - Editable directly from the right sidebar while chatting.
+  - Automatically saved and restored with each session.
+- **Context / Token Budget Viewer**: Visual breakdown of how your context window is being used.
+  - Color-coded stacked bar chart showing each prompt section (System Prompt, Lorebook, Persona, Scenario, Examples, Chat History, Post-History).
+  - Section-by-section token counts with percentages.
+  - Expandable raw text view for debugging prompts.
+  - Accessed via the 📊 analytics button in the chat input area.
+- **Chat Branching (Fork)**: Fork the conversation from any message to explore alternate storylines.
+  - ↗ Fork button on every message bubble creates a new session with messages up to that point.
+  - Branch metadata (parent session, fork index) persisted and displayed in the history dialog with visual indicators.
+
+### 🐛 Bug Fixes
+- Fixed context size slider not persisting to `StorageService`, causing the context budget viewer to always show 8192 as the limit.
+- Fixed `speakingCharacter` referenced before declaration when using per-character system prompts.
+
+### 🏗️ Infrastructure
+- Session save format upgraded to JSON envelope (`{messages, author_note, author_note_depth, parent_session, fork_index}`) with full backward compatibility for older plain-array sessions.
+
+---
+
 ## [V0.5.0] - 2026-02-17
 
 ### ✨ New Features

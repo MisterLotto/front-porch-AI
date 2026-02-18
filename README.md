@@ -10,16 +10,23 @@ Proprietary software lives and dies at the discretion of its creators. When a co
 
 Front Porch AI is proudly licensed under the **GPL v3** because we believe your tools should belong to the community that uses them. If this project is ever abandoned, anyone can fork it, improve it, and keep it alive. Open source isn't just a license — it's a promise that the software will always have a future.
 
-## 🆕 What's New in V0.5.0
+## 🆕 What's New in V0.6.0
 
-- 👥 **Group Chat (Pre-Alpha)**: Create multi-character group chats! Select 2+ characters and watch them interact with each other and with you in a shared conversation. Features round-robin and free-form turn orders, auto-advance mode, and full persistence.
-- ✨ **AI-Generated Scenarios & First Messages**: One-tap ✨ Generate buttons in the group creation dialog. The scenario generator produces concise 1-2 sentence setups; the first message generator creates vivid multi-paragraph opening scenes with dialogue, actions, and sensory details — grounded in the scenario you set.
-- 🎛️ **Generation Presets**: Quick-access preset chips (Creative, Balanced, Precise, Deterministic) in Generation Settings for one-tap parameter profiles.
-- 🎨 **Improved Chat Colorization**: Fixed multi-line `*action*` block detection — dialogue (amber) and actions (blue) now color correctly across line breaks.
-- 🧠 **Thinking Model Support**: Automatic `<think>` block stripping so models like GLM5 don't leak reasoning chains into chat or generated content.
+- 🎭 **Per-Character System Prompts**: Each character can now carry its own system prompt and post-history instructions. Priority chain: Character → Group → Global → Backend Default. Define character-specific behavior without touching global settings.
+- 📝 **Author's Note / Memory**: A per-session note injected into the prompt at a configurable depth (1–20 messages back). Edit it right from the sidebar — automatically saved and restored with each session.
+- 📊 **Context / Token Budget Viewer**: See exactly how your context window is being used with a color-coded stacked bar chart, per-section token counts, percentages, and expandable raw prompt text. Access it via the analytics button in the chat input area.
+- 🌿 **Chat Branching**: Fork the conversation from any message to explore alternate storylines. Branch metadata is tracked and displayed in the session history dialog.
 
 <details>
 <summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.5.0
+
+- 👥 **Group Chat (Pre-Alpha)**: Create multi-character group chats! Select 2+ characters and watch them interact with each other and with you in a shared conversation. Features round-robin and free-form turn orders, auto-advance mode, and full persistence.
+- ✨ **AI-Generated Scenarios & First Messages**: One-tap ✨ Generate buttons in the group creation dialog.
+- 🎛️ **Generation Presets**: Quick-access preset chips (Creative, Balanced, Precise, Deterministic) in Generation Settings.
+- 🎨 **Improved Chat Colorization**: Fixed multi-line `*action*` block detection.
+- 🧠 **Thinking Model Support**: Automatic `<think>` block stripping for thinking models.
 
 ### What's New in V0.0.4.2
 
