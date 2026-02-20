@@ -255,7 +255,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 🔒 Privacy
 
-Front Porch AI does not collect, store, or transmit any personal data. See our full [Privacy Policy](https://linux4life1.github.io/front-porch-AI/privacy.html).
+Front Porch AI does not collect, store, or transmit any personal data. See our full [Privacy Policy](https://app.dreamersai.art/privacy.html).
 
 ## 📄 License
 
