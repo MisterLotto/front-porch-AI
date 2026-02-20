@@ -327,5 +327,6 @@ jobs:
             Front_Porch_AI_Setup.exe
             Front_Porch_AI.dmg
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, 'beta') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

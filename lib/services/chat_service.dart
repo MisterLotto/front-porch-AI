@@ -14,6 +14,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/models/world.dart';
 
 enum GenerationMode { normal, continue_, impersonate }
@@ -274,6 +275,12 @@ class ChatService extends ChangeNotifier {
     _llmProvider = provider;
   }
 
+  /// Set the CloudSyncService after construction.
+  CloudSyncService? _cloudSyncService;
+  void setCloudSyncService(CloudSyncService service) {
+    _cloudSyncService = service;
+  }
+
   Future<void> setActiveCharacter(CharacterCard? character) async {
     // Cancel any in-flight generation before switching context
     await _cancelAndWaitForGeneration();
@@ -457,6 +464,9 @@ class ChatService extends ChangeNotifier {
       if (_forkIndex != null) 'fork_index': _forkIndex,
     };
     await file.writeAsString(jsonEncode(envelope));
+
+    // Fire-and-forget cloud upload
+    _cloudSyncService?.uploadChatSession(file.path, charId);
   }
 
   Future<void> _loadLastSession() async {

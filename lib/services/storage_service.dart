@@ -70,6 +70,14 @@ class StorageService extends ChangeNotifier {
   // Grid scale preference
   double _gridScale = 300.0; // maxCrossAxisExtent in pixels (150-450)
 
+  // Cloud sync settings
+  bool _cloudSyncEnabled = false;
+  String _cloudSyncProvider = 'none'; // 'none', 'webdav', 'gdrive', 'onedrive'
+  String _cloudSyncUrl = '';
+  String _cloudSyncUsername = '';
+  String _cloudSyncPassword = '';
+  String _cloudSyncLastTime = '';
+
 
   // Getters
   String get systemPrompt => _systemPrompt;
@@ -109,6 +117,12 @@ class StorageService extends ChangeNotifier {
   int get ttsConcurrency => _ttsConcurrency;
   String get sortMode => _sortMode;
   double get gridScale => _gridScale;
+  bool get cloudSyncEnabled => _cloudSyncEnabled;
+  String get cloudSyncProvider => _cloudSyncProvider;
+  String get cloudSyncUrl => _cloudSyncUrl;
+  String get cloudSyncUsername => _cloudSyncUsername;
+  String get cloudSyncPassword => _cloudSyncPassword;
+  String get cloudSyncLastTime => _cloudSyncLastTime;
 
   StorageService() {
     _init();
@@ -167,6 +181,14 @@ class StorageService extends ChangeNotifier {
     _openaiTtsModel = _prefs?.getString('openai_tts_model') ?? 'tts-1';
     _sortMode = _prefs?.getString('sort_mode') ?? 'name';
     _gridScale = _prefs?.getDouble('grid_scale') ?? 300.0;
+
+    // Cloud sync settings
+    _cloudSyncEnabled = _prefs?.getBool('cloud_sync_enabled') ?? false;
+    _cloudSyncProvider = _prefs?.getString('cloud_sync_provider') ?? 'none';
+    _cloudSyncUrl = _prefs?.getString('cloud_sync_url') ?? '';
+    _cloudSyncUsername = _prefs?.getString('cloud_sync_username') ?? '';
+    _cloudSyncPassword = _prefs?.getString('cloud_sync_password') ?? '';
+    _cloudSyncLastTime = _prefs?.getString('cloud_sync_last_time') ?? '';
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -451,6 +473,42 @@ class StorageService extends ChangeNotifier {
   Future<void> setGridScale(double value) async {
     _gridScale = value.clamp(150.0, 450.0);
     await _prefs?.setDouble('grid_scale', _gridScale);
+    notifyListeners();
+  }
+
+  Future<void> setCloudSyncEnabled(bool value) async {
+    _cloudSyncEnabled = value;
+    await _prefs?.setBool('cloud_sync_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setCloudSyncProvider(String value) async {
+    _cloudSyncProvider = value;
+    await _prefs?.setString('cloud_sync_provider', value);
+    notifyListeners();
+  }
+
+  Future<void> setCloudSyncUrl(String value) async {
+    _cloudSyncUrl = value;
+    await _prefs?.setString('cloud_sync_url', value);
+    notifyListeners();
+  }
+
+  Future<void> setCloudSyncUsername(String value) async {
+    _cloudSyncUsername = value;
+    await _prefs?.setString('cloud_sync_username', value);
+    notifyListeners();
+  }
+
+  Future<void> setCloudSyncPassword(String value) async {
+    _cloudSyncPassword = value;
+    await _prefs?.setString('cloud_sync_password', value);
+    notifyListeners();
+  }
+
+  Future<void> setCloudSyncLastTime(String value) async {
+    _cloudSyncLastTime = value;
+    await _prefs?.setString('cloud_sync_last_time', value);
     notifyListeners();
   }
 }

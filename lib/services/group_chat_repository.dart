@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
 
 /// Persists group chat definitions to disk.
 class GroupChatRepository extends ChangeNotifier {
@@ -51,10 +52,27 @@ class GroupChatRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> delete(String groupId) async {
+  Future<void> delete(String groupId, {CloudSyncService? cloudSyncService}) async {
     final file = File('${_groupsDir.path}/$groupId.json');
     if (await file.exists()) await file.delete();
     _groups.removeWhere((g) => g.id == groupId);
+
+    // Delete associated chat history folder
+    try {
+      final chatFolder = Directory('${_storageService.chatsDir.path}/group_$groupId');
+      if (await chatFolder.exists()) {
+        await chatFolder.delete(recursive: true);
+        debugPrint('AG_DEBUG: Deleted group chat folder: ${chatFolder.path}');
+      }
+    } catch (e) {
+      debugPrint('Error deleting group chat folder: $e');
+    }
+
+    // Delete from cloud storage
+    if (cloudSyncService != null) {
+      cloudSyncService.deleteRemoteGroupChat(groupId);
+    }
+
     notifyListeners();
   }
 

@@ -2,6 +2,24 @@
 
 All notable changes to Front Porch AI will be documented in this file.
 
+## [V0.8.0-beta] - 2026-02-20
+
+### ✨ New Features
+- **Cloud Sync (Beta)**: Bi-directional sync of characters and chat sessions across devices.
+  - **Google Drive**: OAuth 2.0 authentication, syncs to a dedicated `FrontPorchAI` folder in your Drive.
+  - **Nextcloud / WebDAV**: Connect to any self-hosted or third-party WebDAV server.
+  - Full bi-directional sync — newer files always win. New sessions on either device are automatically pulled in.
+  - Orphan cleanup: deleting a character or group locally removes remote files on next sync.
+  - Configurable sync provider in Settings → Cloud Sync section.
+- **Privacy Policy**: Added `PRIVACY.md` — documents data handling practices. No telemetry, no analytics, cloud sync is opt-in only.
+- **Beta Prerelease Support**: Release workflow flags beta tags as GitHub prereleases so they don't trigger auto-updates for stable users.
+
+### 🏗️ Infrastructure
+- Pluggable `CloudStorageProvider` architecture for easily adding new sync backends.
+- `CloudSyncService` handles sync orchestration, conflict resolution, orphan cleanup, and progress tracking.
+
+---
+
 ## [V0.7.1] - 2026-02-20
 
 ### ✨ New Features

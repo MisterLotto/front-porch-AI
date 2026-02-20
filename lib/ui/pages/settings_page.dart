@@ -15,6 +15,13 @@ import 'package:front_porch_ai/ui/dialogs/rocm_guidance_dialog.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/services/update_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
+import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:path/path.dart' as path;
+import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
+import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
+
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -565,6 +572,9 @@ class _SettingsPageState extends State<SettingsPage> {
                  ],
                ),
              ),
+
+          const SizedBox(height: 24),
+          _buildCloudSyncSection(context, storageService, theme),
 
           const SizedBox(height: 24),
           _buildSectionHeader('Backend Mode', context),
@@ -1595,6 +1605,305 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+
+  Widget _buildCloudSyncSection(BuildContext context, StorageService storageService, ThemeData theme) {
+    final syncService = Provider.of<CloudSyncService>(context);
+    final isEnabled = storageService.cloudSyncEnabled;
+    final provider = storageService.cloudSyncProvider;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('☁️ Cloud Sync', context),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Enable toggle
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.cloud_sync, color: Colors.blueAccent, size: 20),
+                      const SizedBox(width: 8),
+                      Text('Enable Cloud Sync', style: theme.textTheme.titleSmall),
+                    ],
+                  ),
+                  Switch(
+                    value: isEnabled,
+                    onChanged: (val) => storageService.setCloudSyncEnabled(val),
+                  ),
+                ],
+              ),
+              if (isEnabled) ...[
+                const SizedBox(height: 12),
+                // Provider dropdown
+                DropdownButtonFormField<String>(
+                  value: provider == 'none' ? null : provider,
+                  isExpanded: true,
+                  hint: const Text('Select provider...'),
+                  decoration: InputDecoration(
+                    labelText: 'Cloud Provider',
+                    filled: true,
+                    fillColor: theme.scaffoldBackgroundColor,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'webdav', child: Text('Nextcloud (WebDAV)')),
+                    DropdownMenuItem(value: 'gdrive', child: Text('Google Drive')),
+
+                  ],
+                  onChanged: (val) {
+                    if (val != null) storageService.setCloudSyncProvider(val);
+                  },
+                ),
+
+                // WebDAV fields
+                if (provider == 'webdav') ...[
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    initialValue: storageService.cloudSyncUrl,
+                    decoration: InputDecoration(
+                      labelText: 'Server URL',
+                      hintText: 'https://your-nextcloud.com/remote.php/dav/files/username',
+                      filled: true,
+                      fillColor: theme.scaffoldBackgroundColor,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (val) => storageService.setCloudSyncUrl(val.trim()),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    initialValue: storageService.cloudSyncUsername,
+                    decoration: InputDecoration(
+                      labelText: 'Username',
+                      filled: true,
+                      fillColor: theme.scaffoldBackgroundColor,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (val) => storageService.setCloudSyncUsername(val.trim()),
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    initialValue: storageService.cloudSyncPassword,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Password / App Token',
+                      filled: true,
+                      fillColor: theme.scaffoldBackgroundColor,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      suffixIcon: const Icon(Icons.key, size: 18),
+                    ),
+                    onChanged: (val) => storageService.setCloudSyncPassword(val),
+                  ),
+                ],
+
+                // Google Drive sign-in button
+                if (provider == 'gdrive') ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: syncService.isConnected ? null : () async {
+                        try {
+                          final gProvider = GoogleDriveProvider();
+                          await gProvider.connect({});
+                          syncService.setProvider(gProvider);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('✅ Signed in to Google Drive!')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('❌ Google sign-in failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                      icon: Icon(syncService.isConnected ? Icons.check_circle : Icons.login, size: 18),
+                      label: Text(syncService.isConnected ? 'Connected to Google Drive' : 'Sign in with Google'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: syncService.isConnected ? Colors.green.shade700 : Colors.blueAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+
+                // Action buttons
+                if (provider != 'none') ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            // Test connection
+                            CloudStorageProvider testProvider;
+                            switch (provider) {
+                              case 'webdav':
+                                testProvider = WebDavProvider();
+                                break;
+                              case 'gdrive':
+                                testProvider = GoogleDriveProvider();
+                                break;
+
+                              default:
+                                return;
+                            }
+                            try {
+                              await testProvider.connect({
+                                'url': storageService.cloudSyncUrl,
+                                'username': storageService.cloudSyncUsername,
+                                'password': storageService.cloudSyncPassword,
+                              });
+                              syncService.setProvider(testProvider);
+                              final ok = await syncService.testConnection();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(ok ? '✅ Connection successful!' : '❌ Connection failed: ${syncService.lastError}')),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('❌ Connection failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.wifi_tethering, size: 18),
+                          label: const Text('Test'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent.withOpacity(0.8),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: syncService.status == SyncStatus.syncing ? null : () async {
+                            // Full sync now
+                            if (!syncService.isConnected) {
+                              CloudStorageProvider p;
+                              switch (provider) {
+                                case 'webdav':
+                                  p = WebDavProvider();
+                                  break;
+                                case 'gdrive':
+                                  p = GoogleDriveProvider();
+                                  break;
+
+                                default:
+                                  return;
+                              }
+                              await p.connect({
+                                'url': storageService.cloudSyncUrl,
+                                'username': storageService.cloudSyncUsername,
+                                'password': storageService.cloudSyncPassword,
+                              });
+                              syncService.setProvider(p);
+                            }
+
+                            final chatsPath = storageService.chatsDir.path;
+                            final rootPath = storageService.rootPath ?? chatsPath;
+                            final charactersPath = '$rootPath${Platform.pathSeparator}characters';
+
+                            // Build valid ID sets for orphan cleanup
+                            final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+                            final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+                            final validCharIds = charRepo.characters
+                                .where((c) => c.imagePath != null)
+                                .map((c) => path.basenameWithoutExtension(c.imagePath!))
+                                .toSet();
+                            final validGroupIds = groupRepo.groups.map((g) => g.id).toSet();
+
+                            await syncService.fullSync(chatsPath, charactersPath,
+                              validCharIds: validCharIds,
+                              validGroupIds: validGroupIds,
+                            );
+                            if (syncService.status == SyncStatus.success) {
+                              await storageService.setCloudSyncLastTime(DateTime.now().toIso8601String());
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('✅ Synced ${syncService.syncedFiles} files!')),
+                                );
+                              }
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('❌ Sync error: ${syncService.lastError}')),
+                              );
+                            }
+                          },
+                          icon: syncService.status == SyncStatus.syncing
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.sync, size: 18),
+                          label: Text(syncService.status == SyncStatus.syncing
+                              ? 'Syncing ${(syncService.progress * 100).toInt()}%'
+                              : 'Sync Now'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                // Status display
+                if (storageService.cloudSyncLastTime.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Last synced: ${_formatSyncTime(storageService.cloudSyncLastTime)}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  ),
+                ],
+                if (syncService.status == SyncStatus.error && syncService.lastError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Error: ${syncService.lastError}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.redAccent),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatSyncTime(String isoTime) {
+    try {
+      final dt = DateTime.parse(isoTime).toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+      if (diff.inDays < 1) return '${diff.inHours}h ago';
+      return '${dt.month}/${dt.day} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return isoTime;
+    }
   }
 }
 

@@ -10,7 +10,20 @@ Proprietary software lives and dies at the discretion of its creators. When a co
 
 Front Porch AI is proudly licensed under the **GPL v3** because we believe your tools should belong to the community that uses them. If this project is ever abandoned, anyone can fork it, improve it, and keep it alive. Open source isn't just a license — it's a promise that the software will always have a future.
 
-## 🆕 What's New in V0.7.1
+## 🆕 What's New in V0.8.0-beta
+
+- ☁️ **Cloud Sync**: Bi-directional sync of your characters and chat sessions across devices. Supported providers:
+  - **Google Drive** — OAuth 2.0 authentication with your personal Google account. Characters and chats sync to a dedicated `FrontPorchAI` folder in your Drive.
+  - **Nextcloud / WebDAV** — Connect to any self-hosted or third-party WebDAV server with URL + username/password authentication.
+- 🔄 **Full Bi-Directional Sync**: Characters (PNG cards) and chat sessions sync both ways — newer files always win. New sessions created on either device are automatically pulled in.
+- 🧹 **Orphan Cleanup**: When you delete a character or group chat locally, the remote files are cleaned up on the next sync. Orphaned local folders from deleted remote data are also removed.
+- 🔒 **Privacy Policy**: New PRIVACY.md documenting data handling — no telemetry, no analytics, cloud sync is opt-in and connects only to accounts you own.
+- 🏷️ **Beta Prerelease Support**: Release workflow now automatically flags beta versions as prereleases on GitHub, so they won't trigger auto-updates for stable users.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.7.1
 
 - 🔍 **Grid Scale Slider**: Resize character cards on the home screen with a header slider (150–450px). Cards adapt responsively — compact text at medium sizes, image-only with name overlay at tiny sizes.
 - 💬 **Message Count Badges**: Each character card shows a chat bubble badge with how many messages you've sent (AI replies excluded).
@@ -20,9 +33,6 @@ Front Porch AI is proudly licensed under the **GPL v3** because we believe your 
 - 🐛 **Folder Rename Fix**: Fixed path separator mismatch that caused characters to disappear from folders on Windows.
 - 🐛 **Cross-Chat Message Leak Fix**: Messages from one chat no longer appear in another character's session.
 - 🏗️ **CI/CD Cleanup**: Removed the transitional `Front_Porch_AI_Setup_Alpha.exe` duplicate from releases.
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.7.0
 
@@ -140,6 +150,12 @@ Create detailed character cards (V2 spec compatible) with a user-friendly form U
 - **macOS Stability**: Native quarantine management and sandbox-free execution for seamless backend launches.
 - **Model Hub**: Built-in integration with HuggingFace to search for and download GGUF models directly.
 - **Process Management**: Robustly handles the lifecycle of the AI backend, ensuring clean shutdowns.
+
+### ☁️ Cloud Sync
+- **Cross-Device Sync**: Bi-directional sync of characters and chat sessions via Google Drive or Nextcloud/WebDAV.
+- **Conflict Resolution**: Newer files always win — never lose edits.
+- **Orphan Cleanup**: Remote files for deleted characters/groups are automatically cleaned up on next sync.
+- **Privacy-First**: Syncs only to accounts you own. No data ever passes through our servers.
 
 ### 🌍 World Building
 - **World Info**: Create shared lore that can be referenced by multiple characters.

@@ -11,6 +11,7 @@ import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
@@ -1131,7 +1132,8 @@ class _HomePageState extends State<HomePage> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () {
               final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
-              groupRepo.delete(group.id);
+              final cloudSyncService = Provider.of<CloudSyncService>(context, listen: false);
+              groupRepo.delete(group.id, cloudSyncService: cloudSyncService);
               Navigator.pop(ctx);
             },
             child: const Text('Delete'),
@@ -1843,7 +1845,9 @@ class _HomePageState extends State<HomePage> {
               Navigator.of(context).pop();
               final repo = Provider.of<CharacterRepository>(context, listen: false);
               final worldRepo = Provider.of<WorldRepository>(context, listen: false);
-              await repo.deleteCharacter(character, worldRepo: worldRepo);
+              final storageService = Provider.of<StorageService>(context, listen: false);
+              final cloudSyncService = Provider.of<CloudSyncService>(context, listen: false);
+              await repo.deleteCharacter(character, worldRepo: worldRepo, chatsDir: storageService.chatsDir, cloudSyncService: cloudSyncService);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

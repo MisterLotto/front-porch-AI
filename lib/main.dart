@@ -1,4 +1,6 @@
 
+import 'dart:io';
+import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -24,6 +26,10 @@ import 'package:front_porch_ai/services/update_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
+import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
+import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
+
 import 'package:front_porch_ai/ui/widgets/setup_overlay.dart';
 import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
 
@@ -128,6 +134,7 @@ void main(List<String> args) async {
           update: (context, storage, voiceManager, previous) =>
               previous ?? TtsService(storage, voiceManager),
         ),
+        ChangeNotifierProvider(create: (_) => CloudSyncService()),
       ],
       child: const MyApp(),
     ),
@@ -193,6 +200,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                 _updateChecked = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _checkForUpdates(context);
+                  _runCloudSync(context);
                 });
               }
 
@@ -235,6 +243,65 @@ class _MyAppState extends State<MyApp> with WindowListener {
     final hasUpdate = await updateService.checkForUpdate();
     if (hasUpdate && context.mounted) {
       UpdateDialog.show(context);
+    }
+  }
+
+  Future<void> _runCloudSync(BuildContext context) async {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    await storage.initialized;
+    if (!storage.cloudSyncEnabled || storage.cloudSyncProvider == 'none') return;
+
+    final syncService = Provider.of<CloudSyncService>(context, listen: false);
+
+    // Wire cloud sync service into ChatService for auto-upload on save
+    final chatService = Provider.of<ChatService>(context, listen: false);
+    chatService.setCloudSyncService(syncService);
+
+    // Create and connect the appropriate provider
+    CloudStorageProvider provider;
+    switch (storage.cloudSyncProvider) {
+      case 'webdav':
+        provider = WebDavProvider();
+        break;
+      case 'gdrive':
+        provider = GoogleDriveProvider();
+        break;
+
+      default:
+        return;
+    }
+
+    try {
+      await provider.connect({
+        'url': storage.cloudSyncUrl,
+        'username': storage.cloudSyncUsername,
+        'password': storage.cloudSyncPassword,
+      });
+      syncService.setProvider(provider);
+
+      // Get the characters directory (same parent as chats)
+      final chatsPath = storage.chatsDir.path;
+      final rootPath = storage.rootPath ?? chatsPath;
+      final charactersPath = '$rootPath${Platform.pathSeparator}characters';
+
+      // Build valid ID sets for orphan cleanup
+      final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+      final validCharIds = charRepo.characters
+          .where((c) => c.imagePath != null)
+          .map((c) => path.basenameWithoutExtension(c.imagePath!))
+          .toSet();
+      final validGroupIds = groupRepo.groups.map((g) => g.id).toSet();
+
+      await syncService.fullSync(chatsPath, charactersPath,
+        validCharIds: validCharIds,
+        validGroupIds: validGroupIds,
+      );
+      if (syncService.status == SyncStatus.success) {
+        await storage.setCloudSyncLastTime(DateTime.now().toIso8601String());
+      }
+    } catch (e) {
+      debugPrint('Cloud sync startup error: \$e');
     }
   }
 }

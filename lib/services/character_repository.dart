@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:front_porch_ai/models/character_card.dart';
@@ -6,6 +7,7 @@ import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
 
 class CharacterRepository extends ChangeNotifier {
   final List<CharacterCard> _characters = [];
@@ -71,7 +73,7 @@ class CharacterRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteCharacter(CharacterCard character, {WorldRepository? worldRepo}) async {
+  Future<void> deleteCharacter(CharacterCard character, {WorldRepository? worldRepo, Directory? chatsDir, CloudSyncService? cloudSyncService}) async {
     // Remove from in-memory list
     _characters.remove(character);
     notifyListeners();
@@ -86,6 +88,27 @@ class CharacterRepository extends ChangeNotifier {
         }
       } catch (e) {
         print('Error deleting character file: $e');
+      }
+
+      // Delete associated chat history folder
+      if (chatsDir != null) {
+        try {
+          final charId = p.basenameWithoutExtension(character.imagePath!);
+          final chatFolder = Directory('${chatsDir.path}/$charId');
+          if (await chatFolder.exists()) {
+            await chatFolder.delete(recursive: true);
+            print('AG_DEBUG: Deleted chat folder: ${chatFolder.path}');
+          }
+        } catch (e) {
+          print('Error deleting chat folder: $e');
+        }
+      }
+
+      // Delete from cloud storage
+      if (cloudSyncService != null) {
+        final charId = p.basenameWithoutExtension(character.imagePath!);
+        final pngName = p.basename(character.imagePath!);
+        cloudSyncService.deleteRemoteCharacter(charId, pngName);
       }
     }
     
