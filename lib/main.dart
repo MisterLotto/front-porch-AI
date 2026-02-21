@@ -295,9 +295,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
           .toSet();
       final validGroupIds = groupRepo.groups.map((g) => g.id).toSet();
 
+      final folderSvc = Provider.of<FolderService>(context, listen: false);
+
       await syncService.fullSync(chatsPath, charactersPath,
         validCharIds: validCharIds,
         validGroupIds: validGroupIds,
+        folderService: folderSvc,
       );
       if (syncService.status == SyncStatus.success) {
         await storage.setCloudSyncLastTime(DateTime.now().toIso8601String());

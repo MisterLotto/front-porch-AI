@@ -38,6 +38,9 @@ class FolderService extends ChangeNotifier {
   File? _storageFile;
 
   List<CharacterFolder> get folders => List.unmodifiable(_folders);
+  
+  /// The path to the local folders JSON file (for cloud sync).
+  String? get storagePath => _storageFile?.path;
 
   FolderService() {
     _init();
@@ -46,6 +49,11 @@ class FolderService extends ChangeNotifier {
   Future<void> _init() async {
     final directory = await getApplicationDocumentsDirectory();
     _storageFile = File('${directory.path}/KoboldManager/character_folders.json');
+    await _load();
+  }
+
+  /// Reload folders from disk (e.g. after cloud sync downloads a new file).
+  Future<void> reload() async {
     await _load();
   }
 

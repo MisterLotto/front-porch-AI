@@ -18,6 +18,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
 import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
@@ -1905,9 +1906,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                 .toSet();
                             final validGroupIds = groupRepo.groups.map((g) => g.id).toSet();
 
+                            final folderSvc = Provider.of<FolderService>(context, listen: false);
+
                             await syncService.fullSync(chatsPath, charactersPath,
                               validCharIds: validCharIds,
                               validGroupIds: validGroupIds,
+                              folderService: folderSvc,
                             );
                             if (syncService.status == SyncStatus.success) {
                               await storageService.setCloudSyncLastTime(DateTime.now().toIso8601String());

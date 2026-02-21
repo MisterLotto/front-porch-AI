@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
+import 'package:front_porch_ai/services/folder_service.dart';
 
 /// Information about a remote file.
 class RemoteFileInfo {
@@ -88,9 +89,11 @@ class CloudSyncService extends ChangeNotifier {
 
   /// Run a full bi-directional sync of chats and characters.
   /// [validCharIds] and [validGroupIds] are used to clean up orphaned remote folders.
+  /// [folderService] if provided, syncs the folder hierarchy metadata.
   Future<void> fullSync(String chatsDir, String charactersDir, {
     Set<String>? validCharIds,
     Set<String>? validGroupIds,
+    FolderService? folderService,
   }) async {
     if (_provider == null || !_provider!.isConnected) return;
 
@@ -146,6 +149,11 @@ class CloudSyncService extends ChangeNotifier {
         extensions: ['.png'],
       );
 
+      // Sync folder hierarchy metadata
+      if (folderService != null) {
+        await _syncFolderMetadata(folderService);
+      }
+
       _status = SyncStatus.success;
       _lastSyncTime = DateTime.now();
     } catch (e) {
@@ -154,6 +162,50 @@ class CloudSyncService extends ChangeNotifier {
       debugPrint('Cloud sync error: $e');
     }
     notifyListeners();
+  }
+
+  /// Sync the folder hierarchy metadata (character_folders.json).
+  /// Strategy: If local has folders, upload. If local is empty/missing but
+  /// remote has data, download and reload. This handles the "new PC" use case.
+  Future<void> _syncFolderMetadata(FolderService folderService) async {
+    if (_provider == null || !_provider!.isConnected) return;
+
+    const remotePath = '/FrontPorchAI/character_folders.json';
+    final localPath = folderService.storagePath;
+    if (localPath == null) return;
+
+    final localFile = File(localPath);
+    final localExists = await localFile.exists();
+    final localHasData = localExists && (await localFile.length()) > 10;
+
+    // Check if remote version exists
+    RemoteFileInfo? remoteInfo;
+    try {
+      final remoteFiles = await _provider!.listFiles('/FrontPorchAI');
+      remoteInfo = remoteFiles.where((f) => f.name == 'character_folders.json').firstOrNull;
+    } catch (_) {}
+
+    if (localHasData && remoteInfo != null) {
+      // Both exist — local wins (upload) since the user just organized locally
+      // and wants to push their layout. If you want timestamp-based merge,
+      // that can be added later.
+      await _provider!.uploadFile(localPath, remotePath);
+      _syncedFiles++;
+      debugPrint('AG_DEBUG: Uploaded folder metadata to cloud');
+    } else if (localHasData && remoteInfo == null) {
+      // Only local exists — upload it
+      await _provider!.uploadFile(localPath, remotePath);
+      _syncedFiles++;
+      debugPrint('AG_DEBUG: Uploaded folder metadata (first sync)');
+    } else if (!localHasData && remoteInfo != null) {
+      // Only remote exists — download it (new PC scenario)
+      await localFile.parent.create(recursive: true);
+      await _provider!.downloadFile(remotePath, localPath);
+      await folderService.reload();
+      _syncedFiles++;
+      debugPrint('AG_DEBUG: Downloaded folder metadata from cloud (new device)');
+    }
+    // else: neither exists — nothing to sync
   }
 
   /// Upload local files to remote (no downloading). Used for characters
