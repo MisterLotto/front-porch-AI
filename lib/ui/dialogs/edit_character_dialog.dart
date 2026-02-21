@@ -4,8 +4,6 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
-import 'package:front_porch_ai/services/voice_manager.dart';
-import 'package:front_porch_ai/ui/dialogs/voice_browser_dialog.dart';
 
 class EditCharacterDialog extends StatefulWidget {
   final CharacterCard character;
@@ -30,8 +28,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
   late TabController _tabController;
   List<LorebookEntry> _loreEntries = [];
   List<String> _selectedWorldNames = [];
-  String? _selectedTtsVoice;
-  List<String> _installedVoices = [];
+  List<String> _tags = [];
+  final TextEditingController _tagInputController = TextEditingController();
 
   @override
   void initState() {
@@ -56,9 +54,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     }
 
     _selectedWorldNames = List.from(widget.character.worldNames);
-    _selectedTtsVoice = widget.character.ttsVoice;
+    _tags = List<String>.from(widget.character.tags);
     _tabController = TabController(length: 3, vsync: this);
-    _loadInstalledVoices();
   }
 
   @override
@@ -75,14 +72,11 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
       c.dispose();
     }
     _tabController.dispose();
+    _tagInputController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadInstalledVoices() async {
-    final vm = Provider.of<VoiceManager>(context, listen: false);
-    final voices = await vm.listInstalledVoices();
-    if (mounted) setState(() => _installedVoices = voices);
-  }
+
 
   void _openExpandedEditor(String title, TextEditingController controller, {String? hintText}) {
     final expandedController = TextEditingController(text: controller.text);
@@ -168,7 +162,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
         .where((t) => t.isNotEmpty)
         .toList();
     widget.character.worldNames = _selectedWorldNames;
-    widget.character.ttsVoice = _selectedTtsVoice;
+    widget.character.tags = List<String>.from(_tags);
 
     // Update Lorebook
     if (widget.character.lorebook == null) {
@@ -484,22 +478,33 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
             hintText: 'Instructions injected after chat history (jailbreak/reminder).',
           ),
           const SizedBox(height: 24),
-          // TTS Voice selector
-          const Text('TTS Voice', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white54)),
-          const SizedBox(height: 4),
-          const Text('Optional. Overrides the global default voice for this character.',
-              style: TextStyle(fontSize: 11, color: Colors.white30)),
+          // Tags editor
+          const Text('Tags', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white54)),
           const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ..._tags.map((tag) => Chip(
+                label: Text(tag, style: const TextStyle(fontSize: 12, color: Colors.white)),
+                backgroundColor: Colors.blueAccent.withValues(alpha: 0.25),
+                deleteIconColor: Colors.white54,
+                onDeleted: () => setState(() => _tags.remove(tag)),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              )),
+            ],
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedTtsVoice,
-                  dropdownColor: const Color(0xFF374151),
-                  style: const TextStyle(color: Colors.white),
+                child: TextField(
+                  controller: _tagInputController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'Use global default',
-                    hintStyle: const TextStyle(color: Colors.white30),
+                    hintText: 'Add a tag...',
+                    hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
                     filled: true,
                     fillColor: Colors.black26,
                     border: OutlineInputBorder(
@@ -507,29 +512,27 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                       borderSide: BorderSide.none,
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
                   ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: null,
-                      child: Text('Use global default', style: TextStyle(color: Colors.white54)),
-                    ),
-                    ..._installedVoices.map((v) =>
-                      DropdownMenuItem(value: v, child: Text(v, overflow: TextOverflow.ellipsis)),
-                    ),
-                  ],
-                  onChanged: (val) => setState(() => _selectedTtsVoice = val),
+                  onSubmitted: (val) {
+                    final tag = val.trim();
+                    if (tag.isNotEmpty && !_tags.contains(tag)) {
+                      setState(() => _tags.add(tag));
+                    }
+                    _tagInputController.clear();
+                  },
                 ),
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.download, color: Colors.blueAccent, size: 20),
-                tooltip: 'Browse & download voices',
-                onPressed: () async {
-                  await showDialog(
-                    context: context,
-                    builder: (_) => const VoiceBrowserDialog(),
-                  );
-                  await _loadInstalledVoices();
+                icon: const Icon(Icons.add_circle, color: Colors.blueAccent, size: 22),
+                tooltip: 'Add tag',
+                onPressed: () {
+                  final tag = _tagInputController.text.trim();
+                  if (tag.isNotEmpty && !_tags.contains(tag)) {
+                    setState(() => _tags.add(tag));
+                  }
+                  _tagInputController.clear();
                 },
               ),
             ],

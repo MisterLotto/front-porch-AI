@@ -6,17 +6,20 @@ import 'package:path_provider/path_provider.dart';
 class CharacterFolder {
   final String id;
   String name;
+  final String? parentId; // null = top-level folder
   final List<String> characterPaths; // imagePath references
 
   CharacterFolder({
     required this.id,
     required this.name,
+    this.parentId,
     List<String>? characterPaths,
   }) : characterPaths = characterPaths ?? [];
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
+    if (parentId != null) 'parentId': parentId,
     'characterPaths': characterPaths,
   };
 
@@ -24,6 +27,7 @@ class CharacterFolder {
     return CharacterFolder(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
+      parentId: json['parentId'],
       characterPaths: List<String>.from(json['characterPaths'] ?? []),
     );
   }
@@ -68,10 +72,11 @@ class FolderService extends ChangeNotifier {
     await _storageFile!.writeAsString(jsonEncode(json));
   }
 
-  Future<CharacterFolder> createFolder(String name) async {
+  Future<CharacterFolder> createFolder(String name, {String? parentId}) async {
     final folder = CharacterFolder(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
+      parentId: parentId,
     );
     _folders.add(folder);
     await _save();
@@ -87,6 +92,11 @@ class FolderService extends ChangeNotifier {
   }
 
   Future<void> deleteFolder(String folderId) async {
+    // Also delete child folders recursively
+    final childIds = _folders.where((f) => f.parentId == folderId).map((f) => f.id).toList();
+    for (final childId in childIds) {
+      await deleteFolder(childId);
+    }
     _folders.removeWhere((f) => f.id == folderId);
     await _save();
     notifyListeners();
@@ -131,6 +141,23 @@ class FolderService extends ChangeNotifier {
       orElse: () => CharacterFolder(id: '', name: ''),
     );
     return folder.characterPaths;
+  }
+
+  /// Get characters in a folder AND all its subfolders recursively
+  List<String> getCharactersInFolderRecursive(String folderId) {
+    final paths = <String>[];
+    // Add direct characters
+    paths.addAll(getCharactersInFolder(folderId));
+    // Add characters from all child folders
+    for (final child in _folders.where((f) => f.parentId == folderId)) {
+      paths.addAll(getCharactersInFolderRecursive(child.id));
+    }
+    return paths;
+  }
+
+  /// Get subfolders of a given parent (null = top-level folders)
+  List<CharacterFolder> getSubfolders(String? parentId) {
+    return _folders.where((f) => f.parentId == parentId).toList();
   }
 
   /// Get characters not in any folder

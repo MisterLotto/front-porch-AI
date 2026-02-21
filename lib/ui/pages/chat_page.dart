@@ -1379,6 +1379,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
   @override
   Widget build(BuildContext context) {
     final isDirectorNote = message.characterId == '__director__';
+    final bubbleOpacity = Provider.of<StorageService>(context).bubbleOpacity;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -1401,12 +1402,12 @@ class _MessageBubbleState extends State<_MessageBubble> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: isDirectorNote
-                    ? Colors.amberAccent.withValues(alpha: 0.1)
+                    ? Colors.amberAccent.withValues(alpha: 0.1 * bubbleOpacity)
                     : message.isUser
-                        ? const Color(0xFF3B82F6)
+                        ? const Color(0xFF3B82F6).withValues(alpha: bubbleOpacity)
                         : widget.senderColor != null
-                            ? widget.senderColor!.withValues(alpha: 0.15)
-                            : const Color(0xFF374151),
+                            ? widget.senderColor!.withValues(alpha: 0.15 * bubbleOpacity)
+                            : const Color(0xFF374151).withValues(alpha: bubbleOpacity),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(12),
                   topRight: const Radius.circular(12),

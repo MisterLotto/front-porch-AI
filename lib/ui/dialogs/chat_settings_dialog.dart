@@ -109,6 +109,16 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                          const SizedBox(height: 8),
                        ],
 
+                       // Appearance
+                       const Text('Appearance', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                       const SizedBox(height: 8),
+                       _buildSlider('Bubble Opacity', storageService.bubbleOpacity, 0.1, 1.0, (val) => storageService.setBubbleOpacity(val), divisions: 18),
+                       const SizedBox(height: 8),
+                       const Divider(color: Colors.white10),
+                       const SizedBox(height: 8),
+                       // Generation
+                       const Text('Generation', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                       const SizedBox(height: 8),
                        _buildSlider('Temperature', storageService.temperature, 0.0, 2.0, (val) => storageService.setTemperature(val), divisions: 20),
                        _buildSlider('Min-P', storageService.minP, 0.0, 1.0, (val) => storageService.setMinP(val), divisions: 100),
                        _buildSlider('Repeat Penalty', storageService.repeatPenalty, 1.0, 3.0, (val) => storageService.setRepeatPenalty(val), divisions: 200),

@@ -25,6 +25,7 @@ class StorageService extends ChangeNotifier {
   String _systemPrompt = defaultSystemPrompt;
   double _minP = 0.1;
   double _temperature = 0.7;
+  double _bubbleOpacity = 1.0;
   double _repeatPenalty = 1.1;
   int _repeatPenaltyTokens = 64;
   bool _dynamicTempEnabled = false;
@@ -85,6 +86,7 @@ class StorageService extends ChangeNotifier {
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
   double get temperature => _temperature;
+  double get bubbleOpacity => _bubbleOpacity;
   double get repeatPenalty => _repeatPenalty;
   int get repeatPenaltyTokens => _repeatPenaltyTokens;
   bool get dynamicTempEnabled => _dynamicTempEnabled;
@@ -147,6 +149,7 @@ class StorageService extends ChangeNotifier {
     _systemPrompt = _prefs?.getString('system_prompt') ?? _systemPrompt;
     _minP = _prefs?.getDouble('min_p') ?? _minP;
     _temperature = _prefs?.getDouble('temperature') ?? _temperature;
+    _bubbleOpacity = _prefs?.getDouble('bubble_opacity') ?? _bubbleOpacity;
     _repeatPenalty = _prefs?.getDouble('repeat_penalty') ?? _repeatPenalty;
     _repeatPenaltyTokens = _prefs?.getInt('repeat_penalty_tokens') ?? _repeatPenaltyTokens;
     _dynamicTempEnabled = _prefs?.getBool('dynamic_temp_enabled') ?? _dynamicTempEnabled;
@@ -259,6 +262,12 @@ class StorageService extends ChangeNotifier {
   Future<void> setTemperature(double value) async {
     _temperature = value;
     await _prefs?.setDouble('temperature', value);
+    notifyListeners();
+  }
+
+  Future<void> setBubbleOpacity(double value) async {
+    _bubbleOpacity = value;
+    await _prefs?.setDouble('bubble_opacity', value);
     notifyListeners();
   }
 

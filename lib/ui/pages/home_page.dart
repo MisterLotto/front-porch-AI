@@ -35,6 +35,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String _searchQuery = '';
   String? _activeFolderId; // null = top level view
+  List<String> _folderStack = []; // navigation breadcrumb for subfolder back
+  bool _searchAll = false; // when true, search spans all characters even in a folder
   final _searchController = TextEditingController();
 
   // Multi-select for group creation
@@ -240,7 +242,14 @@ class _HomePageState extends State<HomePage> {
                         IconButton(
                           icon: const Icon(Icons.arrow_back),
                           tooltip: 'Back to all characters',
-                          onPressed: () => setState(() => _activeFolderId = null),
+                          onPressed: () => setState(() {
+                            if (_folderStack.isNotEmpty) {
+                              _activeFolderId = _folderStack.removeLast();
+                            } else {
+                              _activeFolderId = null;
+                            }
+                            _searchAll = false;
+                          }),
                         ),
                         const SizedBox(width: 8),
                         Text(
@@ -331,6 +340,12 @@ class _HomePageState extends State<HomePage> {
                             icon: const Icon(Icons.create_new_folder_outlined),
                             onPressed: () => _createFolder(context, folderService),
                           ),
+                        if (_activeFolderId != null)
+                          IconButton(
+                            tooltip: 'New Subfolder',
+                            icon: const Icon(Icons.create_new_folder_outlined, color: Colors.amberAccent),
+                            onPressed: () => _createFolder(context, folderService, parentId: _activeFolderId),
+                          ),
                         PopupMenuButton<String>(
                           tooltip: 'Import Characters',
                           icon: const Icon(Icons.download),
@@ -369,9 +384,44 @@ class _HomePageState extends State<HomePage> {
                     controller: _searchController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Search by name or tag...',
+                      hintText: _activeFolderId != null && !_searchAll
+                          ? 'Search this folder...'
+                          : 'Search by name or tag...',
                       hintStyle: const TextStyle(color: Colors.white38),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white38),
+                      prefixIcon: _activeFolderId != null
+                          ? PopupMenuButton<bool>(
+                              icon: Icon(
+                                _searchAll ? Icons.search : Icons.folder_open,
+                                color: _searchAll ? Colors.blueAccent : Colors.amberAccent,
+                                size: 20,
+                              ),
+                              tooltip: 'Search scope',
+                              color: const Color(0xFF1E293B),
+                              onSelected: (val) => setState(() => _searchAll = val),
+                              itemBuilder: (_) => [
+                                PopupMenuItem(
+                                  value: false,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.folder_open, size: 18, color: !_searchAll ? Colors.amberAccent : Colors.white54),
+                                      const SizedBox(width: 8),
+                                      Text('This Folder', style: TextStyle(color: !_searchAll ? Colors.amberAccent : Colors.white70, fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: true,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.search, size: 18, color: _searchAll ? Colors.blueAccent : Colors.white54),
+                                      const SizedBox(width: 8),
+                                      Text('All Characters', style: TextStyle(color: _searchAll ? Colors.blueAccent : Colors.white70, fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const Icon(Icons.search, color: Colors.white38),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, color: Colors.white38),
@@ -495,9 +545,11 @@ class _HomePageState extends State<HomePage> {
   List<CharacterCard> _getFilteredCharacters(CharacterRepository repo, FolderService folderService) {
     List<CharacterCard> characters;
 
-    if (_activeFolderId != null) {
+    // When _searchAll is true and there's a search query, skip the folder filter
+    final skipFolderFilter = _searchAll && _searchQuery.isNotEmpty;
+    if (_activeFolderId != null && !skipFolderFilter) {
       // Show only characters in this folder
-      final folderPaths = folderService.getCharactersInFolder(_activeFolderId!);
+      final folderPaths = folderService.getCharactersInFolderRecursive(_activeFolderId!);
       // Normalize path separators for comparison (Windows vs Unix style)
       final normalizedFolderPaths = folderPaths.map((p) => p.replaceAll('\\', '/')).toSet();
       characters = repo.characters.where((c) =>
@@ -569,16 +621,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildGrid(BuildContext context, CharacterRepository repo, FolderService folderService, List<CharacterCard> filteredCharacters, GroupChatRepository groupRepo) {
-    // At top level and not searching, show folder cards + unfoldered characters
-    final showFolders = _activeFolderId == null && _searchQuery.isEmpty;
-    final folders = showFolders ? folderService.folders : <CharacterFolder>[];
+    // Show folders: at top level show top-level folders, inside a folder show subfolders
+    final showFolders = _searchQuery.isEmpty;
+    final folders = showFolders ? folderService.getSubfolders(_activeFolderId) : <CharacterFolder>[];
 
     // Show group cards at top level only
-    final groups = (showFolders && !_isSelecting && !_isOrganizing) ? groupRepo.groups : <GroupChat>[];
+    final groups = (_activeFolderId == null && _searchQuery.isEmpty && !_isSelecting && !_isOrganizing) ? groupRepo.groups : <GroupChat>[];
 
     // At top level, show unfoldered characters only (unless searching)
     List<CharacterCard> displayCharacters;
-    if (showFolders) {
+    if (showFolders && _activeFolderId == null) {
       final folderedPaths = folderService.getUnfolderedCharacterPaths().map((p) => p.replaceAll('\\', '/')).toSet();
       displayCharacters = filteredCharacters.where((c) =>
         c.imagePath == null || !folderedPaths.contains(c.imagePath!.replaceAll('\\', '/'))
@@ -643,7 +695,12 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           child: InkWell(
-            onTap: () => setState(() => _activeFolderId = folder.id),
+            onTap: () => setState(() {
+              if (_activeFolderId != null) {
+                _folderStack.add(_activeFolderId!);
+              }
+              _activeFolderId = folder.id;
+            }),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final isSmall = constraints.maxHeight < 200;
@@ -2039,13 +2096,13 @@ class _HomePageState extends State<HomePage> {
 
   // ─── Folder Actions ─────────────────────────────────────────────
 
-  void _createFolder(BuildContext context, FolderService folderService) {
+  void _createFolder(BuildContext context, FolderService folderService, {String? parentId}) {
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F2937),
-        title: const Text('New Folder', style: TextStyle(color: Colors.white)),
+        title: Text(parentId != null ? 'New Subfolder' : 'New Folder', style: const TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -2056,7 +2113,7 @@ class _HomePageState extends State<HomePage> {
           ),
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) {
-              folderService.createFolder(value.trim());
+              folderService.createFolder(value.trim(), parentId: parentId);
               Navigator.pop(ctx);
             }
           },
@@ -2069,7 +2126,7 @@ class _HomePageState extends State<HomePage> {
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
-                folderService.createFolder(controller.text.trim());
+                folderService.createFolder(controller.text.trim(), parentId: parentId);
                 Navigator.pop(ctx);
               }
             },
@@ -2144,7 +2201,13 @@ class _HomePageState extends State<HomePage> {
               folderService.deleteFolder(folder.id);
               Navigator.pop(ctx);
               if (_activeFolderId == folder.id) {
-                setState(() => _activeFolderId = null);
+                setState(() {
+                  if (_folderStack.isNotEmpty) {
+                    _activeFolderId = _folderStack.removeLast();
+                  } else {
+                    _activeFolderId = null;
+                  }
+                });
               }
             },
             child: const Text('Delete'),
