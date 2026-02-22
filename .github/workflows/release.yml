@@ -105,13 +105,19 @@ jobs:
 
           # Install TTS dependencies + PyInstaller
           pip install --upgrade pip
-          pip install pyinstaller kokoro-onnx soundfile piper_tts
+          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate piper_phonemize
 
           # Build Kokoro TTS as a standalone binary
           echo "Building Kokoro TTS binary..."
           pyinstaller kokoro_tts.py \
             --onefile \
             --name kokoro_tts \
+            --collect-all kokoro_onnx \
+            --collect-all soundfile \
+            --hidden-import kokoro_onnx \
+            --hidden-import soundfile \
+            --hidden-import numpy \
+            --hidden-import onnxruntime \
             --distpath "$DEST" \
             --workpath /tmp/kokoro_build \
             --specpath /tmp/kokoro_build \
@@ -126,6 +132,9 @@ jobs:
             --name piper \
             --collect-all piper \
             --hidden-import piper \
+            --hidden-import pathvalidate \
+            --hidden-import piper_phonemize \
+            --hidden-import onnxruntime \
             --distpath "$DEST" \
             --workpath /tmp/piper_build \
             --specpath /tmp/piper_build \
