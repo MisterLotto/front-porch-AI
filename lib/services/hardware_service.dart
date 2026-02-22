@@ -426,11 +426,13 @@ class HardwareService extends ChangeNotifier {
     _hasCuda = false;
     _hasRocm = false;
 
-    // CUDA Check (nvidia-smi)
-    try {
-      final res = await Process.run(Platform.isWindows ? 'nvidia-smi' : 'nvidia-smi', []);
-      if (res.exitCode == 0) _hasCuda = true;
-    } catch (_) {}
+    // CUDA Check (nvidia-smi) — skip on macOS where it doesn't exist
+    if (!Platform.isMacOS) {
+      try {
+        final res = await Process.run('nvidia-smi', []);
+        if (res.exitCode == 0) _hasCuda = true;
+      } catch (_) {}
+    }
 
     // ROCm/HIP Check
     // Windows: Check if amdsysinfo or similar exists, or just defer to Vulkan availability which is standard.

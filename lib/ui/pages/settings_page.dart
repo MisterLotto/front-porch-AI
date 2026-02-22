@@ -63,97 +63,108 @@ class _SettingsPageState extends State<SettingsPage> {
     _useCublas = storage.useCublas == true; 
     _useVulkan = storage.useVulkan == true;
     _useMetal = storage.useMetal == true;
-
-    // Refresh hardware info on load
+    // Apply hardware-based defaults once hardware info is available.
+    // HardwareService.detectHardware() is already called in its constructor,
+    // so we just use the cached result. If detection is still in progress,
+    // listen for changes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final hardwareService = Provider.of<HardwareService>(context, listen: false);
-      hardwareService.detectHardware().then((_) {
-         if (!mounted) return;
-         final hw = hardwareService.hardwareInfo;
-         final storage = Provider.of<StorageService>(context, listen: false);
-
-         bool changed = false;
-
-         // NVIDIA Logic: Default to CuBLAS if not set
-         if (hw?.vendor == 'Nvidia') {
-            if (storage.useCublas == null) {
-               storage.setUseCublas(true);
-               storage.setUseVulkan(false); // Disable Vulkan preference if auto-setting Cublas
-               _useCublas = true;
-               _useVulkan = false;
-               changed = true;
-            } else {
-               // Restore persistence
-               _useCublas = storage.useCublas!;
-               // If useVulkan is also set, respect it, otherwise ensure it's off if Cublas is on
-               if (storage.useVulkan != null) {
-                 _useVulkan = storage.useVulkan!;
-               } else if (_useCublas) {
-                 _useVulkan = false;
-               }
-            }
-         } 
-         // MacOS Logic: Default to Metal if not set
-         else if (Platform.isMacOS) {
-            if (storage.useMetal == null) {
-               storage.setUseMetal(true);
-               storage.setUseVulkan(false);
-               storage.setUseCublas(false);
-               _useMetal = true;
-               _useVulkan = false;
-               _useCublas = false;
-               changed = true;
-            } else {
-               _useMetal = storage.useMetal!;
-               if (storage.useVulkan != null) _useVulkan = storage.useVulkan!;
-               if (storage.useCublas != null) _useCublas = storage.useCublas!;
-            }
-         }
-         // Non-NVIDIA/Non-Mac Logic: Default to Vulkan if not set
-         else {
-            if (storage.useVulkan == null) {
-               storage.setUseVulkan(true); 
-               // Ensure Cublas/Metal is off
-               storage.setUseCublas(false);
-               storage.setUseMetal(false);
-               _useVulkan = true;
-               _useCublas = false; 
-               _useMetal = false;
-               changed = true;
-            } else {
-               // Restore persistence
-               _useVulkan = storage.useVulkan!;
-               if (storage.useCublas != null) _useCublas = storage.useCublas!;
-               if (storage.useMetal != null) _useMetal = storage.useMetal!;
-            }
-         }
-
-         if (changed) {
-            setState(() {});
-             final String msg;
-             if (hw?.vendor == 'Nvidia') {
-               msg = 'NVIDIA GPU detected: CuBLAS enabled.';
-             } else if (Platform.isMacOS) {
-               msg = 'Apple Silicon detected: Metal enabled.';
-             } else if (hw?.vendor == 'AMD' && Platform.isLinux && hw?.hasRocm == false) {
-               msg = 'AMD GPU detected: Vulkan enabled. Install ROCm for better performance.';
-               // Show ROCm guidance dialog
-               showRocmGuidanceDialog(context, hw!.linuxDistro);
-             } else {
-               msg = 'Non-NVIDIA GPU detected: Vulkan enabled.';
-             }
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-         } else {
-            // Just update UI to match loaded persistence
-            setState(() {});
-         }
-
-          // Trigger silent autoconfig on load if model is present
-          if (_selectedModelPath != null) {
-            _applyAutoConfiguration(silent: true);
+      
+      if (hardwareService.hardwareInfo != null) {
+        _applyHardwareDefaults(hardwareService.hardwareInfo!);
+      } else {
+        // Detection still in progress — listen for completion
+        void listener() {
+          if (!mounted) return;
+          if (!hardwareService.isDetecting && hardwareService.hardwareInfo != null) {
+            hardwareService.removeListener(listener);
+            _applyHardwareDefaults(hardwareService.hardwareInfo!);
           }
-      });
+        }
+        hardwareService.addListener(listener);
+      }
     });
+  }
+
+  /// Apply GPU defaults based on detected hardware info.
+  void _applyHardwareDefaults(HardwareInfo hw) {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    bool changed = false;
+
+    // NVIDIA Logic: Default to CuBLAS if not set
+    if (hw.vendor == 'Nvidia') {
+      if (storage.useCublas == null) {
+        storage.setUseCublas(true);
+        storage.setUseVulkan(false);
+        _useCublas = true;
+        _useVulkan = false;
+        changed = true;
+      } else {
+        _useCublas = storage.useCublas!;
+        if (storage.useVulkan != null) {
+          _useVulkan = storage.useVulkan!;
+        } else if (_useCublas) {
+          _useVulkan = false;
+        }
+      }
+    }
+    // MacOS Logic: Default to Metal if not set
+    else if (Platform.isMacOS) {
+      if (storage.useMetal == null) {
+        storage.setUseMetal(true);
+        storage.setUseVulkan(false);
+        storage.setUseCublas(false);
+        _useMetal = true;
+        _useVulkan = false;
+        _useCublas = false;
+        changed = true;
+      } else {
+        _useMetal = storage.useMetal!;
+        if (storage.useVulkan != null) _useVulkan = storage.useVulkan!;
+        if (storage.useCublas != null) _useCublas = storage.useCublas!;
+      }
+    }
+    // Non-NVIDIA/Non-Mac Logic: Default to Vulkan if not set
+    else {
+      if (storage.useVulkan == null) {
+        storage.setUseVulkan(true);
+        storage.setUseCublas(false);
+        storage.setUseMetal(false);
+        _useVulkan = true;
+        _useCublas = false;
+        _useMetal = false;
+        changed = true;
+      } else {
+        _useVulkan = storage.useVulkan!;
+        if (storage.useCublas != null) _useCublas = storage.useCublas!;
+        if (storage.useMetal != null) _useMetal = storage.useMetal!;
+      }
+    }
+
+    if (changed) {
+      setState(() {});
+      final String msg;
+      if (hw.vendor == 'Nvidia') {
+        msg = 'NVIDIA GPU detected: CuBLAS enabled.';
+      } else if (Platform.isMacOS) {
+        msg = 'Apple Silicon detected: Metal enabled.';
+      } else if (hw.vendor == 'AMD' && Platform.isLinux && hw.hasRocm == false) {
+        msg = 'AMD GPU detected: Vulkan enabled. Install ROCm for better performance.';
+        showRocmGuidanceDialog(context, hw.linuxDistro);
+      } else {
+        msg = 'Non-NVIDIA GPU detected: Vulkan enabled.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } else {
+      // Just update UI to match loaded persistence
+      setState(() {});
+    }
+
+    // Trigger silent autoconfig on load if model is present
+    if (_selectedModelPath != null) {
+      _applyAutoConfiguration(silent: true);
+    }
   }
 
   @override
