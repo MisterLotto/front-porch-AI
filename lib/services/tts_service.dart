@@ -31,6 +31,7 @@ class TtsService extends ChangeNotifier {
   double _generationProgress = 0.0;
   double _modelDownloadProgress = 0.0;
   bool _isDownloadingModel = false;
+  Process? _afplayProcess; // macOS audio playback process
 
   // Audio cache — keeps the last generated WAV for instant replay
   File? _cachedWav;
@@ -285,6 +286,9 @@ class TtsService extends ChangeNotifier {
     _piperProcess?.kill();
     _piperProcess = null;
 
+    _afplayProcess?.kill();
+    _afplayProcess = null;
+
     await _audioPlayer.stop();
     notifyListeners();
   }
@@ -454,18 +458,36 @@ class TtsService extends ChangeNotifier {
     _cachedEngine = null;
   }
 
-  /// Play a WAV file using audioplayers.
+  /// Play a WAV file.
+  /// On macOS, uses the built-in `afplay` command for reliability
+  /// (audioplayers has platform channel bugs on macOS).
+  /// On other platforms, uses the audioplayers plugin.
   Future<void> _playWavFile(File wavFile) async {
-    final completer = Completer<void>();
+    if (Platform.isMacOS) {
+      // Use macOS built-in afplay for reliable playback
+      try {
+        _afplayProcess = await Process.start('afplay', [wavFile.path]);
+        final exitCode = await _afplayProcess!.exitCode;
+        _afplayProcess = null;
+        if (exitCode != 0) {
+          print('afplay exited with code $exitCode');
+        }
+      } catch (e) {
+        _afplayProcess = null;
+        print('afplay failed: $e');
+      }
+    } else {
+      final completer = Completer<void>();
 
-    late StreamSubscription sub;
-    sub = _audioPlayer.onPlayerComplete.listen((_) {
-      sub.cancel();
-      if (!completer.isCompleted) completer.complete();
-    });
+      late StreamSubscription sub;
+      sub = _audioPlayer.onPlayerComplete.listen((_) {
+        sub.cancel();
+        if (!completer.isCompleted) completer.complete();
+      });
 
-    await _audioPlayer.play(DeviceFileSource(wavFile.path));
-    await completer.future;
+      await _audioPlayer.play(DeviceFileSource(wavFile.path));
+      await completer.future;
+    }
   }
 
   // ---- Text processing ----
