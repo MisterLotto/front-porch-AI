@@ -199,6 +199,7 @@ class GoogleDriveProvider extends CloudStorageProvider {
 
     final fileList = await _driveApi!.files.list(
       q: "'$parentId' in parents and name = '$fileName' and trashed = false",
+      spaces: 'appDataFolder',
       $fields: 'files(id)',
     );
 
