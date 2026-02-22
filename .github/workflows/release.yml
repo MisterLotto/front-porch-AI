@@ -114,6 +114,10 @@ jobs:
             --name kokoro_tts \
             --collect-all kokoro_onnx \
             --collect-all soundfile \
+            --collect-all language_tags \
+            --collect-all csvw \
+            --collect-all segments \
+            --collect-all phonemizer \
             --hidden-import kokoro_onnx \
             --hidden-import soundfile \
             --hidden-import numpy \
