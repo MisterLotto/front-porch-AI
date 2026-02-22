@@ -97,71 +97,52 @@ jobs:
       - name: Build Application
         run: flutter build ${{ matrix.platform }} --release
 
-      - name: Bundle TTS Engines (Piper + Kokoro)
+      - name: Bundle TTS Engines (Kokoro + Piper as standalone binaries)
         shell: bash
         run: |
-          PIPER_VERSION="1.4.1"
           DEST="${{ matrix.build_path }}/piper"
-          PYLIB="$DEST/pylib"
-          mkdir -p "$PYLIB"
+          mkdir -p "$DEST"
 
-          # Install all Python TTS dependencies into a pylib/ subdirectory
-          # to avoid collisions (piper_tts creates a piper/ module directory
-          # that would conflict with the wrapper script named 'piper').
-          python3 -m pip install --target="$PYLIB" \
-            piper_tts==${PIPER_VERSION} \
-            kokoro-onnx \
-            soundfile \
-            --only-binary=:all:
+          # Install TTS dependencies + PyInstaller
+          pip install --upgrade pip
+          pip install pyinstaller kokoro-onnx soundfile piper_tts
 
-          # Create wrapper scripts for Piper invocation
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            cat > "$DEST/piper.bat" << 'BATCH'
-          @echo off
-          set SCRIPT_DIR=%~dp0
-          set PYTHONPATH=%SCRIPT_DIR%pylib
-          python -m piper %*
-          BATCH
-          else
-            cat > "$DEST/piper" << 'SHELL'
-          #!/bin/bash
-          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-          export PYTHONPATH="$SCRIPT_DIR/pylib"
-          python3 -m piper "$@"
-          SHELL
-            chmod +x "$DEST/piper"
-          fi
+          # Build Kokoro TTS as a standalone binary
+          echo "Building Kokoro TTS binary..."
+          pyinstaller kokoro_tts.py \
+            --onefile \
+            --name kokoro_tts \
+            --distpath "$DEST" \
+            --workpath /tmp/kokoro_build \
+            --specpath /tmp/kokoro_build \
+            --clean \
+            --noconfirm
+          echo "Kokoro binary built at: $DEST/kokoro_tts"
 
-          # Bundle the Kokoro TTS helper script
-          cp kokoro_tts.py "$DEST/kokoro_tts.py"
+          # Build Piper TTS as a standalone binary
+          echo "Building Piper TTS binary..."
+          pyinstaller piper_entry.py \
+            --onefile \
+            --name piper \
+            --collect-all piper \
+            --hidden-import piper \
+            --distpath "$DEST" \
+            --workpath /tmp/piper_build \
+            --specpath /tmp/piper_build \
+            --clean \
+            --noconfirm
+          echo "Piper binary built at: $DEST/piper"
 
-          # Create a Kokoro wrapper script
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            cat > "$DEST/kokoro_tts.bat" << 'BATCH'
-          @echo off
-          set SCRIPT_DIR=%~dp0
-          set PYTHONPATH=%SCRIPT_DIR%pylib
-          python "%SCRIPT_DIR%\kokoro_tts.py" %*
-          BATCH
-          else
-            cat > "$DEST/kokoro_tts" << 'SHELL'
-          #!/bin/bash
-          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-          export PYTHONPATH="$SCRIPT_DIR/pylib"
-          python3 "$SCRIPT_DIR/kokoro_tts.py" "$@"
-          SHELL
-            chmod +x "$DEST/kokoro_tts"
-          fi
-
-          # For macOS, also copy into the app bundle Resources
+          # For macOS, copy into the app bundle Resources
           if [ "${{ matrix.platform }}" = "macos" ]; then
             APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app 2>/dev/null | head -1)
             if [ -n "$APP_NAME" ]; then
               RESOURCES="$APP_NAME/Contents/Resources/piper"
               mkdir -p "$RESOURCES"
-              cp -R "$DEST/"* "$RESOURCES/"
-              chmod +x "$RESOURCES/piper" 2>/dev/null || true
-              chmod +x "$RESOURCES/kokoro_tts" 2>/dev/null || true
+              cp "$DEST/kokoro_tts" "$RESOURCES/kokoro_tts"
+              cp "$DEST/piper" "$RESOURCES/piper"
+              chmod +x "$RESOURCES/kokoro_tts"
+              chmod +x "$RESOURCES/piper"
             fi
           fi
 

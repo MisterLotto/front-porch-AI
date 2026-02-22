@@ -39,10 +39,10 @@ class KokoroEngine implements TtsEngine {
     return p.join(execDir, 'piper');
   }
 
-  /// Path to the kokoro_tts wrapper script (handles PYTHONPATH internally).
+  /// Path to the kokoro_tts standalone binary (PyInstaller-built).
   String get _wrapperScriptPath {
     if (Platform.isWindows) {
-      return p.join(_piperDir, 'kokoro_tts.bat');
+      return p.join(_piperDir, 'kokoro_tts.exe');
     }
     return p.join(_piperDir, 'kokoro_tts');
   }
@@ -182,11 +182,7 @@ class KokoroEngine implements TtsEngine {
       // Launch process: use wrapper if available, else python3 + helper
       Process process;
       if (_hasWrapper) {
-        if (Platform.isWindows) {
-          process = await Process.start('cmd', ['/c', _wrapperScriptPath]);
-        } else {
-          process = await Process.start(_wrapperScriptPath, []);
-        }
+        process = await Process.start(_wrapperScriptPath, []);
       } else {
         final helperPath = _helperScriptPath;
         if (helperPath == null) {

@@ -291,11 +291,11 @@ class TtsService extends ChangeNotifier {
 
   // ---- Piper legacy support ----
 
-  /// Resolve the path to the bundled Piper wrapper script.
+  /// Resolve the path to the bundled Piper binary (PyInstaller-built).
   String _piperBinaryPath() {
     final execDir = File(Platform.resolvedExecutable).parent.path;
     if (Platform.isWindows) {
-      return p.join(execDir, 'piper', 'piper.bat');
+      return p.join(execDir, 'piper', 'piper.exe');
     } else if (Platform.isMacOS) {
       final contentsDir = File(Platform.resolvedExecutable).parent.parent.path;
       return p.join(contentsDir, 'Resources', 'piper', 'piper');
