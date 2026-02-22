@@ -39,12 +39,12 @@ class KokoroEngine implements TtsEngine {
     return p.join(execDir, 'piper');
   }
 
-  /// Path to the kokoro_tts standalone binary (PyInstaller-built).
+  /// Path to the kokoro_tts standalone binary (PyInstaller --onedir bundle).
   String get _wrapperScriptPath {
     if (Platform.isWindows) {
-      return p.join(_piperDir, 'kokoro_tts.exe');
+      return p.join(_piperDir, 'kokoro_tts', 'kokoro_tts.exe');
     }
-    return p.join(_piperDir, 'kokoro_tts');
+    return p.join(_piperDir, 'kokoro_tts', 'kokoro_tts');
   }
 
   /// Whether the bundled wrapper script exists (release mode).

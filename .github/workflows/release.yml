@@ -107,10 +107,10 @@ jobs:
           pip install --upgrade pip
           pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate
 
-          # Build Kokoro TTS as a standalone binary
+          # Build Kokoro TTS as a standalone directory bundle
           echo "Building Kokoro TTS binary..."
           pyinstaller kokoro_tts.py \
-            --onefile \
+            --onedir \
             --name kokoro_tts \
             --collect-all kokoro_onnx \
             --collect-all soundfile \
@@ -128,12 +128,12 @@ jobs:
             --specpath /tmp/kokoro_build \
             --clean \
             --noconfirm
-          echo "Kokoro binary built at: $DEST/kokoro_tts"
+          echo "Kokoro built at: $DEST/kokoro_tts/"
 
-          # Build Piper TTS as a standalone binary
+          # Build Piper TTS as a standalone directory bundle
           echo "Building Piper TTS binary..."
           pyinstaller piper_entry.py \
-            --onefile \
+            --onedir \
             --name piper \
             --collect-all piper \
             --hidden-import piper \
@@ -145,7 +145,7 @@ jobs:
             --specpath /tmp/piper_build \
             --clean \
             --noconfirm
-          echo "Piper binary built at: $DEST/piper"
+          echo "Piper built at: $DEST/piper/"
 
           # For macOS, copy into the app bundle Resources
           if [ "${{ matrix.platform }}" = "macos" ]; then
@@ -153,10 +153,10 @@ jobs:
             if [ -n "$APP_NAME" ]; then
               RESOURCES="$APP_NAME/Contents/Resources/piper"
               mkdir -p "$RESOURCES"
-              cp "$DEST/kokoro_tts" "$RESOURCES/kokoro_tts"
-              cp "$DEST/piper" "$RESOURCES/piper"
-              chmod +x "$RESOURCES/kokoro_tts"
-              chmod +x "$RESOURCES/piper"
+              cp -R "$DEST/kokoro_tts" "$RESOURCES/kokoro_tts"
+              cp -R "$DEST/piper" "$RESOURCES/piper"
+              chmod +x "$RESOURCES/kokoro_tts/kokoro_tts"
+              chmod +x "$RESOURCES/piper/piper"
             fi
           fi
 
