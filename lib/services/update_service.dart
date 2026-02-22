@@ -7,12 +7,13 @@ import 'package:front_porch_ai/app_version.dart';
 
 /// Cross-platform self-update service.
 /// Checks GitHub Releases for new versions and downloads/runs the update.
-/// Supports Windows (Inno Setup installer) and Linux (AppImage replacement).
+/// Supports Windows (Inno Setup), Linux (AppImage), and macOS (DMG).
 class UpdateService extends ChangeNotifier {
   static const String _repoOwner = 'linux4life1';
   static const String _repoName = 'front-porch-AI';
   static const String _windowsAsset = 'Front_Porch_AI_Setup.exe';
   static const String _linuxAsset = 'Front_Porch_AI-Linux.AppImage';
+  static const String _macosAsset = 'Front_Porch_AI.dmg';
   static const String _prefsKeyAutoCheck = 'update_auto_check';
 
   String _currentVersion = '';
@@ -49,6 +50,12 @@ class UpdateService extends ChangeNotifier {
     if (Platform.isLinux) {
       return Platform.environment.containsKey('APPIMAGE');
     }
+    if (Platform.isMacOS) {
+      // Supported when running as an .app bundle (not flutter run debug).
+      // Check that the executable is inside a .app/Contents/MacOS/ structure.
+      final exe = Platform.resolvedExecutable;
+      return exe.contains('.app/Contents/MacOS/');
+    }
     return false;
   }
 
@@ -56,6 +63,7 @@ class UpdateService extends ChangeNotifier {
   static String get _platformAsset {
     if (Platform.isWindows) return _windowsAsset;
     if (Platform.isLinux) return _linuxAsset;
+    if (Platform.isMacOS) return _macosAsset;
     return '';
   }
 
@@ -179,13 +187,16 @@ class UpdateService extends ChangeNotifier {
     }
   }
 
-  /// Run the update immediately and exit (or relaunch on Linux).
+  /// Run the update immediately and exit (or relaunch on Linux/macOS).
   Future<void> installNow() async {
     if (_pendingInstallerPath == null) return;
     try {
       if (Platform.isLinux) {
         await _replaceAppImage(_pendingInstallerPath!);
         await _relaunchAppImage();
+      } else if (Platform.isMacOS) {
+        await _replaceMacApp(_pendingInstallerPath!);
+        await _relaunchMacApp();
       } else {
         await _launchWindowsInstaller(_pendingInstallerPath!);
       }
@@ -202,6 +213,8 @@ class UpdateService extends ChangeNotifier {
     try {
       if (Platform.isLinux) {
         await _replaceAppImage(_pendingInstallerPath!);
+      } else if (Platform.isMacOS) {
+        await _replaceMacApp(_pendingInstallerPath!);
       } else {
         await _launchWindowsInstaller(_pendingInstallerPath!);
       }
@@ -255,6 +268,89 @@ class UpdateService extends ChangeNotifier {
     debugPrint('Relaunching AppImage: $currentAppImage');
     await Process.start(
       currentAppImage, [],
+      mode: ProcessStartMode.detached,
+    );
+  }
+
+  /// Get the current .app bundle path from the resolved executable.
+  /// e.g. /Applications/Front Porch AI.app/Contents/MacOS/front_porch_ai
+  ///   → /Applications/Front Porch AI.app
+  String get _currentMacAppPath {
+    final exe = Platform.resolvedExecutable;
+    // Walk up from MacOS/binary → Contents → .app
+    return File(exe).parent.parent.parent.path;
+  }
+
+  /// Replace the current .app bundle with the one inside the downloaded DMG.
+  /// 1. Mount DMG with hdiutil
+  /// 2. Find the .app inside
+  /// 3. rm -rf old .app, cp -R new .app
+  /// 4. Strip quarantine with xattr -cr
+  /// 5. Unmount DMG
+  Future<void> _replaceMacApp(String dmgPath) async {
+    final currentApp = _currentMacAppPath;
+    final appParent = File(currentApp).parent.path;
+    debugPrint('macOS update: replacing $currentApp from $dmgPath');
+
+    // Mount the DMG
+    final mountResult = await Process.run('hdiutil', [
+      'attach', dmgPath, '-nobrowse', '-quiet', '-mountrandom', '/tmp',
+    ]);
+    if (mountResult.exitCode != 0) {
+      throw Exception('Failed to mount DMG: ${mountResult.stderr}');
+    }
+
+    // Parse mount point from hdiutil output
+    // Output format: "/dev/diskN  Apple_HFS  /tmp/dmg.XXXXX"
+    final mountOutput = (mountResult.stdout as String).trim();
+    final mountPoint = mountOutput.split(RegExp(r'\t+')).last.trim();
+    debugPrint('DMG mounted at: $mountPoint');
+
+    try {
+      // Find the .app bundle inside the mounted volume
+      final volumeDir = Directory(mountPoint);
+      String? newAppPath;
+      await for (final entity in volumeDir.list()) {
+        if (entity is Directory && entity.path.endsWith('.app')) {
+          newAppPath = entity.path;
+          break;
+        }
+      }
+      if (newAppPath == null) {
+        throw Exception('No .app found inside mounted DMG');
+      }
+      debugPrint('Found new app: $newAppPath');
+
+      // Remove old .app
+      final rmResult = await Process.run('rm', ['-rf', currentApp]);
+      if (rmResult.exitCode != 0) {
+        debugPrint('rm -rf old app failed: ${rmResult.stderr}');
+      }
+
+      // Copy new .app to the same location
+      final appName = currentApp.split('/').last;
+      final destPath = '$appParent/$appName';
+      final cpResult = await Process.run('cp', ['-R', newAppPath, destPath]);
+      if (cpResult.exitCode != 0) {
+        throw Exception('Failed to copy new app: ${cpResult.stderr}');
+      }
+
+      // Strip quarantine to prevent Gatekeeper "damaged app" dialog
+      await Process.run('xattr', ['-cr', destPath]);
+      debugPrint('macOS app replaced and quarantine stripped');
+    } finally {
+      // Always unmount the DMG
+      await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+      debugPrint('DMG unmounted');
+    }
+  }
+
+  /// Relaunch the macOS app after replacing it.
+  Future<void> _relaunchMacApp() async {
+    final appPath = _currentMacAppPath;
+    debugPrint('Relaunching macOS app: $appPath');
+    await Process.start(
+      'open', ['-n', appPath],
       mode: ProcessStartMode.detached,
     );
   }
