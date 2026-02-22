@@ -142,8 +142,8 @@ class CloudSyncService extends ChangeNotifier {
         recursive: true,
       );
 
-      // Upload local character PNGs to remote (upload-only; download is user-selected)
-      await _uploadOnlyDirectory(
+      // Sync characters (bi-directional, including auto-download)
+      await _syncDirectory(
         localDir: charactersDir,
         remoteDir: '/FrontPorchAI/characters',
         extensions: ['.png'],
