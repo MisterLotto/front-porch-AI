@@ -65,11 +65,13 @@ class OpenRouterService extends LLMService {
 
   /// Update configuration at runtime (e.g. when user changes settings).
   void configure({String? apiUrl, String? apiKey, String? modelName}) {
-    if (apiUrl != null) _apiUrl = apiUrl;
-    if (apiKey != null) _apiKey = apiKey;
-    if (modelName != null) _modelName = modelName;
-    _isReady = _apiKey.isNotEmpty && _modelName.isNotEmpty;
-    notifyListeners();
+    bool changed = false;
+    if (apiUrl != null && apiUrl != _apiUrl) { _apiUrl = apiUrl; changed = true; }
+    if (apiKey != null && apiKey != _apiKey) { _apiKey = apiKey; changed = true; }
+    if (modelName != null && modelName != _modelName) { _modelName = modelName; changed = true; }
+    final newReady = _apiKey.isNotEmpty && _modelName.isNotEmpty;
+    if (newReady != _isReady) { _isReady = newReady; changed = true; }
+    if (changed) notifyListeners();
   }
 
   /// Test whether the API connection is working.
