@@ -12,11 +12,15 @@ class StorageService extends ChangeNotifier {
 
   SharedPreferences? _prefs;
   String? _rootPath;
+  String? _customModelsPath;
   Directory? _binDir;
 
   String? get rootPath => _rootPath;
+  String? get customModelsPath => _customModelsPath;
   Directory get binDir => _binDir ?? Directory(_rootPath ?? '');
-  Directory get modelsDir => Directory(path.join(_rootPath ?? '', 'models'));
+  Directory get modelsDir => _customModelsPath != null && _customModelsPath!.isNotEmpty
+      ? Directory(_customModelsPath!)
+      : Directory(path.join(_rootPath ?? '', 'models'));
   Directory get chatsDir => Directory(path.join(_rootPath ?? '', 'chats'));
   Directory get worldsDir => Directory(path.join(_rootPath ?? '', 'worlds'));
 
@@ -167,6 +171,9 @@ class StorageService extends ChangeNotifier {
     _openaiTtsModel = _prefs?.getString('openai_tts_model') ?? 'tts-1';
     _sortMode = _prefs?.getString('sort_mode') ?? 'name';
     _gridScale = _prefs?.getDouble('grid_scale') ?? 300.0;
+
+    // Custom models path
+    _customModelsPath = _prefs?.getString('custom_models_path');
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -451,6 +458,16 @@ class StorageService extends ChangeNotifier {
   Future<void> setGridScale(double value) async {
     _gridScale = value.clamp(150.0, 450.0);
     await _prefs?.setDouble('grid_scale', _gridScale);
+    notifyListeners();
+  }
+
+  Future<void> setCustomModelsPath(String? value) async {
+    _customModelsPath = value;
+    if (value != null && value.isNotEmpty) {
+      await _prefs?.setString('custom_models_path', value);
+    } else {
+      await _prefs?.remove('custom_models_path');
+    }
     notifyListeners();
   }
 }
