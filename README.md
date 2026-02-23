@@ -19,9 +19,8 @@ Front Porch AI is proudly licensed under the **GPL v3** because we believe your 
   - **Google Drive** — OAuth 2.0 with your personal Google account.
   - **Nextcloud / WebDAV** — Connect to any self-hosted or third-party WebDAV server.
   - **Browse Cloud Characters** — Browse all characters stored in the cloud, see which ones are already on your device, and selectively download new ones with avatar previews.
-  - **Upload-Only Character Sync** — Characters are uploaded automatically; downloads are user-initiated so you stay in control of your local library.
+  - **Bi-Directional Sync** — Characters, folders, and user personas sync both ways automatically. Newer files always win.
   - **User Persona Sync** — Your custom personas (names, descriptions, avatars) are now included in cloud sync for seamless multi-device continuity.
-  - **Auto-Download on New Device** — Characters, folders, and personas automatically download when syncing to a fresh install.
 - 🎬 **Director Mode**: A complete overhaul of Group Chat turn management. Take control of multi-character conversations:
   - Manually choose which character speaks next.
   - Guide the flow of group conversations instead of relying solely on automated turn orders.
