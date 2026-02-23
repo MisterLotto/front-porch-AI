@@ -14,6 +14,7 @@ class BackendManager extends ChangeNotifier {
   String _statusMessage = '';
   String _arch = 'x64';
   bool _useRocm = false;
+  bool _hasCuda = false;
 
   bool get useRocm => _useRocm;
 
@@ -43,8 +44,18 @@ class BackendManager extends ChangeNotifier {
          }
       } catch (_) {}
     }
-    // Detect ROCm availability on Linux
+    // Detect GPU acceleration availability on Linux
     if (Platform.isLinux) {
+      // Check for NVIDIA/CUDA
+      try {
+        final cudaRes = await Process.run('nvidia-smi', []);
+        _hasCuda = cudaRes.exitCode == 0;
+        print('AG_DEBUG: CUDA detected: $_hasCuda');
+      } catch (_) {
+        _hasCuda = false;
+        print('AG_DEBUG: CUDA not found (nvidia-smi not available)');
+      }
+      // Check for AMD/ROCm
       try {
         final res = await Process.run('rocminfo', []);
         _useRocm = res.exitCode == 0;
@@ -64,17 +75,25 @@ class BackendManager extends ChangeNotifier {
     final executableName = _getExecutableName();
     final file = File(path.join(binDir.path, executableName));
 
-    // Also check for the other variant (user may have switched ROCm availability)
-    final altName = Platform.isLinux
-        ? (_useRocm ? 'koboldcpp-linux-x64' : 'koboldcpp-linux-x64-rocm')
-        : null;
-    final altFile = altName != null ? File(path.join(binDir.path, altName)) : null;
+    // Also check for other variants (user may have switched GPU acceleration)
+    final altNames = <String>[];
+    if (Platform.isLinux) {
+      for (final name in ['koboldcpp-linux-x64', 'koboldcpp-linux-x64-rocm', 'koboldcpp-linux-x64-nocuda']) {
+        if (name != executableName) altNames.add(name);
+      }
+    }
 
     File? foundFile;
     if (await file.exists()) {
       foundFile = file;
-    } else if (altFile != null && await altFile.exists()) {
-      foundFile = altFile;
+    } else {
+      for (final altName in altNames) {
+        final altFile = File(path.join(binDir.path, altName));
+        if (await altFile.exists()) {
+          foundFile = altFile;
+          break;
+        }
+      }
     }
 
     if (foundFile != null) {
@@ -254,7 +273,9 @@ class BackendManager extends ChangeNotifier {
   String _getExecutableName() {
     if (Platform.isWindows) return 'koboldcpp.exe';
     if (Platform.isLinux) {
-      return _useRocm ? 'koboldcpp-linux-x64-rocm' : 'koboldcpp-linux-x64';
+      if (_useRocm) return 'koboldcpp-linux-x64-rocm';
+      if (_hasCuda) return 'koboldcpp-linux-x64';
+      return 'koboldcpp-linux-x64-nocuda';
     }
     if (Platform.isMacOS) {
       return _arch == 'arm64' ? 'koboldcpp-mac-arm64' : 'koboldcpp-mac-x64';
@@ -265,9 +286,9 @@ class BackendManager extends ChangeNotifier {
   String _getDownloadUrl() {
     if (Platform.isWindows) return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp.exe';
     if (Platform.isLinux) {
-      return _useRocm
-          ? 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64-rocm'
-          : 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64';
+      if (_useRocm) return 'https://koboldai.org/cpplinuxrocm';
+      if (_hasCuda) return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64';
+      return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64-nocuda';
     }
     if (Platform.isMacOS) {
        return _arch == 'arm64' 

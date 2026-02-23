@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
 
 class ModelManagerPage extends StatefulWidget {
   const ModelManagerPage({super.key});
@@ -248,15 +249,60 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
                                   ),
                                   const SizedBox(width: 12),
                                   IconButton(
+                                    icon: const Icon(Icons.drive_file_move, size: 16, color: Colors.orangeAccent),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'Change Models Folder',
+                                    onPressed: () async {
+                                      final picked = await FilePicker.platform.getDirectoryPath(
+                                        dialogTitle: 'Select Models Folder',
+                                      );
+                                      if (picked != null && mounted) {
+                                        final storage = Provider.of<StorageService>(context, listen: false);
+                                        await storage.setCustomModelsPath(picked);
+                                        if (mounted) {
+                                          Provider.of<ModelManager>(context, listen: false).refreshModels();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Models folder set to: $picked')),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  if (Provider.of<StorageService>(context).customModelsPath != null) ...[
+                                    const SizedBox(width: 12),
+                                    IconButton(
+                                      icon: const Icon(Icons.restore, size: 16, color: Colors.redAccent),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      tooltip: 'Reset to Default Folder',
+                                      onPressed: () async {
+                                        final storage = Provider.of<StorageService>(context, listen: false);
+                                        await storage.setCustomModelsPath(null);
+                                        if (mounted) {
+                                          Provider.of<ModelManager>(context, listen: false).refreshModels();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Models folder reset to default.')),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                  const SizedBox(width: 12),
+                                  IconButton(
                                     icon: const Icon(Icons.folder_open, size: 16, color: Colors.blueAccent),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(),
-                                    tooltip: 'Open Folder in Explorer',
+                                    tooltip: 'Open Folder in File Manager',
                                     onPressed: () {
+                                      final folderPath = modelManager.modelsPath;
                                       if (Platform.isWindows) {
-                                        // Normalize and fix separators for Windows Shell
-                                        final normPath = modelManager.modelsPath.replaceAll('/', '\\');
+                                        final normPath = folderPath.replaceAll('/', '\\');
                                         Process.run('explorer.exe', [normPath]);
+                                      } else if (Platform.isLinux) {
+                                        Process.run('xdg-open', [folderPath]);
+                                      } else if (Platform.isMacOS) {
+                                        Process.run('open', [folderPath]);
                                       }
                                     },
                                   ),
@@ -265,9 +311,25 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
                             ],
                           ),
                           const SizedBox(height: 4),
-                          SelectableText(
-                            modelManager.modelsPath,
-                            style: const TextStyle(color: Colors.blueAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SelectableText(
+                                  modelManager.modelsPath,
+                                  style: const TextStyle(color: Colors.blueAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              if (Provider.of<StorageService>(context).customModelsPath != null)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orangeAccent.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text('Custom', style: TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                ),
+                            ],
                           ),
                           if (modelManager.statusMessage.contains('Import'))
                              Padding(

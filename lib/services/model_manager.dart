@@ -42,9 +42,7 @@ class ModelManager extends ChangeNotifier {
     if (await modelDir.exists()) {
       print('AG_DEBUG: Scanning for models in ${modelDir.path}');
       try {
-        _models = modelDir.listSync(recursive: true, followLinks: true)
-            .where((e) => e is! Directory && e.path.toLowerCase().endsWith('.gguf'))
-            .toList();
+        _models = _safeRecursiveScan(modelDir);
         print('AG_DEBUG: Found ${_models.length} models.');
       } catch (e) {
         print('AG_DEBUG: Error scanning models: $e');
@@ -54,6 +52,25 @@ class ModelManager extends ChangeNotifier {
       _models = [];
     }
     notifyListeners();
+  }
+
+  /// Recursively scans directories for .gguf files, gracefully skipping
+  /// any directories that are inaccessible (e.g. System Volume Information).
+  List<FileSystemEntity> _safeRecursiveScan(Directory dir) {
+    final results = <FileSystemEntity>[];
+    try {
+      for (final entity in dir.listSync(followLinks: true)) {
+        if (entity is Directory) {
+          results.addAll(_safeRecursiveScan(entity));
+        } else if (entity.path.toLowerCase().endsWith('.gguf')) {
+          results.add(entity);
+        }
+      }
+    } catch (e) {
+      // Skip directories we can't access (permission denied, etc.)
+      print('AG_DEBUG: Skipping inaccessible directory: ${dir.path} ($e)');
+    }
+    return results;
   }
 
   Future<void> importLocalModel(String filePath) async {

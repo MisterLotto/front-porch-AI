@@ -12,11 +12,15 @@ class StorageService extends ChangeNotifier {
 
   SharedPreferences? _prefs;
   String? _rootPath;
+  String? _customModelsPath;
   Directory? _binDir;
 
   String? get rootPath => _rootPath;
+  String? get customModelsPath => _customModelsPath;
   Directory get binDir => _binDir ?? Directory(_rootPath ?? '');
-  Directory get modelsDir => Directory(path.join(_rootPath ?? '', 'models'));
+  Directory get modelsDir => _customModelsPath != null && _customModelsPath!.isNotEmpty
+      ? Directory(_customModelsPath!)
+      : Directory(path.join(_rootPath ?? '', 'models'));
   Directory get chatsDir => Directory(path.join(_rootPath ?? '', 'chats'));
   Directory get worldsDir => Directory(path.join(_rootPath ?? '', 'worlds'));
 
@@ -204,6 +208,9 @@ class StorageService extends ChangeNotifier {
     _cloudSyncUsername = _prefs?.getString('cloud_sync_username') ?? '';
     _cloudSyncPassword = _prefs?.getString('cloud_sync_password') ?? '';
     _cloudSyncLastTime = _prefs?.getString('cloud_sync_last_time') ?? '';
+
+    // Custom models path
+    _customModelsPath = _prefs?.getString('custom_models_path');
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -554,6 +561,16 @@ class StorageService extends ChangeNotifier {
   Future<void> setCloudSyncLastTime(String value) async {
     _cloudSyncLastTime = value;
     await _prefs?.setString('cloud_sync_last_time', value);
+    notifyListeners();
+  }
+
+  Future<void> setCustomModelsPath(String? value) async {
+    _customModelsPath = value;
+    if (value != null && value.isNotEmpty) {
+      await _prefs?.setString('custom_models_path', value);
+    } else {
+      await _prefs?.remove('custom_models_path');
+    }
     notifyListeners();
   }
 }
