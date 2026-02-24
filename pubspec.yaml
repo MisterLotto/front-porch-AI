@@ -51,10 +51,15 @@ dependencies:
   webdav_client: ^1.2.2
   googleapis: ^14.0.0
   googleapis_auth: ^2.0.0
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  drift_dev: ^2.22.1
+  build_runner: ^2.4.14
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

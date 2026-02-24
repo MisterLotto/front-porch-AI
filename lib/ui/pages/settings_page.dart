@@ -1931,28 +1931,12 @@ class _SettingsPageState extends State<SettingsPage> {
                             final rootPath = storageService.rootPath ?? chatsPath;
                             final charactersPath = '$rootPath${Platform.pathSeparator}KoboldManager${Platform.pathSeparator}Characters';
 
-                            // Build valid ID sets for orphan cleanup
-                            final charRepo = Provider.of<CharacterRepository>(context, listen: false);
-                            final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
-                            final validCharIds = charRepo.characters
-                                .where((c) => c.imagePath != null)
-                                .map((c) => path.basenameWithoutExtension(c.imagePath!))
-                                .toSet();
-                            final validGroupIds = groupRepo.groups.map((g) => g.id).toSet();
-
-                            final folderSvc = Provider.of<FolderService>(context, listen: false);
-                            final personaSvc = Provider.of<UserPersonaService>(context, listen: false);
-
-                            await syncService.fullSync(chatsPath, charactersPath,
-                              validCharIds: validCharIds,
-                              validGroupIds: validGroupIds,
-                              folderService: folderSvc,
-                              personaService: personaSvc,
-                            );
+                            await syncService.fullSync(chatsPath, charactersPath);
                             if (syncService.status == SyncStatus.success) {
                               await storageService.setCloudSyncLastTime(DateTime.now().toIso8601String());
 
                               // Reload characters so newly downloaded PNGs appear in the UI
+                              final charRepo = Provider.of<CharacterRepository>(context, listen: false);
                               await charRepo.loadCharacters();
 
                               if (mounted) {

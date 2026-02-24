@@ -1,8 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
+import 'package:drift/drift.dart';
+import 'package:front_porch_ai/database/database.dart';
 
 class CharacterFolder {
   final String id;
@@ -23,56 +21,52 @@ class CharacterFolder {
     if (parentId != null) 'parentId': parentId,
     'characterPaths': characterPaths,
   };
-
-  factory CharacterFolder.fromJson(Map<String, dynamic> json) {
-    // Normalize any absolute paths to filenames only (migration for old data)
-    final rawPaths = List<String>.from(json['characterPaths'] ?? []);
-    final normalizedPaths = rawPaths.map((p) => path.basename(p)).toList();
-    return CharacterFolder(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      parentId: json['parentId'],
-      characterPaths: normalizedPaths,
-    );
-  }
 }
 
 class FolderService extends ChangeNotifier {
+  final AppDatabase _db;
   final List<CharacterFolder> _folders = [];
-  File? _storageFile;
 
   List<CharacterFolder> get folders => List.unmodifiable(_folders);
-  
-  /// The path to the local folders JSON file (for cloud sync).
-  String? get storagePath => _storageFile?.path;
 
-  FolderService() {
+  FolderService(this._db) {
     _init();
   }
 
   /// Normalize a character path to just its filename for portable storage.
   static String _normalize(String characterPath) {
-    return path.basename(characterPath);
+    // Use simple split to avoid importing path package
+    final parts = characterPath.split(RegExp(r'[/\\]'));
+    return parts.last;
   }
 
   Future<void> _init() async {
-    final directory = await getApplicationDocumentsDirectory();
-    _storageFile = File('${directory.path}/KoboldManager/character_folders.json');
     await _load();
   }
 
-  /// Reload folders from disk (e.g. after cloud sync downloads a new file).
+  /// Reload folders from DB (e.g. after cloud sync).
   Future<void> reload() async {
     await _load();
   }
 
   Future<void> _load() async {
-    if (_storageFile == null || !await _storageFile!.exists()) return;
     try {
-      final json = jsonDecode(await _storageFile!.readAsString());
+      final dbFolders = await _db.getAllFolders();
       _folders.clear();
-      for (final item in (json['folders'] as List? ?? [])) {
-        _folders.add(CharacterFolder.fromJson(item));
+      for (final f in dbFolders) {
+        // Find characters assigned to this folder
+        final chars = await _db.getAllCharacters();
+        final charPaths = chars
+            .where((c) => c.folderId == f.id && c.imagePath != null)
+            .map((c) => _normalize(c.imagePath!))
+            .toList();
+
+        _folders.add(CharacterFolder(
+          id: f.id.toString(),
+          name: f.name,
+          parentId: f.parentId?.toString(),
+          characterPaths: charPaths,
+        ));
       }
       notifyListeners();
     } catch (e) {
@@ -80,67 +74,112 @@ class FolderService extends ChangeNotifier {
     }
   }
 
-  Future<void> _save() async {
-    if (_storageFile == null) return;
-    await _storageFile!.parent.create(recursive: true);
-    final json = {
-      'folders': _folders.map((f) => f.toJson()).toList(),
-    };
-    await _storageFile!.writeAsString(jsonEncode(json));
-  }
+  /// The path to the local folders JSON file (for cloud sync).
+  /// Returns null since folders now live in the DB.
+  String? get storagePath => null;
 
   Future<CharacterFolder> createFolder(String name, {String? parentId}) async {
+    final newId = await _db.insertFolder(FoldersCompanion.insert(
+      name: name,
+      parentId: Value(parentId != null ? int.tryParse(parentId) : null),
+    ));
+    
     final folder = CharacterFolder(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: newId.toString(),
       name: name,
       parentId: parentId,
     );
     _folders.add(folder);
-    await _save();
     notifyListeners();
     return folder;
   }
 
   Future<void> renameFolder(String folderId, String newName) async {
+    final id = int.tryParse(folderId);
+    if (id == null) return;
+
     final folder = _folders.firstWhere((f) => f.id == folderId);
     folder.name = newName;
-    await _save();
+    
+    await _db.updateFolder(FoldersCompanion(
+      id: Value(id),
+      name: Value(newName),
+    ));
     notifyListeners();
   }
 
   Future<void> deleteFolder(String folderId) async {
+    final id = int.tryParse(folderId);
+    if (id == null) return;
+
     // Also delete child folders recursively
     final childIds = _folders.where((f) => f.parentId == folderId).map((f) => f.id).toList();
     for (final childId in childIds) {
       await deleteFolder(childId);
     }
+    
+    // Unassign characters from this folder
+    final chars = await _db.getAllCharacters();
+    for (final c in chars) {
+      if (c.folderId == id) {
+        await _db.updateCharacter(CharactersCompanion(
+          id: Value(c.id),
+          name: Value(c.name),
+          folderId: const Value(null),
+        ));
+      }
+    }
+
+    await _db.deleteFolderById(id);
     _folders.removeWhere((f) => f.id == folderId);
-    await _save();
     notifyListeners();
   }
 
   Future<void> addToFolder(String folderId, String characterPath) async {
+    final id = int.tryParse(folderId);
+    if (id == null) return;
+
     final filename = _normalize(characterPath);
-    final folder = _folders.firstWhere((f) => f.id == folderId);
-    if (!folder.characterPaths.contains(filename)) {
-      folder.characterPaths.add(filename);
-      // Remove from any other folder
-      for (final other in _folders) {
-        if (other.id != folderId) {
-          other.characterPaths.remove(filename);
-        }
+    
+    // Find the character in the DB by matching imagePath
+    final chars = await _db.getAllCharacters();
+    for (final c in chars) {
+      if (c.imagePath != null && _normalize(c.imagePath!) == filename) {
+        await _db.updateCharacter(CharactersCompanion(
+          id: Value(c.id),
+          name: Value(c.name),
+          folderId: Value(id),
+          updatedAt: Value(DateTime.now()),
+        ));
+        break;
       }
-      await _save();
-      notifyListeners();
     }
+
+    // Update in-memory
+    await _load();
   }
 
   Future<void> removeFromFolder(String folderId, String characterPath) async {
+    final id = int.tryParse(folderId);
+    if (id == null) return;
+
     final filename = _normalize(characterPath);
-    final folder = _folders.firstWhere((f) => f.id == folderId);
-    folder.characterPaths.remove(filename);
-    await _save();
-    notifyListeners();
+    
+    // Find the character and clear its folderId
+    final chars = await _db.getAllCharacters();
+    for (final c in chars) {
+      if (c.imagePath != null && _normalize(c.imagePath!) == filename && c.folderId == id) {
+        await _db.updateCharacter(CharactersCompanion(
+          id: Value(c.id),
+          name: Value(c.name),
+          folderId: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ));
+        break;
+      }
+    }
+
+    await _load();
   }
 
   /// Get the folder a character belongs to (if any)
@@ -156,15 +195,20 @@ class FolderService extends ChangeNotifier {
 
   /// Get character filenames in a specific folder
   List<String> getCharactersInFolder(String folderId) {
+    final id = int.tryParse(folderId);
+    if (id == null) return [];
     final folder = _folders.firstWhere(
       (f) => f.id == folderId,
-      orElse: () => CharacterFolder(id: '', name: ''),
+      orElse: () => CharacterFolder(id: '0', name: ''),
     );
     return folder.characterPaths;
   }
 
   /// Get character filenames in a folder AND all its subfolders recursively
   List<String> getCharactersInFolderRecursive(String folderId) {
+    final id = int.tryParse(folderId);
+    if (id == null) return [];
+
     final paths = <String>[];
     // Add direct characters
     paths.addAll(getCharactersInFolder(folderId));

@@ -1,15 +1,19 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:drift/drift.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/world.dart' as world_model;
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
+import 'package:front_porch_ai/database/database.dart';
 
 class CharacterRepository extends ChangeNotifier {
+  final AppDatabase _db;
   final List<CharacterCard> _characters = [];
   bool _isLoading = false;
 
@@ -26,7 +30,7 @@ class CharacterRepository extends ChangeNotifier {
     return sorted;
   }
 
-  CharacterRepository() {
+  CharacterRepository(this._db) {
     loadCharacters();
   }
 
@@ -35,32 +39,55 @@ class CharacterRepository extends ChangeNotifier {
     notifyListeners();
     
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final charDir = Directory('${directory.path}/KoboldManager/Characters');
+      final dbChars = await _db.getAllCharacters();
+      _characters.clear();
       
-      if (await charDir.exists()) {
-        _characters.clear();
-        final v2Service = V2CardService();
-        
-        await for (final entity in charDir.list()) {
-          if (entity is File && entity.path.toLowerCase().endsWith('.png')) {
-            try {
-              final card = await v2Service.readCard(entity.path);
-              if (card != null) {
-                _characters.add(card);
-              }
-            } catch (e) {
-              print('Failed to load card ${entity.path}: $e');
-            }
-          }
-        }
+      for (final c in dbChars) {
+        _characters.add(_characterFromRow(c));
       }
     } catch (e) {
-      print('Error loading characters: $e');
+      print('Error loading characters from DB: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Convert a DB row into a CharacterCard model.
+  CharacterCard _characterFromRow(Character c) {
+    List<String> altGreetings = [];
+    try { altGreetings = List<String>.from(jsonDecode(c.alternateGreetings)); } catch (_) {}
+    
+    List<String> tags = [];
+    try { tags = List<String>.from(jsonDecode(c.tags)); } catch (_) {}
+    
+    List<String> worldNames = [];
+    try { worldNames = List<String>.from(jsonDecode(c.worldNames)); } catch (_) {}
+    
+    Lorebook? lorebook;
+    if (c.lorebook != null) {
+      try { lorebook = Lorebook.fromJson(jsonDecode(c.lorebook!)); } catch (_) {}
+    }
+
+    final card = CharacterCard(
+      name: c.name,
+      description: c.description,
+      personality: c.personality,
+      scenario: c.scenario,
+      firstMessage: c.firstMessage,
+      mesExample: c.mesExample,
+      systemPrompt: c.systemPrompt,
+      postHistoryInstructions: c.postHistoryInstructions,
+      alternateGreetings: altGreetings,
+      tags: tags,
+      imagePath: c.imagePath,
+      ttsVoice: c.ttsVoice,
+      lorebook: lorebook,
+      worldNames: worldNames,
+    );
+    // Store DB id for lookups
+    card.dbId = c.id;
+    return card;
   }
 
   void addCharacter(CharacterCard character) {
@@ -77,6 +104,11 @@ class CharacterRepository extends ChangeNotifier {
     // Remove from in-memory list
     _characters.remove(character);
     notifyListeners();
+
+    // Delete from database
+    if (character.dbId != null) {
+      await _db.deleteCharacterById(character.dbId!);
+    }
     
     // Delete the PNG file from disk
     if (character.imagePath != null) {
@@ -156,10 +188,29 @@ class CharacterRepository extends ChangeNotifier {
       
       // Update the imagePath to point to the local copy
       card.imagePath = destPath;
+
+      // Insert into database
+      final dbId = await _db.insertCharacter(CharactersCompanion.insert(
+        name: card.name,
+        description: Value(card.description),
+        personality: Value(card.personality),
+        scenario: Value(card.scenario),
+        firstMessage: Value(card.firstMessage),
+        mesExample: Value(card.mesExample),
+        systemPrompt: Value(card.systemPrompt),
+        postHistoryInstructions: Value(card.postHistoryInstructions),
+        alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
+        tags: Value(jsonEncode(card.tags)),
+        imagePath: Value(card.imagePath),
+        ttsVoice: Value(card.ttsVoice),
+        lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
+        worldNames: Value(jsonEncode(card.worldNames)),
+      ));
+      card.dbId = dbId;
       
       // Auto-create a linked world if the card has a lorebook
       if (card.lorebook != null && card.lorebook!.entries.isNotEmpty && worldRepo != null) {
-        final world = World(
+        final world = world_model.World(
           name: "${card.name}'s Lorebook",
           description: 'Auto-imported from character card: ${card.name}',
           lorebook: Lorebook(entries: List.from(card.lorebook!.entries)),
@@ -231,7 +282,29 @@ class CharacterRepository extends ChangeNotifier {
       // Overwrite the existing file with updated data
       await v2Service.saveCardAsPng(card, card.imagePath!, card.imagePath!);
       
-      // Update the list entry if needed (references might be same, but good to notify)
+      // Update in database
+      if (card.dbId != null) {
+        await _db.updateCharacter(CharactersCompanion(
+          id: Value(card.dbId!),
+          name: Value(card.name),
+          description: Value(card.description),
+          personality: Value(card.personality),
+          scenario: Value(card.scenario),
+          firstMessage: Value(card.firstMessage),
+          mesExample: Value(card.mesExample),
+          systemPrompt: Value(card.systemPrompt),
+          postHistoryInstructions: Value(card.postHistoryInstructions),
+          alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
+          tags: Value(jsonEncode(card.tags)),
+          imagePath: Value(card.imagePath),
+          ttsVoice: Value(card.ttsVoice),
+          lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
+          worldNames: Value(jsonEncode(card.worldNames)),
+          updatedAt: Value(DateTime.now()),
+        ));
+      }
+      
+      // Update the list entry
       final index = _characters.indexWhere((c) => c.imagePath == card.imagePath);
       if (index != -1) {
         _characters[index] = card;
@@ -247,4 +320,3 @@ class CharacterRepository extends ChangeNotifier {
     }
   }
 }
-

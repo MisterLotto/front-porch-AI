@@ -17,6 +17,8 @@ import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/database/database.dart';
+import 'package:drift/drift.dart' as drift;
 
 enum GenerationMode { normal, continue_, impersonate }
 
@@ -108,6 +110,7 @@ class ChatService extends ChangeNotifier {
   final UserPersonaService _userPersonaService;
   final StorageService _storageService;
   final WorldRepository _worldRepository;
+  late final AppDatabase _db;
   LLMProvider? _llmProvider;
   CharacterRepository? _characterRepository;
   TtsService? _ttsService;
@@ -280,6 +283,11 @@ class ChatService extends ChangeNotifier {
   int get greetingIndex => _greetingIndex;
 
   ChatService(this._koboldService, this._userPersonaService, this._storageService, this._worldRepository);
+
+  /// Set the database instance after construction.
+  void setDatabase(AppDatabase db) {
+    _db = db;
+  }
 
   String get authorNote => _authorNote;
   int get authorNoteDepth => _authorNoteDepth;
@@ -509,67 +517,118 @@ class ChatService extends ChangeNotifier {
     if ((_activeCharacter == null && _activeGroup == null) || _currentSessionId == null) return;
     
     final charId = _getCharacterId();
-    final charDir = Directory('${_storageService.chatsDir.path}/$charId');
-    if (!await charDir.exists()) {
-      await charDir.create(recursive: true);
+
+    // Look up character DB id if in 1:1 mode
+    int? characterDbId;
+    String? groupDbId;
+    if (_activeGroup != null) {
+      groupDbId = _activeGroup!.id;
+    } else if (_activeCharacter?.dbId != null) {
+      characterDbId = _activeCharacter!.dbId;
     }
 
-    final file = File('${charDir.path}/$_currentSessionId.json');
-    final envelope = {
-      'messages': _messages.map((m) => m.toJson()).toList(),
-      'author_note': _authorNote,
-      'author_note_depth': _authorNoteDepth,
-      if (_sessionName != null) 'session_name': _sessionName,
-      if (_sessionDescription != null) 'session_description': _sessionDescription,
-      if (_parentSessionId != null) 'parent_session': _parentSessionId,
-      if (_forkIndex != null) 'fork_index': _forkIndex,
-    };
-    await file.writeAsString(jsonEncode(envelope));
+    // Upsert session
+    final existingSession = await _db.getSessionById(_currentSessionId!);
+    if (existingSession == null) {
+      final timestamp = int.tryParse(_currentSessionId!) ?? 0;
+      final createdAt = timestamp > 0
+          ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+          : DateTime.now();
+      await _db.insertSession(SessionsCompanion.insert(
+        id: _currentSessionId!,
+        characterId: drift.Value(characterDbId),
+        groupId: drift.Value(groupDbId),
+        name: drift.Value(_sessionName),
+        description: drift.Value(_sessionDescription),
+        authorNote: drift.Value(_authorNote),
+        authorNoteDepth: drift.Value(_authorNoteDepth),
+        parentSession: drift.Value(_parentSessionId),
+        forkIndex: drift.Value(_forkIndex),
+        createdAt: drift.Value(createdAt),
+        updatedAt: drift.Value(DateTime.now()),
+      ));
+    } else {
+      await _db.updateSession(SessionsCompanion(
+        id: drift.Value(_currentSessionId!),
+        characterId: drift.Value(characterDbId),
+        groupId: drift.Value(groupDbId),
+        name: drift.Value(_sessionName),
+        description: drift.Value(_sessionDescription),
+        authorNote: drift.Value(_authorNote),
+        authorNoteDepth: drift.Value(_authorNoteDepth),
+        parentSession: drift.Value(_parentSessionId),
+        forkIndex: drift.Value(_forkIndex),
+        updatedAt: drift.Value(DateTime.now()),
+      ));
+    }
 
-    // Fire-and-forget cloud upload
-    _cloudSyncService?.uploadChatSession(file.path, charId);
+    // Replace all messages for this session
+    await _db.deleteMessagesForSession(_currentSessionId!);
+    final messageBatch = <MessagesCompanion>[];
+    for (int i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      messageBatch.add(MessagesCompanion.insert(
+        sessionId: _currentSessionId!,
+        position: i,
+        sender: m.sender,
+        isUser: m.isUser,
+        characterId: drift.Value(m.characterId),
+        swipes: drift.Value(jsonEncode(m.swipes)),
+        swipeIndex: drift.Value(m.swipeIndex),
+        swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+      ));
+    }
+    if (messageBatch.isNotEmpty) {
+      await _db.insertMessages(messageBatch);
+    }
   }
 
   Future<void> _loadLastSession() async {
     if (_activeCharacter == null && _activeGroup == null) return;
     
-    final charId = _getCharacterId();
-    final charDir = Directory('${_storageService.chatsDir.path}/$charId');
-    if (!await charDir.exists()) return;
+    // Get sessions from DB
+    List<Session> sessions;
+    if (_activeGroup != null) {
+      sessions = await _db.getSessionsForGroup(_activeGroup!.id);
+    } else if (_activeCharacter?.dbId != null) {
+      sessions = await _db.getSessionsForCharacter(_activeCharacter!.dbId!);
+    } else {
+      return;
+    }
 
-    final files = await charDir.list().where((f) => f is File && f.path.endsWith('.json')).toList();
-    if (files.isEmpty) return;
+    if (sessions.isEmpty) return;
 
-    // Sort by name (which is timestamp) descending
-    files.sort((a, b) => b.path.compareTo(a.path));
-    
-    final lastFile = files.first as File;
-    _currentSessionId = path.basenameWithoutExtension(lastFile.path);
-    
+    // Sessions are already sorted descending by createdAt
+    final lastSession = sessions.first;
+    _currentSessionId = lastSession.id;
+    _authorNote = lastSession.authorNote;
+    _authorNoteDepth = lastSession.authorNoteDepth;
+    _sessionName = lastSession.name;
+    _sessionDescription = lastSession.description;
+    _parentSessionId = lastSession.parentSession;
+    _forkIndex = lastSession.forkIndex;
+
+    // Load messages
     try {
-      final content = await lastFile.readAsString();
-      final decoded = jsonDecode(content);
+      final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
       _messages.clear();
-      
-      if (decoded is List) {
-        _messages.addAll(decoded.map((m) => ChatMessage.fromJson(m)));
-        _authorNote = '';
-        _authorNoteDepth = 4;
-        _sessionName = null;
-        _sessionDescription = null;
-        _parentSessionId = null;
-        _forkIndex = null;
-      } else if (decoded is Map) {
-        final List<dynamic> jsonList = decoded['messages'] ?? [];
-        _messages.addAll(jsonList.map((m) => ChatMessage.fromJson(m)));
-        _authorNote = decoded['author_note'] ?? '';
-        _authorNoteDepth = decoded['author_note_depth'] ?? 4;
-        _sessionName = decoded['session_name'];
-        _sessionDescription = decoded['session_description'];
-        _parentSessionId = decoded['parent_session'];
-        _forkIndex = decoded['fork_index'];
+      for (final m in dbMessages) {
+        List<String> swipes;
+        try { swipes = List<String>.from(jsonDecode(m.swipes)); } catch (_) { swipes = ['']; }
+        List<int> swipeDurations;
+        try { swipeDurations = List<int>.from((jsonDecode(m.swipeDurations) as List).map((e) => (e as num).toInt())); } catch (_) { swipeDurations = [0]; }
+
+        _messages.add(ChatMessage(
+          text: swipes.isNotEmpty ? swipes[m.swipeIndex] : '',
+          sender: m.sender,
+          isUser: m.isUser,
+          characterId: m.characterId,
+          swipes: swipes,
+          swipeIndex: m.swipeIndex,
+          swipeDurations: swipeDurations,
+        ));
       }
-      
+
       if (_messages.isNotEmpty) {
         _scanLorebook(_messages.last.text);
       }
@@ -580,56 +639,53 @@ class ChatService extends ChangeNotifier {
 
   /// Get sessions for a given character/group ID without setting it as active.
   Future<List<Map<String, dynamic>>> getSessionsForId(String charId) async {
-    final charDir = Directory('${_storageService.chatsDir.path}/$charId');
-    if (!await charDir.exists()) return [];
-
-    final files = await charDir.list().where((f) => f is File && f.path.endsWith('.json')).toList();
+    // Determine if this is a group or character
+    List<Session> dbSessions;
+    if (charId.startsWith('group_')) {
+      final groupId = charId.replaceFirst('group_', '');
+      dbSessions = await _db.getSessionsForGroup(groupId);
+    } else {
+      // Find character by imagePath basename
+      final allChars = await _db.getAllCharacters();
+      final match = allChars.where((c) {
+        if (c.imagePath == null) return false;
+        return path.basenameWithoutExtension(c.imagePath!) == charId;
+      }).firstOrNull;
+      if (match != null) {
+        dbSessions = await _db.getSessionsForCharacter(match.id);
+      } else {
+        dbSessions = [];
+      }
+    }
 
     List<Map<String, dynamic>> sessions = [];
-    for (var f in files) {
-      final id = path.basenameWithoutExtension(f.path);
-      final timestamp = int.tryParse(id) ?? 0;
+    for (final s in dbSessions) {
+      final timestamp = int.tryParse(s.id) ?? 0;
       final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
 
-      String preview = "New Conversation";
-      String? sessionName;
-      String? sessionDescription;
-      String? parentSession;
-      int? forkIdx;
-      int messageCount = 0;
-      try {
-        final content = await (f as File).readAsString();
-        final decoded = jsonDecode(content);
-        List<dynamic> msgList;
-        if (decoded is List) {
-          msgList = decoded;
-        } else if (decoded is Map) {
-          msgList = decoded['messages'] ?? [];
-          sessionName = decoded['session_name'];
-          sessionDescription = decoded['session_description'];
-          parentSession = decoded['parent_session'];
-          forkIdx = decoded['fork_index'];
-        } else {
-          msgList = [];
-        }
-        messageCount = msgList.length;
-        if (sessionName != null && sessionName.isNotEmpty) {
-          preview = sessionName;
-        } else if (msgList.length > 1) {
-          preview = msgList[1]['text'] ?? '';
+      // Get message count and preview
+      final msgs = await _db.getMessagesForSession(s.id);
+      String preview = 'New Conversation';
+      if (s.name != null && s.name!.isNotEmpty) {
+        preview = s.name!;
+      } else if (msgs.length > 1) {
+        // Use second message text as preview
+        try {
+          final swipes = List<String>.from(jsonDecode(msgs[1].swipes));
+          preview = swipes.isNotEmpty ? swipes[msgs[1].swipeIndex] : '';
           if (preview.length > 50) preview = '${preview.substring(0, 50)}...';
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
 
       sessions.add({
-        'id': id,
+        'id': s.id,
         'date': date,
         'preview': preview,
-        'message_count': messageCount,
-        if (sessionName != null) 'session_name': sessionName,
-        if (sessionDescription != null) 'session_description': sessionDescription,
-        if (parentSession != null) 'parent_session': parentSession,
-        if (forkIdx != null) 'fork_index': forkIdx,
+        'message_count': msgs.length,
+        if (s.name != null) 'session_name': s.name,
+        if (s.description != null) 'session_description': s.description,
+        if (s.parentSession != null) 'parent_session': s.parentSession,
+        if (s.forkIndex != null) 'fork_index': s.forkIndex,
       });
     }
 
@@ -639,97 +695,44 @@ class ChatService extends ChangeNotifier {
 
   Future<List<Map<String, dynamic>>> getSessions() async {
     if (_activeCharacter == null && _activeGroup == null) return [];
-    
     final charId = _getCharacterId();
-    final charDir = Directory('${_storageService.chatsDir.path}/$charId');
-    if (!await charDir.exists()) return [];
-
-    final files = await charDir.list().where((f) => f is File && f.path.endsWith('.json')).toList();
-    
-    List<Map<String, dynamic>> sessions = [];
-    for (var f in files) {
-      final id = path.basenameWithoutExtension(f.path);
-      final timestamp = int.tryParse(id) ?? 0;
-      final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-      
-      // Peek at first message for a preview?
-      String preview = "New Conversation";
-      String? sessionName;
-      String? sessionDescription;
-      String? parentSession;
-      int? forkIdx;
-      try {
-        final content = await (f as File).readAsString();
-        final decoded = jsonDecode(content);
-        List<dynamic> msgList;
-        if (decoded is List) {
-          msgList = decoded;
-        } else if (decoded is Map) {
-          msgList = decoded['messages'] ?? [];
-          sessionName = decoded['session_name'];
-          sessionDescription = decoded['session_description'];
-          parentSession = decoded['parent_session'];
-          forkIdx = decoded['fork_index'];
-        } else {
-          msgList = [];
-        }
-        if (sessionName != null && sessionName.isNotEmpty) {
-          preview = sessionName;
-        } else if (msgList.length > 1) {
-          preview = msgList[1]['text'] ?? '';
-          if (preview.length > 50) preview = '${preview.substring(0, 50)}...';
-        }
-      } catch (_) {}
-
-      sessions.add({
-        'id': id,
-        'date': date,
-        'preview': preview,
-        if (sessionName != null) 'session_name': sessionName,
-        if (sessionDescription != null) 'session_description': sessionDescription,
-        if (parentSession != null) 'parent_session': parentSession,
-        if (forkIdx != null) 'fork_index': forkIdx,
-      });
-    }
-
-    // Sort descending
-    sessions.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
-    return sessions;
+    return getSessionsForId(charId);
   }
 
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
     
-    final charId = _getCharacterId();
-    final file = File('${_storageService.chatsDir.path}/$charId/$sessionId.json');
-    if (!await file.exists()) return;
+    final session = await _db.getSessionById(sessionId);
+    if (session == null) return;
 
     try {
-      final content = await file.readAsString();
-      final decoded = jsonDecode(content);
-      
+      final dbMessages = await _db.getMessagesForSession(sessionId);
       _messages.clear();
-      // Support both old format (plain array) and new envelope format
-      if (decoded is List) {
-        _messages.addAll(decoded.map((m) => ChatMessage.fromJson(m)));
-        _authorNote = '';
-        _authorNoteDepth = 4;
-        _sessionName = null;
-        _sessionDescription = null;
-        _parentSessionId = null;
-        _forkIndex = null;
-      } else if (decoded is Map) {
-        final List<dynamic> jsonList = decoded['messages'] ?? [];
-        _messages.addAll(jsonList.map((m) => ChatMessage.fromJson(m)));
-        _authorNote = decoded['author_note'] ?? '';
-        _authorNoteDepth = decoded['author_note_depth'] ?? 4;
-        _sessionName = decoded['session_name'];
-        _sessionDescription = decoded['session_description'];
-        _parentSessionId = decoded['parent_session'];
-        _forkIndex = decoded['fork_index'];
+      for (final m in dbMessages) {
+        List<String> swipes;
+        try { swipes = List<String>.from(jsonDecode(m.swipes)); } catch (_) { swipes = ['']; }
+        List<int> swipeDurations;
+        try { swipeDurations = List<int>.from((jsonDecode(m.swipeDurations) as List).map((e) => (e as num).toInt())); } catch (_) { swipeDurations = [0]; }
+
+        _messages.add(ChatMessage(
+          text: swipes.isNotEmpty ? swipes[m.swipeIndex] : '',
+          sender: m.sender,
+          isUser: m.isUser,
+          characterId: m.characterId,
+          swipes: swipes,
+          swipeIndex: m.swipeIndex,
+          swipeDurations: swipeDurations,
+        ));
       }
+
       _currentSessionId = sessionId;
-      
+      _authorNote = session.authorNote;
+      _authorNoteDepth = session.authorNoteDepth;
+      _sessionName = session.name;
+      _sessionDescription = session.description;
+      _parentSessionId = session.parentSession;
+      _forkIndex = session.forkIndex;
+
       if (_messages.isNotEmpty) {
         _scanLorebook(_messages.last.text);
       }
@@ -739,55 +742,39 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  /// Rename a session. Updates the JSON file directly.
+  /// Rename a session.
   Future<void> renameSession(String sessionId, String name) async {
-    if (_activeCharacter == null && _activeGroup == null) return;
+    final session = await _db.getSessionById(sessionId);
+    if (session == null) return;
 
-    final charId = _getCharacterId();
-    final file = File('${_storageService.chatsDir.path}/$charId/$sessionId.json');
-    if (!await file.exists()) return;
+    await _db.updateSession(SessionsCompanion(
+      id: drift.Value(sessionId),
+      name: drift.Value(name.isEmpty ? null : name),
+      updatedAt: drift.Value(DateTime.now()),
+    ));
 
-    try {
-      final content = await file.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is Map<String, dynamic>) {
-        decoded['session_name'] = name.isEmpty ? null : name;
-        await file.writeAsString(jsonEncode(decoded));
-      }
-
-      // Update in-memory if this is the current session
-      if (sessionId == _currentSessionId) {
-        _sessionName = name.isEmpty ? null : name;
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('Error renaming session: $e');
+    // Update in-memory if this is the current session
+    if (sessionId == _currentSessionId) {
+      _sessionName = name.isEmpty ? null : name;
+      notifyListeners();
     }
   }
 
-  /// Update the description of a session. Updates the JSON file directly.
+  /// Update the description of a session.
   Future<void> updateSessionDescription(String sessionId, String description) async {
-    if (_activeCharacter == null && _activeGroup == null) return;
+    final session = await _db.getSessionById(sessionId);
+    if (session == null) return;
 
-    final charId = _getCharacterId();
-    final file = File('${_storageService.chatsDir.path}/$charId/$sessionId.json');
-    if (!await file.exists()) return;
+    await _db.updateSession(SessionsCompanion(
+      id: drift.Value(sessionId),
+      description: drift.Value(description.isEmpty ? null : description),
+      updatedAt: drift.Value(DateTime.now()),
+    ));
 
-    try {
-      final content = await file.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is Map<String, dynamic>) {
-        decoded['session_description'] = description.isEmpty ? null : description;
-        await file.writeAsString(jsonEncode(decoded));
-      }
-
-      // Update in-memory if this is the current session
-      if (sessionId == _currentSessionId) {
-        _sessionDescription = description.isEmpty ? null : description;
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('Error updating session description: $e');
+    // Update in-memory if this is the current session
+    if (sessionId == _currentSessionId) {
+      _sessionDescription = description.isEmpty ? null : description;
+      notifyListeners();
     }
   }
 

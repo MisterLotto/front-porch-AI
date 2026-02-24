@@ -16,6 +16,7 @@ class CharacterCard {
   Lorebook? lorebook;
   List<String> worldNames;
   String? ttsVoice; // Piper voice key for per-character TTS
+  int? dbId; // SQLite row ID (runtime only, not serialized)
 
   CharacterCard({
     required this.name,

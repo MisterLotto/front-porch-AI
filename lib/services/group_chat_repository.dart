@@ -1,47 +1,85 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:drift/drift.dart';
+import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
 
-/// Persists group chat definitions to disk.
+/// Persists group chat definitions to the database.
 class GroupChatRepository extends ChangeNotifier {
   final StorageService _storageService;
+  final AppDatabase _db;
   final List<GroupChat> _groups = [];
 
   List<GroupChat> get groups => List.unmodifiable(_groups);
 
-  GroupChatRepository(this._storageService) {
+  GroupChatRepository(this._storageService, this._db) {
     _load();
-  }
-
-  Directory get _groupsDir {
-    final dir = Directory('${_storageService.chatsDir.path}/groups');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-    return dir;
   }
 
   Future<void> _load() async {
     await _storageService.initialized;
     _groups.clear();
-    final dir = _groupsDir;
 
-    for (final file in dir.listSync().whereType<File>()) {
-      if (!file.path.endsWith('.json')) continue;
-      try {
-        final json = jsonDecode(await file.readAsString());
-        _groups.add(GroupChat.fromJson(json));
-      } catch (e) {
-        debugPrint('Failed to load group: ${file.path}: $e');
+    try {
+      final dbGroups = await _db.getAllGroups();
+      for (final g in dbGroups) {
+        List<String> charIds = [];
+        try { charIds = List<String>.from(jsonDecode(g.characterIds)); } catch (_) {}
+
+        _groups.add(GroupChat(
+          id: g.id,
+          name: g.name,
+          characterIds: charIds,
+          turnOrder: TurnOrder.values.firstWhere(
+            (e) => e.name == g.turnOrder,
+            orElse: () => TurnOrder.roundRobin,
+          ),
+          autoAdvance: g.autoAdvance,
+          directorMode: g.directorMode,
+          firstMessage: g.firstMessage,
+          scenario: g.scenario,
+          systemPrompt: g.systemPrompt,
+        ));
       }
+    } catch (e) {
+      debugPrint('Failed to load groups from DB: $e');
     }
+
     notifyListeners();
   }
 
   Future<void> save(GroupChat group) async {
-    final file = File('${_groupsDir.path}/${group.id}.json');
-    await file.writeAsString(jsonEncode(group.toJson()));
+    // Save to database
+    final existing = await _db.getGroupById(group.id);
+    final companion = GroupsCompanion(
+      id: Value(group.id),
+      name: Value(group.name),
+      characterIds: Value(jsonEncode(group.characterIds)),
+      turnOrder: Value(group.turnOrder.name),
+      autoAdvance: Value(group.autoAdvance),
+      directorMode: Value(group.directorMode),
+      firstMessage: Value(group.firstMessage),
+      scenario: Value(group.scenario),
+      systemPrompt: Value(group.systemPrompt),
+    );
+
+    if (existing != null) {
+      await _db.updateGroup(companion);
+    } else {
+      await _db.insertGroup(GroupsCompanion.insert(
+        id: group.id,
+        name: group.name,
+        characterIds: Value(jsonEncode(group.characterIds)),
+        turnOrder: Value(group.turnOrder.name),
+        autoAdvance: Value(group.autoAdvance),
+        directorMode: Value(group.directorMode),
+        firstMessage: Value(group.firstMessage),
+        scenario: Value(group.scenario),
+        systemPrompt: Value(group.systemPrompt),
+      ));
+    }
 
     final idx = _groups.indexWhere((g) => g.id == group.id);
     if (idx >= 0) {
@@ -53,19 +91,15 @@ class GroupChatRepository extends ChangeNotifier {
   }
 
   Future<void> delete(String groupId, {CloudSyncService? cloudSyncService}) async {
-    final file = File('${_groupsDir.path}/$groupId.json');
-    if (await file.exists()) await file.delete();
+    // Delete from database
+    await _db.deleteGroupById(groupId);
     _groups.removeWhere((g) => g.id == groupId);
 
-    // Delete associated chat history folder
-    try {
-      final chatFolder = Directory('${_storageService.chatsDir.path}/group_$groupId');
-      if (await chatFolder.exists()) {
-        await chatFolder.delete(recursive: true);
-        debugPrint('AG_DEBUG: Deleted group chat folder: ${chatFolder.path}');
-      }
-    } catch (e) {
-      debugPrint('Error deleting group chat folder: $e');
+    // Delete associated chat sessions from database
+    final sessions = await _db.getSessionsForGroup(groupId);
+    for (final session in sessions) {
+      await _db.deleteMessagesForSession(session.id);
+      await _db.deleteSessionById(session.id);
     }
 
     // Delete from cloud storage

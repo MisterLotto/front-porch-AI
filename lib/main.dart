@@ -29,6 +29,8 @@ import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
 import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
+import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/database/data_migration_service.dart';
 
 import 'package:front_porch_ai/ui/widgets/setup_overlay.dart';
 import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
@@ -36,6 +38,10 @@ import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+  
+  // Initialize database
+  final db = await AppDatabase.instance();
+  final needsMigration = !await DataMigrationService.isMigrated();
   
   WindowOptions windowOptions = const WindowOptions(
     size: Size(1280, 720),
@@ -53,6 +59,8 @@ void main(List<String> args) async {
   runApp(
     MultiProvider(
       providers: [
+        Provider<AppDatabase>.value(value: db),
+        Provider<bool>.value(value: needsMigration), // migration flag
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => StorageService()),
         ChangeNotifierProxyProvider<StorageService, KoboldService>(
@@ -60,12 +68,12 @@ void main(List<String> args) async {
           update: (context, storage, previous) => previous ?? KoboldService(storage),
         ),
         ChangeNotifierProvider(create: (_) => HardwareService()),
-        ChangeNotifierProvider(create: (_) => CharacterRepository()),
-        ChangeNotifierProvider(create: (_) => UserPersonaService()),
-        ChangeNotifierProvider(create: (_) => FolderService()),
+        ChangeNotifierProvider(create: (context) => CharacterRepository(db)),
+        ChangeNotifierProvider(create: (context) => UserPersonaService(db)),
+        ChangeNotifierProvider(create: (context) => FolderService(db)),
         ChangeNotifierProxyProvider<StorageService, WorldRepository>(
-          create: (context) => WorldRepository(Provider.of<StorageService>(context, listen: false)),
-          update: (context, storage, previous) => previous ?? WorldRepository(storage),
+          create: (context) => WorldRepository(Provider.of<StorageService>(context, listen: false), db),
+          update: (context, storage, previous) => previous ?? WorldRepository(storage, db),
         ),
         ChangeNotifierProxyProvider<StorageService, BackendManager>(
           create: (context) => BackendManager(Provider.of<StorageService>(context, listen: false)),
@@ -94,6 +102,7 @@ void main(List<String> args) async {
               Provider.of<WorldRepository>(context, listen: false),
             );
             // Wire LLMProvider and CharacterRepository immediately at creation time
+            chatService.setDatabase(db);
             chatService.setLLMProvider(Provider.of<LLMProvider>(context, listen: false));
             chatService.setCharacterRepository(Provider.of<CharacterRepository>(context, listen: false));
             return chatService;
@@ -108,14 +117,15 @@ void main(List<String> args) async {
               return previous;
             }
             final chatService = ChatService(kobold, persona, storage, worldRepo);
+            chatService.setDatabase(db);
             chatService.setLLMProvider(Provider.of<LLMProvider>(context, listen: false));
             chatService.setCharacterRepository(Provider.of<CharacterRepository>(context, listen: false));
             return chatService;
           },
         ),
         ChangeNotifierProxyProvider<StorageService, GroupChatRepository>(
-          create: (context) => GroupChatRepository(Provider.of<StorageService>(context, listen: false)),
-          update: (context, storage, previous) => previous ?? GroupChatRepository(storage),
+          create: (context) => GroupChatRepository(Provider.of<StorageService>(context, listen: false), db),
+          update: (context, storage, previous) => previous ?? GroupChatRepository(storage, db),
         ),
         ChangeNotifierProxyProvider3<StorageService, BackendManager, KoboldService, SetupService>(
           create: (context) => SetupService(
@@ -152,11 +162,19 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WindowListener {
   bool _updateChecked = false;
+  bool _isMigrating = false;
+  String _migrationStep = '';
+  int _migrationCurrent = 0;
+  int _migrationTotal = 1;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // Run migration after first frame if needed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runMigrationIfNeeded();
+    });
   }
 
   @override
@@ -224,6 +242,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
                   children: [
                     const MainLayout(),
                     const SetupOverlay(),
+                    if (_isMigrating)
+                      _buildMigrationOverlay(),
                   ],
                 ),
               );
@@ -231,6 +251,121 @@ class _MyAppState extends State<MyApp> with WindowListener {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _runMigrationIfNeeded() async {
+    final needsMigration = Provider.of<bool>(context, listen: false);
+    if (!needsMigration) return;
+
+    setState(() => _isMigrating = true);
+
+    final db = Provider.of<AppDatabase>(context, listen: false);
+    final migration = DataMigrationService(db);
+    await migration.migrate(
+      onProgress: (step, current, total) {
+        if (mounted) {
+          setState(() {
+            _migrationStep = step;
+            _migrationCurrent = current;
+            _migrationTotal = total;
+          });
+        }
+        debugPrint('DB Migration [$current/$total]: $step');
+      },
+    );
+
+    if (mounted) {
+      setState(() => _isMigrating = false);
+    }
+  }
+
+  Widget _buildMigrationOverlay() {
+    return Positioned.fill(
+      child: Material(
+        color: const Color(0xFF0F172A),
+        child: Center(
+          child: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // App icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blueAccent.shade700, Colors.purpleAccent],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.storage_rounded, size: 40, color: Colors.white),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'Migrating Your Data',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This only happens once — your data is being\nupgraded to a faster database format.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Step name
+                Text(
+                  _migrationStep,
+                  style: TextStyle(
+                    color: Colors.blueAccent.shade100,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: _migrationTotal > 0 ? _migrationCurrent / _migrationTotal : null,
+                    minHeight: 8,
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent.shade200),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Step counter
+                Text(
+                  'Step $_migrationCurrent of $_migrationTotal',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -255,7 +390,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
 
     final syncService = Provider.of<CloudSyncService>(context, listen: false);
 
-    // Wire cloud sync service into ChatService for auto-upload on save
+    // Wire cloud sync service into ChatService
     final chatService = Provider.of<ChatService>(context, listen: false);
     chatService.setCloudSyncService(syncService);
 
@@ -268,7 +403,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
       case 'gdrive':
         provider = GoogleDriveProvider();
         break;
-
       default:
         return;
     }
@@ -281,32 +415,16 @@ class _MyAppState extends State<MyApp> with WindowListener {
       });
       syncService.setProvider(provider);
 
-      // Get the characters directory (same parent as chats)
+      // Get paths
       final chatsPath = storage.chatsDir.path;
       final rootPath = storage.rootPath ?? chatsPath;
       final charactersPath = '$rootPath${Platform.pathSeparator}KoboldManager${Platform.pathSeparator}Characters';
 
-      // Build valid ID sets for orphan cleanup
-      final charRepo = Provider.of<CharacterRepository>(context, listen: false);
-      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
-      final validCharIds = charRepo.characters
-          .where((c) => c.imagePath != null)
-          .map((c) => path.basenameWithoutExtension(c.imagePath!))
-          .toSet();
-      final validGroupIds = groupRepo.groups.map((g) => g.id).toSet();
-
-      final folderSvc = Provider.of<FolderService>(context, listen: false);
-      final personaSvc = Provider.of<UserPersonaService>(context, listen: false);
-
-      await syncService.fullSync(chatsPath, charactersPath,
-        validCharIds: validCharIds,
-        validGroupIds: validGroupIds,
-        folderService: folderSvc,
-        personaService: personaSvc,
-      );
+      await syncService.fullSync(chatsPath, charactersPath);
       if (syncService.status == SyncStatus.success) {
         await storage.setCloudSyncLastTime(DateTime.now().toIso8601String());
         // Reload characters so newly downloaded PNGs appear in the UI
+        final charRepo = Provider.of<CharacterRepository>(context, listen: false);
         await charRepo.loadCharacters();
       }
     } catch (e) {

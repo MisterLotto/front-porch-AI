@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
-import 'package:front_porch_ai/services/folder_service.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/database/database.dart';
 
 /// Information about a remote file.
 class RemoteFileInfo {
@@ -88,14 +87,10 @@ class CloudSyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Run a full bi-directional sync of chats and characters.
-  /// [validCharIds] and [validGroupIds] are used to clean up orphaned remote folders.
-  /// [folderService] if provided, syncs the folder hierarchy metadata.
+  /// Run a full bi-directional sync of characters and the database.
   Future<void> fullSync(String chatsDir, String charactersDir, {
     Set<String>? validCharIds,
     Set<String>? validGroupIds,
-    FolderService? folderService,
-    UserPersonaService? personaService,
   }) async {
     if (_provider == null || !_provider!.isConnected) return;
 
@@ -109,57 +104,23 @@ class CloudSyncService extends ChangeNotifier {
     try {
       // Ensure remote directories exist
       await _provider!.ensureDir('/FrontPorchAI');
-      await _provider!.ensureDir('/FrontPorchAI/chats');
       await _provider!.ensureDir('/FrontPorchAI/characters');
 
-      // Clean up orphaned remote chat folders before syncing
-      if (validCharIds != null || validGroupIds != null) {
-        await _cleanOrphanedRemoteFolders(
-          validCharIds ?? {},
-          validGroupIds ?? {},
-        );
-      }
-
-      // Also clean up orphaned local chat folders
-      if (validCharIds != null || validGroupIds != null) {
-        await _cleanOrphanedLocalFolders(
-          chatsDir,
-          validCharIds ?? {},
-          validGroupIds ?? {},
-        );
-      }
-
-      // Count total files first for progress tracking
-      _totalFiles = await _countSyncFiles(
-        chatsDir, '/FrontPorchAI/chats', true, null,
-      ) + await _countSyncFiles(
+      // Count total files for progress tracking
+      _totalFiles = 1 + await _countSyncFiles( // +1 for DB file
         charactersDir, '/FrontPorchAI/characters', false, ['.png'],
       );
       notifyListeners();
 
-      // Sync chats (bi-directional)
-      await _syncDirectory(
-        localDir: chatsDir,
-        remoteDir: '/FrontPorchAI/chats',
-        recursive: true,
-      );
+      // Sync the database file (replaces per-file chat/folder/persona sync)
+      await _syncDatabase();
 
-      // Sync characters (bi-directional, including auto-download)
+      // Sync characters (bi-directional for PNGs)
       await _syncDirectory(
         localDir: charactersDir,
         remoteDir: '/FrontPorchAI/characters',
         extensions: ['.png'],
       );
-
-      // Sync folder hierarchy metadata
-      if (folderService != null) {
-        await _syncFolderMetadata(folderService);
-      }
-
-      // Sync user personas
-      if (personaService != null) {
-        await _syncPersonaMetadata(personaService, charactersDir);
-      }
 
       _status = SyncStatus.success;
       _lastSyncTime = DateTime.now();
@@ -171,91 +132,65 @@ class CloudSyncService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sync the folder hierarchy metadata (character_folders.json).
-  /// Strategy: If local has folders, upload. If local is empty/missing but
-  /// remote has data, download and reload. This handles the "new PC" use case.
-  Future<void> _syncFolderMetadata(FolderService folderService) async {
+  /// Sync the SQLite database file as a single unit.
+  /// Strategy: compare local vs remote modified time, newer wins.
+  Future<void> _syncDatabase() async {
     if (_provider == null || !_provider!.isConnected) return;
 
-    const remotePath = '/FrontPorchAI/character_folders.json';
-    final localPath = folderService.storagePath;
+    final localPath = AppDatabase.dbFilePath;
     if (localPath == null) return;
 
+    const remotePath = '/FrontPorchAI/front_porch.db';
     final localFile = File(localPath);
-    final localExists = await localFile.exists();
-    final localHasData = localExists && (await localFile.length()) > 10;
+    if (!await localFile.exists()) return;
 
-    // Check if remote version exists
+    // Checkpoint WAL so the .db file is self-contained
+    try {
+      final db = await AppDatabase.instance();
+      await db.checkpoint();
+    } catch (e) {
+      debugPrint('WAL checkpoint failed: $e');
+    }
+
+    // Check remote
     RemoteFileInfo? remoteInfo;
     try {
       final remoteFiles = await _provider!.listFiles('/FrontPorchAI');
-      remoteInfo = remoteFiles.where((f) => path.basename(f.remotePath) == 'character_folders.json').firstOrNull;
+      remoteInfo = remoteFiles.where(
+        (f) => path.basename(f.remotePath) == 'front_porch.db'
+      ).firstOrNull;
     } catch (_) {}
 
-    if (localHasData && remoteInfo != null) {
-      // Both exist — local wins (upload) since the user just organized locally
-      // and wants to push their layout. If you want timestamp-based merge,
-      // that can be added later.
+    final localStat = await localFile.stat();
+
+    if (remoteInfo == null) {
+      // First sync — upload
       await _provider!.uploadFile(localPath, remotePath);
       _syncedFiles++;
-      debugPrint('AG_DEBUG: Uploaded folder metadata to cloud');
-    } else if (localHasData && remoteInfo == null) {
-      // Only local exists — upload it
+      debugPrint('[CloudSync] Uploaded database (first sync)');
+    } else if (remoteInfo.lastModified != null) {
+      if (localStat.modified.isAfter(remoteInfo.lastModified!)) {
+        // Local is newer — upload
+        await _provider!.uploadFile(localPath, remotePath);
+        _syncedFiles++;
+        debugPrint('[CloudSync] Uploaded database (local newer)');
+      } else if (remoteInfo.lastModified!.isAfter(localStat.modified)) {
+        // Remote is newer — download
+        await _provider!.downloadFile(remotePath, localPath);
+        _syncedFiles++;
+        debugPrint('[CloudSync] Downloaded database (remote newer)');
+      }
+    } else {
+      // No timestamp info — be safe, upload
       await _provider!.uploadFile(localPath, remotePath);
       _syncedFiles++;
-      debugPrint('AG_DEBUG: Uploaded folder metadata (first sync)');
-    } else if (!localHasData && remoteInfo != null) {
-      // Only remote exists — download it (new PC scenario)
-      await localFile.parent.create(recursive: true);
-      await _provider!.downloadFile(remotePath, localPath);
-      await folderService.reload();
-      _syncedFiles++;
-      debugPrint('AG_DEBUG: Downloaded folder metadata from cloud (new device)');
     }
-    // else: neither exists — nothing to sync
+
+    _processedFiles++;
+    notifyListeners();
   }
 
-  /// Sync user personas (user_personas.json).
-  /// Personas live in SharedPreferences, so we export to a temp file for sync.
-  Future<void> _syncPersonaMetadata(UserPersonaService personaService, String charactersDir) async {
-    if (_provider == null || !_provider!.isConnected) return;
 
-    const remotePath = '/FrontPorchAI/user_personas.json';
-    // Store the export file next to the characters dir
-    final localPath = path.join(path.dirname(charactersDir), 'user_personas.json');
-    final localFile = File(localPath);
-
-    // Always export current personas to the local file first
-    await personaService.exportToFile(localPath);
-    final localExists = await localFile.exists();
-    final localHasData = localExists && (await localFile.length()) > 10;
-
-    // Check if remote version exists
-    RemoteFileInfo? remoteInfo;
-    try {
-      final remoteFiles = await _provider!.listFiles('/FrontPorchAI');
-      remoteInfo = remoteFiles.where((f) => path.basename(f.remotePath) == 'user_personas.json').firstOrNull;
-    } catch (_) {}
-
-    if (localHasData && remoteInfo != null) {
-      // Both exist — local wins (upload)
-      await _provider!.uploadFile(localPath, remotePath);
-      _syncedFiles++;
-      debugPrint('AG_DEBUG: Uploaded user personas to cloud');
-    } else if (localHasData && remoteInfo == null) {
-      // Only local — upload
-      await _provider!.uploadFile(localPath, remotePath);
-      _syncedFiles++;
-      debugPrint('AG_DEBUG: Uploaded user personas (first sync)');
-    } else if (!localHasData && remoteInfo != null) {
-      // Only remote — download (new device)
-      await localFile.parent.create(recursive: true);
-      await _provider!.downloadFile(remotePath, localPath);
-      await personaService.importFromFile(localPath);
-      _syncedFiles++;
-      debugPrint('AG_DEBUG: Downloaded user personas from cloud (new device)');
-    }
-  }
 
   /// Upload local files to remote (no downloading). Used for characters
   /// so the user can selectively choose which remote characters to pull.
@@ -455,18 +390,9 @@ class CloudSyncService extends ChangeNotifier {
     }
   }
 
-  /// Upload a chat session after it's saved locally.
+  /// Upload a chat session after it's saved locally (legacy, kept for compatibility).
   Future<void> uploadChatSession(String localFilePath, String charId) async {
-    if (_provider == null || !_provider!.isConnected) return;
-
-    try {
-      final sessionFile = path.basename(localFilePath);
-      final remotePath = '/FrontPorchAI/chats/$charId/$sessionFile';
-      await _provider!.ensureDir('/FrontPorchAI/chats/$charId');
-      await _provider!.uploadFile(localFilePath, remotePath);
-    } catch (e) {
-      debugPrint('Cloud upload chat error: $e');
-    }
+    // No-op: chat data is now synced via the .db file
   }
 
   /// Test the connection to the provider.
@@ -644,86 +570,4 @@ class CloudSyncService extends ChangeNotifier {
     return allKeys.length;
   }
 
-  /// Clean up remote chat folders that don't belong to any active character or group.
-  Future<void> _cleanOrphanedRemoteFolders(
-    Set<String> validCharIds,
-    Set<String> validGroupIds,
-  ) async {
-    if (_provider == null) return;
-
-    try {
-      // List top-level items in /FrontPorchAI/chats/
-      final remoteFiles = await _provider!.listFiles('/FrontPorchAI/chats');
-
-      // Extract unique subfolder names from remote paths
-      final remoteFolders = <String>{};
-      for (final rf in remoteFiles) {
-        // remotePath looks like /FrontPorchAI/chats/group_xxx/session.json
-        final relPath = rf.remotePath.replaceFirst('/FrontPorchAI/chats/', '');
-        final firstSegment = relPath.split('/').first;
-        if (firstSegment.isNotEmpty) {
-          remoteFolders.add(firstSegment);
-        }
-      }
-
-      // Delete folders that don't match any valid ID
-      for (final folder in remoteFolders) {
-        bool isValid = false;
-        if (folder.startsWith('group_')) {
-          // Group chat folder: group_{id}
-          final groupId = folder.replaceFirst('group_', '');
-          isValid = validGroupIds.contains(groupId);
-        } else {
-          // Character chat folder: {charId}
-          isValid = validCharIds.contains(folder);
-        }
-
-        if (!isValid) {
-          debugPrint('AG_DEBUG: Cleaning orphaned remote folder: $folder');
-          try {
-            await _provider!.deleteDirectory('/FrontPorchAI/chats/$folder');
-          } catch (e) {
-            debugPrint('Failed to delete remote orphan $folder: $e');
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error cleaning orphaned remote folders: $e');
-    }
-  }
-
-  /// Clean up local chat folders that don't belong to any active character or group.
-  Future<void> _cleanOrphanedLocalFolders(
-    String chatsDir,
-    Set<String> validCharIds,
-    Set<String> validGroupIds,
-  ) async {
-    final dir = Directory(chatsDir);
-    if (!await dir.exists()) return;
-
-    await for (final entity in dir.list()) {
-      if (entity is Directory) {
-        final folderName = path.basename(entity.path);
-        // Skip the 'groups' folder (metadata, not chat data)
-        if (folderName == 'groups') continue;
-
-        bool isValid = false;
-        if (folderName.startsWith('group_')) {
-          final groupId = folderName.replaceFirst('group_', '');
-          isValid = validGroupIds.contains(groupId);
-        } else {
-          isValid = validCharIds.contains(folderName);
-        }
-
-        if (!isValid) {
-          debugPrint('AG_DEBUG: Cleaning orphaned local folder: $folderName');
-          try {
-            await entity.delete(recursive: true);
-          } catch (e) {
-            debugPrint('Failed to delete local orphan $folderName: $e');
-          }
-        }
-      }
-    }
-  }
 }

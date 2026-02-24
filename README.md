@@ -11,9 +11,21 @@ Proprietary software lives and dies at the discretion of its creators. When a co
 
 Front Porch AI is proudly licensed under the **GPL v3** because we believe your tools should belong to the community that uses them. If this project is ever abandoned, anyone can fork it, improve it, and keep it alive. Open source isn't just a license — it's a promise that the software will always have a future.
 
-> **⚠️ Pre-Release Notice:** V0.8.0-beta is a standalone pre-release build. It will not auto-update existing stable installations. Download the standalone `.zip`, `.AppImage`, or `.app` from the [Releases](https://github.com/linux4life1/front-porch-ai/releases) page.
+> **⚠️ Pre-Release Notice:** V0.8.0-beta2 is a standalone pre-release build. It will not auto-update existing stable installations. Download the standalone `.zip`, `.AppImage`, or `.app` from the [Releases](https://github.com/linux4life1/front-porch-ai/releases) page.
+>
+> **Looking for the stable release?** See the [V0.7.1 branch](https://github.com/linux4life1/front-porch-ai/tree/V0.7.1) for the latest stable version with installers.
 
-## 🆕 What's New in V0.8.0-beta
+## 🆕 What's New in V0.8.0-beta2
+
+- 🗄️ **SQLite Database Backend**: All data storage has been migrated from scattered JSON files to a fast, reliable SQLite database powered by **Drift ORM**. Characters, chat sessions, messages, groups, folders, personas, and worlds — all in one `front_porch.db` file.
+- 📊 **Migration Progress Dialog**: First-time launch after the update shows a polished full-screen overlay with step names, progress bar, and step counter while your existing JSON data is imported into the database.
+- ☁️ **Simplified Cloud Sync**: Cloud sync now uploads/downloads a single `.db` file instead of hundreds of individual JSON files. Faster, more reliable, and no more out-of-sync data.
+- 🧹 **Cleaner Codebase**: Removed ~200 lines of orphan cleanup, per-file JSON sync, and dual-write code. The database is now the single source of truth.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.8.0-beta
 
 - ☁️ **Cloud Sync (Alpha)**: Sync your characters, chat sessions, folder layouts, and user personas across devices. An alpha-stage warning now appears when enabling the feature.
   - **Google Drive** — OAuth 2.0 with your personal Google account.
@@ -32,9 +44,6 @@ Front Porch AI is proudly licensed under the **GPL v3** because we believe your 
 - 🎨 **Responsive UI**: Group chat cards now scale gracefully at all grid sizes — no more overflow at small card sizes.
 - 🔒 **Privacy Policy**: PRIVACY.md documenting data handling — no telemetry, no analytics, cloud sync is opt-in and connects only to accounts you own.
 - 🏷️ **Beta Prerelease Support**: Beta versions are flagged as prereleases on GitHub so they won't trigger auto-updates for stable users.
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.7.1
 
@@ -187,12 +196,11 @@ Create detailed character cards (V2 spec compatible) with a user-friendly form U
 - **Model Hub**: Built-in integration with HuggingFace to search for and download GGUF models directly.
 - **Process Management**: Robustly handles the lifecycle of the AI backend, ensuring clean shutdowns.
 
-### ☁️ Cloud Sync (Alpha)
-- **Cross-Device Sync**: Sync characters, chat sessions, folder layouts, and user personas via Google Drive or Nextcloud/WebDAV.
+### ☁️ Cloud Sync
+- **Cross-Device Sync**: Sync your entire database and character PNGs via Google Drive or Nextcloud/WebDAV.
+- **Single-File Sync**: All data (chats, folders, personas, groups, worlds) syncs as one database file — no more hundreds of scattered JSON files.
 - **Browse Cloud Characters**: View all characters stored in the cloud, see which are already on your device, and selectively download new ones with avatar previews.
-- **Upload-Only Characters**: Characters upload automatically; downloads are user-initiated to keep you in control.
-- **Conflict Resolution**: Newer files always win — never lose edits.
-- **Orphan Cleanup**: Remote files for deleted characters/groups are automatically cleaned up on next sync.
+- **Upload-Only Characters**: Character PNGs upload automatically; downloads are user-initiated to keep you in control.
 - **Privacy-First**: Syncs only to accounts you own. No data ever passes through our servers.
 
 ### 🌍 World Building

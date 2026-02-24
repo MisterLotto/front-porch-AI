@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:drift/drift.dart';
+import 'package:front_porch_ai/database/database.dart';
 
 class UserPersona {
   final String id;
@@ -64,6 +65,7 @@ class UserPersona {
 }
 
 class UserPersonaService extends ChangeNotifier {
+  final AppDatabase _db;
   List<UserPersona> _personas = [];
   String _activePersonaId = '';
 
@@ -79,62 +81,62 @@ class UserPersonaService extends ChangeNotifier {
     );
   }
 
-  UserPersonaService() {
+  UserPersonaService(this._db) {
     _loadPersonas();
   }
 
   Future<void> _loadPersonas() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // Load active ID
-    _activePersonaId = prefs.getString('active_persona_id') ?? '';
+    try {
+      final dbPersonas = await _db.getAllPersonas();
 
-    // Load list
-    final List<String>? jsonList = prefs.getStringList('user_personas');
-    
-    if (jsonList != null) {
-      _personas = jsonList.map((str) => UserPersona.fromJson(jsonDecode(str))).toList();
-    }
-
-    // Migration or first run: if empty, try to load old legacy single persona or create default
-    if (_personas.isEmpty) {
-      final oldName = prefs.getString('user_name');
-      if (oldName != null) {
-        // Migrate legacy
-        final legacyPersona = UserPersona(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          name: oldName,
-          description: prefs.getString('user_description') ?? '',
-          persona: prefs.getString('user_persona') ?? '',
-        );
-        _personas.add(legacyPersona);
-        _activePersonaId = legacyPersona.id;
+      if (dbPersonas.isEmpty) {
+        // Create default persona
+        final defaultId = DateTime.now().millisecondsSinceEpoch.toString();
+        await _db.insertPersona(PersonasCompanion.insert(
+          id: defaultId,
+          name: const Value('User'),
+          isActive: const Value(true),
+        ));
+        _personas = [UserPersona(id: defaultId, name: 'User')];
+        _activePersonaId = defaultId;
       } else {
-        // Default
-        final defaultPersona = UserPersona(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          name: 'User',
-        );
-        _personas.add(defaultPersona);
-        _activePersonaId = defaultPersona.id;
+        _personas = dbPersonas.map((p) => UserPersona(
+          id: p.id,
+          title: p.title,
+          name: p.name,
+          description: p.description,
+          persona: p.persona,
+          avatarPath: p.avatarPath,
+        )).toList();
+
+        final active = dbPersonas.where((p) => p.isActive).firstOrNull;
+        _activePersonaId = active?.id ?? _personas.first.id;
       }
-      await _savePersonas();
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading personas from DB: $e');
     }
-
-    notifyListeners();
-  }
-
-  Future<void> _savePersonas() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonList = _personas.map((p) => jsonEncode(p.toJson())).toList();
-    await prefs.setStringList('user_personas', jsonList);
-    await prefs.setString('active_persona_id', _activePersonaId);
-    notifyListeners();
   }
 
   Future<void> createPersona(String title, String name, String description, String persona, String? avatarPath) async {
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    await _db.insertPersona(PersonasCompanion.insert(
+      id: id,
+      title: Value(title),
+      name: Value(name),
+      description: Value(description),
+      persona: Value(persona),
+      avatarPath: Value(avatarPath),
+      isActive: const Value(true),
+    ));
+    
+    // Deactivate others
+    await _db.setActivePersona(id);
+
     final newPersona = UserPersona(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: id,
       title: title,
       name: name,
       description: description,
@@ -142,15 +144,26 @@ class UserPersonaService extends ChangeNotifier {
       avatarPath: avatarPath,
     );
     _personas.add(newPersona);
-    _activePersonaId = newPersona.id; // Auto switch to new? Maybe.
-    await _savePersonas();
+    _activePersonaId = id;
+    notifyListeners();
   }
 
   Future<void> updatePersona(UserPersona updatedPersona) async {
     final index = _personas.indexWhere((p) => p.id == updatedPersona.id);
     if (index != -1) {
       _personas[index] = updatedPersona;
-      await _savePersonas();
+      
+      await _db.updatePersona(PersonasCompanion(
+        id: Value(updatedPersona.id),
+        title: Value(updatedPersona.title),
+        name: Value(updatedPersona.name),
+        description: Value(updatedPersona.description),
+        persona: Value(updatedPersona.persona),
+        avatarPath: Value(updatedPersona.avatarPath),
+        isActive: Value(updatedPersona.id == _activePersonaId),
+      ));
+      
+      notifyListeners();
     }
   }
 
@@ -158,19 +171,22 @@ class UserPersonaService extends ChangeNotifier {
     if (_personas.length <= 1) return; // Prevent deleting the last one
 
     _personas.removeWhere((p) => p.id == id);
+    await _db.deletePersonaById(id);
     
     // If we deleted the active one, switch to the first one
     if (_activePersonaId == id) {
       _activePersonaId = _personas.first.id;
+      await _db.setActivePersona(_activePersonaId);
     }
     
-    await _savePersonas();
+    notifyListeners();
   }
 
   Future<void> setActivePersona(String id) async {
     if (_personas.any((p) => p.id == id)) {
       _activePersonaId = id;
-      await _savePersonas();
+      await _db.setActivePersona(id);
+      notifyListeners();
     }
   }
 
@@ -195,13 +211,29 @@ class UserPersonaService extends ChangeNotifier {
     final data = jsonDecode(content) as Map<String, dynamic>;
     final list = (data['personas'] as List?)?.map((e) => UserPersona.fromJson(e)).toList();
     if (list != null && list.isNotEmpty) {
+      // Clear existing personas from DB and re-import
+      for (final p in _personas) {
+        await _db.deletePersonaById(p.id);
+      }
       _personas = list;
       _activePersonaId = data['active_persona_id'] ?? _personas.first.id;
-      await _savePersonas(); // persist to SharedPreferences
+      
+      for (final p in _personas) {
+        await _db.insertPersona(PersonasCompanion.insert(
+          id: p.id,
+          title: Value(p.title),
+          name: Value(p.name),
+          description: Value(p.description),
+          persona: Value(p.persona),
+          avatarPath: Value(p.avatarPath),
+          isActive: Value(p.id == _activePersonaId),
+        ));
+      }
+      notifyListeners();
     }
   }
 
-  /// Reload personas from SharedPreferences (e.g. after cloud sync import).
+  /// Reload personas from DB (e.g. after cloud sync import).
   Future<void> reload() async {
     await _loadPersonas();
   }

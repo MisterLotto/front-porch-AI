@@ -1,19 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as path;
-import 'package:front_porch_ai/models/world.dart';
+import 'package:drift/drift.dart';
+import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/models/world.dart' as model;
+import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 class WorldRepository extends ChangeNotifier {
   final StorageService _storageService;
-  final List<World> _worlds = [];
+  final AppDatabase _db;
+  final List<model.World> _worlds = [];
   bool _isLoading = false;
 
-  List<World> get worlds => List.unmodifiable(_worlds);
+  List<model.World> get worlds => List.unmodifiable(_worlds);
   bool get isLoading => _isLoading;
 
-  WorldRepository(this._storageService) {
+  WorldRepository(this._storageService, this._db) {
     loadWorlds();
   }
 
@@ -22,35 +25,58 @@ class WorldRepository extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final worldsDir = _storageService.worldsDir;
-      if (await worldsDir.exists()) {
-        _worlds.clear();
-        await for (final entity in worldsDir.list()) {
-          if (entity is File && entity.path.toLowerCase().endsWith('.json')) {
-            try {
-              final content = await entity.readAsString();
-              final world = World.fromJson(jsonDecode(content));
-              _worlds.add(world);
-            } catch (e) {
-              print('Failed to load world ${entity.path}: $e');
-            }
+      await _storageService.initialized;
+      final dbWorlds = await _db.getAllWorlds();
+      _worlds.clear();
+
+      for (final w in dbWorlds) {
+        Lorebook lorebook;
+        if (w.lorebook != null) {
+          try {
+            lorebook = Lorebook.fromJson(jsonDecode(w.lorebook!));
+          } catch (_) {
+            lorebook = Lorebook(entries: []);
           }
+        } else {
+          lorebook = Lorebook(entries: []);
         }
+
+        _worlds.add(model.World(
+          name: w.name,
+          description: w.description,
+          lorebook: lorebook,
+          linkedCharacterName: w.linkedCharacterName,
+        ));
       }
     } catch (e) {
       print('Error loading worlds: $e');
     } finally {
-      _isLoading = true;
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> saveWorld(World world) async {
-    final fileName = '${world.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_')}.json';
-    final file = File('${_storageService.worldsDir.path}/$fileName');
-    await file.writeAsString(jsonEncode(world.toJson()));
+  Future<void> saveWorld(model.World world) async {
+    // Check if exists
+    final existing = await _db.getWorldByName(world.name);
     
+    if (existing != null) {
+      await _db.updateWorld(WorldsCompanion(
+        id: Value(existing.id),
+        name: Value(world.name),
+        description: Value(world.description),
+        lorebook: Value(jsonEncode(world.lorebook.toJson())),
+        linkedCharacterName: Value(world.linkedCharacterName),
+      ));
+    } else {
+      await _db.insertWorld(WorldsCompanion.insert(
+        name: world.name,
+        description: Value(world.description),
+        lorebook: Value(jsonEncode(world.lorebook.toJson())),
+        linkedCharacterName: Value(world.linkedCharacterName),
+      ));
+    }
+
     // Refresh list
     final index = _worlds.indexWhere((w) => w.name == world.name);
     if (index != -1) {
@@ -61,11 +87,10 @@ class WorldRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteWorld(World world) async {
-    final fileName = '${world.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_')}.json';
-    final file = File('${_storageService.worldsDir.path}/$fileName');
-    if (await file.exists()) {
-      await file.delete();
+  Future<void> deleteWorld(model.World world) async {
+    final existing = await _db.getWorldByName(world.name);
+    if (existing != null) {
+      await _db.deleteWorldById(existing.id);
     }
     _worlds.remove(world);
     notifyListeners();
@@ -74,14 +99,14 @@ class WorldRepository extends ChangeNotifier {
   Future<void> importWorld(File file) async {
     try {
       final content = await file.readAsString();
-      final world = World.fromJson(jsonDecode(content));
+      final world = model.World.fromJson(jsonDecode(content));
       await saveWorld(world);
     } catch (e) {
       rethrow;
     }
   }
 
-  Future<void> exportWorld(World world, String outputPath) async {
+  Future<void> exportWorld(model.World world, String outputPath) async {
     final file = File(outputPath);
     await file.writeAsString(jsonEncode(world.toJson()));
   }
