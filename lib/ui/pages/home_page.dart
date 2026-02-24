@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:front_porch_ai/database/database.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -66,49 +67,44 @@ class _HomePageState extends State<HomePage> {
     _refreshLastActivityCache();
   }
 
-  /// Scans chat directories to build a map of characterId → newest file mod time.
+  /// Query the DB to build caches for last activity time and message count per character.
   Future<void> _refreshLastActivityCache() async {
-    final storage = Provider.of<StorageService>(context, listen: false);
-    final chatsDir = storage.chatsDir;
-    if (!await chatsDir.exists()) {
-      if (mounted) setState(() {});
-      return;
-    }
-    final newCache = <String, DateTime>{};
-    final newMsgCount = <String, int>{};
-    await for (final entity in chatsDir.list()) {
-      if (entity is Directory) {
-        final charId = path.basename(entity.path);
-        DateTime? newest;
-        int userMsgCount = 0;
-        await for (final file in entity.list()) {
-          if (file is File && file.path.endsWith('.json')) {
-            final stat = await file.stat();
-            if (newest == null || stat.modified.isAfter(newest)) {
-              newest = stat.modified;
-            }
-            // Count user messages in this session
-            try {
-              final content = await file.readAsString();
-              final json = jsonDecode(content);
-              final messages = json['messages'] as List? ?? [];
-              userMsgCount += messages.where((m) => m['is_user'] == true).length;
-            } catch (_) {}
+    try {
+      final db = await AppDatabase.instance();
+      final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+
+      // Get counts and activity from DB
+      final msgCounts = await db.getMessageCountsPerCharacter();
+      final lastActivity = await db.getLastActivityPerCharacter();
+
+      // Map from character DB id (int) → character card string id
+      final newCache = <String, DateTime>{};
+      final newMsgCount = <String, int>{};
+      for (final card in charRepo.characters) {
+        if (card.dbId != null) {
+          final cardId = _getCharacterIdFromCard(card);
+          if (msgCounts.containsKey(card.dbId)) {
+            newMsgCount[cardId] = msgCounts[card.dbId]!;
+          }
+          if (lastActivity.containsKey(card.dbId)) {
+            newCache[cardId] = lastActivity[card.dbId]!;
           }
         }
-        if (newest != null) newCache[charId] = newest;
-        newMsgCount[charId] = userMsgCount;
       }
-    }
-    if (mounted) {
-      setState(() {
-        _lastActivityCache
-          ..clear()
-          ..addAll(newCache);
-        _messageCountCache
-          ..clear()
-          ..addAll(newMsgCount);
-      });
+
+      if (mounted) {
+        setState(() {
+          _lastActivityCache
+            ..clear()
+            ..addAll(newCache);
+          _messageCountCache
+            ..clear()
+            ..addAll(newMsgCount);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error refreshing activity cache: $e');
+      if (mounted) setState(() {});
     }
   }
 
@@ -952,6 +948,21 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 ),
                             ],
+                            // Message count text
+                            if (msgCount > 0)
+                              Padding(
+                                padding: EdgeInsets.only(top: isCompact ? 2 : 4),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.chat_bubble_outline, size: 12, color: Colors.white38),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$msgCount messages',
+                                      style: TextStyle(color: Colors.white38, fontSize: isCompact ? 10 : 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -961,30 +972,7 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           ),
-          // Message count badge
-          if (msgCount > 0 && !_isSelecting && !_isOrganizing)
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.chat_bubble_outline, size: 12, color: Colors.white70),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$msgCount',
-                      style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+
           // Selection checkbox overlay
           if (_isSelecting || _isOrganizing)
             Positioned(

@@ -194,6 +194,42 @@ class AppDatabase extends _$AppDatabase {
 
   // ── Session Queries ─────────────────────────────────────────────────
 
+  /// Get total message count per character (for home screen badges).
+  /// Returns a map of characterId (int) → message count.
+  Future<Map<int, int>> getMessageCountsPerCharacter() async {
+    final result = await customSelect(
+      'SELECT s.character_id, COUNT(m.id) AS cnt '
+      'FROM sessions s JOIN messages m ON m.session_id = s.id '
+      'WHERE s.character_id IS NOT NULL '
+      'GROUP BY s.character_id',
+    ).get();
+    final map = <int, int>{};
+    for (final row in result) {
+      final charId = row.read<int>('character_id');
+      final count = row.read<int>('cnt');
+      map[charId] = count;
+    }
+    return map;
+  }
+
+  /// Get the most recent session update time per character.
+  /// Returns a map of characterId (int) → last activity DateTime.
+  Future<Map<int, DateTime>> getLastActivityPerCharacter() async {
+    final result = await customSelect(
+      'SELECT character_id, MAX(created_at) AS last_at '
+      'FROM sessions '
+      'WHERE character_id IS NOT NULL '
+      'GROUP BY character_id',
+    ).get();
+    final map = <int, DateTime>{};
+    for (final row in result) {
+      final charId = row.read<int>('character_id');
+      final lastAt = row.read<DateTime>('last_at');
+      map[charId] = lastAt;
+    }
+    return map;
+  }
+
   Future<List<Session>> getSessionsForCharacter(int characterId) =>
       (select(sessions)
         ..where((s) => s.characterId.equals(characterId))
