@@ -65,7 +65,7 @@ class UserPersona {
 }
 
 class UserPersonaService extends ChangeNotifier {
-  final AppDatabase _db;
+  AppDatabase _db;
   List<UserPersona> _personas = [];
   String _activePersonaId = '';
 
@@ -84,6 +84,9 @@ class UserPersonaService extends ChangeNotifier {
   UserPersonaService(this._db) {
     _loadPersonas();
   }
+
+  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  void updateDatabase(AppDatabase db) { _db = db; }
 
   Future<void> _loadPersonas() async {
     try {

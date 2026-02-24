@@ -149,14 +149,15 @@ class CloudSyncService extends ChangeNotifier {
 
     const remotePath = '/FrontPorchAI/front_porch.db';
     final localFile = File(localPath);
-    if (!await localFile.exists()) return;
 
-    // Checkpoint WAL so the .db file is self-contained
-    final db = await AppDatabase.instance();
-    try {
-      await db.checkpoint();
-    } catch (e) {
-      debugPrint('WAL checkpoint failed: $e');
+    // Checkpoint WAL so the .db file is self-contained for upload
+    if (await localFile.exists()) {
+      try {
+        final db = await AppDatabase.instance();
+        await db.checkpoint();
+      } catch (e) {
+        debugPrint('WAL checkpoint failed: $e');
+      }
     }
 
     // Check remote
@@ -168,95 +169,47 @@ class CloudSyncService extends ChangeNotifier {
       ).firstOrNull;
     } catch (_) {}
 
-    final localStat = await localFile.stat();
-
     // Check if local DB is essentially empty (freshly created)
-    // This prevents a new install from uploading an empty DB over good remote data
     int localCharCount = 0;
     try {
+      final db = await AppDatabase.instance();
       final rows = await db.customSelect('SELECT COUNT(*) AS c FROM characters').get();
       localCharCount = rows.first.read<int>('c');
     } catch (_) {}
 
-    if (remoteInfo == null) {
-      // First sync — upload only if we have data, otherwise skip
-      if (localCharCount > 0) {
-        await _provider!.uploadFile(localPath, remotePath);
-        _syncedFiles++;
-        debugPrint('[CloudSync] Uploaded database (first sync)');
-      } else {
-        debugPrint('[CloudSync] Skipped upload — local DB is empty and no remote exists');
-      }
-    } else if (localCharCount == 0 && (remoteInfo.size ?? 0) > 0) {
-      // Local DB is empty but remote has data — always download
-      final tempPath = '$localPath.synctmp';
-      await _provider!.downloadFile(remotePath, tempPath);
+    final shouldDownload = remoteInfo != null && (
+      localCharCount == 0 ||  // Local is empty — always download
+      (remoteInfo.lastModified != null && await localFile.exists() &&
+       remoteInfo.lastModified!.isAfter((await localFile.stat()).modified))
+    );
+
+    final shouldUpload = !shouldDownload && localCharCount > 0;
+
+    if (shouldDownload) {
+      // Close the live DB connection, download new file, reopen
+      await AppDatabase.closeAndReset();
+
+      await _provider!.downloadFile(remotePath, localPath);
+      // Also remove stale WAL/SHM from the old connection
+      try { await File('$localPath-wal').delete(); } catch (_) {}
+      try { await File('$localPath-shm').delete(); } catch (_) {}
+
+      // Reopen — this creates a fresh connection to the downloaded file
+      await AppDatabase.instance();
+
       _syncedFiles++;
-
-      try {
-        final escapedPath = tempPath.replaceAll("'", "''");
-        await db.customStatement("ATTACH DATABASE '$escapedPath' AS synced");
-
-        const tables = ['characters', 'sessions', 'messages', 'groups', 'folders', 'personas', 'worlds'];
-        for (final table in tables) {
-          await db.customStatement('DELETE FROM main.$table');
-          await db.customStatement('INSERT INTO main.$table SELECT * FROM synced.$table');
-        }
-
-        await db.customStatement('DETACH DATABASE synced');
-        _dbWasDownloaded = true;
-        debugPrint('[CloudSync] Downloaded database (local empty, remote has data)');
-      } catch (e) {
-        debugPrint('[CloudSync] ATTACH import failed: $e');
-        try { await db.customStatement('DETACH DATABASE synced'); } catch (_) {}
-      } finally {
-        try { await File(tempPath).delete(); } catch (_) {}
-        try { await File('$tempPath-wal').delete(); } catch (_) {}
-        try { await File('$tempPath-shm').delete(); } catch (_) {}
-      }
-    } else if (remoteInfo.lastModified != null) {
-      if (localStat.modified.isAfter(remoteInfo.lastModified!)) {
-        // Local is newer — upload
-        await _provider!.uploadFile(localPath, remotePath);
-        _syncedFiles++;
-        debugPrint('[CloudSync] Uploaded database (local newer)');
-      } else if (remoteInfo.lastModified!.isAfter(localStat.modified)) {
-        // Remote is newer — download to temp, then import into live connection
-        final tempPath = '$localPath.synctmp';
-        await _provider!.downloadFile(remotePath, tempPath);
-        _syncedFiles++;
-
-        // Attach the downloaded DB, copy all tables, then detach
-        try {
-          final escapedPath = tempPath.replaceAll("'", "''");
-          await db.customStatement("ATTACH DATABASE '$escapedPath' AS synced");
-
-          // Replace all table contents from the synced DB
-          const tables = ['characters', 'sessions', 'messages', 'groups', 'folders', 'personas', 'worlds'];
-          for (final table in tables) {
-            await db.customStatement('DELETE FROM main.$table');
-            await db.customStatement('INSERT INTO main.$table SELECT * FROM synced.$table');
-          }
-
-          await db.customStatement('DETACH DATABASE synced');
-          _dbWasDownloaded = true;
-          debugPrint('[CloudSync] Downloaded database (remote newer) — imported via ATTACH');
-        } catch (e) {
-          debugPrint('[CloudSync] ATTACH import failed: $e');
-          // Try to detach in case it was partially attached
-          try { await db.customStatement('DETACH DATABASE synced'); } catch (_) {}
-        } finally {
-          // Clean up temp file
-          try { await File(tempPath).delete(); } catch (_) {}
-          // Also clean up temp WAL/SHM files
-          try { await File('$tempPath-wal').delete(); } catch (_) {}
-          try { await File('$tempPath-shm').delete(); } catch (_) {}
-        }
-      }
-    } else {
-      // No timestamp info — be safe, upload
+      _dbWasDownloaded = true;
+      debugPrint('[CloudSync] Downloaded database (close → download → reopen)');
+    } else if (shouldUpload && remoteInfo == null) {
       await _provider!.uploadFile(localPath, remotePath);
       _syncedFiles++;
+      debugPrint('[CloudSync] Uploaded database (first sync)');
+    } else if (shouldUpload) {
+      await _provider!.uploadFile(localPath, remotePath);
+      _syncedFiles++;
+      debugPrint('[CloudSync] Uploaded database (local newer)');
+    } else {
+      debugPrint('[CloudSync] Skipped DB sync — local empty, no remote');
     }
 
     _processedFiles++;

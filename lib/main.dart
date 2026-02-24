@@ -427,16 +427,29 @@ class _MyAppState extends State<MyApp> with WindowListener {
         final charRepo = Provider.of<CharacterRepository>(context, listen: false);
         await charRepo.loadCharacters();
 
-        // If a new database was downloaded, reload all DB-backed repositories
+        // If a new database was downloaded, update all repo DB references and reload
         if (syncService.dbWasDownloaded) {
-          debugPrint('[CloudSync] DB was downloaded — reloading all repositories');
+          debugPrint('[CloudSync] DB was downloaded — updating all repositories');
+          final newDb = await AppDatabase.instance();
+
+          // Push the new DB connection to every repo
+          charRepo.updateDatabase(newDb);
           final folderService = Provider.of<FolderService>(context, listen: false);
           final personaService = Provider.of<UserPersonaService>(context, listen: false);
           final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+          final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+          folderService.updateDatabase(newDb);
+          personaService.updateDatabase(newDb);
+          groupRepo.updateDatabase(newDb);
+          worldRepo.updateDatabase(newDb);
+          chatService.updateDatabase(newDb);
+
+          // Now reload all data from the new DB
+          await charRepo.loadCharacters();
           await folderService.reload();
           await personaService.reload();
           await groupRepo.reload();
-          // Reset chat service so it picks up new sessions from the DB
+          await worldRepo.loadWorlds();
           chatService.clearChat();
         }
       }

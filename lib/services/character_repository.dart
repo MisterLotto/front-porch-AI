@@ -13,7 +13,7 @@ import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/database/database.dart';
 
 class CharacterRepository extends ChangeNotifier {
-  final AppDatabase _db;
+  AppDatabase _db;
   final List<CharacterCard> _characters = [];
   bool _isLoading = false;
 
@@ -33,6 +33,9 @@ class CharacterRepository extends ChangeNotifier {
   CharacterRepository(this._db) {
     loadCharacters();
   }
+
+  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  void updateDatabase(AppDatabase db) { _db = db; }
 
   Future<void> loadCharacters() async {
     _isLoading = true;

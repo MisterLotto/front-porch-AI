@@ -9,7 +9,7 @@ import 'package:front_porch_ai/services/cloud_sync_service.dart';
 /// Persists group chat definitions to the database.
 class GroupChatRepository extends ChangeNotifier {
   final StorageService _storageService;
-  final AppDatabase _db;
+  AppDatabase _db;
   final List<GroupChat> _groups = [];
 
   List<GroupChat> get groups => List.unmodifiable(_groups);
@@ -17,6 +17,9 @@ class GroupChatRepository extends ChangeNotifier {
   GroupChatRepository(this._storageService, this._db) {
     _load();
   }
+
+  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  void updateDatabase(AppDatabase db) { _db = db; }
 
   Future<void> _load() async {
     await _storageService.initialized;

@@ -110,10 +110,13 @@ class ChatService extends ChangeNotifier {
   final UserPersonaService _userPersonaService;
   final StorageService _storageService;
   final WorldRepository _worldRepository;
-  late final AppDatabase _db;
+  late AppDatabase _db;
   LLMProvider? _llmProvider;
   CharacterRepository? _characterRepository;
   TtsService? _ttsService;
+
+  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  void updateDatabase(AppDatabase db) { _db = db; }
 
   CharacterCard? _activeCharacter;
   final List<ChatMessage> _messages = [];

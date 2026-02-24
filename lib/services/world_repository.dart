@@ -9,7 +9,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 
 class WorldRepository extends ChangeNotifier {
   final StorageService _storageService;
-  final AppDatabase _db;
+  AppDatabase _db;
   final List<model.World> _worlds = [];
   bool _isLoading = false;
 
@@ -19,6 +19,9 @@ class WorldRepository extends ChangeNotifier {
   WorldRepository(this._storageService, this._db) {
     loadWorlds();
   }
+
+  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  void updateDatabase(AppDatabase db) { _db = db; }
 
   Future<void> loadWorlds() async {
     _isLoading = true;

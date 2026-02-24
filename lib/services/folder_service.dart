@@ -24,7 +24,7 @@ class CharacterFolder {
 }
 
 class FolderService extends ChangeNotifier {
-  final AppDatabase _db;
+  AppDatabase _db;
   final List<CharacterFolder> _folders = [];
 
   List<CharacterFolder> get folders => List.unmodifiable(_folders);
@@ -32,6 +32,9 @@ class FolderService extends ChangeNotifier {
   FolderService(this._db) {
     _init();
   }
+
+  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  void updateDatabase(AppDatabase db) { _db = db; }
 
   /// Normalize a character path to just its filename for portable storage.
   static String _normalize(String characterPath) {
