@@ -50,6 +50,11 @@ class GroupChatRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reload groups from DB (e.g. after cloud sync).
+  Future<void> reload() async {
+    await _load();
+  }
+
   Future<void> save(GroupChat group) async {
     // Save to database
     final existing = await _db.getGroupById(group.id);

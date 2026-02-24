@@ -99,6 +99,7 @@ class CloudSyncService extends ChangeNotifier {
     _syncedFiles = 0;
     _totalFiles = 0;
     _processedFiles = 0;
+    _dbWasDownloaded = false;
     notifyListeners();
 
     try {
@@ -134,6 +135,12 @@ class CloudSyncService extends ChangeNotifier {
 
   /// Sync the SQLite database file as a single unit.
   /// Strategy: compare local vs remote modified time, newer wins.
+  bool _dbWasDownloaded = false;
+
+  /// Whether the last sync downloaded a new database file.
+  /// Callers should check this and reload repositories if true.
+  bool get dbWasDownloaded => _dbWasDownloaded;
+
   Future<void> _syncDatabase() async {
     if (_provider == null || !_provider!.isConnected) return;
 
@@ -145,8 +152,8 @@ class CloudSyncService extends ChangeNotifier {
     if (!await localFile.exists()) return;
 
     // Checkpoint WAL so the .db file is self-contained
+    final db = await AppDatabase.instance();
     try {
-      final db = await AppDatabase.instance();
       await db.checkpoint();
     } catch (e) {
       debugPrint('WAL checkpoint failed: $e');
@@ -175,10 +182,37 @@ class CloudSyncService extends ChangeNotifier {
         _syncedFiles++;
         debugPrint('[CloudSync] Uploaded database (local newer)');
       } else if (remoteInfo.lastModified!.isAfter(localStat.modified)) {
-        // Remote is newer — download
-        await _provider!.downloadFile(remotePath, localPath);
+        // Remote is newer — download to temp, then import into live connection
+        final tempPath = '$localPath.synctmp';
+        await _provider!.downloadFile(remotePath, tempPath);
         _syncedFiles++;
-        debugPrint('[CloudSync] Downloaded database (remote newer)');
+
+        // Attach the downloaded DB, copy all tables, then detach
+        try {
+          final escapedPath = tempPath.replaceAll("'", "''");
+          await db.customStatement("ATTACH DATABASE '$escapedPath' AS synced");
+
+          // Replace all table contents from the synced DB
+          const tables = ['characters', 'sessions', 'messages', 'groups', 'folders', 'personas', 'worlds'];
+          for (final table in tables) {
+            await db.customStatement('DELETE FROM main.$table');
+            await db.customStatement('INSERT INTO main.$table SELECT * FROM synced.$table');
+          }
+
+          await db.customStatement('DETACH DATABASE synced');
+          _dbWasDownloaded = true;
+          debugPrint('[CloudSync] Downloaded database (remote newer) — imported via ATTACH');
+        } catch (e) {
+          debugPrint('[CloudSync] ATTACH import failed: $e');
+          // Try to detach in case it was partially attached
+          try { await db.customStatement('DETACH DATABASE synced'); } catch (_) {}
+        } finally {
+          // Clean up temp file
+          try { await File(tempPath).delete(); } catch (_) {}
+          // Also clean up temp WAL/SHM files
+          try { await File('$tempPath-wal').delete(); } catch (_) {}
+          try { await File('$tempPath-shm').delete(); } catch (_) {}
+        }
       }
     } else {
       // No timestamp info — be safe, upload

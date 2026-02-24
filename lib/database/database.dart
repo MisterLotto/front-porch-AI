@@ -137,6 +137,16 @@ class AppDatabase extends _$AppDatabase {
     await customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
   }
 
+  /// Close the database and clear the singleton so the next call to
+  /// [instance()] will open a fresh connection to the file on disk.
+  /// Used after cloud sync downloads a new .db file.
+  static Future<void> closeAndReset() async {
+    if (_instance != null) {
+      await _instance!.close();
+      _instance = null;
+    }
+  }
+
   /// For testing: create an in-memory database.
   factory AppDatabase.forTesting() {
     return AppDatabase._internal(NativeDatabase.createInBackground(File(':memory:')));

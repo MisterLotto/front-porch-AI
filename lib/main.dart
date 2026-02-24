@@ -426,6 +426,19 @@ class _MyAppState extends State<MyApp> with WindowListener {
         // Reload characters so newly downloaded PNGs appear in the UI
         final charRepo = Provider.of<CharacterRepository>(context, listen: false);
         await charRepo.loadCharacters();
+
+        // If a new database was downloaded, reload all DB-backed repositories
+        if (syncService.dbWasDownloaded) {
+          debugPrint('[CloudSync] DB was downloaded — reloading all repositories');
+          final folderService = Provider.of<FolderService>(context, listen: false);
+          final personaService = Provider.of<UserPersonaService>(context, listen: false);
+          final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+          await folderService.reload();
+          await personaService.reload();
+          await groupRepo.reload();
+          // Reset chat service so it picks up new sessions from the DB
+          chatService.clearChat();
+        }
       }
     } catch (e) {
       debugPrint('Cloud sync startup error: \$e');
