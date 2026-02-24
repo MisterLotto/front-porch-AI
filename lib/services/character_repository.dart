@@ -59,13 +59,9 @@ class CharacterRepository extends ChangeNotifier {
           final rebasedPath = '$localCharDir/$filename';
           if (File(rebasedPath).existsSync()) {
             card.imagePath = rebasedPath;
-            // Update the DB so future loads don't need rebasing
+            // Update ONLY the imagePath in the DB (preserves all other data)
             if (card.dbId != null) {
-              await _db.updateCharacter(CharactersCompanion(
-                id: Value(card.dbId!),
-                name: Value(card.name),
-                imagePath: Value(rebasedPath),
-              ));
+              await _db.updateCharacterImagePath(card.dbId!, rebasedPath);
             }
           }
         }

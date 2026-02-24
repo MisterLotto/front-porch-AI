@@ -183,6 +183,12 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> updateCharacter(CharactersCompanion character) =>
       update(characters).replace(character);
 
+  /// Update ONLY the imagePath for a character (preserves all other data).
+  /// Used for cross-platform path rebasing after cloud sync.
+  Future<void> updateCharacterImagePath(int id, String newPath) =>
+      (update(characters)..where((c) => c.id.equals(id)))
+          .write(CharactersCompanion(imagePath: Value(newPath)));
+
   Future<int> deleteCharacterById(int id) =>
       (delete(characters)..where((c) => c.id.equals(id))).go();
 
