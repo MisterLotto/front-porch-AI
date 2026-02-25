@@ -138,9 +138,10 @@ Front Porch AI stands on the shoulders of incredible open-source projects. This 
 | **KoboldCpp** | The local LLM backend that powers all text generation. A single-file, high-performance inference engine supporting GGUF models with GPU acceleration. | [GitHub](https://github.com/LostRuins/koboldcpp) |
 | **Kokoro** | Our default text-to-speech engine. Beautiful, natural-sounding voices that run entirely offline using ONNX. | [GitHub](https://github.com/hexgrad/kokoro) |
 | **Piper** | Fallback TTS engine. Fast, lightweight, and privacy-respecting local speech synthesis. | [GitHub](https://github.com/rhasspy/piper) |
-| **Backyard AI** | Open-sourced the `.byaf` archive format, so your characters aren't locked into a proprietary app. | [GitHub](https://github.com/ahoylabs/byaf) |
 
 If you find Front Porch AI useful, please consider starring these projects too — they're the foundation everything is built on.
+
+> **🎩 Hat tip to [Backyard AI](https://github.com/ahoylabs/byaf)** for open-sourcing the `.byaf` archive format — the one part of their stack they didn't take with them when they killed the desktop app. Your characters deserve to live somewhere they can run offline.
 
 ## 🌟 Contributors
 
