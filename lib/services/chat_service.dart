@@ -147,7 +147,7 @@ class ChatService extends ChangeNotifier {
 
   // ── Author's Note ──
   String _authorNote = '';
-  int _authorNoteDepth = 4;
+  int _authorNoteStrength = 4;
 
   // ── Context / Prompt Budget ──
   Map<String, int> _lastPromptBudget = {};
@@ -293,7 +293,7 @@ class ChatService extends ChangeNotifier {
   }
 
   String get authorNote => _authorNote;
-  int get authorNoteDepth => _authorNoteDepth;
+  int get authorNoteStrength => _authorNoteStrength;
   Map<String, int> get lastPromptBudget => _lastPromptBudget;
   String get lastAssembledPrompt => _lastAssembledPrompt;
   int get contextSize => _storageService.contextSize;
@@ -302,11 +302,24 @@ class ChatService extends ChangeNotifier {
   String? get sessionName => _sessionName;
   String? get sessionDescription => _sessionDescription;
 
-  void setAuthorNote(String note, {int? depth}) {
+  void setAuthorNote(String note, {int? strength}) {
     _authorNote = note;
-    if (depth != null) _authorNoteDepth = depth;
+    if (strength != null) _authorNoteStrength = strength;
     _saveChat();
     notifyListeners();
+  }
+
+  /// Build the Author's Note block with strength-modulated wrapper text.
+  /// Strength 1–3: subtle suggestion, 4–7: standard, 8–10: urgent directive.
+  String _buildAuthorNoteBlock() {
+    if (_authorNote.isEmpty) return '';
+    if (_authorNoteStrength <= 3) {
+      return '[Author\'s Note (gentle suggestion): $_authorNote]\n';
+    } else if (_authorNoteStrength <= 7) {
+      return '[Author\'s Note: $_authorNote]\n';
+    } else {
+      return '[Author\'s Note (IMPORTANT — apply immediately): $_authorNote]\n';
+    }
   }
 
   /// Set the CharacterRepository so group mode can look up characters.
@@ -542,7 +555,7 @@ class ChatService extends ChangeNotifier {
       name: drift.Value(_sessionName),
       description: drift.Value(_sessionDescription),
       authorNote: drift.Value(_authorNote),
-      authorNoteDepth: drift.Value(_authorNoteDepth),
+      authorNoteDepth: drift.Value(_authorNoteStrength),
       parentSession: drift.Value(_parentSessionId),
       forkIndex: drift.Value(_forkIndex),
       createdAt: drift.Value(createdAt),
@@ -589,7 +602,7 @@ class ChatService extends ChangeNotifier {
     final lastSession = sessions.first;
     _currentSessionId = lastSession.id;
     _authorNote = lastSession.authorNote;
-    _authorNoteDepth = lastSession.authorNoteDepth;
+    _authorNoteStrength = lastSession.authorNoteDepth;
     _sessionName = lastSession.name;
     _sessionDescription = lastSession.description;
     _parentSessionId = lastSession.parentSession;
@@ -714,7 +727,7 @@ class ChatService extends ChangeNotifier {
 
       _currentSessionId = sessionId;
       _authorNote = session.authorNote;
-      _authorNoteDepth = session.authorNoteDepth;
+      _authorNoteStrength = session.authorNoteDepth;
       _sessionName = session.name;
       _sessionDescription = session.description;
       _parentSessionId = session.parentSession;
@@ -1156,7 +1169,7 @@ class ChatService extends ChangeNotifier {
 
       String authorNoteBlock = '';
       if (_authorNote.isNotEmpty) {
-        authorNoteBlock = '[Author\'s Note: $_authorNote]\n';
+        authorNoteBlock = _buildAuthorNoteBlock();
       }
 
       // Impersonate instruction — comprehensive guidance for writing as the user
@@ -1393,7 +1406,7 @@ class ChatService extends ChangeNotifier {
       // Author's note — placed right before the character speaks for maximum influence
       String authorNoteBlock = '';
       if (_authorNote.isNotEmpty) {
-        authorNoteBlock = '[Author\'s Note: $_authorNote]\n';
+        authorNoteBlock = _buildAuthorNoteBlock();
       }
 
       final prompt = "$systemPrompt\n"

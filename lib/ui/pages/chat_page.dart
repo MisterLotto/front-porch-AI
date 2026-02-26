@@ -70,6 +70,7 @@ class _ChatPageState extends State<ChatPage> {
   final _StyledTextController _controller = _StyledTextController();
   final ScrollController _scrollController = ScrollController();
   bool _autoScroll = true;
+  double _sidebarWidth = 300;
 
   @override
   void initState() {
@@ -273,9 +274,13 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   ),
                   if (isGroup)
-                    _buildGroupSidebar(chatService)
+                    _buildResizableSidebar(
+                      child: _buildGroupSidebar(chatService),
+                    )
                   else if (character != null)
-                    _buildRightSidebar(character, chatService),
+                    _buildResizableSidebar(
+                      child: _buildRightSidebar(character, chatService),
+                    ),
                 ],
               ),
             ),
@@ -881,6 +886,41 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// Wraps a sidebar widget with a draggable resize handle on its left edge.
+  Widget _buildResizableSidebar({required Widget child}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Drag handle
+        MouseRegion(
+          cursor: SystemMouseCursors.resizeColumn,
+          child: GestureDetector(
+            onHorizontalDragUpdate: (details) {
+              setState(() {
+                _sidebarWidth = (_sidebarWidth - details.delta.dx).clamp(100, double.infinity);
+              });
+            },
+            child: Container(
+              width: 6,
+              color: Colors.transparent,
+              child: Center(
+                child: Container(
+                  width: 3,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: _sidebarWidth, child: child),
+      ],
+    );
+  }
+
   Widget _buildRightSidebar(CharacterCard character, ChatService chatService) {
     final userName = Provider.of<UserPersonaService>(context, listen: false).persona.name;
     String replace(String text) {
@@ -888,7 +928,6 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     return Container(
-      width: 300,
       decoration: const BoxDecoration(
         color: Color(0xFF1F2937),
         border: Border(left: BorderSide(color: Colors.white10)),
@@ -896,7 +935,7 @@ class _ChatPageState extends State<ChatPage> {
       child: Column(
         children: [
           if (character.imagePath != null)
-             Image.file(File(character.imagePath!), height: 300, width: 300, fit: BoxFit.cover),
+             Image.file(File(character.imagePath!), height: _sidebarWidth, width: _sidebarWidth, fit: BoxFit.cover),
           
           // Action Buttons
           Container(
@@ -1063,7 +1102,6 @@ class _ChatPageState extends State<ChatPage> {
   Widget _buildGroupSidebar(ChatService chatService) {
     final chars = chatService.groupCharacters;
     return Container(
-      width: 300,
       decoration: const BoxDecoration(
         color: Color(0xFF1F2937),
         border: Border(left: BorderSide(color: Colors.white10)),
@@ -2069,41 +2107,85 @@ class _AuthorNoteSectionState extends State<_AuthorNoteSection> {
             contentPadding: const EdgeInsets.all(10),
           ),
           onChanged: (val) {
-            widget.chatService.setAuthorNote(val, depth: widget.chatService.authorNoteDepth);
+            widget.chatService.setAuthorNote(val, strength: widget.chatService.authorNoteStrength);
           },
         ),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            const Text('Depth: ', style: TextStyle(color: Colors.white54, fontSize: 11)),
-            Expanded(
-              child: SliderTheme(
-                data: SliderThemeData(
-                  trackHeight: 3,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                  activeTrackColor: Colors.blueAccent,
-                  inactiveTrackColor: Colors.white12,
-                  thumbColor: Colors.blueAccent,
+        Builder(
+          builder: (context) {
+            final strength = widget.chatService.authorNoteStrength;
+            Color sliderColor;
+            String tierLabel;
+            if (strength <= 3) {
+              sliderColor = Colors.blueAccent;
+              tierLabel = 'Subtle';
+            } else if (strength <= 7) {
+              sliderColor = Colors.amberAccent;
+              tierLabel = 'Moderate';
+            } else {
+              sliderColor = Colors.redAccent;
+              tierLabel = 'Strong';
+            }
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    const Tooltip(
+                      message: 'Controls how forcefully the author\'s note is applied.\n'
+                        'Subtle: a gentle suggestion the AI may follow.\n'
+                        'Moderate: standard injection into context.\n'
+                        'Strong: an urgent directive the AI should apply immediately.',
+                      child: Text('Strength: ', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 3,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                          activeTrackColor: sliderColor,
+                          inactiveTrackColor: Colors.white12,
+                          thumbColor: sliderColor,
+                        ),
+                        child: Slider(
+                          value: strength.toDouble(),
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          label: '$strength — $tierLabel',
+                          onChanged: (val) {
+                            widget.chatService.setAuthorNote(
+                              widget.chatService.authorNote,
+                              strength: val.round(),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    Text('$strength',
+                      style: TextStyle(color: sliderColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ],
                 ),
-                child: Slider(
-                  value: widget.chatService.authorNoteDepth.toDouble(),
-                  min: 1,
-                  max: 20,
-                  divisions: 19,
-                  label: widget.chatService.authorNoteDepth.toString(),
-                  onChanged: (val) {
-                    widget.chatService.setAuthorNote(
-                      widget.chatService.authorNote,
-                      depth: val.round(),
-                    );
-                  },
+                Padding(
+                  padding: const EdgeInsets.only(left: 2),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: sliderColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: sliderColor.withOpacity(0.3)),
+                        ),
+                        child: Text(tierLabel,
+                          style: TextStyle(color: sliderColor, fontSize: 10, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            Text('${widget.chatService.authorNoteDepth}',
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
+              ],
+            );
+          },
         ),
       ],
     );
