@@ -15,6 +15,7 @@ import 'package:front_porch_ai/ui/dialogs/rocm_guidance_dialog.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/services/update_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
@@ -28,6 +29,9 @@ import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.da
 
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
+import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/web_server_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -88,7 +92,31 @@ class _SettingsPageState extends State<SettingsPage> {
         }
         hardwareService.addListener(listener);
       }
+
+      // Auto-fetch available models if API is configured
+      _autoFetchModels();
     });
+  }
+
+  /// Fetch available models from the configured API on startup.
+  void _autoFetchModels() async {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    if (storage.remoteApiKey.isEmpty) return; // no API configured
+
+    final openRouter = Provider.of<OpenRouterService>(context, listen: false);
+    openRouter.configure(
+      apiUrl: storage.remoteApiUrl,
+      apiKey: storage.remoteApiKey,
+    );
+
+    try {
+      final models = await openRouter.fetchAvailableModels();
+      if (mounted && models.isNotEmpty) {
+        setState(() => _availableModels = models);
+      }
+    } catch (_) {
+      // Silent fail on startup — user can manually refresh
+    }
   }
 
   /// Apply GPU defaults based on detected hardware info.
@@ -580,6 +608,663 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ],
             ),
+          ),
+
+          const SizedBox(height: 24),
+          _buildSectionHeader('Voice Input (STT)', context),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.mic, color: Colors.greenAccent, size: 20),
+                        const SizedBox(width: 12),
+                        const Text('Enable Voice Input', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    Switch(
+                      value: storageService.sttEnabled,
+                      onChanged: (val) => storageService.setSttEnabled(val),
+                    ),
+                  ],
+                ),
+                if (storageService.sttEnabled) ...[
+                  const Divider(color: Colors.white10),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Whisper Model', style: theme.textTheme.bodySmall),
+                            const SizedBox(height: 4),
+                            DropdownButtonFormField<String>(
+                              value: storageService.whisperModel,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: theme.scaffoldBackgroundColor,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'tiny.en', child: Text('Tiny (~40MB, fastest)')),
+                                DropdownMenuItem(value: 'base.en', child: Text('Base (~75MB, balanced)')),
+                                DropdownMenuItem(value: 'small.en', child: Text('Small (~250MB, best accuracy)')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) storageService.setWhisperModel(val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Download model button with progress
+                  Consumer<SttService>(
+                    builder: (context, sttService, _) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: sttService.isDownloading
+                                  ? null
+                                  : () async {
+                                      final ok = await sttService.downloadModel();
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(ok
+                                                ? '✅ Model "${storageService.whisperModel}" downloaded!'
+                                                : '❌ ${sttService.downloadError ?? "Download failed"}'),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              icon: sttService.isDownloading
+                                  ? const SizedBox(
+                                      width: 16, height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                                    )
+                                  : const Icon(Icons.download, size: 18),
+                              label: Text(sttService.isDownloading
+                                  ? sttService.downloadStatus
+                                  : 'Download Model'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.greenAccent,
+                                side: const BorderSide(color: Colors.greenAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                              ),
+                            ),
+                          ),
+                          if (sttService.isDownloading) ...[
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: sttService.downloadProgress > 0
+                                    ? sttService.downloadProgress
+                                    : null,
+                                backgroundColor: Colors.white10,
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                                minHeight: 4,
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Microphone selector
+                  Consumer<SttService>(
+                    builder: (context, sttService, _) {
+                      // Auto-refresh devices on first render so dropdown is populated
+                      if (sttService.inputDevices.isEmpty) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          sttService.refreshInputDevices();
+                        });
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Microphone', style: theme.textTheme.bodySmall),
+                                    const SizedBox(height: 4),
+                                    DropdownButtonFormField<String>(
+                                      value: sttService.inputDevices.any((d) => d.id == sttService.selectedDeviceId)
+                                          ? sttService.selectedDeviceId
+                                          : null,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: theme.scaffoldBackgroundColor,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem<String>(
+                                          value: null,
+                                          child: Text('System Default'),
+                                        ),
+                                        ...sttService.inputDevices.map((d) => DropdownMenuItem<String>(
+                                          value: d.id,
+                                          child: Text(d.label, overflow: TextOverflow.ellipsis),
+                                        )),
+                                      ],
+                                      onChanged: (val) => sttService.setSelectedDevice(val),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.refresh, size: 20, color: Colors.white54),
+                                tooltip: 'Refresh devices',
+                                onPressed: () => sttService.refreshInputDevices(),
+                              ),
+                            ],
+                          ),
+                          if (sttService.inputDevices.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'No microphones detected. Click refresh to scan.',
+                                style: TextStyle(fontSize: 11, color: Colors.orangeAccent.withValues(alpha: 0.7)),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Voice call model selector
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Voice Call Model', style: theme.textTheme.bodySmall),
+                      const SizedBox(height: 4),
+                      if (_availableModels.isNotEmpty)
+                        DropdownButtonFormField<String>(
+                          value: storageService.callModelName.isEmpty
+                              ? ''
+                              : (_availableModels.any((m) => m.id == storageService.callModelName)
+                                  ? storageService.callModelName
+                                  : ''),
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: theme.scaffoldBackgroundColor,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: '',
+                              child: Text('Same as main model', style: TextStyle(color: Colors.white38, fontSize: 13)),
+                            ),
+                            ..._availableModels.map((m) => DropdownMenuItem<String>(
+                              value: m.id,
+                              child: Text(
+                                m.name.length > 45 ? '${m.name.substring(0, 42)}...' : m.name,
+                                style: const TextStyle(fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            )),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) storageService.setCallModelName(val);
+                          },
+                        )
+                      else
+                        // Fallback text field if no models fetched yet
+                        TextFormField(
+                          initialValue: storageService.callModelName,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: theme.scaffoldBackgroundColor,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            hintText: 'Enter model ID or configure API first',
+                            hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                          ),
+                          style: const TextStyle(fontSize: 13),
+                          onChanged: (val) => storageService.setCallModelName(val.trim()),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '💡 Use a smaller, faster model for voice calls.\n'
+                        'Reasoning/thinking models add latency — not recommended.',
+                        style: TextStyle(fontSize: 11, color: Colors.white38),
+                      ),
+                      // Quick-pick chips for recommended fast models
+                      if (_availableModels.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text('Recommended:', style: TextStyle(fontSize: 10, color: Colors.white24)),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: _availableModels
+                              .where((m) {
+                                final id = m.id.toLowerCase();
+                                return id.contains('mini') ||
+                                    id.contains('3b') ||
+                                    id.contains('4b') ||
+                                    id.contains('1b') ||
+                                    id.contains('flash') ||
+                                    id.contains('haiku') ||
+                                    id.contains('nano');
+                              })
+                              .take(8)
+                              .map((m) => ActionChip(
+                                    label: Text(
+                                      m.name.length > 30 ? '${m.name.substring(0, 27)}...' : m.name,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: storageService.callModelName == m.id
+                                            ? Colors.greenAccent
+                                            : Colors.white54,
+                                      ),
+                                    ),
+                                    backgroundColor: storageService.callModelName == m.id
+                                        ? Colors.greenAccent.withValues(alpha: 0.15)
+                                        : Colors.white.withValues(alpha: 0.05),
+                                    side: BorderSide(
+                                      color: storageService.callModelName == m.id
+                                          ? Colors.greenAccent.withValues(alpha: 0.4)
+                                          : Colors.white12,
+                                    ),
+                                    onPressed: () => storageService.setCallModelName(m.id),
+                                  ))
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Voice buffer size slider
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Voice Buffer', style: theme.textTheme.bodySmall),
+                          Text(
+                            '${storageService.callBufferSentences} sentences',
+                            style: TextStyle(fontSize: 12, color: Colors.white54),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: storageService.callBufferSentences.toDouble(),
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        activeColor: Colors.blueAccent,
+                        onChanged: (val) => storageService.setCallBufferSentences(val.round()),
+                      ),
+                      Text(
+                        'Sentences to pre-generate before playback starts. '
+                        'Auto-expands if generation is slow.',
+                        style: TextStyle(fontSize: 11, color: Colors.white38),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Call system prompt
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Call System Prompt', style: theme.textTheme.bodySmall),
+                          TextButton.icon(
+                            onPressed: () {
+                              storageService.setCallSystemPrompt(
+                                'You are on a live voice call. Respond naturally as if speaking on the phone. '
+                                'ALWAYS write in first person \u2014 never narrate in third person. '
+                                'Keep responses concise: 1-3 sentences max. '
+                                'No actions, no narration, no stage directions \u2014 just speak directly.',
+                              );
+                            },
+                            icon: const Icon(Icons.restore, size: 14),
+                            label: const Text('Reset', style: TextStyle(fontSize: 11)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white38,
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 24),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      TextFormField(
+                        key: ValueKey(storageService.callSystemPrompt.hashCode),
+                        initialValue: storageService.callSystemPrompt,
+                        maxLines: 4,
+                        minLines: 2,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: theme.scaffoldBackgroundColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          hintText: 'Instructions appended during voice calls...',
+                          hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+                        ),
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (val) => storageService.setCallSystemPrompt(val),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Appended to the system prompt during voice calls to control response style.',
+                        style: TextStyle(fontSize: 11, color: Colors.white38),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.send, color: Colors.blueAccent, size: 16),
+                          const SizedBox(width: 8),
+                          const Text('Auto-send transcription', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                      Switch(
+                        value: storageService.autoSendTranscription,
+                        onChanged: (val) => storageService.setAutoSendTranscription(val),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'When enabled, transcribed text is sent automatically instead of being placed in the input field.',
+                    style: TextStyle(fontSize: 11, color: Colors.white38),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          _buildSectionHeader('Image Generation', context),
+          const SizedBox(height: 8),
+          Consumer<StorageService>(
+            builder: (context, storage, _) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome, color: Colors.purpleAccent, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('AI Image Generation', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text(
+                            storage.imageGenEnabled
+                                ? 'Enabled — Model: ${storage.imageGenModel.isEmpty ? "Not set" : storage.imageGenModel}'
+                                : 'Disabled',
+                            style: const TextStyle(fontSize: 12, color: Colors.white54),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => const ImageGenSettingsDialog(),
+                      ),
+                      icon: const Icon(Icons.settings, size: 16),
+                      label: const Text('Configure'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purpleAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 24),
+          _buildSectionHeader('Web Server', context),
+          const SizedBox(height: 8),
+          Consumer2<StorageService, WebServerService>(
+            builder: (context, storage, webServer, _) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              webServer.isRunning ? Icons.wifi_tethering : Icons.wifi_tethering_off,
+                              color: webServer.isRunning ? Colors.greenAccent : Colors.white38,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Enable Web Server', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        Switch(
+                          value: storage.webServerEnabled,
+                          onChanged: (val) async {
+                            await storage.setWebServerEnabled(val);
+                            if (val) {
+                              await webServer.start(storage.webServerPort);
+                            } else {
+                              await webServer.stop();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    if (storage.webServerEnabled) ...[
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Port', style: theme.textTheme.bodySmall),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  width: 120,
+                                  child: TextFormField(
+                                    initialValue: storage.webServerPort.toString(),
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: theme.scaffoldBackgroundColor,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    ),
+                                    onFieldSubmitted: (val) async {
+                                      final port = int.tryParse(val) ?? 8085;
+                                      await storage.setWebServerPort(port);
+                                      if (webServer.isRunning) {
+                                        await webServer.stop();
+                                        await webServer.start(port);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('PIN', style: theme.textTheme.bodySmall),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  width: 120,
+                                  child: TextFormField(
+                                    initialValue: storage.webServerPin,
+                                    keyboardType: TextInputType.number,
+                                    style: const TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 4),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: theme.scaffoldBackgroundColor,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      hintText: '6 digits',
+                                      hintStyle: TextStyle(color: Colors.white24, letterSpacing: 1),
+                                    ),
+                                    maxLength: 6,
+                                    buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                                    onFieldSubmitted: (val) async {
+                                      if (val.length >= 4 && int.tryParse(val) != null) {
+                                        await storage.setWebServerPin(val);
+                                      }
+                                    },
+                                    onChanged: (val) async {
+                                      if (val.length == 6 && int.tryParse(val) != null) {
+                                        await storage.setWebServerPin(val);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Status', style: theme.textTheme.bodySmall),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: webServer.isRunning ? Colors.greenAccent : Colors.redAccent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      webServer.isRunning ? 'Running' : 'Stopped',
+                                      style: TextStyle(
+                                        color: webServer.isRunning ? Colors.greenAccent : Colors.redAccent,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (webServer.lanIp != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.language, color: Colors.blueAccent, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: SelectableText(
+                                  'http://${webServer.lanIp}:${storage.webServerPort}',
+                                  style: const TextStyle(
+                                    color: Colors.blueAccent,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (webServer.hasActiveClient) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.devices, color: Colors.amber, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Client connected: ${webServer.connectedClientIp ?? "Unknown"}',
+                                  style: const TextStyle(color: Colors.amber, fontSize: 12),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              );
+            },
           ),
 
           const SizedBox(height: 24),
@@ -1106,11 +1791,10 @@ class _SettingsPageState extends State<SettingsPage> {
            _buildSlider('Rep Pen Tokens', storageService.repeatPenaltyTokens.toDouble(), 0, 512, (val) => storageService.setRepeatPenaltyTokens(val.toInt()), context, divisions: 512, tooltip: 'How far back the AI checks for repetition (in tokens). Higher = checks more of the conversation history.'),
            _buildSlider('XTC Threshold', storageService.xtcThreshold, 0.0, 0.5, (val) => storageService.setXtcThreshold(val), context, divisions: 50, tooltip: 'Exclude Top Choices — removes the most obvious/cliché word choices. Lower = stronger effect. Try 0.1 for more creative writing.'),
            _buildSlider('XTC Probability', storageService.xtcProbability, 0.0, 1.0, (val) => storageService.setXtcProbability(val), context, divisions: 20, tooltip: 'How often XTC activates. 0 = never, 1 = always. Try 0.5 for a balance between creativity and coherence.'),
-           _buildSlider('Max Output Tokens', storageService.maxLength.toDouble(), 16, 2048, (val) => storageService.setMaxLength(val.toInt()), context, divisions: 2048 - 16, tooltip: 'Maximum number of tokens (roughly words) the AI can write in one response.'),
+           _buildSlider('Max Output Tokens', storageService.maxLength.toDouble(), 16, 16384, (val) => storageService.setMaxLength(val.toInt()), context, divisions: null, tooltip: 'Maximum number of tokens the AI can write in one response. Thinking models need higher values since reasoning tokens count toward this limit.'),
            _buildSlider('Min Output Tokens', storageService.minLength.toDouble(), 0, 512, (val) => storageService.setMinLength(val.toInt()), context, divisions: 512, tooltip: 'Minimum tokens the AI must write before it can stop. Increase for longer responses.'),
             Builder(builder: (context) {
-              final isApi = !Provider.of<LLMProvider>(context, listen: false).isLocal;
-              final maxCtx = isApi ? 500000.0 : 15000.0;
+              final maxCtx = 500000.0;
               return _buildSlider('Context Size', _contextSizeValue.clamp(4098, maxCtx), 4098, maxCtx, (val) {
                 setState(() {
                   _contextSizeValue = val;

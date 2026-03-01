@@ -76,6 +76,18 @@ class StorageService extends ChangeNotifier {
   int _ttsConcurrency = Platform.numberOfProcessors.clamp(1, 16);
   double _directorDelay = 15.0; // seconds between auto-chat responses in Director Mode
 
+  // STT (Speech-to-Text) settings
+  bool _sttEnabled = false;
+  String _whisperModel = 'base.en'; // 'tiny.en', 'base.en', 'small.en'
+  bool _autoSendTranscription = false;
+  String? _selectedMicId;
+  String _callModelName = ''; // separate LLM model for voice call mode
+  int _callBufferSentences = 3; // how many sentences to buffer before playback
+  String _callSystemPrompt = 'You are on a live voice call. Respond naturally as if speaking on the phone. '
+      'ALWAYS write in first person — never narrate in third person. '
+      'Keep responses concise: 1-3 sentences max. '
+      'No actions, no narration, no stage directions — just speak directly.';
+
   // Sort preference
   String _sortMode = 'name'; // 'name', 'recent', 'importDate'
 
@@ -90,6 +102,28 @@ class StorageService extends ChangeNotifier {
   String _cloudSyncPassword = '';
   String _cloudSyncLastTime = '';
 
+  // Image generation settings
+  bool _imageGenEnabled = false;
+  String _imageGenModel = '';
+  String _imageGenSize = '1024x1024';
+  String _imageGenNegativePrompt = 'blurry, low quality, watermark, text';
+  String _imageGenStyle = 'photorealistic';
+
+  // Web server settings
+  bool _webServerEnabled = false;
+  int _webServerPort = 8085;
+  String _webServerPin = '';
+
+  // Summary settings
+  bool _summaryEnabled = false;
+  int _summaryInterval = 10; // generate/update summary every N user messages
+  int _summaryMaxWords = 200; // target max words for the summary
+  static const String defaultSummaryPrompt =
+      'Provide a concise summary of the conversation so far in {{words}} words or fewer. '
+      'Focus on: key plot points, character developments, important decisions, emotional shifts, '
+      'and any established facts. Preserve character names, locations, and relationships. '
+      'If a previous summary exists, update it with new events rather than starting fresh.';
+  String _summaryPrompt = defaultSummaryPrompt;
 
   // Getters
   String get systemPrompt => _systemPrompt;
@@ -134,6 +168,13 @@ class StorageService extends ChangeNotifier {
   String get openaiTtsModel => _openaiTtsModel;
   int get ttsConcurrency => _ttsConcurrency;
   double get directorDelay => _directorDelay;
+  bool get sttEnabled => _sttEnabled;
+  String get whisperModel => _whisperModel;
+  bool get autoSendTranscription => _autoSendTranscription;
+  String? get selectedMicId => _selectedMicId;
+  String get callModelName => _callModelName;
+  int get callBufferSentences => _callBufferSentences;
+  String get callSystemPrompt => _callSystemPrompt;
   String get sortMode => _sortMode;
   double get gridScale => _gridScale;
   bool get cloudSyncEnabled => _cloudSyncEnabled;
@@ -142,6 +183,18 @@ class StorageService extends ChangeNotifier {
   String get cloudSyncUsername => _cloudSyncUsername;
   String get cloudSyncPassword => _cloudSyncPassword;
   String get cloudSyncLastTime => _cloudSyncLastTime;
+  bool get imageGenEnabled => _imageGenEnabled;
+  String get imageGenModel => _imageGenModel;
+  String get imageGenSize => _imageGenSize;
+  String get imageGenNegativePrompt => _imageGenNegativePrompt;
+  String get imageGenStyle => _imageGenStyle;
+  bool get webServerEnabled => _webServerEnabled;
+  int get webServerPort => _webServerPort;
+  String get webServerPin => _webServerPin;
+  bool get summaryEnabled => _summaryEnabled;
+  int get summaryInterval => _summaryInterval;
+  int get summaryMaxWords => _summaryMaxWords;
+  String get summaryPrompt => _summaryPrompt;
 
   StorageService() {
     _init();
@@ -218,6 +271,17 @@ class StorageService extends ChangeNotifier {
     _ttsConcurrency = _prefs?.getInt('tts_concurrency') ?? Platform.numberOfProcessors.clamp(1, 16);
     _openaiTtsModel = _prefs?.getString('openai_tts_model') ?? 'tts-1';
     _directorDelay = _prefs?.getDouble('director_delay') ?? 15.0;
+
+    // STT settings
+    _sttEnabled = _prefs?.getBool('stt_enabled') ?? false;
+    _whisperModel = _prefs?.getString('whisper_model') ?? 'base.en';
+    _autoSendTranscription = _prefs?.getBool('auto_send_transcription') ?? false;
+    _selectedMicId = _prefs?.getString('selected_mic_id');
+    _callModelName = _prefs?.getString('call_model_name') ?? '';
+    _callBufferSentences = _prefs?.getInt('call_buffer_sentences') ?? 3;
+    final savedCallPrompt = _prefs?.getString('call_system_prompt');
+    if (savedCallPrompt != null) _callSystemPrompt = savedCallPrompt;
+
     _sortMode = _prefs?.getString('sort_mode') ?? 'name';
     _gridScale = _prefs?.getDouble('grid_scale') ?? 300.0;
 
@@ -229,8 +293,26 @@ class StorageService extends ChangeNotifier {
     _cloudSyncPassword = _prefs?.getString('cloud_sync_password') ?? '';
     _cloudSyncLastTime = _prefs?.getString('cloud_sync_last_time') ?? '';
 
+    // Image generation settings
+    _imageGenEnabled = _prefs?.getBool('image_gen_enabled') ?? false;
+    _imageGenModel = _prefs?.getString('image_gen_model') ?? '';
+    _imageGenSize = _prefs?.getString('image_gen_size') ?? '1024x1024';
+    _imageGenNegativePrompt = _prefs?.getString('image_gen_negative_prompt') ?? 'blurry, low quality, watermark, text';
+    _imageGenStyle = _prefs?.getString('image_gen_style') ?? 'photorealistic';
+
+    // Web server settings
+    _webServerEnabled = _prefs?.getBool('web_server_enabled') ?? false;
+    _webServerPort = _prefs?.getInt('web_server_port') ?? 8085;
+    _webServerPin = _prefs?.getString('web_server_pin') ?? '';
+
     // Custom models path
     _customModelsPath = _prefs?.getString('custom_models_path');
+
+    // Summary settings
+    _summaryEnabled = _prefs?.getBool('summary_enabled') ?? false;
+    _summaryInterval = _prefs?.getInt('summary_interval') ?? 10;
+    _summaryMaxWords = _prefs?.getInt('summary_max_words') ?? 200;
+    _summaryPrompt = _prefs?.getString('summary_prompt') ?? defaultSummaryPrompt;
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -522,6 +604,24 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setCallModelName(String value) async {
+    _callModelName = value;
+    await _prefs?.setString('call_model_name', value);
+    notifyListeners();
+  }
+
+  Future<void> setCallBufferSentences(int value) async {
+    _callBufferSentences = value.clamp(1, 10);
+    await _prefs?.setInt('call_buffer_sentences', _callBufferSentences);
+    notifyListeners();
+  }
+
+  Future<void> setCallSystemPrompt(String value) async {
+    _callSystemPrompt = value;
+    await _prefs?.setString('call_system_prompt', value);
+    notifyListeners();
+  }
+
   Future<void> setRemoteApiUrl(String value) async {
     _remoteApiUrl = value;
     await _prefs?.setString('remote_api_url', value);
@@ -596,6 +696,35 @@ class StorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // STT setters
+  Future<void> setSttEnabled(bool value) async {
+    _sttEnabled = value;
+    await _prefs?.setBool('stt_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setWhisperModel(String value) async {
+    _whisperModel = value;
+    await _prefs?.setString('whisper_model', value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoSendTranscription(bool value) async {
+    _autoSendTranscription = value;
+    await _prefs?.setBool('auto_send_transcription', value);
+    notifyListeners();
+  }
+
+  Future<void> setSelectedMicId(String? value) async {
+    _selectedMicId = value;
+    if (value != null) {
+      await _prefs?.setString('selected_mic_id', value);
+    } else {
+      await _prefs?.remove('selected_mic_id');
+    }
+    notifyListeners();
+  }
+
   Future<void> setDirectorDelay(double value) async {
     _directorDelay = value.clamp(0.5, 60.0);
     await _prefs?.setDouble('director_delay', _directorDelay);
@@ -657,6 +786,81 @@ class StorageService extends ChangeNotifier {
     } else {
       await _prefs?.remove('custom_models_path');
     }
+    notifyListeners();
+  }
+
+  // Image generation setters
+  Future<void> setImageGenEnabled(bool value) async {
+    _imageGenEnabled = value;
+    await _prefs?.setBool('image_gen_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenModel(String value) async {
+    _imageGenModel = value;
+    await _prefs?.setString('image_gen_model', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenSize(String value) async {
+    _imageGenSize = value;
+    await _prefs?.setString('image_gen_size', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenNegativePrompt(String value) async {
+    _imageGenNegativePrompt = value;
+    await _prefs?.setString('image_gen_negative_prompt', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenStyle(String value) async {
+    _imageGenStyle = value;
+    await _prefs?.setString('image_gen_style', value);
+    notifyListeners();
+  }
+
+  // Web server setters
+  Future<void> setWebServerEnabled(bool value) async {
+    _webServerEnabled = value;
+    await _prefs?.setBool('web_server_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setWebServerPort(int value) async {
+    _webServerPort = value;
+    await _prefs?.setInt('web_server_port', value);
+    notifyListeners();
+  }
+
+  Future<void> setWebServerPin(String value) async {
+    _webServerPin = value;
+    await _prefs?.setString('web_server_pin', value);
+    notifyListeners();
+  }
+
+  // Summary setters
+  Future<void> setSummaryEnabled(bool value) async {
+    _summaryEnabled = value;
+    await _prefs?.setBool('summary_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setSummaryInterval(int value) async {
+    _summaryInterval = value.clamp(3, 50);
+    await _prefs?.setInt('summary_interval', _summaryInterval);
+    notifyListeners();
+  }
+
+  Future<void> setSummaryMaxWords(int value) async {
+    _summaryMaxWords = value.clamp(50, 1000);
+    await _prefs?.setInt('summary_max_words', _summaryMaxWords);
+    notifyListeners();
+  }
+
+  Future<void> setSummaryPrompt(String value) async {
+    _summaryPrompt = value;
+    await _prefs?.setString('summary_prompt', value);
     notifyListeners();
   }
 }

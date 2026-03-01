@@ -26,7 +26,9 @@ import 'package:front_porch_ai/services/update_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
+import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
+import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
 import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
 import 'package:front_porch_ai/database/database.dart';
@@ -34,8 +36,11 @@ import 'package:front_porch_ai/database/data_migration_service.dart';
 import 'package:front_porch_ai/services/backup_service.dart';
 
 import 'package:front_porch_ai/ui/widgets/setup_overlay.dart';
+import 'package:front_porch_ai/ui/widgets/remote_lock_overlay.dart';
 import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
-
+import 'package:front_porch_ai/services/web_server_service.dart';
+import 'package:front_porch_ai/services/web_chat_bridge.dart';
+import 'package:front_porch_ai/app_version.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
@@ -156,7 +161,66 @@ void main(List<String> args) async {
           update: (context, storage, voiceManager, previous) =>
               previous ?? TtsService(storage, voiceManager),
         ),
+        ChangeNotifierProxyProvider<StorageService, SttService>(
+          create: (context) => SttService(
+            Provider.of<StorageService>(context, listen: false),
+          ),
+          update: (context, storage, previous) {
+            if (previous != null) {
+              try { previous.setTtsService(Provider.of<TtsService>(context, listen: false)); } catch (_) {}
+            }
+            return previous ?? SttService(storage);
+          },
+        ),
         ChangeNotifierProvider(create: (_) => CloudSyncService()),
+        ChangeNotifierProxyProvider<StorageService, ImageGenService>(
+          create: (context) => ImageGenService(Provider.of<StorageService>(context, listen: false)),
+          update: (context, storage, previous) => previous ?? ImageGenService(storage),
+        ),
+        ChangeNotifierProxyProvider<StorageService, WebServerService>(
+          create: (context) {
+            final chatService = Provider.of<ChatService>(context, listen: false);
+            final ws = WebServerService(Provider.of<StorageService>(context, listen: false));
+            ws.setDatabase(db);
+            ws.setCharacterRepository(Provider.of<CharacterRepository>(context, listen: false));
+            ws.setChatService(chatService);
+            ws.setChatBridge(WebChatBridge(chatService));
+            ws.setLLMProvider(Provider.of<LLMProvider>(context, listen: false));
+            ws.setFolderService(Provider.of<FolderService>(context, listen: false));
+            ws.setTtsService(Provider.of<TtsService>(context, listen: false));
+            ws.setUserPersonaService(Provider.of<UserPersonaService>(context, listen: false));
+            ws.setGroupChatRepository(Provider.of<GroupChatRepository>(context, listen: false));
+            ws.setCloudSyncService(Provider.of<CloudSyncService>(context, listen: false));
+            return ws;
+          },
+          update: (context, storage, previous) {
+            if (previous != null) {
+              final chatService = Provider.of<ChatService>(context, listen: false);
+              previous.setChatService(chatService);
+              previous.setCharacterRepository(Provider.of<CharacterRepository>(context, listen: false));
+              previous.setLLMProvider(Provider.of<LLMProvider>(context, listen: false));
+              previous.setFolderService(Provider.of<FolderService>(context, listen: false));
+              previous.setTtsService(Provider.of<TtsService>(context, listen: false));
+              previous.setUserPersonaService(Provider.of<UserPersonaService>(context, listen: false));
+              previous.setGroupChatRepository(Provider.of<GroupChatRepository>(context, listen: false));
+              previous.setCloudSyncService(Provider.of<CloudSyncService>(context, listen: false));
+              return previous;
+            }
+            final chatService = Provider.of<ChatService>(context, listen: false);
+            final ws = WebServerService(storage);
+            ws.setDatabase(db);
+            ws.setCharacterRepository(Provider.of<CharacterRepository>(context, listen: false));
+            ws.setChatService(chatService);
+            ws.setChatBridge(WebChatBridge(chatService));
+            ws.setLLMProvider(Provider.of<LLMProvider>(context, listen: false));
+            ws.setFolderService(Provider.of<FolderService>(context, listen: false));
+            ws.setTtsService(Provider.of<TtsService>(context, listen: false));
+            ws.setUserPersonaService(Provider.of<UserPersonaService>(context, listen: false));
+            ws.setGroupChatRepository(Provider.of<GroupChatRepository>(context, listen: false));
+            ws.setCloudSyncService(Provider.of<CloudSyncService>(context, listen: false));
+            return ws;
+          },
+        ),
       ],
       child: const MyApp(),
     ),
@@ -213,6 +277,17 @@ class _MyAppState extends State<MyApp> with WindowListener {
         await updateService.installOnClose();
       }
     }
+
+    // Stop web server
+    try {
+      final webServer = Provider.of<WebServerService>(context, listen: false);
+      if (webServer.isRunning) {
+        await webServer.stop();
+      }
+    } catch (e) {
+      debugPrint('AG_DEBUG: Error stopping web server on close: $e');
+    }
+
     await windowManager.destroy();
   }
 
@@ -242,6 +317,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _checkForUpdates(context);
                   _runCloudSync(context);
+                  _autoStartWebServer(context);
                 });
               }
 
@@ -263,6 +339,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                   children: [
                     const MainLayout(),
                     const SetupOverlay(),
+                    const RemoteLockOverlay(),
                     if (_isMigrating)
                       _buildMigrationOverlay(),
                   ],
@@ -405,6 +482,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
   }
 
   Future<void> _runCloudSync(BuildContext context) async {
+    // Pre-release builds must not sync to prevent schema version conflicts
+    if (isPreRelease) {
+      debugPrint('[CloudSync] Skipped — pre-release build uses separate beta DB');
+      return;
+    }
+
     final storage = Provider.of<StorageService>(context, listen: false);
     await storage.initialized;
     if (!storage.cloudSyncEnabled || storage.cloudSyncProvider == 'none') return;
@@ -598,5 +681,14 @@ class _MyAppState extends State<MyApp> with WindowListener {
     } catch (e) {
       debugPrint('Cloud sync startup error: \$e');
     }
+  }
+
+  Future<void> _autoStartWebServer(BuildContext context) async {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    await storage.initialized;
+    if (!storage.webServerEnabled) return;
+
+    final webServer = Provider.of<WebServerService>(context, listen: false);
+    await webServer.start(storage.webServerPort);
   }
 }

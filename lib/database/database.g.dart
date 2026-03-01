@@ -1147,6 +1147,28 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     requiredDuringInsert: false,
     defaultValue: const Constant(4),
   );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _summaryLastIndexMeta = const VerificationMeta(
+    'summaryLastIndex',
+  );
+  @override
+  late final GeneratedColumn<int> summaryLastIndex = GeneratedColumn<int>(
+    'summary_last_index',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _parentSessionMeta = const VerificationMeta(
     'parentSession',
   );
@@ -1213,6 +1235,8 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     description,
     authorNote,
     authorNoteDepth,
+    summary,
+    summaryLastIndex,
     parentSession,
     forkIndex,
     createdAt,
@@ -1278,6 +1302,21 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         authorNoteDepth.isAcceptableOrUnknown(
           data['author_note_depth']!,
           _authorNoteDepthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    }
+    if (data.containsKey('summary_last_index')) {
+      context.handle(
+        _summaryLastIndexMeta,
+        summaryLastIndex.isAcceptableOrUnknown(
+          data['summary_last_index']!,
+          _summaryLastIndexMeta,
         ),
       );
     }
@@ -1351,6 +1390,14 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.int,
         data['${effectivePrefix}author_note_depth'],
       )!,
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      ),
+      summaryLastIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}summary_last_index'],
+      ),
       parentSession: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}parent_session'],
@@ -1388,6 +1435,8 @@ class Session extends DataClass implements Insertable<Session> {
   final String? description;
   final String authorNote;
   final int authorNoteDepth;
+  final String? summary;
+  final int? summaryLastIndex;
   final String? parentSession;
   final int? forkIndex;
   final DateTime createdAt;
@@ -1401,6 +1450,8 @@ class Session extends DataClass implements Insertable<Session> {
     this.description,
     required this.authorNote,
     required this.authorNoteDepth,
+    this.summary,
+    this.summaryLastIndex,
     this.parentSession,
     this.forkIndex,
     required this.createdAt,
@@ -1425,6 +1476,12 @@ class Session extends DataClass implements Insertable<Session> {
     }
     map['author_note'] = Variable<String>(authorNote);
     map['author_note_depth'] = Variable<int>(authorNoteDepth);
+    if (!nullToAbsent || summary != null) {
+      map['summary'] = Variable<String>(summary);
+    }
+    if (!nullToAbsent || summaryLastIndex != null) {
+      map['summary_last_index'] = Variable<int>(summaryLastIndex);
+    }
     if (!nullToAbsent || parentSession != null) {
       map['parent_session'] = Variable<String>(parentSession);
     }
@@ -1454,6 +1511,12 @@ class Session extends DataClass implements Insertable<Session> {
           : Value(description),
       authorNote: Value(authorNote),
       authorNoteDepth: Value(authorNoteDepth),
+      summary: summary == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summary),
+      summaryLastIndex: summaryLastIndex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summaryLastIndex),
       parentSession: parentSession == null && nullToAbsent
           ? const Value.absent()
           : Value(parentSession),
@@ -1481,6 +1544,8 @@ class Session extends DataClass implements Insertable<Session> {
       description: serializer.fromJson<String?>(json['description']),
       authorNote: serializer.fromJson<String>(json['authorNote']),
       authorNoteDepth: serializer.fromJson<int>(json['authorNoteDepth']),
+      summary: serializer.fromJson<String?>(json['summary']),
+      summaryLastIndex: serializer.fromJson<int?>(json['summaryLastIndex']),
       parentSession: serializer.fromJson<String?>(json['parentSession']),
       forkIndex: serializer.fromJson<int?>(json['forkIndex']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -1499,6 +1564,8 @@ class Session extends DataClass implements Insertable<Session> {
       'description': serializer.toJson<String?>(description),
       'authorNote': serializer.toJson<String>(authorNote),
       'authorNoteDepth': serializer.toJson<int>(authorNoteDepth),
+      'summary': serializer.toJson<String?>(summary),
+      'summaryLastIndex': serializer.toJson<int?>(summaryLastIndex),
       'parentSession': serializer.toJson<String?>(parentSession),
       'forkIndex': serializer.toJson<int?>(forkIndex),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1515,6 +1582,8 @@ class Session extends DataClass implements Insertable<Session> {
     Value<String?> description = const Value.absent(),
     String? authorNote,
     int? authorNoteDepth,
+    Value<String?> summary = const Value.absent(),
+    Value<int?> summaryLastIndex = const Value.absent(),
     Value<String?> parentSession = const Value.absent(),
     Value<int?> forkIndex = const Value.absent(),
     DateTime? createdAt,
@@ -1528,6 +1597,10 @@ class Session extends DataClass implements Insertable<Session> {
     description: description.present ? description.value : this.description,
     authorNote: authorNote ?? this.authorNote,
     authorNoteDepth: authorNoteDepth ?? this.authorNoteDepth,
+    summary: summary.present ? summary.value : this.summary,
+    summaryLastIndex: summaryLastIndex.present
+        ? summaryLastIndex.value
+        : this.summaryLastIndex,
     parentSession: parentSession.present
         ? parentSession.value
         : this.parentSession,
@@ -1553,6 +1626,10 @@ class Session extends DataClass implements Insertable<Session> {
       authorNoteDepth: data.authorNoteDepth.present
           ? data.authorNoteDepth.value
           : this.authorNoteDepth,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      summaryLastIndex: data.summaryLastIndex.present
+          ? data.summaryLastIndex.value
+          : this.summaryLastIndex,
       parentSession: data.parentSession.present
           ? data.parentSession.value
           : this.parentSession,
@@ -1573,6 +1650,8 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('description: $description, ')
           ..write('authorNote: $authorNote, ')
           ..write('authorNoteDepth: $authorNoteDepth, ')
+          ..write('summary: $summary, ')
+          ..write('summaryLastIndex: $summaryLastIndex, ')
           ..write('parentSession: $parentSession, ')
           ..write('forkIndex: $forkIndex, ')
           ..write('createdAt: $createdAt, ')
@@ -1591,6 +1670,8 @@ class Session extends DataClass implements Insertable<Session> {
     description,
     authorNote,
     authorNoteDepth,
+    summary,
+    summaryLastIndex,
     parentSession,
     forkIndex,
     createdAt,
@@ -1608,6 +1689,8 @@ class Session extends DataClass implements Insertable<Session> {
           other.description == this.description &&
           other.authorNote == this.authorNote &&
           other.authorNoteDepth == this.authorNoteDepth &&
+          other.summary == this.summary &&
+          other.summaryLastIndex == this.summaryLastIndex &&
           other.parentSession == this.parentSession &&
           other.forkIndex == this.forkIndex &&
           other.createdAt == this.createdAt &&
@@ -1623,6 +1706,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String?> description;
   final Value<String> authorNote;
   final Value<int> authorNoteDepth;
+  final Value<String?> summary;
+  final Value<int?> summaryLastIndex;
   final Value<String?> parentSession;
   final Value<int?> forkIndex;
   final Value<DateTime> createdAt;
@@ -1637,6 +1722,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.description = const Value.absent(),
     this.authorNote = const Value.absent(),
     this.authorNoteDepth = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.summaryLastIndex = const Value.absent(),
     this.parentSession = const Value.absent(),
     this.forkIndex = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1652,6 +1739,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.description = const Value.absent(),
     this.authorNote = const Value.absent(),
     this.authorNoteDepth = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.summaryLastIndex = const Value.absent(),
     this.parentSession = const Value.absent(),
     this.forkIndex = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1667,6 +1756,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? description,
     Expression<String>? authorNote,
     Expression<int>? authorNoteDepth,
+    Expression<String>? summary,
+    Expression<int>? summaryLastIndex,
     Expression<String>? parentSession,
     Expression<int>? forkIndex,
     Expression<DateTime>? createdAt,
@@ -1682,6 +1773,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (description != null) 'description': description,
       if (authorNote != null) 'author_note': authorNote,
       if (authorNoteDepth != null) 'author_note_depth': authorNoteDepth,
+      if (summary != null) 'summary': summary,
+      if (summaryLastIndex != null) 'summary_last_index': summaryLastIndex,
       if (parentSession != null) 'parent_session': parentSession,
       if (forkIndex != null) 'fork_index': forkIndex,
       if (createdAt != null) 'created_at': createdAt,
@@ -1699,6 +1792,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String?>? description,
     Value<String>? authorNote,
     Value<int>? authorNoteDepth,
+    Value<String?>? summary,
+    Value<int?>? summaryLastIndex,
     Value<String?>? parentSession,
     Value<int?>? forkIndex,
     Value<DateTime>? createdAt,
@@ -1714,6 +1809,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       description: description ?? this.description,
       authorNote: authorNote ?? this.authorNote,
       authorNoteDepth: authorNoteDepth ?? this.authorNoteDepth,
+      summary: summary ?? this.summary,
+      summaryLastIndex: summaryLastIndex ?? this.summaryLastIndex,
       parentSession: parentSession ?? this.parentSession,
       forkIndex: forkIndex ?? this.forkIndex,
       createdAt: createdAt ?? this.createdAt,
@@ -1747,6 +1844,12 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (authorNoteDepth.present) {
       map['author_note_depth'] = Variable<int>(authorNoteDepth.value);
     }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (summaryLastIndex.present) {
+      map['summary_last_index'] = Variable<int>(summaryLastIndex.value);
+    }
     if (parentSession.present) {
       map['parent_session'] = Variable<String>(parentSession.value);
     }
@@ -1778,6 +1881,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('description: $description, ')
           ..write('authorNote: $authorNote, ')
           ..write('authorNoteDepth: $authorNoteDepth, ')
+          ..write('summary: $summary, ')
+          ..write('summaryLastIndex: $summaryLastIndex, ')
           ..write('parentSession: $parentSession, ')
           ..write('forkIndex: $forkIndex, ')
           ..write('createdAt: $createdAt, ')
@@ -5274,6 +5379,8 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String?> description,
       Value<String> authorNote,
       Value<int> authorNoteDepth,
+      Value<String?> summary,
+      Value<int?> summaryLastIndex,
       Value<String?> parentSession,
       Value<int?> forkIndex,
       Value<DateTime> createdAt,
@@ -5290,6 +5397,8 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String?> description,
       Value<String> authorNote,
       Value<int> authorNoteDepth,
+      Value<String?> summary,
+      Value<int?> summaryLastIndex,
       Value<String?> parentSession,
       Value<int?> forkIndex,
       Value<DateTime> createdAt,
@@ -5339,6 +5448,16 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<int> get authorNoteDepth => $composableBuilder(
     column: $table.authorNoteDepth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get summaryLastIndex => $composableBuilder(
+    column: $table.summaryLastIndex,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5412,6 +5531,16 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get summaryLastIndex => $composableBuilder(
+    column: $table.summaryLastIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get parentSession => $composableBuilder(
     column: $table.parentSession,
     builder: (column) => ColumnOrderings(column),
@@ -5476,6 +5605,14 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<int> get summaryLastIndex => $composableBuilder(
+    column: $table.summaryLastIndex,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get parentSession => $composableBuilder(
     column: $table.parentSession,
     builder: (column) => column,
@@ -5529,6 +5666,8 @@ class $$SessionsTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String> authorNote = const Value.absent(),
                 Value<int> authorNoteDepth = const Value.absent(),
+                Value<String?> summary = const Value.absent(),
+                Value<int?> summaryLastIndex = const Value.absent(),
                 Value<String?> parentSession = const Value.absent(),
                 Value<int?> forkIndex = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -5543,6 +5682,8 @@ class $$SessionsTableTableManager
                 description: description,
                 authorNote: authorNote,
                 authorNoteDepth: authorNoteDepth,
+                summary: summary,
+                summaryLastIndex: summaryLastIndex,
                 parentSession: parentSession,
                 forkIndex: forkIndex,
                 createdAt: createdAt,
@@ -5559,6 +5700,8 @@ class $$SessionsTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String> authorNote = const Value.absent(),
                 Value<int> authorNoteDepth = const Value.absent(),
+                Value<String?> summary = const Value.absent(),
+                Value<int?> summaryLastIndex = const Value.absent(),
                 Value<String?> parentSession = const Value.absent(),
                 Value<int?> forkIndex = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -5573,6 +5716,8 @@ class $$SessionsTableTableManager
                 description: description,
                 authorNote: authorNote,
                 authorNoteDepth: authorNoteDepth,
+                summary: summary,
+                summaryLastIndex: summaryLastIndex,
                 parentSession: parentSession,
                 forkIndex: forkIndex,
                 createdAt: createdAt,

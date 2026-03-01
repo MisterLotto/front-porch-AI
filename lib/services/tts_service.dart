@@ -276,6 +276,231 @@ class TtsService extends ChangeNotifier {
     }
   }
 
+  /// Speak sentences as they arrive from a stream (for call mode).
+  ///
+  /// Uses a producer-consumer pattern: a producer generates audio files
+  /// concurrently as sentences arrive, while a consumer plays them in order.
+  /// An initial buffer of 3 sentences gives a head start so playback is smooth.
+  Future<void> speakStreaming(Stream<String> sentenceStream, {String? voiceKey}) async {
+    if (!_storageService.ttsEnabled) return;
+
+    await stop();
+
+    // Resolve voice
+    final voice = (voiceKey != null && voiceKey.isNotEmpty)
+        ? voiceKey
+        : _storageService.ttsVoiceModel;
+    if (voice.isEmpty) {
+      print('TTS streaming: no voice configured');
+      return;
+    }
+
+    // For Piper, check model exists
+    if (_isPiperEngine) {
+      final modelPath = await _voiceManager.getVoiceModelPath(voice);
+      if (!File(modelPath).existsSync()) return;
+    }
+
+    // Ensure Kokoro model is ready
+    if (_storageService.ttsEngine == 'kokoro') {
+      final ready = await activeEngine.ensureModelReady(onProgress: (p) {
+        _modelDownloadProgress = p;
+        _isDownloadingModel = p < 1.0;
+        notifyListeners();
+      });
+      _isDownloadingModel = false;
+      if (!ready) return;
+    }
+
+    _isSpeaking = true;
+    _isGenerating = true;
+    _clearCache(); // no caching for streaming
+    notifyListeners();
+
+    final engine = activeEngine;
+    final speed = _storageService.ttsSpeechRate;
+    final tempFiles = <File>[];
+
+    // Shared queue between producer and consumer
+    final audioQueue = <File>[];
+    bool producerDone = false;
+    Completer<void>? audioAvailable;
+    int bufferTarget = _storageService.callBufferSentences.clamp(1, 10);
+
+    try {
+      final maxConcurrency = _isPiperEngine ? 1 : _storageService.ttsConcurrency.clamp(1, 16);
+
+      // ── Producer: fire off concurrent generation futures ──
+      final orderedFutures = <Future<File?>>[];
+      final completedFiles = <int, File?>{};
+      int nextToQueue = 0;
+      Completer<void>? futureReady; // signals when a new future completes
+
+      final producerFuture = () async {
+        await for (final sentence in sentenceStream) {
+          if (!_isSpeaking) break;
+          if (sentence == '__DONE__') break;
+
+          final sanitized = _sanitizeText(sentence);
+          if (sanitized.trim().isEmpty) continue;
+
+          final idx = orderedFutures.length;
+          debugPrint('TTS streaming[$idx]: launching "$sanitized"');
+
+          // Fire off generation without awaiting — runs concurrently
+          final future = () async {
+            File? wavFile;
+            if (_isPiperEngine) {
+              final modelPath = await _voiceManager.getVoiceModelPath(voice);
+              wavFile = await _generatePiperWav(sanitized, modelPath, idx);
+            } else {
+              wavFile = await engine.generateAudio(sanitized, voice, speed);
+            }
+            return wavFile;
+          }();
+
+          orderedFutures.add(future);
+
+          // When this future completes, store result and signal collector
+          future.then((file) {
+            completedFiles[idx] = file;
+            if (file != null) tempFiles.add(file);
+            if (futureReady != null && !futureReady!.isCompleted) {
+              futureReady!.complete();
+            }
+          });
+
+          // Throttle: if we have too many in-flight, wait for some to complete
+          final inFlight = orderedFutures.length - nextToQueue;
+          if (inFlight >= maxConcurrency) {
+            await orderedFutures[nextToQueue]; // wait for oldest to finish
+          }
+        }
+        producerDone = true;
+        if (futureReady != null && !futureReady!.isCompleted) {
+          futureReady!.complete();
+        }
+      }();
+
+      // ── Collector: gather completed results in order into audioQueue ──
+      void collectReady() {
+        while (completedFiles.containsKey(nextToQueue)) {
+          final file = completedFiles[nextToQueue]!;
+          audioQueue.add(file);
+          nextToQueue++;
+          if (audioAvailable != null && !audioAvailable!.isCompleted) {
+            audioAvailable!.complete();
+          }
+        }
+      }
+
+      // Wait for initial buffer to fill
+      while (!producerDone && audioQueue.length < bufferTarget && _isSpeaking) {
+        futureReady = Completer<void>();
+        await futureReady!.future;
+        collectReady();
+      }
+
+      // ── Consumer: play audio in order ──
+      _isGenerating = false;
+      notifyListeners();
+
+      while (_isSpeaking) {
+        collectReady(); // gather any newly completed results
+        if (audioQueue.isNotEmpty) {
+          final toPlay = audioQueue.removeAt(0);
+          await _playWavFile(toPlay);
+        } else if (producerDone && !completedFiles.containsKey(nextToQueue)) {
+          break; // nothing left to play or generate
+        } else {
+          // Wait for more audio from producer
+          futureReady = Completer<void>();
+          await futureReady!.future;
+          collectReady();
+        }
+      }
+
+      await producerFuture; // ensure producer finishes cleanly
+    } catch (e) {
+      print('TTS streaming error: $e');
+    } finally {
+      _isSpeaking = false;
+      _isGenerating = false;
+      _generationProgress = 0.0;
+      _currentMessageId = null;
+      notifyListeners();
+
+      // Clean up temp files
+      _cleanupFiles(tempFiles);
+    }
+  }
+
+  /// Generate audio for the given text and return the WAV file without playing.
+  /// Used by the web server to stream audio to the browser.
+  Future<File?> generateAudioFile(String text, {String? voiceKey}) async {
+    if (!_storageService.ttsEnabled) return null;
+
+    final voice = (voiceKey != null && voiceKey.isNotEmpty)
+        ? voiceKey
+        : _storageService.ttsVoiceModel;
+    if (voice.isEmpty) return null;
+
+    final sanitized = _sanitizeText(text);
+    if (sanitized.trim().isEmpty) return null;
+
+    if (_isPiperEngine) {
+      final modelPath = await _voiceManager.getVoiceModelPath(voice);
+      if (!File(modelPath).existsSync()) return null;
+    }
+
+    try {
+      if (_storageService.ttsEngine == 'kokoro') {
+        final ready = await activeEngine.ensureModelReady(onProgress: (_) {});
+        if (!ready) return null;
+      }
+
+      final sentences = _splitSentences(sanitized);
+      final wavFiles = <File>[];
+
+      if (_isPiperEngine) {
+        for (int i = 0; i < sentences.length; i++) {
+          final modelPath = await _voiceManager.getVoiceModelPath(voice);
+          final wav = await _generatePiperWav(sentences[i], modelPath, i);
+          if (wav == null) break;
+          wavFiles.add(wav);
+        }
+      } else {
+        final engine = activeEngine;
+        final speed = _storageService.ttsSpeechRate;
+        final maxConcurrency = _storageService.ttsConcurrency;
+
+        for (int batchStart = 0; batchStart < sentences.length; batchStart += maxConcurrency) {
+          final batchEnd = (batchStart + maxConcurrency).clamp(0, sentences.length);
+          final futures = <Future<File?>>[];
+          for (int i = batchStart; i < batchEnd; i++) {
+            futures.add(engine.generateAudio(sentences[i], voice, speed));
+          }
+          final results = await Future.wait(futures);
+          bool failed = false;
+          for (final result in results) {
+            if (result == null) { failed = true; break; }
+            wavFiles.add(result);
+          }
+          if (failed) break;
+        }
+      }
+
+      if (wavFiles.isEmpty) return null;
+
+      final combinedWav = await _concatenateWavFiles(wavFiles);
+      _cleanupFiles(wavFiles);
+      return combinedWav;
+    } catch (e) {
+      print('TTS generateAudioFile error: $e');
+      return null;
+    }
+  }
+
   /// Stop any active speech.
   Future<void> stop() async {
     _isSpeaking = false;

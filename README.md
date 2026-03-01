@@ -1,6 +1,6 @@
 # Front Porch AI
 
-![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)
 ![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![Stable](https://img.shields.io/badge/Status-Stable-brightgreen)
@@ -22,19 +22,40 @@ Have questions, feedback, or just want to hang out? Connect with us:
 
 Proprietary software lives and dies at the discretion of its creators. When a company moves on, shuts down, or simply loses interest, the tools you depend on become frozen in time — no updates, no fixes, no future.
 
-Front Porch AI is proudly licensed under the **GPL v3** because we believe your tools should belong to the community that uses them. If this project is ever abandoned, anyone can fork it, improve it, and keep it alive. Open source isn't just a license — it's a promise that the software will always have a future.
+Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero General Public License v3 (AGPL-3.0)**. With the addition of a full-featured web UI, the app can now be accessed over a network — and the AGPL ensures that anyone who hosts a modified version as a service must share their changes with their users. This keeps the project truly open, even in a world of cloud-hosted forks.
+
+> **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
 
-## 🆕 What's New in V0.8.1
+## 🆕 What's New in V0.9.0
+
+- 🌐 **Full-Featured Web UI**: Access Front Porch AI from any device on your local network. A complete browser-based interface served directly from the desktop app — no separate server needed. Includes chat, characters, group chat, cloud sync, settings, and more — full parity with the desktop experience.
+- 🎨 **AI Image Generation**: Generate images directly from your chat using your existing API provider (Nano-GPT, OpenRouter, or any OpenAI-compatible endpoint).
+  - **6 Generation Modes**: Visualize Scene, From Last Message, Character Portrait, Chat Background, User Avatar, and Custom Prompt.
+  - **Smart Prompts**: The active LLM automatically crafts optimized image prompts from your chat context — no prompt engineering needed.
+  - **6 Art Styles**: Photorealistic, Anime, Fantasy Art, Oil Painting, Digital Art, and Watercolor.
+  - **Auto-Save**: Generated images are saved to disk and can be viewed in a full-screen lightbox.
+- 📞 **Voice Call Mode**: Have a hands-free voice conversation with any character. Full-duplex call loop: listen → transcribe → send → TTS → listen.
+  - **Waveform Visualization**: Real-time microphone amplitude displayed as an animated waveform during calls.
+  - **Call Controls**: Mute/unmute and end call buttons with a live call timer.
+  - **Auto-Resume**: Automatically resumes listening after TTS finishes speaking.
+- 🎙️ **Push-to-Talk (Whisper STT)**: Hold-to-record voice input powered by Faster Whisper. Supports Tiny, Base, and Small models with microphone device selection.
+- 📖 **Chat Summary**: Automatic rolling summary of the conversation, injected into context so the AI remembers earlier events even after they scroll out of the context window. Pause, edit, or regenerate summaries on demand.
+- 📱 **Device Identification**: The desktop app now identifies connected web clients by browser and OS (e.g., "Firefox on Linux") instead of showing "Unknown".
+- 🎛️ **Extended Max Output Tokens**: Increased from 2,048 to 16,384 to support thinking models where reasoning tokens count toward the limit.
+- 🛡️ **Pre-Release Safety**: Beta builds use a separate database (`front_porch_beta.db`) and disable cloud sync to prevent schema conflicts with stable releases.
+- 📄 **License Change**: Switched from GPLv3 to **AGPL-3.0** to ensure that anyone hosting a modified version as a network service must share their changes. Versions 0.8.x and earlier remain GPLv3.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.8.1
 
 - 🐛 **Bug Fixes**:
   - Fixed custom installation directory breaking the 0.8.0 database — the DB, character PNGs, and all data files now correctly follow the user-configured install path
   - Changing install directory in Settings now properly relocates all data (database, characters, chats, worlds, models) to the new location and cleans up the old directory
   - Fixed data migration from 0.7.2 JSON format failing when a custom install directory was set — character and folder migrations now respect the custom path
   - Legacy JSON files from pre-0.8.0 (chat sessions, group chats, worlds, folder config) are now automatically cleaned up after migration
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.8.0
 
@@ -175,6 +196,7 @@ Front Porch AI stands on the shoulders of incredible open-source projects. This 
 | Project | What It Does | Link |
 |---|---|---|
 | **KoboldCpp** | The local LLM backend that powers all text generation. A single-file, high-performance inference engine supporting GGUF models with GPU acceleration. | [GitHub](https://github.com/LostRuins/koboldcpp) |
+| **Faster Whisper** | Speech-to-text engine powering push-to-talk and voice call mode. A fast, CTranslate2-based reimplementation of OpenAI Whisper. | [GitHub](https://github.com/SYSTRAN/faster-whisper) |
 | **Kokoro** | Our default text-to-speech engine. Beautiful, natural-sounding voices that run entirely offline using ONNX. | [GitHub](https://github.com/hexgrad/kokoro) |
 | **Piper** | Fallback TTS engine. Fast, lightweight, and privacy-respecting local speech synthesis. | [GitHub](https://github.com/rhasspy/piper) |
 
@@ -385,7 +407,9 @@ Front Porch AI does not collect, store, or transmit any personal data. See our f
 
 ## 📄 License
 
-This project is licensed under the **GPLv3 License** - see the [LICENSE](LICENSE) file for details.
+**v0.9.0 and later:** Licensed under the **GNU Affero General Public License v3 (AGPL-3.0)** — see the [LICENSE](LICENSE) file for details.
+
+**v0.8.x and earlier:** Licensed under the **GNU General Public License v3 (GPL-3.0)**.
 
 ---
 *Built with 💙 using [Flutter](https://flutter.dev).*

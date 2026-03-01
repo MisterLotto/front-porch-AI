@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import 'package:front_porch_ai/app_version.dart';
 
 part 'database.g.dart';
 
@@ -48,6 +50,8 @@ class Sessions extends Table {
   TextColumn get description => text().nullable()();
   TextColumn get authorNote => text().withDefault(const Constant(''))();
   IntColumn get authorNoteDepth => integer().withDefault(const Constant(4))();
+  TextColumn get summary => text().nullable()(); // rolling chat summary
+  IntColumn get summaryLastIndex => integer().nullable()(); // message index at last summary update
   TextColumn get parentSession => text().nullable()();
   IntColumn get forkIndex => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -156,13 +160,32 @@ class AppDatabase extends _$AppDatabase {
   static String? _dbPath;
 
   /// Singleton access. Call [AppDatabase.instance()] to get the shared database.
+  ///
+  /// Pre-release builds (alpha/beta/rc/dev) automatically use a separate
+  /// `front_porch_beta.db` to protect the production database from schema
+  /// changes that may be incompatible with the stable release.
   static Future<AppDatabase> instance() async {
     if (_instance != null) return _instance!;
     final prefs = await SharedPreferences.getInstance();
     final rootPath = prefs.getString('root_path');
     final basePath = rootPath ?? (await getApplicationDocumentsDirectory()).path;
-    final file = File(p.join(basePath, 'KoboldManager', 'front_porch.db'));
+    final dbDir = p.join(basePath, 'KoboldManager');
+
+    // Choose database filename based on release type
+    final dbName = isPreRelease ? 'front_porch_beta.db' : 'front_porch.db';
+    final file = File(p.join(dbDir, dbName));
     await file.parent.create(recursive: true);
+
+    // For pre-release: if no beta DB exists yet, copy the production DB
+    // so users get all their data without modifying the stable database.
+    if (isPreRelease && !file.existsSync()) {
+      final prodFile = File(p.join(dbDir, 'front_porch.db'));
+      if (prodFile.existsSync()) {
+        debugPrint('[DB] Pre-release build — copying production DB to beta DB');
+        await prodFile.copy(file.path);
+      }
+    }
+
     _dbPath = file.path;
     _instance = AppDatabase._internal(NativeDatabase.createInBackground(file));
     return _instance!;
@@ -193,7 +216,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -225,6 +248,11 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         // v2→v3: migrate int PKs to text UUIDs, add updatedAt/deletedAt
         await _migrateToUuids();
+      }
+      if (from < 4) {
+        // v3→v4: add summary columns to sessions
+        await customStatement('ALTER TABLE sessions ADD COLUMN summary TEXT');
+        await customStatement('ALTER TABLE sessions ADD COLUMN summary_last_index INTEGER');
       }
     },
   );

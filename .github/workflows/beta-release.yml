@@ -1,9 +1,12 @@
-name: Beta Release (Standalone Only)
+name: Pre-Release (Standalone Only)
 
 on:
   push:
     tags:
+      - '*alpha*'
       - '*beta*'
+      - '*rc*'
+      - '*dev*'
   workflow_dispatch:
 
 permissions:
@@ -11,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    name: Build Beta Release
+    name: Build Pre-Release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -104,7 +107,7 @@ jobs:
 
           # Install TTS dependencies + PyInstaller
           pip install --upgrade pip
-          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate
+          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper
 
           # Build Kokoro TTS as a standalone directory bundle
           echo "Building Kokoro TTS binary..."
@@ -146,6 +149,24 @@ jobs:
             --noconfirm
           echo "Piper built at: $DEST/piper/"
 
+          # Build Whisper STT as a standalone directory bundle
+          echo "Building Whisper STT binary..."
+          STT_DEST="${{ matrix.build_path }}"
+          pyinstaller whisper_stt.py \
+            --onedir \
+            --name whisper_stt \
+            --collect-all faster_whisper \
+            --hidden-import faster_whisper \
+            --hidden-import ctranslate2 \
+            --hidden-import huggingface_hub \
+            --hidden-import tokenizers \
+            --distpath "$STT_DEST" \
+            --workpath ./build_tmp/whisper \
+            --specpath ./build_tmp/whisper \
+            --clean \
+            --noconfirm
+          echo "Whisper STT built at: $STT_DEST/whisper_stt/"
+
           # For macOS, copy into the app bundle Resources
           if [ "${{ matrix.platform }}" = "macos" ]; then
             APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app 2>/dev/null | head -1)
@@ -156,11 +177,18 @@ jobs:
               cp -R "$DEST/piper" "$RESOURCES/piper"
               chmod +x "$RESOURCES/kokoro_tts/kokoro_tts"
               chmod +x "$RESOURCES/piper/piper"
+
+              STT_RESOURCES="$APP_NAME/Contents/Resources/whisper_stt"
+              mkdir -p "$STT_RESOURCES"
+              cp -R "$STT_DEST/whisper_stt/"* "$STT_RESOURCES/"
+              chmod +x "$STT_RESOURCES/whisper_stt"
             fi
           fi
 
           echo "TTS engines bundled at: $DEST"
           ls -la "$DEST"
+          echo "STT engine bundled at: $STT_DEST/whisper_stt/"
+          ls -la "$STT_DEST/whisper_stt/"
 
       # ── Standalone packaging only — no installers, no DMG, no deb/rpm ──
 
@@ -245,6 +273,6 @@ jobs:
             Front_Porch_AI-Linux.AppImage
           generate_release_notes: true
           prerelease: true
-          name: "${{ github.ref_name }} (Beta)"
+          name: "${{ github.ref_name }} (Pre-Release)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

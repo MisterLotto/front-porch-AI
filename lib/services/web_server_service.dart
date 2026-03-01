@@ -1,0 +1,2490 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:uuid/uuid.dart';
+
+import 'package:flutter/foundation.dart';
+import 'package:shelf/shelf.dart' as shelf;
+import 'package:shelf/shelf_io.dart' as shelf_io;
+import 'package:shelf_router/shelf_router.dart';
+
+import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/web_chat_bridge.dart';
+import 'package:front_porch_ai/services/llm_provider.dart';
+import 'package:front_porch_ai/services/folder_service.dart';
+import 'package:front_porch_ai/services/tts_service.dart';
+import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/services/byaf_service.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/models/group_chat.dart';
+import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/cloud_sync_service.dart';
+import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
+import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
+import 'package:front_porch_ai/services/backup_service.dart';
+import 'package:path/path.dart' as p;
+import 'package:front_porch_ai/database/database.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:front_porch_ai/app_version.dart';
+
+/// Embedded HTTP server that serves the web UI and REST API.
+///
+/// When a remote client connects (any authenticated API request),
+/// [hasActiveClient] is set to `true`, which causes the Flutter desktop
+/// app to display a lock overlay.
+class WebServerService extends ChangeNotifier {
+  final StorageService _storageService;
+  ChatService? _chatService;
+  CharacterRepository? _characterRepository;
+  AppDatabase? _db;
+  WebChatBridge? _chatBridge;
+  LLMProvider? _llmProvider;
+  FolderService? _folderService;
+  TtsService? _ttsService;
+  UserPersonaService? _userPersonaService;
+  GroupChatRepository? _groupChatRepository;
+  CloudSyncService? _cloudSyncService;
+
+  HttpServer? _server;
+  bool _isRunning = false;
+  bool _hasActiveClient = false;
+  String? _lanIp;
+  String? _connectedClientIp;
+  String? _connectedClientInfo;
+
+  // ── Session-token auth ──
+  final Map<String, DateTime> _activeSessions = {};
+
+  bool get isRunning => _isRunning;
+  bool get hasActiveClient => _hasActiveClient;
+  String? get lanIp => _lanIp;
+  int get port => _storageService.webServerPort;
+  String? get connectedClientIp => _connectedClientIp;
+  String? get connectedClientInfo => _connectedClientInfo;
+
+  WebServerService(this._storageService) {
+    _detectLanIp();
+  }
+
+  /// Inject dependencies that aren't available at construction time.
+  void setChatService(ChatService service) => _chatService = service;
+  void setCharacterRepository(CharacterRepository repo) => _characterRepository = repo;
+  void setDatabase(AppDatabase db) => _db = db;
+  void setChatBridge(WebChatBridge bridge) => _chatBridge = bridge;
+  void setLLMProvider(LLMProvider provider) => _llmProvider = provider;
+  void setFolderService(FolderService fs) => _folderService = fs;
+  void setTtsService(TtsService tts) => _ttsService = tts;
+  void setUserPersonaService(UserPersonaService ups) => _userPersonaService = ups;
+  void setGroupChatRepository(GroupChatRepository gcr) => _groupChatRepository = gcr;
+  void setCloudSyncService(CloudSyncService css) => _cloudSyncService = css;
+
+  // ─────────────────────────────────────────────────────────────────────
+  // LAN IP detection
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<void> _detectLanIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+        includeLoopback: false,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (addr.address.startsWith('192.168.') ||
+              addr.address.startsWith('10.') ||
+              addr.address.startsWith('172.')) {
+            _lanIp = addr.address;
+            notifyListeners();
+            return;
+          }
+        }
+      }
+      if (interfaces.isNotEmpty && interfaces.first.addresses.isNotEmpty) {
+        _lanIp = interfaces.first.addresses.first.address;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[WebServer] Failed to detect LAN IP: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Server lifecycle
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<void> start([int? portOverride]) async {
+    if (_isRunning) return;
+
+    // Ensure a PIN is set — auto-generate if empty
+    if (_storageService.webServerPin.isEmpty) {
+      final pin = _generatePin();
+      await _storageService.setWebServerPin(pin);
+      debugPrint('[WebServer] Auto-generated PIN: $pin');
+    }
+
+    final bindPort = portOverride ?? _storageService.webServerPort;
+    final router = Router();
+
+    // ── Auth routes (no auth required) ──
+    router.post('/api/auth/login', _handleLogin);
+    router.post('/api/auth/logout', _handleLogout);
+
+    // ── Health check (no auth required) ──
+    router.get('/api/health', _handleHealth);
+
+    // ── Disconnect endpoint ──
+    router.post('/api/disconnect', _handleDisconnect);
+
+    // ── Character routes ──
+    router.get('/api/characters', _handleGetCharacters);
+    router.get('/api/characters/<id>/avatar', _handleGetAvatar);
+    router.get('/api/characters/<id>/sessions', _handleGetSessions);
+    router.get('/api/characters/<id>/detail', _handleGetCharacterDetail);
+    router.post('/api/characters/<id>/edit', _handleEditCharacter);
+    router.post('/api/characters/<id>/delete', _handleDeleteCharacter);
+    router.post('/api/characters/import', _handleImportCharacter);
+
+    // ── Chat routes ──
+    router.get('/api/chat/state', _handleGetChatState);
+    router.post('/api/chat/author-note', _handleSetAuthorNote);
+    router.post('/api/chat/select', _handleChatSelect);
+    router.post('/api/chat/send', _handleChatSend);
+    router.post('/api/chat/stop', _handleChatStop);
+    router.post('/api/chat/regenerate', _handleChatRegenerate);
+    router.post('/api/chat/session', _handleChatSession);
+    router.post('/api/chat/swipe', _handleChatSwipe);
+    router.post('/api/chat/continue', _handleChatContinue);
+    router.post('/api/chat/edit', _handleChatEdit);
+    router.post('/api/chat/delete', _handleChatDelete);
+    router.post('/api/chat/impersonate', _handleChatImpersonate);
+    router.post('/api/chat/cycle-greeting', _handleChatCycleGreeting);
+    router.post('/api/chat/fork', _handleChatFork);
+    router.post('/api/chat/session/delete', _handleDeleteSession);
+    router.get('/api/chat/stream', _handleChatStream);
+    router.get('/api/chat/summary', _handleGetSummary);
+    router.post('/api/chat/summary', _handleSetSummary);
+    router.post('/api/chat/summary/pause', _handleSummaryPause);
+    router.post('/api/chat/summary/regenerate', _handleSummaryRegenerate);
+
+    // ── TTS routes ──
+    router.post('/api/tts/speak', _handleTtsSpeak);
+
+    // ── Settings routes ──
+    router.get('/api/settings', _handleGetSettings);
+    router.post('/api/settings', _handleSetSettings);
+
+    // ── Persona routes ──
+    router.get('/api/personas', _handleGetPersonas);
+    router.post('/api/personas/active', _handleSetActivePersona);
+    router.post('/api/personas', _handleCreatePersona);
+    router.post('/api/personas/update', _handleUpdatePersona);
+    router.post('/api/personas/delete', _handleDeletePersona);
+
+    // ── Character creation routes ──
+    router.post('/api/characters/create', _handleCreateCharacter);
+
+    // ── Model routes ──
+    router.get('/api/models/list', _handleGetModelList);
+    router.post('/api/models/test-connection', _handleTestConnection);
+
+    // ── World routes ──
+    router.get('/api/worlds', _handleGetWorlds);
+    router.post('/api/worlds', _handleCreateWorld);
+    router.post('/api/worlds/update', _handleUpdateWorld);
+    router.post('/api/worlds/delete', _handleDeleteWorld);
+
+    // ── Group chat routes ──
+    router.get('/api/groups', _handleGetGroups);
+    router.post('/api/groups/create', _handleCreateGroup);
+    router.post('/api/groups/update', _handleUpdateGroup);
+    router.post('/api/groups/delete', _handleDeleteGroup);
+    router.post('/api/groups/select', _handleSelectGroup);
+
+    // ── AI generation route ──
+    router.post('/api/generate', _handleGenerate);
+
+    // ── Cloud sync routes ──
+    router.get('/api/sync/status', _handleGetSyncStatus);
+    router.post('/api/sync/config', _handleSetSyncConfig);
+    router.post('/api/sync/test', _handleSyncTestConnection);
+    router.post('/api/sync/now', _handleSyncNow);
+    router.post('/api/sync/force-upload', _handleSyncForceUpload);
+    router.post('/api/sync/purge', _handleSyncPurge);
+    router.get('/api/sync/cloud-characters', _handleListCloudCharacters);
+    router.post('/api/sync/download-characters', _handleDownloadCloudCharacters);
+
+    // ── Backup routes ──
+    router.get('/api/backups', _handleGetBackups);
+    router.post('/api/backups/create', _handleCreateBackup);
+    router.post('/api/backups/restore', _handleRestoreBackup);
+    router.post('/api/backups/delete', _handleDeleteBackup);
+
+    // ── Folder routes ──
+    router.get('/api/folders', _handleGetFolders);
+    router.post('/api/folders/create', _handleCreateFolder);
+    router.post('/api/folders/rename', _handleRenameFolder);
+    router.post('/api/folders/delete', _handleDeleteFolder);
+    router.post('/api/folders/add-character', _handleAddCharToFolder);
+    router.post('/api/folders/remove-character', _handleRemoveCharFromFolder);
+
+    // ── Static web assets ──
+    router.get('/', (shelf.Request request) => _serveWebAsset('index.html'));
+    router.get('/css/<file|.*>', (shelf.Request request, String file) =>
+        _serveWebAsset('css/$file'));
+    router.get('/js/<file|.*>', (shelf.Request request, String file) =>
+        _serveWebAsset('js/$file'));
+    router.get('/img/<file|.*>', (shelf.Request request, String file) =>
+        _serveWebAsset('img/$file'));
+
+    final handler = const shelf.Pipeline()
+        .addMiddleware(_corsMiddleware())
+        .addMiddleware(_authMiddleware())
+        .addMiddleware(_clientTrackingMiddleware())
+        .addHandler(router.call);
+
+    try {
+      _server = await shelf_io.serve(handler, '0.0.0.0', bindPort);
+      _server!.autoCompress = true;
+      _isRunning = true;
+      debugPrint('[WebServer] Listening on http://0.0.0.0:$bindPort');
+      debugPrint('[WebServer] LAN access: http://$_lanIp:$bindPort');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[WebServer] Failed to start: $e');
+      _isRunning = false;
+      notifyListeners();
+    }
+  }
+
+  /// Generate a random 6-digit PIN.
+  String _generatePin() {
+    final rng = Random.secure();
+    return (100000 + rng.nextInt(900000)).toString();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Auth middleware & handlers
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Middleware that enforces Bearer-token auth on all /api/* routes
+  /// except health and auth/login, and all static asset routes.
+  shelf.Middleware _authMiddleware() {
+    return (shelf.Handler innerHandler) {
+      return (shelf.Request request) async {
+        final path = request.url.path;
+
+        // Allow static assets, health, and login without auth
+        if (!path.startsWith('api/') ||
+            path == 'api/health' ||
+            path == 'api/auth/login') {
+          return innerHandler(request);
+        }
+
+        // Check Authorization header
+        final authHeader = request.headers['authorization'];
+        String? tokenValue;
+
+        if (authHeader != null && authHeader.startsWith('Bearer ')) {
+          tokenValue = authHeader.substring(7);
+        } else {
+          // Fallback: check query parameter (for <img> tags, SSE, etc.)
+          tokenValue = request.url.queryParameters['token'];
+        }
+
+        if (tokenValue == null || !_activeSessions.containsKey(tokenValue)) {
+          return shelf.Response(401,
+            body: jsonEncode({'error': 'Authentication required'}),
+            headers: {'Content-Type': 'application/json'},
+          );
+        }
+
+        // Update last-activity timestamp
+        _activeSessions[tokenValue] = DateTime.now();
+        return innerHandler(request);
+      };
+    };
+  }
+
+  /// POST /api/auth/login — validate PIN, return session token.
+  Future<shelf.Response> _handleLogin(shelf.Request request) async {
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final pin = body['pin']?.toString() ?? '';
+
+      if (pin.isEmpty || pin != _storageService.webServerPin) {
+        return shelf.Response(401,
+          body: jsonEncode({'error': 'Invalid PIN'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      // Generate session token
+      final token = _generateSessionToken();
+      _activeSessions[token] = DateTime.now();
+
+      debugPrint('[WebServer] Client authenticated, token issued');
+      return shelf.Response.ok(
+        jsonEncode({'token': token, 'version': appVersion}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return shelf.Response(400,
+        body: jsonEncode({'error': 'Invalid request body'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
+  /// POST /api/auth/logout — invalidate session token.
+  Future<shelf.Response> _handleLogout(shelf.Request request) async {
+    final authHeader = request.headers['authorization'];
+    if (authHeader != null && authHeader.startsWith('Bearer ')) {
+      _activeSessions.remove(authHeader.substring(7));
+    }
+    return shelf.Response.ok(
+      jsonEncode({'status': 'logged_out'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  String _generateSessionToken() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(32, (_) => rng.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Core route handlers
+  // ─────────────────────────────────────────────────────────────────────
+
+  shelf.Response _handleHealth(shelf.Request request) {
+    return shelf.Response.ok(
+      jsonEncode({
+        'status': 'ok',
+        'version': appVersion,
+        'hasActiveClient': _hasActiveClient,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  shelf.Response _handleDisconnect(shelf.Request request) {
+    disconnectClient();
+    return shelf.Response.ok(
+      jsonEncode({'status': 'disconnected'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Character API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetCharacters(shelf.Request request) async {
+    if (_db == null) {
+      return _errorResponse(503, 'Database not available');
+    }
+
+    try {
+      final query = request.url.queryParameters;
+      final searchTerm = query['search']?.toLowerCase();
+      final folderId = query['folder'];
+
+      var characters = await _db!.getAllCharacters();
+
+      // Apply search filter (bypasses folder filtering)
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        characters = characters.where((c) {
+          if (c.name.toLowerCase().contains(searchTerm)) return true;
+          final tags = _tryParseJsonList(c.tags);
+          if (tags.any((t) => t.toString().toLowerCase().contains(searchTerm))) return true;
+          return false;
+        }).toList();
+      } else {
+        // Apply folder filter (only when not searching)
+        if (folderId != null && folderId.isNotEmpty && _folderService != null) {
+          // Use FolderService (same as desktop app) to find characters in folder
+          final folderFilenames = _folderService!.getCharactersInFolder(folderId);
+          characters = characters.where((c) =>
+            c.imagePath != null && folderFilenames.contains(_basename(c.imagePath!))
+          ).toList();
+        } else if (folderId == null || folderId.isEmpty) {
+          // Top level: show characters not in any folder
+          if (_folderService != null) {
+            final folderedPaths = _folderService!.getUnfolderedCharacterPaths();
+            characters = characters.where((c) =>
+              c.imagePath == null || !folderedPaths.contains(_basename(c.imagePath!))
+            ).toList();
+          }
+        }
+      }
+
+      // Apply sort
+      final sortMode = query['sort'] ?? 'name';
+      switch (sortMode) {
+        case 'name':
+          characters.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          break;
+        case 'recent':
+          // reversed so newest first — sort by updatedAt or leave as-is
+          characters = characters.reversed.toList();
+          break;
+      }
+
+      final result = characters.map((c) => {
+        'id': c.id,
+        'charId': c.imagePath != null ? p.basenameWithoutExtension(c.imagePath!) : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_'),
+        'name': c.name,
+        'description': c.description ?? '',
+        'scenario': c.scenario ?? '',
+        'personality': c.personality ?? '',
+        'tags': _tryParseJsonList(c.tags),
+        'hasAvatar': c.imagePath != null && c.imagePath!.isNotEmpty,
+        'folderId': c.folderId ?? '',
+      }).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch characters: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleGetAvatar(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final character = await _db!.getCharacterById(id);
+      if (character.imagePath == null || character.imagePath!.isEmpty) {
+        return shelf.Response.notFound('No avatar');
+      }
+
+      final file = File(character.imagePath!);
+      if (!file.existsSync()) {
+        return shelf.Response.notFound('Avatar file not found');
+      }
+
+      return shelf.Response.ok(
+        file.readAsBytesSync(),
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=3600',
+        },
+      );
+    } catch (e) {
+      return shelf.Response.notFound('Character not found');
+    }
+  }
+
+  Future<shelf.Response> _handleGetSessions(shelf.Request request, String id) async {
+    if (_db == null || _chatService == null) {
+      return _errorResponse(503, 'Service not available');
+    }
+
+    try {
+      final sessions = await _db!.getSessionsForCharacter(id);
+      final result = <Map<String, dynamic>>[];
+
+      for (final s in sessions) {
+        final msgs = await _db!.getMessagesForSession(s.id);
+        String preview = s.name ?? 'New Conversation';
+        if (s.name == null && msgs.length > 1) {
+          try {
+            final swipes = List<String>.from(jsonDecode(msgs[1].swipes));
+            preview = swipes.isNotEmpty ? swipes[msgs[1].swipeIndex] : '';
+            if (preview.length > 80) preview = '${preview.substring(0, 80)}...';
+          } catch (_) {}
+        }
+
+        result.add({
+          'id': s.id,
+          'name': s.name,
+          'preview': preview,
+          'messageCount': msgs.length,
+          'createdAt': s.createdAt.toIso8601String(),
+          'updatedAt': s.updatedAt.toIso8601String(),
+        });
+      }
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch sessions: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleGetCharacterDetail(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final c = await _db!.getCharacterById(id);
+      List<dynamic> altGreetings = [];
+      try { altGreetings = jsonDecode(c.alternateGreetings); } catch (_) {}
+      List<dynamic> tags = [];
+      try { tags = jsonDecode(c.tags); } catch (_) {}
+      List<dynamic> worldNames = [];
+      try { worldNames = jsonDecode(c.worldNames); } catch (_) {}
+      Map<String, dynamic>? lorebook;
+      if (c.lorebook != null) {
+        try { lorebook = jsonDecode(c.lorebook!); } catch (_) {}
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({
+          'id': c.id,
+          'name': c.name,
+          'description': c.description,
+          'personality': c.personality,
+          'scenario': c.scenario,
+          'firstMessage': c.firstMessage,
+          'mesExample': c.mesExample,
+          'systemPrompt': c.systemPrompt,
+          'postHistoryInstructions': c.postHistoryInstructions,
+          'alternateGreetings': altGreetings,
+          'tags': tags,
+          'worldNames': worldNames,
+          'lorebook': lorebook,
+          'ttsVoice': c.ttsVoice,
+          'imagePath': c.imagePath,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to get character: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleEditCharacter(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final character = await _db!.getCharacterById(id);
+
+      final companion = CharactersCompanion(
+        id: Value(character.id),
+        name: Value(body['name']?.toString() ?? character.name),
+        description: Value(body['description']?.toString() ?? character.description),
+        scenario: Value(body['scenario']?.toString() ?? character.scenario),
+        personality: Value(body['personality']?.toString() ?? character.personality),
+        firstMessage: Value(body['firstMessage']?.toString() ?? character.firstMessage),
+        mesExample: Value(body['mesExample']?.toString() ?? character.mesExample),
+        systemPrompt: Value(body['systemPrompt']?.toString() ?? character.systemPrompt),
+        postHistoryInstructions: Value(body['postHistoryInstructions']?.toString() ?? character.postHistoryInstructions),
+        alternateGreetings: Value(body.containsKey('alternateGreetings') ? jsonEncode(body['alternateGreetings']) : character.alternateGreetings),
+        tags: Value(body.containsKey('tags') ? jsonEncode(body['tags']) : character.tags),
+        imagePath: Value(character.imagePath),
+        ttsVoice: Value(character.ttsVoice),
+        folderId: Value(character.folderId),
+        lorebook: Value(body.containsKey('lorebook') ? jsonEncode(body['lorebook']) : character.lorebook),
+        worldNames: Value(body.containsKey('worldNames') ? jsonEncode(body['worldNames']) : character.worldNames),
+        createdAt: Value(character.createdAt),
+        updatedAt: Value(DateTime.now()),
+      );
+
+      await _db!.updateCharacter(companion);
+
+      // Also update the in-memory character in the repository
+      if (_characterRepository != null) {
+        await _characterRepository!.loadCharacters();
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to update character: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Chat API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetChatState(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    final chat = _chatService!;
+    final activeChar = chat.activeCharacter;
+
+    final messagesJson = chat.messages.asMap().entries.map((entry) {
+      final i = entry.key;
+      final m = entry.value;
+      return {
+        'index': i,
+        'sender': m.sender,
+        'text': m.displayText,
+        'isUser': m.isUser,
+        'hasThinking': m.hasThinking,
+        'thinkingContent': m.thinkingContent,
+        'thinkingDurationMs': m.thinkingDurationMs,
+        'swipeCount': m.swipes.length,
+        'swipeIndex': m.swipeIndex,
+        'characterId': m.characterId,
+      };
+    }).toList();
+
+    // Greeting info for first message cycling
+    int greetingIndex = chat.greetingIndex;
+    int totalGreetings = 1;
+    if (activeChar != null) {
+      totalGreetings = activeChar.allGreetings.length;
+    }
+
+    // Active persona name for {{user}} replacement
+    String userPersonaName = 'User';
+    if (_userPersonaService != null) {
+      userPersonaName = _userPersonaService!.persona.name;
+    }
+
+    return shelf.Response.ok(
+      jsonEncode({
+        'character': activeChar != null ? {
+          'name': activeChar.name,
+          'id': activeChar.dbId,
+        } : null,
+        'sessionId': chat.currentSessionId,
+        'sessionName': chat.sessionName,
+        'messages': messagesJson,
+        'isGenerating': chat.isGenerating,
+        'isGroupMode': chat.isGroupMode,
+        'tokensPerSecond': chat.tokensPerSecond,
+        'tokensGenerated': chat.tokensGenerated,
+        'authorNote': chat.authorNote,
+        'authorNoteDepth': chat.authorNoteStrength,
+        'summary': chat.summary,
+        'summaryLastIndex': chat.summaryLastIndex,
+        'summaryPaused': chat.summaryPaused,
+        'isSummaryGenerating': chat.isSummaryGenerating,
+        'greetingIndex': greetingIndex,
+        'totalGreetings': totalGreetings,
+        'userPersonaName': userPersonaName,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<shelf.Response> _handleSetAuthorNote(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final note = body['authorNote']?.toString() ?? '';
+      final strength = body['strength'] is int ? body['strength'] as int : null;
+      _chatService!.setAuthorNote(note, strength: strength);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to set author note: $e');
+    }
+  }
+
+  // ── Summary API ──
+
+  Future<shelf.Response> _handleGetSummary(shelf.Request request) async {
+    if (_chatService == null) return _errorResponse(503, 'Chat service not available');
+    return shelf.Response.ok(
+      jsonEncode({
+        'summary': _chatService!.summary,
+        'summaryLastIndex': _chatService!.summaryLastIndex,
+        'paused': _chatService!.summaryPaused,
+        'isGenerating': _chatService!.isSummaryGenerating,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<shelf.Response> _handleSetSummary(shelf.Request request) async {
+    if (_chatService == null) return _errorResponse(503, 'Chat service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final summary = body['summary']?.toString() ?? '';
+      _chatService!.setSummary(summary);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to set summary: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSummaryPause(shelf.Request request) async {
+    if (_chatService == null) return _errorResponse(503, 'Chat service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final paused = body['paused'] == true;
+      _chatService!.setSummaryPaused(paused);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'paused': paused}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to toggle summary pause: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSummaryRegenerate(shelf.Request request) async {
+    if (_chatService == null) return _errorResponse(503, 'Chat service not available');
+    try {
+      await _chatService!.forceSummaryUpdate();
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to regenerate summary: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatSelect(shelf.Request request) async {
+    if (_chatService == null || _characterRepository == null) {
+      return _errorResponse(503, 'Service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final characterId = body['characterId']?.toString();
+      if (characterId == null) {
+        return _errorResponse(400, 'characterId is required');
+      }
+
+      // Find the character card
+      final card = _characterRepository!.characters
+          .where((c) => c.dbId == characterId)
+          .firstOrNull;
+      if (card == null) {
+        return _errorResponse(404, 'Character not found');
+      }
+
+      await _chatService!.setActiveCharacter(card);
+
+      return shelf.Response.ok(
+        jsonEncode({
+          'status': 'ok',
+          'character': card.name,
+          'sessionId': _chatService!.currentSessionId,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to select character: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatSend(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final text = body['text']?.toString();
+      if (text == null || text.trim().isEmpty) {
+        return _errorResponse(400, 'text is required');
+      }
+
+      // sendMessage is fire-and-forget — it starts generation async
+      _chatService!.sendMessage(text);
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to send message: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatStop(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    _chatService!.stopGeneration();
+    return shelf.Response.ok(
+      jsonEncode({'status': 'ok'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<shelf.Response> _handleChatRegenerate(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    _chatService!.regenerateLastMessage();
+    return shelf.Response.ok(
+      jsonEncode({'status': 'ok'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<shelf.Response> _handleChatSession(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final sessionId = body['sessionId']?.toString();
+      final action = body['action']?.toString();
+
+      if (action == 'new') {
+        await _chatService!.startNewChat();
+      } else if (sessionId != null) {
+        await _chatService!.loadSession(sessionId);
+      } else {
+        return _errorResponse(400, 'sessionId or action is required');
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({
+          'status': 'ok',
+          'sessionId': _chatService!.currentSessionId,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to switch session: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatSwipe(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final messageIndex = body['messageIndex'] as int?;
+      final direction = body['direction'] as int?;
+
+      if (messageIndex == null || direction == null) {
+        return _errorResponse(400, 'messageIndex and direction are required');
+      }
+
+      _chatService!.swipeMessage(messageIndex, direction);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to swipe: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatContinue(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    _chatService!.continueGeneration();
+    return shelf.Response.ok(
+      jsonEncode({'status': 'ok'}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<shelf.Response> _handleChatEdit(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final index = body['index'] as int?;
+      final text = body['text']?.toString();
+
+      if (index == null || text == null) {
+        return _errorResponse(400, 'index and text are required');
+      }
+
+      _chatService!.editMessage(index, text);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to edit message: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatDelete(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final index = body['index'] as int?;
+
+      if (index == null) {
+        return _errorResponse(400, 'index is required');
+      }
+
+      _chatService!.deleteMessage(index);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete message: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatImpersonate(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final prefix = body['prefix']?.toString() ?? '';
+      String result = '';
+
+      await _chatService!.impersonateUser(
+        prefix: prefix,
+        onToken: (accumulated) {
+          result = accumulated;
+        },
+      );
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'text': result}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to impersonate: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatCycleGreeting(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final direction = body['direction'] as int? ?? 1;
+
+      await _chatService!.cycleGreeting(direction);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'greetingIndex': _chatService!.greetingIndex}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to cycle greeting: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleChatFork(shelf.Request request) async {
+    if (_chatService == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final index = body['index'] as int?;
+
+      if (index == null) {
+        return _errorResponse(400, 'index is required');
+      }
+
+      await _chatService!.forkFromMessage(index);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fork: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeleteSession(shelf.Request request) async {
+    if (_chatService == null || _db == null) {
+      return _errorResponse(503, 'Chat service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final sessionId = body['sessionId'] as String?;
+
+      if (sessionId == null || sessionId.isEmpty) {
+        return _errorResponse(400, 'sessionId is required');
+      }
+
+      // Delete the session
+      await _db!.deleteSessionById(sessionId);
+
+      // If it was the active session, start a new one
+      if (_chatService!.currentSessionId == sessionId) {
+        await _chatService!.startNewChat();
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete session: $e');
+    }
+  }
+
+  /// SSE streaming endpoint — pushes real-time token events to the web client.
+  shelf.Response _handleChatStream(shelf.Request request) {
+    if (_chatBridge == null) {
+      return _errorResponse(503, 'Chat bridge not available');
+    }
+
+    final sseStream = _chatBridge!.addClient();
+
+    return shelf.Response.ok(
+      sseStream,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      },
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // TTS API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleTtsSpeak(shelf.Request request) async {
+    if (_ttsService == null) {
+      return _errorResponse(503, 'TTS service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final text = body['text']?.toString();
+      String? voiceKey = body['voiceKey']?.toString();
+
+      if (text == null || text.isEmpty) {
+        return _errorResponse(400, 'text is required');
+      }
+
+      // If no voice key, try to use the active character's TTS voice
+      if ((voiceKey == null || voiceKey.isEmpty) && _chatService != null) {
+        final sender = body['sender']?.toString();
+        if (_chatService!.activeGroup != null && sender != null) {
+          final charMatch = _chatService!.groupCharacters
+              .where((c) => c.name == sender)
+              .firstOrNull;
+          voiceKey = charMatch?.ttsVoice;
+        } else {
+          voiceKey = _chatService!.activeCharacter?.ttsVoice;
+        }
+      }
+
+      final wavFile = await _ttsService!.generateAudioFile(text, voiceKey: voiceKey);
+      if (wavFile == null) {
+        return _errorResponse(500, 'Failed to generate audio. Check TTS configuration.');
+      }
+
+      final bytes = await wavFile.readAsBytes();
+      // Clean up the temp file after reading
+      try { await wavFile.delete(); } catch (_) {}
+
+      return shelf.Response.ok(
+        bytes,
+        headers: {
+          'Content-Type': 'audio/wav',
+          'Content-Length': bytes.length.toString(),
+        },
+      );
+    } catch (e) {
+      return _errorResponse(500, 'TTS failed: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Settings API
+  // ─────────────────────────────────────────────────────────────────────
+
+  shelf.Response _handleGetSettings(shelf.Request request) {
+    try {
+      final s = _storageService;
+      return shelf.Response.ok(
+        jsonEncode({
+          // General
+          'systemPrompt': s.systemPrompt,
+          'textScale': s.textScale,
+          // TTS
+          'ttsEnabled': s.ttsEnabled,
+          'ttsEngine': s.ttsEngine,
+          'ttsVoice': s.ttsVoiceModel,
+          'ttsSpeechRate': s.ttsSpeechRate,
+          'ttsAutoPlay': s.ttsAutoPlay,
+          'ttsConcurrency': s.ttsConcurrency,
+          'openaiTtsApiKey': s.openaiTtsApiKey.isNotEmpty ? '••••' : '',
+          'openaiTtsApiKeySet': s.openaiTtsApiKey.isNotEmpty,
+          'openaiTtsModel': s.openaiTtsModel,
+          // TTS available voices
+          'ttsVoices': _ttsService != null
+              ? _ttsService!.activeVoices.map((v) => {'id': v.id, 'name': v.name}).toList()
+              : [],
+          // Image Gen
+          'imageGenEnabled': s.imageGenEnabled,
+          'imageGenModel': s.imageGenModel,
+          // Samplers
+          'temperature': s.temperature,
+          'minP': s.minP,
+          'maxTokens': s.maxLength,
+          'minTokens': s.minLength,
+          'repetitionPenalty': s.repeatPenalty,
+          'repeatPenaltyTokens': s.repeatPenaltyTokens,
+          'xtcThreshold': s.xtcThreshold,
+          'xtcProbability': s.xtcProbability,
+          'contextSize': s.contextSize,
+          'dynamicTempEnabled': s.dynamicTempEnabled,
+          'dynamicTempRange': s.dynamicTempRange,
+          'stopSequences': s.stopSequences,
+          // Backend / API — prefer runtime values from LLMProvider
+          'activeBackend': s.backendType,
+          'apiKey': s.remoteApiKey.isNotEmpty ? '••••${s.remoteApiKey.length > 4 ? s.remoteApiKey.substring(s.remoteApiKey.length - 4) : ''}' : '',
+          'apiKeySet': s.remoteApiKey.isNotEmpty,
+          'apiModel': _llmProvider?.openRouterService.modelName.isNotEmpty == true
+              ? _llmProvider!.openRouterService.modelName
+              : s.remoteModelName,
+          'apiUrl': s.remoteApiUrl,
+          // Reasoning
+          'reasoningEnabled': s.reasoningEnabled,
+          'reasoningEffort': s.reasoningEffort,
+          // Web server
+          'webServerPort': s.webServerPort,
+          'webServerEnabled': s.webServerEnabled,
+          'webServerPin': s.webServerPin,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch settings: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSetSettings(shelf.Request request) async {
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final s = _storageService;
+
+      // General
+      if (body.containsKey('systemPrompt')) await s.setSystemPrompt(body['systemPrompt'].toString());
+      if (body.containsKey('textScale')) await s.setTextScale((body['textScale'] as num).toDouble());
+
+      // TTS
+      if (body.containsKey('ttsEnabled')) await s.setTtsEnabled(body['ttsEnabled'] as bool);
+      if (body.containsKey('ttsEngine')) await s.setTtsEngine(body['ttsEngine'].toString());
+      if (body.containsKey('ttsVoice')) await s.setTtsVoiceModel(body['ttsVoice'].toString());
+      if (body.containsKey('ttsSpeechRate')) await s.setTtsSpeechRate((body['ttsSpeechRate'] as num).toDouble());
+      if (body.containsKey('ttsAutoPlay')) await s.setTtsAutoPlay(body['ttsAutoPlay'] as bool);
+      if (body.containsKey('ttsConcurrency')) await s.setTtsConcurrency((body['ttsConcurrency'] as num).toInt());
+      if (body.containsKey('openaiTtsApiKey')) await s.setOpenaiTtsApiKey(body['openaiTtsApiKey'].toString());
+      if (body.containsKey('openaiTtsModel')) await s.setOpenaiTtsModel(body['openaiTtsModel'].toString());
+
+      // Image Gen
+      if (body.containsKey('imageGenEnabled')) await s.setImageGenEnabled(body['imageGenEnabled'] as bool);
+      if (body.containsKey('imageGenModel')) await s.setImageGenModel(body['imageGenModel'].toString());
+
+      // Samplers
+      if (body.containsKey('temperature')) await s.setTemperature((body['temperature'] as num).toDouble());
+      if (body.containsKey('minP')) await s.setMinP((body['minP'] as num).toDouble());
+      if (body.containsKey('maxTokens')) await s.setMaxLength((body['maxTokens'] as num).toInt());
+      if (body.containsKey('minTokens')) await s.setMinLength((body['minTokens'] as num).toInt());
+      if (body.containsKey('repetitionPenalty')) await s.setRepeatPenalty((body['repetitionPenalty'] as num).toDouble());
+      if (body.containsKey('repeatPenaltyTokens')) await s.setRepeatPenaltyTokens((body['repeatPenaltyTokens'] as num).toInt());
+      if (body.containsKey('xtcThreshold')) await s.setXtcThreshold((body['xtcThreshold'] as num).toDouble());
+      if (body.containsKey('xtcProbability')) await s.setXtcProbability((body['xtcProbability'] as num).toDouble());
+      if (body.containsKey('contextSize')) await s.setContextSize((body['contextSize'] as num).toInt());
+      if (body.containsKey('dynamicTempEnabled')) await s.setDynamicTempEnabled(body['dynamicTempEnabled'] as bool);
+      if (body.containsKey('dynamicTempRange')) await s.setDynamicTempRange((body['dynamicTempRange'] as num).toDouble());
+
+      // Backend / API
+      if (body.containsKey('activeBackend')) await s.setBackendType(body['activeBackend'].toString());
+      if (body.containsKey('apiKey')) await s.setRemoteApiKey(body['apiKey'].toString());
+      if (body.containsKey('apiModel')) await s.setRemoteModelName(body['apiModel'].toString());
+      if (body.containsKey('apiUrl')) await s.setRemoteApiUrl(body['apiUrl'].toString());
+
+      // Reasoning
+      if (body.containsKey('reasoningEnabled')) await s.setReasoningEnabled(body['reasoningEnabled'] as bool);
+      if (body.containsKey('reasoningEffort')) await s.setReasoningEffort(body['reasoningEffort'].toString());
+
+      // Web Server
+      if (body.containsKey('webServerPin')) {
+        final newPin = body['webServerPin'].toString().trim();
+        if (newPin.length >= 4) {
+          await s.setWebServerPin(newPin);
+        }
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to update settings: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Model API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetModelList(shelf.Request request) async {
+    if (_llmProvider == null) {
+      return _errorResponse(503, 'LLM provider not available');
+    }
+
+    try {
+      final models = await _llmProvider!.openRouterService.fetchAvailableModels();
+      final result = models.map((m) => ({
+        'id': m.id,
+        'name': m.name,
+        'pricing': m.pricingLabel,
+        'isFree': m.isFree,
+      })).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch models: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleTestConnection(shelf.Request request) async {
+    if (_llmProvider == null) {
+      return _errorResponse(503, 'LLM provider not available');
+    }
+
+    try {
+      final message = await _llmProvider!.openRouterService.testConnection();
+      return shelf.Response.ok(
+        jsonEncode({'message': message}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Connection test failed: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Persona API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetPersonas(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final personas = await _db!.getAllPersonas();
+      final result = personas.map((p) => ({
+        'id': p.id,
+        'title': p.title,
+        'name': p.name,
+        'description': p.description,
+        'persona': p.persona,
+        'isActive': p.isActive,
+      })).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch personas: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSetActivePersona(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final personaId = body['id']?.toString();
+      if (personaId == null) return _errorResponse(400, 'id is required');
+
+      await _db!.setActivePersona(personaId);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to set active persona: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleCreatePersona(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = DateTime.now().millisecondsSinceEpoch.toString();
+      final companion = PersonasCompanion.insert(
+        id: id,
+        title: Value(body['title']?.toString() ?? ''),
+        name: Value(body['name']?.toString() ?? 'User'),
+        description: Value(body['description']?.toString() ?? ''),
+        persona: Value(body['persona']?.toString() ?? ''),
+      );
+      await _db!.insertPersona(companion);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': id}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create persona: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeletePersona(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString();
+      if (id == null) return _errorResponse(400, 'id is required');
+      await _db!.deletePersonaById(id);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete persona: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleUpdatePersona(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString();
+      if (id == null) return _errorResponse(400, 'id is required');
+
+      // Fetch the existing persona to get all current values
+      final personas = await _db!.getAllPersonas();
+      final existing = personas.firstWhere((p) => p.id == id);
+
+      final companion = PersonasCompanion(
+        id: Value(existing.id),
+        title: Value(body['title']?.toString() ?? existing.title),
+        name: Value(body['name']?.toString() ?? existing.name),
+        description: Value(body['description']?.toString() ?? existing.description),
+        persona: Value(existing.persona),
+        avatarPath: Value(existing.avatarPath),
+        isActive: Value(existing.isActive),
+        updatedAt: Value(DateTime.now()),
+      );
+
+      await _db!.updatePersona(companion);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to update persona: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Worlds API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetWorlds(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final worlds = await _db!.getAllWorlds();
+      final list = worlds.map((w) {
+        Map<String, dynamic>? lorebook;
+        if (w.lorebook != null) {
+          try { lorebook = jsonDecode(w.lorebook!); } catch (_) {}
+        }
+        return {
+          'id': w.id,
+          'name': w.name,
+          'description': w.description,
+          'lorebook': lorebook,
+        };
+      }).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(list),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to get worlds: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleCreateWorld(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString() ?? '';
+      if (name.isEmpty) return _errorResponse(400, 'name is required');
+
+      final id = await _db!.insertWorld(WorldsCompanion.insert(
+        id: const Uuid().v4(),
+        name: name,
+        description: Value(body['description']?.toString() ?? ''),
+        lorebook: Value(body.containsKey('lorebook') ? jsonEncode(body['lorebook']) : null),
+      ));
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': id}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create world: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleUpdateWorld(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString();
+      if (id == null) return _errorResponse(400, 'id is required');
+
+      // Get existing world
+      final worlds = await _db!.getAllWorlds();
+      final existing = worlds.firstWhere((w) => w.id == id);
+
+      final companion = WorldsCompanion(
+        id: Value(existing.id),
+        name: Value(body['name']?.toString() ?? existing.name),
+        description: Value(body['description']?.toString() ?? existing.description),
+        lorebook: Value(body.containsKey('lorebook') ? jsonEncode(body['lorebook']) : existing.lorebook),
+        linkedCharacterName: Value(existing.linkedCharacterName),
+        updatedAt: Value(DateTime.now()),
+      );
+
+      await _db!.updateWorld(companion);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to update world: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeleteWorld(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString();
+      if (id == null) return _errorResponse(400, 'id is required');
+      await _db!.deleteWorldById(id);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete world: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleCreateCharacter(shelf.Request request) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString() ?? '';
+      if (name.isEmpty) return _errorResponse(400, 'Character name is required');
+
+      final description = body['description']?.toString() ?? '';
+      final personality = body['personality']?.toString() ?? '';
+      final scenario = body['scenario']?.toString() ?? '';
+      final firstMessage = body['firstMessage']?.toString() ?? '';
+      final tagsRaw = body['tags'];
+      final tags = tagsRaw is List ? jsonEncode(tagsRaw) : '[]';
+
+      final dbId = await _db!.insertCharacterReturningId(CharactersCompanion(
+        name: Value(name),
+        description: Value(description),
+        personality: Value(personality),
+        scenario: Value(scenario),
+        firstMessage: Value(firstMessage),
+        mesExample: const Value(''),
+        systemPrompt: const Value(''),
+        postHistoryInstructions: const Value(''),
+        alternateGreetings: const Value('[]'),
+        tags: Value(tags),
+        imagePath: const Value(null),
+        ttsVoice: const Value(null),
+        lorebook: const Value(null),
+        worldNames: const Value('[]'),
+      ));
+
+      // Refresh character list so new char appears
+      _characterRepository?.loadCharacters();
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': dbId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create character: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeleteCharacter(shelf.Request request, String id) async {
+    if (_characterRepository == null) return _errorResponse(503, 'Character repository not available');
+
+    try {
+      final dbId = int.tryParse(id);
+      if (dbId == null) return _errorResponse(400, 'Invalid character ID');
+
+      // Find the character in the repository  
+      final character = _characterRepository!.characters.firstWhere(
+        (c) => c.dbId == dbId,
+        orElse: () => throw Exception('Character not found'),
+      );
+
+      await _characterRepository!.deleteCharacter(
+        character,
+        chatsDir: _storageService.chatsDir,
+      );
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete character: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleImportCharacter(shelf.Request request) async {
+    if (_characterRepository == null || _db == null) {
+      return _errorResponse(503, 'Character repository not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final filename = body['filename']?.toString() ?? '';
+      final dataBase64 = body['data']?.toString() ?? '';
+
+      if (filename.isEmpty || dataBase64.isEmpty) {
+        return _errorResponse(400, 'Filename and data are required');
+      }
+
+      final bytes = base64Decode(dataBase64);
+      final ext = p.extension(filename).toLowerCase();
+
+      // Write to temp file
+      final tempDir = await Directory.systemTemp.createTemp('fpai_import_');
+      final tempFile = File('${tempDir.path}/$filename');
+      await tempFile.writeAsBytes(bytes);
+
+      try {
+        if (ext == '.byaf') {
+          // Handle .byaf import
+          final byafService = ByafService();
+          final preview = await byafService.parseByaf(tempFile.path);
+          final card = byafService.toCharacterCard(preview);
+          final savedPath = await byafService.saveCharacterPng(
+            card,
+            charactersDirPath: _storageService.charactersDir.path,
+          );
+          card.imagePath = savedPath;
+
+          // Insert into database
+          final dbId = await _db!.insertCharacterReturningId(CharactersCompanion(
+            name: Value(card.name),
+            description: Value(card.description),
+            personality: Value(card.personality),
+            scenario: Value(card.scenario),
+            firstMessage: Value(card.firstMessage),
+            mesExample: Value(card.mesExample),
+            systemPrompt: Value(card.systemPrompt),
+            postHistoryInstructions: Value(card.postHistoryInstructions),
+            alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
+            tags: Value(jsonEncode(card.tags)),
+            imagePath: Value(card.imagePath),
+            ttsVoice: Value(card.ttsVoice),
+            lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
+            worldNames: Value(jsonEncode(card.worldNames)),
+          ));
+          card.dbId = dbId;
+
+          // Import chat history if available
+          if (preview.messages.isNotEmpty) {
+            await byafService.importChatHistory(_db!, preview, card);
+          }
+
+          _characterRepository!.addCharacter(card);
+
+          return shelf.Response.ok(
+            jsonEncode({'status': 'ok', 'name': card.name, 'id': dbId}),
+            headers: {'Content-Type': 'application/json'},
+          );
+        } else {
+          // Handle PNG V2 card import
+          final card = await _characterRepository!.importCharacter(tempFile);
+
+          if (card == null) {
+            return _errorResponse(400, 'Failed to parse character from file');
+          }
+
+          return shelf.Response.ok(
+            jsonEncode({'status': 'ok', 'name': card.name, 'id': card.dbId}),
+            headers: {'Content-Type': 'application/json'},
+          );
+        }
+      } finally {
+        // Clean up temp directory
+        try { await tempDir.delete(recursive: true); } catch (_) {}
+      }
+    } catch (e) {
+      return _errorResponse(500, 'Failed to import character: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Group Chat API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetGroups(shelf.Request request) async {
+    if (_groupChatRepository == null) return _errorResponse(503, 'Group chat not available');
+    try {
+      final groups = _groupChatRepository!.groups.map((g) => g.toJson()).toList();
+      return shelf.Response.ok(
+        jsonEncode(groups),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch groups: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleCreateGroup(shelf.Request request) async {
+    if (_groupChatRepository == null) return _errorResponse(503, 'Group chat not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final group = GroupChat(
+        id: 'group_${DateTime.now().millisecondsSinceEpoch}',
+        name: body['name']?.toString() ?? 'Group Chat',
+        characterIds: List<String>.from(body['character_ids'] ?? []),
+        turnOrder: TurnOrder.values.firstWhere(
+          (e) => e.name == (body['turn_order'] ?? 'roundRobin'),
+          orElse: () => TurnOrder.roundRobin,
+        ),
+        autoAdvance: body['auto_advance'] ?? false,
+        directorMode: body['director_mode'] ?? false,
+        firstMessage: body['first_message']?.toString() ?? '',
+        scenario: body['scenario']?.toString() ?? '',
+        systemPrompt: body['system_prompt']?.toString() ?? '',
+      );
+      await _groupChatRepository!.save(group);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': group.id, 'name': group.name}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create group: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleUpdateGroup(shelf.Request request) async {
+    if (_groupChatRepository == null) return _errorResponse(503, 'Group chat not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString() ?? '';
+      if (id.isEmpty) return _errorResponse(400, 'Group id is required');
+      final existing = _groupChatRepository!.getById(id);
+      if (existing == null) return _errorResponse(404, 'Group not found');
+
+      existing.name = body['name']?.toString() ?? existing.name;
+      if (body['character_ids'] != null) existing.characterIds = List<String>.from(body['character_ids']);
+      if (body['turn_order'] != null) {
+        existing.turnOrder = TurnOrder.values.firstWhere(
+          (e) => e.name == body['turn_order'],
+          orElse: () => existing.turnOrder,
+        );
+      }
+      if (body['auto_advance'] != null) existing.autoAdvance = body['auto_advance'];
+      if (body['director_mode'] != null) existing.directorMode = body['director_mode'];
+      if (body['first_message'] != null) existing.firstMessage = body['first_message'].toString();
+      if (body['scenario'] != null) existing.scenario = body['scenario'].toString();
+      if (body['system_prompt'] != null) existing.systemPrompt = body['system_prompt'].toString();
+
+      await _groupChatRepository!.save(existing);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to update group: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeleteGroup(shelf.Request request) async {
+    if (_groupChatRepository == null) return _errorResponse(503, 'Group chat not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString() ?? '';
+      if (id.isEmpty) return _errorResponse(400, 'Group id is required');
+      await _groupChatRepository!.delete(id);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete group: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSelectGroup(shelf.Request request) async {
+    if (_groupChatRepository == null || _chatService == null) {
+      return _errorResponse(503, 'Group chat not available');
+    }
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString() ?? '';
+      if (id.isEmpty) return _errorResponse(400, 'Group id is required');
+      final group = _groupChatRepository!.getById(id);
+      if (group == null) return _errorResponse(404, 'Group not found');
+
+      await _chatService!.setActiveGroup(group);
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'name': group.name}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to select group: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // AI Text Generation (for group scenario / first message)
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGenerate(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+    final service = _llmProvider!.activeService;
+    if (!service.isReady) return _errorResponse(503, 'LLM backend is not ready');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final prompt = body['prompt']?.toString() ?? '';
+      if (prompt.isEmpty) return _errorResponse(400, 'Prompt is required');
+
+      final maxLength = body['maxLength'] as int? ?? 500;
+      final temperature = (body['temperature'] as num?)?.toDouble() ?? 0.9;
+      final stopSeqs = body['stopSequences'] != null
+          ? List<String>.from(body['stopSequences'])
+          : <String>[];
+
+      final params = GenerationParams(
+        prompt: prompt,
+        maxLength: maxLength,
+        temperature: temperature,
+        stopSequences: stopSeqs.isNotEmpty ? stopSeqs : null,
+      );
+
+      final buffer = StringBuffer();
+      await for (final token in service.generateStream(params)) {
+        buffer.write(token);
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'text': buffer.toString()}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Generation failed: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Folder API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetFolders(shelf.Request request) async {
+    if (_folderService == null) {
+      return _errorResponse(503, 'Folder service not available');
+    }
+
+    try {
+      final folders = _folderService!.folders;
+
+      final result = folders.map((f) => ({
+        'id': f.id,
+        'name': f.name,
+        'parentId': f.parentId,
+        'characterCount': f.characterPaths.length,
+      })).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch folders: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleCreateFolder(shelf.Request request) async {
+    if (_folderService == null) return _errorResponse(503, 'Folder service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString() ?? '';
+      if (name.isEmpty) return _errorResponse(400, 'Folder name is required');
+      final parentId = body['parentId']?.toString();
+      final folder = await _folderService!.createFolder(name, parentId: parentId);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': folder.id, 'name': folder.name}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create folder: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleRenameFolder(shelf.Request request) async {
+    if (_folderService == null) return _errorResponse(503, 'Folder service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString() ?? '';
+      final name = body['name']?.toString() ?? '';
+      if (id.isEmpty || name.isEmpty) return _errorResponse(400, 'Folder id and name are required');
+      await _folderService!.renameFolder(id, name);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to rename folder: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeleteFolder(shelf.Request request) async {
+    if (_folderService == null) return _errorResponse(503, 'Folder service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final id = body['id']?.toString() ?? '';
+      if (id.isEmpty) return _errorResponse(400, 'Folder id is required');
+      await _folderService!.deleteFolder(id);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete folder: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleAddCharToFolder(shelf.Request request) async {
+    if (_folderService == null) return _errorResponse(503, 'Folder service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final folderId = body['folderId']?.toString() ?? '';
+      final characterPath = body['characterPath']?.toString() ?? '';
+      if (folderId.isEmpty || characterPath.isEmpty) return _errorResponse(400, 'folderId and characterPath required');
+      await _folderService!.addToFolder(folderId, characterPath);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to add character to folder: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleRemoveCharFromFolder(shelf.Request request) async {
+    if (_folderService == null) return _errorResponse(503, 'Folder service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final folderId = body['folderId']?.toString() ?? '';
+      final characterPath = body['characterPath']?.toString() ?? '';
+      if (folderId.isEmpty || characterPath.isEmpty) return _errorResponse(400, 'folderId and characterPath required');
+      await _folderService!.removeFromFolder(folderId, characterPath);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to remove character from folder: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Cloud Sync API
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Ensure the cloud provider is connected using stored credentials.
+  /// For WebDAV, creates a fresh provider and connects.
+  /// For Google Drive, tries to restore saved credentials (no interactive OAuth).
+  Future<CloudStorageProvider?> _ensureSyncProvider() async {
+    final provider = _storageService.cloudSyncProvider;
+    if (_cloudSyncService == null) return null;
+    if (_cloudSyncService!.isConnected) return _cloudSyncService!.provider;
+
+    CloudStorageProvider p;
+    switch (provider) {
+      case 'webdav':
+        p = WebDavProvider();
+        break;
+      case 'gdrive':
+        p = GoogleDriveProvider();
+        break;
+      default:
+        return null;
+    }
+    try {
+      await p.connect({
+        'url': _storageService.cloudSyncUrl,
+        'username': _storageService.cloudSyncUsername,
+        'password': _storageService.cloudSyncPassword,
+      });
+      _cloudSyncService!.setProvider(p);
+      return p;
+    } catch (e) {
+      debugPrint('[WebServer] Cloud provider connect failed: $e');
+      return null;
+    }
+  }
+
+  shelf.Response _handleGetSyncStatus(shelf.Request request) {
+    final s = _storageService;
+    final syncService = _cloudSyncService;
+    return shelf.Response.ok(
+      jsonEncode({
+        'enabled': s.cloudSyncEnabled,
+        'provider': s.cloudSyncProvider,
+        'url': s.cloudSyncUrl,
+        'username': s.cloudSyncUsername,
+        'passwordSet': s.cloudSyncPassword.isNotEmpty,
+        'lastSyncTime': s.cloudSyncLastTime,
+        'status': syncService?.status.name ?? 'idle',
+        'progress': syncService?.progress ?? 0.0,
+        'syncedFiles': syncService?.syncedFiles ?? 0,
+        'isConnected': syncService?.isConnected ?? false,
+        'lastError': syncService?.lastError,
+        'providerName': syncService?.providerName,
+        'isPreRelease': isPreRelease,
+        'stableVersionBase': stableVersionBase,
+      }),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<shelf.Response> _handleSetSyncConfig(shelf.Request request) async {
+    if (isPreRelease) {
+      return _errorResponse(403, 'Cloud Sync is disabled in pre-release builds to prevent database incompatibility with the stable release.');
+    }
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final s = _storageService;
+
+      if (body.containsKey('enabled')) {
+        await s.setCloudSyncEnabled(body['enabled'] as bool);
+      }
+      if (body.containsKey('provider')) {
+        await s.setCloudSyncProvider(body['provider'].toString());
+      }
+      if (body.containsKey('url')) {
+        await s.setCloudSyncUrl(body['url'].toString());
+      }
+      if (body.containsKey('username')) {
+        await s.setCloudSyncUsername(body['username'].toString());
+      }
+      if (body.containsKey('password')) {
+        await s.setCloudSyncPassword(body['password'].toString());
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to save sync config: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSyncTestConnection(shelf.Request request) async {
+    if (isPreRelease) {
+      return _errorResponse(403, 'Cloud Sync is disabled in pre-release builds.');
+    }
+    if (_cloudSyncService == null) {
+      return _errorResponse(503, 'Cloud sync service not available');
+    }
+
+    try {
+      final provider = await _ensureSyncProvider();
+      if (provider == null) {
+        return shelf.Response.ok(
+          jsonEncode({'ok': false, 'error': 'Could not connect to provider. Check credentials.'}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+
+      final ok = await _cloudSyncService!.testConnection();
+      return shelf.Response.ok(
+        jsonEncode({
+          'ok': ok,
+          'error': ok ? null : (_cloudSyncService!.lastError ?? 'Connection test failed'),
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return shelf.Response.ok(
+        jsonEncode({'ok': false, 'error': e.toString()}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    }
+  }
+
+  Future<shelf.Response> _handleSyncNow(shelf.Request request) async {
+    if (isPreRelease) {
+      return _errorResponse(403, 'Cloud Sync is disabled in pre-release builds.');
+    }
+    if (_cloudSyncService == null) {
+      return _errorResponse(503, 'Cloud sync service not available');
+    }
+
+    try {
+      final provider = await _ensureSyncProvider();
+      if (provider == null) {
+        return _errorResponse(400, 'Could not connect to cloud provider');
+      }
+
+      final chatsPath = _storageService.chatsDir.path;
+      final rootPath = _storageService.rootPath ?? chatsPath;
+      final charactersPath = '$rootPath${Platform.pathSeparator}KoboldManager${Platform.pathSeparator}Characters';
+
+      // Fire-and-forget — client polls /api/sync/status for progress
+      _cloudSyncService!.fullSync(chatsPath, charactersPath).then((_) async {
+        if (_cloudSyncService!.status == SyncStatus.success) {
+          await _storageService.setCloudSyncLastTime(DateTime.now().toIso8601String());
+          // Reload characters so newly downloaded PNGs appear
+          await _characterRepository?.loadCharacters();
+        }
+      });
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'syncing'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to start sync: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSyncForceUpload(shelf.Request request) async {
+    if (isPreRelease) {
+      return _errorResponse(403, 'Cloud Sync is disabled in pre-release builds.');
+    }
+    if (_cloudSyncService == null) {
+      return _errorResponse(503, 'Cloud sync service not available');
+    }
+
+    try {
+      final provider = await _ensureSyncProvider();
+      if (provider == null) {
+        return _errorResponse(400, 'Could not connect to cloud provider');
+      }
+
+      await _cloudSyncService!.forceUploadDatabase();
+      await _storageService.setCloudSyncLastTime(DateTime.now().toIso8601String());
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Force upload failed: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleSyncPurge(shelf.Request request) async {
+    if (isPreRelease) {
+      return _errorResponse(403, 'Cloud Sync is disabled in pre-release builds.');
+    }
+    if (_cloudSyncService == null) {
+      return _errorResponse(503, 'Cloud sync service not available');
+    }
+
+    try {
+      final provider = await _ensureSyncProvider();
+      if (provider == null) {
+        return _errorResponse(400, 'Could not connect to cloud provider');
+      }
+
+      await _cloudSyncService!.purgeCloudData();
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Purge failed: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleListCloudCharacters(shelf.Request request) async {
+    if (_cloudSyncService == null) {
+      return _errorResponse(503, 'Cloud sync service not available');
+    }
+
+    try {
+      final provider = await _ensureSyncProvider();
+      if (provider == null) {
+        return _errorResponse(400, 'Could not connect to cloud provider');
+      }
+
+      final rootPath = _storageService.rootPath ?? _storageService.chatsDir.path;
+      final charactersPath = '$rootPath${Platform.pathSeparator}KoboldManager${Platform.pathSeparator}Characters';
+
+      final chars = await _cloudSyncService!.listAllRemoteCharacters(charactersPath);
+      final result = chars.map((c) => {
+        'name': c.name,
+        'existsLocally': c.existsLocally,
+      }).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to list cloud characters: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDownloadCloudCharacters(shelf.Request request) async {
+    if (_cloudSyncService == null) {
+      return _errorResponse(503, 'Cloud sync service not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final filenames = List<String>.from(body['filenames'] ?? []);
+      if (filenames.isEmpty) {
+        return _errorResponse(400, 'No filenames provided');
+      }
+
+      final provider = await _ensureSyncProvider();
+      if (provider == null) {
+        return _errorResponse(400, 'Could not connect to cloud provider');
+      }
+
+      final rootPath = _storageService.rootPath ?? _storageService.chatsDir.path;
+      final charactersPath = '$rootPath${Platform.pathSeparator}KoboldManager${Platform.pathSeparator}Characters';
+
+      final downloaded = await _cloudSyncService!.downloadCharacters(charactersPath, filenames);
+
+      // Reload characters so new PNGs appear in the UI
+      await _characterRepository?.loadCharacters();
+
+      return shelf.Response.ok(
+        jsonEncode({'downloaded': downloaded}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to download characters: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Backup API
+  // ─────────────────────────────────────────────────────────────────────
+
+  Future<shelf.Response> _handleGetBackups(shelf.Request request) async {
+    if (isPreRelease) return _errorResponse(403, 'Backups are disabled in pre-release builds.');
+    try {
+      final backups = await BackupService.listBackups();
+      final result = backups.map((f) {
+        final stat = f.statSync();
+        return {
+          'path': f.path,
+          'name': p.basename(f.path),
+          'sizeMb': (stat.size / (1024 * 1024)).toStringAsFixed(1),
+          'sizeBytes': stat.size,
+          'modified': stat.modified.toIso8601String(),
+        };
+      }).toList();
+
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to list backups: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleCreateBackup(shelf.Request request) async {
+    if (isPreRelease) return _errorResponse(403, 'Backups are disabled in pre-release builds.');
+    try {
+      final backupPath = await BackupService.createBackup();
+      return shelf.Response.ok(
+        jsonEncode({'status': backupPath != null ? 'ok' : 'no_db', 'path': backupPath}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create backup: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleRestoreBackup(shelf.Request request) async {
+    if (isPreRelease) return _errorResponse(403, 'Backups are disabled in pre-release builds.');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final backupPath = body['path']?.toString();
+      if (backupPath == null || backupPath.isEmpty) {
+        return _errorResponse(400, 'path is required');
+      }
+
+      await BackupService.restoreBackup(backupPath);
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'message': 'Backup restored. App may need restart.'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to restore backup: $e');
+    }
+  }
+
+  Future<shelf.Response> _handleDeleteBackup(shelf.Request request) async {
+    if (isPreRelease) return _errorResponse(403, 'Backups are disabled in pre-release builds.');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final backupPath = body['path']?.toString();
+      if (backupPath == null || backupPath.isEmpty) {
+        return _errorResponse(400, 'path is required');
+      }
+
+      final file = File(backupPath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete backup: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Static asset serving
+  // ─────────────────────────────────────────────────────────────────────
+
+  shelf.Response _serveWebAsset(String filePath) {
+    final assetPath = _resolveWebAssetPath(filePath);
+    final file = File(assetPath);
+    if (!file.existsSync()) {
+      return shelf.Response.notFound('File not found: $filePath');
+    }
+
+    String contentType = 'text/plain';
+    if (filePath.endsWith('.html')) contentType = 'text/html; charset=utf-8';
+    if (filePath.endsWith('.css')) contentType = 'text/css; charset=utf-8';
+    if (filePath.endsWith('.js')) contentType = 'application/javascript; charset=utf-8';
+    if (filePath.endsWith('.json')) contentType = 'application/json; charset=utf-8';
+    if (filePath.endsWith('.png')) contentType = 'image/png';
+    if (filePath.endsWith('.svg')) contentType = 'image/svg+xml';
+
+    return shelf.Response.ok(
+      file.readAsBytesSync(),
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
+    );
+  }
+
+  String _resolveWebAssetPath(String relativePath) {
+    final projectPath = Platform.resolvedExecutable;
+    Directory dir = File(projectPath).parent;
+    for (int i = 0; i < 10; i++) {
+      if (File('${dir.path}/pubspec.yaml').existsSync()) {
+        return '${dir.path}/assets/web/$relativePath';
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    final bundleDir = File(Platform.resolvedExecutable).parent;
+    return '${bundleDir.path}/data/flutter_assets/assets/web/$relativePath';
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Middleware
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Track active client when any authenticated API request arrives.
+  shelf.Middleware _clientTrackingMiddleware() {
+    return (shelf.Handler innerHandler) {
+      return (shelf.Request request) async {
+        if (request.url.path.startsWith('api/') &&
+            request.url.path != 'api/health' &&
+            request.url.path != 'api/auth/login' &&
+            request.url.path != 'api/disconnect') {
+          if (!_hasActiveClient) {
+            _hasActiveClient = true;
+            final forwardedFor = request.headers['x-forwarded-for'];
+            _connectedClientIp = forwardedFor ??
+                request.headers['x-real-ip'] ??
+                (request.context['shelf.io.connection_info'] != null
+                    ? (request.context['shelf.io.connection_info'] as HttpConnectionInfo?)?.remoteAddress.address
+                    : null);
+            final ua = request.headers['user-agent'] ?? '';
+            _connectedClientInfo = _parseUserAgent(ua, _connectedClientIp);
+            debugPrint('[WebServer] Remote client connected: $_connectedClientInfo');
+            notifyListeners();
+          }
+        }
+        return innerHandler(request);
+      };
+    };
+  }
+
+  /// Parse User-Agent string into a human-readable browser + OS description.
+  String _parseUserAgent(String ua, String? ip) {
+    if (ua.isEmpty) return ip ?? 'Unknown';
+
+    // Detect browser (order matters — check specific before generic)
+    String browser;
+    if (ua.contains('Edg/') || ua.contains('Edge/')) {
+      browser = 'Edge';
+    } else if (ua.contains('OPR/') || ua.contains('Opera')) {
+      browser = 'Opera';
+    } else if (ua.contains('Vivaldi/')) {
+      browser = 'Vivaldi';
+    } else if (ua.contains('Brave')) {
+      browser = 'Brave';
+    } else if (ua.contains('Firefox/')) {
+      browser = 'Firefox';
+    } else if (ua.contains('Chrome/') && ua.contains('Safari/')) {
+      browser = 'Chrome';
+    } else if (ua.contains('Safari/') && !ua.contains('Chrome/')) {
+      browser = 'Safari';
+    } else {
+      browser = 'Browser';
+    }
+
+    // Detect OS
+    String os;
+    if (ua.contains('Windows')) {
+      os = 'Windows';
+    } else if (ua.contains('Macintosh') || ua.contains('Mac OS')) {
+      os = 'macOS';
+    } else if (ua.contains('Android')) {
+      os = 'Android';
+    } else if (ua.contains('iPhone') || ua.contains('iPad')) {
+      os = 'iOS';
+    } else if (ua.contains('Linux')) {
+      os = 'Linux';
+    } else if (ua.contains('CrOS')) {
+      os = 'ChromeOS';
+    } else {
+      os = 'Unknown OS';
+    }
+
+    final ipPart = ip != null ? ' ($ip)' : '';
+    return '$browser on $os$ipPart';
+  }
+
+  shelf.Middleware _corsMiddleware() {
+    return (shelf.Handler innerHandler) {
+      return (shelf.Request request) async {
+        if (request.method == 'OPTIONS') {
+          return shelf.Response.ok('', headers: _corsHeaders);
+        }
+        final response = await innerHandler(request);
+        return response.change(headers: _corsHeaders);
+      };
+    };
+  }
+
+  static const _corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────────────────
+
+  shelf.Response _errorResponse(int status, String message) {
+    return shelf.Response(status,
+      body: jsonEncode({'error': message}),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  List<dynamic> _tryParseJsonList(String jsonStr) {
+    try {
+      return jsonDecode(jsonStr) as List<dynamic>;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Extract filename from a path (matches FolderService._normalize).
+  String _basename(String path) {
+    final parts = path.split(RegExp(r'[/\\]'));
+    return parts.last;
+  }
+
+  void disconnectClient() {
+    _hasActiveClient = false;
+    _connectedClientIp = null;
+    _connectedClientInfo = null;
+    _activeSessions.clear();
+    debugPrint('[WebServer] Remote client disconnected');
+    notifyListeners();
+  }
+
+  Future<void> stop() async {
+    if (!_isRunning) return;
+    await _server?.close(force: true);
+    _server = null;
+    _isRunning = false;
+    _hasActiveClient = false;
+    _connectedClientIp = null;
+    _connectedClientInfo = null;
+    _activeSessions.clear();
+    debugPrint('[WebServer] Server stopped');
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    stop();
+    super.dispose();
+  }
+}

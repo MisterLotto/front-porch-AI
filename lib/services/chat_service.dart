@@ -135,6 +135,25 @@ class ChatService extends ChangeNotifier {
   int _displayedTokenCount = 0;
   final List<DateTime> _tokenTimestamps = []; // Rolling window for TPS measurement
 
+  // ── Web SSE token broadcast ──
+  // External consumers (e.g. WebChatBridge) listen to this for real-time token streaming.
+  final StreamController<String> _tokenBroadcast = StreamController<String>.broadcast();
+  Stream<String> get tokenStream => _tokenBroadcast.stream;
+
+  /// Emits complete sentences as they're detected during LLM token streaming.
+  /// Used by call mode to start TTS on the first sentence immediately.
+  final StreamController<String> _sentenceBroadcast = StreamController<String>.broadcast();
+  Stream<String> get sentenceStream => _sentenceBroadcast.stream;
+  String _sentenceBuffer = ''; // accumulates tokens until a sentence boundary
+
+  /// Whether the app is in voice call mode (auto-disables reasoning for lower latency).
+  bool _callMode = false;
+  bool get callMode => _callMode;
+  set callMode(bool value) {
+    _callMode = value;
+    notifyListeners();
+  }
+
   // ── Group chat state ──
   GroupChat? _activeGroup;
   List<CharacterCard> _groupCharacters = [];
@@ -148,6 +167,12 @@ class ChatService extends ChangeNotifier {
   // ── Author's Note ──
   String _authorNote = '';
   int _authorNoteStrength = 4;
+
+  // ── Chat Summary ──
+  String _summary = '';
+  int _summaryLastIndex = 0;
+  bool _summaryPaused = false;
+  bool _isSummaryGenerating = false;
 
   // ── Context / Prompt Budget ──
   Map<String, int> _lastPromptBudget = {};
@@ -301,6 +326,10 @@ class ChatService extends ChangeNotifier {
   int? get forkIndex => _forkIndex;
   String? get sessionName => _sessionName;
   String? get sessionDescription => _sessionDescription;
+  String get summary => _summary;
+  bool get summaryPaused => _summaryPaused;
+  int get summaryLastIndex => _summaryLastIndex;
+  bool get isSummaryGenerating => _isSummaryGenerating;
 
   void setAuthorNote(String note, {int? strength}) {
     _authorNote = note;
@@ -556,6 +585,8 @@ class ChatService extends ChangeNotifier {
       description: drift.Value(_sessionDescription),
       authorNote: drift.Value(_authorNote),
       authorNoteDepth: drift.Value(_authorNoteStrength),
+      summary: drift.Value(_summary.isEmpty ? null : _summary),
+      summaryLastIndex: drift.Value(_summaryLastIndex > 0 ? _summaryLastIndex : null),
       parentSession: drift.Value(_parentSessionId),
       forkIndex: drift.Value(_forkIndex),
       createdAt: drift.Value(createdAt),
@@ -603,6 +634,8 @@ class ChatService extends ChangeNotifier {
     _currentSessionId = lastSession.id;
     _authorNote = lastSession.authorNote;
     _authorNoteStrength = lastSession.authorNoteDepth;
+    _summary = lastSession.summary ?? '';
+    _summaryLastIndex = lastSession.summaryLastIndex ?? 0;
     _sessionName = lastSession.name;
     _sessionDescription = lastSession.description;
     _parentSessionId = lastSession.parentSession;
@@ -728,6 +761,8 @@ class ChatService extends ChangeNotifier {
       _currentSessionId = sessionId;
       _authorNote = session.authorNote;
       _authorNoteStrength = session.authorNoteDepth;
+      _summary = session.summary ?? '';
+      _summaryLastIndex = session.summaryLastIndex ?? 0;
       _sessionName = session.name;
       _sessionDescription = session.description;
       _parentSessionId = session.parentSession;
@@ -802,6 +837,8 @@ class ChatService extends ChangeNotifier {
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _parentSessionId = oldSessionId;
     _forkIndex = messageIndex;
+    _summary = '';
+    _summaryLastIndex = 0;
 
     await _saveChat();
     notifyListeners();
@@ -867,6 +904,8 @@ class ChatService extends ChangeNotifier {
 
     _messages.clear();
     _greetingIndex = 0;
+    _summary = '';
+    _summaryLastIndex = 0;
 
     if (_activeGroup != null && _groupCharacters.isNotEmpty) {
       // Group mode: greeting from first character
@@ -1285,7 +1324,11 @@ class ChatService extends ChangeNotifier {
     _maxTokens = _storageService.maxLength;
     _generationStartTime = DateTime.now();
     _isBuffering = true;
+    _sentenceBuffer = '';
     notifyListeners();
+
+    // Track original model for call mode swap/restore (needs to be outside try/catch)
+    String? _originalModelName;
 
     try {
       final userName = _userPersonaService.persona.name;
@@ -1305,7 +1348,7 @@ class ChatService extends ChangeNotifier {
 
       // ── System prompt selection ──
       // Priority: group custom > group default > character > user global > backend default
-      final String systemPrompt;
+      String systemPrompt;
       if (_activeGroup != null && _activeGroup!.systemPrompt.isNotEmpty) {
         // User wrote a custom group system prompt — use it
         systemPrompt = _activeGroup!.systemPrompt;
@@ -1322,6 +1365,11 @@ class ChatService extends ChangeNotifier {
         // Single-char mode, no user prompt — pick default based on backend
         final isApi = _llmProvider != null && !_llmProvider!.isLocal;
         systemPrompt = isApi ? defaultApiSystemPrompt : defaultKoboldSystemPrompt;
+      }
+
+      // In call mode, inject voice-specific instructions for natural conversation
+      if (_callMode && _storageService.callSystemPrompt.isNotEmpty) {
+        systemPrompt += '\n\n[Voice Call Mode] ${_storageService.callSystemPrompt}';
       }
 
       // Build Lorebook content from all relevant characters
@@ -1409,12 +1457,19 @@ class ChatService extends ChangeNotifier {
         authorNoteBlock = _buildAuthorNoteBlock();
       }
 
+      // Build summary block if available
+      String summaryBlock = '';
+      if (_summary.isNotEmpty) {
+        summaryBlock = '[Summary of events so far: $_summary]\n';
+      }
+
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
           "Scenario: $scenario\n"
           "$mesExampleBlock"
           "<START>\n"
+          "$summaryBlock"
           "$history"
           "$postHistoryBlock"
           "$authorNoteBlock"
@@ -1428,6 +1483,7 @@ class ChatService extends ChangeNotifier {
         'Persona': (personaBlock.length / 4).ceil(),
         'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
         'Examples': (mesExampleBlock.length / 4).ceil(),
+        'Summary': (summaryBlock.length / 4).ceil(),
         'Chat History': (history.length / 4).ceil(),
         'Post-History': (postHistoryBlock.length / 4).ceil(),
         'Author\'s Note': (authorNoteBlock.length / 4).ceil(),
@@ -1456,6 +1512,12 @@ class ChatService extends ChangeNotifier {
       // Get the active LLM service (local or remote)
       final llmService = _llmProvider?.activeService ?? _koboldService;
 
+      // For call mode with a dedicated call model, temporarily swap the model
+      if (_callMode && _storageService.callModelName.isNotEmpty && _llmProvider != null && !_llmProvider!.isLocal) {
+        _originalModelName = _llmProvider!.openRouterService.modelName;
+        _llmProvider!.openRouterService.configure(modelName: _storageService.callModelName);
+      }
+
       final genParams = GenerationParams(
         prompt: prompt,
         maxLength: _storageService.maxLength,
@@ -1468,7 +1530,7 @@ class ChatService extends ChangeNotifier {
         xtcThreshold: _storageService.xtcThreshold,
         xtcProbability: _storageService.xtcProbability,
         stopSequences: stopList,
-        reasoningEnabled: _storageService.reasoningEnabled,
+        reasoningEnabled: _callMode ? false : _storageService.reasoningEnabled,
         reasoningEffort: _storageService.reasoningEffort,
       );
 
@@ -1551,7 +1613,55 @@ class ChatService extends ChangeNotifier {
         accumulatedResponse += token;
         _tokensGenerated++;
         _tokenTimestamps.add(DateTime.now());
+
+        // Broadcast token to external listeners (SSE bridge)
+        _tokenBroadcast.add(token);
         _generationProgress = _maxTokens > 0 ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0) : 0.0;
+
+        // Sentence streaming: accumulate tokens and emit complete sentences
+        _sentenceBuffer += token;
+
+        // Split strategy:
+        // 1. Always split at sentence boundaries: . ! ? followed by space, or \n
+        // 2. For long buffers (>80 chars / ~15 words), also split at clause
+        //    boundaries: ", " "; " " — " " - " to keep TTS chunks short (~1-3s)
+        bool emitted = true;
+        while (emitted) {
+          emitted = false;
+
+          // First try sentence boundaries
+          final sentenceEnd = RegExp(r'[.!?]\s|[.!?]$|\n');
+          if (sentenceEnd.hasMatch(_sentenceBuffer)) {
+            final match = sentenceEnd.firstMatch(_sentenceBuffer)!;
+            final sentence = _sentenceBuffer.substring(0, match.end).trim();
+            _sentenceBuffer = _sentenceBuffer.substring(match.end);
+            if (sentence.isNotEmpty) {
+              _sentenceBroadcast.add(sentence);
+              emitted = true;
+            }
+            continue;
+          }
+
+          // For long buffers, split at clause boundaries to keep TTS fast
+          if (_sentenceBuffer.length > 80) {
+            final clauseEnd = RegExp(r',\s|;\s|\s[—–-]\s');
+            if (clauseEnd.hasMatch(_sentenceBuffer)) {
+              // Find the LAST clause boundary to maximize chunk size
+              Match? lastMatch;
+              for (final m in clauseEnd.allMatches(_sentenceBuffer)) {
+                if (m.start > 30) lastMatch = m; // at least 30 chars per chunk
+              }
+              if (lastMatch != null) {
+                final chunk = _sentenceBuffer.substring(0, lastMatch.end).trim();
+                _sentenceBuffer = _sentenceBuffer.substring(lastMatch.end);
+                if (chunk.isNotEmpty) {
+                  _sentenceBroadcast.add(chunk);
+                  emitted = true;
+                }
+              }
+            }
+          }
+        }
 
         // Client-side safety trim check (mid-stream)
         for (final stop in stopList) {
@@ -1667,6 +1777,17 @@ class ChatService extends ChangeNotifier {
       _generationProgress = 0.0;
       _isBuffering = false;
       _generationStartTime = null;
+
+      // Signal generation complete to SSE listeners
+      _tokenBroadcast.add('__DONE__');
+
+      // Flush remaining sentence buffer and signal done to sentence listeners
+      if (_sentenceBuffer.trim().isNotEmpty) {
+        _sentenceBroadcast.add(_sentenceBuffer.trim());
+        _sentenceBuffer = '';
+      }
+      _sentenceBroadcast.add('__DONE__');
+
       notifyListeners();
 
       // Only finalize if this generation is still current
@@ -1682,6 +1803,9 @@ class ChatService extends ChangeNotifier {
         // Save session after AI message is complete
         await _saveChat();
 
+        // Check if summary needs updating (fire-and-forget)
+        _maybeUpdateSummary();
+
         // Auto-play: if director mode is active, queue the next character
         if (_autoPlayActive && _observerMode && _activeGroup != null) {
           // If TTS is active, wait for it to finish before starting the delay
@@ -1696,6 +1820,11 @@ class ChatService extends ChangeNotifier {
             });
           }
         }
+      }
+
+      // Restore original model if swapped for call mode
+      if (_originalModelName != null && _llmProvider != null) {
+        _llmProvider!.openRouterService.configure(modelName: _originalModelName);
       }
 
     } catch (e) {
@@ -1729,6 +1858,15 @@ class ChatService extends ChangeNotifier {
         sender: "System", 
         isUser: false
       ));
+
+      // Signal error to SSE listeners
+      _tokenBroadcast.add('__ERROR__');
+
+      // Restore original model if swapped for call mode
+      if (_originalModelName != null && _llmProvider != null) {
+        _llmProvider!.openRouterService.configure(modelName: _originalModelName);
+      }
+
       notifyListeners();
     } 
   }
@@ -1842,6 +1980,30 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Delete a specific chat session and its messages.
+  /// If it's the current session, switches to the most recent remaining one.
+  Future<void> deleteSession(String sessionId) async {
+    if (_db == null) return;
+
+    // Delete messages and session from DB
+    await _db!.deleteMessagesForSession(sessionId);
+    await _db!.deleteSessionById(sessionId);
+
+    // If we deleted the current session, switch to another
+    if (sessionId == _currentSessionId) {
+      final remaining = await getSessions();
+      if (remaining.isNotEmpty) {
+        await loadSession(remaining.first['id']);
+      } else {
+        // No sessions left — start fresh
+        _messages.clear();
+        _currentSessionId = null;
+        await startNewChat();
+      }
+    }
+    notifyListeners();
+  }
+
   void deleteMessage(int index) async {
     if (index >= 0 && index < _messages.length) {
       _messages.removeAt(index);
@@ -1877,6 +2039,144 @@ class ChatService extends ChangeNotifier {
         isUser: old.isUser,
       );
       await _saveChat();
+      notifyListeners();
+    }
+  }
+
+  // ── Summary System ──────────────────────────────────────────────────
+
+  /// Manually set the summary text.
+  void setSummary(String text) {
+    _summary = text;
+    _saveChat();
+    notifyListeners();
+  }
+
+  /// Pause or resume automatic summary updates.
+  void setSummaryPaused(bool paused) {
+    _summaryPaused = paused;
+    notifyListeners();
+  }
+
+  /// Force an immediate summary regeneration.
+  Future<void> forceSummaryUpdate() async {
+    if (_isSummaryGenerating) return;
+    await _generateSummaryInBackground();
+  }
+
+  /// Check if a summary update is needed and trigger it non-blockingly.
+  void _maybeUpdateSummary() {
+    if (!_storageService.summaryEnabled) return;
+    if (_summaryPaused) return;
+    if (_isSummaryGenerating) return;
+    if (_llmProvider == null) return;
+
+    // Count user messages since last summary update
+    int userMessagesSinceSummary = 0;
+    for (int i = _summaryLastIndex; i < _messages.length; i++) {
+      if (_messages[i].isUser) userMessagesSinceSummary++;
+    }
+
+    if (userMessagesSinceSummary >= _storageService.summaryInterval) {
+      // Fire and forget — don't await
+      _generateSummaryInBackground();
+    }
+  }
+
+  /// Generate a summary of the chat history using the active LLM.
+  Future<void> _generateSummaryInBackground() async {
+    if (_llmProvider == null) return;
+    final llmService = _llmProvider!.activeService;
+    if (llmService == null || !llmService.isReady) return;
+
+    _isSummaryGenerating = true;
+    notifyListeners();
+
+    try {
+      final userName = _userPersonaService.persona.name;
+      final charName = _activeCharacter?.name ?? _activeGroup?.name ?? 'Character';
+
+      // Build the summary prompt with macro replacement
+      final summaryPromptTemplate = _storageService.summaryPrompt
+          .replaceAll('{{words}}', _storageService.summaryMaxWords.toString())
+          .replaceAll('{{user}}', userName)
+          .replaceAll('{{char}}', charName);
+
+      // Build a condensed chat history for the summary request
+      final historyLines = <String>[];
+      for (final m in _messages) {
+        if (m.characterId == '__director__') continue;
+        // Strip thinking blocks from display text for summarization
+        historyLines.add('${m.sender}: ${m.displayText}');
+      }
+      final chatHistoryForSummary = historyLines.join('\n');
+
+      // Build the full prompt for the summary LLM call
+      String previousSummaryBlock = '';
+      if (_summary.isNotEmpty) {
+        previousSummaryBlock = 'Previous summary:\n$_summary\n\n';
+      }
+
+      final summaryRequestPrompt =
+          'The following is a conversation between $userName and $charName.\n\n'
+          '$previousSummaryBlock'
+          'Chat history:\n$chatHistoryForSummary\n\n'
+          '$summaryPromptTemplate\n\n'
+          'Here is the summary of the conversation so far:\n';
+
+      final genParams = GenerationParams(
+        prompt: summaryRequestPrompt,
+        maxLength: (_storageService.summaryMaxWords * 3).clamp(200, 4000),
+        temperature: 0.3,  // Low temperature for factual summarization
+        repeatPenalty: 1.0,
+        reasoningEnabled: false,
+        stopSequences: ['\n\n\n', '<END>', '</END>'],
+      );
+
+      String accumulated = '';
+      await for (final token in llmService.generateStream(genParams)) {
+        accumulated += token;
+      }
+
+      var result = accumulated
+          .replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '')
+          .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'</think>', caseSensitive: false), '')
+          .trim();
+
+      // Strip numbered-list analysis blocks that thinking models prepend.
+      // Walk through lines, skip analysis preamble, keep only prose.
+      final lines = result.split('\n');
+      int startIdx = 0;
+      for (int i = 0; i < lines.length; i++) {
+        final trimmed = lines[i].trim();
+        if (trimmed.isEmpty) continue;
+        // Skip numbered list items like "1. **Analyze..."
+        if (RegExp(r'^\d+\.').hasMatch(trimmed)) { startIdx = i + 1; continue; }
+        // Skip bullet points like "* **Goal:**" or "- **Setting:**"
+        if (trimmed.startsWith('*') || trimmed.startsWith('-')) { startIdx = i + 1; continue; }
+        // Found prose — stop here
+        break;
+      }
+      if (startIdx > 0 && startIdx < lines.length) {
+        result = lines.sublist(startIdx).join('\n').trim();
+      }
+
+      // Trim trailing incomplete sentence — cut back to last . ! or ?
+      final lastSentenceEnd = result.lastIndexOf(RegExp(r'[.!?]'));
+      if (lastSentenceEnd > 0 && lastSentenceEnd < result.length - 1) {
+        result = result.substring(0, lastSentenceEnd + 1).trim();
+      }
+
+      if (result.isNotEmpty) {
+        _summary = result;
+        _summaryLastIndex = _messages.length;
+        await _saveChat();
+      }
+    } catch (e) {
+      debugPrint('Summary generation failed: $e');
+    } finally {
+      _isSummaryGenerating = false;
       notifyListeners();
     }
   }

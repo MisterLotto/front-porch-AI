@@ -11,6 +11,7 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
 import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:front_porch_ai/app_version.dart';
 
 class CloudSyncPage extends StatefulWidget {
   const CloudSyncPage({super.key});
@@ -92,6 +93,71 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
   }
 
   Widget _buildCloudSyncSection(BuildContext context, StorageService storageService, ThemeData theme) {
+    // Pre-release builds cannot use cloud sync to prevent database
+    // version conflicts with stable releases on other devices.
+    if (isPreRelease) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('☁️ Cloud Sync'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.cloud_off, size: 48, color: Colors.amber.withValues(alpha: 0.6)),
+                const SizedBox(height: 12),
+                Text(
+                  'Cloud Sync Disabled',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This feature is disabled due to database incompatibility '
+                  'with the stable release. Cloud Sync will be re-enabled '
+                  'once $stableVersionBase goes stable.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.amber,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This pre-release uses a separate database '
+                          '(front_porch_beta.db) to protect your stable data.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.blueAccent,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     final syncService = Provider.of<CloudSyncService>(context);
     final isEnabled = storageService.cloudSyncEnabled;
     final provider = storageService.cloudSyncProvider;
@@ -623,6 +689,45 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
   }
 
   Widget _buildBackupSection(BuildContext context, ThemeData theme) {
+    if (isPreRelease) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('Database Backups'),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.backup, size: 48, color: Colors.amber.withValues(alpha: 0.6)),
+                const SizedBox(height: 12),
+                Text(
+                  'Backups Disabled',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Database backups are disabled in pre-release builds to prevent '
+                  'confusion between beta and stable databases. Backups will be '
+                  're-enabled once $stableVersionBase goes stable.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.amber,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

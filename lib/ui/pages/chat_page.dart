@@ -11,9 +11,15 @@ import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/ui/dialogs/user_persona_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
+import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/services/llm_provider.dart';
+import 'package:front_porch_ai/ui/dialogs/image_gen_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/call_overlay.dart';
 import 'package:file_picker/file_picker.dart';
 
 class _StyledTextController extends TextEditingController {
@@ -71,6 +77,7 @@ class _ChatPageState extends State<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   bool _autoScroll = true;
   double _sidebarWidth = 300;
+  bool _isCallActive = false;
 
   @override
   void initState() {
@@ -289,6 +296,16 @@ class _ChatPageState extends State<ChatPage> {
                 color: Colors.black54,
                 child: const Center(
                   child: CircularProgressIndicator(),
+                ),
+              ),
+            // Voice call overlay
+            if (_isCallActive && character != null && !isGroup)
+              Positioned.fill(
+                child: CallOverlay(
+                  character: character,
+                  onEndCall: () {
+                    setState(() => _isCallActive = false);
+                  },
                 ),
               ),
           ],
@@ -578,6 +595,40 @@ class _ChatPageState extends State<ChatPage> {
                               },
                             ),
                           ),
+                          if (!isCurrent)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                              tooltip: 'Delete chat',
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: const Color(0xFF1F2937),
+                                    title: const Text('Delete Chat?'),
+                                    content: Text(
+                                      'This will permanently delete this chat and all its messages.\n\n"${s['preview']}"',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await chatService.deleteSession(s['id']);
+                                  sessions = await chatService.getSessions();
+                                  setDialogState(() {});
+                                }
+                              },
+                            ),
                           if (isCurrent)
                             const Icon(Icons.check, color: Colors.greenAccent),
                         ],
@@ -669,6 +720,132 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showImageGenDialog(BuildContext context, ChatService chatService, ImageGenMode mode) async {
+    final personaService = Provider.of<UserPersonaService>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
+    final character = chatService.activeCharacter;
+
+    // Get the active LLM service for smart prompt generation
+    final llmService = llmProvider.activeService.isReady ? llmProvider.activeService : null;
+
+    // Get world info if available
+    String? worldInfo;
+    try {
+      final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+      final worlds = worldRepo.worlds;
+      if (worlds.isNotEmpty) {
+        worldInfo = worlds.first.description;
+      }
+    } catch (_) {}
+
+    // Get recent messages for scene visualization
+    List<String>? recentMessages;
+    String? lastMessage;
+    final messages = chatService.messages;
+    if (messages.isNotEmpty) {
+      lastMessage = messages.last.displayText;
+      recentMessages = messages
+          .reversed
+          .take(5)
+          .map((m) => m.displayText)
+          .where((m) => m.isNotEmpty)
+          .toList()
+          .reversed
+          .toList();
+    }
+
+    // For custom prompt, show a text input dialog first
+    String? customPrompt;
+    if (mode == ImageGenMode.customPrompt) {
+      final promptController = TextEditingController();
+      customPrompt = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1F2937),
+          title: const Row(
+            children: [
+              Icon(Icons.brush, color: Colors.purpleAccent),
+              SizedBox(width: 12),
+              Text('Custom Image Prompt', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+          content: SizedBox(
+            width: 400,
+            child: TextField(
+              controller: promptController,
+              maxLines: 4,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Describe the image you want to generate...',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: const Color(0xFF374151),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, promptController.text),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent),
+              child: const Text('Generate', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (customPrompt == null || customPrompt.trim().isEmpty) return;
+      customPrompt = customPrompt.trim();
+    }
+
+    if (!context.mounted) return;
+
+    // Accept callback for avatar/background modes
+    void Function(String path)? onAccept;
+    if (mode == ImageGenMode.characterPortrait && character != null) {
+      onAccept = (path) {
+        character.imagePath = path;
+        final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+        charRepo.updateCharacter(character);
+      };
+    } else if (mode == ImageGenMode.chatBackground) {
+      onAccept = (path) {
+        storage.setChatBackground(path);
+      };
+    } else if (mode == ImageGenMode.userAvatar) {
+      onAccept = (path) {
+        final updatedPersona = personaService.persona.copyWith(avatarPath: path);
+        personaService.updatePersona(updatedPersona);
+      };
+    }
+
+    // Pass raw context to the dialog — it will use the LLM to craft the prompt
+    ImageGenDialog.show(
+      context,
+      mode: mode,
+      customPrompt: customPrompt,
+      lastMessage: lastMessage,
+      characterName: character?.name,
+      characterDescription: character?.description,
+      characterPersonality: character?.personality,
+      scenario: character?.scenario,
+      worldInfo: worldInfo,
+      personaName: personaService.persona.name,
+      personaDescription: personaService.persona.description,
+      recentMessages: recentMessages,
+      llmService: llmService,
+      onAccept: onAccept,
     );
   }
 
@@ -797,6 +974,82 @@ class _ChatPageState extends State<ChatPage> {
               );
             },
           ),
+
+          // Image Generation Menu
+          Consumer<StorageService>(
+            builder: (context, storage, _) {
+              if (!storage.imageGenEnabled) return const SizedBox.shrink();
+              return PopupMenuButton<ImageGenMode>(
+                icon: const Icon(Icons.auto_awesome, color: Colors.purpleAccent),
+                padding: EdgeInsets.zero,
+                tooltip: 'Generate Image',
+                onSelected: (mode) => _showImageGenDialog(context, chatService, mode),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: ImageGenMode.customPrompt,
+                    child: Row(
+                      children: [
+                        Icon(Icons.brush, size: 20, color: Colors.purpleAccent),
+                        SizedBox(width: 12),
+                        Text('Custom Prompt'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: ImageGenMode.visualizeScene,
+                    child: Row(
+                      children: [
+                        Icon(Icons.landscape, size: 20, color: Colors.green),
+                        SizedBox(width: 12),
+                        Text('Visualize Scene'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: ImageGenMode.fromLastMessage,
+                    child: Row(
+                      children: [
+                        Icon(Icons.chat_bubble_outline, size: 20, color: Colors.blueAccent),
+                        SizedBox(width: 12),
+                        Text('From Last Message'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: ImageGenMode.characterPortrait,
+                    child: Row(
+                      children: [
+                        Icon(Icons.face, size: 20, color: Colors.amber),
+                        SizedBox(width: 12),
+                        Text('Character Portrait'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: ImageGenMode.chatBackground,
+                    child: Row(
+                      children: [
+                        Icon(Icons.wallpaper, size: 20, color: Colors.teal),
+                        SizedBox(width: 12),
+                        Text('Chat Background'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: ImageGenMode.userAvatar,
+                    child: Row(
+                      children: [
+                        Icon(Icons.person, size: 20, color: Colors.orange),
+                        SizedBox(width: 12),
+                        Text('User Avatar'),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
           
           const SizedBox(width: 4),
 
@@ -828,6 +1081,78 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
           const SizedBox(width: 4),
+          // Mic button (push-to-talk STT)
+          Consumer2<SttService, StorageService>(
+            builder: (context, sttService, storage, _) {
+              if (!storage.sttEnabled || !sttService.isEngineUsable) {
+                return const SizedBox.shrink();
+              }
+              if (sttService.isTranscribing) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: SizedBox(
+                    width: 24, height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blueAccent),
+                  ),
+                );
+              }
+              return Tooltip(
+                message: sttService.isRecording ? 'Stop recording' : 'Voice input',
+                child: IconButton(
+                  icon: Icon(
+                    sttService.isRecording ? Icons.stop_circle : Icons.mic,
+                    color: sttService.isRecording ? Colors.redAccent : Colors.white70,
+                  ),
+                  onPressed: chatService.isGenerating ? null : () async {
+                    if (sttService.isRecording) {
+                      final text = await sttService.stopRecordingAndTranscribe();
+                      if (text != null && text.isNotEmpty) {
+                        if (storage.autoSendTranscription && _controller.text.isEmpty) {
+                          chatService.sendMessage(text);
+                        } else {
+                          _controller.text = _controller.text.isEmpty
+                              ? text
+                              : '${_controller.text} $text';
+                          _controller.selection = TextSelection.fromPosition(
+                            TextPosition(offset: _controller.text.length),
+                          );
+                        }
+                      }
+                    } else {
+                      final micOk = await sttService.checkMicAvailable();
+                      if (!micOk && context.mounted) {
+                        _showNoMicDialog(context);
+                        return;
+                      }
+                      await sttService.startRecording();
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+          // Call button (voice call mode)
+          Consumer2<SttService, StorageService>(
+            builder: (context, sttService, storage, _) {
+              if (!storage.sttEnabled || !sttService.isEngineUsable || chatService.isGroupMode) {
+                return const SizedBox.shrink();
+              }
+              return Tooltip(
+                message: 'Start voice call',
+                child: IconButton(
+                  icon: const Icon(Icons.call, color: Colors.greenAccent),
+                  onPressed: chatService.isGenerating || sttService.isBusy ? null : () async {
+                    final micOk = await sttService.checkMicAvailable();
+                    if (!micOk && context.mounted) {
+                      _showNoMicDialog(context);
+                      return;
+                    }
+                    setState(() => _isCallActive = true);
+                  },
+                ),
+              );
+            },
+          ),
           // Auto-play button (observer mode only)
           if (chatService.isGroupMode && chatService.observerMode && !chatService.isGenerating)
             Tooltip(
@@ -881,6 +1206,32 @@ class _ChatPageState extends State<ChatPage> {
                 },
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Wraps a sidebar widget with a draggable resize handle on its left edge.
+  void _showNoMicDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        icon: const Icon(Icons.mic_off, color: Colors.redAccent, size: 40),
+        title: const Text('No Microphone Detected',
+          style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'No microphone was found or microphone permission was denied.\n\n'
+          '• Check that a microphone is connected\n'
+          '• Grant microphone permission if prompted\n'
+          '• Select a specific microphone in Settings → Voice Input',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );
@@ -1086,6 +1437,9 @@ class _ChatPageState extends State<ChatPage> {
                 const SizedBox(height: 16),
                 // Author's Note — editable
                 _AuthorNoteSection(chatService: chatService),
+                const SizedBox(height: 16),
+                // Chat Summary
+                _SummarySection(chatService: chatService),
                 const SizedBox(height: 16),
                 _SidebarSection(title: 'Scenario', content: replace(character.scenario)),
                 const SizedBox(height: 16),
@@ -2187,6 +2541,317 @@ class _AuthorNoteSectionState extends State<_AuthorNoteSection> {
             );
           },
         ),
+      ],
+    );
+  }
+}
+
+/// Chat Summary sidebar section — shows enable toggle, config,
+/// current summary, and allows editing/pause/regeneration.
+class _SummarySection extends StatefulWidget {
+  final ChatService chatService;
+  const _SummarySection({required this.chatService});
+
+  @override
+  State<_SummarySection> createState() => _SummarySectionState();
+}
+
+class _SummarySectionState extends State<_SummarySection> {
+  late TextEditingController _controller;
+  bool _showSettings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.chatService.summary);
+    widget.chatService.addListener(_onChatChanged);
+  }
+
+  void _onChatChanged() {
+    if (_controller.text != widget.chatService.summary) {
+      _controller.text = widget.chatService.summary;
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.chatService.removeListener(_onChatChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = Provider.of<StorageService>(context);
+    final enabled = storage.summaryEnabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header with enable toggle
+        Row(
+          children: [
+            const Icon(Icons.auto_stories, size: 16, color: Colors.tealAccent),
+            const SizedBox(width: 6),
+            const Text('Chat Summary',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 13)),
+            const Spacer(),
+            if (enabled && widget.chatService.isSummaryGenerating)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.tealAccent),
+                ),
+              ),
+            SizedBox(
+              height: 28,
+              child: FittedBox(
+                child: Switch(
+                  value: enabled,
+                  onChanged: (val) => storage.setSummaryEnabled(val),
+                  activeColor: Colors.tealAccent,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        if (!enabled)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Auto-summarize conversations so the AI remembers earlier events even after they leave the context window.',
+              style: TextStyle(fontSize: 11, color: Colors.white30),
+            ),
+          ),
+
+        if (enabled) ...[
+          const SizedBox(height: 8),
+          // Summary text field
+          TextField(
+            controller: _controller,
+            maxLines: 6,
+            minLines: 2,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+            decoration: InputDecoration(
+              hintText: 'No summary yet. It will generate after enough messages...',
+              hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+              filled: true,
+              fillColor: const Color(0xFF111827),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.white12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.tealAccent),
+              ),
+              contentPadding: const EdgeInsets.all(10),
+            ),
+            onChanged: (val) {
+              widget.chatService.setSummary(val);
+            },
+          ),
+          const SizedBox(height: 6),
+          // Controls row
+          Row(
+            children: [
+              // Pause/Resume toggle
+              InkWell(
+                onTap: () => widget.chatService.setSummaryPaused(!widget.chatService.summaryPaused),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.chatService.summaryPaused ? Icons.play_arrow : Icons.pause,
+                        size: 14,
+                        color: widget.chatService.summaryPaused ? Colors.orangeAccent : Colors.white38,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.chatService.summaryPaused ? 'Paused' : 'Auto',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: widget.chatService.summaryPaused ? Colors.orangeAccent : Colors.white38,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Settings gear toggle
+              InkWell(
+                onTap: () => setState(() => _showSettings = !_showSettings),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Icon(Icons.tune, size: 14,
+                    color: _showSettings ? Colors.tealAccent : Colors.white38),
+                ),
+              ),
+              const Spacer(),
+              // Regenerate button
+              InkWell(
+                onTap: widget.chatService.isSummaryGenerating
+                    ? null
+                    : () => widget.chatService.forceSummaryUpdate(),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh, size: 14,
+                        color: widget.chatService.isSummaryGenerating ? Colors.white12 : Colors.tealAccent),
+                      const SizedBox(width: 4),
+                      Text('Regen',
+                        style: TextStyle(fontSize: 10,
+                          color: widget.chatService.isSummaryGenerating ? Colors.white12 : Colors.tealAccent)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (widget.chatService.summaryLastIndex > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Last updated at message #${widget.chatService.summaryLastIndex}',
+                style: const TextStyle(fontSize: 10, color: Colors.white24),
+              ),
+            ),
+
+          // Expandable settings panel
+          if (_showSettings) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Update Interval
+                  Row(
+                    children: [
+                      const Text('Update every', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                      const Spacer(),
+                      Text('${storage.summaryInterval} messages',
+                        style: const TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      value: storage.summaryInterval.toDouble(),
+                      min: 3,
+                      max: 50,
+                      divisions: 47,
+                      activeColor: Colors.tealAccent,
+                      inactiveColor: Colors.white12,
+                      onChanged: (val) => storage.setSummaryInterval(val.toInt()),
+                    ),
+                  ),
+                  // Max Words
+                  Row(
+                    children: [
+                      const Text('Max words', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                      const Spacer(),
+                      Text('${storage.summaryMaxWords}',
+                        style: const TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      value: storage.summaryMaxWords.toDouble(),
+                      min: 50,
+                      max: 1000,
+                      divisions: 19,
+                      activeColor: Colors.tealAccent,
+                      inactiveColor: Colors.white12,
+                      onChanged: (val) => storage.setSummaryMaxWords(val.toInt()),
+                    ),
+                  ),
+                  // Summary Prompt
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('Summary Prompt', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          storage.setSummaryPrompt(StorageService.defaultSummaryPrompt);
+                          setState(() {});
+                        },
+                        child: const Text('Reset', style: TextStyle(fontSize: 10, color: Colors.tealAccent)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: TextEditingController(text: storage.summaryPrompt),
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                    decoration: InputDecoration(
+                      hintText: 'Instructions for summarizing...',
+                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                      filled: true,
+                      fillColor: const Color(0xFF0D1117),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Colors.white12),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Colors.white12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Colors.tealAccent),
+                      ),
+                      contentPadding: const EdgeInsets.all(8),
+                    ),
+                    onChanged: (val) => storage.setSummaryPrompt(val),
+                  ),
+                  const SizedBox(height: 6),
+                  const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 12, color: Colors.amber),
+                      SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Uses your active LLM — consumes tokens on paid APIs.',
+                          style: TextStyle(fontSize: 10, color: Colors.amber),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ],
     );
   }
