@@ -3,7 +3,7 @@
 ![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)
 ![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
-![Stable](https://img.shields.io/badge/Status-Stable-brightgreen)
+![Alpha](https://img.shields.io/badge/Status-Alpha-orange)
 
 ## 📝 Note from the Dev
 
