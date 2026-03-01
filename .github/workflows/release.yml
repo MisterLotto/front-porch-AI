@@ -75,7 +75,17 @@ jobs:
               f.write(\"/// Update this constant whenever a new release is made.\n\")
               f.write(\"/// This avoids reliance on platform-specific version resource extraction\n\")
               f.write(\"/// (e.g., PackageInfo.fromPlatform) which can be unreliable on Windows.\n\")
-              f.write(\"const String appVersion = '$DISPLAY_VERSION';\n\")
+              f.write(\"const String appVersion = '$DISPLAY_VERSION';\n\n\")
+              f.write(\"/// Whether the current build is a pre-release (alpha, beta, rc, dev).\n\")
+              f.write(\"bool get isPreRelease {\n\")
+              f.write(\"  final lower = appVersion.toLowerCase();\n\")
+              f.write(\"  return lower.contains('-alpha') ||\n\")
+              f.write(\"      lower.contains('-beta') ||\n\")
+              f.write(\"      lower.contains('-rc') ||\n\")
+              f.write(\"      lower.contains('-dev');\n\")
+              f.write(\"}\n\n\")
+              f.write(\"/// The stable version number without the pre-release suffix.\n\")
+              f.write(\"String get stableVersionBase => appVersion.split('-').first;\n\")
           "
           # Verify both were updated (visible in CI logs)
           echo "Verifying pubspec version:"
