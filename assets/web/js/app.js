@@ -3344,6 +3344,11 @@
                     </div>
                 `;
             }
+            // Also disable backup section
+            const backupBtn = $('#btn-backup-create');
+            if (backupBtn) backupBtn.style.display = 'none';
+            const backupList = $('#backup-list');
+            if (backupList) backupList.innerHTML = '<p style="text-align:center;color:#FBBF24;padding:16px 0;font-size:13px">Backups are disabled in pre-release builds.</p>';
             return;
         }
 

@@ -29,6 +29,15 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 
 ## 🆕 What's New in V0.9.0
 
+- 🧙 **AI Character Creator**: Generate complete, ready-to-chat character cards from just a name and a concept. The AI builds a full V2-spec card — personality, backstory, dialogue examples, system prompt, and optional avatar — all in one flow.
+  - **Multi-Step Wizard**: Streamlined 4-step process — Setup (backend & model) → Configure (character details) → Generate → Review & Edit.
+  - **Dual Backend Support**: Works with both remote API (OpenRouter, Nano-GPT) and local KoboldCpp models.
+  - **KoboldCpp Model Manager**: Scan, select, and hot-reload local `.gguf` models directly from the creator with real-time status indicators.
+  - **AI Avatar Generation**: Automatic portrait generation via API, or a copyable image prompt for local Stable Diffusion when using KoboldCpp.
+  - **Editor Passes**: Optional AI post-processing — Anti-Puppet (removes {{user}} puppeting), Consistency Check, Quality Polish, and Truncation Completion.
+  - **Alternate Greetings**: Generate up to 5 unique first messages with configurable tone, length, and art style.
+  - **Lorebook Auto-Generation**: Optionally generate world-building lorebook entries alongside the character.
+  - **Persona-Aware**: Select a {{user}} persona to tailor greetings, or leave blank for public cards.
 - 🌐 **Full-Featured Web UI**: Access Front Porch AI from any device on your local network. A complete browser-based interface served directly from the desktop app — no separate server needed. Includes chat, characters, group chat, cloud sync, settings, and more — full parity with the desktop experience.
 - 🎨 **AI Image Generation**: Generate images directly from your chat using your existing API provider (Nano-GPT, OpenRouter, or any OpenAI-compatible endpoint).
   - **6 Generation Modes**: Visualize Scene, From Last Message, Character Portrait, Chat Background, User Avatar, and Custom Prompt.
@@ -45,6 +54,11 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 - 🎛️ **Extended Max Output Tokens**: Increased from 2,048 to 16,384 to support thinking models where reasoning tokens count toward the limit.
 - 🛡️ **Pre-Release Safety**: Beta builds use a separate database (`front_porch_beta.db`) and disable cloud sync to prevent schema conflicts with stable releases.
 - 📄 **License Change**: Switched from GPLv3 to **AGPL-3.0** to ensure that anyone hosting a modified version as a network service must share their changes. Versions 0.8.x and earlier remain GPLv3.
+- 🐛 **Bug Fixes**:
+  - Fixed first message formatting — actions now correctly use `*asterisks*`, dialogue uses `"quotation marks"`, narration is plain text
+  - Fixed AI-generated image prompts containing character names and narrative prose instead of clean visual trait tags
+  - Fixed truncated first messages not being detected or completed by editor passes
+  - Fixed avatar prompt generator outputting story-like descriptions instead of comma-separated visual tags
 
 <details>
 <summary><strong>📦 Previous Releases</strong></summary>
@@ -241,11 +255,8 @@ A powerful, cross-platform desktop application designed to streamline the manage
 ### 🎨 Character Creation
 <img src="docs/screenshots/create.png" width="800" alt="Character Creation">
 
-Create detailed character cards (V2 spec compatible) with a user-friendly form UI. Support for:
-- Name, Description, Personality, Scenario, First Message
-- Alternate Greetings
-- Tags
-- Avatar image upload
+- **AI Character Creator**: Generate a complete character card from just a name and concept — the AI writes the personality, backstory, dialogue examples, system prompt, lorebook, and even an avatar. Multi-step wizard with editor passes for quality control.
+- **Manual Creation**: Build detailed character cards (V2 spec compatible) with a full-form UI — name, description, personality, scenario, first message, alternate greetings, tags, and avatar upload.
 
 ### 💬 Immersive Chat Experience
 <img src="docs/screenshots/chat.png" width="800" alt="Immersive Chat Interface">

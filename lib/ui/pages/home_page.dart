@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
+import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -224,6 +225,18 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const SizedBox(width: 16),
                     ElevatedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const CharacterCreatorPage()),
+                      ),
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('AI Create'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber.shade800,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
                       onPressed: () => _folderImportCharacters(context),
                       icon: const Icon(Icons.library_add),
                       label: const Text('Bulk Import'),
@@ -402,18 +415,22 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: () => _openBrowser(context),
-                          icon: const Icon(Icons.public),
-                          label: const Text('AI Cards'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+                        IconButton(
+                          tooltip: 'AI Character Creator',
+                          icon: const Icon(Icons.auto_awesome, color: Colors.amberAccent),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const CharacterCreatorPage()),
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
+                        IconButton(
+                          tooltip: 'Browse AI Character Cards',
+                          icon: const Icon(Icons.public, color: Colors.blueAccent),
+                          onPressed: () => _openBrowser(context),
+                        ),
+                        IconButton(
+                          tooltip: 'Chub.ai (Caution)',
+                          icon: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
                           onPressed: () => _showChubWarning(context),
-                          icon: const Icon(Icons.warning_amber_rounded),
-                          label: const Text('Chub.ai'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
                         ),
                       ],
                     ],

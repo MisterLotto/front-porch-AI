@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:front_porch_ai/services/desktop_spell_check_service.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/models/character_card.dart';
@@ -75,14 +77,36 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final _StyledTextController _controller = _StyledTextController();
   final ScrollController _scrollController = ScrollController();
+  late final FocusNode _chatFocusNode;
   bool _autoScroll = true;
   double _sidebarWidth = 300;
   bool _isCallActive = false;
+  bool _wasLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Auto-scroll logic could be enhanced here
+    _chatFocusNode = FocusNode(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+          if (HardwareKeyboard.instance.isShiftPressed) {
+            return KeyEventResult.ignored; // let the TextField insert a newline
+          }
+          // Bare Enter → send message
+          final chatService = Provider.of<ChatService>(context, listen: false);
+          final text = _controller.text.trim();
+          if (text.isNotEmpty && !chatService.isGenerating) {
+            chatService.sendMessage(text);
+            _controller.clear();
+            WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+    // Scroll to bottom on initial load
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   void _scrollToBottom() {
@@ -107,8 +131,11 @@ class _ChatPageState extends State<ChatPage> {
           return const Center(child: Text('No character selected.'));
         }
         
-        // Trigger scroll on build if messages changed
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        // Scroll to bottom when a session finishes loading
+        if (_wasLoading && !chatService.isLoadingSession) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        }
+        _wasLoading = chatService.isLoadingSession;
 
         return Stack(
           children: [
@@ -1056,9 +1083,15 @@ class _ChatPageState extends State<ChatPage> {
           Expanded(
             child: TextField(
               controller: _controller,
+              focusNode: _chatFocusNode,
               maxLines: 5,
               minLines: 1,
-              textInputAction: TextInputAction.send,
+              textInputAction: TextInputAction.newline,
+              spellCheckConfiguration: (Platform.isLinux || Platform.isWindows)
+                  ? SpellCheckConfiguration(spellCheckService: DesktopSpellCheckService())
+                  : (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
+                      ? const SpellCheckConfiguration()
+                      : null,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: chatService.observerMode ? 'Direct the scene...' : 'Type a message...',
@@ -1072,12 +1105,6 @@ class _ChatPageState extends State<ChatPage> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
-              onSubmitted: (value) {
-                if (value.isNotEmpty && !chatService.isGenerating) {
-                  chatService.sendMessage(value);
-                  _controller.clear();
-                }
-              },
             ),
           ),
           const SizedBox(width: 4),
@@ -1202,6 +1229,7 @@ class _ChatPageState extends State<ChatPage> {
                    if (_controller.text.isNotEmpty && !chatService.isGenerating) {
                       chatService.sendMessage(_controller.text);
                       _controller.clear();
+                      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
                    }
                 },
               ),
