@@ -12,10 +12,22 @@ class ChatSettingsDialog extends StatefulWidget {
 
 class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   final TextEditingController _stopSequenceController = TextEditingController();
+  late final TextEditingController _bannedPhrasesController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Read once at dialog open — avoids recreation on every rebuild
+    final storageService = Provider.of<StorageService>(context, listen: false);
+    _bannedPhrasesController = TextEditingController(
+      text: storageService.bannedPhrases.join('\n'),
+    );
+  }
 
   @override
   void dispose() {
     _stopSequenceController.dispose();
+    _bannedPhrasesController.dispose();
     super.dispose();
   }
 
@@ -283,6 +295,56 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                              ],
                            ),
                          ),
+
+                         // ── Banned Phrases (Anti-Slop) ──
+                         const SizedBox(height: 24),
+                         Row(
+                           children: [
+                             const Text('Banned Phrases', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                             const SizedBox(width: 6),
+                             Tooltip(
+                               message: 'KoboldCpp only. If any of these phrases appear during generation, the model backtracks and regenerates without them.',
+                               child: const Icon(Icons.info_outline, size: 16, color: Colors.white38),
+                             ),
+                           ],
+                         ),
+                         const SizedBox(height: 4),
+                         Text(
+                           'One phrase per line (local KoboldCpp only)',
+                           style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+                         ),
+                         const SizedBox(height: 8),
+                         Container(
+                           decoration: BoxDecoration(
+                             color: const Color(0xFF374151),
+                             borderRadius: BorderRadius.circular(8),
+                           ),
+                           padding: const EdgeInsets.all(8.0),
+                           child: TextField(
+                             controller: _bannedPhrasesController,
+                             maxLines: 5,
+                             minLines: 2,
+                             style: const TextStyle(color: Colors.white, fontSize: 13),
+                             decoration: const InputDecoration(
+                               hintText: 'shivers down\na cold shiver\nher eyes sparkled',
+                               hintStyle: TextStyle(color: Colors.white24, fontSize: 13),
+                               border: InputBorder.none,
+                               contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                             ),
+                             onChanged: (val) {
+                               final phrases = val.split('\n').where((s) => s.trim().isNotEmpty).map((s) => s.trim()).toList();
+                               storageService.setBannedPhrases(phrases);
+                             },
+                           ),
+                         ),
+                         if (storageService.bannedPhrases.isNotEmpty)
+                           Padding(
+                             padding: const EdgeInsets.only(top: 6),
+                             child: Text(
+                               '${storageService.bannedPhrases.length} phrase${storageService.bannedPhrases.length == 1 ? '' : 's'} banned',
+                               style: TextStyle(color: Colors.amber.shade300, fontSize: 11),
+                             ),
+                           ),
                      ],
                    ),
                  ),
