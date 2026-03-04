@@ -1953,10 +1953,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 24),
             _buildStopSequencesSection(context),
+            const SizedBox(height: 24),
+            _buildBannedPhrasesSection(context),
          ],
        ),
      );
   }
+
 
   Widget _buildSlider(String label, double value, double min, double max, Function(double) onChanged, BuildContext context, {int? divisions, String? tooltip}) {
     final theme = Theme.of(context);
@@ -2123,7 +2126,60 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildBannedPhrasesSection(BuildContext context) {
+    final storageService = Provider.of<StorageService>(context);
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Banned Phrases (Anti-Slop)', context),
+        const SizedBox(height: 8),
+        const Text(
+          'Phrases banned from generation. If detected, KoboldCpp backtracks and regenerates. '
+          'One phrase per line. (Local KoboldCpp only)',
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(8.0),
+          child: TextField(
+            controller: TextEditingController(
+              text: storageService.bannedPhrases.join('\n'),
+            ),
+            maxLines: 6,
+            minLines: 3,
+            style: theme.textTheme.bodyMedium,
+            decoration: InputDecoration(
+              hintText: 'shivers down\na cold shiver\nher eyes sparkled',
+              hintStyle: TextStyle(color: theme.textTheme.bodySmall?.color?.withOpacity(0.4)),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            onChanged: (val) {
+              final phrases = val.split('\n').where((s) => s.trim().isNotEmpty).map((s) => s.trim()).toList();
+              storageService.setBannedPhrases(phrases);
+            },
+          ),
+        ),
+        if (storageService.bannedPhrases.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '${storageService.bannedPhrases.length} phrase${storageService.bannedPhrases.length == 1 ? '' : 's'} banned',
+              style: TextStyle(color: Colors.amber.shade300, fontSize: 11),
+            ),
+          ),
+      ],
+    );
+  }
+
   void _showSavePromptDialog(BuildContext context, StorageService storageService) {
+
     final controller = TextEditingController();
     showDialog(
       context: context,

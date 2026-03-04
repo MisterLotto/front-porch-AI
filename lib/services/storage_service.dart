@@ -125,6 +125,9 @@ class StorageService extends ChangeNotifier {
       'If a previous summary exists, update it with new events rather than starting fresh.';
   String _summaryPrompt = defaultSummaryPrompt;
 
+  // Banned phrases (anti-slop)
+  List<String> _bannedPhrases = [];
+
   // Getters
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
@@ -195,6 +198,7 @@ class StorageService extends ChangeNotifier {
   int get summaryInterval => _summaryInterval;
   int get summaryMaxWords => _summaryMaxWords;
   String get summaryPrompt => _summaryPrompt;
+  List<String> get bannedPhrases => List.unmodifiable(_bannedPhrases);
 
   StorageService() {
     _init();
@@ -313,6 +317,16 @@ class StorageService extends ChangeNotifier {
     _summaryInterval = _prefs?.getInt('summary_interval') ?? 10;
     _summaryMaxWords = _prefs?.getInt('summary_max_words') ?? 200;
     _summaryPrompt = _prefs?.getString('summary_prompt') ?? defaultSummaryPrompt;
+
+    // Banned phrases
+    final bannedJson = _prefs?.getString('banned_phrases');
+    if (bannedJson != null) {
+      try {
+        _bannedPhrases = List<String>.from(jsonDecode(bannedJson) as List);
+      } catch (_) {
+        _bannedPhrases = [];
+      }
+    }
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -861,6 +875,13 @@ class StorageService extends ChangeNotifier {
   Future<void> setSummaryPrompt(String value) async {
     _summaryPrompt = value;
     await _prefs?.setString('summary_prompt', value);
+    notifyListeners();
+  }
+
+  // Banned phrases setters
+  Future<void> setBannedPhrases(List<String> value) async {
+    _bannedPhrases = value.where((s) => s.isNotEmpty).toList();
+    await _prefs?.setString('banned_phrases', jsonEncode(_bannedPhrases));
     notifyListeners();
   }
 }

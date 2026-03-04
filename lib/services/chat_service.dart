@@ -1220,6 +1220,32 @@ class ChatService extends ChangeNotifier {
           'Do not include meta-commentary, stage directions for others, or break the fourth wall. '
           'Keep the response natural, and consistent with the scene.]\n';
 
+      // ── Context Shift: budget-aware history trimming ──
+      final fixedContent = "$systemPrompt\n"
+          "$loreContent"
+          "$personaBlock\n"
+          "Scenario: $scenario\n"
+          "$mesExampleBlock"
+          "<START>\n"
+          "$postHistoryBlock"
+          "$authorNoteBlock"
+          "$impersonateInstruction"
+          "$suffix";
+      final fixedTokens = await _countTokens(fixedContent);
+      final contextBudget = _storageService.contextSize;
+      final generationReserve = _storageService.maxLength + 50;
+      final historyBudget = contextBudget - fixedTokens - generationReserve;
+
+      if (historyBudget > 0) {
+        final result = await _buildChatHistoryWithBudget(historyBudget);
+        history = result.history;
+      } else if (_messages.isNotEmpty) {
+        final lastMsg = _messages.last;
+        history = lastMsg.characterId == '__director__'
+            ? '[Director: ${lastMsg.text}]'
+            : '${lastMsg.sender}: ${lastMsg.text}';
+      }
+
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
@@ -1231,6 +1257,7 @@ class ChatService extends ChangeNotifier {
           "$authorNoteBlock"
           "$impersonateInstruction"
           "$suffix";
+
 
       // Stop sequences: character names only (not user — we ARE the user)
       final stopSequences = {
@@ -1257,9 +1284,9 @@ class ChatService extends ChangeNotifier {
         xtcThreshold: _storageService.xtcThreshold,
         xtcProbability: _storageService.xtcProbability,
         stopSequences: stopSequences.toList(),
-        // Always disable reasoning for impersonate — we only want plain text
         reasoningEnabled: false,
         reasoningEffort: _storageService.reasoningEffort,
+        bannedPhrases: _storageService.bannedPhrases.isNotEmpty ? _storageService.bannedPhrases : null,
       );
 
       final stream = llmService.generateStream(genParams);
@@ -1420,7 +1447,6 @@ class ChatService extends ChangeNotifier {
       }
       final scenario = speakingCharacter.replacePlaceholders(rawScenario, userName: userName);
 
-      String history = _buildChatHistory();
       String suffix = "";
       
       if (mode == GenerationMode.normal) {
@@ -1463,6 +1489,42 @@ class ChatService extends ChangeNotifier {
         summaryBlock = '[Summary of events so far: $_summary]\n';
       }
 
+      String history = _buildChatHistory();
+
+      // ── Context Shift: budget-aware history trimming ──
+
+      // Calculate token cost of all fixed sections to determine chat history budget
+      final fixedContent = "$systemPrompt\n"
+          "$loreContent"
+          "$personaBlock\n"
+          "Scenario: $scenario\n"
+          "$mesExampleBlock"
+          "<START>\n"
+          "$summaryBlock"
+          "$postHistoryBlock"
+          "$authorNoteBlock"
+          "$suffix";
+      final fixedTokens = await _countTokens(fixedContent);
+      final contextBudget = _storageService.contextSize;
+      final generationReserve = _storageService.maxLength + 50; // +50 safety margin
+      final historyBudget = contextBudget - fixedTokens - generationReserve;
+
+      int droppedMessages = 0;
+      if (historyBudget > 0) {
+        final result = await _buildChatHistoryWithBudget(historyBudget);
+        history = result.history;
+        droppedMessages = result.droppedCount;
+      }
+      // If budget is zero or negative, fixed sections already fill the context — use minimal history
+      if (historyBudget <= 0 && _messages.isNotEmpty) {
+        // Include at least the last message for continuity
+        final lastMsg = _messages.last;
+        history = lastMsg.characterId == '__director__'
+            ? '[Director: ${lastMsg.text}]'
+            : '${lastMsg.sender}: ${lastMsg.text}';
+        droppedMessages = _messages.length - 1;
+      }
+
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
@@ -1487,6 +1549,7 @@ class ChatService extends ChangeNotifier {
         'Chat History': (history.length / 4).ceil(),
         'Post-History': (postHistoryBlock.length / 4).ceil(),
         'Author\'s Note': (authorNoteBlock.length / 4).ceil(),
+        if (droppedMessages > 0) 'Dropped Messages': droppedMessages,
       };
       // Remove zero-value entries
       _lastPromptBudget.removeWhere((_, v) => v == 0);
@@ -1495,6 +1558,7 @@ class ChatService extends ChangeNotifier {
       final stopSequences = {
         ..._storageService.stopSequences,
       };
+
       // In impersonate mode the model IS the user, so don't stop on user name
       if (mode != GenerationMode.impersonate) {
         stopSequences.add('\nUser:');
@@ -1532,6 +1596,7 @@ class ChatService extends ChangeNotifier {
         stopSequences: stopList,
         reasoningEnabled: _callMode ? false : _storageService.reasoningEnabled,
         reasoningEffort: _storageService.reasoningEffort,
+        bannedPhrases: _storageService.bannedPhrases.isNotEmpty ? _storageService.bannedPhrases : null,
       );
 
       // Get streaming response from whichever backend is active
@@ -1973,6 +2038,64 @@ class ChatService extends ChangeNotifier {
     }).toList();
     return lines.join("\n");
   }
+
+  /// Build chat history that fits within a token budget.
+  /// Walks messages newest-to-oldest, dropping the oldest that don't fit.
+  /// Returns ({String history, int droppedCount, int tokenCount}).
+  Future<({String history, int droppedCount, int tokenCount})> _buildChatHistoryWithBudget(int tokenBudget) async {
+    if (_messages.isEmpty) return (history: '', droppedCount: 0, tokenCount: 0);
+
+    // Format all messages
+    final formatted = _messages.map((m) {
+      if (m.characterId == '__director__') {
+        return '[Director: ${m.text}]';
+      }
+      return '${m.sender}: ${m.text}';
+    }).toList();
+
+    // If budget is very large or negative (unlimited), return everything
+    if (tokenBudget <= 0) {
+      return (history: formatted.join('\n'), droppedCount: 0, tokenCount: 0);
+    }
+
+    // Walk from newest to oldest, accumulating messages that fit
+    final included = <String>[];
+    int usedTokens = 0;
+    int droppedCount = 0;
+
+    for (int i = formatted.length - 1; i >= 0; i--) {
+      final msgText = formatted[i];
+      final msgTokens = await _countTokens(msgText);
+      if (usedTokens + msgTokens > tokenBudget && included.isNotEmpty) {
+        // This message would exceed budget — drop it and all older messages
+        droppedCount = i + 1;
+        break;
+      }
+      usedTokens += msgTokens;
+      included.insert(0, msgText);
+    }
+
+    // If messages were dropped, prepend a separator
+    String history = included.join('\n');
+    if (droppedCount > 0) {
+      history = '[Earlier messages truncated — see summary above for context]\n$history';
+    }
+
+    return (history: history, droppedCount: droppedCount, tokenCount: usedTokens);
+  }
+
+  /// Count tokens for a text string. Uses KoboldCpp's tokenizer when available,
+  /// falls back to chars/4 estimate for remote APIs.
+  Future<int> _countTokens(String text) async {
+    if (text.isEmpty) return 0;
+    // Use the KoboldCpp tokenizer if we're running locally
+    if (_llmProvider == null || _llmProvider!.isLocal) {
+      return _koboldService.countTokens(text);
+    }
+    // Fallback for remote APIs
+    return (text.length / 4).ceil();
+  }
+
 
   void clearChat() async {
     _messages.clear();

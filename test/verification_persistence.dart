@@ -23,6 +23,7 @@ class MockKoboldService extends Fake implements KoboldService {
     double xtcThreshold = 0.1,
     double xtcProbability = 0.5,
     List<String>? stopSequences,
+    List<String>? bannedPhrases,
   }) async {
     return "Mock Response";
   }

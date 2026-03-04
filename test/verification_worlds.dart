@@ -11,7 +11,7 @@ import 'dart:io';
 
 class MockKoboldService extends Fake implements KoboldService {
   @override
-  Future<String> generate(String prompt, {int maxLength = 80, int minLength = 0, double temp = 0.7, double repPenalty = 1.1, double topP = 0.9, double minP = 0.0, int repPenTokens = 64, double? dynatempRange, double xtcThreshold = 0.1, double xtcProbability = 0.5, List<String>? stopSequences}) async {
+  Future<String> generate(String prompt, {int maxLength = 80, int minLength = 0, double temp = 0.7, double repPenalty = 1.1, double topP = 0.9, double minP = 0.0, int repPenTokens = 64, double? dynatempRange, double xtcThreshold = 0.1, double xtcProbability = 0.5, List<String>? stopSequences, List<String>? bannedPhrases}) async {
     return "Mock Response";
   }
 }

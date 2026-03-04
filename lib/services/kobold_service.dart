@@ -199,6 +199,7 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
     double xtcThreshold = 0.1,
     double xtcProbability = 0.5,
     List<String>? stopSequences,
+    List<String>? bannedPhrases,
   }) async* {
     final uri = Uri.parse('$_baseUrl/api/extra/generate/stream');
     final Map<String, dynamic> payload = {
@@ -226,6 +227,11 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
 
     if (stopSequences != null && stopSequences.isNotEmpty) {
       payload['stop_sequence'] = stopSequences;
+    }
+
+    // Anti-slop phrase banning (KoboldCpp-specific)
+    if (bannedPhrases != null && bannedPhrases.isNotEmpty) {
+      payload['banned_tokens'] = bannedPhrases.join('||\$||');
     }
 
     final request = http.Request('POST', uri);
@@ -279,6 +285,7 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
       xtcThreshold: params.xtcThreshold,
       xtcProbability: params.xtcProbability,
       stopSequences: params.stopSequences,
+      bannedPhrases: params.bannedPhrases,
     );
   }
 
@@ -300,6 +307,7 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
     double xtcThreshold = 0.1,
     double xtcProbability = 0.5,
     List<String>? stopSequences,
+    List<String>? bannedPhrases,
   }) async {
     if (!_isRunning && !Platform.environment.containsKey('FLUTTER_TEST')) {
        _addLog('Warning: internal backend not running, trying to connect anyway...');
@@ -335,6 +343,11 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
 
         if (stopSequences != null && stopSequences.isNotEmpty) {
            payload['stop_sequence'] = stopSequences;
+        }
+
+        // Anti-slop phrase banning (KoboldCpp-specific)
+        if (bannedPhrases != null && bannedPhrases.isNotEmpty) {
+          payload['banned_tokens'] = bannedPhrases.join('||\$||');
         }
         
         final body = jsonEncode(payload);
@@ -435,6 +448,32 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
   }
 
   bool get isProcessAlive => _process != null && _isRunning;
+
+  /// Count tokens using the loaded model's actual tokenizer.
+  /// Falls back to chars/4 estimate if the endpoint is unavailable.
+  Future<int> countTokens(String text) async {
+    if (text.isEmpty) return 0;
+    try {
+      final uri = Uri.parse('$_baseUrl/api/extra/tokencount');
+      final client = http.Client();
+      try {
+        final response = await client.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'prompt': text}),
+        ).timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          return (data['value'] as num?)?.toInt() ?? (text.length / 4).ceil();
+        }
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      // Endpoint unavailable — fall back to estimate
+    }
+    return (text.length / 4).ceil();
+  }
 
   Future<void> stopKobold() async {
     if (_process != null) {

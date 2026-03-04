@@ -27,6 +27,7 @@ class MockKoboldService extends ChangeNotifier implements KoboldService {
     double xtcThreshold = 0.1,
     double xtcProbability = 0.5,
     List<String>? stopSequences,
+    List<String>? bannedPhrases,
   }) async {
     return 'Response mentioning magic key';
   }
@@ -53,8 +54,10 @@ class MockKoboldService extends ChangeNotifier implements KoboldService {
     bool useVulkan = false,
     bool useCublas = false,
     bool useMetal = false,
+    bool useRocm = false,
   }) async {}
   @override Future<void> stopKobold() async {}
+  @override Future<int> countTokens(String text) async => (text.length / 4).ceil();
 }
 
 class MockUserPersonaService extends ChangeNotifier implements UserPersonaService {

@@ -16,6 +16,7 @@ class GenerationParams {
   final List<String>? stopSequences;
   final bool reasoningEnabled;
   final String reasoningEffort;
+  final List<String>? bannedPhrases;
 
   const GenerationParams({
     required this.prompt,
@@ -32,6 +33,7 @@ class GenerationParams {
     this.stopSequences,
     this.reasoningEnabled = false,
     this.reasoningEffort = 'medium',
+    this.bannedPhrases,
   });
 }
 
