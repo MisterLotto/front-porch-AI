@@ -1953,8 +1953,10 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 24),
             _buildStopSequencesSection(context),
+            if (llmProvider.isLocal) ...[
             const SizedBox(height: 24),
             _buildBannedPhrasesSection(context),
+            ],
          ],
        ),
      );

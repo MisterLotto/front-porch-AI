@@ -296,21 +296,22 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                            ),
                          ),
 
-                         // ── Banned Phrases (Anti-Slop) ──
+                         // ── Banned Phrases (Anti-Slop) — local KoboldCpp only ──
+                         if (!isRemote) ...[
                          const SizedBox(height: 24),
                          Row(
                            children: [
                              const Text('Banned Phrases', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                              const SizedBox(width: 6),
                              Tooltip(
-                               message: 'KoboldCpp only. If any of these phrases appear during generation, the model backtracks and regenerates without them.',
+                               message: 'If any of these phrases appear during generation, the model backtracks and regenerates without them.',
                                child: const Icon(Icons.info_outline, size: 16, color: Colors.white38),
                              ),
                            ],
                          ),
                          const SizedBox(height: 4),
                          Text(
-                           'One phrase per line (local KoboldCpp only)',
+                           'One phrase per line',
                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
                          ),
                          const SizedBox(height: 8),
@@ -345,6 +346,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                style: TextStyle(color: Colors.amber.shade300, fontSize: 11),
                              ),
                            ),
+                         ],
                      ],
                    ),
                  ),
