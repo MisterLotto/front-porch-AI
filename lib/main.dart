@@ -45,6 +45,23 @@ import 'package:front_porch_ai/app_version.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+
+  // Intercept SIGINT (Ctrl+C) and SIGTERM on Linux/macOS to prevent
+  // the Flutter engine from doing an unclean teardown that triggers:
+  //   "FlutterEngineRemoveView returned kInvalidArguments"
+  //   "Segmentation fault (core dumped)"
+  if (!Platform.isWindows) {
+    ProcessSignal.sigint.watch().listen((_) async {
+      debugPrint('Caught SIGINT — shutting down gracefully...');
+      await windowManager.destroy();
+      exit(0);
+    });
+    ProcessSignal.sigterm.watch().listen((_) async {
+      debugPrint('Caught SIGTERM — shutting down gracefully...');
+      await windowManager.destroy();
+      exit(0);
+    });
+  }
   
   // Initialize database
   final db = await AppDatabase.instance();
