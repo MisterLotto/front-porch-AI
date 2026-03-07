@@ -140,7 +140,7 @@ class _WorldCard extends StatelessWidget {
         title: Row(
           children: [
             Expanded(
-              child: Text(world.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(world.name.replaceAll('Lorebook', 'World Lore'), style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
             if (world.linkedCharacterName != null)
               Container(
@@ -284,7 +284,7 @@ class _WorldCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Lorebook Entries (${world.lorebook.entries.length})',
+                    Text('World Lore Entries (${world.lorebook.entries.length})',
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                     IconButton(
                       icon: const Icon(Icons.add_circle, color: Colors.blueAccent),

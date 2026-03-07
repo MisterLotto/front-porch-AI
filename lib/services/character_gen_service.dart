@@ -30,10 +30,15 @@ class CharacterGenService {
     int altGreetingCount = 2,
     List<String> greetingTones = const ['Neutral'],
     bool generateLorebook = true,
+    List<String> loreCategories = const [],
+    String loreDepth = 'Standard',
     String apiSystemPrompt = '',
     String age = '',
     String sex = '',
     String relationship = '',
+    String descriptionDetail = '2-3 paragraphs',
+    String backstory = '',
+    String characterContext = '',
     String userPersonaContext = '',
     void Function(String accumulated)? onProgress,
     void Function(String error)? onError,
@@ -46,10 +51,14 @@ class CharacterGenService {
       concept: concept,
       personalityKeywords: personalityKeywords,
       generateLorebook: generateLorebook,
+      loreCategories: loreCategories,
+      loreDepth: loreDepth,
       apiSystemPrompt: apiSystemPrompt,
       age: age,
       sex: sex,
       relationship: relationship,
+      descriptionDetail: descriptionDetail,
+      backstory: backstory,
     );
 
     debugPrint('CharacterGen: Starting generation for "$name"');
@@ -80,6 +89,7 @@ class CharacterGenService {
       length: greetingLength,
       tone: greetingTones.isNotEmpty ? greetingTones[0] : 'Neutral',
       previousGreetings: [],
+      characterContext: characterContext,
       userPersonaContext: userPersonaContext,
     );
 
@@ -104,6 +114,7 @@ class CharacterGenService {
           length: greetingLength,
           tone: greetingTones.isNotEmpty ? greetingTones[(i + 1) % greetingTones.length] : 'Neutral',
           previousGreetings: [card.firstMessage, ...alts],
+          characterContext: characterContext,
           userPersonaContext: userPersonaContext,
         );
 
@@ -141,7 +152,7 @@ class CharacterGenService {
           maxLength: maxLen,
           minLength: minLen,
           temperature: 0.8,
-          repeatPenalty: 1.05,
+          repeatPenalty: 1.15,
           minP: 0.05,
           reasoningEnabled: false,
           stopSequences: ['```', '<END>', '</END>'],
@@ -194,10 +205,14 @@ class CharacterGenService {
     required String concept,
     String personalityKeywords = '',
     bool generateLorebook = true,
+    List<String> loreCategories = const [],
+    String loreDepth = 'Standard',
     String apiSystemPrompt = '',
     String age = '',
     String sex = '',
     String relationship = '',
+    String descriptionDetail = '2-3 paragraphs',
+    String backstory = '',
   }) {
     final keywordsLine = personalityKeywords.isNotEmpty
         ? 'Personality keywords: $personalityKeywords\n'
@@ -207,10 +222,29 @@ class CharacterGenService {
     final relationshipLine = relationship.isNotEmpty
         ? 'Relationship to {{user}}: $relationship\n'
         : '';
-
-    final lorebookSpec = generateLorebook
-        ? '- "lorebook": (array of 5-8 objects) world-building entries, each: {"name": "title", "key": "trigger,keywords", "content": "1-2 paragraphs of lore"}\n'
+    final backstoryLine = backstory.isNotEmpty
+        ? 'Backstory: $backstory\n'
         : '';
+
+    // Build lorebook spec with depth and categories
+    String lorebookSpec = '';
+    if (generateLorebook) {
+      String countRange;
+      switch (loreDepth) {
+        case 'Light':
+          countRange = '3-4';
+          break;
+        case 'Deep':
+          countRange = '10-15';
+          break;
+        default:
+          countRange = '5-8';
+      }
+      final categoryHint = loreCategories.isNotEmpty
+          ? ' focusing on: ${loreCategories.join(", ")}'
+          : '';
+      lorebookSpec = '- "lorebook": (array of $countRange objects) world-building entries$categoryHint, each: {"name": "title", "key": "trigger,keywords", "content": "1-2 paragraphs of lore"}\n';
+    }
 
     String sysSpec = '- "system_prompt": (string) brief instruction for how to portray this character';
     if (apiSystemPrompt.isNotEmpty) {
@@ -221,9 +255,8 @@ class CharacterGenService {
 
 Character name: $name
 Concept: $concept
-$ageLine$sexLine$relationshipLine$keywordsLine
+$ageLine$sexLine$relationshipLine$backstoryLine$keywordsLine
 Required JSON keys:
-- "description": (string) 2-3 paragraphs, third person, physical appearance + background + mannerisms
 - "personality": (string) 1-2 paragraphs, third person, core traits + motivations + quirks
 - "scenario": (string) 1 paragraph, the default conversation setting
 - "example_dialogue": (string) format: <START>\\n{{user}}: message\\n{{char}}: response\\n<START>\\n{{user}}: message\\n{{char}}: response
@@ -243,6 +276,7 @@ Use {{char}} for character name and {{user}} for user name. Do NOT include first
     required String length,
     required String tone,
     required List<String> previousGreetings,
+    String characterContext = '',
     String userPersonaContext = '',
   }) {
     String lengthSpec;
@@ -318,13 +352,29 @@ $userPersonaContext''';
       personaSection = '';
     }
 
-    return '''This is a roleplay between {{char}} ($name) and {{user}}. Write {{char}}'s opening message to begin the conversation. {{char}} should initiate an engaging scene and end with dialogue or a prompt that {{user}} can naturally respond to. Output ONLY the message text — no JSON, no quotes, no labels.
+    // Build character context section
+    String characterSection = '';
+    if (characterContext.isNotEmpty) {
+      characterSection = '''
+
+Character Details (weave these naturally into the scene — SHOW through action, environment, and description, don't just list them):
+$characterContext''';
+    }
+
+    return '''This is a roleplay between {{char}} ($name) and {{user}}. Write {{char}}'s opening message to begin the conversation. This is the FIRST interaction — {{user}} knows NOTHING about {{char}} yet. The greeting must SET THE SCENE and naturally introduce who {{char}} is through vivid storytelling. {{char}} should initiate an engaging scene and end with dialogue or a prompt that {{user}} can naturally respond to. Output ONLY the message text — no JSON, no quotes, no labels.
 
 Character: $name
 Description: $description
 Personality: $personality
 Scenario: $scenario
-$toneSpec$personaSection
+$toneSpec$characterSection$personaSection
+
+SCENE-SETTING REQUIREMENTS:
+- This is the OPENING of the story — describe the setting, atmosphere, and what is happening
+- Naturally reveal {{char}}'s appearance, race/species, and personality through the narrative (e.g. describe their features as they move, show personality through actions and dialogue)
+- Show {{char}}'s relationship to {{user}} through context and behavior, don't state it outright
+- Ground the scene in a specific moment and place — what does it look, sound, smell, feel like?
+- {{user}} should understand who {{char}} is and what's happening WITHOUT needing to read a character bio
 
 CRITICAL RULES — NEVER VIOLATE THESE:
 - Write ENTIRELY in FIRST PERSON as $name (use "I", "my", "me" — NEVER "she", "he", "they" or "$name" to refer to yourself)

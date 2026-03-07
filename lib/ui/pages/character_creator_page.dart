@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/character_gen_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
@@ -43,6 +45,44 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   int _altGreetingCount = 2;
   Set<String> _selectedTones = {'Neutral'};
   bool _generateLorebook = true;
+  Set<String> _selectedLoreCategories = {};
+  String _loreDepth = 'Standard';
+  Set<String> _selectedRelationships = {};
+  String _customRelationship = '';
+  String _selectedArchetype = '';
+  bool _nsfwEnabled = false;
+  String _generationDetail = 'Standard';
+
+  // SFW Appearance
+  String _race = '';
+  final _customRaceController = TextEditingController();
+  String _bodyType = '';
+  String _hairLength = '';
+  String _hairStyle = '';
+  String _skinTone = '';
+  Set<String> _notableFeatures = {};
+  String _absCore = '';
+  String _thighs = '';
+  String _hips = '';
+  String _shoulders = '';
+  String _waist = '';
+
+  // NSFW Appearance + Traits
+  String _chestSize = '';
+  String _buttSize = '';
+  String _experience = '';
+  String _dominance = '';
+  Set<String> _selectedKinks = {};
+  final _customKinksController = TextEditingController();
+  String _outfitVibe = '';
+
+  // Backstory
+  String _backstoryOrigin = '';
+  String _backstoryTone = '';
+  String _backstoryEra = '';
+  final _backstoryNotesController = TextEditingController();
+  bool _conceptGenerated = false;
+
   String _selectedPersonaId = ''; // '' = None (blank slate)
 
   // Editor pass toggles
@@ -89,6 +129,139 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     'Melancholy',
   ];
 
+  static const _loreCategoryOptions = [
+    'Locations',
+    'NPCs/Allies',
+    'Items/Equipment',
+    'History/Lore',
+    'Factions/Organizations',
+    'Abilities/Magic',
+    'Culture/Customs',
+    'Secrets/Hidden Lore',
+  ];
+
+  static const _loreDepths = ['Light', 'Standard', 'Deep'];
+
+  static const _relationshipPresets = [
+    // SFW
+    'Stranger', 'Childhood Friend', 'Rival', 'Best Friend',
+    'Mentor', 'Student', 'Roommate', 'Co-worker',
+    'Sparring Partner', 'Sibling',
+    // Spicy/NSFW
+    'Love Interest', 'Secret Admirer', 'Forbidden Romance',
+    'FWB', 'Ex-lover', 'Arranged Marriage',
+    'Fake Dating', 'Bodyguard',
+  ];
+
+  static const _nsfwRelationships = {
+    'Love Interest', 'Secret Admirer', 'Forbidden Romance',
+    'FWB', 'Ex-lover', 'Arranged Marriage',
+    'Fake Dating', 'Bodyguard',
+  };
+
+  static const _archetypePresets = {
+    'Tsundere': {
+      'concept': 'A sharp-tongued person who hides their caring nature behind a cold exterior, denying their feelings while secretly looking out for {{user}}',
+      'keywords': 'tsundere, sharp-tongued, secretly caring, stubborn, easily flustered',
+    },
+    'Yandere': {
+      'concept': 'An obsessively devoted person whose love borders on dangerous possessiveness, willing to do anything to keep {{user}} close',
+      'keywords': 'yandere, obsessive, possessive, devoted, unstable, sweet on the surface',
+    },
+    'Kuudere': {
+      'concept': 'A stoic and emotionally reserved individual who rarely shows feelings, but whose rare moments of warmth are deeply meaningful',
+      'keywords': 'kuudere, stoic, calm, reserved, analytical, quietly caring',
+    },
+    'Femme Fatale': {
+      'concept': 'A dangerously alluring and manipulative figure who uses charm and wit as weapons, always three steps ahead',
+      'keywords': 'seductive, cunning, confident, dangerous, mysterious, manipulative',
+    },
+    'Dark Lord': {
+      'concept': 'A powerful and charismatic ruler of dark forces, whose iron will conceals a complex past and a surprising code of honor',
+      'keywords': 'commanding, ruthless, charismatic, intelligent, dark humor, powerful',
+    },
+    'Mentor': {
+      'concept': 'A wise and experienced guide who mentors {{user}} through challenges, offering cryptic advice and hard-earned wisdom',
+      'keywords': 'wise, patient, cryptic, experienced, protective, tough love',
+    },
+    'Rival': {
+      'concept': 'A fiercely competitive adversary who pushes {{user}} to their limits, respecting strength while refusing to lose',
+      'keywords': 'competitive, proud, skilled, determined, begrudging respect, ambitious',
+    },
+    'Best Friend': {
+      'concept': 'A loyal and easygoing companion who always has {{user}}\'s back, bringing laughter and genuine support to every situation',
+      'keywords': 'loyal, funny, supportive, easygoing, ride-or-die, honest',
+    },
+    'The Healer': {
+      'concept': 'A gentle and empathetic soul with healing abilities who tends to everyone\'s wounds but their own, carrying quiet burdens',
+      'keywords': 'gentle, empathetic, selfless, nurturing, quietly strong, burdened',
+    },
+    'Rogue': {
+      'concept': 'A charming and morally grey trickster who lives by their own rules, stealing hearts as easily as coin purses',
+      'keywords': 'charming, witty, roguish, morally grey, quick on their feet, flirtatious',
+    },
+    'Chosen One': {
+      'concept': 'A reluctant hero burdened by an ancient prophecy, thrust into a destiny they never asked for while just wanting a normal life',
+      'keywords': 'reluctant, burdened, humble, determined, conflicted, growing into power',
+    },
+    'The Ex': {
+      'concept': 'A former flame who reappears unexpectedly in {{user}}\'s life, carrying unresolved tension, lingering feelings, and unanswered questions',
+      'keywords': 'complicated, nostalgic, guarded, magnetic, unresolved, bittersweet',
+    },
+    'Dandere': {
+      'concept': 'A painfully shy and quiet soul who struggles to express themselves, but reveals incredible sweetness and depth once they feel safe enough to open up',
+      'keywords': 'dandere, shy, quiet, gentle, sweet, anxious, secretly passionate',
+    },
+    'Genki': {
+      'concept': 'An unstoppable ball of infectious energy and optimism who drags everyone into adventures, refuses to let anyone be sad, and lights up every room',
+      'keywords': 'genki, energetic, optimistic, loud, cheerful, stubborn positivity, adventurous',
+    },
+    'Ojou-sama': {
+      'concept': 'A sheltered noble or wealthy heir with an imperious demeanor and signature \"ohoho\" laugh, who secretly yearns for normal friendships and real connections',
+      'keywords': 'ojou-sama, elegant, prideful, sheltered, secretly lonely, dramatic, refined',
+    },
+  };
+
+  // ── Appearance Options (SFW) ──
+  static const _bodyTypes = ['Petite', 'Slim', 'Athletic', 'Average', 'Curvy', 'Muscular', 'Plus-size', 'Tall & Lanky'];
+
+  // ── Race / Species Options ──
+  static const _raceOptions = [
+    'Human', 'Elven', 'Dark Elf', 'Beastkin', 'Demon', 'Angel',
+    'Vampire', 'Lycan', 'Dragon-blood', 'Fae', 'Merfolk',
+    'Spirit', 'Undead', 'Elemental', 'Android', 'Alien', 'Monster',
+  ];
+  static const _hairLengths = ['Bald/Shaved', 'Pixie/Short', 'Medium', 'Long', 'Very Long'];
+  static const _hairStyles = ['Straight', 'Wavy', 'Curly', 'Braided', 'Ponytail', 'Messy/Wild', 'Twin Tails'];
+  static const _skinTones = ['Pale', 'Fair', 'Olive', 'Tan', 'Brown', 'Dark', 'Fantasy'];
+  static const _notableFeatureOptions = ['Glasses', 'Freckles', 'Scars', 'Tattoos', 'Piercings', 'Heterochromia', 'Fangs', 'Horns', 'Wings', 'Tail', 'Elf Ears', 'Cat Ears'];
+  static const _absCoreOptions = ['Soft', 'Toned', 'Defined', 'Ripped'];
+  static const _thighOptions = ['Slim', 'Average', 'Thick', 'Thunder'];
+  static const _hipOptions = ['Narrow', 'Average', 'Wide', 'Extra Wide'];
+  static const _shoulderOptions = ['Narrow', 'Average', 'Broad', 'V-Shape'];
+  static const _waistOptions = ['Thick', 'Average', 'Narrow', 'Wasp'];
+
+  // ── NSFW Options ──
+  static const _chestSizes = ['Flat', 'Small', 'Medium', 'Large', 'Huge'];
+  static const _buttSizes = ['Flat', 'Small', 'Medium', 'Large', 'Huge'];
+  static const _experienceOptions = ['Innocent', 'Virgin', 'Curious', 'Experienced', 'Insatiable'];
+  static const _dominanceOptions = ['Submissive', 'Switch', 'Dominant'];
+  static const _kinkOptions = ['Praise', 'Degradation', 'Biting/Marking', 'Bondage', 'Exhibitionism', 'Voyeurism', 'Facesitting', 'Smothering', 'Breath Play', 'Breeding', 'Jealousy/Possession'];
+  static const _outfitVibes = ['Revealing', 'Lingerie', 'Uniform', 'Leather', 'Barely There'];
+
+  // ── Backstory Options ──
+  static const _backstoryOrigins = ['Orphan', 'Noble Birth', 'Self-Made', 'Exile/Outcast', 'Military/Warrior', 'Scholar/Academic', 'Criminal Past', 'Mysterious/Unknown', 'Supernatural Origin', 'Common Folk'];
+  static const _backstoryTones = ['Tragic', 'Heroic', 'Comedic', 'Dark/Gritty', 'Wholesome', 'Mysterious', 'Redemptive'];
+  static const _backstoryEras = ['Ancient', 'Medieval', 'Victorian', 'Modern', 'Futuristic', 'Timeless/Fantasy'];
+
+  // ── Generation Detail Options ──
+  static const _generationDetailOptions = {
+    'Brief': '1 short paragraph',
+    'Standard': '2-3 paragraphs',
+    'Detailed': '3-4 rich paragraphs',
+    'Comprehensive': '5-6 detailed paragraphs with extensive backstory',
+  };
+
   // Step 2 — Generation state
   String _generationStatus = '';
   String _generationPreview = '';
@@ -100,6 +273,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   Uint8List? _generatedAvatar;
   String? _imagePrompt;
   bool _isGeneratingAvatar = false;
+  Map<int, bool> _lorebookEntryEnabled = {};
   bool _imagePromptExpanded = false;
 
   // Model selector state
@@ -134,6 +308,36 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   static const _prefEditorConsistency = 'chargen_editor_consistency';
   static const _prefEditorQuality = 'chargen_editor_quality';
   static const _prefEditorModel = 'chargen_editor_model';
+  static const _prefLoreCategories = 'chargen_lore_categories';
+  static const _prefLoreDepth = 'chargen_lore_depth';
+  static const _prefRelationships = 'chargen_relationships';
+  static const _prefCustomRelationship = 'chargen_custom_relationship';
+  static const _prefNsfwEnabled = 'chargen_nsfw_enabled';
+  static const _prefBodyType = 'chargen_body_type';
+  static const _prefRace = 'chargen_race';
+  static const _prefCustomRace = 'chargen_custom_race';
+  static const _prefHairLength = 'chargen_hair_length';
+  static const _prefHairStyle = 'chargen_hair_style';
+  static const _prefSkinTone = 'chargen_skin_tone';
+  static const _prefNotableFeatures = 'chargen_notable_features';
+  static const _prefAbsCore = 'chargen_abs_core';
+  static const _prefThighs = 'chargen_thighs';
+  static const _prefHips = 'chargen_hips';
+  static const _prefShoulders = 'chargen_shoulders';
+  static const _prefWaist = 'chargen_waist';
+  static const _prefChestSize = 'chargen_chest_size';
+  static const _prefButtSize = 'chargen_butt_size';
+  static const _prefExperience = 'chargen_experience';
+  static const _prefDominance = 'chargen_dominance';
+  static const _prefKinks = 'chargen_kinks';
+  static const _prefCustomKinks = 'chargen_custom_kinks';
+  static const _prefOutfitVibe = 'chargen_outfit_vibe';
+  static const _prefGenerationDetail = 'chargen_generation_detail';
+  static const _prefBackstoryOrigin = 'chargen_backstory_origin';
+  static const _prefBackstoryTone = 'chargen_backstory_tone';
+  static const _prefBackstoryEra = 'chargen_backstory_era';
+  static const _prefBackstoryNotes = 'chargen_backstory_notes';
+  static const _prefConceptGenerated = 'chargen_concept_generated';
 
   @override
   void initState() {
@@ -172,6 +376,40 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         _editorConsistency = prefs.getBool(_prefEditorConsistency) ?? false;
         _editorQuality = prefs.getBool(_prefEditorQuality) ?? false;
         _editorModelId = prefs.getString(_prefEditorModel) ?? '';
+        final savedCategories = prefs.getString(_prefLoreCategories) ?? '';
+        _selectedLoreCategories = savedCategories.split(',').where((c) => c.isNotEmpty).toSet();
+        _loreDepth = prefs.getString(_prefLoreDepth) ?? 'Standard';
+        final savedRelationships = prefs.getString(_prefRelationships) ?? '';
+        _selectedRelationships = savedRelationships.split(',').where((r) => r.isNotEmpty).toSet();
+        _customRelationship = prefs.getString(_prefCustomRelationship) ?? '';
+        _nsfwEnabled = prefs.getBool(_prefNsfwEnabled) ?? false;
+        _bodyType = prefs.getString(_prefBodyType) ?? '';
+        _race = prefs.getString(_prefRace) ?? '';
+        _customRaceController.text = prefs.getString(_prefCustomRace) ?? '';
+        _hairLength = prefs.getString(_prefHairLength) ?? '';
+        _hairStyle = prefs.getString(_prefHairStyle) ?? '';
+        _skinTone = prefs.getString(_prefSkinTone) ?? '';
+        final savedFeatures = prefs.getString(_prefNotableFeatures) ?? '';
+        _notableFeatures = savedFeatures.split(',').where((f) => f.isNotEmpty).toSet();
+        _absCore = prefs.getString(_prefAbsCore) ?? '';
+        _thighs = prefs.getString(_prefThighs) ?? '';
+        _hips = prefs.getString(_prefHips) ?? '';
+        _shoulders = prefs.getString(_prefShoulders) ?? '';
+        _waist = prefs.getString(_prefWaist) ?? '';
+        _chestSize = prefs.getString(_prefChestSize) ?? '';
+        _buttSize = prefs.getString(_prefButtSize) ?? '';
+        _experience = prefs.getString(_prefExperience) ?? '';
+        _dominance = prefs.getString(_prefDominance) ?? '';
+        final savedKinks = prefs.getString(_prefKinks) ?? '';
+        _selectedKinks = savedKinks.split(',').where((k) => k.isNotEmpty).toSet();
+        _customKinksController.text = prefs.getString(_prefCustomKinks) ?? '';
+        _outfitVibe = prefs.getString(_prefOutfitVibe) ?? '';
+        _generationDetail = prefs.getString(_prefGenerationDetail) ?? 'Standard';
+        _backstoryOrigin = prefs.getString(_prefBackstoryOrigin) ?? '';
+        _backstoryTone = prefs.getString(_prefBackstoryTone) ?? '';
+        _backstoryEra = prefs.getString(_prefBackstoryEra) ?? '';
+        _backstoryNotesController.text = prefs.getString(_prefBackstoryNotes) ?? '';
+        _conceptGenerated = prefs.getBool(_prefConceptGenerated) ?? false;
       });
     }
   }
@@ -195,6 +433,36 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     await prefs.setBool(_prefEditorConsistency, _editorConsistency);
     await prefs.setBool(_prefEditorQuality, _editorQuality);
     await prefs.setString(_prefEditorModel, _editorModelId);
+    await prefs.setString(_prefLoreCategories, _selectedLoreCategories.join(','));
+    await prefs.setString(_prefLoreDepth, _loreDepth);
+    await prefs.setString(_prefRelationships, _selectedRelationships.join(','));
+    await prefs.setString(_prefCustomRelationship, _customRelationship);
+    await prefs.setBool(_prefNsfwEnabled, _nsfwEnabled);
+    await prefs.setString(_prefBodyType, _bodyType);
+    await prefs.setString(_prefRace, _race);
+    await prefs.setString(_prefCustomRace, _customRaceController.text);
+    await prefs.setString(_prefHairLength, _hairLength);
+    await prefs.setString(_prefHairStyle, _hairStyle);
+    await prefs.setString(_prefSkinTone, _skinTone);
+    await prefs.setString(_prefNotableFeatures, _notableFeatures.join(','));
+    await prefs.setString(_prefAbsCore, _absCore);
+    await prefs.setString(_prefThighs, _thighs);
+    await prefs.setString(_prefHips, _hips);
+    await prefs.setString(_prefShoulders, _shoulders);
+    await prefs.setString(_prefWaist, _waist);
+    await prefs.setString(_prefChestSize, _chestSize);
+    await prefs.setString(_prefButtSize, _buttSize);
+    await prefs.setString(_prefExperience, _experience);
+    await prefs.setString(_prefDominance, _dominance);
+    await prefs.setString(_prefKinks, _selectedKinks.join(','));
+    await prefs.setString(_prefCustomKinks, _customKinksController.text);
+    await prefs.setString(_prefOutfitVibe, _outfitVibe);
+    await prefs.setString(_prefGenerationDetail, _generationDetail);
+    await prefs.setString(_prefBackstoryOrigin, _backstoryOrigin);
+    await prefs.setString(_prefBackstoryTone, _backstoryTone);
+    await prefs.setString(_prefBackstoryEra, _backstoryEra);
+    await prefs.setString(_prefBackstoryNotes, _backstoryNotesController.text);
+    await prefs.setBool(_prefConceptGenerated, _conceptGenerated);
   }
 
   Future<void> _loadAvailableModels() async {
@@ -873,7 +1141,94 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   //  STEP 1: Character Configuration
   // ═══════════════════════════════════════════════════════════════
 
+  /// Helper: single-select chip row
+  Widget _singleSelectChipRow(String label, String current, List<String> options, void Function(String) onChanged, {bool isNsfw = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (isNsfw) ...[
+                const Icon(Icons.local_fire_department, size: 12, color: Colors.pinkAccent),
+                const SizedBox(width: 4),
+              ],
+              Text(label, style: TextStyle(color: isNsfw ? Colors.pinkAccent.shade100 : Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: options.map((opt) {
+              final isSelected = current == opt;
+              final accentColor = isNsfw ? Colors.pinkAccent : Colors.blueAccent;
+              return ChoiceChip(
+                label: Text(opt, style: const TextStyle(fontSize: 11)),
+                selected: isSelected,
+                onSelected: (_) {
+                  onChanged(isSelected ? '' : opt);
+                  _saveState();
+                },
+                selectedColor: accentColor.withValues(alpha: 0.3),
+                backgroundColor: const Color(0xFF1E293B),
+                labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white54),
+                side: BorderSide(color: isSelected ? accentColor : Colors.white10),
+                visualDensity: VisualDensity.compact,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
 
+  /// Helper: multi-select chip row
+  Widget _multiSelectChipRow(String label, Set<String> selected, List<String> options, void Function(Set<String>) onChanged, {bool isNsfw = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (isNsfw) ...[
+                const Icon(Icons.local_fire_department, size: 12, color: Colors.pinkAccent),
+                const SizedBox(width: 4),
+              ],
+              Text(label, style: TextStyle(color: isNsfw ? Colors.pinkAccent.shade100 : Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: options.map((opt) {
+              final isSelected = selected.contains(opt);
+              final accentColor = isNsfw ? Colors.pinkAccent : Colors.blueAccent;
+              return FilterChip(
+                label: Text(opt, style: const TextStyle(fontSize: 11)),
+                selected: isSelected,
+                onSelected: (val) {
+                  final newSet = Set<String>.from(selected);
+                  if (val) { newSet.add(opt); } else { newSet.remove(opt); }
+                  onChanged(newSet);
+                  _saveState();
+                },
+                selectedColor: accentColor.withValues(alpha: 0.3),
+                backgroundColor: const Color(0xFF1E293B),
+                checkmarkColor: accentColor,
+                labelStyle: TextStyle(color: isSelected ? accentColor : Colors.white38),
+                side: BorderSide(color: isSelected ? accentColor : Colors.white10),
+                visualDensity: VisualDensity.compact,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
   Widget _buildConfigStep() {
     return Center(
       key: const ValueKey('config'),
@@ -896,35 +1251,128 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                 'dialogue examples, and a custom avatar.',
                 style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
-              // Name
-              _inputLabel('Character Name', required: true),
+              // ── NSFW Toggle ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _nsfwEnabled ? Colors.pinkAccent.withValues(alpha: 0.08) : const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _nsfwEnabled ? Colors.pinkAccent.withValues(alpha: 0.4) : Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.local_fire_department, color: _nsfwEnabled ? Colors.pinkAccent : Colors.white24, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Enable NSFW Options', style: TextStyle(color: _nsfwEnabled ? Colors.pinkAccent.shade100 : Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+                          Text('Unlock spicy appearance & relationship options', style: TextStyle(color: _nsfwEnabled ? Colors.pinkAccent.withValues(alpha: 0.5) : Colors.white24, fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _nsfwEnabled,
+                      activeColor: Colors.pinkAccent,
+                      onChanged: (val) {
+                        setState(() => _nsfwEnabled = val);
+                        _saveState();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── Archetype Quick Start ──
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF162032),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.bolt, color: Colors.amberAccent, size: 18),
+                        const SizedBox(width: 6),
+                        const Text('Quick Start — Archetype Presets', style: TextStyle(color: Colors.amberAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Tap to auto-fill concept & personality', style: TextStyle(color: Colors.white24, fontSize: 11)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _archetypePresets.entries.map((entry) {
+                        final isSelected = _selectedArchetype == entry.key;
+                        return ChoiceChip(
+                          label: Text(entry.key, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.white70)),
+                          avatar: Icon(isSelected ? Icons.check : Icons.auto_awesome, size: 14, color: isSelected ? Colors.white : Colors.amberAccent),
+                          selected: isSelected,
+                          selectedColor: Colors.amberAccent.withValues(alpha: 0.3),
+                          backgroundColor: const Color(0xFF1E293B),
+                          side: BorderSide(color: isSelected ? Colors.amberAccent : Colors.white12),
+                          checkmarkColor: Colors.amberAccent,
+                          showCheckmark: false,
+                          onSelected: (_) {
+                            setState(() {
+                              if (isSelected) {
+                                _selectedArchetype = '';
+                              } else {
+                                _selectedArchetype = entry.key;
+                                _conceptController.text = entry.value['concept'] ?? '';
+                                _keywordsController.text = entry.value['keywords'] ?? '';
+                                if (_nameController.text.isEmpty) {
+                                  _nameController.text = entry.key;
+                                }
+                              }
+                            });
+                            _saveState();
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Name with Randomize ──
+              Row(
+                children: [
+                  _inputLabel('Character Name', required: true),
+                  const Spacer(),
+                  Tooltip(
+                    message: 'Generate a random character name',
+                    child: IconButton(
+                      icon: const Icon(Icons.casino, color: Colors.amberAccent, size: 20),
+                      onPressed: _randomizeName,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               _styledTextField(
                 controller: _nameController,
                 hint: 'e.g. Aria Blackwood, Captain Zara, Luna...',
                 maxLines: 1,
               ),
-              const SizedBox(height: 24),
-
-              // Concept
-              _inputLabel('Concept / Description', required: true),
-              const SizedBox(height: 8),
-              _styledTextField(
-                controller: _conceptController,
-                hint: 'Describe your character in a few sentences...\n'
-                    'e.g. "A sarcastic elven librarian in a steampunk city who secretly fights crime at night"',
-                maxLines: 4,
-              ),
               const SizedBox(height: 16),
 
-              // Age, Sex, Relationship — compact row
+              // ── Age & Sex row (compact) ──
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    flex: 1,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -940,7 +1388,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    flex: 1,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -954,24 +1401,200 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _inputLabel('Relationship to {{user}}', required: false),
-                        const SizedBox(height: 8),
-                        _styledTextField(
-                          controller: _relationshipController,
-                          hint: 'e.g. Childhood friend, Boss, Rival...',
-                          maxLines: 1,
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
+              const SizedBox(height: 24),
+
+              // ── Appearance Builder ──
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF162032),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline, color: Colors.blueAccent, size: 18),
+                        const SizedBox(width: 8),
+                        const Text('Character Appearance', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        const Text('All optional', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _singleSelectChipRow('Race / Species', _race, _raceOptions, (v) => setState(() => _race = v)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          const Text('Custom: ', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _customRaceController,
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              decoration: InputDecoration(
+                                hintText: 'e.g. Kitsune, Arachnid, Void-born...',
+                                hintStyle: const TextStyle(color: Colors.white12, fontSize: 12),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                filled: true,
+                                fillColor: const Color(0xFF1E293B),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.white12)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.white12)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.blueAccent)),
+                              ),
+                              onChanged: (_) {
+                                // Clear chip selection if typing custom
+                                if (_customRaceController.text.trim().isNotEmpty && _race.isNotEmpty) {
+                                  setState(() => _race = '');
+                                }
+                                _saveState();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _singleSelectChipRow('Body Type', _bodyType, _bodyTypes, (v) => setState(() => _bodyType = v)),
+                    _singleSelectChipRow('Hair Length', _hairLength, _hairLengths, (v) => setState(() => _hairLength = v)),
+                    _singleSelectChipRow('Hair Style', _hairStyle, _hairStyles, (v) => setState(() => _hairStyle = v)),
+                    _singleSelectChipRow('Skin Tone', _skinTone, _skinTones, (v) => setState(() => _skinTone = v)),
+                    _multiSelectChipRow('Notable Features', _notableFeatures, _notableFeatureOptions, (v) => setState(() => _notableFeatures = v)),
+                    const Divider(color: Colors.white10, height: 16),
+                    _singleSelectChipRow('Abs / Core', _absCore, _absCoreOptions, (v) => setState(() => _absCore = v)),
+                    _singleSelectChipRow('Thighs', _thighs, _thighOptions, (v) => setState(() => _thighs = v)),
+                    _singleSelectChipRow('Hips', _hips, _hipOptions, (v) => setState(() => _hips = v)),
+                    _singleSelectChipRow('Shoulders', _shoulders, _shoulderOptions, (v) => setState(() => _shoulders = v)),
+                    _singleSelectChipRow('Waist', _waist, _waistOptions, (v) => setState(() => _waist = v)),
+                    // NSFW body details
+                    if (_nsfwEnabled) ...[
+                      const Divider(color: Colors.pinkAccent, height: 24),
+                      _singleSelectChipRow('Chest Size', _chestSize, _chestSizes, (v) => setState(() => _chestSize = v), isNsfw: true),
+                      _singleSelectChipRow('Butt Size', _buttSize, _buttSizes, (v) => setState(() => _buttSize = v), isNsfw: true),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Relationship Presets (multi-select, NSFW gated) ──
+              _inputLabel('Relationship to {{user}}', required: false),
+              const SizedBox(height: 4),
+              const Text('Select one or more dynamics', style: TextStyle(color: Colors.white24, fontSize: 11)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _relationshipPresets.where((rel) {
+                  // Hide NSFW chips if toggle is off
+                  if (!_nsfwEnabled && _nsfwRelationships.contains(rel)) return false;
+                  return true;
+                }).map((rel) {
+                  final isSelected = _selectedRelationships.contains(rel);
+                  final isNsfw = _nsfwRelationships.contains(rel);
+                  return FilterChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isNsfw) ...[
+                          Icon(Icons.local_fire_department, size: 12, color: isSelected ? Colors.white : Colors.pinkAccent.shade100),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(rel),
+                      ],
+                    ),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedRelationships.add(rel);
+                        } else {
+                          _selectedRelationships.remove(rel);
+                        }
+                      });
+                      _saveState();
+                    },
+                    selectedColor: isNsfw ? Colors.pinkAccent.withValues(alpha: 0.3) : Colors.blueAccent,
+                    backgroundColor: const Color(0xFF1E293B),
+                    checkmarkColor: Colors.white,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontSize: 12,
+                    ),
+                    side: BorderSide(
+                      color: isSelected
+                          ? (isNsfw ? Colors.pinkAccent : Colors.blueAccent)
+                          : Colors.white12,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+              _styledTextField(
+                controller: _relationshipController,
+                hint: 'Or type a custom relationship...',
+                maxLines: 1,
+              ),
+              const SizedBox(height: 24),
+
+              // ── NSFW Traits Section ──
+              if (_nsfwEnabled) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.pinkAccent.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.local_fire_department, color: Colors.pinkAccent, size: 18),
+                          const SizedBox(width: 8),
+                          const Text('Sexual Traits', style: TextStyle(color: Colors.pinkAccent, fontSize: 14, fontWeight: FontWeight.w600)),
+                          const Spacer(),
+                          const Text('All optional', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _singleSelectChipRow('Experience', _experience, _experienceOptions, (v) => setState(() => _experience = v), isNsfw: true),
+                      _singleSelectChipRow('Dominance', _dominance, _dominanceOptions, (v) => setState(() => _dominance = v), isNsfw: true),
+                      _multiSelectChipRow('Kinks', _selectedKinks, _kinkOptions, (v) => setState(() => _selectedKinks = v), isNsfw: true),
+                      // Custom kinks
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.local_fire_department, size: 12, color: Colors.pinkAccent),
+                                const SizedBox(width: 4),
+                                Text('Custom Kinks', style: TextStyle(color: Colors.pinkAccent.shade100, fontSize: 12, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            _styledTextField(
+                              controller: _customKinksController,
+                              hint: 'e.g. foot worship, roleplay, praise kink...',
+                              maxLines: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                      _singleSelectChipRow('Outfit Vibe', _outfitVibe, _outfitVibes, (v) => setState(() => _outfitVibe = v), isNsfw: true),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
               const SizedBox(height: 24),
 
               // Personality keywords
@@ -984,18 +1607,67 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
               ),
               const SizedBox(height: 24),
 
-              // Art style
-              _inputLabel('Avatar Art Style', required: false),
+              // ── Backstory ──
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF162032),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.auto_stories, color: Colors.blueAccent, size: 18),
+                        const SizedBox(width: 8),
+                        const Text('Backstory', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        const Text('All optional', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _singleSelectChipRow('Origin', _backstoryOrigin, _backstoryOrigins, (v) => setState(() => _backstoryOrigin = v)),
+                    _singleSelectChipRow('Tone', _backstoryTone, _backstoryTones, (v) => setState(() => _backstoryTone = v)),
+                    _singleSelectChipRow('Era', _backstoryEra, _backstoryEras, (v) => setState(() => _backstoryEra = v)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Custom Backstory Notes', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 6),
+                          _styledTextField(
+                            controller: _backstoryNotesController,
+                            hint: 'e.g. Was betrayed by their order, seeks revenge...',
+                            maxLines: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Description detail level
+              _inputLabel('Description Detail', required: false),
+              const SizedBox(height: 4),
+              const Text('Controls how detailed the character description will be', style: TextStyle(color: Colors.white24, fontSize: 11)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _artStyles.map((style) {
-                  final isSelected = _artStyle == style;
+                children: _generationDetailOptions.keys.map((label) {
+                  final isSelected = _generationDetail == label;
                   return ChoiceChip(
-                    label: Text(style),
+                    label: Text(label),
                     selected: isSelected,
-                    onSelected: (_) => setState(() => _artStyle = style),
+                    onSelected: (_) {
+                      setState(() => _generationDetail = label);
+                      _saveState();
+                    },
                     selectedColor: Colors.blueAccent,
                     backgroundColor: const Color(0xFF1E293B),
                     labelStyle: TextStyle(
@@ -1008,6 +1680,235 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                   );
                 }).toList(),
               ),
+              const SizedBox(height: 24),
+
+              // ── Description (generated via magic wand) ──
+              Row(
+                children: [
+                  _inputLabel('Description', required: true),
+                  const Spacer(),
+                  if (_isRandomizing)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                              value: _conceptGenProgress > 0 ? _conceptGenProgress : null,
+                              strokeWidth: 2,
+                              color: Colors.amberAccent,
+                            ),
+                          ),
+                          if (_conceptGenProgress > 0) ...[
+                            const SizedBox(width: 6),
+                            Text('${(_conceptGenProgress * 100).toInt()}%', style: const TextStyle(color: Colors.amberAccent, fontSize: 11)),
+                          ],
+                        ],
+                      ),
+                    )
+                  else
+                    Tooltip(
+                      message: 'Generate a description using all your selections',
+                      child: IconButton(
+                        icon: const Icon(Icons.auto_fix_high, color: Colors.amberAccent, size: 20),
+                        onPressed: _randomizeConcept,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Description field — locked until magic wand is run
+              Stack(
+                children: [
+                  _styledTextField(
+                    controller: _conceptController,
+                    hint: _conceptGenerated
+                        ? 'Edit the generated description...'
+                        : 'Tap ✨ above to generate a description from your selections',
+                    maxLines: null,
+                    minLines: 4,
+                    readOnly: !_conceptGenerated,
+                    enabled: _conceptGenerated,
+                  ),
+                  if (!_conceptGenerated && !_isRandomizing)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: _randomizeConcept,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black12,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.2)),
+                          ),
+                          child: const Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_fix_high, color: Colors.amberAccent, size: 18),
+                                SizedBox(width: 8),
+                                Text('Tap to generate description', style: TextStyle(color: Colors.amberAccent, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // ── Lorebook Section (enhanced) ──
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF162032),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.menu_book, color: Colors.blueAccent, size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text('Auto-generate World Lore',
+                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                        ),
+                        Switch(
+                          value: _generateLorebook,
+                          activeColor: Colors.blueAccent,
+                          onChanged: (val) {
+                            setState(() => _generateLorebook = val);
+                            _saveState();
+                          },
+                        ),
+                      ],
+                    ),
+                    if (_generateLorebook) ...[
+                      const SizedBox(height: 12),
+                      // Depth selector
+                      Row(
+                        children: [
+                          const Text('Depth:', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                          const SizedBox(width: 12),
+                          ..._loreDepths.map((depth) {
+                            final isSelected = _loreDepth == depth;
+                            final count = depth == 'Light' ? '3-4' : depth == 'Deep' ? '10-15' : '5-8';
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text('$depth ($count)', style: const TextStyle(fontSize: 11)),
+                                selected: isSelected,
+                                onSelected: (_) {
+                                  setState(() => _loreDepth = depth);
+                                  _saveState();
+                                },
+                                selectedColor: Colors.blueAccent,
+                                backgroundColor: const Color(0xFF1E293B),
+                                labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white54),
+                                side: BorderSide(color: isSelected ? Colors.blueAccent : Colors.white12),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Focus areas (optional):', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _loreCategoryOptions.map((cat) {
+                          final isSelected = _selectedLoreCategories.contains(cat);
+                          return FilterChip(
+                            label: Text(cat, style: const TextStyle(fontSize: 11)),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedLoreCategories.add(cat);
+                                } else {
+                                  _selectedLoreCategories.remove(cat);
+                                }
+                              });
+                              _saveState();
+                            },
+                            selectedColor: Colors.blueAccent.withValues(alpha: 0.3),
+                            backgroundColor: const Color(0xFF1E293B),
+                            checkmarkColor: Colors.blueAccent,
+                            labelStyle: TextStyle(color: isSelected ? Colors.blueAccent : Colors.white38),
+                            side: BorderSide(color: isSelected ? Colors.blueAccent : Colors.white12),
+                            visualDensity: VisualDensity.compact,
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Persona selector (directly above tones)
+              _inputLabel('{{user}} Persona for Greetings', required: false),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a persona to tailor greetings, or "None" for public cards.',
+                style: TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Builder(builder: (context) {
+                final personaService = Provider.of<UserPersonaService>(context);
+                final personas = personaService.personas;
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedPersonaId,
+                      isExpanded: true,
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_off, size: 16, color: Colors.white38),
+                              SizedBox(width: 8),
+                              Text('None (Blank Slate)', style: TextStyle(color: Colors.white54)),
+                            ],
+                          ),
+                        ),
+                        ...personas.map((p) => DropdownMenuItem(
+                          value: p.id,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.person, size: 16, color: Colors.blueAccent),
+                              const SizedBox(width: 8),
+                              Flexible(child: Text(p.displayLabel, overflow: TextOverflow.ellipsis)),
+                            ],
+                          ),
+                        )),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _selectedPersonaId = value ?? '');
+                        _saveState();
+                      },
+                    ),
+                  ),
+                );
+              }),
               const SizedBox(height: 24),
 
               // Greeting tone (multi-select, capped to total greeting count)
@@ -1142,93 +2043,34 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              // Lorebook toggle
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.menu_book, color: Colors.blueAccent, size: 18),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text('Auto-generate Lorebook entries',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
-                    ),
-                    Switch(
-                      value: _generateLorebook,
-                      activeColor: Colors.blueAccent,
-                      onChanged: (val) {
-                        setState(() => _generateLorebook = val);
-                        _saveState();
-                      },
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(height: 24),
 
-              // Persona selector
-              _inputLabel('{{user}} Persona for Greetings', required: false),
-              const SizedBox(height: 4),
-              const Text(
-                'Select a persona to tailor greetings, or "None" for public cards.',
-                style: TextStyle(color: Colors.white24, fontSize: 11),
-              ),
+              // Art style (last option)
+              _inputLabel('Avatar Art Style', required: false),
               const SizedBox(height: 8),
-              Builder(builder: (context) {
-                final personaService = Provider.of<UserPersonaService>(context);
-                final personas = personaService.personas;
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedPersonaId,
-                      isExpanded: true,
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      items: [
-                        const DropdownMenuItem(
-                          value: '',
-                          child: Row(
-                            children: [
-                              Icon(Icons.person_off, size: 16, color: Colors.white38),
-                              SizedBox(width: 8),
-                              Text('None (Blank Slate)', style: TextStyle(color: Colors.white54)),
-                            ],
-                          ),
-                        ),
-                        ...personas.map((p) => DropdownMenuItem(
-                          value: p.id,
-                          child: Row(
-                            children: [
-                              const Icon(Icons.person, size: 16, color: Colors.blueAccent),
-                              const SizedBox(width: 8),
-                              Flexible(child: Text(p.displayLabel, overflow: TextOverflow.ellipsis)),
-                            ],
-                          ),
-                        )),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _selectedPersonaId = value ?? '');
-                        _saveState();
-                      },
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _artStyles.map((style) {
+                  final isSelected = _artStyle == style;
+                  return ChoiceChip(
+                    label: Text(style),
+                    selected: isSelected,
+                    onSelected: (_) => setState(() => _artStyle = style),
+                    selectedColor: Colors.blueAccent,
+                    backgroundColor: const Color(0xFF1E293B),
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white70,
+                      fontSize: 13,
                     ),
-                  ),
-                );
-              }),
+                    side: BorderSide(
+                      color: isSelected ? Colors.blueAccent : Colors.white12,
+                    ),
+                  );
+                }).toList(),
+              ),
               const SizedBox(height: 32),
+
 
               // Back + Generate buttons
               Center(
@@ -1253,7 +2095,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                       width: 240,
                       height: 52,
                       child: ElevatedButton.icon(
-                        onPressed: _nameController.text.trim().isEmpty || _conceptController.text.trim().isEmpty
+                        onPressed: _nameController.text.trim().isEmpty || _conceptController.text.trim().isEmpty || !_conceptGenerated
                             ? null
                             : _startGeneration,
                         icon: const Icon(Icons.auto_awesome, size: 20),
@@ -1445,12 +2287,18 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   Widget _styledTextField({
     required TextEditingController controller,
     required String hint,
-    int maxLines = 1,
+    int? maxLines = 1,
+    int? minLines,
+    bool readOnly = false,
+    bool enabled = true,
   }) {
     return TextField(
       controller: controller,
+      readOnly: readOnly,
+      enabled: enabled,
       maxLines: maxLines,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
+      minLines: minLines,
+      style: TextStyle(color: enabled ? Colors.white : Colors.white38, fontSize: 14),
       onChanged: (_) {
         setState(() {}); // Rebuild to update button state
         _saveState(); // Auto-save on change
@@ -1798,6 +2646,65 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                 _editableField('First Message', _firstMessageController, maxLines: 6),
                 _editableField('Example Dialogue', _exampleDialogueController, maxLines: 6),
                 _editableField('System Prompt', _systemPromptController, maxLines: 3),
+
+                // ── Lorebook Preview & Cherry-pick ──
+                if (_generatedCard!.lorebook != null && _generatedCard!.lorebook!.entries.isNotEmpty) ...[
+                  const Divider(color: Colors.white12, height: 32),
+                  Row(
+                    children: [
+                      const Icon(Icons.menu_book, color: Colors.blueAccent, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('World Lore Entries', style: TextStyle(color: Colors.blueAccent, fontSize: 15, fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      Text('${_lorebookEntryEnabled.values.where((v) => v).length}/${_generatedCard!.lorebook!.entries.length} enabled',
+                        style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Uncheck entries you don\'t want included in the saved character.',
+                    style: TextStyle(color: Colors.white24, fontSize: 11)),
+                  const SizedBox(height: 12),
+                  ...List.generate(_generatedCard!.lorebook!.entries.length, (i) {
+                    final entry = _generatedCard!.lorebook!.entries[i];
+                    final enabled = _lorebookEntryEnabled[i] ?? true;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: enabled ? const Color(0xFF1E293B) : const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: enabled ? Colors.blueAccent.withValues(alpha: 0.3) : Colors.white10),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: enabled,
+                            activeColor: Colors.blueAccent,
+                            onChanged: (val) => setState(() => _lorebookEntryEnabled[i] = val ?? true),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Opacity(
+                              opacity: enabled ? 1.0 : 0.4,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(entry.name, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 2),
+                                  Text('Keys: ${entry.key}', style: const TextStyle(color: Colors.blueAccent, fontSize: 11)),
+                                  const SizedBox(height: 4),
+                                  Text(entry.content, style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ],
             ),
           ),
@@ -1844,6 +2751,179 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   // ═══════════════════════════════════════════════════════════════
   //  Logic
   // ═══════════════════════════════════════════════════════════════
+
+  bool _isRandomizing = false;
+  double _conceptGenProgress = 0.0;
+
+  /// Randomize just the character name
+  Future<void> _randomizeName() async {
+    if (_isRandomizing) return;
+    setState(() => _isRandomizing = true);
+
+    try {
+      final llmService = _getActiveLlmService();
+      if (llmService == null) return;
+
+      final archetypeHint = _selectedArchetype.isNotEmpty
+          ? ' The name should suit a "$_selectedArchetype" character.'
+          : '';
+
+      String accumulated = '';
+      await for (final token in llmService.generateStream(GenerationParams(
+        prompt: 'Generate ONE unique, creative character name for a roleplay character.$archetypeHint Output ONLY a JSON object with exactly one key: "name". No markdown, no explanation, just the JSON:',
+        maxLength: 128,
+        minLength: 16,
+        temperature: 1.2,
+        repeatPenalty: 1.1,
+        minP: 0.05,
+        reasoningEnabled: false,
+        stopSequences: ['```', '<END>'],
+      ))) {
+        accumulated += token;
+      }
+
+      String cleaned = accumulated.replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '').trim();
+      final jsonStart = cleaned.indexOf('{');
+      final jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+        try {
+          final data = json.decode(cleaned) as Map<String, dynamic>;
+          setState(() {
+            _nameController.text = data['name']?.toString() ?? '';
+          });
+          _saveState();
+        } catch (_) {
+          debugPrint('CharacterCreator: Failed to parse random name JSON');
+        }
+      }
+    } catch (e) {
+      debugPrint('CharacterCreator: Randomize name failed: $e');
+    }
+
+    if (mounted) setState(() => _isRandomizing = false);
+  }
+
+  /// Randomize a concept/description using all selected toggles as context
+  Future<void> _randomizeConcept() async {
+    if (_isRandomizing) return;
+    setState(() {
+      _isRandomizing = true;
+      _conceptGenProgress = 0.0;
+    });
+
+    try {
+      final llmService = _getActiveLlmService();
+      if (llmService == null) return;
+
+      // Build context from all selections
+      final contextParts = <String>[];
+      if (_selectedArchetype.isNotEmpty) contextParts.add('Archetype: $_selectedArchetype');
+      if (_nameController.text.trim().isNotEmpty) contextParts.add('Name: ${_nameController.text.trim()}');
+      if (_keywordsController.text.trim().isNotEmpty) contextParts.add('Personality: ${_keywordsController.text.trim()}');
+      if (_ageController.text.trim().isNotEmpty) contextParts.add('Age: ${_ageController.text.trim()}');
+      if (_sexController.text.trim().isNotEmpty) contextParts.add('Sex: ${_sexController.text.trim()}');
+      final effectiveRace = _customRaceController.text.trim().isNotEmpty ? _customRaceController.text.trim() : _race;
+      if (effectiveRace.isNotEmpty) contextParts.add('Race/species: $effectiveRace');
+      if (_bodyType.isNotEmpty) contextParts.add('Body type: $_bodyType');
+      if (_hairLength.isNotEmpty || _hairStyle.isNotEmpty) {
+        contextParts.add('Hair: ${[if (_hairLength.isNotEmpty) _hairLength, if (_hairStyle.isNotEmpty) _hairStyle].join(", ")}');
+      }
+      if (_skinTone.isNotEmpty) contextParts.add('Skin tone: $_skinTone');
+      if (_notableFeatures.isNotEmpty) contextParts.add('Notable features: ${_notableFeatures.join(", ")}');
+      if (_selectedRelationships.isNotEmpty) contextParts.add('Relationship to user: ${_selectedRelationships.join(", ")}');
+      if (_backstoryOrigin.isNotEmpty) contextParts.add('Backstory origin: $_backstoryOrigin');
+      if (_backstoryTone.isNotEmpty) contextParts.add('Backstory tone: $_backstoryTone');
+      if (_backstoryEra.isNotEmpty) contextParts.add('Era/setting: $_backstoryEra');
+      if (_backstoryNotesController.text.trim().isNotEmpty) contextParts.add('Backstory notes: ${_backstoryNotesController.text.trim()}');
+      if (_nsfwEnabled) {
+        if (_experience.isNotEmpty) contextParts.add('Experience: $_experience');
+        if (_dominance.isNotEmpty) contextParts.add('Dominance: $_dominance');
+        if (_selectedKinks.isNotEmpty) contextParts.add('Kinks: ${_selectedKinks.join(", ")}');
+        if (_outfitVibe.isNotEmpty) contextParts.add('Outfit vibe: $_outfitVibe');
+      }
+
+      final contextStr = contextParts.isNotEmpty
+          ? ' Use these character details as inspiration: ${contextParts.join("; ")}.'
+          : '';
+
+      final descLength = _generationDetailOptions[_generationDetail] ?? '2-3 paragraphs';
+      final maxTokensForDesc = const {'Brief': 256, 'Standard': 512, 'Detailed': 1024, 'Comprehensive': 2048}[_generationDetail] ?? 512;
+
+      String accumulated = '';
+      int tokenCount = 0;
+      await for (final token in llmService.generateStream(GenerationParams(
+        prompt: 'Generate a creative character description ($descLength) for a roleplay character.$contextStr Write in third person. Include physical appearance, personality hints, and backstory elements. Output ONLY a JSON object with exactly one key: "concept". Be vivid and detailed. No markdown, no explanation, just the JSON:',
+        maxLength: maxTokensForDesc,
+        minLength: 32,
+        temperature: 1.2,
+        repeatPenalty: 1.1,
+        minP: 0.05,
+        reasoningEnabled: false,
+        stopSequences: ['```', '<END>'],
+      ))) {
+        accumulated += token;
+        tokenCount++;
+        if (mounted) {
+          setState(() => _conceptGenProgress = (tokenCount / maxTokensForDesc).clamp(0.0, 0.95));
+        }
+      }
+
+      String cleaned = accumulated.replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '').trim();
+      final jsonStart = cleaned.indexOf('{');
+      final jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart >= 0 && jsonEnd > jsonStart) {
+        cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+        try {
+          final data = json.decode(cleaned) as Map<String, dynamic>;
+          setState(() {
+            _conceptController.text = data['concept']?.toString() ?? '';
+            _conceptGenerated = true;
+          });
+          _saveState();
+        } catch (_) {
+          debugPrint('CharacterCreator: Failed to parse random concept JSON');
+        }
+      }
+    } catch (e) {
+      debugPrint('CharacterCreator: Randomize concept failed: $e');
+    }
+
+    if (mounted) setState(() => _isRandomizing = false);
+  }
+
+  /// Helper: resolve the active LLM service for randomization
+  LLMService? _getActiveLlmService() {
+    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+
+    LLMService? llmService;
+    if (llmProvider.activeBackend == BackendType.kobold) {
+      final kobold = llmProvider.koboldService;
+      if (kobold.isReady) llmService = kobold;
+    } else {
+      if (_selectedModelId.isNotEmpty && _selectedModelId != llmProvider.openRouterService.modelName) {
+        llmService = OpenRouterService(
+          apiUrl: storage.remoteApiUrl,
+          apiKey: storage.remoteApiKey,
+          modelName: _selectedModelId,
+        );
+      } else {
+        llmService = llmProvider.activeService;
+      }
+    }
+
+    if (llmService == null || !llmService.isReady) {
+      setState(() => _isRandomizing = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No LLM available — configure a model first'), backgroundColor: Color(0xFF2A2A2A), behavior: SnackBarBehavior.floating),
+        );
+      }
+      return null;
+    }
+    return llmService;
+  }
 
   Future<void> _startGeneration() async {
     final name = _nameController.text.trim();
@@ -1917,19 +2997,80 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
 
     String lastRawOutput = '';
     String? genError;
+    // Build appearance + NSFW context
+    final appearanceParts = <String>[];
+    final effectiveRace = _customRaceController.text.trim().isNotEmpty ? _customRaceController.text.trim() : _race;
+    if (effectiveRace.isNotEmpty) appearanceParts.add('$effectiveRace race/species');
+    if (_bodyType.isNotEmpty) appearanceParts.add('$_bodyType build');
+    if (_hairLength.isNotEmpty) appearanceParts.add('$_hairLength hair');
+    if (_hairStyle.isNotEmpty) appearanceParts.add('$_hairStyle hair style');
+    if (_skinTone.isNotEmpty) appearanceParts.add('$_skinTone skin');
+    if (_notableFeatures.isNotEmpty) appearanceParts.addAll(_notableFeatures);
+    if (_absCore.isNotEmpty) appearanceParts.add('$_absCore abs');
+    if (_thighs.isNotEmpty) appearanceParts.add('$_thighs thighs');
+    if (_hips.isNotEmpty) appearanceParts.add('$_hips hips');
+    if (_shoulders.isNotEmpty) appearanceParts.add('$_shoulders shoulders');
+    if (_waist.isNotEmpty) appearanceParts.add('$_waist waist');
+    if (_nsfwEnabled) {
+      if (_chestSize.isNotEmpty) appearanceParts.add('$_chestSize chest');
+      if (_buttSize.isNotEmpty) appearanceParts.add('$_buttSize butt');
+    }
+
+    final nsfwParts = <String>[];
+    if (_nsfwEnabled) {
+      if (_experience.isNotEmpty) nsfwParts.add('Sexual experience: $_experience');
+      if (_dominance.isNotEmpty) nsfwParts.add('Dominance: $_dominance');
+      if (_selectedKinks.isNotEmpty) nsfwParts.add('Kinks: ${_selectedKinks.join(", ")}');
+      if (_customKinksController.text.trim().isNotEmpty) nsfwParts.add('Also into: ${_customKinksController.text.trim()}');
+      if (_outfitVibe.isNotEmpty) nsfwParts.add('Typical outfit vibe: $_outfitVibe');
+    }
+
+    String enrichedConcept = concept;
+    if (appearanceParts.isNotEmpty) {
+      enrichedConcept += '. Physical appearance: ${appearanceParts.join(", ")}';
+    }
+    if (nsfwParts.isNotEmpty) {
+      enrichedConcept += '. ${nsfwParts.join(". ")}';
+    }
+
     final card = await genService.generateCharacter(
       name: name,
-      concept: concept,
+      concept: enrichedConcept,
       personalityKeywords: keywords,
       artStyle: _artStyle,
       greetingLength: _greetingLength,
       altGreetingCount: _altGreetingCount,
       greetingTones: _selectedTones.toList(),
       generateLorebook: _generateLorebook,
+      loreCategories: _selectedLoreCategories.toList(),
+      loreDepth: _loreDepth,
+      descriptionDetail: _generationDetailOptions[_generationDetail] ?? '2-3 paragraphs',
       apiSystemPrompt: storage.systemPrompt,
       age: _ageController.text.trim(),
       sex: _sexController.text.trim(),
-      relationship: _relationshipController.text.trim(),
+      relationship: [
+        ..._selectedRelationships,
+        if (_relationshipController.text.trim().isNotEmpty) _relationshipController.text.trim(),
+      ].join(', '),
+      backstory: [
+        if (_backstoryOrigin.isNotEmpty) _backstoryOrigin,
+        if (_backstoryTone.isNotEmpty) '${_backstoryTone} tone',
+        if (_backstoryEra.isNotEmpty) '${_backstoryEra} era',
+        if (_backstoryNotesController.text.trim().isNotEmpty) _backstoryNotesController.text.trim(),
+      ].join(', '),
+      characterContext: [
+        if (effectiveRace.isNotEmpty) 'Race/Species: $effectiveRace',
+        if (_ageController.text.trim().isNotEmpty) 'Age: ${_ageController.text.trim()}',
+        if (_sexController.text.trim().isNotEmpty) 'Sex: ${_sexController.text.trim()}',
+        if (appearanceParts.isNotEmpty) 'Appearance: ${appearanceParts.join(", ")}',
+        if (_selectedRelationships.isNotEmpty || _relationshipController.text.trim().isNotEmpty)
+          'Relationship to {{user}}: ${[..._selectedRelationships, if (_relationshipController.text.trim().isNotEmpty) _relationshipController.text.trim()].join(", ")}',
+        if (_backstoryOrigin.isNotEmpty) 'Backstory origin: $_backstoryOrigin',
+        if (_backstoryTone.isNotEmpty) 'Story tone: $_backstoryTone',
+        if (_backstoryEra.isNotEmpty) 'Era/setting: $_backstoryEra',
+        if (_backstoryNotesController.text.trim().isNotEmpty) 'Backstory: ${_backstoryNotesController.text.trim()}',
+        if (_nsfwEnabled && nsfwParts.isNotEmpty) nsfwParts.join(', '),
+      ].join('\n'),
       userPersonaContext: userPersonaContext,
       onProgress: (accumulated) {
         lastRawOutput = accumulated;
@@ -1961,6 +3102,8 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     _imagePrompt = genService.extractImagePrompt(lastRawOutput);
 
     if (card != null) {
+      // Inject user-authored description (from magic wand)
+      card.description = enrichedConcept;
       // ── Editor passes ──
       final hasEditorPass = _editorAntiPuppet || _editorConsistency || _editorQuality;
       if (hasEditorPass) {
@@ -2037,6 +3180,13 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       }
 
       _generatedCard = card;
+      // Initialize lorebook entry enabled map — all enabled by default
+      _lorebookEntryEnabled = {};
+      if (card.lorebook != null) {
+        for (int i = 0; i < card.lorebook!.entries.length; i++) {
+          _lorebookEntryEnabled[i] = true;
+        }
+      }
       _descController.text = card.description;
       _personalityController.text = card.personality;
       _scenarioController.text = card.scenario;
@@ -2131,6 +3281,17 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     card.firstMessage = _firstMessageController.text;
     card.mesExample = _exampleDialogueController.text;
     card.systemPrompt = _systemPromptController.text;
+
+    // Filter lorebook entries — remove unchecked ones
+    if (card.lorebook != null && _lorebookEntryEnabled.isNotEmpty) {
+      final filtered = <LorebookEntry>[];
+      for (int i = 0; i < card.lorebook!.entries.length; i++) {
+        if (_lorebookEntryEnabled[i] ?? true) {
+          filtered.add(card.lorebook!.entries[i]);
+        }
+      }
+      card.lorebook = Lorebook(entries: filtered);
+    }
 
     // Save avatar image
     if (_generatedAvatar != null) {

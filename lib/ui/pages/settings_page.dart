@@ -1150,250 +1150,6 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           ),
 
-          const SizedBox(height: 24),
-          _buildSectionHeader('Web Server', context),
-          const SizedBox(height: 8),
-          Consumer2<StorageService, WebServerService>(
-            builder: (context, storage, webServer, _) {
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              webServer.isRunning ? Icons.wifi_tethering : Icons.wifi_tethering_off,
-                              color: webServer.isRunning ? Colors.greenAccent : Colors.white38,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            const Text('Enable Web Server', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        Switch(
-                          value: storage.webServerEnabled,
-                          onChanged: (val) async {
-                            await storage.setWebServerEnabled(val);
-                            if (val) {
-                              await webServer.start(storage.webServerPort);
-                            } else {
-                              await webServer.stop();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    if (storage.webServerEnabled) ...[
-                      const Divider(color: Colors.white10),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Port', style: theme.textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  width: 120,
-                                  child: TextFormField(
-                                    initialValue: storage.webServerPort.toString(),
-                                    keyboardType: TextInputType.number,
-                                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                                    decoration: InputDecoration(
-                                      filled: true,
-                                      fillColor: theme.scaffoldBackgroundColor,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    ),
-                                    onFieldSubmitted: (val) async {
-                                      final port = int.tryParse(val) ?? 8085;
-                                      await storage.setWebServerPort(port);
-                                      if (webServer.isRunning) {
-                                        await webServer.stop();
-                                        await webServer.start(port);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('PIN', style: theme.textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                SizedBox(
-                                  width: 120,
-                                  child: TextFormField(
-                                    initialValue: storage.webServerPin,
-                                    keyboardType: TextInputType.number,
-                                    style: const TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 4),
-                                    decoration: InputDecoration(
-                                      filled: true,
-                                      fillColor: theme.scaffoldBackgroundColor,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      hintText: '6 digits',
-                                      hintStyle: TextStyle(color: Colors.white24, letterSpacing: 1),
-                                    ),
-                                    maxLength: 6,
-                                    buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
-                                    onFieldSubmitted: (val) async {
-                                      if (val.length >= 4 && int.tryParse(val) != null) {
-                                        await storage.setWebServerPin(val);
-                                      }
-                                    },
-                                    onChanged: (val) async {
-                                      if (val.length == 6 && int.tryParse(val) != null) {
-                                        await storage.setWebServerPin(val);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Status', style: theme.textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: webServer.isRunning ? Colors.greenAccent : Colors.redAccent,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      webServer.isRunning ? 'Running' : 'Stopped',
-                                      style: TextStyle(
-                                        color: webServer.isRunning ? Colors.greenAccent : Colors.redAccent,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (webServer.lanIp != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.blueAccent.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.language, color: Colors.blueAccent, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: SelectableText(
-                                  'http://${webServer.lanIp}:${storage.webServerPort}',
-                                  style: const TextStyle(
-                                    color: Colors.blueAccent,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      if (webServer.hasActiveClient) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.devices, color: Colors.amber, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Client connected: ${webServer.connectedClientIp ?? "Unknown"}',
-                                  style: const TextStyle(color: Colors.amber, fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 24),
-          _buildSectionHeader('Storage Configuration', context),
-           const SizedBox(height: 8),
-             Container(
-               padding: const EdgeInsets.all(12),
-               decoration: BoxDecoration(
-                 color: theme.cardColor,
-                 borderRadius: BorderRadius.circular(8),
-               ),
-               child: Row(
-                 children: [
-                   const Icon(Icons.folder, color: Colors.blueAccent),
-                   const SizedBox(width: 12),
-                   Expanded(
-                     child: Column(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         Text('Data Directory', style: theme.textTheme.bodySmall),
-                         Text(
-                           storageService.rootPath ?? 'Not set',
-                           style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-                         ),
-                       ],
-                     ),
-                   ),
-                   IconButton(
-                     icon: Icon(Icons.edit, color: theme.iconTheme.color),
-                     onPressed: _pickStoragePath,
-                     tooltip: 'Change Data Directory',
-                   ),
-                 ],
-               ),
-             ),
-
 
 
           const SizedBox(height: 24),
@@ -1875,48 +1631,250 @@ class _SettingsPageState extends State<SettingsPage> {
        child: Column(
          crossAxisAlignment: CrossAxisAlignment.start,
          children: [
-           _buildSectionHeader('Generation Settings', context),
-           const SizedBox(height: 16),
-           
-           _buildSlider('Min-P', storageService.minP, 0.0, 1.0, (val) => storageService.setMinP(val), context, tooltip: 'Filters out unlikely words. Higher = only the most probable words are kept. Start around 0.05–0.1.'),
-           _buildSlider('Temperature', storageService.temperature, 0.0, 2.0, (val) => storageService.setTemperature(val), context, divisions: 20, tooltip: 'Controls randomness. Low = predictable and focused. High = creative and surprising. 0.7 is a good default.'),
-           _buildSlider('Repeat Penalty', storageService.repeatPenalty, 1.0, 3.0, (val) => storageService.setRepeatPenalty(val), context, tooltip: 'Discourages the AI from repeating the same words. Higher = less repetition. 1.1 is a safe default.'),
-           _buildSlider('Rep Pen Tokens', storageService.repeatPenaltyTokens.toDouble(), 0, 512, (val) => storageService.setRepeatPenaltyTokens(val.toInt()), context, divisions: 512, tooltip: 'How far back the AI checks for repetition (in tokens). Higher = checks more of the conversation history.'),
-           _buildSlider('XTC Threshold', storageService.xtcThreshold, 0.0, 0.5, (val) => storageService.setXtcThreshold(val), context, divisions: 50, tooltip: 'Exclude Top Choices — removes the most obvious/cliché word choices. Lower = stronger effect. Try 0.1 for more creative writing.'),
-           _buildSlider('XTC Probability', storageService.xtcProbability, 0.0, 1.0, (val) => storageService.setXtcProbability(val), context, divisions: 20, tooltip: 'How often XTC activates. 0 = never, 1 = always. Try 0.5 for a balance between creativity and coherence.'),
-           _buildSlider('Max Output Tokens', storageService.maxLength.toDouble(), 16, 16384, (val) => storageService.setMaxLength(val.toInt()), context, divisions: null, tooltip: 'Maximum number of tokens the AI can write in one response. Thinking models need higher values since reasoning tokens count toward this limit.'),
-           _buildSlider('Min Output Tokens', storageService.minLength.toDouble(), 0, 512, (val) => storageService.setMinLength(val.toInt()), context, divisions: 512, tooltip: 'Minimum tokens the AI must write before it can stop. Increase for longer responses.'),
-            Builder(builder: (context) {
-              final maxCtx = 500000.0;
-              return _buildSlider('Context Size', _contextSizeValue.clamp(4098, maxCtx), 4098, maxCtx, (val) {
-                setState(() {
-                  _contextSizeValue = val;
-                  _contextSizeController.text = val.toInt().toString();
-                });
-                storageService.setContextSize(val.toInt());
-              }, context, divisions: (maxCtx - 4098).toInt(), tooltip: 'How much conversation history the AI can remember. More = better memory but slower and uses more RAM/VRAM.');
-            }),
-           
-           Row(
-             children: [
-               Text('Dynamic Temperature', style: theme.textTheme.bodyMedium),
-               Tooltip(
-                 message: 'Varies temperature randomly within a range each generation for more varied outputs.',
-                 child: const Padding(
-                   padding: EdgeInsets.only(left: 4),
-                   child: Icon(Icons.info_outline, size: 16, color: Colors.white38),
-                 ),
-               ),
-               Switch(
-                 value: storageService.dynamicTempEnabled, 
-                 onChanged: (val) => storageService.setDynamicTempEnabled(val)
-               ),
-             ],
-           ),
-           if (storageService.dynamicTempEnabled)
-             _buildSlider('Dynatemp Range', storageService.dynamicTempRange, 0.0, 2.0, (val) => storageService.setDynamicTempRange(val), context, tooltip: 'How much the temperature can vary. The actual temperature will be randomly chosen within this range around the base temperature.'),
+           _buildSectionHeader('Storage Configuration', context),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.folder, color: Colors.blueAccent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Data Directory', style: theme.textTheme.bodySmall),
+                        Text(
+                          storageService.rootPath ?? 'Not set',
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.edit, color: theme.iconTheme.color),
+                    onPressed: _pickStoragePath,
+                    tooltip: 'Change Data Directory',
+                  ),
+                ],
+              ),
+            ),
 
-           const SizedBox(height: 24),
+            const SizedBox(height: 24),
+            _buildSectionHeader('Web Server', context),
+            const SizedBox(height: 8),
+            Consumer2<StorageService, WebServerService>(
+              builder: (context, storage, webServer, _) {
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                webServer.isRunning ? Icons.wifi_tethering : Icons.wifi_tethering_off,
+                                color: webServer.isRunning ? Colors.greenAccent : Colors.white38,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text('Enable Web Server', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          Switch(
+                            value: storage.webServerEnabled,
+                            onChanged: (val) async {
+                              await storage.setWebServerEnabled(val);
+                              if (val) {
+                                await webServer.start(storage.webServerPort);
+                              } else {
+                                await webServer.stop();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      if (storage.webServerEnabled) ...[
+                        const Divider(color: Colors.white10),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Port', style: theme.textTheme.bodySmall),
+                                  const SizedBox(height: 4),
+                                  SizedBox(
+                                    width: 120,
+                                    child: TextFormField(
+                                      initialValue: storage.webServerPort.toString(),
+                                      keyboardType: TextInputType.number,
+                                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: theme.scaffoldBackgroundColor,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      ),
+                                      onFieldSubmitted: (val) async {
+                                        final port = int.tryParse(val) ?? 8085;
+                                        await storage.setWebServerPort(port);
+                                        if (webServer.isRunning) {
+                                          await webServer.stop();
+                                          await webServer.start(port);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('PIN', style: theme.textTheme.bodySmall),
+                                  const SizedBox(height: 4),
+                                  SizedBox(
+                                    width: 120,
+                                    child: TextFormField(
+                                      initialValue: storage.webServerPin,
+                                      keyboardType: TextInputType.number,
+                                      style: const TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 4),
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: theme.scaffoldBackgroundColor,
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        hintText: '6 digits',
+                                        hintStyle: TextStyle(color: Colors.white24, letterSpacing: 1),
+                                      ),
+                                      maxLength: 6,
+                                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                                      onFieldSubmitted: (val) async {
+                                        if (val.length >= 4 && int.tryParse(val) != null) {
+                                          await storage.setWebServerPin(val);
+                                        }
+                                      },
+                                      onChanged: (val) async {
+                                        if (val.length == 6 && int.tryParse(val) != null) {
+                                          await storage.setWebServerPin(val);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Status', style: theme.textTheme.bodySmall),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: webServer.isRunning ? Colors.greenAccent : Colors.redAccent,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        webServer.isRunning ? 'Running' : 'Stopped',
+                                        style: TextStyle(
+                                          color: webServer.isRunning ? Colors.greenAccent : Colors.redAccent,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (webServer.lanIp != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.language, color: Colors.blueAccent, size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: SelectableText(
+                                    'http://${webServer.lanIp}:${storage.webServerPort}',
+                                    style: const TextStyle(
+                                      color: Colors.blueAccent,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (webServer.hasActiveClient) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.devices, color: Colors.amber, size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Client connected: ${webServer.connectedClientIp ?? "Unknown"}',
+                                    style: const TextStyle(color: Colors.amber, fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 24),
            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
