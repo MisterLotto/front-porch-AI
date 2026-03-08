@@ -341,12 +341,41 @@ A powerful, cross-platform desktop application designed to streamline the manage
 ## 🚀 Getting Started
 
 ### 📦 For Regular Users
-If you just want to use the app, simply head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page and download for your platform:
+
+#### 🐧 Linux — Install via Package Manager
+
+**Debian / Ubuntu / Mint / Pop!_OS (APT)**
+```bash
+curl -fsSL https://apt.dreamersai.art/install.sh | bash
+sudo apt install front-porch-ai
+```
+Or manually:
+```bash
+curl -fsSL https://apt.dreamersai.art/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
+echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.dreamersai.art stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
+sudo apt update && sudo apt install front-porch-ai
+```
+
+**Fedora / RHEL / openSUSE (DNF)**
+```bash
+sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
+sudo dnf install front-porch-ai
+```
+
+**Arch Linux (AUR)**
+```bash
+yay -S front-porch-ai-bin        # Stable
+yay -S front-porch-ai-beta-bin   # Beta / Pre-release
+```
+
+Future updates arrive through your normal system updates (`apt upgrade`, `dnf upgrade`, `yay -Syu`).
+
+#### 📥 Manual Downloads (All Platforms)
+
+Head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page:
 
 - **Stable releases**: `.exe` installer (Windows), `.dmg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux)
 - **Beta releases**: Standalone `.zip` (Windows/macOS), `.AppImage` / `.tar.gz` (Linux) — no installer required, just extract and run
-
-No setup required!
 
 ---
 
