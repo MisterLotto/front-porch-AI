@@ -18,6 +18,101 @@ Have questions, feedback, or just want to hang out? Connect with us:
 - **Discord**: [Join our server](https://discord.gg/e4tET6rpdv)
 - **Matrix**: [matrix.dreamersai.art](https://matrix.dreamersai.art)
 
+## 🚀 Getting Started
+
+### 📦 For Regular Users
+
+#### 🐧 Linux — Install via Package Manager
+
+**Debian / Ubuntu / Mint / Pop!_OS (APT)**
+```bash
+curl -fsSL https://apt.dreamersai.art/install.sh | bash
+sudo apt install front-porch-ai
+```
+Or manually:
+```bash
+curl -fsSL https://apt.dreamersai.art/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
+echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.dreamersai.art stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
+sudo apt update && sudo apt install front-porch-ai
+```
+
+**Fedora / RHEL / openSUSE (DNF)**
+```bash
+sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
+sudo dnf install front-porch-ai
+```
+
+**Arch Linux (AUR)**
+```bash
+yay -S front-porch-ai-bin        # Stable
+yay -S front-porch-ai-beta-bin   # Beta / Pre-release
+```
+
+Future updates arrive through your normal system updates (`apt upgrade`, `dnf upgrade`, `yay -Syu`).
+
+#### 📥 Manual Downloads (All Platforms)
+
+Head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page:
+
+- **Stable releases**: `.exe` installer (Windows), `.dmg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux)
+- **Beta releases**: Standalone `.zip` (Windows/macOS), `.AppImage` / `.tar.gz` (Linux) — no installer required, just extract and run
+
+---
+
+### 🛠️ For Developers & Tinkerers
+If you want to modify the code or build from source, follow these steps:
+
+#### Prerequisites
+- **Flutter Environment**: You must have the [Flutter SDK](https://docs.flutter.dev/get-started/install) installed and configured on your system.
+- **Git**: To clone the repository.
+- **OS**: Windows, Linux, or macOS.
+
+#### 🐧 Linux Dependencies
+
+If you are on Linux, you'll need a few extra packages to compile the desktop embedding:
+
+**Ubuntu/Debian**:
+```bash
+sudo apt-get update
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libwpewebkit-1.0-dev
+```
+
+**Arch Linux**:
+```bash
+sudo pacman -S clang cmake ninja pkgconf gtk3 xz wpewebkit
+```
+
+**Fedora**:
+```bash
+sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel wpewebkit-devel
+```
+
+> **Note:** `wpewebkit` is required for the built-in browser that allows you to download character cards directly from Chub.ai and AI Character Cards. If you're building from source, you must install this dependency. Pre-built AppImages bundle this library automatically.
+
+#### Installation
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/linux4life1/front-porch-ai.git
+    cd front-porch-ai
+    ```
+
+2.  **Install Dependencies**:
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Run the App**:
+    ```bash
+    flutter run
+    ```
+
+### Building for Release
+To create a standalone executable:
+```bash
+flutter build windows
+```
+The output will be in `build/windows/runner/Release/`.
+
 ## 🔓 Why Open Source?
 
 Proprietary software lives and dies at the discretion of its creators. When a company moves on, shuts down, or simply loses interest, the tools you depend on become frozen in time — no updates, no fixes, no future.
@@ -338,100 +433,6 @@ A powerful, cross-platform desktop application designed to streamline the manage
 - **World Info**: Create shared lore that can be referenced by multiple characters.
 - **Dynamic Context**: World info is injected into the context based on keywords, ensuring the AI knows about your world without overloading the context window.
 
-## 🚀 Getting Started
-
-### 📦 For Regular Users
-
-#### 🐧 Linux — Install via Package Manager
-
-**Debian / Ubuntu / Mint / Pop!_OS (APT)**
-```bash
-curl -fsSL https://apt.dreamersai.art/install.sh | bash
-sudo apt install front-porch-ai
-```
-Or manually:
-```bash
-curl -fsSL https://apt.dreamersai.art/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
-echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.dreamersai.art stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
-sudo apt update && sudo apt install front-porch-ai
-```
-
-**Fedora / RHEL / openSUSE (DNF)**
-```bash
-sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
-sudo dnf install front-porch-ai
-```
-
-**Arch Linux (AUR)**
-```bash
-yay -S front-porch-ai-bin        # Stable
-yay -S front-porch-ai-beta-bin   # Beta / Pre-release
-```
-
-Future updates arrive through your normal system updates (`apt upgrade`, `dnf upgrade`, `yay -Syu`).
-
-#### 📥 Manual Downloads (All Platforms)
-
-Head over to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page:
-
-- **Stable releases**: `.exe` installer (Windows), `.dmg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux)
-- **Beta releases**: Standalone `.zip` (Windows/macOS), `.AppImage` / `.tar.gz` (Linux) — no installer required, just extract and run
-
----
-
-### 🛠️ For Developers & Tinkerers
-If you want to modify the code or build from source, follow these steps:
-
-#### Prerequisites
-- **Flutter Environment**: You must have the [Flutter SDK](https://docs.flutter.dev/get-started/install) installed and configured on your system.
-- **Git**: To clone the repository.
-- **OS**: Windows, Linux, or macOS.
-
-#### 🐧 Linux Dependencies
-
-If you are on Linux, you'll need a few extra packages to compile the desktop embedding:
-
-**Ubuntu/Debian**:
-```bash
-sudo apt-get update
-sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libwpewebkit-1.0-dev
-```
-
-**Arch Linux**:
-```bash
-sudo pacman -S clang cmake ninja pkgconf gtk3 xz wpewebkit
-```
-
-**Fedora**:
-```bash
-sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel wpewebkit-devel
-```
-
-> **Note:** `wpewebkit` is required for the built-in browser that allows you to download character cards directly from Chub.ai and AI Character Cards. If you're building from source, you must install this dependency. Pre-built AppImages bundle this library automatically.
-
-#### Installation
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/linux4life1/front-porch-ai.git
-    cd front-porch-ai
-    ```
-
-2.  **Install Dependencies**:
-    ```bash
-    flutter pub get
-    ```
-
-3.  **Run the App**:
-    ```bash
-    flutter run
-    ```
-
-### Building for Release
-To create a standalone executable:
-```bash
-flutter build windows
-```
-The output will be in `build/windows/runner/Release/`.
 
 ## 🛠️ Configuration
 
