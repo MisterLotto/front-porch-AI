@@ -3,7 +3,7 @@
 ![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)
 ![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
-![Alpha](https://img.shields.io/badge/Status-Alpha-orange)
+![Beta](https://img.shields.io/badge/Status-Beta-blue)
 
 ## 📝 Note from the Dev
 
@@ -27,7 +27,39 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
 
-## 🆕 What's New in V0.9.0
+## 🆕 What's New in V0.9.0-Beta
+
+- 🎛️ **Context Size Slider in Character Creator**: New power-of-2 slider (2K → 128K) on the chargen Setup page lets you set the context window before starting KoboldCpp. Available in both the Flutter app and WebUI.
+- ▶️ **Start/Stop KoboldCpp from Character Creator**: Start and stop KoboldCpp directly from the chargen Setup step — no need to switch to Settings. The button shows real-time status (green/red dot) and a loading spinner during model load. Works in both Flutter and WebUI.
+- 🔧 **Auto-Configure Fix**: The auto-configure button now respects your chosen context size instead of overwriting it. It adjusts GPU layer offloading to fit the context you want, rather than dictating the context size.
+- 🌐 **WebUI Character Creator Parity**: The WebUI chargen Setup page now matches the Flutter app — backend toggle (KoboldCpp / API), local model list with file sizes, context slider, Start/Stop buttons with status polling, and Rescan.
+- 🔄 **Truncation Recovery**: Character generation now detects incomplete JSON output and retries missing fields (personality, scenario, system prompt, example dialogue) with focused prompts.
+- 📖 **Separate Lorebook Generation**: If the lorebook is missing from the initial generation (due to output truncation), it's now generated in a separate pass so world-building data isn't lost.
+- 📚 **Lorebook Sidebar in WebUI**: The chat sidebar in the WebUI now displays lorebook entries with red/green dots indicating active/inactive trigger status — matching the Flutter app.
+- 💬 **Greeting Quality Improvements**: Restructured greeting prompts to prioritize character details and narrative flow (scene → character → encounter). Removed the "editor pass" that was degrading greeting quality.
+- 🐧 **Linux Desktop Fixes**:
+  - Fixed `.desktop` file `Exec=` / `Icon=` mismatch with actual binary name
+  - Added proper Linux app icon (was missing/empty)
+  - Fixed `FlutterEngineRemoveView` segfault on app close
+  - Added SIGINT/SIGTERM signal handlers to prevent segfault on terminal exit
+- 💾 **Character Data Loss Fix**: Fixed character description fields being wiped after crash-on-shutdown, particularly for characters stored in folders.
+- 🗑️ **Removed Local SD**: Cleaned out the local Stable Diffusion image generation feature (remote API image gen remains fully functional).
+- 🌍 **World Editor**: Full lorebook entry management UI for creating and editing world info.
+- 🚫 **Banned Phrases**: Context shift support, tokenizer integration, and banned token phrases for controlling model output.
+- 🔌 **New Backend API Endpoints**: `/api/backend/status`, `/api/backend/local-models`, `/api/backend/start`, `/api/backend/stop` — enabling full KoboldCpp management from the WebUI.
+- 🐛 **Bug Fixes**:
+  - Fixed KoboldCpp chargen name/description generators hitting premature stop sequences (`` ``` ``)
+  - Fixed chargen using the wrong backend (API instead of KoboldCpp) when KoboldCpp was selected
+  - Fixed first message formatting — actions now use `*asterisks*`, dialogue uses `"quotation marks"`
+  - Fixed AI-generated image prompts containing character names instead of clean visual tags
+  - Fixed truncated first messages not being detected or completed by editor passes
+  - Fixed avatar prompt generator outputting story-like descriptions instead of comma-separated visual tags
+  - Fixed banned_tokens sent as delimited string instead of JSON array
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.9.0-Alpha
 
 - 🧙 **AI Character Creator**: Generate complete, ready-to-chat character cards from just a name and a concept. The AI builds a full V2-spec card — personality, backstory, dialogue examples, system prompt, and optional avatar — all in one flow.
   - **Multi-Step Wizard**: Streamlined 4-step process — Setup (backend & model) → Configure (character details) → Generate → Review & Edit.
@@ -38,30 +70,15 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
   - **Alternate Greetings**: Generate up to 5 unique first messages with configurable tone, length, and art style.
   - **Lorebook Auto-Generation**: Optionally generate world-building lorebook entries alongside the character.
   - **Persona-Aware**: Select a {{user}} persona to tailor greetings, or leave blank for public cards.
-- 🌐 **Full-Featured Web UI**: Access Front Porch AI from any device on your local network. A complete browser-based interface served directly from the desktop app — no separate server needed. Includes chat, characters, group chat, cloud sync, settings, and more — full parity with the desktop experience.
-- 🎨 **AI Image Generation**: Generate images directly from your chat using your existing API provider (Nano-GPT, OpenRouter, or any OpenAI-compatible endpoint).
-  - **6 Generation Modes**: Visualize Scene, From Last Message, Character Portrait, Chat Background, User Avatar, and Custom Prompt.
-  - **Smart Prompts**: The active LLM automatically crafts optimized image prompts from your chat context — no prompt engineering needed.
-  - **6 Art Styles**: Photorealistic, Anime, Fantasy Art, Oil Painting, Digital Art, and Watercolor.
-  - **Auto-Save**: Generated images are saved to disk and can be viewed in a full-screen lightbox.
-- 📞 **Voice Call Mode**: Have a hands-free voice conversation with any character. Full-duplex call loop: listen → transcribe → send → TTS → listen.
-  - **Waveform Visualization**: Real-time microphone amplitude displayed as an animated waveform during calls.
-  - **Call Controls**: Mute/unmute and end call buttons with a live call timer.
-  - **Auto-Resume**: Automatically resumes listening after TTS finishes speaking.
-- 🎙️ **Push-to-Talk (Whisper STT)**: Hold-to-record voice input powered by Faster Whisper. Supports Tiny, Base, and Small models with microphone device selection.
-- 📖 **Chat Summary**: Automatic rolling summary of the conversation, injected into context so the AI remembers earlier events even after they scroll out of the context window. Pause, edit, or regenerate summaries on demand.
-- 📱 **Device Identification**: The desktop app now identifies connected web clients by browser and OS (e.g., "Firefox on Linux") instead of showing "Unknown".
-- 🎛️ **Extended Max Output Tokens**: Increased from 2,048 to 16,384 to support thinking models where reasoning tokens count toward the limit.
-- 🛡️ **Pre-Release Safety**: Beta builds use a separate database (`front_porch_beta.db`) and disable cloud sync to prevent schema conflicts with stable releases.
-- 📄 **License Change**: Switched from GPLv3 to **AGPL-3.0** to ensure that anyone hosting a modified version as a network service must share their changes. Versions 0.8.x and earlier remain GPLv3.
-- 🐛 **Bug Fixes**:
-  - Fixed first message formatting — actions now correctly use `*asterisks*`, dialogue uses `"quotation marks"`, narration is plain text
-  - Fixed AI-generated image prompts containing character names and narrative prose instead of clean visual trait tags
-  - Fixed truncated first messages not being detected or completed by editor passes
-  - Fixed avatar prompt generator outputting story-like descriptions instead of comma-separated visual tags
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
+- 🌐 **Full-Featured Web UI**: Access Front Porch AI from any device on your local network. A complete browser-based interface served directly from the desktop app — no separate server needed.
+- 🎨 **AI Image Generation**: Generate images directly from your chat using your existing API provider.
+- 📞 **Voice Call Mode**: Hands-free voice conversation with any character using Whisper STT + TTS.
+- 🎙️ **Push-to-Talk (Whisper STT)**: Hold-to-record voice input powered by Faster Whisper.
+- 📖 **Chat Summary**: Automatic rolling summary injected into context for long conversations.
+- 📱 **Device Identification**: Connected web clients identified by browser and OS.
+- 🎛️ **Extended Max Output Tokens**: Increased from 2,048 to 16,384 for thinking models.
+- 🛡️ **Pre-Release Safety**: Beta builds use a separate database to prevent schema conflicts.
+- 📄 **License Change**: Switched from GPLv3 to **AGPL-3.0** for v0.9.0+.
 
 ### What's New in V0.8.1
 
