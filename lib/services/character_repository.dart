@@ -151,7 +151,25 @@ class CharacterRepository extends ChangeNotifier {
     return card;
   }
 
-  void addCharacter(CharacterCard character) {
+  Future<void> addCharacter(CharacterCard character) async {
+    // Persist to database immediately so data survives hot reload / crash
+    final dbId = await _db.insertCharacterReturningId(CharactersCompanion(
+      name: Value(character.name),
+      description: Value(character.description),
+      personality: Value(character.personality),
+      scenario: Value(character.scenario),
+      firstMessage: Value(character.firstMessage),
+      mesExample: Value(character.mesExample),
+      systemPrompt: Value(character.systemPrompt),
+      postHistoryInstructions: Value(character.postHistoryInstructions),
+      alternateGreetings: Value(jsonEncode(character.alternateGreetings)),
+      tags: Value(jsonEncode(character.tags)),
+      imagePath: Value(character.imagePath),
+      ttsVoice: Value(character.ttsVoice),
+      lorebook: Value(character.lorebook != null ? jsonEncode(character.lorebook!.toJson()) : null),
+      worldNames: Value(jsonEncode(character.worldNames)),
+    ));
+    character.dbId = dbId;
     _characters.add(character);
     notifyListeners();
   }

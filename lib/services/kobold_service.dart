@@ -241,6 +241,8 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
     request.headers['Content-Type'] = 'application/json';
     request.body = jsonEncode(payload);
 
+    debugPrint('[KoboldCpp] Streaming request: prompt=${prompt.length} chars, max_length=$maxLength, stop_sequences=${stopSequences?.length ?? 0}');
+
     final client = http.Client();
     _activeClient = client;
     try {

@@ -210,6 +210,7 @@ void main(List<String> args) async {
             ws.setUserPersonaService(Provider.of<UserPersonaService>(context, listen: false));
             ws.setGroupChatRepository(Provider.of<GroupChatRepository>(context, listen: false));
             ws.setCloudSyncService(Provider.of<CloudSyncService>(context, listen: false));
+            ws.setImageGenService(Provider.of<ImageGenService>(context, listen: false));
             return ws;
           },
           update: (context, storage, previous) {
@@ -223,6 +224,7 @@ void main(List<String> args) async {
               previous.setUserPersonaService(Provider.of<UserPersonaService>(context, listen: false));
               previous.setGroupChatRepository(Provider.of<GroupChatRepository>(context, listen: false));
               previous.setCloudSyncService(Provider.of<CloudSyncService>(context, listen: false));
+              previous.setImageGenService(Provider.of<ImageGenService>(context, listen: false));
               return previous;
             }
             final chatService = Provider.of<ChatService>(context, listen: false);
@@ -237,6 +239,7 @@ void main(List<String> args) async {
             ws.setUserPersonaService(Provider.of<UserPersonaService>(context, listen: false));
             ws.setGroupChatRepository(Provider.of<GroupChatRepository>(context, listen: false));
             ws.setCloudSyncService(Provider.of<CloudSyncService>(context, listen: false));
+            ws.setImageGenService(Provider.of<ImageGenService>(context, listen: false));
             return ws;
           },
         ),

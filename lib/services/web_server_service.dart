@@ -27,10 +27,12 @@ import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
 import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
 import 'package:front_porch_ai/services/backup_service.dart';
+import 'package:front_porch_ai/services/character_gen_service.dart';
+import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/database/database.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:front_porch_ai/app_version.dart';
 
 /// Embedded HTTP server that serves the web UI and REST API.
 ///
@@ -49,6 +51,17 @@ class WebServerService extends ChangeNotifier {
   UserPersonaService? _userPersonaService;
   GroupChatRepository? _groupChatRepository;
   CloudSyncService? _cloudSyncService;
+  ImageGenService? _imageGenService;
+
+  // ── Chargen SSE state ──
+  final Set<StreamController<List<int>>> _chargenSseClients = {};
+
+  // Chargen state for polling fallback
+  String _chargenStatus = '';
+  String _chargenPreview = '';
+  Map<String, dynamic>? _chargenCompletedCard;
+  String? _chargenError;
+  bool _isChargenRunning = false;
 
   HttpServer? _server;
   bool _isRunning = false;
@@ -82,6 +95,7 @@ class WebServerService extends ChangeNotifier {
   void setUserPersonaService(UserPersonaService ups) => _userPersonaService = ups;
   void setGroupChatRepository(GroupChatRepository gcr) => _groupChatRepository = gcr;
   void setCloudSyncService(CloudSyncService css) => _cloudSyncService = css;
+  void setImageGenService(ImageGenService igs) => _imageGenService = igs;
 
   // ─────────────────────────────────────────────────────────────────────
   // LAN IP detection
@@ -148,6 +162,7 @@ class WebServerService extends ChangeNotifier {
     router.get('/api/characters/<id>/detail', _handleGetCharacterDetail);
     router.post('/api/characters/<id>/edit', _handleEditCharacter);
     router.post('/api/characters/<id>/delete', _handleDeleteCharacter);
+    router.get('/api/characters/<id>/export.png', _handleExportCharacterPng);
     router.post('/api/characters/import', _handleImportCharacter);
 
     // ── Chat routes ──
@@ -189,6 +204,12 @@ class WebServerService extends ChangeNotifier {
     // ── Character creation routes ──
     router.post('/api/characters/create', _handleCreateCharacter);
 
+    // ── Backend status & control ──
+    router.get('/api/backend/status', _handleBackendStatus);
+    router.get('/api/backend/local-models', _handleListLocalModels);
+    router.post('/api/backend/start', _handleStartKobold);
+    router.post('/api/backend/stop', _handleStopKobold);
+
     // ── Model routes ──
     router.get('/api/models/list', _handleGetModelList);
     router.post('/api/models/test-connection', _handleTestConnection);
@@ -208,6 +229,15 @@ class WebServerService extends ChangeNotifier {
 
     // ── AI generation route ──
     router.post('/api/generate', _handleGenerate);
+
+    // ── Character generator (AI creator) routes ──
+    router.post('/api/chargen/generate', _handleChargenGenerate);
+    router.post('/api/chargen/describe', _handleChargenDescribe);
+    router.post('/api/chargen/randomname', _handleChargenRandomName);
+    router.get('/api/chargen/status', _handleChargenStatus);
+    router.get('/api/chargen/stream', _handleChargenStream);
+    router.post('/api/chargen/avatar', _handleChargenAvatar);
+    router.post('/api/chargen/save', _handleChargenSave);
 
     // ── Cloud sync routes ──
     router.get('/api/sync/status', _handleGetSyncStatus);
@@ -536,7 +566,35 @@ class WebServerService extends ChangeNotifier {
       try { worldNames = jsonDecode(c.worldNames); } catch (_) {}
       Map<String, dynamic>? lorebook;
       if (c.lorebook != null) {
-        try { lorebook = jsonDecode(c.lorebook!); } catch (_) {}
+        try {
+          final raw = jsonDecode(c.lorebook!);
+          // Normalize DB format (keys array, comment) → frontend format (key string, name)
+          if (raw is Map<String, dynamic> && raw['entries'] is List) {
+            final entries = (raw['entries'] as List).map((e) {
+              if (e is Map<String, dynamic>) {
+                // Join keys array → comma-separated string
+                String keyStr = '';
+                if (e['keys'] is List) {
+                  keyStr = (e['keys'] as List).map((k) => k.toString()).join(', ');
+                } else if (e['key'] is String) {
+                  keyStr = e['key'] as String;
+                }
+                return {
+                  'name': e['comment']?.toString() ?? e['name']?.toString() ?? '',
+                  'key': keyStr,
+                  'content': e['content']?.toString() ?? '',
+                  'enabled': e['enabled'] ?? true,
+                  'constant': e['constant'] ?? false,
+                  'stickyDepth': e['sticky_depth'] ?? e['insertion_order'] ?? 4,
+                };
+              }
+              return e;
+            }).toList();
+            lorebook = {'entries': entries};
+          } else {
+            lorebook = raw;
+          }
+        } catch (_) {}
       }
 
       return shelf.Response.ok(
@@ -586,7 +644,7 @@ class WebServerService extends ChangeNotifier {
         imagePath: Value(character.imagePath),
         ttsVoice: Value(character.ttsVoice),
         folderId: Value(character.folderId),
-        lorebook: Value(body.containsKey('lorebook') ? jsonEncode(body['lorebook']) : character.lorebook),
+        lorebook: Value(body.containsKey('lorebook') ? _normalizeLorebookForDb(body['lorebook']) : character.lorebook),
         worldNames: Value(body.containsKey('worldNames') ? jsonEncode(body['worldNames']) : character.worldNames),
         createdAt: Value(character.createdAt),
         updatedAt: Value(DateTime.now()),
@@ -650,6 +708,37 @@ class WebServerService extends ChangeNotifier {
       userPersonaName = _userPersonaService!.persona.name;
     }
 
+    // Collect lorebook entries with trigger state
+    final lorebookEntries = <Map<String, dynamic>>[];
+    if (activeChar != null && activeChar.lorebook != null) {
+      for (final entry in activeChar.lorebook!.entries) {
+        if (!entry.enabled) continue;
+        lorebookEntries.add({
+          'key': entry.key,
+          'name': entry.displayName,
+          'isTriggered': entry.isTriggered,
+          'constant': entry.constant,
+          'remainingDepth': entry.remainingDepth,
+        });
+      }
+    }
+    // Also include world lorebook entries via chat service's group characters
+    if (chat.isGroupMode) {
+      for (final ch in chat.groupCharacters) {
+        if (ch.lorebook == null) continue;
+        for (final entry in ch.lorebook!.entries) {
+          if (!entry.enabled) continue;
+          lorebookEntries.add({
+            'key': entry.key,
+            'name': '${ch.name}: ${entry.displayName}',
+            'isTriggered': entry.isTriggered,
+            'constant': entry.constant,
+            'remainingDepth': entry.remainingDepth,
+          });
+        }
+      }
+    }
+
     return shelf.Response.ok(
       jsonEncode({
         'character': activeChar != null ? {
@@ -672,6 +761,7 @@ class WebServerService extends ChangeNotifier {
         'greetingIndex': greetingIndex,
         'totalGreetings': totalGreetings,
         'userPersonaName': userPersonaName,
+        'lorebook': lorebookEntries,
       }),
       headers: {'Content-Type': 'application/json'},
     );
@@ -1176,11 +1266,148 @@ class WebServerService extends ChangeNotifier {
           'webServerPort': s.webServerPort,
           'webServerEnabled': s.webServerEnabled,
           'webServerPin': s.webServerPin,
+          // Backend runtime state
+          'koboldRunning': _llmProvider?.koboldService.isRunning ?? false,
+          'koboldReady': _llmProvider?.koboldService.isReady ?? false,
         }),
         headers: {'Content-Type': 'application/json'},
       );
     } catch (e) {
       return _errorResponse(500, 'Failed to fetch settings: $e');
+    }
+  }
+
+  shelf.Response _handleBackendStatus(shelf.Request request) {
+    try {
+      final kobold = _llmProvider?.koboldService;
+      return shelf.Response.ok(
+        jsonEncode({
+          'running': kobold?.isRunning ?? false,
+          'ready': kobold?.isReady ?? false,
+          'modelReady': kobold?.modelReady ?? false,
+          'loadingStatus': kobold?.modelLoadingStatus ?? '',
+          'activeBackend': _storageService.backendType,
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to check backend status: $e');
+    }
+  }
+
+  /// GET /api/backend/local-models — List .gguf model files.
+  shelf.Response _handleListLocalModels(shelf.Request request) {
+    try {
+      final modelsDir = _storageService.modelsDir;
+      final lastUsed = _storageService.lastUsedModelPath ?? '';
+      if (!modelsDir.existsSync()) {
+        return shelf.Response.ok(
+          jsonEncode({'models': [], 'modelsDir': modelsDir.path, 'lastUsedPath': lastUsed}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      }
+      final files = modelsDir
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.toLowerCase().endsWith('.gguf'))
+          .toList()
+        ..sort((a, b) => p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase()));
+
+      final models = files.map((f) {
+        final sizeBytes = f.lengthSync();
+        final sizeGB = (sizeBytes / (1024 * 1024 * 1024)).toStringAsFixed(1);
+        return {
+          'path': f.path,
+          'name': p.basename(f.path),
+          'sizeGB': sizeGB,
+          'sizeBytes': sizeBytes,
+        };
+      }).toList();
+
+      return shelf.Response.ok(
+        jsonEncode({'models': models, 'modelsDir': modelsDir.path, 'lastUsedPath': lastUsed}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to list local models: $e');
+    }
+  }
+
+  /// POST /api/backend/start — Start KoboldCpp with a local model (non-blocking).
+  Future<shelf.Response> _handleStartKobold(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final modelPath = body['modelPath']?.toString() ?? '';
+      if (modelPath.isEmpty) return _errorResponse(400, 'modelPath is required');
+
+      final kobold = _llmProvider!.koboldService;
+      final s = _storageService;
+
+      // Stop if currently running
+      if (kobold.isRunning) {
+        await kobold.stopKobold();
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // Find executable
+      final binDir = s.binDir;
+      String? execPath;
+      if (binDir.existsSync()) {
+        for (final f in binDir.listSync()) {
+          if (f is File && (f.path.contains('koboldcpp') || f.path.contains('KoboldCpp'))) {
+            execPath = f.path;
+            break;
+          }
+        }
+      }
+
+      if (execPath == null) {
+        return _errorResponse(404, 'KoboldCpp executable not found in ${binDir.path}');
+      }
+
+      // Start KoboldCpp (non-blocking — returns immediately)
+      await kobold.startKobold(
+        execPath,
+        modelPath,
+        port: 5001,
+        gpuLayers: s.gpuLayers,
+        contextSize: s.contextSize,
+        useVulkan: s.useVulkan ?? false,
+        useCublas: s.useCublas ?? false,
+        useMetal: s.useMetal ?? false,
+        useRocm: s.useRocm ?? false,
+      );
+
+      // Save as last used model
+      await s.setLastUsedModelPath(modelPath);
+
+      // Return immediately — client should poll /api/backend/status for readiness
+      return shelf.Response.ok(
+        jsonEncode({'status': 'starting', 'message': 'KoboldCpp is starting. Poll /api/backend/status for readiness.'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to start KoboldCpp: $e');
+    }
+  }
+
+  /// POST /api/backend/stop — Stop KoboldCpp.
+  Future<shelf.Response> _handleStopKobold(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+
+    try {
+      final kobold = _llmProvider!.koboldService;
+      if (kobold.isRunning) {
+        await kobold.stopKobold();
+      }
+      return shelf.Response.ok(
+        jsonEncode({'status': 'stopped'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to stop KoboldCpp: $e');
     }
   }
 
@@ -1580,6 +1807,163 @@ class WebServerService extends ChangeNotifier {
     } catch (e) {
       return _errorResponse(500, 'Failed to delete character: $e');
     }
+  }
+
+  /// GET /api/characters/:id/export.png — Export character as PNG with embedded card data.
+  Future<shelf.Response> _handleExportCharacterPng(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+    try {
+      final character = await _db!.getCharacterById(id);
+
+      // Build V2 character card JSON
+      final v2Card = {
+        'spec': 'chara_card_v2',
+        'spec_version': '2.0',
+        'data': character.toJson(),
+      };
+      final charaJson = jsonEncode(v2Card);
+      final charaB64 = base64Encode(utf8.encode(charaJson));
+
+      // Load avatar PNG or create placeholder
+      Uint8List pngBytes;
+      if (character.imagePath != null && character.imagePath!.isNotEmpty) {
+        final file = File(character.imagePath!);
+        if (file.existsSync()) {
+          pngBytes = file.readAsBytesSync();
+        } else {
+          pngBytes = _createPlaceholderPng(character.name);
+        }
+      } else {
+        pngBytes = _createPlaceholderPng(character.name);
+      }
+
+      // Embed character data as tEXt chunk
+      final resultPng = _embedPngTextChunk(pngBytes, 'chara', charaB64);
+      final safeName = character.name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+
+      return shelf.Response.ok(
+        resultPng,
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Disposition': 'attachment; filename="$safeName.png"',
+        },
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Export failed: $e');
+    }
+  }
+
+  /// Create a minimal 1x1 white PNG for characters without avatars.
+  Uint8List _createPlaceholderPng(String name) {
+    // Minimal valid 1x1 white PNG
+    return Uint8List.fromList([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+      0x00, 0x00, 0x00, 0x0D, // IHDR length
+      0x49, 0x48, 0x44, 0x52, // IHDR type
+      0x00, 0x00, 0x00, 0x01, // width=1
+      0x00, 0x00, 0x00, 0x01, // height=1
+      0x08, 0x02, // 8bit RGB
+      0x00, 0x00, 0x00, // compression, filter, interlace
+      0x90, 0x77, 0x53, 0xDE, // CRC
+      0x00, 0x00, 0x00, 0x0C, // IDAT length
+      0x49, 0x44, 0x41, 0x54, // IDAT type
+      0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, // compressed pixel
+      0xE2, 0x21, 0xBC, 0x33, // CRC
+      0x00, 0x00, 0x00, 0x00, // IEND length
+      0x49, 0x45, 0x4E, 0x44, // IEND type
+      0xAE, 0x42, 0x60, 0x82, // CRC
+    ]);
+  }
+
+  /// Embed a tEXt chunk into a PNG before the IEND chunk.
+  Uint8List _embedPngTextChunk(Uint8List pngBytes, String keyword, String text) {
+    // Find IEND offset
+    int iendPos = -1;
+    for (int i = pngBytes.length - 12; i >= 8; i--) {
+      if (pngBytes[i + 4] == 0x49 && pngBytes[i + 5] == 0x45 &&
+          pngBytes[i + 6] == 0x4E && pngBytes[i + 7] == 0x44) {
+        iendPos = i;
+        break;
+      }
+    }
+    if (iendPos < 0) return pngBytes;
+
+    // Build tEXt chunk data: keyword + null + text
+    final keyBytes = utf8.encode(keyword);
+    final textBytes = utf8.encode(text);
+    final chunkData = Uint8List(keyBytes.length + 1 + textBytes.length);
+    chunkData.setRange(0, keyBytes.length, keyBytes);
+    chunkData[keyBytes.length] = 0;
+    chunkData.setRange(keyBytes.length + 1, chunkData.length, textBytes);
+
+    // Chunk type
+    final chunkType = utf8.encode('tEXt');
+
+    // CRC32 over type + data
+    final crcInput = Uint8List(4 + chunkData.length);
+    crcInput.setRange(0, 4, chunkType);
+    crcInput.setRange(4, crcInput.length, chunkData);
+    final crc = _crc32(crcInput);
+
+    // Build full chunk: length(4) + type(4) + data + crc(4)
+    final chunkLen = chunkData.length;
+    final chunk = Uint8List(4 + 4 + chunkData.length + 4);
+    chunk[0] = (chunkLen >> 24) & 0xFF;
+    chunk[1] = (chunkLen >> 16) & 0xFF;
+    chunk[2] = (chunkLen >> 8) & 0xFF;
+    chunk[3] = chunkLen & 0xFF;
+    chunk.setRange(4, 8, chunkType);
+    chunk.setRange(8, 8 + chunkData.length, chunkData);
+    chunk[chunk.length - 4] = (crc >> 24) & 0xFF;
+    chunk[chunk.length - 3] = (crc >> 16) & 0xFF;
+    chunk[chunk.length - 2] = (crc >> 8) & 0xFF;
+    chunk[chunk.length - 1] = crc & 0xFF;
+
+    // Insert before IEND
+    final result = Uint8List(pngBytes.length + chunk.length);
+    result.setRange(0, iendPos, pngBytes);
+    result.setRange(iendPos, iendPos + chunk.length, chunk);
+    result.setRange(iendPos + chunk.length, result.length, pngBytes.sublist(iendPos));
+    return result;
+  }
+
+  /// Standard CRC32 for PNG chunks.
+  int _crc32(Uint8List bytes) {
+    int crc = 0xFFFFFFFF;
+    for (int i = 0; i < bytes.length; i++) {
+      crc ^= bytes[i];
+      for (int j = 0; j < 8; j++) {
+        crc = (crc >> 1) ^ (crc & 1 == 1 ? 0xEDB88320 : 0);
+      }
+    }
+    return crc ^ 0xFFFFFFFF;
+  }
+
+  /// Normalize lorebook data from frontend format (key string, name) to DB format (keys array, comment).
+  String _normalizeLorebookForDb(dynamic lorebookData) {
+    if (lorebookData is! Map<String, dynamic>) return jsonEncode(lorebookData);
+    final entries = lorebookData['entries'];
+    if (entries is! List) return jsonEncode(lorebookData);
+
+    final normalized = entries.map((e) {
+      if (e is! Map<String, dynamic>) return e;
+      // Convert 'key' (string) → 'keys' (array) and 'name' → 'comment'
+      final keyStr = e['key']?.toString() ?? '';
+      final keys = keyStr.isNotEmpty
+          ? keyStr.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toList()
+          : (e['keys'] is List ? e['keys'] : <String>[]);
+      return {
+        'keys': keys,
+        'content': e['content']?.toString() ?? '',
+        'comment': e['name']?.toString() ?? e['comment']?.toString() ?? '',
+        'enabled': e['enabled'] ?? true,
+        'constant': e['constant'] ?? false,
+        'sticky_depth': e['stickyDepth'] ?? e['sticky_depth'] ?? e['insertion_order'] ?? 4,
+        'insertion_order': e['insertion_order'] ?? 0,
+      };
+    }).toList();
+
+    return jsonEncode({'entries': normalized});
   }
 
   Future<shelf.Response> _handleImportCharacter(shelf.Request request) async {
@@ -2481,6 +2865,785 @@ class WebServerService extends ChangeNotifier {
     _activeSessions.clear();
     debugPrint('[WebServer] Server stopped');
     notifyListeners();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Character Generator (AI Creator) API
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Send an SSE event to all chargen clients.
+  void _chargenBroadcast(Map<String, dynamic> eventData) {
+    // Also store state for polling fallback
+    final eventType = eventData['event']?.toString() ?? '';
+    if (eventType == 'status') _chargenStatus = eventData['text']?.toString() ?? '';
+    if (eventType == 'preview') _chargenPreview = eventData['text']?.toString() ?? '';
+    if (eventType == 'complete') {
+      _chargenCompletedCard = eventData['card'] as Map<String, dynamic>?;
+      _chargenError = null;
+    }
+    if (eventType == 'error') _chargenError = eventData['text']?.toString() ?? 'Unknown error';
+
+    _chargenSseClients.removeWhere((c) => c.isClosed);
+    if (_chargenSseClients.isEmpty) {
+      debugPrint('[SSE] No chargen clients connected, dropping $eventType event');
+      return;
+    }
+    int sent = 0;
+    for (final client in _chargenSseClients) {
+      try {
+        final jsonStr = jsonEncode(eventData);
+        client.add(utf8.encode('data: $jsonStr\n\n'));
+        sent++;
+      } catch (e) {
+        debugPrint('[SSE] Failed to send $eventType to client: $e');
+      }
+    }
+    if (eventType != 'preview') {
+      debugPrint('[SSE] Broadcast $eventType to $sent/${_chargenSseClients.length} clients');
+    }
+  }
+
+  /// GET /api/chargen/status — Polling fallback for generation progress.
+  Future<shelf.Response> _handleChargenStatus(shelf.Request request) async {
+    final result = <String, dynamic>{
+      'isGenerating': _isChargenRunning,
+      'status': _chargenStatus,
+      'preview': _chargenPreview,
+    };
+    if (_chargenCompletedCard != null) {
+      result['complete'] = true;
+      result['card'] = _chargenCompletedCard;
+    }
+    if (_chargenError != null) {
+      result['error'] = _chargenError;
+    }
+    return shelf.Response.ok(
+      jsonEncode(result),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  /// GET /api/chargen/stream — SSE endpoint for generation progress.
+  Future<shelf.Response> _handleChargenStream(shelf.Request request) async {
+    final controller = StreamController<List<int>>();
+    _chargenSseClients.add(controller);
+    debugPrint('[WebServer] Chargen SSE client connected (${_chargenSseClients.length} total)');
+
+    // Send initial state
+    try {
+      final jsonStr = jsonEncode({'event': 'connected', 'isGenerating': _isChargenRunning});
+      controller.add(utf8.encode('data: $jsonStr\n\n'));
+    } catch (_) {}
+
+    controller.onCancel = () {
+      _chargenSseClients.remove(controller);
+      debugPrint('[WebServer] Chargen SSE client disconnected (${_chargenSseClients.length} remaining)');
+    };
+
+    return shelf.Response.ok(
+      controller.stream,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      },
+    );
+  }
+
+  /// Helper to create an SSE streaming response from an LLM generation.
+  /// Sends 'token' events in real-time and a 'done' event with the parsed result.
+  shelf.Response _streamingLlmResponse(
+    LLMService llmService,
+    GenerationParams params,
+    String resultKey, // 'name' or 'concept'
+    Duration timeout,
+  ) {
+    final controller = StreamController<List<int>>();
+
+    void sse(String event, String data) {
+      if (!controller.isClosed) {
+        controller.add(utf8.encode('event: $event\ndata: $data\n\n'));
+      }
+    }
+
+    () async {
+      String accumulated = '';
+      bool inThinking = false;
+      try {
+        await for (final token in llmService.generateStream(params).timeout(timeout)) {
+          accumulated += token;
+          // Filter thinking tokens
+          if (token.contains('<think>')) { inThinking = true; continue; }
+          if (token.contains('</think>')) { inThinking = false; continue; }
+          if (inThinking) continue;
+          sse('token', token);
+        }
+
+        // Parse JSON and extract result
+        String cleaned = accumulated.replaceAll(
+          RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '',
+        ).replaceAll(
+          RegExp(r'<think>[\s\S]*$', caseSensitive: false), '',
+        ).trim();
+
+        // Strip markdown code fences (common with local models)
+        cleaned = cleaned
+            .replaceAll(RegExp(r'^```(?:json)?\s*', multiLine: true), '')
+            .replaceAll(RegExp(r'^```\s*$', multiLine: true), '')
+            .trim();
+
+        final jsonStart = cleaned.indexOf('{');
+        final jsonEnd = cleaned.lastIndexOf('}');
+        String result = accumulated.trim();
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+          final jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
+          // Strategy 1: Direct parse
+          bool parsed = false;
+          try {
+            final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+            result = data[resultKey]?.toString() ?? result;
+            parsed = true;
+          } catch (_) {}
+
+          // Strategy 2: Fix literal newlines inside JSON strings
+          if (!parsed) {
+            try {
+              String fixed = jsonStr.replaceAll('\r\n', '\\n').replaceAll('\r', '\\n');
+              final sb = StringBuffer();
+              bool inStr = false;
+              bool esc = false;
+              for (int i = 0; i < fixed.length; i++) {
+                final ch = fixed[i];
+                if (esc) { sb.write(ch); esc = false; continue; }
+                if (ch == '\\') { sb.write(ch); esc = true; continue; }
+                if (ch == '"') { inStr = !inStr; sb.write(ch); continue; }
+                if (ch == '\n' && inStr) { sb.write('\\n'); continue; }
+                sb.write(ch);
+              }
+              fixed = sb.toString().replaceAll(RegExp(r',\s*}'), '}').replaceAll(RegExp(r',\s*]'), ']');
+              final data = jsonDecode(fixed) as Map<String, dynamic>;
+              result = data[resultKey]?.toString() ?? result;
+              parsed = true;
+            } catch (_) {}
+          }
+
+          // Strategy 3: Regex fallback
+          if (!parsed) {
+            final pattern = RegExp('"$resultKey"\\s*:\\s*"', caseSensitive: false);
+            final match = pattern.firstMatch(jsonStr);
+            if (match != null) {
+              final valueStart = match.end;
+              bool esc = false;
+              for (int i = valueStart; i < jsonStr.length; i++) {
+                final ch = jsonStr[i];
+                if (esc) { esc = false; continue; }
+                if (ch == '\\') { esc = true; continue; }
+                if (ch == '"') {
+                  result = jsonStr.substring(valueStart, i)
+                      .replaceAll('\\n', '\n').replaceAll('\\t', '\t').replaceAll('\\"', '"');
+                  break;
+                }
+              }
+            }
+          }
+        }
+        sse('done', jsonEncode({resultKey: result}));
+      } catch (e) {
+        debugPrint('Chargen streaming error: $e');
+        sse('error', jsonEncode({'error': '$e'}));
+      }
+      await controller.close();
+    }();
+
+    return shelf.Response.ok(
+      controller.stream,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    );
+  }
+
+  /// Resolve the LLM service for chargen, creating a fresh OpenRouterService
+  /// when a specific modelId is provided.
+  LLMService? _resolveChargenLlm(String modelId, String debugLabel) {
+    if (modelId.isNotEmpty) {
+      debugPrint('$debugLabel: Using model=$modelId via ${_storageService.remoteApiUrl}');
+      return OpenRouterService(
+        apiUrl: _storageService.remoteApiUrl,
+        apiKey: _storageService.remoteApiKey,
+        modelName: modelId,
+      );
+    } else {
+      debugPrint('$debugLabel: Using active service: ${_llmProvider!.activeService.runtimeType}');
+      return _llmProvider!.activeService;
+    }
+  }
+
+  /// POST /api/chargen/randomname — Stream a random character name generation.
+  Future<shelf.Response> _handleChargenRandomName(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+    try {
+      final body = jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final archetype = body['selectedArchetype']?.toString() ?? '';
+      final modelId = body['modelId']?.toString() ?? '';
+
+      final llmService = _resolveChargenLlm(modelId, 'ChargenRandomName');
+      if (llmService == null || !llmService.isReady) {
+        return _errorResponse(503, 'LLM service is not ready. Select a model first.');
+      }
+
+      final archetypeHint = archetype.isNotEmpty
+          ? ' The name should suit a "$archetype" character.'
+          : '';
+
+      return _streamingLlmResponse(
+        llmService,
+        GenerationParams(
+          prompt: 'Generate ONE unique, creative character name for a roleplay character.$archetypeHint Output ONLY a JSON object with exactly one key: "name". No markdown, no explanation, just the JSON:',
+          maxLength: 128,
+          minLength: 16,
+          temperature: 1.2,
+          repeatPenalty: 1.1,
+          minP: 0.05,
+          reasoningEnabled: false,
+          stopSequences: ['<END>'],
+        ),
+        'name',
+        const Duration(seconds: 90),
+      );
+    } catch (e) {
+      debugPrint('ChargenRandomName: Error: $e');
+      return _errorResponse(500, 'Name generation failed: $e');
+    }
+  }
+
+  /// POST /api/chargen/describe — Stream a character description generation.
+  Future<shelf.Response> _handleChargenDescribe(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+    try {
+      final body = jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+
+      // Build context from all selections (mirrors Flutter _randomizeConcept)
+      final contextParts = <String>[];
+      final archetype = body['selectedArchetype']?.toString() ?? '';
+      if (archetype.isNotEmpty) contextParts.add('Archetype: $archetype');
+      final name = body['name']?.toString() ?? '';
+      if (name.isNotEmpty) contextParts.add('Name: $name');
+      final keywords = body['keywords']?.toString() ?? '';
+      if (keywords.isNotEmpty) contextParts.add('Personality: $keywords');
+      final age = body['age']?.toString() ?? '';
+      if (age.isNotEmpty) contextParts.add('Age: $age');
+      final sex = body['sex']?.toString() ?? '';
+      if (sex.isNotEmpty) contextParts.add('Sex: $sex');
+      final customRace = body['customRace']?.toString() ?? '';
+      final race = customRace.isNotEmpty ? customRace : (body['race']?.toString() ?? '');
+      if (race.isNotEmpty) contextParts.add('Race/species: $race');
+      final bodyType = body['bodyType']?.toString() ?? '';
+      if (bodyType.isNotEmpty) contextParts.add('Body type: $bodyType');
+      final hairLen = body['hairLength']?.toString() ?? '';
+      final hairSty = body['hairStyle']?.toString() ?? '';
+      if (hairLen.isNotEmpty || hairSty.isNotEmpty) {
+        contextParts.add('Hair: ${[if (hairLen.isNotEmpty) hairLen, if (hairSty.isNotEmpty) hairSty].join(", ")}');
+      }
+      final skinTone = body['skinTone']?.toString() ?? '';
+      if (skinTone.isNotEmpty) contextParts.add('Skin tone: $skinTone');
+      final features = (body['notableFeatures'] as List?)?.cast<String>() ?? [];
+      if (features.isNotEmpty) contextParts.add('Notable features: ${features.join(", ")}');
+      final relationship = body['relationship']?.toString() ?? '';
+      if (relationship.isNotEmpty) contextParts.add('Relationship to user: $relationship');
+      final bsOrigin = body['backstoryOrigin']?.toString() ?? '';
+      if (bsOrigin.isNotEmpty) contextParts.add('Backstory origin: $bsOrigin');
+      final bsTone = body['backstoryTone']?.toString() ?? '';
+      if (bsTone.isNotEmpty) contextParts.add('Backstory tone: $bsTone');
+      final bsEra = body['backstoryEra']?.toString() ?? '';
+      if (bsEra.isNotEmpty) contextParts.add('Era/setting: $bsEra');
+      final bsNotes = body['backstoryNotes']?.toString() ?? '';
+      if (bsNotes.isNotEmpty) contextParts.add('Backstory notes: $bsNotes');
+      final nsfw = body['nsfwEnabled'] == true;
+      if (nsfw) {
+        final exp = body['experience']?.toString() ?? '';
+        if (exp.isNotEmpty) contextParts.add('Experience: $exp');
+        final dom = body['dominance']?.toString() ?? '';
+        if (dom.isNotEmpty) contextParts.add('Dominance: $dom');
+        final kinks = (body['kinks'] as List?)?.cast<String>() ?? [];
+        if (kinks.isNotEmpty) contextParts.add('Kinks: ${kinks.join(", ")}');
+        final outfit = body['outfitVibe']?.toString() ?? '';
+        if (outfit.isNotEmpty) contextParts.add('Outfit vibe: $outfit');
+      }
+
+      final contextStr = contextParts.isNotEmpty
+          ? ' Use these character details as inspiration: ${contextParts.join("; ")}.'
+          : '';
+
+      final detailMap = {
+        'Brief': '1 short paragraph',
+        'Standard': '2-3 paragraphs',
+        'Detailed': '3-4 rich paragraphs',
+        'Comprehensive': '5-6 detailed paragraphs with extensive backstory',
+      };
+      final maxTokenMap = {'Brief': 256, 'Standard': 512, 'Detailed': 1024, 'Comprehensive': 2048};
+      final detail = body['generationDetail']?.toString() ?? 'Standard';
+      final descLength = detailMap[detail] ?? '2-3 paragraphs';
+      final maxTokens = maxTokenMap[detail] ?? 512;
+
+      final modelId = body['modelId']?.toString() ?? '';
+      final llmService = _resolveChargenLlm(modelId, 'ChargenDescribe');
+      if (llmService == null || !llmService.isReady) {
+        return _errorResponse(503, 'LLM service is not ready. Select a model first.');
+      }
+
+      final prompt = 'Generate a creative character description ($descLength) for a roleplay character.$contextStr Write in third person. Include physical appearance, personality hints, and backstory elements. Output ONLY a JSON object with exactly one key: "concept". Be vivid and detailed. No markdown, no explanation, just the JSON:';
+
+      return _streamingLlmResponse(
+        llmService,
+        GenerationParams(
+          prompt: prompt,
+          maxLength: maxTokens,
+          minLength: 32,
+          temperature: 1.2,
+          repeatPenalty: 1.1,
+          minP: 0.05,
+          reasoningEnabled: false,
+          stopSequences: ['<END>'],
+        ),
+        'concept',
+        const Duration(seconds: 120),
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Description generation failed: $e');
+    }
+  }
+
+  /// POST /api/chargen/generate — Start multi-step character generation.
+  Future<shelf.Response> _handleChargenGenerate(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+    if (_isChargenRunning) return _errorResponse(409, 'Generation already in progress');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString() ?? '';
+      if (name.isEmpty) return _errorResponse(400, 'Character name is required');
+
+      final concept = body['concept']?.toString() ?? '';
+      final keywords = body['keywords']?.toString() ?? '';
+      final age = body['age']?.toString() ?? '';
+      final sex = body['sex']?.toString() ?? '';
+      final relationship = body['relationship']?.toString() ?? '';
+      final greetingLength = body['greetingLength']?.toString() ?? 'Medium (2-4 paragraphs)';
+      final altGreetingCount = body['altGreetingCount'] as int? ?? 2;
+      final greetingTones = List<String>.from(body['greetingTones'] ?? ['Neutral']);
+      final generateLorebook = body['generateLorebook'] as bool? ?? true;
+      final loreCategories = List<String>.from(body['loreCategories'] ?? []);
+      final loreDepth = body['loreDepth']?.toString() ?? 'Standard';
+      final nsfwEnabled = body['nsfwEnabled'] as bool? ?? false;
+      final generationDetail = body['generationDetail']?.toString() ?? 'Standard';
+      final backstoryNotes = body['backstoryNotes']?.toString() ?? '';
+      final artStyle = body['artStyle']?.toString() ?? 'Anime';
+      final selectedPersonaId = body['personaId']?.toString() ?? '';
+      final modelId = body['modelId']?.toString() ?? '';
+
+      // Build description detail from generationDetail
+      String descriptionDetail;
+      switch (generationDetail) {
+        case 'Brief': descriptionDetail = '1 short paragraph'; break;
+        case 'Detailed': descriptionDetail = '3-4 rich paragraphs'; break;
+        case 'Comprehensive': descriptionDetail = '5-6 detailed paragraphs with extensive backstory'; break;
+        default: descriptionDetail = '2-3 paragraphs';
+      }
+
+      // Build character context from appearance + NSFW + backstory
+      final contextParts = <String>[];
+
+      // Appearance
+      final race = body['race']?.toString() ?? '';
+      final customRace = body['customRace']?.toString() ?? '';
+      final bodyType = body['bodyType']?.toString() ?? '';
+      final hairLength = body['hairLength']?.toString() ?? '';
+      final hairStyle = body['hairStyle']?.toString() ?? '';
+      final skinTone = body['skinTone']?.toString() ?? '';
+      final notableFeatures = List<String>.from(body['notableFeatures'] ?? []);
+      final absCore = body['absCore']?.toString() ?? '';
+      final thighs = body['thighs']?.toString() ?? '';
+      final hips = body['hips']?.toString() ?? '';
+      final shoulders = body['shoulders']?.toString() ?? '';
+      final waist = body['waist']?.toString() ?? '';
+
+      final effectiveRace = customRace.isNotEmpty ? customRace : race;
+      if (effectiveRace.isNotEmpty) contextParts.add('Race/Species: $effectiveRace');
+      if (bodyType.isNotEmpty) contextParts.add('Body type: $bodyType');
+      if (hairLength.isNotEmpty || hairStyle.isNotEmpty) {
+        final hair = [hairLength, hairStyle].where((s) => s.isNotEmpty).join(' ');
+        contextParts.add('Hair: $hair');
+      }
+      if (skinTone.isNotEmpty) contextParts.add('Skin: $skinTone');
+      if (notableFeatures.isNotEmpty) contextParts.add('Notable features: ${notableFeatures.join(", ")}');
+      final bodyParts = <String>[];
+      if (absCore.isNotEmpty) bodyParts.add('abs/core: $absCore');
+      if (thighs.isNotEmpty) bodyParts.add('thighs: $thighs');
+      if (hips.isNotEmpty) bodyParts.add('hips: $hips');
+      if (shoulders.isNotEmpty) bodyParts.add('shoulders: $shoulders');
+      if (waist.isNotEmpty) bodyParts.add('waist: $waist');
+      if (bodyParts.isNotEmpty) contextParts.add('Build: ${bodyParts.join(", ")}');
+
+      // NSFW appearance
+      if (nsfwEnabled) {
+        final chestSize = body['chestSize']?.toString() ?? '';
+        final buttSize = body['buttSize']?.toString() ?? '';
+        final experience = body['experience']?.toString() ?? '';
+        final dominance = body['dominance']?.toString() ?? '';
+        final kinks = List<String>.from(body['kinks'] ?? []);
+        final customKinks = body['customKinks']?.toString() ?? '';
+        final outfitVibe = body['outfitVibe']?.toString() ?? '';
+
+        if (chestSize.isNotEmpty) contextParts.add('Chest: $chestSize');
+        if (buttSize.isNotEmpty) contextParts.add('Butt: $buttSize');
+        if (experience.isNotEmpty) contextParts.add('Experience level: $experience');
+        if (dominance.isNotEmpty) contextParts.add('Dominance: $dominance');
+        final allKinks = [...kinks];
+        if (customKinks.isNotEmpty) allKinks.add(customKinks);
+        if (allKinks.isNotEmpty) contextParts.add('Kinks: ${allKinks.join(", ")}');
+        if (outfitVibe.isNotEmpty) contextParts.add('Outfit vibe: $outfitVibe');
+      }
+
+      // Backstory
+      final backstoryOrigin = body['backstoryOrigin']?.toString() ?? '';
+      final backstoryTone = body['backstoryTone']?.toString() ?? '';
+      final backstoryEra = body['backstoryEra']?.toString() ?? '';
+      final backstoryParts = <String>[];
+      if (backstoryOrigin.isNotEmpty) backstoryParts.add('Origin: $backstoryOrigin');
+      if (backstoryTone.isNotEmpty) backstoryParts.add('Tone: $backstoryTone');
+      if (backstoryEra.isNotEmpty) backstoryParts.add('Era: $backstoryEra');
+      if (backstoryNotes.isNotEmpty) backstoryParts.add(backstoryNotes);
+      final backstory = backstoryParts.join('. ');
+
+      final characterContext = contextParts.join('\n');
+
+      // Build user persona context
+      String userPersonaContext = '';
+      if (selectedPersonaId.isNotEmpty && _userPersonaService != null) {
+        final persona = _userPersonaService!.persona;
+        if (persona.name.isNotEmpty) {
+          userPersonaContext = 'Name: ${persona.name}';
+          if (persona.description.isNotEmpty) userPersonaContext += '\n${persona.description}';
+        }
+      }
+
+      // Return immediately, run generation in background
+      _isChargenRunning = true;
+      _chargenCompletedCard = null;
+      _chargenError = null;
+      _chargenStatus = 'Starting generation...';
+      _chargenPreview = '';
+      _chargenBroadcast({'event': 'started'});
+
+      // Resolve LLM service — use model override if provided
+      final genLlmService = _resolveChargenLlm(modelId, 'ChargenGenerate');
+      if (genLlmService == null || !genLlmService.isReady) {
+        _isChargenRunning = false;
+        return _errorResponse(503, 'LLM backend is not ready');
+      }
+
+      // Create CharacterGenService with resolved LLM
+      final genService = CharacterGenService(genLlmService);
+
+      // Run generation asynchronously
+      _runChargenAsync(
+        genService: genService,
+        name: name,
+        concept: concept,
+        keywords: keywords,
+        age: age,
+        sex: sex,
+        relationship: relationship,
+        greetingLength: greetingLength,
+        altGreetingCount: altGreetingCount,
+        greetingTones: greetingTones,
+        generateLorebook: generateLorebook,
+        loreCategories: loreCategories,
+        loreDepth: loreDepth,
+        descriptionDetail: descriptionDetail,
+        backstory: backstory,
+        characterContext: characterContext,
+        userPersonaContext: userPersonaContext,
+        artStyle: artStyle,
+      );
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'started'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      _isChargenRunning = false;
+      return _errorResponse(500, 'Failed to start generation: $e');
+    }
+  }
+
+  /// Run the multi-step character generation in the background.
+  Future<void> _runChargenAsync({
+    required CharacterGenService genService,
+    required String name,
+    required String concept,
+    required String keywords,
+    required String age,
+    required String sex,
+    required String relationship,
+    required String greetingLength,
+    required int altGreetingCount,
+    required List<String> greetingTones,
+    required bool generateLorebook,
+    required List<String> loreCategories,
+    required String loreDepth,
+    required String descriptionDetail,
+    required String backstory,
+    required String characterContext,
+    required String userPersonaContext,
+    required String artStyle,
+  }) async {
+    try {
+      final card = await genService.generateCharacter(
+        name: name,
+        concept: concept,
+        personalityKeywords: keywords,
+        artStyle: artStyle,
+        greetingLength: greetingLength,
+        altGreetingCount: altGreetingCount,
+        greetingTones: greetingTones,
+        generateLorebook: generateLorebook,
+        loreCategories: loreCategories,
+        loreDepth: loreDepth,
+        age: age,
+        sex: sex,
+        relationship: relationship,
+        descriptionDetail: descriptionDetail,
+        backstory: backstory,
+        characterContext: characterContext,
+        userPersonaContext: userPersonaContext,
+        onProgress: (accumulated) {
+          _chargenBroadcast({'event': 'preview', 'text': accumulated});
+        },
+        onStatus: (status) {
+          _chargenBroadcast({'event': 'status', 'text': status});
+        },
+        onError: (error) {
+          _chargenBroadcast({'event': 'error', 'text': error});
+        },
+      );
+
+      if (card == null) {
+        _chargenBroadcast({'event': 'error', 'text': 'Generation failed — LLM did not produce valid output.'});
+        _isChargenRunning = false;
+        return;
+      }
+
+      // Completion pass on greetings (check for truncation)
+      final allGreetings = <String>[card.firstMessage, ...card.alternateGreetings];
+      for (int gi = 0; gi < allGreetings.length; gi++) {
+        String greeting = allGreetings[gi];
+        final label = gi == 0 ? 'first message' : 'alt greeting $gi';
+        _chargenBroadcast({'event': 'status', 'text': 'Checking $label for truncation...'});
+        final completed = await genService.editorCompletionPass(greeting, onProgress: (p) {
+          _chargenBroadcast({'event': 'preview', 'text': p});
+        });
+        if (completed != null) greeting = completed;
+        allGreetings[gi] = greeting;
+      }
+
+      // Apply edited greetings back to card
+      card.firstMessage = allGreetings[0];
+      if (allGreetings.length > 1) {
+        card.alternateGreetings = allGreetings.sublist(1);
+      }
+
+      // The LLM prompt doesn't generate a 'description' key — the user's
+      // concept from Step 2 IS the description (matches Flutter app behavior).
+      if (card.description.isEmpty && concept.isNotEmpty) {
+        card.description = concept;
+      }
+
+      // Extract image prompt from raw generation output (matches Flutter app)
+      String imagePrompt = '';
+      if (genService.lastRawOutput != null) {
+        imagePrompt = genService.extractImagePrompt(genService.lastRawOutput!) ?? '';
+      }
+      if (imagePrompt.isNotEmpty) {
+        // Strip character name from prompt (prevents text artifacts in image)
+        if (name.isNotEmpty) {
+          imagePrompt = imagePrompt.replaceAll(RegExp(RegExp.escape(name), caseSensitive: false), '').trim();
+          imagePrompt = imagePrompt.replaceAll(RegExp(r'\s{2,}'), ' ').replaceAll(RegExp(r'^[,\.\s]+'), '');
+        }
+        // Append art style as a tag
+        imagePrompt = '$imagePrompt, $artStyle style';
+      } else if (card.description.isNotEmpty) {
+        // Fallback: build from description
+        final desc = card.description.length > 400
+            ? card.description.substring(0, 400)
+            : card.description;
+        imagePrompt = 'character portrait, $artStyle style, $desc';
+      }
+
+      // Build complete result
+      final result = {
+        'name': card.name,
+        'description': card.description,
+        'personality': card.personality,
+        'scenario': card.scenario,
+        'firstMessage': card.firstMessage,
+        'mesExample': card.mesExample,
+        'systemPrompt': card.systemPrompt,
+        'alternateGreetings': card.alternateGreetings,
+        'tags': card.tags,
+        'imagePrompt': imagePrompt,
+      };
+
+      // Add lorebook if present
+      if (card.lorebook != null) {
+        result['lorebook'] = card.lorebook!.entries.map((e) => {
+          'name': e.name,
+          'key': e.key,
+          'content': e.content,
+          'enabled': e.enabled,
+        }).toList();
+      }
+
+      _chargenBroadcast({'event': 'complete', 'card': result});
+      _isChargenRunning = false;
+    } catch (e) {
+      debugPrint('[WebServer] Chargen error: $e');
+      _chargenBroadcast({'event': 'error', 'text': 'Generation failed: $e'});
+      _isChargenRunning = false;
+    }
+  }
+
+  /// POST /api/chargen/avatar — Generate avatar image from prompt.
+  Future<shelf.Response> _handleChargenAvatar(shelf.Request request) async {
+    if (_imageGenService == null) {
+      return _errorResponse(503, 'Image generation service not available');
+    }
+    if (!_imageGenService!.isConfigured) {
+      return _errorResponse(503, 'Image generation not configured — set API key and image model in Settings');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final prompt = body['prompt']?.toString() ?? '';
+      if (prompt.isEmpty) return _errorResponse(400, 'Prompt is required');
+
+      final imageBytes = await _imageGenService!.generateImage(
+        prompt: prompt,
+        size: '512x512',
+        isPortrait: true,
+      );
+
+      if (imageBytes == null) {
+        return _errorResponse(500, 'Image generation failed: ${_imageGenService!.statusMessage}');
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({
+          'status': 'ok',
+          'image': base64Encode(imageBytes),
+        }),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Avatar generation failed: $e');
+    }
+  }
+
+  /// POST /api/chargen/save — Save generated character to database.
+  Future<shelf.Response> _handleChargenSave(shelf.Request request) async {
+    if (_db == null || _characterRepository == null) {
+      return _errorResponse(503, 'Database not available');
+    }
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['name']?.toString() ?? '';
+      if (name.isEmpty) return _errorResponse(400, 'Character name is required');
+
+      final description = body['description']?.toString() ?? '';
+      final personality = body['personality']?.toString() ?? '';
+      final scenario = body['scenario']?.toString() ?? '';
+      final firstMessage = body['firstMessage']?.toString() ?? '';
+      final mesExample = body['mesExample']?.toString() ?? '';
+      final systemPrompt = body['systemPrompt']?.toString() ?? '';
+      final altGreetings = List<String>.from(body['alternateGreetings'] ?? []);
+      final tags = List<String>.from(body['tags'] ?? []);
+      final avatarBase64 = body['avatar']?.toString() ?? '';
+
+      // Parse lorebook
+      String? lorebookJson;
+      final lorebookData = body['lorebook'];
+      if (lorebookData != null && lorebookData is List && lorebookData.isNotEmpty) {
+        final entries = <Map<String, dynamic>>[];
+        for (final entry in lorebookData) {
+          if (entry is Map<String, dynamic>) {
+            final enabled = entry['enabled'] as bool? ?? true;
+            if (enabled) {
+              entries.add({
+                'keys': (entry['key']?.toString() ?? '').split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toList(),
+                'content': entry['content']?.toString() ?? '',
+                'comment': entry['name']?.toString() ?? '',
+                'enabled': true,
+                'insertion_order': entries.length,
+              });
+            }
+          }
+        }
+        if (entries.isNotEmpty) {
+          lorebookJson = jsonEncode({'entries': entries});
+        }
+      }
+
+      // Save avatar to disk
+      String? imagePath;
+      if (avatarBase64.isNotEmpty) {
+        try {
+          final avatarBytes = base64Decode(avatarBase64);
+          final rootPath = _storageService.rootPath ?? '.';
+          final charDir = Directory(p.join(rootPath, 'characters'));
+          if (!charDir.existsSync()) charDir.createSync(recursive: true);
+
+          final epoch = DateTime.now().millisecondsSinceEpoch;
+          final safeName = name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+          imagePath = p.join(charDir.path, '${safeName}_$epoch.png');
+          await File(imagePath).writeAsBytes(avatarBytes);
+        } catch (e) {
+          debugPrint('[WebServer] Failed to save avatar: $e');
+          // Continue without avatar
+        }
+      }
+
+      final dbId = await _db!.insertCharacterReturningId(CharactersCompanion(
+        name: Value(name),
+        description: Value(description),
+        personality: Value(personality),
+        scenario: Value(scenario),
+        firstMessage: Value(firstMessage),
+        mesExample: Value(mesExample),
+        systemPrompt: Value(systemPrompt),
+        postHistoryInstructions: const Value(''),
+        alternateGreetings: Value(jsonEncode(altGreetings)),
+        tags: Value(jsonEncode(tags)),
+        imagePath: Value(imagePath),
+        ttsVoice: const Value(null),
+        lorebook: Value(lorebookJson),
+        worldNames: const Value('[]'),
+      ));
+
+      // Refresh character list
+      _characterRepository?.loadCharacters();
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': dbId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to save character: $e');
+    }
   }
 
   @override

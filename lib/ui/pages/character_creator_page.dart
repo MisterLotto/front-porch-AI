@@ -85,11 +85,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
 
   String _selectedPersonaId = ''; // '' = None (blank slate)
 
-  // Editor pass toggles
-  bool _editorAntiPuppet = true;
-  bool _editorConsistency = false;
-  bool _editorQuality = false;
-  String _editorModelId = '';
+
 
   // KoboldCpp local model state
   List<FileSystemEntity> _localModels = [];
@@ -304,10 +300,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   static const _prefSex = 'chargen_sex';
   static const _prefRelationship = 'chargen_relationship';
   static const _prefPersona = 'chargen_persona';
-  static const _prefEditorAntiPuppet = 'chargen_editor_antipuppet';
-  static const _prefEditorConsistency = 'chargen_editor_consistency';
-  static const _prefEditorQuality = 'chargen_editor_quality';
-  static const _prefEditorModel = 'chargen_editor_model';
+
   static const _prefLoreCategories = 'chargen_lore_categories';
   static const _prefLoreDepth = 'chargen_lore_depth';
   static const _prefRelationships = 'chargen_relationships';
@@ -372,10 +365,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         _sexController.text = prefs.getString(_prefSex) ?? '';
         _relationshipController.text = prefs.getString(_prefRelationship) ?? '';
         _selectedPersonaId = prefs.getString(_prefPersona) ?? '';
-        _editorAntiPuppet = prefs.getBool(_prefEditorAntiPuppet) ?? true;
-        _editorConsistency = prefs.getBool(_prefEditorConsistency) ?? false;
-        _editorQuality = prefs.getBool(_prefEditorQuality) ?? false;
-        _editorModelId = prefs.getString(_prefEditorModel) ?? '';
+
         final savedCategories = prefs.getString(_prefLoreCategories) ?? '';
         _selectedLoreCategories = savedCategories.split(',').where((c) => c.isNotEmpty).toSet();
         _loreDepth = prefs.getString(_prefLoreDepth) ?? 'Standard';
@@ -429,10 +419,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     await prefs.setString(_prefSex, _sexController.text);
     await prefs.setString(_prefRelationship, _relationshipController.text);
     await prefs.setString(_prefPersona, _selectedPersonaId);
-    await prefs.setBool(_prefEditorAntiPuppet, _editorAntiPuppet);
-    await prefs.setBool(_prefEditorConsistency, _editorConsistency);
-    await prefs.setBool(_prefEditorQuality, _editorQuality);
-    await prefs.setString(_prefEditorModel, _editorModelId);
+
     await prefs.setString(_prefLoreCategories, _selectedLoreCategories.join(','));
     await prefs.setString(_prefLoreDepth, _loreDepth);
     await prefs.setString(_prefRelationships, _selectedRelationships.join(','));
@@ -876,24 +863,106 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                           },
                         ),
                 ),
-                const SizedBox(height: 12),
-                // Reload button + status
+                const SizedBox(height: 16),
+                // ── Context Size Slider ──
+                Builder(builder: (context) {
+                  final storage = Provider.of<StorageService>(context);
+                  // Power-of-2 steps for context sizes
+                  const contextSteps = [2048, 4096, 8192, 16384, 32768, 65536, 131072];
+                  // Find closest step index for current value
+                  int currentIdx = 0;
+                  for (int i = 0; i < contextSteps.length; i++) {
+                    if ((contextSteps[i] - storage.contextSize).abs() <
+                        (contextSteps[currentIdx] - storage.contextSize).abs()) {
+                      currentIdx = i;
+                    }
+                  }
+                  final contextLabel = storage.contextSize >= 1024
+                      ? '${(storage.contextSize / 1024).toStringAsFixed(storage.contextSize % 1024 == 0 ? 0 : 1)}K'
+                      : '${storage.contextSize}';
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.memory, size: 14, color: Colors.white38),
+                          const SizedBox(width: 6),
+                          Text('Context Size: $contextLabel tokens',
+                            style: const TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+                          const Spacer(),
+                          Text('${storage.contextSize}',
+                            style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      SliderTheme(
+                        data: SliderThemeData(
+                          activeTrackColor: Colors.blueAccent,
+                          inactiveTrackColor: Colors.white10,
+                          thumbColor: Colors.blueAccent,
+                          overlayColor: Colors.blueAccent.withValues(alpha: 0.2),
+                          trackHeight: 4,
+                        ),
+                        child: Slider(
+                          value: currentIdx.toDouble(),
+                          min: 0,
+                          max: (contextSteps.length - 1).toDouble(),
+                          divisions: contextSteps.length - 1,
+                          onChanged: (val) {
+                            storage.setContextSize(contextSteps[val.round()]);
+                          },
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('2K', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                          const Text('128K', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Larger context uses more VRAM. Match your KoboldCpp --contextsize setting.',
+                        style: TextStyle(color: Colors.white24, fontSize: 10),
+                      ),
+                    ],
+                  );
+                }),
+                const SizedBox(height: 16),
+                // Start/Stop button + status
                 Row(
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: _isReloadingKobold || _selectedLocalModelPath.isEmpty
-                          ? null
-                          : () => _reloadKoboldWithModel(_selectedLocalModelPath),
-                      icon: _isReloadingKobold
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.refresh, size: 16),
-                      label: Text(_isReloadingKobold ? 'Loading...' : 'Load Model'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.white10,
+                    if (llmProvider.koboldService.isRunning)
+                      ElevatedButton.icon(
+                        onPressed: _isReloadingKobold
+                            ? null
+                            : () async {
+                                setState(() => _koboldStatus = 'Stopping...');
+                                await llmProvider.koboldService.stopKobold();
+                                if (mounted) setState(() => _koboldStatus = 'Stopped');
+                              },
+                        icon: const Icon(Icons.stop, size: 16),
+                        label: const Text('Stop KoboldCpp'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                        ),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: _isReloadingKobold || _selectedLocalModelPath.isEmpty
+                            ? null
+                            : () => _reloadKoboldWithModel(_selectedLocalModelPath),
+                        icon: _isReloadingKobold
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.play_arrow, size: 16),
+                        label: Text(_isReloadingKobold ? 'Starting...' : 'Start KoboldCpp'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.white10,
+                        ),
                       ),
-                    ),
                     const SizedBox(width: 8),
                     TextButton.icon(
                       onPressed: _scanLocalModels,
@@ -975,119 +1044,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                   style: TextStyle(color: Colors.white24, fontSize: 11),
                 ),
               ],
-              const SizedBox(height: 24),
 
-              // ── Editor Pass Section ──
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF162032),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.edit_note, color: Colors.deepPurpleAccent, size: 20),
-                        const SizedBox(width: 8),
-                        const Text('Editor Pass',
-                          style: TextStyle(color: Colors.deepPurpleAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                        const Spacer(),
-                        Text(
-                          _editorAntiPuppet || _editorConsistency || _editorQuality
-                              ? 'Extra API calls will be made'
-                              : 'Disabled',
-                          style: TextStyle(
-                            color: _editorAntiPuppet || _editorConsistency || _editorQuality
-                                ? Colors.deepPurple.shade200
-                                : Colors.white24,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _editorToggle(
-                      'Anti-Puppet Check',
-                      'Scans greetings for {{user}} puppeting and rewrites offending lines',
-                      Icons.shield_outlined,
-                      _editorAntiPuppet,
-                      (val) => setState(() { _editorAntiPuppet = val; _saveState(); }),
-                    ),
-                    _editorToggle(
-                      'Consistency Check',
-                      'Verifies greetings match the character\'s personality and scenario',
-                      Icons.fact_check_outlined,
-                      _editorConsistency,
-                      (val) => setState(() { _editorConsistency = val; _saveState(); }),
-                    ),
-                    _editorToggle(
-                      'Quality Polish',
-                      'Improves prose quality, pacing, and immersiveness',
-                      Icons.auto_fix_high,
-                      _editorQuality,
-                      (val) => setState(() { _editorQuality = val; _saveState(); }),
-                    ),
-                    // Editor model selector (only if any toggle is on AND using remote backend)
-                    if ((_editorAntiPuppet || _editorConsistency || _editorQuality) && !isKobold) ...[
-                      const SizedBox(height: 12),
-                      const Text('Editor Model', style: TextStyle(color: Colors.deepPurple, fontSize: 12, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      const Text('Can be a different model than the generator (e.g. a thinking model)',
-                        style: TextStyle(color: Colors.white24, fontSize: 11)),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
-                        ),
-                        child: _isLoadingModels
-                            ? const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 14),
-                                child: Text('Loading models...', style: TextStyle(color: Colors.white38, fontSize: 13)),
-                              )
-                            : InkWell(
-                                onTap: () async {
-                                  final result = await _showModelSearchDialog(
-                                    title: 'Select Editor Model',
-                                    currentValue: _editorModelId,
-                                    showSameAsGenerator: true,
-                                  );
-                                  if (result != null) {
-                                    setState(() => _editorModelId = result);
-                                    _saveState();
-                                  }
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.search, size: 16, color: Colors.white24),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          _editorModelId.isEmpty
-                                              ? 'Same as generator'
-                                              : (_availableModels.where((m) => m.id == _editorModelId).firstOrNull?.name ?? _editorModelId),
-                                          style: TextStyle(color: _editorModelId.isEmpty ? Colors.white54 : Colors.white, fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const Icon(Icons.arrow_drop_down, color: Colors.white38),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
               const SizedBox(height: 32),
 
               // Next button
@@ -1924,7 +1881,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _greetingTones.map((tone) {
+                children: _greetingTones.where((tone) => tone != 'Spicy/NSFW' || _nsfwEnabled).map((tone) {
                   final isSelected = _selectedTones.contains(tone);
                   final maxTones = _altGreetingCount + 1;
                   final atLimit = _selectedTones.length >= maxTones && !isSelected;
@@ -2127,31 +2084,8 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     );
   }
 
-  Widget _editorToggle(String title, String subtitle, IconData icon, bool value, ValueChanged<bool> onChanged) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: value ? Colors.deepPurpleAccent : Colors.white24, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(color: value ? Colors.white : Colors.white54, fontSize: 13, fontWeight: FontWeight.w500)),
-                Text(subtitle, style: const TextStyle(color: Colors.white24, fontSize: 11)),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            activeColor: Colors.deepPurpleAccent,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
+
+
 
   /// Show a searchable model picker dialog. Returns the selected model ID or null.
   Future<String?> _showModelSearchDialog({
@@ -2777,25 +2711,17 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         repeatPenalty: 1.1,
         minP: 0.05,
         reasoningEnabled: false,
-        stopSequences: ['```', '<END>'],
+        stopSequences: ['<END>'],
       ))) {
         accumulated += token;
       }
 
-      String cleaned = accumulated.replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '').trim();
-      final jsonStart = cleaned.indexOf('{');
-      final jsonEnd = cleaned.lastIndexOf('}');
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-        try {
-          final data = json.decode(cleaned) as Map<String, dynamic>;
-          setState(() {
-            _nameController.text = data['name']?.toString() ?? '';
-          });
-          _saveState();
-        } catch (_) {
-          debugPrint('CharacterCreator: Failed to parse random name JSON');
-        }
+      final nameResult = _extractChargenValue(accumulated, 'name');
+      if (nameResult != null) {
+        setState(() {
+          _nameController.text = nameResult;
+        });
+        _saveState();
       }
     } catch (e) {
       debugPrint('CharacterCreator: Randomize name failed: $e');
@@ -2860,7 +2786,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         repeatPenalty: 1.1,
         minP: 0.05,
         reasoningEnabled: false,
-        stopSequences: ['```', '<END>'],
+        stopSequences: ['<END>'],
       ))) {
         accumulated += token;
         tokenCount++;
@@ -2869,27 +2795,144 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         }
       }
 
-      String cleaned = accumulated.replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '').trim();
-      final jsonStart = cleaned.indexOf('{');
-      final jsonEnd = cleaned.lastIndexOf('}');
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-        try {
-          final data = json.decode(cleaned) as Map<String, dynamic>;
-          setState(() {
-            _conceptController.text = data['concept']?.toString() ?? '';
-            _conceptGenerated = true;
-          });
-          _saveState();
-        } catch (_) {
-          debugPrint('CharacterCreator: Failed to parse random concept JSON');
-        }
+      final conceptResult = _extractChargenValue(accumulated, 'concept');
+      if (conceptResult != null) {
+        setState(() {
+          _conceptController.text = conceptResult;
+          _conceptGenerated = true;
+        });
+        _saveState();
       }
     } catch (e) {
       debugPrint('CharacterCreator: Randomize concept failed: $e');
     }
 
     if (mounted) setState(() => _isRandomizing = false);
+  }
+
+  /// Robust extractor for chargen JSON values from LLM output.
+  /// Handles markdown fences, literal newlines, unescaped quotes, and
+  /// falls back to regex extraction if JSON.decode fails.
+  String? _extractChargenValue(String raw, String key) {
+    // Step 1: Strip thinking blocks
+    String cleaned = raw.replaceAll(
+      RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '',
+    ).replaceAll(
+      RegExp(r'<think>[\s\S]*$', caseSensitive: false), '',
+    ).trim();
+
+    // Step 2: Strip markdown code fences (common with local models)
+    cleaned = cleaned
+        .replaceAll(RegExp(r'^```(?:json)?\s*', multiLine: true), '')
+        .replaceAll(RegExp(r'^```\s*$', multiLine: true), '')
+        .trim();
+
+    debugPrint('CharacterCreator: Raw $key output (${cleaned.length} chars): ${cleaned.length > 200 ? '${cleaned.substring(0, 200)}...' : cleaned}');
+
+    // Step 3: Extract JSON object
+    final jsonStart = cleaned.indexOf('{');
+    final jsonEnd = cleaned.lastIndexOf('}');
+    if (jsonStart < 0 || jsonEnd <= jsonStart) {
+      debugPrint('CharacterCreator: No JSON object found in $key output');
+      return null;
+    }
+    String jsonStr = cleaned.substring(jsonStart, jsonEnd + 1);
+
+    // Step 4: Try direct JSON parse
+    try {
+      final data = json.decode(jsonStr) as Map<String, dynamic>;
+      final value = data[key]?.toString();
+      if (value != null && value.isNotEmpty) {
+        debugPrint('CharacterCreator: Direct JSON parse succeeded for $key');
+        return value;
+      }
+    } catch (_) {
+      debugPrint('CharacterCreator: Direct JSON parse failed for $key, trying fixes...');
+    }
+
+    // Step 5: Fix literal newlines inside JSON strings and retry
+    try {
+      String fixed = jsonStr;
+      // Escape literal newlines that are inside JSON string values
+      // (between unescaped quotes) — these break json.decode
+      fixed = fixed.replaceAll('\r\n', '\\n').replaceAll('\r', '\\n');
+      // Replace literal newlines with \n but only inside strings
+      final sb = StringBuffer();
+      bool inString = false;
+      bool escaped = false;
+      for (int i = 0; i < fixed.length; i++) {
+        final ch = fixed[i];
+        if (escaped) {
+          sb.write(ch);
+          escaped = false;
+          continue;
+        }
+        if (ch == '\\') {
+          sb.write(ch);
+          escaped = true;
+          continue;
+        }
+        if (ch == '"') {
+          inString = !inString;
+          sb.write(ch);
+          continue;
+        }
+        if (ch == '\n' && inString) {
+          sb.write('\\n');
+          continue;
+        }
+        sb.write(ch);
+      }
+      fixed = sb.toString();
+      // Also fix trailing commas
+      fixed = fixed.replaceAll(RegExp(r',\s*}'), '}').replaceAll(RegExp(r',\s*]'), ']');
+
+      final data = json.decode(fixed) as Map<String, dynamic>;
+      final value = data[key]?.toString();
+      if (value != null && value.isNotEmpty) {
+        debugPrint('CharacterCreator: Fixed JSON parse succeeded for $key');
+        return value;
+      }
+    } catch (_) {
+      debugPrint('CharacterCreator: Fixed JSON parse also failed for $key, trying regex...');
+    }
+
+    // Step 6: Regex fallback — extract value after "key": "
+    try {
+      final pattern = RegExp('"$key"\\s*:\\s*"', caseSensitive: false);
+      final match = pattern.firstMatch(jsonStr);
+      if (match != null) {
+        final valueStart = match.end;
+        // Walk forward to find the closing quote (not escaped)
+        bool esc = false;
+        for (int i = valueStart; i < jsonStr.length; i++) {
+          final ch = jsonStr[i];
+          if (esc) { esc = false; continue; }
+          if (ch == '\\') { esc = true; continue; }
+          if (ch == '"') {
+            // Found the end of the value
+            final value = jsonStr.substring(valueStart, i)
+                .replaceAll('\\n', '\n')
+                .replaceAll('\\t', '\t')
+                .replaceAll('\\"', '"');
+            if (value.isNotEmpty) {
+              debugPrint('CharacterCreator: Regex extraction succeeded for $key');
+              return value;
+            }
+            break;
+          }
+        }
+        // If no closing quote found, just grab everything after the key to the end
+        final rawValue = jsonStr.substring(valueStart).replaceAll(RegExp(r'"\s*}?\s*$'), '');
+        if (rawValue.isNotEmpty) {
+          debugPrint('CharacterCreator: Regex extraction (no closing quote) for $key');
+          return rawValue.replaceAll('\\n', '\n').replaceAll('\\t', '\t').replaceAll('\\"', '"');
+        }
+      }
+    } catch (_) {}
+
+    debugPrint('CharacterCreator: All parse strategies failed for $key');
+    return null;
   }
 
   /// Helper: resolve the active LLM service for randomization
@@ -2975,7 +3018,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       llmService = active;
     }
 
-    debugPrint('CharacterGen: Using model: ${_selectedModelId.isNotEmpty ? _selectedModelId : "default"}');
+    debugPrint('CharacterGen: Using backend: ${llmService.runtimeType} (${llmProvider.activeBackend == BackendType.kobold ? "KoboldCpp" : _selectedModelId.isNotEmpty ? _selectedModelId : "default API model"})');
 
     // Resolve selected persona context
     String userPersonaContext = '';
@@ -3104,80 +3147,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     if (card != null) {
       // Inject user-authored description (from magic wand)
       card.description = enrichedConcept;
-      // ── Editor passes ──
-      final hasEditorPass = _editorAntiPuppet || _editorConsistency || _editorQuality;
-      if (hasEditorPass) {
-        // Resolve editor model
-        LLMService editorService;
-        if (llmProvider.activeBackend == BackendType.kobold) {
-          // KoboldCpp — always use local backend for editor too
-          editorService = llmService;
-        } else {
-          final editorModel = _editorModelId.isNotEmpty ? _editorModelId : _selectedModelId;
-          if (editorModel.isNotEmpty && editorModel != llmProvider.openRouterService.modelName) {
-            editorService = OpenRouterService(
-              apiUrl: storage.remoteApiUrl,
-              apiKey: storage.remoteApiKey,
-              modelName: editorModel,
-            );
-          } else {
-            editorService = llmService;
-          }
-        }
-
-        final editor = CharacterGenService(editorService);
-
-        void editorProgress(String text) {
-          if (mounted) {
-            setState(() => _generationPreview = text);
-          }
-        }
-
-        // Run completion pass first — fix any truncated greetings
-        if (mounted) setState(() => _generationStatus = 'Editor: Checking for truncation...');
-        final completedFirst = await editor.editorCompletionPass(card.firstMessage, onProgress: editorProgress);
-        if (completedFirst != null) card.firstMessage = completedFirst;
-        for (int i = 0; i < card.alternateGreetings.length; i++) {
-          final completedAlt = await editor.editorCompletionPass(card.alternateGreetings[i], onProgress: editorProgress);
-          if (completedAlt != null) card.alternateGreetings[i] = completedAlt;
-        }
-
-        // Run anti-puppet check on all greetings
-        if (_editorAntiPuppet) {
-          if (mounted) setState(() => _generationStatus = 'Editor: Anti-puppet check...');
-          card.firstMessage = await editor.editorAntiPuppetCheck(card.firstMessage, onProgress: editorProgress) ?? card.firstMessage;
-          for (int i = 0; i < card.alternateGreetings.length; i++) {
-            if (mounted) setState(() => _generationStatus = 'Editor: Anti-puppet check (alt ${i + 1})...');
-            card.alternateGreetings[i] = await editor.editorAntiPuppetCheck(card.alternateGreetings[i], onProgress: editorProgress) ?? card.alternateGreetings[i];
-          }
-        }
-
-        // Run consistency check
-        if (_editorConsistency) {
-          if (mounted) setState(() => _generationStatus = 'Editor: Consistency check...');
-          card.firstMessage = await editor.editorConsistencyCheck(
-            card.firstMessage, card.description, card.personality, card.scenario,
-            onProgress: editorProgress,
-          ) ?? card.firstMessage;
-          for (int i = 0; i < card.alternateGreetings.length; i++) {
-            if (mounted) setState(() => _generationStatus = 'Editor: Consistency check (alt ${i + 1})...');
-            card.alternateGreetings[i] = await editor.editorConsistencyCheck(
-              card.alternateGreetings[i], card.description, card.personality, card.scenario,
-              onProgress: editorProgress,
-            ) ?? card.alternateGreetings[i];
-          }
-        }
-
-        // Run quality polish
-        if (_editorQuality) {
-          if (mounted) setState(() => _generationStatus = 'Editor: Quality polish...');
-          card.firstMessage = await editor.editorQualityPolish(card.firstMessage, onProgress: editorProgress) ?? card.firstMessage;
-          for (int i = 0; i < card.alternateGreetings.length; i++) {
-            if (mounted) setState(() => _generationStatus = 'Editor: Quality polish (alt ${i + 1})...');
-            card.alternateGreetings[i] = await editor.editorQualityPolish(card.alternateGreetings[i], onProgress: editorProgress) ?? card.alternateGreetings[i];
-          }
-        }
-      }
 
       _generatedCard = card;
       // Initialize lorebook entry enabled map — all enabled by default
@@ -3273,64 +3242,80 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     final repo = Provider.of<CharacterRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
 
-    // Update card with edited fields
-    final card = _generatedCard!;
-    card.description = _descController.text;
-    card.personality = _personalityController.text;
-    card.scenario = _scenarioController.text;
-    card.firstMessage = _firstMessageController.text;
-    card.mesExample = _exampleDialogueController.text;
-    card.systemPrompt = _systemPromptController.text;
+    try {
+      // Update card with edited fields
+      final card = _generatedCard!;
+      card.description = _descController.text;
+      card.personality = _personalityController.text;
+      card.scenario = _scenarioController.text;
+      card.firstMessage = _firstMessageController.text;
+      card.mesExample = _exampleDialogueController.text;
+      card.systemPrompt = _systemPromptController.text;
 
-    // Filter lorebook entries — remove unchecked ones
-    if (card.lorebook != null && _lorebookEntryEnabled.isNotEmpty) {
-      final filtered = <LorebookEntry>[];
-      for (int i = 0; i < card.lorebook!.entries.length; i++) {
-        if (_lorebookEntryEnabled[i] ?? true) {
-          filtered.add(card.lorebook!.entries[i]);
+      // Filter lorebook entries — remove unchecked ones
+      if (card.lorebook != null && _lorebookEntryEnabled.isNotEmpty) {
+        final filtered = <LorebookEntry>[];
+        for (int i = 0; i < card.lorebook!.entries.length; i++) {
+          if (_lorebookEntryEnabled[i] ?? true) {
+            filtered.add(card.lorebook!.entries[i]);
+          }
         }
+        card.lorebook = Lorebook(entries: filtered);
       }
-      card.lorebook = Lorebook(entries: filtered);
-    }
 
-    // Save avatar image
-    if (_generatedAvatar != null) {
-      final rootPath = storage.rootPath ?? '.';
-      final charDir = Directory(p.join(rootPath, 'characters'));
-      if (!charDir.existsSync()) charDir.createSync(recursive: true);
+      // Save avatar image
+      if (_generatedAvatar != null) {
+        final rootPath = storage.rootPath ?? '.';
+        final charDir = Directory(p.join(rootPath, 'characters'));
+        if (!charDir.existsSync()) charDir.createSync(recursive: true);
 
-      final epoch = DateTime.now().millisecondsSinceEpoch;
-      final safeName = card.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
-      final imagePath = p.join(charDir.path, '${safeName}_$epoch.png');
+        final epoch = DateTime.now().millisecondsSinceEpoch;
+        final safeName = card.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+        final imagePath = p.join(charDir.path, '${safeName}_$epoch.png');
 
-      // Write the raw image — V2 embedding is handled by the repo
-      await File(imagePath).writeAsBytes(_generatedAvatar!);
-      card.imagePath = imagePath;
-    }
+        // Write the raw image — V2 embedding is handled by the repo
+        await File(imagePath).writeAsBytes(_generatedAvatar!);
+        card.imagePath = imagePath;
+      }
 
-    // Add to repository
-    repo.addCharacter(card);
+      // Add to repository
+      debugPrint('AG_DEBUG: Saving character "${card.name}" to DB...');
+      await repo.addCharacter(card);
+      debugPrint('AG_DEBUG: Character saved! dbId=${card.dbId}');
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
-              const SizedBox(width: 8),
-              Text('${card.name} created successfully!'),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 8),
+                Text('${card.name} created successfully!'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2A2A2A),
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: const Color(0xFF2A2A2A),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      // Clear saved form data since character was created
-      final prefs = await SharedPreferences.getInstance();
-      for (final key in [_prefName, _prefConcept, _prefKeywords, _prefArtStyle]) {
-        await prefs.remove(key);
+        );
+        // Clear saved form data since character was created
+        final prefs = await SharedPreferences.getInstance();
+        for (final key in [_prefName, _prefConcept, _prefKeywords, _prefArtStyle]) {
+          await prefs.remove(key);
+        }
+        Navigator.of(context).pop();
       }
-      Navigator.of(context).pop();
+    } catch (e, stackTrace) {
+      debugPrint('AG_DEBUG: ERROR saving character: $e');
+      debugPrint('AG_DEBUG: Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save character: $e'),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

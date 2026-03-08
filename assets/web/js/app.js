@@ -220,7 +220,11 @@
         if (pageName === 'persona') loadPersonas();
         if (pageName === 'worlds') loadWorlds();
         if (pageName === 'sync') loadSyncStatus();
+        if (pageName === 'creator' && window.ChargenModule) window.ChargenModule.init();
     }
+
+    // Expose switchPage for external modules (chargen save redirect)
+    window._fpSwitchPage = switchPage;
 
     // ═══════════════════════════════════════════════════════════
     // CHARACTER GRID (HOME PAGE)
@@ -408,7 +412,7 @@
                     : `<div class="char-card-placeholder">${esc(char.name.charAt(0).toUpperCase())}</div>`
                 }
                     ${checkboxHtml}
-                    ${!isSelectingForGroup ? '<button class="char-card-delete" title="Delete character">🗑️</button>' : ''}
+                    ${!isSelectingForGroup ? '<button class="char-card-export" title="Export PNG" style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2">📥</button><button class="char-card-delete" title="Delete character">🗑️</button>' : ''}
                 </div>
                 <div class="char-card-info">
                     <div class="char-card-name">${esc(char.name)}</div>
@@ -441,6 +445,15 @@
                     if (!confirm(`Delete "${char.name}"? This cannot be undone.`)) return;
                     const res = await api(`/api/characters/${char.id}/delete`, { method: 'POST' });
                     if (res && res.ok) loadCharacters();
+                });
+
+                // Export PNG button
+                card.querySelector('.char-card-export').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const a = document.createElement('a');
+                    a.href = `/api/characters/${char.id}/export.png?token=` + encodeURIComponent(sessionStorage.getItem('fp_token') || '');
+                    a.download = (char.name || 'character').replace(/[^a-zA-Z0-9_-]/g, '_') + '.png';
+                    a.click();
                 });
 
                 card.addEventListener('click', () => selectCharacter(char));
@@ -816,6 +829,26 @@
             const statusEl = $('#rp-summary-status');
             if (statusEl && data.summaryLastIndex > 0) {
                 statusEl.textContent = `Last updated at message #${data.summaryLastIndex}`;
+            }
+        }
+
+        // Update lorebook triggers panel
+        const loreEl = $('#rp-lorebook');
+        if (loreEl && data.lorebook) {
+            if (data.lorebook.length === 0) {
+                loreEl.innerHTML = '<span style="color:rgba(255,255,255,0.3)">No lorebook entries.</span>';
+            } else {
+                loreEl.innerHTML = data.lorebook.map(e => {
+                    let dotColor = '#EF4444'; // red = inactive
+                    if (e.constant) dotColor = '#3B82F6'; // blue = always active
+                    else if (e.isTriggered) dotColor = '#4ADE80'; // green = triggered
+                    const textColor = (e.isTriggered || e.constant) ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)';
+                    const label = e.key && !e.constant ? e.name : (e.constant ? '⚡ Always Active' : e.name);
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+                        <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;display:inline-block"></span>
+                        <span style="color:${textColor};font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(e.key || '')}">${esc(label)}</span>
+                    </div>`;
+                }).join('');
             }
         }
     }

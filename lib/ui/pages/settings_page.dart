@@ -333,7 +333,13 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     }
 
-    final suggestion = OptimizationService.calculateSettings(adjustedHw, modelSizeMb: modelSize);
+    // Respect user's context size — pass it to the optimizer so only GPU layers adjust
+    final userContext = int.tryParse(_contextSizeController.text);
+    final suggestion = OptimizationService.calculateSettings(
+      adjustedHw,
+      modelSizeMb: modelSize,
+      requestedContextSize: userContext,
+    );
 
     setState(() {
       _gpuLayersController.text = suggestion.gpuLayers.toString();

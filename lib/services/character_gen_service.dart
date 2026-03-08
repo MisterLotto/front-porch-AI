@@ -16,6 +16,9 @@ import 'package:front_porch_ai/services/llm_service.dart';
 class CharacterGenService {
   final LLMService _llmService;
 
+  /// The raw LLM output from the last base card generation, for image prompt extraction.
+  String? lastRawOutput;
+
   CharacterGenService(this._llmService);
 
   /// Generate a complete character card from user-provided creative inputs.
@@ -64,6 +67,7 @@ class CharacterGenService {
     debugPrint('CharacterGen: Starting generation for "$name"');
 
     final baseOutput = await _callLLM(basePrompt, onProgress: onProgress);
+    lastRawOutput = baseOutput; // Store for image prompt extraction
     if (baseOutput == null) {
       onError?.call('LLM returned empty response for base card.');
       return null;
@@ -76,6 +80,71 @@ class CharacterGenService {
     if (card == null) {
       onError?.call('Failed to parse base card JSON. Try a different model.');
       return null;
+    }
+
+    // ── Step 1b: Truncation recovery ────────────────────────────
+    // If critical fields are empty, the JSON was likely truncated.
+    // Make a focused retry asking only for the missing fields.
+    final missingFields = <String>[];
+    if (card.personality.trim().isEmpty) missingFields.add('personality');
+    if (card.scenario.trim().isEmpty) missingFields.add('scenario');
+    if (card.systemPrompt.trim().isEmpty) missingFields.add('system_prompt');
+    if (card.mesExample.trim().isEmpty) missingFields.add('example_dialogue');
+
+    if (missingFields.isNotEmpty) {
+      debugPrint('CharacterGen: Truncation detected — missing: ${missingFields.join(", ")}');
+      onStatus?.call('Recovering truncated fields...');
+      onProgress?.call('');
+
+      final recoveryCard = await _recoverMissingFields(
+        name: name,
+        concept: concept,
+        personalityKeywords: personalityKeywords,
+        missingFields: missingFields,
+        apiSystemPrompt: apiSystemPrompt,
+        age: age,
+        sex: sex,
+        relationship: relationship,
+        backstory: backstory,
+        onProgress: onProgress,
+      );
+
+      if (recoveryCard != null) {
+        if (card.personality.trim().isEmpty && recoveryCard.personality.trim().isNotEmpty) {
+          card.personality = recoveryCard.personality;
+        }
+        if (card.scenario.trim().isEmpty && recoveryCard.scenario.trim().isNotEmpty) {
+          card.scenario = recoveryCard.scenario;
+        }
+        if (card.systemPrompt.trim().isEmpty && recoveryCard.systemPrompt.trim().isNotEmpty) {
+          card.systemPrompt = recoveryCard.systemPrompt;
+        }
+        if (card.mesExample.trim().isEmpty && recoveryCard.mesExample.trim().isNotEmpty) {
+          card.mesExample = recoveryCard.mesExample;
+        }
+        debugPrint('CharacterGen: Recovery filled ${missingFields.length - [
+          if (card.personality.trim().isEmpty) 'personality',
+          if (card.scenario.trim().isEmpty) 'scenario',
+          if (card.systemPrompt.trim().isEmpty) 'system_prompt',
+          if (card.mesExample.trim().isEmpty) 'example_dialogue',
+        ].length} fields');
+      }
+    }
+
+    // ── Step 1c: Separate lorebook generation ───────────────────
+    // If lorebook was requested but missing (truncated out), generate separately.
+    if (generateLorebook && (card.lorebook == null || card.lorebook!.entries.isEmpty)) {
+      debugPrint('CharacterGen: Lorebook missing from base card, generating separately...');
+      onStatus?.call('Generating world lore...');
+      onProgress?.call('');
+      await _generateLorebookSeparately(
+        card: card,
+        name: name,
+        concept: concept,
+        loreCategories: loreCategories,
+        loreDepth: loreDepth,
+        onProgress: onProgress,
+      );
     }
 
     // ── Step 2: Generate first message ────────────────────────
@@ -143,6 +212,8 @@ class CharacterGenService {
     int maxRetries = 3,
     void Function(String accumulated)? onProgress,
   }) async {
+    final promptEstTokens = (prompt.length / 4).ceil();
+    debugPrint('CharacterGen: Prompt size: ${prompt.length} chars (~$promptEstTokens tokens), maxLen: $maxLen');
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       String accumulated = '';
       int tokenCount = 0;
@@ -155,7 +226,7 @@ class CharacterGenService {
           repeatPenalty: 1.15,
           minP: 0.05,
           reasoningEnabled: false,
-          stopSequences: ['```', '<END>', '</END>'],
+          stopSequences: ['<END>', '</END>'],
         ))) {
           accumulated += token;
           tokenCount++;
@@ -175,8 +246,10 @@ class CharacterGenService {
 
         if (accumulated.isNotEmpty) return accumulated;
 
-        // Empty response — retry
-        debugPrint('CharacterGen: Empty response on attempt $attempt/$maxRetries');
+        // Empty response — retry with diagnostics
+        debugPrint('CharacterGen: Empty response on attempt $attempt/$maxRetries. '
+            'Prompt ~$promptEstTokens tokens. If this exceeds your model\'s context window, '
+            'try a shorter concept or reduce lore depth.');
       } catch (e) {
         debugPrint('CharacterGen: LLM error on attempt $attempt/$maxRetries: $e');
       }
@@ -193,6 +266,152 @@ class CharacterGenService {
 
     debugPrint('CharacterGen: All $maxRetries attempts failed');
     return null;
+  }
+
+  // ═════════════════════════════════════════════════════════════
+  //  Truncation Recovery
+  // ═════════════════════════════════════════════════════════════
+
+  /// Generate only the missing fields after a truncated base card output.
+  /// Uses a focused prompt with no lorebook/image_prompt to fit in limited context.
+  Future<CharacterCard?> _recoverMissingFields({
+    required String name,
+    required String concept,
+    required String personalityKeywords,
+    required List<String> missingFields,
+    String apiSystemPrompt = '',
+    String age = '',
+    String sex = '',
+    String relationship = '',
+    String backstory = '',
+    void Function(String accumulated)? onProgress,
+  }) async {
+    final keywordsLine = personalityKeywords.isNotEmpty
+        ? 'Personality keywords: $personalityKeywords\n'
+        : '';
+    final ageLine = age.isNotEmpty ? 'Age: $age\n' : '';
+    final sexLine = sex.isNotEmpty ? 'Sex: $sex\n' : '';
+    final relationshipLine = relationship.isNotEmpty
+        ? 'Relationship to {{user}}: $relationship\n'
+        : '';
+    final backstoryLine = backstory.isNotEmpty
+        ? 'Backstory: $backstory\n'
+        : '';
+
+    // Build spec only for the missing keys
+    final fieldSpecs = <String>[];
+    for (final field in missingFields) {
+      switch (field) {
+        case 'personality':
+          fieldSpecs.add('- "personality": (string) 1-2 paragraphs, third person, core traits + motivations + quirks');
+          break;
+        case 'scenario':
+          fieldSpecs.add('- "scenario": (string) 1 paragraph, the default conversation setting');
+          break;
+        case 'system_prompt':
+          String spec = '- "system_prompt": (string) brief instruction for how to portray this character';
+          if (apiSystemPrompt.isNotEmpty) {
+            spec += '. Incorporate: "$apiSystemPrompt"';
+          }
+          fieldSpecs.add(spec);
+          break;
+        case 'example_dialogue':
+          fieldSpecs.add('- "example_dialogue": (string) format: <START>\\n{{user}}: message\\n{{char}}: response\\n<START>\\n{{user}}: message\\n{{char}}: response');
+          break;
+      }
+    }
+
+    final prompt = '''Generate ONLY the following fields for a roleplay character as a JSON object. Output ONLY the JSON, no markdown, no explanation.
+
+Character name: $name
+Concept: $concept
+$ageLine$sexLine$relationshipLine$backstoryLine$keywordsLine
+Required JSON keys:
+${fieldSpecs.join('\n')}
+
+Use {{char}} for character name and {{user}} for user name. Respond with ONLY the JSON:''';
+
+    debugPrint('CharacterGen: Recovery prompt for ${missingFields.length} fields');
+
+    final output = await _callLLM(prompt, maxLen: 4096, onProgress: onProgress);
+    if (output == null) return null;
+
+    final cleaned = _stripContent(output);
+    return _parseCharacterJson(cleaned, name);
+  }
+
+  /// Generate lorebook entries as a separate call when truncated from base card.
+  Future<void> _generateLorebookSeparately({
+    required CharacterCard card,
+    required String name,
+    required String concept,
+    required List<String> loreCategories,
+    required String loreDepth,
+    void Function(String accumulated)? onProgress,
+  }) async {
+    String countRange;
+    switch (loreDepth) {
+      case 'Light':
+        countRange = '3-4';
+        break;
+      case 'Deep':
+        countRange = '10-15';
+        break;
+      default:
+        countRange = '5-8';
+    }
+    final categoryHint = loreCategories.isNotEmpty
+        ? ' Focus on: ${loreCategories.join(", ")}.'
+        : '';
+
+    final prompt = '''Generate world-building lorebook entries for a roleplay character. Output ONLY a JSON object with a single key "lorebook" containing an array of $countRange entry objects.$categoryHint
+
+Character: $name
+Description: ${concept.length > 300 ? '${concept.substring(0, 300)}...' : concept}
+Personality: ${card.personality.length > 200 ? '${card.personality.substring(0, 200)}...' : card.personality}
+
+Each entry format: {"name": "title", "key": "trigger,keywords", "content": "1-2 paragraphs of lore"}
+
+Output ONLY the JSON:''';
+
+    final output = await _callLLM(prompt, maxLen: 4096, onProgress: onProgress);
+    if (output == null) return;
+
+    final cleaned = _stripContent(output);
+    try {
+      // Try direct parse
+      Map<String, dynamic>? data;
+      try {
+        data = json.decode(cleaned) as Map<String, dynamic>;
+      } catch (_) {
+        // Try newline fix
+        final fixed = _fixJsonNewlines(cleaned)
+            .replaceAll(RegExp(r',\s*}'), '}')
+            .replaceAll(RegExp(r',\s*]'), ']');
+        data = json.decode(fixed) as Map<String, dynamic>;
+      }
+
+      final lorebookData = data['lorebook'];
+      if (lorebookData is List && lorebookData.isNotEmpty) {
+        final entries = <LorebookEntry>[];
+        for (final entry in lorebookData) {
+          if (entry is Map<String, dynamic>) {
+            entries.add(LorebookEntry(
+              name: entry['name']?.toString() ?? '',
+              key: entry['key']?.toString() ?? '',
+              content: entry['content']?.toString() ?? '',
+              enabled: true,
+            ));
+          }
+        }
+        if (entries.isNotEmpty) {
+          card.lorebook = Lorebook(entries: entries);
+          debugPrint('CharacterGen: Separate lorebook generated ${entries.length} entries');
+        }
+      }
+    } catch (e) {
+      debugPrint('CharacterGen: Separate lorebook parse failed: $e');
+    }
   }
 
   // ═════════════════════════════════════════════════════════════
@@ -251,20 +470,23 @@ class CharacterGenService {
       sysSpec += '. Incorporate this existing prompt: "$apiSystemPrompt"';
     }
 
+    // Key order: critical small fields FIRST so they survive output truncation.
+    // Lorebook (the largest field) goes LAST so it gets clipped first if the
+    // model runs out of output tokens — we can regenerate it separately.
     return '''Create a roleplay character card as a single JSON object. Do NOT analyze, plan, or explain. Output ONLY the JSON object starting with { and ending with }. No markdown. No lists. Just raw JSON.
 
 Character name: $name
 Concept: $concept
 $ageLine$sexLine$relationshipLine$backstoryLine$keywordsLine
-Required JSON keys:
+Required JSON keys (generate them IN THIS ORDER):
 - "personality": (string) 1-2 paragraphs, third person, core traits + motivations + quirks
 - "scenario": (string) 1 paragraph, the default conversation setting
-- "example_dialogue": (string) format: <START>\\n{{user}}: message\\n{{char}}: response\\n<START>\\n{{user}}: message\\n{{char}}: response
 $sysSpec
 - "tags": (array of strings) 3-5 relevant tags
-- "image_prompt": (string) CRITICAL: must be a flat comma-separated list of visual tags for an image generator. NO prose, NO sentences, NO character names. Format exactly like this example: "fair skinned woman, long black curly hair, emerald green eyes, voluptuous figure, leather pirate coat, tricorn hat, standing on ship deck, ocean sunset background, dramatic lighting, confident smirk". List: skin tone + gender, hair, eyes, body type, outfit pieces, pose, setting, expression. Under 80 words total. NO storytelling
+- "image_prompt": (string) flat comma-separated visual tags for an image generator. NO prose, NO sentences, NO character names. Format: "skin tone + gender, hair, eyes, body type, outfit pieces, pose, setting, expression". Under 80 words total
+- "example_dialogue": (string) format: <START>\\n{{user}}: message\\n{{char}}: response\\n<START>\\n{{user}}: message\\n{{char}}: response
 $lorebookSpec
-Use {{char}} for character name and {{user}} for user name. Do NOT include first_message or alternate_greetings — those will be generated separately. Respond with ONLY the JSON:''';
+IMPORTANT: Do NOT generate a "description" key — the description is handled separately. Do NOT include first_message or alternate_greetings. Use {{char}} for character name and {{user}} for user name. Respond with ONLY the JSON:''';
   }
 
   /// Build prompt for a single greeting message.
@@ -361,56 +583,31 @@ Character Details (weave these naturally into the scene — SHOW through action,
 $characterContext''';
     }
 
-    return '''This is a roleplay between {{char}} ($name) and {{user}}. Write {{char}}'s opening message to begin the conversation. This is the FIRST interaction — {{user}} knows NOTHING about {{char}} yet. The greeting must SET THE SCENE and naturally introduce who {{char}} is through vivid storytelling. {{char}} should initiate an engaging scene and end with dialogue or a prompt that {{user}} can naturally respond to. Output ONLY the message text — no JSON, no quotes, no labels.
+    return '''Write an opening roleplay message as $name (first person: "I", "my", "me"). This is the very first moment of the story — set the scene and introduce who $name is through vivid prose. Output ONLY the message text.
 
-Character: $name
+== WHO $name IS ==
 Description: $description
 Personality: $personality
-Scenario: $scenario
-$toneSpec$characterSection$personaSection
+Scenario: $scenario$characterSection$personaSection
+$toneSpec
 
-SCENE-SETTING REQUIREMENTS:
-- This is the OPENING of the story — describe the setting, atmosphere, and what is happening
-- Naturally reveal {{char}}'s appearance, race/species, and personality through the narrative (e.g. describe their features as they move, show personality through actions and dialogue)
-- Show {{char}}'s relationship to {{user}} through context and behavior, don't state it outright
-- Ground the scene in a specific moment and place — what does it look, sound, smell, feel like?
-- {{user}} should understand who {{char}} is and what's happening WITHOUT needing to read a character bio
+== NARRATIVE STRUCTURE (follow this order) ==
+1. SCENE — Open with the environment. Where are we? What time of day? What's the atmosphere? Paint the world with sensory detail (sights, sounds, smells, textures). Minimum 1 full paragraph of scene-setting.
+2. CHARACTER — Describe $name's physical appearance through action. Show race/species features, body, clothing, hair, distinguishing marks AS $name moves through the scene. The reader should be able to picture $name vividly. Minimum 1 full paragraph focused on $name's appearance and mannerisms.
+3. ENCOUNTER — The moment $name notices or interacts with {{user}}. Include inner thoughts, emotional reactions, and end with spoken dialogue that invites {{user}} to respond.
 
-CRITICAL RULES — NEVER VIOLATE THESE:
-- Write ENTIRELY in FIRST PERSON as $name (use "I", "my", "me" — NEVER "she", "he", "they" or "$name" to refer to yourself)
-- NEVER write in third person — no "she grips the helm", write "I grip the helm"
-- When referring to the other person, ALWAYS use the literal text {{user}} — NEVER use vague references like "the figure", "their companion", "a presence", "the one beside me", etc.
-- NEVER write actions, dialogue, thoughts, or feelings for {{user}}
-- NEVER describe {{user}}'s appearance, body, clothing, or physical traits
-- NEVER narrate what {{user}} sees, notices, or thinks about themselves
-- NEVER move {{user}}, make {{user}} react, or assume {{user}}'s state
-- {{user}} is a completely blank slate — only describe YOUR ({{char}}'s) own actions, thoughts, and surroundings
-- {{user}} may be mentioned or addressed directly by name ({{user}}) but NEVER puppeted or described physically
-- Do NOT describe how {{user}} looks — focus only on your own actions and the environment
+== RULES ==
+- First person ONLY ("I", "my", "me") — never third person, never use "$name" to refer to yourself
+- *Asterisks* for physical actions only. "Quotes" for dialogue. Plain text for narration/thoughts/description.
+- Use {{user}} (with curly braces) when mentioning the other person — never vague references like "the stranger"
+- NEVER write actions, thoughts, feelings, appearance, or dialogue for {{user}} — {{user}} is a blank slate
+- Do NOT start the message by addressing {{user}} — start with scene description
 
-CONVERSATION HOOK:
-- End the message with dialogue spoken TO {{user}} — a question, invitation, or statement that {{user}} can respond to
-- The ending should make {{user}} feel compelled to reply and begin the conversation
-- Examples: a question about their intentions, an invitation to join an activity, a provocative statement, or a request for their opinion
-
-LENGTH REQUIREMENT — THIS IS MANDATORY:
+== LENGTH ==
 $lengthEnforcement
+This is MANDATORY — do NOT write less. Fill the space with rich, immersive prose.$previousContext
 
-Format rules:
-- FIRST PERSON ONLY — "I", "my", "me" (never third person)
-- *Asterisks* are ONLY for physical actions — things the character physically does (e.g. *I grip the helm tightly* or *I turn to face {{user}}*)
-- "Quotation marks" are for spoken dialogue
-- Narration, description, inner thoughts, and scene-setting are plain text with NO special formatting
-- Example of CORRECT format:
-  The salt air stings my face as the ship cuts through the waves. *I grip the helm and glance over my shoulder.* "You look like you've got a story to tell." Something about their presence puts me on edge.
-- Example of WRONG format (DO NOT DO THIS):
-  *The salt air stings my face as the ship cuts through the waves. I grip the helm and glance over my shoulder.* "You look like you've got a story to tell." *Something about their presence puts me on edge.*
-- Length: $lengthSpec — DO NOT write less than this
-- Make it immersive, vivid, and engaging with rich environmental detail
-- Use {{user}} (exactly like that, with curly braces) when mentioning the other person — never substitute with pronouns or vague descriptions
-- Do NOT use {{char}} in the message — write as "I" instead$previousContext
-
-Begin the message:''';
+Begin:''';
   }
 
   /// Clean raw greeting output — remove quotes, labels, fix truncation.
