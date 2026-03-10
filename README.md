@@ -3,7 +3,7 @@
 ![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)
 ![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
-![Beta](https://img.shields.io/badge/Status-Beta-blue)
+![Stable](https://img.shields.io/badge/Status-Stable-brightgreen)
 
 ## 📝 Note from the Dev
 
@@ -122,8 +122,15 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
 
-## 🆕 What's New in V0.9.0-Beta
+## 🆕 What's New in V0.9.0
 
+- 💾 **Database Optimization**: Converted all delete operations from soft-delete to hard-delete, eliminating massive DB bloat from accumulated "ghost" rows. Existing bloat is automatically purged on upgrade (e.g. 334MB → 2MB).
+- ☁️ **Cloud Sync Overhaul**:
+  - Cloud sync now waits for database reunification to complete before starting, preventing concurrent access issues
+  - Fresh upload after 0.9.0 upgrade bypass prevents version mismatch errors
+  - Google Drive folder ID cache is cleared after data purge to prevent stale references
+  - Safe download pattern: files download to a temp file first, then rename on success — interrupted syncs no longer corrupt existing local files
+- 🔄 **Database Reunification**: Automatic one-time migration that merges beta database data into the stable database on first launch. Progress is shown via a step-by-step overlay.
 - 🎛️ **Context Size Slider in Character Creator**: New power-of-2 slider (2K → 128K) on the chargen Setup page lets you set the context window before starting KoboldCpp. Available in both the Flutter app and WebUI.
 - ▶️ **Start/Stop KoboldCpp from Character Creator**: Start and stop KoboldCpp directly from the chargen Setup step — no need to switch to Settings. The button shows real-time status (green/red dot) and a loading spinner during model load. Works in both Flutter and WebUI.
 - 🔧 **Auto-Configure Fix**: The auto-configure button now respects your chosen context size instead of overwriting it. It adjusts GPU layer offloading to fit the context you want, rather than dictating the context size.
@@ -131,12 +138,13 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 - 🔄 **Truncation Recovery**: Character generation now detects incomplete JSON output and retries missing fields (personality, scenario, system prompt, example dialogue) with focused prompts.
 - 📖 **Separate Lorebook Generation**: If the lorebook is missing from the initial generation (due to output truncation), it's now generated in a separate pass so world-building data isn't lost.
 - 📚 **Lorebook Sidebar in WebUI**: The chat sidebar in the WebUI now displays lorebook entries with red/green dots indicating active/inactive trigger status — matching the Flutter app.
-- 💬 **Greeting Quality Improvements**: Restructured greeting prompts to prioritize character details and narrative flow (scene → character → encounter). Removed the "editor pass" that was degrading greeting quality.
+- 💬 **Greeting Quality Improvements**: Restructured greeting prompts to prioritize character details and narrative flow (scene → character → context → encounter). Added CONTEXT step for self-contained greetings.
 - 🐧 **Linux Desktop Fixes**:
   - Fixed `.desktop` file `Exec=` / `Icon=` mismatch with actual binary name
   - Added proper Linux app icon (was missing/empty)
   - Fixed `FlutterEngineRemoveView` segfault on app close
   - Added SIGINT/SIGTERM signal handlers to prevent segfault on terminal exit
+  - Linux package repos: APT (Debian/Ubuntu), RPM (Fedora/RHEL), AUR (Arch) — auto-published via CI/CD
 - 💾 **Character Data Loss Fix**: Fixed character description fields being wiped after crash-on-shutdown, particularly for characters stored in folders.
 - 🗑️ **Removed Local SD**: Cleaned out the local Stable Diffusion image generation feature (remote API image gen remains fully functional).
 - 🌍 **World Editor**: Full lorebook entry management UI for creating and editing world info.
@@ -150,6 +158,8 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
   - Fixed truncated first messages not being detected or completed by editor passes
   - Fixed avatar prompt generator outputting story-like descriptions instead of comma-separated visual tags
   - Fixed banned_tokens sent as delimited string instead of JSON array
+  - Fixed cloud sync hanging on large database uploads (caused by 300MB+ of soft-deleted data)
+  - Fixed database reunification re-triggering on every app launch
 
 <details>
 <summary><strong>📦 Previous Releases</strong></summary>
