@@ -160,12 +160,6 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
   - Fixed banned_tokens sent as delimited string instead of JSON array
   - Fixed cloud sync hanging on large database uploads (caused by 300MB+ of soft-deleted data)
   - Fixed database reunification re-triggering on every app launch
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
-
-### What's New in V0.9.0-Alpha
-
 - 🧙 **AI Character Creator**: Generate complete, ready-to-chat character cards from just a name and a concept. The AI builds a full V2-spec card — personality, backstory, dialogue examples, system prompt, and optional avatar — all in one flow.
   - **Multi-Step Wizard**: Streamlined 4-step process — Setup (backend & model) → Configure (character details) → Generate → Review & Edit.
   - **Dual Backend Support**: Works with both remote API (OpenRouter, Nano-GPT) and local KoboldCpp models.
@@ -184,6 +178,9 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 - 🎛️ **Extended Max Output Tokens**: Increased from 2,048 to 16,384 for thinking models.
 - 🛡️ **Pre-Release Safety**: Beta builds use a separate database to prevent schema conflicts.
 - 📄 **License Change**: Switched from GPLv3 to **AGPL-3.0** for v0.9.0+.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.8.1
 
