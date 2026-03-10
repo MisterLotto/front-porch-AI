@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/services/db_reunification_service.dart';
 
 part 'database.g.dart';
 
@@ -158,6 +159,7 @@ class AppDatabase extends _$AppDatabase {
 
   static AppDatabase? _instance;
   static String? _dbPath;
+  static String? _dbDir;
 
   /// Singleton access. Call [AppDatabase.instance()] to get the shared database.
   ///
@@ -170,6 +172,7 @@ class AppDatabase extends _$AppDatabase {
     final rootPath = prefs.getString('root_path');
     final basePath = rootPath ?? (await getApplicationDocumentsDirectory()).path;
     final dbDir = p.join(basePath, 'KoboldManager');
+    _dbDir = dbDir;
 
     // Choose database filename based on release type
     final dbName = isPreRelease ? 'front_porch_beta.db' : 'front_porch.db';
@@ -186,6 +189,16 @@ class AppDatabase extends _$AppDatabase {
       }
     }
 
+    // For stable builds: reunify beta DB into production if both exist.
+    // This is a one-time operation on the first 0.9.0 stable launch.
+    // Steps 1-2 run here (backup + promote). Steps 3-5 (diff + import)
+    // run later in main.dart with a UI overlay.
+    if (!isPreRelease && await DbReunificationService.needsReunification(dbDir)) {
+      debugPrint('[DB] Reunification needed — backing up and promoting beta DB');
+      await DbReunificationService.createBackups(dbDir);
+      await DbReunificationService.promoteBetaDb(dbDir);
+    }
+
     _dbPath = file.path;
     _instance = AppDatabase._internal(NativeDatabase.createInBackground(file));
     return _instance!;
@@ -193,6 +206,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// The absolute path to the database file on disk.
   static String? get dbFilePath => _dbPath;
+
+  /// The directory containing the database files.
+  static String? get dbDirPath => _dbDir;
 
   /// Flush WAL (Write-Ahead Log) to the main database file.
   /// Call this before uploading the .db file to ensure it's self-contained.
@@ -213,6 +229,11 @@ class AppDatabase extends _$AppDatabase {
   /// For testing: create an in-memory database.
   factory AppDatabase.forTesting() {
     return AppDatabase._internal(NativeDatabase.createInBackground(File(':memory:')));
+  }
+
+  /// Open a specific DB file for reunification (runs migrations, not a singleton).
+  factory AppDatabase.forReunification(File file) {
+    return AppDatabase._internal(NativeDatabase.createInBackground(file));
   }
 
   @override
@@ -477,6 +498,29 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Hard-delete all soft-deleted rows from every table and VACUUM the database
+  /// to reclaim disk space. Without this, deleted messages accumulate and bloat
+  /// the DB (e.g. 59k deleted messages = 300+ MB of wasted space).
+  Future<int> purgeDeletedRows() async {
+    int total = 0;
+    for (final table in ['messages', 'sessions', 'characters', 'groups', 'folders', 'personas']) {
+      final count = await customUpdate(
+        'DELETE FROM $table WHERE deleted_at IS NOT NULL',
+        updates: {},
+      );
+      if (count > 0) {
+        debugPrint('[DB] Purged $count deleted rows from $table');
+        total += count;
+      }
+    }
+    if (total > 0) {
+      debugPrint('[DB] Purged $total deleted rows total — running VACUUM');
+      await customStatement('VACUUM');
+      debugPrint('[DB] VACUUM complete');
+    }
+    return total;
+  }
+
   // ── Character Queries ───────────────────────────────────────────────
 
   Future<List<Character>> getAllCharacters() =>
@@ -529,11 +573,15 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteCharacterById(String id) async {
-    // Soft delete: set deletedAt instead of removing
-    await (update(characters)..where((c) => c.id.equals(id)))
-        .write(CharactersCompanion(deletedAt: Value(DateTime.now())));
+    // Hard delete: also cascade to sessions and their messages
+    final charSessions = await (select(sessions)..where((s) => s.characterId.equals(id))).get();
+    for (final s in charSessions) {
+      await (delete(messages)..where((m) => m.sessionId.equals(s.id))).go();
+    }
+    await (delete(sessions)..where((s) => s.characterId.equals(id))).go();
+    final count = await (delete(characters)..where((c) => c.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   // ── Session Queries ─────────────────────────────────────────────────
@@ -607,10 +655,11 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteSessionById(String id) async {
-    await (update(sessions)..where((s) => s.id.equals(id)))
-        .write(SessionsCompanion(deletedAt: Value(DateTime.now())));
+    // Hard delete: also delete all messages in this session
+    await (delete(messages)..where((m) => m.sessionId.equals(id))).go();
+    final count = await (delete(sessions)..where((s) => s.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   // ── Message Queries ─────────────────────────────────────────────────
@@ -645,17 +694,15 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteMessagesForSession(String sessionId) async {
-    await (update(messages)..where((m) => m.sessionId.equals(sessionId)))
-        .write(MessagesCompanion(deletedAt: Value(DateTime.now())));
+    final count = await (delete(messages)..where((m) => m.sessionId.equals(sessionId))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   Future<int> deleteMessageById(String id) async {
-    await (update(messages)..where((m) => m.id.equals(id)))
-        .write(MessagesCompanion(deletedAt: Value(DateTime.now())));
+    final count = await (delete(messages)..where((m) => m.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   Future<void> updateMessage(MessagesCompanion message) async {
@@ -688,10 +735,15 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteGroupById(String id) async {
-    await (update(groups)..where((g) => g.id.equals(id)))
-        .write(GroupsCompanion(deletedAt: Value(DateTime.now())));
+    // Hard delete: also cascade to sessions and their messages
+    final groupSessions = await (select(sessions)..where((s) => s.groupId.equals(id))).get();
+    for (final s in groupSessions) {
+      await (delete(messages)..where((m) => m.sessionId.equals(s.id))).go();
+    }
+    await (delete(sessions)..where((s) => s.groupId.equals(id))).go();
+    final count = await (delete(groups)..where((g) => g.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   // ── Folder Queries ──────────────────────────────────────────────────
@@ -708,10 +760,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteFolderById(String id) async {
-    await (update(folders)..where((f) => f.id.equals(id)))
-        .write(FoldersCompanion(deletedAt: Value(DateTime.now())));
+    final count = await (delete(folders)..where((f) => f.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   Future<void> updateFolder(FoldersCompanion folder) async {
@@ -741,10 +792,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deletePersonaById(String id) async {
-    await (update(personas)..where((p) => p.id.equals(id)))
-        .write(PersonasCompanion(deletedAt: Value(DateTime.now())));
+    final count = await (delete(personas)..where((p) => p.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   Future<void> setActivePersona(String id) async {
@@ -781,10 +831,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteWorldById(String id) async {
-    await (update(worlds)..where((w) => w.id.equals(id)))
-        .write(WorldsCompanion(deletedAt: Value(DateTime.now())));
+    final count = await (delete(worlds)..where((w) => w.id.equals(id))).go();
     await bumpSyncVersion();
-    return 1;
+    return count;
   }
 
   Future<World?> getWorldByName(String name) =>

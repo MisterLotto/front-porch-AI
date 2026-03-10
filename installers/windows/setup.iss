@@ -1,5 +1,5 @@
 ; Inno Setup Script for Front Porch AI
-; Produces a Windows installer with GPL V3 license acceptance
+; Produces a Windows installer with AGPL V3 license acceptance
 
 #define MyAppName "Front Porch AI"
 #define MyAppPublisher "linux4life1"

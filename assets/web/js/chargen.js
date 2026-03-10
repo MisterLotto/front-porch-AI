@@ -61,7 +61,9 @@
     // Step 0 (Setup)
     modelId: '',
     modelsLoaded: false, availableModels: [],
-    // Step 1 (Configure) — order matches Flutter exactly
+    // Step 1 (Mode Selection)
+    creatorMode: 'automated', // 'automated' or 'guided'
+    // Step 2 (Configure — Automated) — order matches Flutter exactly
     nsfwEnabled: false,
     selectedArchetype: '',
     name: '', age: '', sex: '',
@@ -80,9 +82,17 @@
     greetingTones: ['Neutral'],
     greetingLength: 'Medium (2-4 paragraphs)', altGreetingCount: 2,
     artStyle: 'Anime',
-    // Step 2 (Generating)
+    // Step 2 (Configure — Guided)
+    guidedVision: '', guidedAppearance: '', guidedHair: '', guidedFeatures: '', guidedRace: '',
+    guidedPersonality: '', guidedSpeech: '', guidedSecret: '',
+    guidedOrigin: '', guidedSetting: '', guidedTone: '',
+    guidedRelDynamic: '', guidedRelScenario: '',
+    guidedNsfwBody: '', guidedNsfwExp: '', guidedNsfwDom: '',
+    guidedNsfwKinks: '', guidedNsfwClothing: '', guidedNsfwPersonality: '',
+    isExpandingNarrative: false,
+    // Step 3 (Generating)
     isGenerating: false, genStatus: '', genPreview: '',
-    // Step 3 (Review)
+    // Step 4 (Review)
     generatedCard: null, avatarBase64: '', imagePrompt: '', lorebookEnabled: {},
     // UI state
     _open: {},
@@ -558,7 +568,450 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // STEP 1: Configure — EXACT Flutter layout order
+  // STEP 1: Mode Selection
+  // ═══════════════════════════════════════════════════════════
+  function renderStep1_ModeSelect() {
+    const c = $('#cw-content');
+    c.innerHTML = '';
+    const wrap = el('div', {style:'max-width:700px;margin:0 auto'});
+    wrap.appendChild(el('div', {className:'cw-section-title', style:'font-size:24px;font-weight:700;margin-bottom:6px'}, 'How do you want to create?'));
+    wrap.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:14px;margin-bottom:28px'}, 'Choose the creation mode that fits your workflow.'));
+
+    function modeCard(mode, icon, iconColor, title, subtitle, desc, features) {
+      const sel = state.creatorMode === mode;
+      const borderColor = sel ? (mode === 'guided' ? '#5eead4' : '#fbbf24') : 'rgba(255,255,255,0.08)';
+      const bgColor = sel ? (mode === 'guided' ? 'rgba(94,234,212,0.06)' : 'rgba(251,191,36,0.06)') : 'var(--bg-secondary, #1e293b)';
+      const card = el('div', {
+        className: 'cw-mode-card' + (sel ? ' selected' : ''),
+        style: `display:flex;gap:16px;padding:20px;border-radius:16px;border:${sel?2:1}px solid ${borderColor};background:${bgColor};cursor:pointer;margin-bottom:16px;transition:all 0.2s`,
+      });
+      card.addEventListener('click', () => { state.creatorMode = mode; saveState(); renderStep1_ModeSelect(); });
+      // Icon box
+      const iconBox = el('div', {style:`width:56px;height:56px;border-radius:14px;background:${iconColor}22;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:28px`});
+      iconBox.textContent = icon;
+      card.appendChild(iconBox);
+      // Info
+      const info = el('div', {style:'flex:1;min-width:0'});
+      const titleRow = el('div', {style:'display:flex;justify-content:space-between;align-items:center'});
+      titleRow.appendChild(el('div', {style:`font-size:18px;font-weight:700;color:${sel?'#fff':'rgba(255,255,255,0.7)'}`}, title));
+      if (sel) {
+        const badge = el('span', {style:`padding:4px 10px;border-radius:12px;background:${borderColor}4d;color:${borderColor};font-size:11px;font-weight:600`}, 'Selected');
+        titleRow.appendChild(badge);
+      }
+      info.appendChild(titleRow);
+      info.appendChild(el('div', {style:`color:${sel?iconColor:'rgba(255,255,255,0.3)'};font-size:13px;margin-top:2px`}, subtitle));
+      info.appendChild(el('div', {style:'color:rgba(255,255,255,0.3);font-size:12px;line-height:1.4;margin-top:8px'}, desc));
+      const featsWrap = el('div', {style:'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px'});
+      features.forEach(f => {
+        const feat = el('div', {style:`display:flex;align-items:center;gap:4px;font-size:11px;color:${sel?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)'}`});
+        feat.textContent = '✓ ' + f;
+        featsWrap.appendChild(feat);
+      });
+      info.appendChild(featsWrap);
+      card.appendChild(info);
+      return card;
+    }
+
+    wrap.appendChild(modeCard('automated', '✨', '#fbbf24', 'Automated Creator',
+      'Pick traits from bubbles, let AI fill the gaps',
+      'Best when you want to explore and discover. Select from archetypes, appearance options, backstory presets, and personality keywords. The AI handles the rest.',
+      ['Archetype presets', 'Bubble selectors for every trait', 'AI generates description from selections']
+    ));
+    wrap.appendChild(modeCard('guided', '📝', '#5eead4', 'Guided Creator',
+      'Write your vision, AI helps you flesh it out',
+      'Best when you already have a character in mind but need help getting it on paper. Describe your idea in your own words — guided prompts and suggestions help you express your vision.',
+      ['Free-form text with guided prompts', 'Suggestion chips for inspiration', '"Help me expand this" AI assist']
+    ));
+
+    // Navigation
+    const nav = el('div', {style:'display:flex;justify-content:center;gap:16px;margin-top:32px'});
+    const backBtn = el('button', {className:'cw-btn cw-btn-secondary', style:'height:52px;padding:0 24px'}, '← Back');
+    backBtn.addEventListener('click', () => { state.step = 0; saveState(); render(); });
+    nav.appendChild(backBtn);
+    const nextBtn = el('button', {className:'cw-btn cw-btn-primary', style:`height:52px;min-width:280px;background:${state.creatorMode==='guided'?'#0d7377':'#3b82f6'}`});
+    nextBtn.textContent = 'Next: ' + (state.creatorMode === 'guided' ? 'Guided' : 'Automated') + ' Setup →';
+    nextBtn.addEventListener('click', () => { state.step = 2; saveState(); render(); });
+    nav.appendChild(nextBtn);
+    wrap.appendChild(nav);
+    c.appendChild(wrap);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // STEP 2 (Guided): Guided Character Configuration
+  // ═══════════════════════════════════════════════════════════
+
+  const GUIDED_VISION_PLACEHOLDERS = [
+    'A tall, slender woman with flowing black hair was dancing in a nightclub when she locked eyes with {{user}}...',
+    'A grizzled old blacksmith with one arm, haunted by the war, but still cracks jokes while forging weapons...',
+    'Shy bookworm, always has cat hair on her sweater, secretly powerful mage, terrible at eye contact...',
+    'Cocky bounty hunter with cybernetic eyes and a debt to the wrong people. Flirts with everyone...',
+    'Ancient dragon disguised as a librarian, hoards rare first editions instead of gold...',
+  ];
+  const SCENARIO_SEEDS = [
+    'Met at a café', 'Childhood friends', 'Mysterious stranger', 'Coworkers',
+    'Online match', 'Rescued by them', 'Woke up next to them', 'Battle partners',
+    'Neighbors', 'Classmates', 'Summoned them',
+  ];
+
+  function buildGuidedField(label, stateKey, hint, suggestions, opts) {
+    opts = opts || {};
+    const isNsfw = opts.nsfw || false;
+    const accent = isNsfw ? '#f472b6' : '#5eead4';
+    const wrap = el('div', {className:'cw-guided-field', style:'margin-bottom:16px'});
+    // Label row
+    const labelRow = el('div', {style:'display:flex;align-items:center;gap:4px;margin-bottom:6px'});
+    if (isNsfw) labelRow.appendChild(el('span', {style:'font-size:12px'}, '🔥'));
+    labelRow.appendChild(el('span', {style:`color:${isNsfw?'#f9a8d4':'rgba(255,255,255,0.5)'};font-size:12px;font-weight:500;flex:1`}, label));
+    if (opts.trailing) labelRow.appendChild(opts.trailing);
+    wrap.appendChild(labelRow);
+    // Input
+    const isMultiline = (opts.maxLines || 2) > 1;
+    const inp = isMultiline
+      ? el('textarea', {className:'cw-textarea', rows: String(opts.maxLines || 2), placeholder: hint || '', style:`border-color:transparent;background:#1e293b`})
+      : el('input', {className:'cw-input', type:'text', placeholder: hint || '', style:`border-color:transparent;background:#1e293b`});
+    inp.value = state[stateKey] || '';
+    inp.addEventListener('input', () => { state[stateKey] = inp.value; saveState(); });
+    inp.addEventListener('focus', () => { inp.style.borderColor = accent; });
+    inp.addEventListener('blur', () => { inp.style.borderColor = 'transparent'; });
+    wrap.appendChild(inp);
+    // Suggestion chips
+    if (suggestions && suggestions.length) {
+      const chipsWrap = el('div', {style:'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px'});
+      suggestions.forEach(sug => {
+        const isIn = (state[stateKey] || '').toLowerCase().includes(sug.toLowerCase());
+        const chip = el('span', {
+          style: `padding:4px 10px;border-radius:16px;font-size:11px;cursor:pointer;border:1px solid ${isIn ? accent+'80' : 'rgba(255,255,255,0.07)'};background:${isIn ? accent+'33' : '#1e293b'};color:${isIn ? accent : 'rgba(255,255,255,0.3)'};transition:all 0.15s`,
+        }, sug);
+        chip.addEventListener('click', () => {
+          if (!isIn) {
+            const cur = (state[stateKey] || '').trim();
+            state[stateKey] = cur ? cur + ', ' + sug : sug;
+            saveState();
+            renderStep2_Guided();
+          }
+        });
+        chipsWrap.appendChild(chip);
+      });
+      wrap.appendChild(chipsWrap);
+    }
+    return wrap;
+  }
+
+  function buildGuidedSection(title, subtitle, icon, children, opts) {
+    opts = opts || {};
+    const accent = opts.accent || '#5eead4';
+    const sectionKey = 'guided_' + title.replace(/\s/g,'_');
+    const isOpen = state._open[sectionKey] !== undefined ? state._open[sectionKey] : (opts.defaultOpen || false);
+    const sec = el('div', {style:`margin-bottom:16px;border-radius:12px;border:1px solid ${accent}26;background:#162032`});
+    // Header
+    const header = el('div', {
+      style: 'display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;user-select:none',
+    });
+    header.appendChild(el('span', {style:`font-size:18px`}, icon));
+    const titleCol = el('div', {style:'flex:1'});
+    titleCol.appendChild(el('div', {style:'color:#fff;font-size:14px;font-weight:600'}, title));
+    titleCol.appendChild(el('div', {style:'color:rgba(255,255,255,0.2);font-size:11px'}, subtitle));
+    header.appendChild(titleCol);
+    header.appendChild(el('span', {style:`color:${accent};font-size:14px;transition:transform 0.2s`}, isOpen ? '▼' : '▶'));
+    header.addEventListener('click', () => {
+      state._open[sectionKey] = !isOpen;
+      saveState();
+      renderStep2_Guided();
+    });
+    sec.appendChild(header);
+    // Content
+    if (isOpen) {
+      const body = el('div', {style:'padding:0 16px 16px'});
+      children.forEach(ch => body.appendChild(ch));
+      sec.appendChild(body);
+    }
+    return sec;
+  }
+
+  function renderStep2_Guided() {
+    const c = $('#cw-content');
+    c.innerHTML = '';
+    const wrap = el('div', {style:'max-width:700px;margin:0 auto'});
+    wrap.appendChild(el('div', {className:'cw-section-title', style:'font-size:24px;font-weight:700;margin-bottom:6px;color:#5eead4'}, '📝 Guided Character Creator'));
+    wrap.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:13px;margin-bottom:24px'}, "Describe your character — we'll help you flesh them out."));
+
+    // ── "What's your character like?" header ──
+    wrap.appendChild(el('div', {style:'font-size:18px;font-weight:600;color:#fff;margin-bottom:4px'}, "What's your character like?"));
+    wrap.appendChild(el('div', {style:'color:rgba(255,255,255,0.38);font-size:12px;line-height:1.4;margin-bottom:16px'}, "Don't worry about perfect writing — a few sentences, a scene, bullet points, whatever comes naturally."));
+
+    // ── Name / Age / Sex ──
+    const nameSection = el('div', {className:'cw-section', style:'margin-bottom:20px'});
+    const nameRow = el('div', {style:'display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end'});
+    const nameField = buildField('Character Name *', 'text', 'name', 'e.g. Aria Blackthorn', {style:'flex:2;min-width:200px'});
+    nameRow.appendChild(nameField);
+    const diceBtn = el('button', {className:'cw-btn cw-btn-secondary cw-btn-sm', style:'height:38px;margin-bottom:0;white-space:nowrap'});
+    diceBtn.textContent = state.isRandomizingName ? '⏳ ...' : '🎲 Random';
+    diceBtn.disabled = state.isRandomizingName;
+    diceBtn.addEventListener('click', randomizeName);
+    nameRow.appendChild(diceBtn);
+    nameSection.appendChild(nameRow);
+    const ageSexRow = el('div', {style:'display:flex;gap:12px;flex-wrap:wrap;margin-top:12px'});
+    ageSexRow.appendChild(buildField('Age', 'text', 'age', 'e.g. 24, Ancient, Timeless', {style:'flex:1;min-width:120px'}));
+    ageSexRow.appendChild(buildField('Sex', 'text', 'sex', 'e.g. Female, Male, Non-binary', {style:'flex:1;min-width:120px'}));
+    nameSection.appendChild(ageSexRow);
+    wrap.appendChild(nameSection);
+
+    // ── Collapsible Sections (matching Flutter order) ──
+    // 1. Appearance
+    wrap.appendChild(buildGuidedSection('Appearance', 'Already described their look above? Skip this.', '👤', [
+      buildGuidedField('Build / Body Type', 'guidedAppearance', "Or describe: 'tall and lanky with long legs'", ['Petite', 'Slim', 'Athletic', 'Curvy', 'Muscular', 'Plus-size', 'Tall & Lanky']),
+      buildGuidedField('Hair', 'guidedHair', "e.g. 'waist-length silver hair, usually messy'", ['Short', 'Long', 'Flowing', 'Braided', 'Wild', 'Shaved', 'Pixie']),
+      buildGuidedField('Distinguishing Features', 'guidedFeatures', "e.g. 'a jagged scar across her left eye, pointed elf ears'", ['Glasses', 'Scars', 'Tattoos', 'Horns', 'Wings', 'Fangs', 'Cat Ears', 'Freckles']),
+      buildGuidedField('Race / Species', 'guidedRace', "e.g. 'half-dragon shapeshifter'", ['Human', 'Elf', 'Demon', 'Vampire', 'Beastkin', 'Android', 'Angel', 'Fae']),
+    ]));
+
+    // 2. Personality & Vibe
+    wrap.appendChild(buildGuidedSection('Personality & Vibe', "What's it like to spend time with them?", '🎭', [
+      buildGuidedField('Personality', 'guidedPersonality', "What are they like? e.g. 'Sharp wit, never shows vulnerability, but secretly writes poetry'", ['Sarcastic', 'Gentle', 'Intense', 'Playful', 'Cold', 'Chaotic', 'Nurturing', 'Mysterious']),
+      buildGuidedField('How They Talk', 'guidedSpeech', "e.g. 'Formal and old-fashioned' or 'Lots of slang, drops F-bombs'", ['Formal', 'Casual', 'Poetic', 'Blunt', 'Soft-spoken', 'Loud', 'Sarcastic', 'Flirty']),
+      buildGuidedField('Secret / Hidden Depth', 'guidedSecret', "What's beneath the surface? e.g. 'Seems cold but is terrified of being alone'", ['Dark past', 'Hidden power', 'Secret identity', 'Tragic loss', 'Forbidden love', 'Dual personality']),
+    ]));
+
+    // 3. Backstory
+    wrap.appendChild(buildGuidedSection('Backstory', 'Even a sentence helps the AI build a richer history.', '📖', [
+      buildGuidedField('Origin / Background', 'guidedOrigin', "e.g. 'Grew up on the streets after her parents disappeared'", ['Orphan', 'Nobility', 'Self-made', 'Military', 'Criminal past', 'Mysterious origins', 'Small-town', 'Royalty']),
+      buildGuidedField('Setting / Era', 'guidedSetting', "When and where? e.g. 'Cyberpunk megacity' or 'Medieval fantasy kingdom'", ['Modern', 'Medieval', 'Futuristic', 'Victorian', 'Ancient', 'Post-apocalyptic', 'Urban fantasy']),
+      buildGuidedField('Tone', 'guidedTone', "Overall feel? e.g. 'Dark and gritty but with moments of warmth'", ['Dark', 'Wholesome', 'Tragic', 'Comedic', 'Mysterious', 'Heroic', 'Bittersweet']),
+    ]));
+
+    // 4. Relationship to {{user}}
+    wrap.appendChild(buildGuidedSection('Relationship to {{user}}', 'How do they know {{user}}?', '💫', [
+      buildGuidedField('Dynamic', 'guidedRelDynamic', "e.g. 'Coworkers who secretly like each other' or 'She's my bodyguard'", ['Strangers', 'Childhood friends', 'Rivals', 'Roommates', 'Love interest', 'Mentor/Student', 'Exes', 'Online friends']),
+      buildGuidedField('Opening Scenario', 'guidedRelScenario', "Where does the story start? e.g. 'First day at a new school'", ['First meeting', 'Reunion', 'Rescue', 'Confrontation', 'Date', 'Mission briefing', 'Accident', 'Summoning', 'Dream']),
+    ]));
+
+    // ── NSFW Toggle (after Relationship, matching Flutter) ──
+    const nsfwRow = el('div', {style:`display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:${state.nsfwEnabled?'rgba(244,114,182,0.08)':'#1e293b'};border-radius:12px;border:1px solid ${state.nsfwEnabled?'rgba(244,114,182,0.4)':'rgba(255,255,255,0.12)'};margin-bottom:16px`});
+    const nsfwLeft = el('div', {style:'display:flex;align-items:center;gap:8px;flex:1'});
+    nsfwLeft.appendChild(el('span', {style:`font-size:16px;color:${state.nsfwEnabled?'#f472b6':'rgba(255,255,255,0.24)'}`}, '🔥'));
+    const nsfwInfo = el('div');
+    nsfwInfo.appendChild(el('div', {style:`color:${state.nsfwEnabled?'#f9a8d4':'rgba(255,255,255,0.54)'};font-size:13px;font-weight:600`}, 'Enable NSFW Options'));
+    nsfwInfo.appendChild(el('div', {style:`color:${state.nsfwEnabled?'rgba(244,114,182,0.5)':'rgba(255,255,255,0.24)'};font-size:10px`}, 'Unlock intimate character details'));
+    nsfwLeft.appendChild(nsfwInfo);
+    nsfwRow.appendChild(nsfwLeft);
+    const toggle = el('label', {className:'toggle-switch', style:'margin:0'});
+    const cb = el('input', {type:'checkbox'}); cb.checked = state.nsfwEnabled;
+    cb.addEventListener('change', () => { state.nsfwEnabled = cb.checked; saveState(); renderStep2_Guided(); });
+    toggle.appendChild(cb); toggle.appendChild(el('span', {className:'toggle-slider'}));
+    nsfwRow.appendChild(toggle);
+    wrap.appendChild(nsfwRow);
+
+    // 5. NSFW Details (gated)
+    if (state.nsfwEnabled) {
+      wrap.appendChild(buildGuidedSection('Intimate Details', 'Guided prompts for romantic and sexual traits.', '🔥', [
+        buildGuidedField('Body (intimate details)', 'guidedNsfwBody', "Describe specifics if you want: 'modest chest, wide hips, thick thighs'", ['Flat', 'Small', 'Medium', 'Large', 'Huge'], {nsfw: true}),
+        buildGuidedField('Experience Level', 'guidedNsfwExp', "How experienced are they? e.g. 'First time, nervous but eager'", ['Innocent', 'Virgin', 'Curious', 'Experienced', 'Insatiable'], {nsfw: true}),
+        buildGuidedField('Dominance', 'guidedNsfwDom', "Who takes the lead? e.g. 'Dominant in public, submissive behind closed doors'", ['Submissive', 'Switch', 'Dominant'], {nsfw: true}),
+        buildGuidedField('Turn-ons & Kinks', 'guidedNsfwKinks', "What are they into? e.g. 'Loves being praised, goes weak when you grab her hair'", ['Praise', 'Teasing', 'Biting', 'Bondage', 'Exhibitionism', 'Jealousy', 'Breeding'], {nsfw: true}),
+        buildGuidedField('Clothing / Aesthetic', 'guidedNsfwClothing', "What do they wear? e.g. 'Always wears thigh-highs and an oversized shirt at home'", ['Revealing', 'Lingerie', 'Uniform', 'Leather', 'Elegant', 'Barely There'], {nsfw: true}),
+        buildGuidedField('Sexual Personality', 'guidedNsfwPersonality', "How do they act during intimacy? e.g. 'Giggly and playful, hides her face when embarrassed'", ['Teasing', 'Passionate', 'Tender', 'Aggressive', 'Shy', 'Seductive', 'Playful', 'Romantic'], {nsfw: true}),
+      ], {accent: '#f472b6'}));
+    }
+
+    // ── Character Vision (after NSFW, matching Flutter) ──
+    const visionSec = el('div', {style:'padding:16px;background:rgba(94,234,212,0.04);border-radius:12px;border:1px solid rgba(94,234,212,0.2);margin-bottom:16px'});
+    const visionHeader = el('div', {style:'display:flex;align-items:center;gap:8px;margin-bottom:12px'});
+    visionHeader.appendChild(el('span', {style:'font-size:18px;color:#5eead4'}, '📝'));
+    const visionTitleCol = el('div');
+    visionTitleCol.appendChild(el('div', {style:'font-size:16px;font-weight:600;color:#fff'}, 'Your Character Vision'));
+    visionTitleCol.appendChild(el('div', {style:'font-size:11px;color:rgba(255,255,255,0.38);margin-top:2px'}, 'Write your idea, or let AI generate a description from the details above.'));
+    visionHeader.appendChild(visionTitleCol);
+    visionSec.appendChild(visionHeader);
+    const phIdx = Math.abs(hashCode(state.name || 'x')) % GUIDED_VISION_PLACEHOLDERS.length;
+    const visionTa = el('textarea', {className:'cw-textarea', rows:'6', placeholder: GUIDED_VISION_PLACEHOLDERS[phIdx], style:'border:1px solid rgba(255,255,255,0.12);background:#1e293b'});
+    visionTa.value = state.guidedVision || '';
+    visionTa.addEventListener('input', () => { state.guidedVision = visionTa.value; saveState(); });
+    visionSec.appendChild(visionTa);
+    // Scenario seed chips
+    const seedWrap = el('div', {style:'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px'});
+    SCENARIO_SEEDS.forEach(seed => {
+      const isIn = (state.guidedVision || '').toLowerCase().includes(seed.toLowerCase());
+      const chip = el('span', {
+        style: `padding:4px 10px;border-radius:16px;font-size:11px;cursor:pointer;border:1px solid ${isIn?'rgba(94,234,212,0.5)':'rgba(255,255,255,0.1)'};background:${isIn?'rgba(94,234,212,0.2)':'#1e293b'};color:${isIn?'#5eead4':'rgba(255,255,255,0.38)'}`,
+      }, seed);
+      chip.addEventListener('click', () => {
+        if (!isIn) { const cur = (state.guidedVision||'').trim(); state.guidedVision = cur ? cur + '. ' + seed : seed; saveState(); renderStep2_Guided(); }
+      });
+      seedWrap.appendChild(chip);
+    });
+    visionSec.appendChild(seedWrap);
+    // Generate Character Description button (right-aligned like Flutter)
+    const expandRow = el('div', {style:'display:flex;justify-content:flex-end;margin-top:12px'});
+    const expandBtn = el('button', {className:'cw-btn', style:'background:#0d7377;color:#fff;border:none;padding:10px 16px;border-radius:10px;font-size:13px;cursor:pointer'});
+    expandBtn.textContent = state.isExpandingNarrative ? '⏳ Generating description...' : '✨ Generate Character Description';
+    expandBtn.disabled = state.isExpandingNarrative || !state.name.trim();
+    expandBtn.addEventListener('click', expandNarrative);
+    expandRow.appendChild(expandBtn);
+    visionSec.appendChild(expandRow);
+    wrap.appendChild(visionSec);
+
+    // ── Output Settings ──
+    wrap.appendChild(buildGuidedSection('Output Settings', 'Greeting style, art style, lorebook, and detail level.', '⚙️', [
+      buildSelectField('Generation Detail', ['Brief', 'Standard', 'Detailed', 'Comprehensive'], 'generationDetail'),
+      buildSelectField('Art Style', ART_STYLES, 'artStyle'),
+      buildSelectField('First Message Length', GREETING_LENGTHS, 'greetingLength'),
+      buildSliderField('Alternate Greetings', 0, 5, state.altGreetingCount, v => {
+        state.altGreetingCount = v;
+        const newMax = v + 1;
+        while (state.greetingTones.length > newMax) state.greetingTones.pop();
+        saveState();
+      }),
+      (() => {
+        const loreRow = el('div', {style:'margin-top:8px'});
+        const loreToggle = el('div', {style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'});
+        loreToggle.appendChild(el('span', {style:'color:rgba(255,255,255,0.5);font-size:12px'}, 'Generate Lorebook'));
+        const lt = el('label', {className:'toggle-switch', style:'margin:0'});
+        const lcb = el('input', {type:'checkbox'}); lcb.checked = state.generateLorebook;
+        lcb.addEventListener('change', () => { state.generateLorebook = lcb.checked; saveState(); });
+        lt.appendChild(lcb); lt.appendChild(el('span', {className:'toggle-slider'}));
+        loreToggle.appendChild(lt);
+        loreRow.appendChild(loreToggle);
+        return loreRow;
+      })(),
+    ], {defaultOpen: false}));
+
+    // ── Navigation ──
+    wrap.appendChild(buildNavBtns(
+      () => { state.step = 1; saveState(); render(); },
+      () => {
+        if (!state.name.trim()) { alert('Please enter a character name.'); return; }
+        if ((state.guidedVision||'').trim().length < 10) { alert('Please write at least a short character vision (10+ characters).'); return; }
+        state.step = 3; saveState(); render(); startGuidedGeneration();
+      },
+      'Generate Character'
+    ));
+    c.appendChild(wrap);
+  }
+
+  function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; } return h; }
+
+  async function expandNarrative() {
+    if (state.isExpandingNarrative) return;
+    state.isExpandingNarrative = true; saveState(); renderStep2_Guided();
+    try {
+      const body = {
+        modelId: state.modelId, name: state.name, age: state.age, sex: state.sex,
+        guidedVision: state.guidedVision, guidedAppearance: state.guidedAppearance,
+        guidedHair: state.guidedHair, guidedFeatures: state.guidedFeatures, guidedRace: state.guidedRace,
+        guidedPersonality: state.guidedPersonality, guidedSpeech: state.guidedSpeech, guidedSecret: state.guidedSecret,
+        guidedOrigin: state.guidedOrigin, guidedSetting: state.guidedSetting, guidedTone: state.guidedTone,
+        guidedRelDynamic: state.guidedRelDynamic, guidedRelScenario: state.guidedRelScenario,
+        nsfwEnabled: state.nsfwEnabled,
+        guidedNsfwBody: state.guidedNsfwBody, guidedNsfwExp: state.guidedNsfwExp,
+        guidedNsfwDom: state.guidedNsfwDom, guidedNsfwKinks: state.guidedNsfwKinks,
+        guidedNsfwClothing: state.guidedNsfwClothing, guidedNsfwPersonality: state.guidedNsfwPersonality,
+      };
+      let rawTokens = '';
+      const result = await streamLlmSSE('/api/chargen/expand', body, (token) => { rawTokens += token; });
+      if (result && result.expanded) {
+        // Show accept/discard modal
+        showExpandModal(result.expanded);
+      } else {
+        alert('Description generation failed: ' + (result?.error || 'No response'));
+      }
+    } catch(e) {
+      alert('Description generation failed: ' + e.message);
+    }
+    state.isExpandingNarrative = false; saveState(); renderStep2_Guided();
+  }
+
+  function showExpandModal(expandedText) {
+    // Remove any existing modal
+    const existing = document.querySelector('.cw-modal-overlay');
+    if (existing) existing.remove();
+    const overlay = el('div', {className:'cw-modal-overlay', style:'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px'});
+    const modal = el('div', {style:'background:#1e293b;border-radius:16px;max-width:550px;width:100%;padding:24px;border:1px solid rgba(94,234,212,0.3)'});
+    // Title
+    const titleRow = el('div', {style:'display:flex;align-items:center;gap:8px;margin-bottom:16px'});
+    titleRow.appendChild(el('span', {style:'font-size:20px'}, '✨'));
+    titleRow.appendChild(el('span', {style:'color:#fff;font-size:18px;font-weight:600'}, 'Generated Description'));
+    modal.appendChild(titleRow);
+    modal.appendChild(el('div', {style:'color:rgba(255,255,255,0.3);font-size:12px;margin-bottom:12px'}, 'AI generated this description from your details:'));
+    const preview = el('div', {style:'background:#0f172a;padding:14px;border-radius:10px;border:1px solid rgba(94,234,212,0.3);color:rgba(255,255,255,0.7);font-size:13px;line-height:1.5;max-height:300px;overflow-y:auto;user-select:text'});
+    preview.textContent = expandedText;
+    modal.appendChild(preview);
+    modal.appendChild(el('div', {style:'color:rgba(255,255,255,0.15);font-size:11px;margin-top:8px'}, 'This will replace the current vision text. You can edit it after.'));
+    // Buttons
+    const btnRow = el('div', {style:'display:flex;justify-content:flex-end;gap:12px;margin-top:16px'});
+    const discardBtn = el('button', {className:'cw-btn cw-btn-secondary'}, 'Discard');
+    discardBtn.addEventListener('click', () => overlay.remove());
+    btnRow.appendChild(discardBtn);
+    const useBtn = el('button', {className:'cw-btn cw-btn-primary', style:'background:#0d7377'}, 'Use This');
+    useBtn.addEventListener('click', () => {
+      state.guidedVision = expandedText;
+      saveState();
+      overlay.remove();
+      renderStep2_Guided();
+    });
+    btnRow.appendChild(useBtn);
+    modal.appendChild(btnRow);
+    overlay.appendChild(modal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  }
+
+  async function startGuidedGeneration() {
+    // Assemble guided fields into enriched concept (mirrors Flutter _startGuidedGeneration)
+    const vision = (state.guidedVision || '').trim();
+    const conceptParts = [vision];
+    const addPart = (key, label) => { const v = (state[key]||'').trim(); if (v) conceptParts.push(label + ': ' + v); };
+    addPart('guidedAppearance', 'Physical build');
+    addPart('guidedHair', 'Hair');
+    addPart('guidedFeatures', 'Distinguishing features');
+    addPart('guidedRace', 'Race/Species');
+    addPart('guidedPersonality', 'Personality');
+    addPart('guidedSpeech', 'Speech style');
+    addPart('guidedSecret', 'Hidden depth');
+    addPart('guidedOrigin', 'Background');
+    addPart('guidedSetting', 'Setting');
+    addPart('guidedTone', 'Tone');
+    addPart('guidedRelDynamic', 'Relationship to {{user}}');
+    addPart('guidedRelScenario', 'Opening scenario');
+    if (state.nsfwEnabled) {
+      addPart('guidedNsfwBody', 'Intimate body details');
+      addPart('guidedNsfwExp', 'Sexual experience');
+      addPart('guidedNsfwDom', 'Dominance');
+      addPart('guidedNsfwKinks', 'Turn-ons/kinks');
+      addPart('guidedNsfwClothing', 'Clothing aesthetic');
+      addPart('guidedNsfwPersonality', 'Sexual personality');
+    }
+    const enrichedConcept = conceptParts.join('. ');
+
+    // Use the existing generation flow with the assembled concept
+    state.isGenerating = true; state.genStatus = 'Starting generation...'; state.genPreview = ''; saveState();
+    connectChargenSSE();
+    startGenStatusPoller();
+    const body = {
+      name: state.name, concept: enrichedConcept, keywords: (state.guidedPersonality||'').trim(),
+      age: state.age, sex: state.sex,
+      relationship: (state.guidedRelDynamic||'').trim(),
+      greetingLength: state.greetingLength, altGreetingCount: state.altGreetingCount,
+      greetingTones: state.greetingTones,
+      generateLorebook: state.generateLorebook, loreCategories: state.loreCategories, loreDepth: state.loreDepth,
+      nsfwEnabled: state.nsfwEnabled, generationDetail: state.generationDetail,
+      backstoryNotes: (state.guidedOrigin||'').trim(), artStyle: state.artStyle, personaId: state.personaId,
+      modelId: state.modelId,
+      backstoryOrigin: (state.guidedOrigin||'').trim(),
+      backstoryTone: (state.guidedTone||'').trim(),
+      backstoryEra: (state.guidedSetting||'').trim(),
+    };
+    const res = await apiJson('/api/chargen/generate', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+    });
+    if (!res || res.error) {
+      state.genStatus = 'Error: ' + (res?.error || 'Failed to start generation');
+      state.isGenerating = false; saveState(); updateGenUI();
+      stopGenStatusPoller();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // STEP 2 (Automated): Configure — EXACT Flutter layout order
   // 1. NSFW toggle  2. Archetypes  3. Name  4. Age/Sex
   // 5. Appearance (race,body,hair,skin,features,measurements,NSFW chest/butt)
   // 6. Relationship  7. NSFW Sexual Traits  8. Personality Keywords
@@ -566,7 +1019,7 @@
   // 12. Lorebook  13. Persona  14. Greeting Tones
   // 15. Message Length / Alt Greetings  16. Art Style
   // ═══════════════════════════════════════════════════════════
-  function renderStep1() {
+  function renderStep2_Automated() {
     const c = $('#cw-content');
     c.innerHTML = '';
 
@@ -576,7 +1029,7 @@
     // ── 1. NSFW Toggle ──
     const nsfwSec = el('div', {className:'cw-section cw-nsfw-toggle-section'});
     nsfwSec.appendChild(buildToggleRow('🔞 Enable NSFW Options', state.nsfwEnabled, v => {
-      state.nsfwEnabled = v; saveState(); renderStep1();
+      state.nsfwEnabled = v; saveState(); renderStep2_Automated();
     }, 'Unlock spicy appearance & relationship options'));
     c.appendChild(nsfwSec);
 
@@ -592,7 +1045,7 @@
         state.keywords = ARCHETYPES[opt].keywords;
         if (!state.name) state.name = opt;
       }
-      saveState(); renderStep1();
+      saveState(); renderStep2_Automated();
     }, {archetype:true}));
     c.appendChild(archSec);
 
@@ -805,7 +1258,7 @@
       const newMax = v + 1;
       while (state.greetingTones.length > newMax) state.greetingTones.pop();
       saveState();
-      renderStep1(); // Re-render to update hint text and chips
+      renderStep2_Automated(); // Re-render to update hint text and chips
     }));
     greetSec.appendChild(greetRow);
     c.appendChild(greetSec);
@@ -818,10 +1271,10 @@
 
     // Navigation
     c.appendChild(buildNavBtns(
-      () => { state.step = 0; saveState(); render(); },
+      () => { state.step = 1; saveState(); render(); },
       () => {
         if (!state.name.trim()) { alert('Please enter a character name.'); return; }
-        state.step = 2; saveState(); render(); startGeneration();
+        state.step = 3; saveState(); render(); startGeneration();
       },
       'Generate ✨'
     ));
@@ -830,7 +1283,7 @@
   // ═══════════════════════════════════════════════════════════
   // STEP 2: Generating
   // ═══════════════════════════════════════════════════════════
-  function renderStep2() {
+  function renderStep3() {
     const c = $('#cw-content');
     c.innerHTML = '';
     const wrap = el('div', {className:'cw-gen-wrap'});
@@ -840,7 +1293,7 @@
     wrap.appendChild(progressBar);
     wrap.appendChild(el('div', {className:'cw-gen-preview', id:'cw-gen-preview'}, state.genPreview || 'Waiting for AI response...'));
     const cancelBtn = el('button', {className:'cw-btn cw-btn-danger', style:'margin-top:20px'}, 'Cancel');
-    cancelBtn.addEventListener('click', () => { disconnectChargenSSE(); stopGenStatusPoller(); state.step = 1; state.isGenerating = false; saveState(); render(); });
+    cancelBtn.addEventListener('click', () => { disconnectChargenSSE(); stopGenStatusPoller(); state.step = 2; state.isGenerating = false; saveState(); render(); });
     wrap.appendChild(cancelBtn);
     c.appendChild(wrap);
   }
@@ -902,7 +1355,7 @@
           state.avatarBase64 = '';
           state.lorebookEnabled = {};
           if (data.card.lorebook) data.card.lorebook.forEach((e,i) => { state.lorebookEnabled[i] = e.enabled !== false; });
-          state.isGenerating = false; state.step = 3;
+          state.isGenerating = false; state.step = 4;
           saveState(); disconnectChargenSSE(); stopGenStatusPoller(); render();
           // Auto-start avatar generation
           setTimeout(() => tryAutoAvatar(), 500);
@@ -943,7 +1396,7 @@
             state.avatarBase64 = '';
             state.lorebookEnabled = {};
             if (data.card.lorebook) data.card.lorebook.forEach((e,i) => { state.lorebookEnabled[i] = e.enabled !== false; });
-            state.isGenerating = false; state.step = 3;
+            state.isGenerating = false; state.step = 4;
             saveState(); disconnectChargenSSE(); render();
             // Auto-start avatar generation
             setTimeout(() => tryAutoAvatar(), 500);
@@ -970,7 +1423,7 @@
   // ═══════════════════════════════════════════════════════════
   // STEP 3: Review
   // ═══════════════════════════════════════════════════════════
-  function renderStep3() {
+  function renderStep4() {
     const c = $('#cw-content');
     c.innerHTML = '';
     const card = state.generatedCard;
@@ -1039,7 +1492,7 @@
         const card2 = el('div', {className:'cw-lore-entry' + (enabled?'':' disabled')});
         const cb = el('input', {type:'checkbox'});
         cb.checked = enabled;
-        cb.addEventListener('change', () => { state.lorebookEnabled[i] = cb.checked; saveState(); renderStep3(); });
+        cb.addEventListener('change', () => { state.lorebookEnabled[i] = cb.checked; saveState(); renderStep4(); });
         card2.appendChild(cb);
         const info = el('div', {style:'flex:1;min-width:0'});
         info.appendChild(el('div', {className:'cw-lore-name'}, entry.name || 'Untitled'));
@@ -1062,7 +1515,7 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ prompt: state.imagePrompt }),
     });
-    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep3(); }
+    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep4(); }
     else {
       // Show friendly inline message instead of ugly alert
       const avatarBox = document.querySelector('#cw-avatar-box');
@@ -1085,7 +1538,7 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ prompt: state.imagePrompt }),
     });
-    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep3(); }
+    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep4(); }
     // On failure: silently do nothing — user can see the prompt and generate manually
   }
 
@@ -1271,6 +1724,7 @@
   function resetState() {
     const fresh = {
       step:0, modelId:'', modelsLoaded:false, availableModels:[],
+      creatorMode:'automated',
       nsfwEnabled:false, selectedArchetype:'',
       name:'', age:'', sex:'',
       race:'', customRace:'', bodyType:'', hairLength:'', hairStyle:'', skinTone:'',
@@ -1285,6 +1739,13 @@
       generateLorebook:true, loreCategories:[], loreDepth:'Standard',
       personaId:'', greetingTones:['Neutral'],
       greetingLength:'Medium (2-4 paragraphs)', altGreetingCount:2, artStyle:'Anime',
+      guidedVision:'', guidedAppearance:'', guidedHair:'', guidedFeatures:'', guidedRace:'',
+      guidedPersonality:'', guidedSpeech:'', guidedSecret:'',
+      guidedOrigin:'', guidedSetting:'', guidedTone:'',
+      guidedRelDynamic:'', guidedRelScenario:'',
+      guidedNsfwBody:'', guidedNsfwExp:'', guidedNsfwDom:'',
+      guidedNsfwKinks:'', guidedNsfwClothing:'', guidedNsfwPersonality:'',
+      isExpandingNarrative:false,
       isGenerating:false, genStatus:'', genPreview:'',
       generatedCard:null, avatarBase64:'', imagePrompt:'', lorebookEnabled:{},
       _open:{},
@@ -1294,7 +1755,7 @@
 
   async function generateDescription() {
     if (state.isDescribing) return;
-    state.isDescribing = true; saveState(); renderStep1();
+    state.isDescribing = true; saveState(); renderStep2_Automated();
     try {
       const body = {
         selectedArchetype: state.selectedArchetype, name: state.name, keywords: state.keywords,
@@ -1324,12 +1785,18 @@
     } catch(e) {
       alert('Description generation failed: ' + e.message);
     }
-    state.isDescribing = false; saveState(); renderStep1();
+    state.isDescribing = false; saveState(); renderStep2_Automated();
+  }
+
+  /** Re-render the current config step (works for both automated and guided modes). */
+  function rerenderConfigStep() {
+    if (state.creatorMode === 'guided') renderStep2_Guided();
+    else renderStep2_Automated();
   }
 
   async function randomizeName() {
     if (state.isRandomizingName) return;
-    state.isRandomizingName = true; saveState(); renderStep1();
+    state.isRandomizingName = true; saveState(); rerenderConfigStep();
     try {
       let rawTokens = '';
       const result = await streamLlmSSE('/api/chargen/randomname', {
@@ -1346,7 +1813,7 @@
     } catch(e) {
       console.error('[chargen] randomize name failed', e);
     }
-    state.isRandomizingName = false; saveState(); renderStep1();
+    state.isRandomizingName = false; saveState(); rerenderConfigStep();
   }
 
   /** Read an SSE stream from a POST endpoint. Calls onToken for each token event.
@@ -1474,7 +1941,7 @@
   }
 
   // ── Main ──
-  function render() { updateStepIndicators(); switch(state.step) { case 0: renderStep0(); break; case 1: renderStep1(); break; case 2: renderStep2(); break; case 3: renderStep3(); break; } }
+  function render() { updateStepIndicators(); switch(state.step) { case 0: renderStep0(); break; case 1: renderStep1_ModeSelect(); break; case 2: state.creatorMode === 'guided' ? renderStep2_Guided() : renderStep2_Automated(); break; case 3: renderStep3(); break; case 4: renderStep4(); break; } }
   function init() { loadState(); render(); }
   window.ChargenModule = { init, resetState };
 })();

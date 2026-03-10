@@ -224,8 +224,12 @@ class UpdateService extends ChangeNotifier {
   }
 
   Future<void> _launchWindowsInstaller(String path) async {
+    // Use /SILENT (shows license page) for 0.8→0.9 upgrades (GPL→AGPL change)
+    // Use /VERYSILENT (fully silent) for same-license upgrades
+    final needsLicenseAcceptance = _currentVersion.startsWith('0.8');
+    final silentFlag = needsLicenseAcceptance ? '/SILENT' : '/VERYSILENT';
     await Process.start(path, [
-      '/VERYSILENT',
+      silentFlag,
       '/SUPPRESSMSGBOXES',
       '/NORESTART',
       '/CLOSEAPPLICATIONS',

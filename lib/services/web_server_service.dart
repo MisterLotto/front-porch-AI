@@ -238,6 +238,7 @@ class WebServerService extends ChangeNotifier {
     router.get('/api/chargen/stream', _handleChargenStream);
     router.post('/api/chargen/avatar', _handleChargenAvatar);
     router.post('/api/chargen/save', _handleChargenSave);
+    router.post('/api/chargen/expand', _handleChargenExpand);
 
     // ── Cloud sync routes ──
     router.get('/api/sync/status', _handleGetSyncStatus);
@@ -3214,6 +3215,91 @@ class WebServerService extends ChangeNotifier {
       );
     } catch (e) {
       return _errorResponse(500, 'Description generation failed: $e');
+    }
+  }
+
+  /// POST /api/chargen/expand — Stream a guided narrative expansion.
+  /// Gathers all guided-mode field values and asks the LLM to weave them
+  /// into a cohesive 2-3 paragraph character description (mirrors Flutter
+  /// _expandNarrative).
+  Future<shelf.Response> _handleChargenExpand(shelf.Request request) async {
+    if (_llmProvider == null) return _errorResponse(503, 'LLM provider not available');
+    try {
+      final body = jsonDecode(await request.readAsString()) as Map<String, dynamic>;
+      final modelId = body['modelId']?.toString() ?? '';
+
+      final llmService = _resolveChargenLlm(modelId, 'ChargenExpand');
+      if (llmService == null || !llmService.isReady) {
+        return _errorResponse(503, 'LLM service is not ready. Select a model first.');
+      }
+
+      // Gather all filled-in fields (mirrors Flutter _expandNarrative)
+      final details = <String>[];
+      void addIfPresent(String key, String label) {
+        final v = body[key]?.toString() ?? '';
+        if (v.isNotEmpty) details.add('$label: $v');
+      }
+      addIfPresent('name', 'Name');
+      addIfPresent('age', 'Age');
+      addIfPresent('sex', 'Sex');
+      addIfPresent('guidedAppearance', 'Build/Body');
+      addIfPresent('guidedHair', 'Hair');
+      addIfPresent('guidedFeatures', 'Features');
+      addIfPresent('guidedRace', 'Race/Species');
+      addIfPresent('guidedPersonality', 'Personality');
+      addIfPresent('guidedSpeech', 'Speech style');
+      addIfPresent('guidedSecret', 'Hidden depth');
+      addIfPresent('guidedOrigin', 'Background');
+      addIfPresent('guidedSetting', 'Setting');
+      addIfPresent('guidedTone', 'Tone');
+      addIfPresent('guidedRelDynamic', 'Relationship to {{user}}');
+      addIfPresent('guidedRelScenario', 'Opening scenario');
+      final nsfw = body['nsfwEnabled'] == true;
+      if (nsfw) {
+        addIfPresent('guidedNsfwBody', 'Intimate body');
+        addIfPresent('guidedNsfwExp', 'Experience');
+        addIfPresent('guidedNsfwDom', 'Dominance');
+        addIfPresent('guidedNsfwKinks', 'Kinks');
+        addIfPresent('guidedNsfwClothing', 'Clothing');
+        addIfPresent('guidedNsfwPersonality', 'Sexual personality');
+      }
+
+      final userVision = body['guidedVision']?.toString() ?? '';
+      if (details.length <= 1 && userVision.isEmpty) {
+        return _errorResponse(400, 'Please fill in at least a few fields before generating.');
+      }
+
+      final detailsBlock = details.join('\n');
+      final visionBlock = userVision.isNotEmpty
+          ? '\n\nUser\'s additional notes/vision:\n"$userVision"'
+          : '';
+
+      final prompt = 'A user is creating a roleplay character using a guided form. They filled in '
+          'various fields with details about the character. Generate a vivid, cohesive character '
+          'description that weaves ALL of these details together into 2-3 flowing paragraphs. '
+          'PRESERVE the user\'s creative intent — do not override their ideas with generic tropes. '
+          'If they provided NSFW details, include them tastefully in the description.\n\n'
+          'Character details from form:\n$detailsBlock$visionBlock\n\n'
+          'Output ONLY a JSON object with exactly one key: "expanded". The value should be '
+          'the complete character description in third person. No markdown, no explanation, just the JSON:';
+
+      return _streamingLlmResponse(
+        llmService,
+        GenerationParams(
+          prompt: prompt,
+          maxLength: 1024,
+          minLength: 64,
+          temperature: 1.0,
+          repeatPenalty: 1.1,
+          minP: 0.05,
+          reasoningEnabled: false,
+          stopSequences: ['<END>'],
+        ),
+        'expanded',
+        const Duration(seconds: 120),
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Narrative expansion failed: $e');
     }
   }
 

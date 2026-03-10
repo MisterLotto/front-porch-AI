@@ -6,6 +6,8 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/database_merge_service.dart';
+import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Information about a remote file.
 class RemoteFileInfo {
@@ -106,6 +108,22 @@ class CloudSyncService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // One-time cloud data purge after 0.9.0 upgrade.
+      // The old cloud DB is schema v1/v2/v3 with different UUIDs — merging
+      // it would cause duplicates. Purge it and do a fresh upload.
+      final prefs = await SharedPreferences.getInstance();
+      final didPurge = !(prefs.getBool('cloud_purged_for_0.9.0') ?? false);
+      if (didPurge) {
+        debugPrint('[CloudSync] Purging stale cloud data for 0.9.0 fresh start');
+        try {
+          await purgeCloudData();
+        } catch (e) {
+          debugPrint('[CloudSync] Purge failed (non-fatal): $e');
+        }
+        await prefs.setBool('cloud_purged_for_0.9.0', true);
+        debugPrint('[CloudSync] Cloud purge complete — uploading fresh data');
+      }
+
       // Ensure remote directories exist
       await _provider!.ensureDir('/FrontPorchAI');
       await _provider!.ensureDir('/FrontPorchAI/characters');
@@ -116,10 +134,26 @@ class CloudSyncService extends ChangeNotifier {
       );
       notifyListeners();
 
-      // Sync the database file (replaces per-file chat/folder/persona sync)
-      debugPrint('[CloudSync] Starting database sync...');
-      await _syncDatabase();
-      debugPrint('[CloudSync] Database sync complete.');
+      if (didPurge) {
+        // After purge, skip normal _syncDatabase (version mismatches confuse it).
+        // Just checkpoint and upload the local DB directly.
+        final localPath = AppDatabase.dbFilePath;
+        if (localPath != null) {
+          final db = await AppDatabase.instance();
+          await db.bumpSyncVersion();
+          await db.checkpoint();
+          await _provider!.uploadFile(localPath, '/FrontPorchAI/front_porch.db');
+          _syncedFiles++;
+          _processedFiles++;
+          notifyListeners();
+          debugPrint('[CloudSync] Fresh upload complete after purge');
+        }
+      } else {
+        // Normal sync flow
+        debugPrint('[CloudSync] Starting database sync...');
+        await _syncDatabase();
+        debugPrint('[CloudSync] Database sync complete.');
+      }
 
       // Sync characters (bi-directional for PNGs)
       debugPrint('[CloudSync] Starting character file sync...');
@@ -201,6 +235,10 @@ class CloudSyncService extends ChangeNotifier {
 
     try {
       await _provider!.deleteDirectory('/FrontPorchAI');
+      // Clear any cached folder IDs — they all point to deleted folders now
+      if (_provider is GoogleDriveProvider) {
+        (_provider as GoogleDriveProvider).clearFolderCache();
+      }
       debugPrint('[CloudSync] Purged all cloud data (/FrontPorchAI deleted)');
     } catch (e) {
       debugPrint('[CloudSync] Purge error: $e');
@@ -694,15 +732,32 @@ class CloudSyncService extends ChangeNotifier {
       final localPath = path.join(localDir, relativePath.replaceAll('/', Platform.pathSeparator));
       final localFile = File(localPath);
 
+      bool shouldDownload = false;
       if (!await localFile.exists()) {
         await localFile.parent.create(recursive: true);
-        await _provider!.downloadFile(remoteInfo.remotePath, localPath);
-        _syncedFiles++;
+        shouldDownload = true;
       } else if (remoteInfo.lastModified != null) {
         final localStat = await localFile.stat();
         if (remoteInfo.lastModified!.isAfter(localStat.modified)) {
-          await _provider!.downloadFile(remoteInfo.remotePath, localPath);
+          shouldDownload = true;
+        }
+      }
+
+      if (shouldDownload) {
+        // Download to a temp file first, then rename on success.
+        // This prevents data loss if the download is interrupted.
+        final tempPath = '$localPath.tmp';
+        try {
+          await _provider!.downloadFile(remoteInfo.remotePath, tempPath);
+          final tempFile = File(tempPath);
+          if (await tempFile.exists()) {
+            await tempFile.rename(localPath);
+          }
           _syncedFiles++;
+        } catch (e) {
+          // Clean up partial temp file on failure
+          try { await File(tempPath).delete(); } catch (_) {}
+          debugPrint('[CloudSync] Download failed for $relativePath: $e');
         }
       }
       _processedFiles++;

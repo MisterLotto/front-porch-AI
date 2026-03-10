@@ -186,20 +186,27 @@ class GoogleDriveProvider extends CloudStorageProvider {
   Future<void> _uploadFileInternal(String localPath, String remotePath) async {
     final fileName = remotePath.split('/').last;
     final parentPath = remotePath.substring(0, remotePath.lastIndexOf('/'));
+    debugPrint('[GDrive] Upload: resolving parent folder $parentPath');
     final parentId = await _getOrCreateFolderId(parentPath);
+    debugPrint('[GDrive] Upload: parent folder ID = $parentId');
 
     // Check if file already exists
+    debugPrint('[GDrive] Upload: checking for existing $fileName');
     final existing = await _driveApi!.files.list(
       q: "'$parentId' in parents and name = '$fileName' and trashed = false",
       spaces: 'appDataFolder',
       $fields: 'files(id)',
     );
+    debugPrint('[GDrive] Upload: found ${existing.files?.length ?? 0} existing files');
 
     final localFile = File(localPath);
-    final media = drive.Media(localFile.openRead(), await localFile.length());
+    final fileSize = await localFile.length();
+    debugPrint('[GDrive] Upload: $fileName ($fileSize bytes)');
+    final media = drive.Media(localFile.openRead(), fileSize);
 
     if (existing.files != null && existing.files!.isNotEmpty) {
       // Update existing file
+      debugPrint('[GDrive] Upload: updating existing file ${existing.files!.first.id}');
       await _driveApi!.files.update(
         drive.File()..modifiedTime = (await localFile.stat()).modified,
         existing.files!.first.id!,
@@ -207,6 +214,7 @@ class GoogleDriveProvider extends CloudStorageProvider {
       );
     } else {
       // Create new file
+      debugPrint('[GDrive] Upload: creating new file in $parentId');
       await _driveApi!.files.create(
         drive.File()
           ..name = fileName
@@ -215,6 +223,7 @@ class GoogleDriveProvider extends CloudStorageProvider {
         uploadMedia: media,
       );
     }
+    debugPrint('[GDrive] Upload: $fileName complete');
   }
 
   @override
@@ -287,6 +296,13 @@ class GoogleDriveProvider extends CloudStorageProvider {
     } catch (e) {
       debugPrint('Google Drive deleteDirectory error: $e');
     }
+  }
+
+  /// Clear all cached folder IDs. Call after purging cloud data
+  /// to prevent stale references to deleted folders.
+  void clearFolderCache() {
+    _folderIdCache.clear();
+    debugPrint('[GDrive] Folder ID cache cleared');
   }
 
   /// Invalidate all cached folder IDs at or below the given path.

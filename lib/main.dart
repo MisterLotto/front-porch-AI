@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
@@ -34,6 +35,8 @@ import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.da
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/database/data_migration_service.dart';
 import 'package:front_porch_ai/services/backup_service.dart';
+import 'package:front_porch_ai/services/db_reunification_service.dart';
+
 
 import 'package:front_porch_ai/ui/widgets/setup_overlay.dart';
 import 'package:front_porch_ai/ui/widgets/remote_lock_overlay.dart';
@@ -263,13 +266,23 @@ class _MyAppState extends State<MyApp> with WindowListener {
   int _migrationCurrent = 0;
   int _migrationTotal = 1;
 
+  // Reunification overlay state
+  bool _isReunifying = false;
+  String _reunifyStep = '';
+  int _reunifyCurrent = 0;
+  final int _reunifyTotal = 5;
+  // Inline import choice (replaces showDialog to avoid MaterialLocalizations issue)
+  Completer<bool>? _importChoiceCompleter;
+  List<String> _importItems = [];
+
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    // Run migration after first frame if needed
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _runMigrationIfNeeded();
+    // Run migration after first frame, then reunification if needed
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _runMigrationIfNeeded();
+      await _runReunificationIfNeeded();
     });
   }
 
@@ -372,6 +385,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
                     const RemoteLockOverlay(),
                     if (_isMigrating)
                       _buildMigrationOverlay(),
+                    if (_isReunifying)
+                      _buildReunificationOverlay(),
                   ],
                 ),
               );
@@ -497,6 +512,327 @@ class _MyAppState extends State<MyApp> with WindowListener {
     );
   }
 
+  // ── Reunification ──────────────────────────────────────────────────
+
+  Future<void> _runReunificationIfNeeded() async {
+    final dbDir = AppDatabase.dbDirPath;
+    if (dbDir == null) return;
+    if (await DbReunificationService.isComplete()) return;
+
+    // Check if the stable backup exists (created by database.dart during promoteBetaDb)
+    final stableBackupExists = File('$dbDir/front_porch.db.pre-0.9.0-backup').existsSync();
+    if (!stableBackupExists) return;
+
+    setState(() {
+      _isReunifying = true;
+      _reunifyStep = 'Backing up your databases...';
+      _reunifyCurrent = 1;
+    });
+
+    try {
+      // Step 1: Backups (already done in database.dart, but show the step)
+      await Future.wait([
+        Future.value(), // backups already created
+        Future.delayed(const Duration(seconds: 3)),
+      ]);
+
+      // Step 2: Preparing data
+       if (mounted) {
+        setState(() {
+          _reunifyStep = 'Preparing your data...';
+          _reunifyCurrent = 2;
+        });
+      }
+      final db = Provider.of<AppDatabase>(context, listen: false);
+      await Future.wait([
+        BackupService.purgeAllBackups(), // purge old v1/v2 schema backups
+        db.purgeDeletedRows(),           // hard-delete soft-deleted bloat + VACUUM
+        Future.delayed(const Duration(seconds: 3)),
+      ]);
+
+      // Step 3: Scanning for unique data
+      if (mounted) {
+        setState(() {
+          _reunifyStep = 'Scanning for unique data...';
+          _reunifyCurrent = 3;
+        });
+      }
+
+      late final ReunificationDiff diff;
+      await Future.wait([
+        DbReunificationService.diffStableOnly(db, dbDir).then((d) => diff = d),
+        Future.delayed(const Duration(seconds: 3)),
+      ]);
+
+      if (diff.isEmpty) {
+        // Nothing to import — show success and finish
+        if (mounted) {
+          setState(() {
+            _reunifyStep = 'All data accounted for ✅';
+            _reunifyCurrent = 5;
+          });
+        }
+        await Future.delayed(const Duration(seconds: 3));
+        await DbReunificationService.markComplete();
+        if (mounted) setState(() => _isReunifying = false);
+        return;
+      }
+
+      // Step 4: Show import dialog
+      if (mounted) {
+        setState(() {
+          _reunifyStep = 'Found unique data in your stable install';
+          _reunifyCurrent = 4;
+        });
+      }
+
+      // Build the description of what was found
+      final items = <String>[];
+      if (diff.characters.isNotEmpty) {
+        final names = diff.characters.map((c) => c.name).join(', ');
+        final sessions = diff.characters.fold<int>(0, (sum, c) => sum + c.sessionCount);
+        items.add('${diff.characters.length} character(s): $names');
+        if (sessions > 0) items.add('$sessions chat session(s)');
+      }
+      if (diff.groups.isNotEmpty) {
+        items.add('${diff.groups.length} group(s): ${diff.groups.join(', ')}');
+      }
+      if (diff.personas.isNotEmpty) {
+        items.add('${diff.personas.length} persona(s): ${diff.personas.join(', ')}');
+      }
+      if (diff.worlds.isNotEmpty) {
+        items.add('${diff.worlds.length} world(s): ${diff.worlds.join(', ')}');
+      }
+
+      // Show inline import choice inside the overlay (not showDialog)
+      final completer = Completer<bool>();
+      if (mounted) {
+        setState(() {
+          _importItems = items;
+          _importChoiceCompleter = completer;
+        });
+      }
+      final shouldImport = await completer.future;
+
+      // Step 5: Import or finish
+      // Clear the choice UI first
+      if (mounted) {
+        setState(() {
+          _importChoiceCompleter = null;
+          _importItems = [];
+        });
+      }
+
+      if (shouldImport) {
+        if (mounted) {
+          final totalItems = diff.totalItems;
+          setState(() {
+            _reunifyStep = 'Importing $totalItems item(s)...';
+            _reunifyCurrent = 5;
+          });
+        }
+
+        await Future.wait([
+          DbReunificationService.importStableItems(db, dbDir, diff),
+          Future.delayed(const Duration(seconds: 3)),
+        ]);
+
+        // Reload all repositories
+        if (mounted) {
+          final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+          final folderService = Provider.of<FolderService>(context, listen: false);
+          final personaService = Provider.of<UserPersonaService>(context, listen: false);
+          final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+          final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+          final chatService = Provider.of<ChatService>(context, listen: false);
+          await charRepo.loadCharacters();
+          await charRepo.cleanOrphanedPngs();
+          await folderService.reload();
+          await personaService.reload();
+          await groupRepo.reload();
+          await worldRepo.loadWorlds();
+          chatService.clearChat();
+        }
+
+        if (mounted) {
+          setState(() => _reunifyStep = 'Import complete ✅');
+        }
+        await Future.delayed(const Duration(seconds: 3));
+      } else {
+        if (mounted) {
+          setState(() {
+            _reunifyStep = 'Finishing up...';
+            _reunifyCurrent = 5;
+          });
+        }
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      await DbReunificationService.markComplete();
+    } catch (e) {
+      debugPrint('[Reunification] Error: $e');
+      // Mark complete anyway to avoid infinite retry loops
+      await DbReunificationService.markComplete();
+    } finally {
+      if (mounted) setState(() => _isReunifying = false);
+    }
+  }
+
+  Widget _buildReunificationOverlay() {
+    return Positioned.fill(
+      child: Material(
+        color: const Color(0xFF0F172A),
+        child: Center(
+          child: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // App icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.blueAccent.shade700, Colors.cyanAccent.shade400],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.merge_type_rounded, size: 40, color: Colors.white),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'Upgrading to v0.9.0',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Merging your beta and stable databases\ninto a single unified database.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Inline import choice (shown at step 4)
+                if (_importChoiceCompleter != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Import Stable Data?',
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'We found data in your stable v0.8 install that isn\'t in your v0.9 database:',
+                          style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+                        ),
+                        const SizedBox(height: 12),
+                        ..._importItems.map((item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('• ', style: TextStyle(color: Colors.blueAccent, fontSize: 13)),
+                              Expanded(
+                                child: Text(item, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                              ),
+                            ],
+                          ),
+                        )),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your v0.9 data is safe regardless of your choice.',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => _importChoiceCompleter?.complete(false),
+                              child: const Text('Skip', style: TextStyle(color: Colors.white38)),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => _importChoiceCompleter?.complete(true),
+                              icon: const Icon(Icons.download_rounded, size: 18),
+                              label: const Text('Import'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blueAccent,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  // Step name
+                  Text(
+                    _reunifyStep,
+                    style: TextStyle(
+                      color: Colors.blueAccent.shade100,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: _reunifyTotal > 0 ? _reunifyCurrent / _reunifyTotal : null,
+                      minHeight: 8,
+                      backgroundColor: Colors.white.withValues(alpha: 0.1),
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent.shade200),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Step counter
+                  Text(
+                    'Step $_reunifyCurrent of $_reunifyTotal',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _checkForUpdates(BuildContext context) async {
     final updateService = Provider.of<UpdateService>(context, listen: false);
     await updateService.initialize();
@@ -512,6 +848,11 @@ class _MyAppState extends State<MyApp> with WindowListener {
   }
 
   Future<void> _runCloudSync(BuildContext context) async {
+    // Wait for reunification to finish before syncing — they share the DB
+    while (_isReunifying) {
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
     // Pre-release builds must not sync to prevent schema version conflicts
     if (isPreRelease) {
       debugPrint('[CloudSync] Skipped — pre-release build uses separate beta DB');
@@ -557,6 +898,10 @@ class _MyAppState extends State<MyApp> with WindowListener {
       // Safety net: backup DB before every cloud sync
       await BackupService.createBackup();
       await BackupService.pruneBackups();
+
+      // Purge any accumulated soft-deleted rows before sync
+      final db = await AppDatabase.instance();
+      await db.purgeDeletedRows();
 
       await syncService.fullSync(chatsPath, charactersPath);
 
