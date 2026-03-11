@@ -90,15 +90,103 @@
     // TEXT FORMATTING — matches _StyledTextController
     // ═══════════════════════════════════════════════════════════
 
+    // ── Image consent tracking ──
+    // Stores character IDs that have been consented for external images.
+    // Persists in localStorage so consent survives page reloads.
+    const IMAGE_CONSENT_KEY = 'image_consent_chars';
+    function getImageConsent() {
+        try { return JSON.parse(localStorage.getItem(IMAGE_CONSENT_KEY) || '[]'); } catch { return []; }
+    }
+    function setImageConsent(charId) {
+        const list = getImageConsent();
+        if (!list.includes(charId)) { list.push(charId); localStorage.setItem(IMAGE_CONSENT_KEY, JSON.stringify(list)); }
+    }
+    function hasImageConsent(charId) { return getImageConsent().includes(charId); }
+
+    // Pending image loads — URLs that have been checked as cached and can load without consent
+    const _cachedImageUrls = new Set();
+
     function formatText(text) {
         if (!text) return '';
         let html = esc(text);
+        // Detect ![alt](url) image markdown BEFORE quote/action formatting
+        // We work on the escaped text, so brackets/parens are literal
+        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
+            const charId = currentCharacterId || '';
+            const consented = hasImageConsent(charId);
+            const cached = _cachedImageUrls.has(url);
+            if (consented || cached) {
+                // Consent given or image already cached — render inline
+                if (!consented && cached) setImageConsent(charId); // auto-consent for cached
+                const proxyUrl = `/api/image-cache/serve?url=${encodeURIComponent(url)}&token=${encodeURIComponent(token || '')}`;
+                return `<div class="chat-inline-img-wrap"><img class="chat-inline-img" src="${proxyUrl}" alt="${alt}" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'img-error\\'>⚠️ Failed to load image</span>'"></div>`;
+            }
+            // No consent — show placeholder with load button
+            return `<div class="chat-img-consent" data-url="${esc(url)}" data-alt="${esc(alt)}">
+                <div class="img-consent-icon">🖼️</div>
+                <div class="img-consent-text">External image detected</div>
+                <button class="btn btn-sm img-consent-btn" onclick="window._showImageConsentDialog('${esc(url)}')">View Image</button>
+            </div>`;
+        });
         // Quotes: "text" → amber
         html = html.replace(/&quot;([^&]*?)&quot;/g, '<span class="quote">"$1"</span>');
         html = html.replace(/"([^"]*?)"/g, '<span class="quote">"$1"</span>');
         // Actions: *text* → blue italic
         html = html.replace(/\*([^*]+?)\*/g, '<span class="action">*$1*</span>');
         return html;
+    }
+
+    // Show the consent dialog for external images
+    window._showImageConsentDialog = function(url) {
+        const charId = currentCharacterId || '';
+
+        // First check if already cached on server — skip consent if so
+        api(`/api/image-cache/check?url=${encodeURIComponent(url)}`).then(res => {
+            if (res && res.cached) {
+                _cachedImageUrls.add(url);
+                setImageConsent(charId);
+                pollChatState(); // Re-render to show the image
+                return;
+            }
+            // Not cached — show warning dialog
+            _showImageWarningModal(charId, url);
+        }).catch(() => {
+            _showImageWarningModal(charId, url);
+        });
+    };
+
+    function _showImageWarningModal(charId, url) {
+        let overlay = $('#image-consent-modal');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'image-consent-modal';
+            overlay.className = 'modal-overlay';
+            document.body.appendChild(overlay);
+        }
+        overlay.innerHTML = `<div class="modal" style="max-width:440px">
+            <div class="modal-title">⚠️ External Image</div>
+            <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">
+                <p style="margin:0 0 8px">This message contains an image from an <strong>unverified external source</strong>.</p>
+                <p style="margin:0 0 8px"><strong>Security risks:</strong></p>
+                <ul style="margin:0 0 8px;padding-left:20px">
+                    <li>Your IP address will be exposed to the image host</li>
+                    <li>PNG files can potentially contain malicious payloads</li>
+                    <li>The host may track when and how often images are viewed</li>
+                </ul>
+                <p style="margin:0;color:var(--text-muted);font-size:11px">Images are proxied through the server and cached locally. This consent applies to all images for this character.</p>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outlined" id="img-consent-cancel">Block</button>
+                <button class="btn btn-primary" id="img-consent-allow">Allow Images</button>
+            </div>
+        </div>`;
+        overlay.classList.add('active');
+        overlay.querySelector('#img-consent-cancel').addEventListener('click', () => overlay.classList.remove('active'));
+        overlay.querySelector('#img-consent-allow').addEventListener('click', () => {
+            setImageConsent(charId);
+            overlay.classList.remove('active');
+            pollChatState(); // Re-render messages with images loaded
+        });
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -2681,6 +2769,19 @@
         if (oaiKey && data.openaiTtsApiKeySet) oaiKey.placeholder = 'Key saved';
         const oaiModel = $('#setting-openai-tts-model');
         if (oaiModel) oaiModel.value = data.openaiTtsModel || 'tts-1';
+        // Show/hide ElevenLabs TTS fields
+        const elFields = $('#elevenlabs-tts-fields');
+        if (elFields) elFields.style.display = (data.ttsEngine === 'elevenlabs') ? 'block' : 'none';
+        const elKey = $('#setting-elevenlabs-key');
+        if (elKey && data.elevenlabsApiKeySet) elKey.placeholder = 'Key saved';
+        const elModel = $('#setting-elevenlabs-model');
+        if (elModel) elModel.value = data.elevenlabsModel || 'eleven_flash_v2_5';
+        const elStab = $('#setting-el-stability');
+        if (elStab) { elStab.value = data.elevenlabsStability ?? 0.5; const v = $('#el-stability-value'); if (v) v.textContent = parseFloat(elStab.value).toFixed(2); }
+        const elSim = $('#setting-el-similarity');
+        if (elSim) { elSim.value = data.elevenlabsSimilarity ?? 0.75; const v = $('#el-similarity-value'); if (v) v.textContent = parseFloat(elSim.value).toFixed(2); }
+        const elStyle = $('#setting-el-style');
+        if (elStyle) { elStyle.value = data.elevenlabsStyle ?? 0.0; const v = $('#el-style-value'); if (v) v.textContent = parseFloat(elStyle.value).toFixed(2); }
 
         // Image Gen
         const igCb = $('#setting-imgen-enabled');
@@ -3164,6 +3265,14 @@
             const rv = $('#tts-rate-value');
             if (rv) rv.textContent = parseFloat($('#setting-tts-rate').value).toFixed(1) + '×';
         });
+
+        // ElevenLabs slider feedback
+        for (const [id, valId] of [['setting-el-stability', 'el-stability-value'], ['setting-el-similarity', 'el-similarity-value'], ['setting-el-style', 'el-style-value']]) {
+            $(`#${id}`)?.addEventListener('input', (e) => {
+                const v = $(`#${valId}`);
+                if (v) v.textContent = parseFloat(e.target.value).toFixed(2);
+            });
+        }
 
         // Save TTS settings
         $('#btn-save-tts')?.addEventListener('click', async () => {

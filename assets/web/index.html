@@ -517,6 +517,7 @@
                   <select id="setting-tts-engine" class="settings-select">
                     <option value="kokoro">Kokoro (Local)</option>
                     <option value="openai">OpenAI TTS (Cloud)</option>
+                    <option value="elevenlabs">ElevenLabs (Premium)</option>
                     <option value="piper">Piper (Legacy)</option>
                   </select>
                 </div>
@@ -555,6 +556,47 @@
                       <option value="tts-1">tts-1</option>
                       <option value="tts-1-hd">tts-1-hd</option>
                     </select>
+                  </div>
+                </div>
+                <div id="elevenlabs-tts-fields" style="display:none;margin-top:8px">
+                  <div class="settings-field">
+                    <label class="field-label">ElevenLabs API Key</label>
+                    <input type="password" id="setting-elevenlabs-key" class="settings-input" placeholder="Enter API key...">
+                  </div>
+                  <div class="settings-field">
+                    <label class="field-label">ElevenLabs Model</label>
+                    <select id="setting-elevenlabs-model" class="settings-select">
+                      <option value="eleven_flash_v2_5">Flash v2.5 — fastest (~75ms)</option>
+                      <option value="eleven_multilingual_v2">Multilingual v2 — 29 languages</option>
+                      <option value="eleven_v3">v3 — best quality</option>
+                    </select>
+                  </div>
+                  <div class="slider-row">
+                    <label class="slider-label">Stability</label>
+                    <input type="range" id="setting-el-stability" min="0" max="1" step="0.05" value="0.5" class="settings-slider">
+                    <span id="el-stability-value" class="slider-value">0.50</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.25);margin:-4px 0 4px">
+                    <span>Expressive</span><span>Consistent</span>
+                  </div>
+                  <div class="slider-row">
+                    <label class="slider-label">Similarity</label>
+                    <input type="range" id="setting-el-similarity" min="0" max="1" step="0.05" value="0.75" class="settings-slider">
+                    <span id="el-similarity-value" class="slider-value">0.75</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.25);margin:-4px 0 4px">
+                    <span>Creative</span><span>Faithful</span>
+                  </div>
+                  <div class="slider-row">
+                    <label class="slider-label">Style</label>
+                    <input type="range" id="setting-el-style" min="0" max="1" step="0.05" value="0.0" class="settings-slider">
+                    <span id="el-style-value" class="slider-value">0.00</span>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,0.25);margin:-4px 0 4px">
+                    <span>Subtle</span><span>Expressive</span>
+                  </div>
+                  <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;color:rgba(255,255,255,0.4);font-size:11px;margin-top:4px">
+                    ☁️ Requires ElevenLabs API key. Free tier: ~10 min/month.
                   </div>
                 </div>
               </div>

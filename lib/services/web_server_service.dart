@@ -49,6 +49,7 @@ import 'package:front_porch_ai/services/character_gen_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:drift/drift.dart' show Value;
 
@@ -281,6 +282,10 @@ class WebServerService extends ChangeNotifier {
     router.post('/api/folders/delete', _handleDeleteFolder);
     router.post('/api/folders/add-character', _handleAddCharToFolder);
     router.post('/api/folders/remove-character', _handleRemoveCharFromFolder);
+
+    // ── Image cache proxy ──
+    router.get('/api/image-cache/check', _handleImageCacheCheck);
+    router.get('/api/image-cache/serve', _handleImageCacheServe);
 
     // ── Static web assets ──
     router.get('/', (shelf.Request request) => _serveWebAsset('index.html'));
@@ -2364,6 +2369,102 @@ class WebServerService extends ChangeNotifier {
       );
     } catch (e) {
       return _errorResponse(500, 'Failed to remove character from folder: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Image Cache Proxy
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Returns the image_cache directory path (same as Flutter app uses).
+  Future<Directory> _getImageCacheDir() async {
+    final appDir = await getApplicationSupportDirectory();
+    final dir = Directory('${appDir.path}/image_cache');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  /// Compute cache filename for a URL — same scheme as Flutter app.
+  String _imageCacheFilename(String url) {
+    final hash = url.hashCode.toRadixString(16);
+    final uri = Uri.tryParse(url);
+    String ext = '.png';
+    if (uri != null && uri.pathSegments.isNotEmpty) {
+      final seg = uri.pathSegments.last.split('.').last.split('?').first;
+      if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].contains(seg.toLowerCase())) {
+        ext = '.$seg';
+      }
+    }
+    return '$hash$ext';
+  }
+
+  /// GET /api/image-cache/check?url=<encoded_url>
+  /// Returns { cached: bool } — checks if URL is already in local image cache.
+  Future<shelf.Response> _handleImageCacheCheck(shelf.Request request) async {
+    final url = request.url.queryParameters['url'];
+    if (url == null || url.isEmpty) {
+      return _errorResponse(400, 'url parameter required');
+    }
+    try {
+      final dir = await _getImageCacheDir();
+      final filename = _imageCacheFilename(url);
+      final file = File('${dir.path}/$filename');
+      return shelf.Response.ok(
+        jsonEncode({'cached': await file.exists()}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Cache check failed: $e');
+    }
+  }
+
+  /// GET /api/image-cache/serve?url=<encoded_url>
+  /// Serves image from cache, downloading and caching first if needed.
+  Future<shelf.Response> _handleImageCacheServe(shelf.Request request) async {
+    final url = request.url.queryParameters['url'];
+    if (url == null || url.isEmpty) {
+      return _errorResponse(400, 'url parameter required');
+    }
+    try {
+      final dir = await _getImageCacheDir();
+      final filename = _imageCacheFilename(url);
+      final file = File('${dir.path}/$filename');
+
+      // Serve from cache if available
+      if (await file.exists()) {
+        final ext = filename.split('.').last.toLowerCase();
+        final mime = {
+          'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+          'gif': 'image/gif', 'webp': 'image/webp', 'svg': 'image/svg+xml',
+        }[ext] ?? 'image/png';
+        return shelf.Response.ok(
+          await file.readAsBytes(),
+          headers: {'Content-Type': mime, 'Cache-Control': 'public, max-age=86400'},
+        );
+      }
+
+      // Download and cache
+      final httpClient = HttpClient();
+      try {
+        final req = await httpClient.getUrl(Uri.parse(url));
+        final response = await req.close();
+        if (response.statusCode != 200) {
+          return _errorResponse(502, 'Upstream returned ${response.statusCode}');
+        }
+        final bytes = await consolidateHttpClientResponseBytes(response);
+        await file.writeAsBytes(bytes);
+
+        final contentType = response.headers.contentType;
+        final mime = contentType != null ? '${contentType.primaryType}/${contentType.subType}' : 'image/png';
+        return shelf.Response.ok(
+          bytes,
+          headers: {'Content-Type': mime, 'Cache-Control': 'public, max-age=86400'},
+        );
+      } finally {
+        httpClient.close();
+      }
+    } catch (e) {
+      return _errorResponse(500, 'Image proxy failed: $e');
     }
   }
 
