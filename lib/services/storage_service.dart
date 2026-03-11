@@ -66,7 +66,7 @@ class StorageService extends ChangeNotifier {
   String? _lastUsedModelPath;
   int _gpuLayers = 0;
   int _contextSize = 8192;
-  List<String> _stopSequences = ["\nUser:", "\n###", "\nScenario:", "<END>", "</END>", "[END]", "<|end|>", "\nSystem:", "\n(Note:", "\n[Note:", "\n{Note:"];
+  List<String> _stopSequences = ["\nUser:", "\n###", "\nScenario:", "<END>", "</END>", "[END]", "<|end|>", "<START>", "\nSystem:", "\n(Note:", "\n[Note:", "\n{Note:"];
   double _textScale = 1.0;
   String _chatBackground = 'none';
   List<Map<String, String>> _savedPrompts = [];
@@ -275,7 +275,7 @@ class StorageService extends ChangeNotifier {
     _contextSize = _prefs?.getInt('context_size') ?? _contextSize;
     _stopSequences = _prefs?.getStringList('stop_sequences') ?? _stopSequences;
     // Ensure essential stop sequences are always present (migration for existing users)
-    const essentialStops = ['</END>', '[END]', '<|end|>'];
+    const essentialStops = ['</END>', '[END]', '<|end|>', '<START>'];
     bool added = false;
     for (final s in essentialStops) {
       if (!_stopSequences.contains(s)) {
