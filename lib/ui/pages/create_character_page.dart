@@ -211,7 +211,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                           : 'The character\'s opening line...',
                       hintStyle: const TextStyle(color: Colors.white24),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: Colors.white.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -274,7 +274,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                             width: 300,
                             height: 450,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.05),
+                              color: Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(color: Colors.white24),
                               image: _imagePath != null
@@ -460,10 +460,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF1a1a2e).withOpacity(0.95),
+                color: const Color(0xFF1a1a2e).withValues(alpha: 0.95),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: _tokenCountColor().withOpacity(0.4),
+                  color: _tokenCountColor().withValues(alpha: 0.4),
                   width: 1,
                 ),
               ),
@@ -533,7 +533,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
             hintText: hint,
             hintStyle: const TextStyle(color: Colors.white24),
             filled: true,
-            fillColor: Colors.white.withOpacity(0.05),
+            fillColor: Colors.white.withValues(alpha: 0.05),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,

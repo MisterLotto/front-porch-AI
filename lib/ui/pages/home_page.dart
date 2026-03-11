@@ -16,11 +16,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:convert';
 import 'package:front_porch_ai/database/database.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
@@ -40,7 +38,6 @@ import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
@@ -767,12 +764,12 @@ class _HomePageState extends State<HomePage> {
       builder: (context, candidateData, rejectedData) {
         final isHovering = candidateData.isNotEmpty;
         return Card(
-          color: isHovering ? Colors.amber.shade900.withOpacity(0.4) : const Color(0xFF1E293B),
+          color: isHovering ? Colors.amber.shade900.withValues(alpha: 0.4) : const Color(0xFF1E293B),
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isHovering ? Colors.amber : Colors.white.withOpacity(0.1),
+              color: isHovering ? Colors.amber : Colors.white.withValues(alpha: 0.1),
               width: isHovering ? 2 : 1,
             ),
           ),
@@ -2363,7 +2360,7 @@ class _HomePageState extends State<HomePage> {
 
   ButtonStyle _buttonStyle() {
     return ElevatedButton.styleFrom(
-      backgroundColor: Colors.white.withOpacity(0.1),
+      backgroundColor: Colors.white.withValues(alpha: 0.1),
       foregroundColor: Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       shape: RoundedRectangleBorder(

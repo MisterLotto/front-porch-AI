@@ -293,7 +293,7 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -387,7 +387,7 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
                       margin: const EdgeInsets.only(left: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.orangeAccent.withOpacity(0.15),
+                        color: Colors.orangeAccent.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text('Custom', style: TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
@@ -417,7 +417,7 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
                     } catch (_) {}
                     
                     return Card(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         leading: const Icon(Icons.psychology, color: Colors.purpleAccent),
@@ -451,7 +451,7 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
                     hintText: 'Search HuggingFace (e.g. "Mistral 7B")',
                     hintStyle: const TextStyle(color: Colors.white54),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.05),
+                    fillColor: Colors.white.withValues(alpha: 0.05),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.search, color: Colors.blueAccent),
@@ -476,7 +476,7 @@ class _ModelManagerPageState extends State<ModelManagerPage> with SingleTickerPr
                       itemBuilder: (context, index) {
                         final model = _searchResults[index];
                         return Card(
-                          color: Colors.white.withOpacity(0.05),
+                          color: Colors.white.withValues(alpha: 0.05),
                           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           child: ListTile(
                             leading: const Icon(Icons.psychology, color: Colors.purpleAccent, size: 24),

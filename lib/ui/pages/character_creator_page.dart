@@ -1959,7 +1959,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                     ),
                     Switch(
                       value: _nsfwEnabled,
-                      activeColor: Colors.pinkAccent,
+                      activeTrackColor: Colors.pinkAccent,
                       onChanged: (val) {
                         setState(() => _nsfwEnabled = val);
                         _saveState();
@@ -2344,7 +2344,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                       const SizedBox(width: 8),
                       const Expanded(child: Text('Auto-generate World Lore',
                         style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600))),
-                      Switch(value: _generateLorebook, activeColor: Colors.blueAccent,
+                      Switch(value: _generateLorebook, activeTrackColor: Colors.blueAccent,
                         onChanged: (val) { setState(() => _generateLorebook = val); _saveState(); }),
                     ],
                   ),
@@ -2588,7 +2588,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                     ),
                     Switch(
                       value: _nsfwEnabled,
-                      activeColor: Colors.pinkAccent,
+                      activeTrackColor: Colors.pinkAccent,
                       onChanged: (val) {
                         setState(() => _nsfwEnabled = val);
                         _saveState();
@@ -3093,7 +3093,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                         ),
                         Switch(
                           value: _generateLorebook,
-                          activeColor: Colors.blueAccent,
+                          activeTrackColor: Colors.blueAccent,
                           onChanged: (val) {
                             setState(() => _generateLorebook = val);
                             _saveState();

@@ -30,7 +30,6 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
 import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:front_porch_ai/app_version.dart';
 
 class CloudSyncPage extends StatefulWidget {
   const CloudSyncPage({super.key});
@@ -259,7 +258,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                 const SizedBox(height: 12),
                 // Provider dropdown
                 DropdownButtonFormField<String>(
-                  value: provider == 'none' ? null : provider,
+                  initialValue: provider == 'none' ? null : provider,
                   isExpanded: true,
                   hint: const Text('Select provider...'),
                   decoration: InputDecoration(
@@ -426,7 +425,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                           icon: const Icon(Icons.wifi_tethering, size: 18),
                           label: const Text('Test'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent.withOpacity(0.8),
+                            backgroundColor: Colors.blueAccent.withValues(alpha: 0.8),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
@@ -1154,14 +1153,14 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isLocal
-                                      ? Colors.green.withOpacity(0.5)
+                                      ? Colors.green.withValues(alpha: 0.5)
                                       : isSelected
                                           ? Colors.blueAccent
                                           : Colors.white12,
                                   width: isSelected ? 2.5 : 1,
                                 ),
                                 boxShadow: isSelected
-                                    ? [BoxShadow(color: Colors.blueAccent.withOpacity(0.3), blurRadius: 8)]
+                                    ? [BoxShadow(color: Colors.blueAccent.withValues(alpha: 0.3), blurRadius: 8)]
                                     : null,
                               ),
                               child: ClipRRect(
@@ -1195,7 +1194,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                                           gradient: LinearGradient(
                                             begin: Alignment.topCenter,
                                             end: Alignment.bottomCenter,
-                                            colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.85)],
                                           ),
                                         ),
                                         child: Text(
@@ -1244,7 +1243,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.withOpacity(0.85),
+                                            color: Colors.green.withValues(alpha: 0.85),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: const Text(

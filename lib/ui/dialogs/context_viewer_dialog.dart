@@ -276,7 +276,7 @@ class _SectionRowState extends State<_SectionRow> {
             decoration: BoxDecoration(
               color: const Color(0xFF1e293b),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: widget.color.withOpacity(0.3)),
+              border: Border.all(color: widget.color.withValues(alpha: 0.3)),
             ),
             child: SelectableText(
               widget.rawText,

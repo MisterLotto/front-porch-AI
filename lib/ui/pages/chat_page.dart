@@ -33,7 +33,6 @@ import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
@@ -246,7 +245,7 @@ class _ChatPageState extends State<ChatPage> {
                                     ),
                                     Positioned.fill(
                                       child: Container(
-                                        color: Colors.black.withOpacity(0.45),
+                                        color: Colors.black.withValues(alpha: 0.45),
                                       ),
                                     ),
                                   ],
@@ -1637,7 +1636,7 @@ class _ChatPageState extends State<ChatPage> {
                     const Spacer(),
                     Switch(
                       value: chatService.observerMode,
-                      activeColor: Colors.amberAccent,
+                      activeTrackColor: Colors.amberAccent,
                       onChanged: chatService.isGenerating ? null : (val) => chatService.setObserverMode(val),
                     ),
                   ],
@@ -2613,9 +2612,9 @@ class _AuthorNoteSectionState extends State<_AuthorNoteSection> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: sliderColor.withOpacity(0.15),
+                          color: sliderColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: sliderColor.withOpacity(0.3)),
+                          border: Border.all(color: sliderColor.withValues(alpha: 0.3)),
                         ),
                         child: Text(tierLabel,
                           style: TextStyle(color: sliderColor, fontSize: 10, fontWeight: FontWeight.w600)),
@@ -2697,7 +2696,7 @@ class _SummarySectionState extends State<_SummarySection> {
                 child: Switch(
                   value: enabled,
                   onChanged: (val) => storage.setSummaryEnabled(val),
-                  activeColor: Colors.tealAccent,
+                  activeTrackColor: Colors.tealAccent,
                 ),
               ),
             ),

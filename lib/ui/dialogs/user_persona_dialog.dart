@@ -162,7 +162,7 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isActive ? Colors.blueAccent.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+                      color: isActive ? Colors.blueAccent.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
                       border: isActive ? Border.all(color: Colors.blueAccent) : null,
                     ),
@@ -250,7 +250,7 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     shape: BoxShape.circle,
                     image: _avatarPath != null
                         ? DecorationImage(

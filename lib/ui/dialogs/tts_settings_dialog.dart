@@ -109,7 +109,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           subtitle: const Text('Add speaker buttons to character messages',
                               style: TextStyle(color: Colors.white54, fontSize: 12)),
                           value: storage.ttsEnabled,
-                          activeColor: Colors.blueAccent,
+                          activeTrackColor: Colors.blueAccent,
                           contentPadding: EdgeInsets.zero,
                           onChanged: (val) => storage.setTtsEnabled(val),
                         ),
@@ -214,7 +214,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           subtitle: const Text('Automatically speak new character messages',
                               style: TextStyle(color: Colors.white54, fontSize: 12)),
                           value: storage.ttsAutoPlay,
-                          activeColor: Colors.blueAccent,
+                          activeTrackColor: Colors.blueAccent,
                           contentPadding: EdgeInsets.zero,
                           onChanged: (val) => storage.setTtsAutoPlay(val),
                         ),
@@ -233,7 +233,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           subtitle: const Text('TTS will only read text inside quotation marks',
                               style: TextStyle(color: Colors.white54, fontSize: 11)),
                           value: storage.ttsNarrateQuotedOnly,
-                          activeColor: Colors.blueAccent,
+                          activeTrackColor: Colors.blueAccent,
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           onChanged: (val) => storage.setTtsNarrateQuotedOnly(val),
@@ -244,7 +244,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           subtitle: const Text('TTS will skip all narration in *asterisks*, even quotes',
                               style: TextStyle(color: Colors.white54, fontSize: 11)),
                           value: storage.ttsIgnoreAsterisks,
-                          activeColor: Colors.blueAccent,
+                          activeTrackColor: Colors.blueAccent,
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           onChanged: (val) => storage.setTtsIgnoreAsterisks(val),
@@ -441,7 +441,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
           style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: voices.any((v) => v.id == storage.ttsVoiceModel)
+        initialValue: voices.any((v) => v.id == storage.ttsVoiceModel)
             ? storage.ttsVoiceModel
             : null,
         dropdownColor: const Color(0xFF374151),
@@ -536,7 +536,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
           style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: storage.openaiTtsModel,
+        initialValue: storage.openaiTtsModel,
         dropdownColor: const Color(0xFF374151),
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
@@ -565,7 +565,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
           style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: voices.any((v) => v.id == storage.ttsVoiceModel)
+        initialValue: voices.any((v) => v.id == storage.ttsVoiceModel)
             ? storage.ttsVoiceModel
             : null,
         dropdownColor: const Color(0xFF374151),
@@ -636,7 +636,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
         children: [
           Expanded(
             child: DropdownButtonFormField<String>(
-              value: _installedPiperVoices.contains(storage.ttsVoiceModel)
+              initialValue: _installedPiperVoices.contains(storage.ttsVoiceModel)
                   ? storage.ttsVoiceModel
                   : null,
               dropdownColor: const Color(0xFF374151),
@@ -750,7 +750,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
           style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: storage.elevenlabsModel,
+        initialValue: storage.elevenlabsModel,
         dropdownColor: const Color(0xFF374151),
         style: const TextStyle(color: Colors.white),
         decoration: InputDecoration(
@@ -784,7 +784,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
         children: [
           Expanded(
             child: DropdownButtonFormField<String>(
-              value: voices.any((v) => v.id == storage.ttsVoiceModel)
+              initialValue: voices.any((v) => v.id == storage.ttsVoiceModel)
                   ? storage.ttsVoiceModel
                   : null,
               dropdownColor: const Color(0xFF374151),

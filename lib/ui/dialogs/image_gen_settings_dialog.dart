@@ -114,7 +114,7 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
                               style: TextStyle(
                                   color: Colors.white54, fontSize: 12)),
                           value: storage.imageGenEnabled,
-                          activeColor: Colors.purpleAccent,
+                          activeTrackColor: Colors.purpleAccent,
                           contentPadding: EdgeInsets.zero,
                           onChanged: (val) => storage.setImageGenEnabled(val),
                         ),
@@ -170,7 +170,7 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: _models
+                                initialValue: _models
                                         .any((m) => m.id == storage.imageGenModel)
                                     ? storage.imageGenModel
                                     : null,
@@ -271,7 +271,7 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
                                 fontWeight: FontWeight.w600)),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
-                          value: ImageGenService.styleLabels.containsKey(storage.imageGenStyle)
+                          initialValue: ImageGenService.styleLabels.containsKey(storage.imageGenStyle)
                               ? storage.imageGenStyle
                               : 'photorealistic',
                           dropdownColor: const Color(0xFF374151),

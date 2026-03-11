@@ -34,17 +34,12 @@ import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/services/update_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/stt_service.dart';
-import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
-import 'package:front_porch_ai/services/backup_service.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
-import 'package:path/path.dart' as path;
-import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
-import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
 import 'package:front_porch_ai/services/web_server_service.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
@@ -522,7 +517,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: null,
+                  initialValue: null,
                   isExpanded: true,
                   hint: const Text('Load saved prompt...', style: TextStyle(fontSize: 13)),
                   decoration: InputDecoration(
@@ -681,7 +676,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             Text('Whisper Model', style: theme.textTheme.bodySmall),
                             const SizedBox(height: 4),
                             DropdownButtonFormField<String>(
-                              value: storageService.whisperModel,
+                              initialValue: storageService.whisperModel,
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: theme.scaffoldBackgroundColor,
@@ -782,7 +777,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     Text('Microphone', style: theme.textTheme.bodySmall),
                                     const SizedBox(height: 4),
                                     DropdownButtonFormField<String>(
-                                      value: sttService.inputDevices.any((d) => d.id == sttService.selectedDeviceId)
+                                      initialValue: sttService.inputDevices.any((d) => d.id == sttService.selectedDeviceId)
                                           ? sttService.selectedDeviceId
                                           : null,
                                       isExpanded: true,
@@ -888,7 +883,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         const SizedBox(height: 4),
                         if (callModels.isNotEmpty)
                           DropdownButtonFormField<String>(
-                            value: storageService.callModelName.isEmpty
+                            initialValue: storageService.callModelName.isEmpty
                                 ? ''
                                 : (callModels.any((m) => m['id'] == storageService.callModelName)
                                     ? storageService.callModelName
@@ -1342,7 +1337,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           : const Icon(Icons.wifi_tethering, size: 18),
                       label: Text(_isCheckingConnection ? 'Checking...' : 'Check Connection'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent.withOpacity(0.8),
+                        backgroundColor: Colors.blueAccent.withValues(alpha: 0.8),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -1454,9 +1449,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: Colors.blue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
@@ -1629,7 +1624,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 icon: Icon(koboldService.isRunning ? Icons.stop : Icons.play_arrow),
                 label: Text(koboldService.isRunning ? 'Stop Backend' : 'Start Backend'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: koboldService.isRunning ? Colors.red.withOpacity(0.8) : Colors.green.withOpacity(0.8),
+                  backgroundColor: koboldService.isRunning ? Colors.red.withValues(alpha: 0.8) : Colors.green.withValues(alpha: 0.8),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 20),
                 ),
@@ -1845,9 +1840,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.blueAccent.withOpacity(0.1),
+                              color: Colors.blueAccent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
                             ),
                             child: Row(
                               children: [
@@ -1873,9 +1868,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.1),
+                              color: Colors.amber.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                              border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
                             ),
                             child: Row(
                               children: [
@@ -2100,7 +2095,7 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.tealAccent.withOpacity(0.12) : Colors.white.withOpacity(0.05),
+          color: isSelected ? Colors.tealAccent.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? Colors.tealAccent : Colors.white12,
@@ -2121,7 +2116,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Text(
               subtitle,
               style: TextStyle(
-                color: isSelected ? Colors.tealAccent.withOpacity(0.6) : Colors.white30,
+                color: isSelected ? Colors.tealAccent.withValues(alpha: 0.6) : Colors.white30,
                 fontSize: 10,
               ),
             ),
@@ -2275,7 +2270,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: theme.textTheme.bodyMedium,
             decoration: InputDecoration(
               hintText: 'shivers down\na cold shiver\nher eyes sparkled',
-              hintStyle: TextStyle(color: theme.textTheme.bodySmall?.color?.withOpacity(0.4)),
+              hintStyle: TextStyle(color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.4)),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
@@ -2448,7 +2443,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 return ListTile(
                                   dense: true,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.blueAccent.withOpacity(0.15),
+                                  selectedTileColor: Colors.blueAccent.withValues(alpha: 0.15),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   title: Text(
@@ -2467,7 +2462,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                           margin: const EdgeInsets.only(right: 6),
                                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.withOpacity(0.2),
+                                            color: Colors.green.withValues(alpha: 0.2),
                                             borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: const Text('FREE', style: TextStyle(color: Colors.greenAccent, fontSize: 9, fontWeight: FontWeight.bold)),

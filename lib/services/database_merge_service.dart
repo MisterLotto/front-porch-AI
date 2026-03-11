@@ -20,7 +20,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/database/database.dart';
 
 /// Row-level merge service for cloud sync.

@@ -162,7 +162,7 @@ class _UserPersonaPageState extends State<UserPersonaPage> {
             final isActive = persona.id == service.persona.id;
             
             return Card(
-              color: isActive ? Colors.blueAccent.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+              color: isActive ? Colors.blueAccent.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -244,7 +244,7 @@ class _UserPersonaPageState extends State<UserPersonaPage> {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         shape: BoxShape.circle,
                         image: _avatarPath != null
                             ? DecorationImage(

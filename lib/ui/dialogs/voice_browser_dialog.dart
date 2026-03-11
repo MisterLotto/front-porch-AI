@@ -149,7 +149,7 @@ class _VoiceBrowserDialogState extends State<VoiceBrowserDialog> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
-                  value: _selectedLanguage,
+                  initialValue: _selectedLanguage,
                   dropdownColor: const Color(0xFF374151),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
@@ -172,7 +172,7 @@ class _VoiceBrowserDialogState extends State<VoiceBrowserDialog> {
               SizedBox(
                 width: 120,
                 child: DropdownButtonFormField<String>(
-                  value: _selectedQuality,
+                  initialValue: _selectedQuality,
                   dropdownColor: const Color(0xFF374151),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
@@ -268,7 +268,7 @@ class _VoiceBrowserDialogState extends State<VoiceBrowserDialog> {
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 leading: CircleAvatar(
-                  backgroundColor: isInstalled ? Colors.green.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2),
+                  backgroundColor: isInstalled ? Colors.green.withValues(alpha: 0.2) : Colors.blueAccent.withValues(alpha: 0.2),
                   child: Icon(
                     isInstalled ? Icons.check_circle : Icons.record_voice_over,
                     color: isInstalled ? Colors.greenAccent : Colors.blueAccent,
