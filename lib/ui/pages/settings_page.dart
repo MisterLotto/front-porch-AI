@@ -62,6 +62,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _useRocm = false;
   String? _selectedModelPath;
   late final TextEditingController _systemPromptController;
+  late final TextEditingController _bannedPhrasesController;
 
   // Remote API state
   List<RemoteModelInfo> _availableModels = [];
@@ -74,6 +75,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _apiController.text = Provider.of<KoboldService>(context, listen: false).baseUrl;
     _systemPromptController = TextEditingController(
       text: Provider.of<StorageService>(context, listen: false).systemPrompt,
+    );
+    _bannedPhrasesController = TextEditingController(
+      text: Provider.of<StorageService>(context, listen: false).bannedPhrases.join('\n'),
     );
     
     // Sync local state with storage
@@ -233,6 +237,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _gpuLayersController.dispose();
     _contextSizeController.dispose();
     _apiController.dispose();
+    _bannedPhrasesController.dispose();
     super.dispose();
   }
 
@@ -2262,9 +2267,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           padding: const EdgeInsets.all(8.0),
           child: TextField(
-            controller: TextEditingController(
-              text: storageService.bannedPhrases.join('\n'),
-            ),
+            controller: _bannedPhrasesController,
             maxLines: 6,
             minLines: 3,
             style: theme.textTheme.bodyMedium,
