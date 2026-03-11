@@ -764,7 +764,7 @@
 
         currentCharacterId = char.id;
         currentCharacterName = char.name;
-        currentCharacterDesc = char.description || '';
+        currentCharacterDesc = (char.description || '').replace(/\{\{char\}\}/gi, char.name).replace(/\{char\}/gi, char.name).replace(/<char>/gi, char.name);
         currentCharacterHasAvatar = char.hasAvatar;
 
         // Update chat appbar
