@@ -453,7 +453,7 @@
                         <div class="char-card-name" style="flex:1;min-width:0">${esc(char.name)}</div>
                         ${(char.messageCount || 0) > 0 ? `<span class="char-card-msg-count"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>${char.messageCount}</span>` : ''}
                     </div>
-                    ${char.description ? `<div class="char-card-desc">${esc(char.description)}</div>` : ''}
+                    ${char.description ? `<div class="char-card-desc">${esc(char.description.replace(/\{\{char\}\}/gi, char.name).replace(/\{char\}/gi, char.name).replace(/<char>/gi, char.name))}</div>` : ''}
                     ${tagsHtml ? `<div class="char-card-tags">${tagsHtml}</div>` : ''}
                 </div>
             `;
@@ -794,8 +794,9 @@
         }
 
         // Fill right panel text
-        $('#rp-scenario').textContent = char.scenario || '';
-        $('#rp-description').textContent = char.description || '';
+        const replaceCharPlaceholders = (text) => (text || '').replace(/\{\{char\}\}/gi, char.name).replace(/\{char\}/gi, char.name).replace(/<char>/gi, char.name);
+        $('#rp-scenario').textContent = replaceCharPlaceholders(char.scenario);
+        $('#rp-description').textContent = replaceCharPlaceholders(char.description);
 
         // Author's note will be loaded from chat state once SSE connects
 
