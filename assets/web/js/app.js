@@ -2005,7 +2005,7 @@
                 `<option value="${esc(v.id)}" ${v.id === data.ttsVoice ? 'selected' : ''}>${esc(v.name || v.id)}</option>`
             ).join('');
 
-            overlay.innerHTML = `<div class="modal" style="min-width:500px;max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
+            overlay.innerHTML = `<div class="modal" style="min-width:min(500px,95vw);max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
                 <div class="modal-title">🔊 TTS Settings</div>
                 <div style="overflow-y:auto;flex:1;padding:12px 0;">
                     <div class="toggle-row"><span>Enable TTS</span>
@@ -2014,6 +2014,7 @@
                         <select id="m-tts-engine" class="settings-select">
                             <option value="kokoro" ${data.ttsEngine === 'kokoro' ? 'selected' : ''}>Kokoro (Local)</option>
                             <option value="openai" ${data.ttsEngine === 'openai' ? 'selected' : ''}>OpenAI TTS (Cloud)</option>
+                            <option value="elevenlabs" ${data.ttsEngine === 'elevenlabs' ? 'selected' : ''}>ElevenLabs (Premium)</option>
                             <option value="piper" ${data.ttsEngine === 'piper' ? 'selected' : ''}>Piper (Legacy)</option>
                         </select></div>
                     <div class="settings-field"><label class="field-label">Voice</label>
@@ -2028,6 +2029,8 @@
                         <input type="number" id="m-tts-concurrency" value="${data.ttsConcurrency ?? 4}" min="1" max="16" class="settings-number" style="width:80px"></div>
                     <div class="toggle-row"><span>Auto-play on receive</span>
                         <label class="toggle-switch"><input type="checkbox" id="m-tts-autoplay" ${data.ttsAutoPlay ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+
+                    <!-- OpenAI fields -->
                     <div id="m-openai-tts-fields" style="${data.ttsEngine === 'openai' ? '' : 'display:none'}">
                         <div class="settings-field"><label class="field-label">OpenAI TTS API Key</label>
                             <input type="password" id="m-openai-tts-key" class="settings-input" placeholder="${data.openaiTtsApiKeySet ? 'Key saved' : 'sk-...'}"></div>
@@ -2036,6 +2039,40 @@
                                 <option value="tts-1" ${data.openaiTtsModel === 'tts-1' ? 'selected' : ''}>tts-1</option>
                                 <option value="tts-1-hd" ${data.openaiTtsModel === 'tts-1-hd' ? 'selected' : ''}>tts-1-hd</option>
                             </select></div>
+                    </div>
+
+                    <!-- ElevenLabs fields -->
+                    <div id="m-elevenlabs-fields" style="${data.ttsEngine === 'elevenlabs' ? '' : 'display:none'}">
+                        <div class="settings-field"><label class="field-label">ElevenLabs API Key</label>
+                            <input type="password" id="m-elevenlabs-key" class="settings-input" placeholder="${data.elevenlabsApiKeySet ? 'Key saved' : 'Enter API key...'}"></div>
+                        <div class="settings-field"><label class="field-label">ElevenLabs Model</label>
+                            <select id="m-elevenlabs-model" class="settings-select">
+                                <option value="eleven_flash_v2_5" ${data.elevenlabsModel === 'eleven_flash_v2_5' ? 'selected' : ''}>Flash v2.5 — fastest (~75ms)</option>
+                                <option value="eleven_multilingual_v2" ${data.elevenlabsModel === 'eleven_multilingual_v2' ? 'selected' : ''}>Multilingual v2 — 29 languages</option>
+                                <option value="eleven_v3" ${data.elevenlabsModel === 'eleven_v3' ? 'selected' : ''}>v3 — best quality</option>
+                            </select></div>
+                        <div class="slider-row"><label class="slider-label">Stability</label>
+                            <input type="range" id="m-el-stability" min="0" max="1" step="0.05" value="${data.elevenlabsStability ?? 0.5}" class="settings-slider">
+                            <span class="slider-value">${parseFloat(data.elevenlabsStability ?? 0.5).toFixed(2)}</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:10px;color:#ffffff44;margin:-4px 0 4px"><span>Expressive</span><span>Consistent</span></div>
+                        <div class="slider-row"><label class="slider-label">Similarity</label>
+                            <input type="range" id="m-el-similarity" min="0" max="1" step="0.05" value="${data.elevenlabsSimilarity ?? 0.75}" class="settings-slider">
+                            <span class="slider-value">${parseFloat(data.elevenlabsSimilarity ?? 0.75).toFixed(2)}</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:10px;color:#ffffff44;margin:-4px 0 4px"><span>Creative</span><span>Faithful</span></div>
+                        <div class="slider-row"><label class="slider-label">Style</label>
+                            <input type="range" id="m-el-style" min="0" max="1" step="0.05" value="${data.elevenlabsStyle ?? 0.0}" class="settings-slider">
+                            <span class="slider-value">${parseFloat(data.elevenlabsStyle ?? 0.0).toFixed(2)}</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:10px;color:#ffffff44;margin:-4px 0 4px"><span>Subtle</span><span>Expressive</span></div>
+                        <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;color:#ffffff66;font-size:11px;margin-top:4px">☁️ Requires ElevenLabs API key. Free tier: ~10 min/month.</div>
+                    </div>
+
+                    <!-- Narration Filters -->
+                    <div style="border-top:1px solid #ffffff1a;margin-top:12px;padding-top:12px">
+                        <div style="color:#ffffff88;font-size:12px;font-weight:600;margin-bottom:8px">Narration Filters</div>
+                        <div class="toggle-row"><span style="font-size:13px">Only narrate "quotes"</span>
+                            <label class="toggle-switch"><input type="checkbox" id="m-tts-quotes-only" ${data.ttsNarrateQuotedOnly ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+                        <div class="toggle-row"><span style="font-size:13px">Ignore *text inside asterisks*</span>
+                            <label class="toggle-switch"><input type="checkbox" id="m-tts-ignore-asterisks" ${data.ttsIgnoreAsterisks ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -2050,9 +2087,17 @@
                 const valSpan = e.target.nextElementSibling;
                 if (valSpan) valSpan.textContent = parseFloat(e.target.value).toFixed(1) + '×';
             });
+            for (const sid of ['#m-el-stability', '#m-el-similarity', '#m-el-style']) {
+                overlay.querySelector(sid)?.addEventListener('input', (e) => {
+                    const valSpan = e.target.nextElementSibling;
+                    if (valSpan) valSpan.textContent = parseFloat(e.target.value).toFixed(2);
+                });
+            }
             overlay.querySelector('#m-tts-engine')?.addEventListener('change', (e) => {
                 const oai = overlay.querySelector('#m-openai-tts-fields');
+                const el = overlay.querySelector('#m-elevenlabs-fields');
                 if (oai) oai.style.display = e.target.value === 'openai' ? 'block' : 'none';
+                if (el) el.style.display = e.target.value === 'elevenlabs' ? 'block' : 'none';
             });
             overlay.querySelector('#m-tts-cancel').addEventListener('click', () => overlay.classList.remove('active'));
             overlay.querySelector('#m-tts-save').addEventListener('click', async () => {
@@ -2063,10 +2108,18 @@
                     ttsSpeechRate: parseFloat(overlay.querySelector('#m-tts-rate').value),
                     ttsConcurrency: parseInt(overlay.querySelector('#m-tts-concurrency').value),
                     ttsAutoPlay: overlay.querySelector('#m-tts-autoplay').checked,
-                    openaiTtsModel: overlay.querySelector('#m-openai-tts-model').value,
+                    openaiTtsModel: overlay.querySelector('#m-openai-tts-model')?.value || 'tts-1',
+                    elevenlabsModel: overlay.querySelector('#m-elevenlabs-model')?.value || 'eleven_flash_v2_5',
+                    elevenlabsStability: parseFloat(overlay.querySelector('#m-el-stability')?.value || 0.5),
+                    elevenlabsSimilarity: parseFloat(overlay.querySelector('#m-el-similarity')?.value || 0.75),
+                    elevenlabsStyle: parseFloat(overlay.querySelector('#m-el-style')?.value || 0.0),
+                    ttsNarrateQuotedOnly: overlay.querySelector('#m-tts-quotes-only')?.checked || false,
+                    ttsIgnoreAsterisks: overlay.querySelector('#m-tts-ignore-asterisks')?.checked || false,
                 };
                 const oaiKey = overlay.querySelector('#m-openai-tts-key')?.value;
                 if (oaiKey) payload.openaiTtsApiKey = oaiKey;
+                const elKey = overlay.querySelector('#m-elevenlabs-key')?.value;
+                if (elKey) payload.elevenlabsApiKey = elKey;
                 const res = await api('/api/settings', {
                     method: 'POST',
                     body: JSON.stringify(payload),
@@ -3072,11 +3125,13 @@
             });
         });
 
-        // TTS engine change — show/hide OpenAI fields and reload voices
+        // TTS engine change — show/hide engine-specific fields and reload voices
         $('#setting-tts-engine')?.addEventListener('change', async () => {
             const eng = $('#setting-tts-engine').value;
             const oaiFields = $('#openai-tts-fields');
+            const elFields = $('#elevenlabs-tts-fields');
             if (oaiFields) oaiFields.style.display = eng === 'openai' ? 'block' : 'none';
+            if (elFields) elFields.style.display = eng === 'elevenlabs' ? 'block' : 'none';
             // Save engine first, then reload settings to get updated voice list
             await api('/api/settings', {
                 method: 'POST',
@@ -3100,11 +3155,20 @@
                 ttsSpeechRate: parseFloat($('#setting-tts-rate')?.value || '1.0'),
                 ttsConcurrency: parseInt($('#setting-tts-concurrency')?.value || '4'),
                 ttsAutoPlay: $('#setting-tts-autoplay')?.checked || false,
+                ttsNarrateQuotedOnly: $('#setting-tts-quotes-only')?.checked || false,
+                ttsIgnoreAsterisks: $('#setting-tts-ignore-asterisks')?.checked || false,
             };
             // OpenAI TTS fields
             const oaiKey = $('#setting-openai-tts-key')?.value;
             if (oaiKey) payload.openaiTtsApiKey = oaiKey;
             payload.openaiTtsModel = $('#setting-openai-tts-model')?.value || 'tts-1';
+            // ElevenLabs fields
+            const elKey = $('#setting-elevenlabs-key')?.value;
+            if (elKey) payload.elevenlabsApiKey = elKey;
+            payload.elevenlabsModel = $('#setting-elevenlabs-model')?.value || 'eleven_flash_v2_5';
+            payload.elevenlabsStability = parseFloat($('#setting-el-stability')?.value || '0.5');
+            payload.elevenlabsSimilarity = parseFloat($('#setting-el-similarity')?.value || '0.75');
+            payload.elevenlabsStyle = parseFloat($('#setting-el-style')?.value || '0.0');
             const res = await api('/api/settings', {
                 method: 'POST',
                 body: JSON.stringify(payload),

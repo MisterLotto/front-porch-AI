@@ -68,12 +68,19 @@ class StorageService extends ChangeNotifier {
 
   // TTS settings
   bool _ttsEnabled = false;
-  String _ttsEngine = 'kokoro'; // 'kokoro', 'openai', 'piper'
+  String _ttsEngine = 'kokoro'; // 'kokoro', 'openai', 'elevenlabs', 'piper'
   String _ttsVoiceModel = ''; // voice key, e.g. 'af_heart' or 'en_US-lessac-medium'
   double _ttsSpeechRate = 1.0;
   bool _ttsAutoPlay = false;
   String _openaiTtsApiKey = '';
   String _openaiTtsModel = 'tts-1'; // 'tts-1' or 'tts-1-hd'
+  String _elevenlabsApiKey = '';
+  String _elevenlabsModel = 'eleven_flash_v2_5';
+  double _elevenlabsStability = 0.5;
+  double _elevenlabsSimilarity = 0.75;
+  double _elevenlabsStyle = 0.0;
+  bool _ttsNarrateQuotedOnly = false;
+  bool _ttsIgnoreAsterisks = false;
   int _ttsConcurrency = Platform.numberOfProcessors.clamp(1, 16);
   double _directorDelay = 15.0; // seconds between auto-chat responses in Director Mode
 
@@ -171,6 +178,13 @@ class StorageService extends ChangeNotifier {
   bool get ttsAutoPlay => _ttsAutoPlay;
   String get openaiTtsApiKey => _openaiTtsApiKey;
   String get openaiTtsModel => _openaiTtsModel;
+  String get elevenlabsApiKey => _elevenlabsApiKey;
+  String get elevenlabsModel => _elevenlabsModel;
+  double get elevenlabsStability => _elevenlabsStability;
+  double get elevenlabsSimilarity => _elevenlabsSimilarity;
+  double get elevenlabsStyle => _elevenlabsStyle;
+  bool get ttsNarrateQuotedOnly => _ttsNarrateQuotedOnly;
+  bool get ttsIgnoreAsterisks => _ttsIgnoreAsterisks;
   int get ttsConcurrency => _ttsConcurrency;
   double get directorDelay => _directorDelay;
   bool get sttEnabled => _sttEnabled;
@@ -277,6 +291,13 @@ class StorageService extends ChangeNotifier {
     _openaiTtsApiKey = _prefs?.getString('openai_tts_api_key') ?? '';
     _ttsConcurrency = _prefs?.getInt('tts_concurrency') ?? Platform.numberOfProcessors.clamp(1, 16);
     _openaiTtsModel = _prefs?.getString('openai_tts_model') ?? 'tts-1';
+    _elevenlabsApiKey = _prefs?.getString('elevenlabs_api_key') ?? '';
+    _elevenlabsModel = _prefs?.getString('elevenlabs_model') ?? 'eleven_flash_v2_5';
+    _elevenlabsStability = _prefs?.getDouble('elevenlabs_stability') ?? 0.5;
+    _elevenlabsSimilarity = _prefs?.getDouble('elevenlabs_similarity') ?? 0.75;
+    _elevenlabsStyle = _prefs?.getDouble('elevenlabs_style') ?? 0.0;
+    _ttsNarrateQuotedOnly = _prefs?.getBool('tts_narrate_quoted_only') ?? false;
+    _ttsIgnoreAsterisks = _prefs?.getBool('tts_ignore_asterisks') ?? false;
     _directorDelay = _prefs?.getDouble('director_delay') ?? 15.0;
 
     // STT settings
@@ -705,6 +726,48 @@ class StorageService extends ChangeNotifier {
   Future<void> setOpenaiTtsModel(String value) async {
     _openaiTtsModel = value;
     await _prefs?.setString('openai_tts_model', value);
+    notifyListeners();
+  }
+
+  Future<void> setElevenlabsApiKey(String value) async {
+    _elevenlabsApiKey = value;
+    await _prefs?.setString('elevenlabs_api_key', value);
+    notifyListeners();
+  }
+
+  Future<void> setElevenlabsModel(String value) async {
+    _elevenlabsModel = value;
+    await _prefs?.setString('elevenlabs_model', value);
+    notifyListeners();
+  }
+
+  Future<void> setElevenlabsStability(double value) async {
+    _elevenlabsStability = value.clamp(0.0, 1.0);
+    await _prefs?.setDouble('elevenlabs_stability', _elevenlabsStability);
+    notifyListeners();
+  }
+
+  Future<void> setElevenlabsSimilarity(double value) async {
+    _elevenlabsSimilarity = value.clamp(0.0, 1.0);
+    await _prefs?.setDouble('elevenlabs_similarity', _elevenlabsSimilarity);
+    notifyListeners();
+  }
+
+  Future<void> setElevenlabsStyle(double value) async {
+    _elevenlabsStyle = value.clamp(0.0, 1.0);
+    await _prefs?.setDouble('elevenlabs_style', _elevenlabsStyle);
+    notifyListeners();
+  }
+
+  Future<void> setTtsNarrateQuotedOnly(bool value) async {
+    _ttsNarrateQuotedOnly = value;
+    await _prefs?.setBool('tts_narrate_quoted_only', value);
+    notifyListeners();
+  }
+
+  Future<void> setTtsIgnoreAsterisks(bool value) async {
+    _ttsIgnoreAsterisks = value;
+    await _prefs?.setBool('tts_ignore_asterisks', value);
     notifyListeners();
   }
 

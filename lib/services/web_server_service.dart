@@ -1244,6 +1244,14 @@ class WebServerService extends ChangeNotifier {
           'openaiTtsApiKey': s.openaiTtsApiKey.isNotEmpty ? '••••' : '',
           'openaiTtsApiKeySet': s.openaiTtsApiKey.isNotEmpty,
           'openaiTtsModel': s.openaiTtsModel,
+          'elevenlabsApiKey': s.elevenlabsApiKey.isNotEmpty ? '••••' : '',
+          'elevenlabsApiKeySet': s.elevenlabsApiKey.isNotEmpty,
+          'elevenlabsModel': s.elevenlabsModel,
+          'elevenlabsStability': s.elevenlabsStability,
+          'elevenlabsSimilarity': s.elevenlabsSimilarity,
+          'elevenlabsStyle': s.elevenlabsStyle,
+          'ttsNarrateQuotedOnly': s.ttsNarrateQuotedOnly,
+          'ttsIgnoreAsterisks': s.ttsIgnoreAsterisks,
           // TTS available voices
           'ttsVoices': _ttsService != null
               ? _ttsService!.activeVoices.map((v) => {'id': v.id, 'name': v.name}).toList()
@@ -1442,6 +1450,13 @@ class WebServerService extends ChangeNotifier {
       if (body.containsKey('ttsConcurrency')) await s.setTtsConcurrency((body['ttsConcurrency'] as num).toInt());
       if (body.containsKey('openaiTtsApiKey')) await s.setOpenaiTtsApiKey(body['openaiTtsApiKey'].toString());
       if (body.containsKey('openaiTtsModel')) await s.setOpenaiTtsModel(body['openaiTtsModel'].toString());
+      if (body.containsKey('elevenlabsApiKey')) await s.setElevenlabsApiKey(body['elevenlabsApiKey'].toString());
+      if (body.containsKey('elevenlabsModel')) await s.setElevenlabsModel(body['elevenlabsModel'].toString());
+      if (body.containsKey('elevenlabsStability')) await s.setElevenlabsStability((body['elevenlabsStability'] as num).toDouble());
+      if (body.containsKey('elevenlabsSimilarity')) await s.setElevenlabsSimilarity((body['elevenlabsSimilarity'] as num).toDouble());
+      if (body.containsKey('elevenlabsStyle')) await s.setElevenlabsStyle((body['elevenlabsStyle'] as num).toDouble());
+      if (body.containsKey('ttsNarrateQuotedOnly')) await s.setTtsNarrateQuotedOnly(body['ttsNarrateQuotedOnly'] as bool);
+      if (body.containsKey('ttsIgnoreAsterisks')) await s.setTtsIgnoreAsterisks(body['ttsIgnoreAsterisks'] as bool);
 
       // Image Gen
       if (body.containsKey('imageGenEnabled')) await s.setImageGenEnabled(body['imageGenEnabled'] as bool);

@@ -9,6 +9,7 @@ import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/tts_engine.dart';
 import 'package:front_porch_ai/services/kokoro_engine.dart';
 import 'package:front_porch_ai/services/openai_tts_engine.dart';
+import 'package:front_porch_ai/services/elevenlabs_tts_engine.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
 
 /// Text-to-speech service — multi-engine architecture.
@@ -23,6 +24,7 @@ class TtsService extends ChangeNotifier {
   // Engines
   final KokoroEngine _kokoroEngine = KokoroEngine();
   final OpenAiTtsEngine _openaiEngine = OpenAiTtsEngine();
+  final ElevenLabsTtsEngine _elevenlabsEngine = ElevenLabsTtsEngine();
 
   Process? _piperProcess;
   bool _isSpeaking = false;
@@ -54,6 +56,13 @@ class TtsService extends ChangeNotifier {
         _openaiEngine.apiKey = _storageService.openaiTtsApiKey;
         _openaiEngine.model = _storageService.openaiTtsModel;
         return _openaiEngine;
+      case 'elevenlabs':
+        _elevenlabsEngine.apiKey = _storageService.elevenlabsApiKey;
+        _elevenlabsEngine.model = _storageService.elevenlabsModel;
+        _elevenlabsEngine.stability = _storageService.elevenlabsStability;
+        _elevenlabsEngine.similarityBoost = _storageService.elevenlabsSimilarity;
+        _elevenlabsEngine.style = _storageService.elevenlabsStyle;
+        return _elevenlabsEngine;
       case 'kokoro':
         return _kokoroEngine;
       default:
@@ -717,9 +726,22 @@ class TtsService extends ChangeNotifier {
 
   // ---- Text processing ----
 
-  /// Sanitize text for TTS: remove think tags, markdown, emotes, OOC, etc.
+  /// Sanitize text for TTS: apply narration filters, remove think tags, markdown, emotes, OOC, etc.
   String _sanitizeText(String text) {
     var result = text;
+
+    // ── Narration filters (SillyTavern-style) ──
+    // Step 1: If ignoreAsterisks, remove all *...* blocks (including quotes inside them)
+    if (_storageService.ttsIgnoreAsterisks) {
+      result = result.replaceAll(RegExp(r'\*[^*]*\*'), '');
+    }
+    // Step 2: If narrateQuotedOnly, extract only text within "..." quotes
+    if (_storageService.ttsNarrateQuotedOnly) {
+      final quotes = RegExp(r'"([^"]+)"').allMatches(result).map((m) => m.group(0)!).toList();
+      result = quotes.isNotEmpty ? quotes.join('... ') : '';
+    }
+
+    // ── Standard cleanup ──
     result = result.replaceAll(RegExp(r'<think>.*?</think>', caseSensitive: false, dotAll: true), '');
     result = result.replaceAll(RegExp(r'<think>.*$', caseSensitive: false, dotAll: true), '');
     result = result.replaceAll(RegExp(r'\(OOC:.*?\)', caseSensitive: false), '');

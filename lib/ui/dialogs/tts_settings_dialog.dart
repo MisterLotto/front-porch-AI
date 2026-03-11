@@ -5,6 +5,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
+import 'package:front_porch_ai/services/elevenlabs_tts_engine.dart';
 import 'package:front_porch_ai/ui/dialogs/voice_browser_dialog.dart';
 
 /// Dialog for configuring TTS settings with multi-engine support.
@@ -108,6 +109,7 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                         // ──── Engine-specific settings ────
                         if (engineId == 'kokoro') ..._buildKokoroSettings(storage, tts, voices),
                         if (engineId == 'openai') ..._buildOpenAiSettings(storage, tts, voices),
+                        if (engineId == 'elevenlabs') ..._buildElevenLabsSettings(storage, tts, voices),
                         if (engineId == 'piper') ..._buildPiperSettings(storage, tts),
 
                         const SizedBox(height: 20),
@@ -199,6 +201,37 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           onChanged: (val) => storage.setTtsAutoPlay(val),
                         ),
 
+                        const SizedBox(height: 8),
+
+                        // ──── Narration Filters ────
+                        const Divider(color: Colors.white12),
+                        const SizedBox(height: 4),
+                        const Text('Narration Filters',
+                            style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        SwitchListTile(
+                          title: const Text('Only narrate "quotes"',
+                              style: TextStyle(color: Colors.white, fontSize: 14)),
+                          subtitle: const Text('TTS will only read text inside quotation marks',
+                              style: TextStyle(color: Colors.white54, fontSize: 11)),
+                          value: storage.ttsNarrateQuotedOnly,
+                          activeColor: Colors.blueAccent,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          onChanged: (val) => storage.setTtsNarrateQuotedOnly(val),
+                        ),
+                        SwitchListTile(
+                          title: const Text('Ignore *text inside asterisks*',
+                              style: TextStyle(color: Colors.white, fontSize: 14)),
+                          subtitle: const Text('TTS will skip all narration in *asterisks*, even quotes',
+                              style: TextStyle(color: Colors.white54, fontSize: 11)),
+                          value: storage.ttsIgnoreAsterisks,
+                          activeColor: Colors.blueAccent,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          onChanged: (val) => storage.setTtsIgnoreAsterisks(val),
+                        ),
+
                         const SizedBox(height: 16),
 
                         // Test button
@@ -238,9 +271,10 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
       ),
       child: Row(
         children: [
-          _engineTab(storage, 'kokoro', '🔊 Kokoro', 'High quality, local'),
-          _engineTab(storage, 'openai', '☁️ OpenAI', 'Premium, cloud API'),
-          _engineTab(storage, 'piper', '📦 Piper', 'Lightweight, local'),
+          _engineTab(storage, 'kokoro', '🔊 Kokoro', 'Local'),
+          _engineTab(storage, 'openai', '☁️ OpenAI', 'Cloud API'),
+          _engineTab(storage, 'elevenlabs', '🎙 ElevenLabs', 'Premium'),
+          _engineTab(storage, 'piper', '📦 Piper', 'Lightweight'),
         ],
       ),
     );
@@ -653,6 +687,265 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                   color: tts.isPiperAvailable ? Colors.greenAccent : Colors.amber,
                   fontSize: 11,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// ElevenLabs-specific settings.
+  List<Widget> _buildElevenLabsSettings(
+      StorageService storage, TtsService tts, List<TtsVoiceInfo> voices) {
+    return [
+      // API Key
+      const Text('API Key',
+          style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      TextField(
+        controller: TextEditingController(text: storage.elevenlabsApiKey),
+        obscureText: _obscureApiKey,
+        style: const TextStyle(color: Colors.white, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'Enter your ElevenLabs API key...',
+          hintStyle: const TextStyle(color: Colors.white24),
+          filled: true,
+          fillColor: Colors.black26,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          suffixIcon: IconButton(
+            icon: Icon(_obscureApiKey ? Icons.visibility_off : Icons.visibility,
+                color: Colors.white38, size: 18),
+            onPressed: () => setState(() => _obscureApiKey = !_obscureApiKey),
+          ),
+        ),
+        onChanged: (val) => storage.setElevenlabsApiKey(val.trim()),
+      ),
+      const SizedBox(height: 12),
+
+      // Model
+      const Text('Model',
+          style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: storage.elevenlabsModel,
+        dropdownColor: const Color(0xFF374151),
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.black26,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        items: const [
+          DropdownMenuItem(value: 'eleven_flash_v2_5',
+              child: Text('Flash v2.5 — fastest (~75ms)')),
+          DropdownMenuItem(value: 'eleven_multilingual_v2',
+              child: Text('Multilingual v2 — 29 languages')),
+          DropdownMenuItem(value: 'eleven_v3',
+              child: Text('v3 — best quality, 70+ languages')),
+        ],
+        onChanged: (val) {
+          if (val != null) storage.setElevenlabsModel(val);
+        },
+      ),
+      const SizedBox(height: 12),
+
+      // Voice
+      const Text('Voice',
+          style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: voices.any((v) => v.id == storage.ttsVoiceModel)
+                  ? storage.ttsVoiceModel
+                  : null,
+              dropdownColor: const Color(0xFF374151),
+              style: const TextStyle(color: Colors.white),
+              isExpanded: true,
+              decoration: InputDecoration(
+                hintText: 'Select a voice',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: Colors.black26,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              items: voices.map((v) => DropdownMenuItem(
+                value: v.id,
+                child: Row(
+                  children: [
+                    Text(v.gender == 'Female' ? '♀ ' : v.gender == 'Male' ? '♂ ' : '⚬ ',
+                        style: TextStyle(
+                          color: v.gender == 'Female' ? Colors.pinkAccent : Colors.cyanAccent,
+                          fontSize: 13,
+                        )),
+                    Expanded(child: Text(v.name, overflow: TextOverflow.ellipsis)),
+                  ],
+                ),
+              )).toList(),
+              onChanged: (val) {
+                if (val != null) storage.setTtsVoiceModel(val);
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final engine = tts.activeEngine;
+              if (engine is ElevenLabsTtsEngine) {
+                final fetched = await engine.fetchVoices();
+                if (mounted) setState(() {});
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Found ${fetched.length} voices'),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 2),
+                  ));
+                }
+              }
+            },
+            icon: const Icon(Icons.refresh, size: 14),
+            label: const Text('Refresh'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            ),
+          ),
+        ],
+      ),
+
+      const SizedBox(height: 20),
+
+      // ── Voice Settings Sliders ──
+      const Divider(color: Colors.white12),
+      const SizedBox(height: 8),
+      const Text('Voice Settings',
+          style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 12),
+
+      // Stability
+      Row(
+        children: [
+          const Text('Stability',
+              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          const Spacer(),
+          Text('${storage.elevenlabsStability.toStringAsFixed(2)}',
+              style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+      Slider(
+        value: storage.elevenlabsStability,
+        min: 0.0,
+        max: 1.0,
+        divisions: 20,
+        activeColor: Colors.blueAccent,
+        inactiveColor: Colors.white12,
+        onChanged: (val) => storage.setElevenlabsStability(val),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Expressive', style: TextStyle(color: Colors.white24, fontSize: 9)),
+            Text('Consistent', style: TextStyle(color: Colors.white24, fontSize: 9)),
+          ],
+        ),
+      ),
+
+      const SizedBox(height: 8),
+
+      // Similarity Boost
+      Row(
+        children: [
+          const Text('Similarity',
+              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          const Spacer(),
+          Text('${storage.elevenlabsSimilarity.toStringAsFixed(2)}',
+              style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+      Slider(
+        value: storage.elevenlabsSimilarity,
+        min: 0.0,
+        max: 1.0,
+        divisions: 20,
+        activeColor: Colors.blueAccent,
+        inactiveColor: Colors.white12,
+        onChanged: (val) => storage.setElevenlabsSimilarity(val),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Creative', style: TextStyle(color: Colors.white24, fontSize: 9)),
+            Text('Faithful', style: TextStyle(color: Colors.white24, fontSize: 9)),
+          ],
+        ),
+      ),
+
+      const SizedBox(height: 8),
+
+      // Style
+      Row(
+        children: [
+          const Text('Style',
+              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          const Spacer(),
+          Text('${storage.elevenlabsStyle.toStringAsFixed(2)}',
+              style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+      Slider(
+        value: storage.elevenlabsStyle,
+        min: 0.0,
+        max: 1.0,
+        divisions: 20,
+        activeColor: Colors.blueAccent,
+        inactiveColor: Colors.white12,
+        onChanged: (val) => storage.setElevenlabsStyle(val),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Subtle', style: TextStyle(color: Colors.white24, fontSize: 9)),
+            Text('Expressive', style: TextStyle(color: Colors.white24, fontSize: 9)),
+          ],
+        ),
+      ),
+
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.cloud_outlined, color: Colors.amber, size: 16),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Requires an ElevenLabs API key. Free tier: ~10 min/month.',
+                style: TextStyle(color: Colors.white38, fontSize: 11),
               ),
             ),
           ],
