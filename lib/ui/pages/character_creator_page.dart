@@ -427,10 +427,10 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
 
   // ── Generation Detail Options ──
   static const _generationDetailOptions = {
-    'Brief': '1 short paragraph (50-80 words max)',
-    'Standard': '1-2 paragraphs (100-150 words max)',
-    'Detailed': '2-3 paragraphs (200-300 words max)',
-    'Comprehensive': '3-4 paragraphs (300-500 words max)',
+    'Brief': '1 short paragraph (80-150 words max)',
+    'Standard': '2-3 paragraphs (200-400 words max)',
+    'Detailed': '3-4 paragraphs (300-500 words max)',
+    'Comprehensive': '4-5 paragraphs (500-700 words max)',
   };
 
   // Step 2 — Generation state
