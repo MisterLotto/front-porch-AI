@@ -533,7 +533,24 @@ body {
   font-weight: 700;
 }
 
-/* Message count badge */
+/* Message count badge — inline in card info */
+.char-card-msg-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.char-card-msg-count svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+
+/* Message count badge (overlay) */
 .char-card-badge {
   position: absolute;
   top: 8px;
@@ -682,6 +699,57 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Model name label in chat appbar */
+.chat-model-label {
+  font-size: 10px;
+  color: var(--accent-purple, #A78BFA);
+  background: rgba(139, 92, 246, 0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  flex-shrink: 0;
+}
+
+/* Overflow menu */
+.appbar-overflow-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+  padding: 4px 0;
+  overflow: hidden;
+}
+
+.appbar-overflow-menu.open {
+  display: block;
+}
+
+.appbar-overflow-menu button {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.appbar-overflow-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Message Area */
@@ -1376,11 +1444,114 @@ body {
   }
 
   .char-grid-wrap {
-    padding: 0 16px 16px;
+    padding: 0 12px 16px;
   }
 
+  /* ── Compact list layout for character cards ── */
   .char-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+  }
+
+  .char-card {
+    flex-direction: row;
+    aspect-ratio: unset;
+    height: 80px;
+    border-radius: var(--radius-sm);
+  }
+
+  .char-card .char-card-img-wrap {
+    width: 80px;
+    min-width: 80px;
+    height: 100%;
+    flex: none;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  .char-card .char-card-img {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  }
+
+  .char-card .char-card-placeholder {
+    font-size: 24px;
+  }
+
+  .char-card .char-card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 8px 12px;
+  }
+
+  .char-card .char-card-name {
+    font-size: 14px;
+  }
+
+  .char-card .char-card-desc {
+    -webkit-line-clamp: 1;
+    font-size: 11px;
+  }
+
+  .char-card .char-card-tags {
+    display: none;
+  }
+
+  .char-card .char-card-export {
+    display: none !important;
+  }
+
+  .char-card .char-card-delete {
+    top: 50%;
+    transform: translateY(-50%);
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+    line-height: 24px;
+  }
+
+  /* Folder cards compact */
+  .char-card.folder-card {
+    flex-direction: row;
+    aspect-ratio: unset;
+    height: 64px;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 16px;
     gap: 12px;
+  }
+
+  .char-card.folder-card .char-card-img-wrap {
+    width: auto;
+    min-width: auto;
+    height: auto;
+  }
+
+  .char-card.folder-card .char-card-info {
+    padding: 0;
+  }
+
+  /* Group cards compact */
+  .char-card.group-card {
+    flex-direction: row;
+    aspect-ratio: unset;
+    height: 64px;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .char-card.group-card .char-card-img-wrap {
+    width: auto;
+    min-width: auto;
+    height: auto;
+  }
+
+  .char-card.group-card .char-card-info {
+    padding: 0;
   }
 
   .message {

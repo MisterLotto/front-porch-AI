@@ -429,6 +429,9 @@ class WebServerService extends ChangeNotifier {
 
       var characters = await _db!.getAllCharacters();
 
+      // Fetch message counts per character (keyed by character DB id)
+      final msgCounts = await _db!.getMessageCountsPerCharacter();
+
       // Apply search filter (bypasses folder filtering)
       if (searchTerm != null && searchTerm.isNotEmpty) {
         characters = characters.where((c) {
@@ -466,6 +469,14 @@ class WebServerService extends ChangeNotifier {
           // reversed so newest first — sort by updatedAt or leave as-is
           characters = characters.reversed.toList();
           break;
+        case 'messages':
+          // Sort by message count descending (most messages first)
+          characters.sort((a, b) {
+            final aCount = msgCounts[a.id] ?? 0;
+            final bCount = msgCounts[b.id] ?? 0;
+            return bCount.compareTo(aCount);
+          });
+          break;
       }
 
       final result = characters.map((c) => {
@@ -478,6 +489,7 @@ class WebServerService extends ChangeNotifier {
         'tags': _tryParseJsonList(c.tags),
         'hasAvatar': c.imagePath != null && c.imagePath!.isNotEmpty,
         'folderId': c.folderId ?? '',
+        'messageCount': msgCounts[c.id] ?? 0,
       }).toList();
 
       return shelf.Response.ok(

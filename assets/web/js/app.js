@@ -35,6 +35,22 @@
 
     function isNearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < 100; }
 
+    async function updateModelLabel() {
+        const label = $('#chat-model-label');
+        if (!label) return;
+        try {
+            const data = await apiJson('/api/settings');
+            if (data && data.apiModel) {
+                // Show just the model basename (e.g. "claude-3.5-sonnet" from "anthropic/claude-3.5-sonnet")
+                const name = data.apiModel.includes('/') ? data.apiModel.split('/').pop() : data.apiModel;
+                label.textContent = name;
+                label.style.display = '';
+            } else {
+                label.style.display = 'none';
+            }
+        } catch { label.style.display = 'none'; }
+    }
+
     async function api(path, opts = {}) {
         const headers = { ...opts.headers };
         if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -415,7 +431,10 @@
                     ${!isSelectingForGroup ? '<button class="char-card-export" title="Export PNG" style="position:absolute;top:4px;left:4px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:2">📥</button><button class="char-card-delete" title="Delete character">🗑️</button>' : ''}
                 </div>
                 <div class="char-card-info">
-                    <div class="char-card-name">${esc(char.name)}</div>
+                    <div style="display:flex;align-items:center;gap:4px">
+                        <div class="char-card-name" style="flex:1;min-width:0">${esc(char.name)}</div>
+                        ${(char.messageCount || 0) > 0 ? `<span class="char-card-msg-count"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>${char.messageCount}</span>` : ''}
+                    </div>
                     ${char.description ? `<div class="char-card-desc">${esc(char.description)}</div>` : ''}
                     ${tagsHtml ? `<div class="char-card-tags">${tagsHtml}</div>` : ''}
                 </div>
@@ -735,6 +754,9 @@
         $('#chat-char-desc').textContent = currentCharacterDesc.length > 40
             ? currentCharacterDesc.substring(0, 40) + '...'
             : currentCharacterDesc;
+
+        // Fetch and show current model name
+        updateModelLabel();
 
         const avatarEl = $('#chat-avatar');
         if (char.hasAvatar) {
@@ -1835,7 +1857,7 @@
                 overlay.className = 'modal-overlay';
                 document.body.appendChild(overlay);
             }
-            overlay.innerHTML = `<div class="modal" style="min-width:500px;max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
+            overlay.innerHTML = `<div class="modal" style="min-width:min(500px, 95vw);max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
                 <div class="modal-title">🧠 Model / API Config</div>
                 <div style="overflow-y:auto;flex:1;padding:12px 0;">
                     <div class="radio-group" style="margin-bottom:12px">
@@ -1940,9 +1962,32 @@
                 if (res && res.ok) {
                     overlay.classList.remove('active');
                     loadSettings();
+                    updateModelLabel();
                 }
             });
         });
+
+        // Appbar overflow menu — toggle & dispatch
+        const overflowBtn = $('#btn-appbar-overflow');
+        const overflowMenu = $('#appbar-overflow-menu');
+        if (overflowBtn && overflowMenu) {
+            overflowBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                overflowMenu.classList.toggle('open');
+            });
+            // Close menu when clicking anywhere else
+            document.addEventListener('click', () => overflowMenu.classList.remove('open'));
+            overflowMenu.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-action]');
+                if (!btn) return;
+                overflowMenu.classList.remove('open');
+                const action = btn.dataset.action;
+                if (action === 'model') $('#btn-rp-model').click();
+                if (action === 'samplers') $('#btn-rp-chat').click();
+                if (action === 'tts') $('#btn-rp-tts').click();
+                if (action === 'edit') $('#btn-edit-char').click();
+            });
+        }
 
         $('#btn-rp-tts').addEventListener('click', async () => {
             // Open TTS settings as modal overlay
