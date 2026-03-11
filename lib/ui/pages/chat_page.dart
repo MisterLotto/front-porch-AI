@@ -17,7 +17,10 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:front_porch_ai/services/desktop_spell_check_service.dart';
 import 'package:provider/provider.dart';
@@ -99,6 +102,8 @@ class _ChatPageState extends State<ChatPage> {
   double _sidebarWidth = 300;
   bool _isCallActive = false;
   bool _wasLoading = false;
+  bool? _externalImagesAllowed;
+  bool _imageConsentChecked = false;
 
   @override
   void initState() {
@@ -274,6 +279,80 @@ class _ChatPageState extends State<ChatPage> {
                                         characterImage: senderImage,
                                         index: index,
                                         senderColor: senderColor,
+                                        externalImagesAllowed: _externalImagesAllowed,
+                                        onRequestImagePermission: () async {
+                                          if (_externalImagesAllowed != null) return _externalImagesAllowed!;
+                                          // Check persisted consent first
+                                          if (!_imageConsentChecked) {
+                                            _imageConsentChecked = true;
+                                            final prefs = await SharedPreferences.getInstance();
+                                            final consented = prefs.getStringList('image_consent_characters') ?? [];
+                                            final charName = Provider.of<ChatService>(context, listen: false).activeCharacter?.name ?? '';
+                                            if (charName.isNotEmpty && consented.contains(charName)) {
+                                              if (mounted) setState(() => _externalImagesAllowed = true);
+                                              return true;
+                                            }
+                                          }
+                                          final result = await showDialog<bool>(
+                                            context: context,
+                                            barrierDismissible: false,
+                                            builder: (ctx) => AlertDialog(
+                                              backgroundColor: const Color(0xFF1E293B),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                              icon: const Icon(Icons.shield_outlined, color: Colors.orangeAccent, size: 36),
+                                              title: const Text('External Image Detected',
+                                                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                              content: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'This message contains images hosted on an external server. '
+                                                    'Loading them carries security risks:',
+                                                    style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  _buildRiskItem(Icons.visibility, 'Your IP address will be exposed to the image host'),
+                                                  _buildRiskItem(Icons.bug_report, 'Maliciously crafted images could potentially exploit vulnerabilities'),
+                                                  _buildRiskItem(Icons.track_changes, 'The URL may be used for tracking'),
+                                                  const SizedBox(height: 16),
+                                                  Text(
+                                                    'The source has not been verified as safe.',
+                                                    style: TextStyle(color: Colors.orangeAccent.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w600),
+                                                  ),
+                                                ],
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(ctx, false),
+                                                  child: const Text('Block Images', style: TextStyle(color: Colors.white54)),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.pop(ctx, true),
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black87),
+                                                  child: const Text('Accept Risk & Load'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                          final allowed = result ?? false;
+                                          if (allowed) {
+                                            // Persist consent for this character
+                                            final prefs = await SharedPreferences.getInstance();
+                                            final charName = Provider.of<ChatService>(context, listen: false).activeCharacter?.name ?? '';
+                                            if (charName.isNotEmpty) {
+                                              final consented = prefs.getStringList('image_consent_characters') ?? [];
+                                              if (!consented.contains(charName)) {
+                                                consented.add(charName);
+                                                await prefs.setStringList('image_consent_characters', consented);
+                                              }
+                                            }
+                                          }
+                                          if (mounted) {
+                                            setState(() => _externalImagesAllowed = allowed);
+                                          }
+                                          return allowed;
+                                        },
                                       );
                                     },
                                   ),
@@ -1839,9 +1918,11 @@ class _MessageBubble extends StatefulWidget {
   final ChatMessage message;
   final File? characterImage;
   final int index;
-  final Color? senderColor; // Non-null in group mode
+  final Color? senderColor;
+  final bool? externalImagesAllowed;
+  final Future<bool> Function()? onRequestImagePermission;
 
-  const _MessageBubble({required this.message, this.characterImage, required this.index, this.senderColor});
+  const _MessageBubble({required this.message, this.characterImage, required this.index, this.senderColor, this.externalImagesAllowed, this.onRequestImagePermission});
 
   @override
   State<_MessageBubble> createState() => _MessageBubbleState();
@@ -2117,7 +2198,12 @@ class _MessageBubbleState extends State<_MessageBubble> {
                         );
                       },
                     ),
-                  _StyledChatMessage(text: message.displayText, isUser: message.isUser),
+                  _StyledChatMessage(
+                    text: message.displayText,
+                    isUser: message.isUser,
+                    externalImagesAllowed: widget.externalImagesAllowed,
+                    onRequestImagePermission: widget.onRequestImagePermission,
+                  ),
                   // Swipe arrows for alternate greetings on first message
                   if (index == 0 && !message.isUser)
                     Consumer<ChatService>(
@@ -2376,57 +2462,115 @@ class _MessageBubbleState extends State<_MessageBubble> {
   }
 }
 
+Widget _buildRiskItem(IconData icon, String text) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.orangeAccent),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4))),
+      ],
+    ),
+  );
+}
+
+final _markdownImageRegex = RegExp(r'!\[([^\]]*)\]\((https?://[^)]+)\)');
+
 class _StyledChatMessage extends StatelessWidget {
   final String text;
   final bool isUser;
+  final bool? externalImagesAllowed;
+  final Future<bool> Function()? onRequestImagePermission;
 
-  const _StyledChatMessage({required this.text, required this.isUser});
+  const _StyledChatMessage({
+    required this.text,
+    required this.isUser,
+    this.externalImagesAllowed,
+    this.onRequestImagePermission,
+  });
 
   @override
   Widget build(BuildContext context) {
     final storageService = Provider.of<StorageService>(context);
     final scaledSize = 14.0 * storageService.textScale;
-    // Two-pass approach:
-    // Pass 1: Split on asterisk blocks *...* (including multi-line)
-    // Pass 2: Within each segment, colorize quoted dialogue "..."
-    // This ensures quotes inside asterisk blocks still get yellow treatment
 
+    // Check for markdown images
+    final imageMatches = _markdownImageRegex.allMatches(text).toList();
+    if (imageMatches.isEmpty) {
+      // No images — use existing fast path
+      return _buildStyledText(text, scaledSize);
+    }
+
+    // Split text into segments: [text, image, text, image, text]
+    final widgets = <Widget>[];
+    int lastEnd = 0;
+
+    for (final match in imageMatches) {
+      // Text before this image
+      if (match.start > lastEnd) {
+        final textBefore = text.substring(lastEnd, match.start).trim();
+        if (textBefore.isNotEmpty) {
+          widgets.add(_buildStyledText(textBefore, scaledSize));
+        }
+      }
+
+      final altText = match.group(1) ?? '';
+      final imageUrl = match.group(2)!;
+
+      // Image placeholder or loaded image
+      widgets.add(_ExternalImageWidget(
+        url: imageUrl,
+        altText: altText,
+        allowed: externalImagesAllowed,
+        onRequestPermission: onRequestImagePermission,
+      ));
+
+      lastEnd = match.end;
+    }
+
+    // Remaining text after last image
+    if (lastEnd < text.length) {
+      final textAfter = text.substring(lastEnd).trim();
+      if (textAfter.isNotEmpty) {
+        widgets.add(_buildStyledText(textAfter, scaledSize));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
+  }
+
+  Widget _buildStyledText(String segment, double scaledSize) {
     final plainStyle = TextStyle(color: Colors.white, fontSize: scaledSize);
     final dialogueStyle = TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.w500, fontSize: scaledSize);
     final actionStyle = TextStyle(color: const Color(0xFF90CAF9), fontSize: scaledSize);
 
-    // dotAll flag lets . match newlines, so *multi-line blocks* are captured
     final asteriskRegex = RegExp(r'\*[^*]+\*', dotAll: true);
     final quoteRegex = RegExp(r'"[^"]*"');
 
     List<TextSpan> spans = [];
 
-    // Pass 1: Split by asterisk blocks
     int lastEnd = 0;
-    for (final match in asteriskRegex.allMatches(text)) {
-      // Process plain text before this asterisk block
+    for (final match in asteriskRegex.allMatches(segment)) {
       if (match.start > lastEnd) {
-        _addColorizedQuotes(spans, text.substring(lastEnd, match.start), plainStyle, dialogueStyle, quoteRegex);
+        _addColorizedQuotes(spans, segment.substring(lastEnd, match.start), plainStyle, dialogueStyle, quoteRegex);
       }
-
-      // Process the asterisk block — colorize inner quotes as yellow, rest as blue italic
       final blockText = match.group(0)!;
       _addColorizedQuotes(spans, blockText, actionStyle, dialogueStyle, quoteRegex);
-
       lastEnd = match.end;
     }
 
-    // Process remaining text after last asterisk block
-    if (lastEnd < text.length) {
-      _addColorizedQuotes(spans, text.substring(lastEnd), plainStyle, dialogueStyle, quoteRegex);
+    if (lastEnd < segment.length) {
+      _addColorizedQuotes(spans, segment.substring(lastEnd), plainStyle, dialogueStyle, quoteRegex);
     }
 
     if (spans.isEmpty) {
       return SelectionArea(
-        child: Text(
-          text,
-          style: TextStyle(color: Colors.white, fontSize: scaledSize, height: 1.4),
-        ),
+        child: Text(segment, style: TextStyle(color: Colors.white, fontSize: scaledSize, height: 1.4)),
       );
     }
 
@@ -2440,8 +2584,6 @@ class _StyledChatMessage extends StatelessWidget {
     );
   }
 
-  /// Splits a segment of text by quoted dialogue and adds spans.
-  /// Non-quoted text gets [baseStyle], quoted text gets [dialogueStyle].
   void _addColorizedQuotes(List<TextSpan> spans, String segment, TextStyle baseStyle, TextStyle dialogueStyle, RegExp quoteRegex) {
     int lastEnd = 0;
     for (final match in quoteRegex.allMatches(segment)) {
@@ -2454,6 +2596,201 @@ class _StyledChatMessage extends StatelessWidget {
     if (lastEnd < segment.length) {
       spans.add(TextSpan(text: segment.substring(lastEnd), style: baseStyle));
     }
+  }
+}
+
+/// Renders an external image with consent gating.
+class _ExternalImageWidget extends StatefulWidget {
+  final String url;
+  final String altText;
+  final bool? allowed;
+  final Future<bool> Function()? onRequestPermission;
+
+  const _ExternalImageWidget({
+    required this.url,
+    required this.altText,
+    required this.allowed,
+    required this.onRequestPermission,
+  });
+
+  @override
+  State<_ExternalImageWidget> createState() => _ExternalImageWidgetState();
+}
+
+class _ExternalImageWidgetState extends State<_ExternalImageWidget> {
+  bool _loading = false;
+  File? _cachedFile;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.allowed == null && widget.onRequestPermission != null) {
+      _loading = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await widget.onRequestPermission!.call();
+        if (mounted) setState(() => _loading = false);
+      });
+    } else if (widget.allowed == true) {
+      _loadCachedImage();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ExternalImageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.allowed == true && oldWidget.allowed != true && _cachedFile == null) {
+      _loadCachedImage();
+    }
+  }
+
+  Future<void> _loadCachedImage() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      final cacheDir = Directory('${appDir.path}/image_cache');
+      if (!await cacheDir.exists()) await cacheDir.create(recursive: true);
+      final hash = widget.url.hashCode.toRadixString(16);
+      final uri = Uri.tryParse(widget.url);
+      final ext = (uri?.pathSegments.isNotEmpty == true)
+          ? '.${uri!.pathSegments.last.split('.').last.split('?').first}'
+          : '.png';
+      final file = File('${cacheDir.path}/$hash$ext');
+
+      if (await file.exists()) {
+        if (mounted) setState(() { _cachedFile = file; _loading = false; });
+        return;
+      }
+
+      final httpClient = HttpClient();
+      try {
+        final request = await httpClient.getUrl(Uri.parse(widget.url));
+        final response = await request.close();
+        if (response.statusCode == 200) {
+          final bytes = await consolidateHttpClientResponseBytes(response);
+          await file.writeAsBytes(bytes);
+          if (mounted) setState(() { _cachedFile = file; _loading = false; });
+        } else {
+          if (mounted) setState(() { _error = 'HTTP ${response.statusCode}'; _loading = false; });
+        }
+      } finally {
+        httpClient.close();
+      }
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Already allowed — show image
+    if (widget.allowed == true) {
+      if (_cachedFile != null) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 600),
+              child: Image.file(
+                _cachedFile!,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stack) => Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.broken_image, color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Flexible(child: Text('Failed to load image', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.8), fontSize: 12))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+      if (_error != null) {
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.broken_image, color: Colors.redAccent, size: 18),
+              const SizedBox(width: 8),
+              Flexible(child: Text('Failed to load image', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.8), fontSize: 12))),
+            ],
+          ),
+        );
+      }
+      return Container(
+        width: 300, height: 200,
+        decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(12)),
+        child: const Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            CircularProgressIndicator(color: Colors.blueAccent, strokeWidth: 2),
+            SizedBox(height: 8),
+            Text('Loading image...', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          ]),
+        ),
+      );
+    }
+
+    // Denied — show subtle blocked indicator
+    if (widget.allowed == false) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.image_not_supported, size: 14, color: Colors.white.withValues(alpha: 0.2)),
+            const SizedBox(width: 6),
+            Text('Image blocked', style: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 11)),
+          ],
+        ),
+      );
+    }
+
+    // Waiting for consent dialog — show loading placeholder
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.orangeAccent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14, height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: Colors.orangeAccent.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'External image detected...',
+              style: TextStyle(color: Colors.orangeAccent.withValues(alpha: 0.8), fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
