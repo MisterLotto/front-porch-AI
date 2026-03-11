@@ -5,6 +5,17 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/services/tts_engine.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
 
+/// Exception thrown when ElevenLabs API returns a recoverable error
+/// that the UI should display to the user.
+class ElevenLabsApiException implements Exception {
+  final String message;
+  final int statusCode;
+  final bool isQuotaExceeded;
+  const ElevenLabsApiException(this.message, {this.statusCode = 0, this.isQuotaExceeded = false});
+  @override
+  String toString() => 'ElevenLabsApiException: $message (status=$statusCode)';
+}
+
 /// ElevenLabs TTS engine — premium cloud-based TTS with expressive voices.
 ///
 /// Uses the ElevenLabs Text-to-Speech API.
@@ -71,7 +82,29 @@ class ElevenLabsTtsEngine implements TtsEngine {
 
       if (response.statusCode != 200) {
         print('ElevenLabs TTS error: ${response.statusCode} ${response.body}');
-        return null;
+
+        // Parse error detail for user-friendly message
+        String userMessage;
+        bool isQuota = false;
+        try {
+          final detail = jsonDecode(response.body)['detail'];
+          final status = detail is Map ? detail['status']?.toString() ?? '' : '';
+          if (response.statusCode == 401) {
+            userMessage = 'ElevenLabs API key is invalid or expired.';
+          } else if (response.statusCode == 422 || status.contains('quota')) {
+            userMessage = 'ElevenLabs credits exhausted. Your quota will reset at the start of your next billing cycle.';
+            isQuota = true;
+          } else if (response.statusCode == 429) {
+            userMessage = 'ElevenLabs rate limit reached. Please try again in a moment.';
+          } else {
+            userMessage = 'ElevenLabs error: ${detail is Map ? detail['message'] ?? response.statusCode : response.statusCode}';
+          }
+        } catch (_) {
+          userMessage = 'ElevenLabs error (${response.statusCode})';
+        }
+
+        throw ElevenLabsApiException(userMessage,
+            statusCode: response.statusCode, isQuotaExceeded: isQuota);
       }
 
       // ElevenLabs returns MP3 audio directly — no conversion needed.
@@ -82,6 +115,8 @@ class ElevenLabsTtsEngine implements TtsEngine {
       await outputFile.writeAsBytes(response.bodyBytes);
 
       return outputFile;
+    } on ElevenLabsApiException {
+      rethrow; // Let TTS service handle these
     } catch (e) {
       print('ElevenLabs TTS error: $e');
       return null;

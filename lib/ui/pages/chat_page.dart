@@ -107,6 +107,46 @@ class _ChatPageState extends State<ChatPage> {
     );
     // Scroll to bottom on initial load
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+
+    // Listen for TTS errors (e.g. ElevenLabs quota exceeded) and show a snackbar.
+    final tts = Provider.of<TtsService>(context, listen: false);
+    tts.addListener(_onTtsChanged);
+  }
+
+  void _onTtsChanged() {
+    final tts = Provider.of<TtsService>(context, listen: false);
+    if (tts.lastError != null && mounted) {
+      final error = tts.lastError!;
+      tts.clearError();
+      // If a call is active, end it
+      if (_isCallActive) {
+        setState(() => _isCallActive = false);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(error, style: const TextStyle(color: Colors.white))),
+            ],
+          ),
+          backgroundColor: const Color(0xFFB91C1C),
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(label: 'OK', textColor: Colors.white70, onPressed: () {}),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    Provider.of<TtsService>(context, listen: false).removeListener(_onTtsChanged);
+    _chatFocusNode.dispose();
+    _scrollController.dispose();
+    _controller.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {

@@ -49,6 +49,12 @@ class TtsService extends ChangeNotifier {
   double get modelDownloadProgress => _modelDownloadProgress;
   bool get isDownloadingModel => _isDownloadingModel;
 
+  /// Last error message from a TTS engine (e.g. quota exceeded).
+  /// The UI should observe this and show a snackbar/alert when non-null.
+  String? _lastError;
+  String? get lastError => _lastError;
+  void clearError() { _lastError = null; notifyListeners(); }
+
   /// The currently active TTS engine instance.
   TtsEngine get activeEngine {
     switch (_storageService.ttsEngine) {
@@ -122,6 +128,7 @@ class TtsService extends ChangeNotifier {
       return;
     }
 
+    _lastError = null;
     await stop();
 
     // Resolve voice
@@ -290,6 +297,15 @@ class TtsService extends ChangeNotifier {
         await _playWavFile(audioFile);
         // Don't delete — it's cached now
       }
+    } on ElevenLabsApiException catch (e) {
+      print('TTS ElevenLabs error: $e');
+      _lastError = e.message;
+      _isSpeaking = false;
+      _isGenerating = false;
+      _generationProgress = 0.0;
+      _currentMessageId = null;
+      notifyListeners();
+      return;
     } catch (e) {
       print('TTS error: $e');
     } finally {
@@ -448,6 +464,9 @@ class TtsService extends ChangeNotifier {
       }
 
       await producerFuture; // ensure producer finishes cleanly
+    } on ElevenLabsApiException catch (e) {
+      print('TTS ElevenLabs streaming error: $e');
+      _lastError = e.message;
     } catch (e) {
       print('TTS streaming error: $e');
     } finally {
