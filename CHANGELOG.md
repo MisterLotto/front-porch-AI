@@ -2,6 +2,26 @@
 
 All notable changes to Front Porch AI will be documented in this file.
 
+## [V0.9.2] - 2026-03-13
+
+### ✨ New Features
+- **Objective / Goals System**: Set session-level objectives that guide AI behavior. Goals persist across messages and shape conversation direction.
+- **RAG-Grounded Summaries**: Chat summaries use Retrieval-Augmented Generation with an embedded vector store for context-aware rolling summaries. Configurable retrieval count, window size, and embedding source.
+- **Data Bank Dialog**: Unified UI for browsing RAG memory entries, embedding stats, and persona-linked memory.
+- **NSFW Content Toggle**: Global on/off switch for NSFW content filtering with per-character override.
+- **WebUI RAG / Memory Menu**: New hamburger menu entry for RAG settings — retrieval count, window size, embedding model, toggle on/off.
+- **Greeting Tones (Guided Creator)**: Guided character creator now supports greeting tone selection, matching the automated creator.
+- **Intel Mac Detection**: Detects Intel Macs and disables KoboldCpp with a warning banner directing users to Remote API. Covers Flutter app, WebUI settings, model modal, and character creator.
+- **Lorebook World-Building Focus**: Prompts rewritten to produce world lore (locations, factions, magic, cultures) instead of character biography. Per-category guidance, expanded categories (added Flora/Fauna, renamed History/Lore → History/Events).
+
+### 📱 WebUI Mobile Fixes
+- Fixed chat input bar clipped off bottom in Safari (viewport height + safe area insets)
+- Added back buttons to all Settings sub-sections on mobile
+- Compact modals and responsive layout fixes for small screens
+- Added hamburger menu for RAG/Memory feature settings
+
+---
+
 ## [V0.9.1] - 2026-03-11
 
 ### ✨ New Features

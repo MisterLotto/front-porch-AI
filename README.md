@@ -122,7 +122,28 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
 
-## 🆕 What's New in V0.9.1
+## 🆕 What's New in V0.9.2
+
+- 🎯 **Objective / Goals System**: Set session-level objectives that guide the AI's behavior. Goals persist across messages and shift the conversation toward your desired outcome without manual steering.
+- 🧠 **RAG-Grounded Summaries**: Chat summaries now use Retrieval-Augmented Generation with an embedded vector store for more accurate, context-aware rolling summaries. Includes configurable retrieval count, window size, and embedding source.
+- 📊 **Data Bank Dialog**: New unified UI for browsing and managing RAG memory entries, embedding stats, and persona-linked memory.
+- 🔞 **NSFW Content Toggle**: Global on/off switch for NSFW content filtering, with per-character override support.
+- 📱 **WebUI Mobile Improvements**:
+  - Fixed chat input bar clipped off the bottom in Safari (viewport height + safe area insets)
+  - Added back buttons to all Settings sub-sections on mobile
+  - Compact modals and responsive layout fixes for small screens
+- 🍔 **WebUI RAG / Memory Menu**: New hamburger menu entry for RAG settings — configure retrieval count, window size, embedding model, and toggle RAG on/off directly from the WebUI.
+- 🎵 **Greeting Tones in Guided Creator**: The guided character creator now supports greeting tone selection (Romantic, Adventure, Comedy, etc.) — matching the existing automated creator and Flutter app.
+- 🍎 **Intel Mac Detection**: Automatically detects Intel-based Macs and disables KoboldCpp (which requires Apple Silicon). A warning banner guides users to Remote API mode across the Flutter app, WebUI settings, model modal, and character creator.
+- 📖 **Lorebook World-Building Focus**: Lorebook generation prompts rewritten to produce world lore (locations, factions, magic systems, cultures, creatures) instead of character biography. New per-category prompt guidance and expanded categories (added Flora/Fauna, renamed History/Lore → History/Events).
+- 🐛 **Bug Fixes**:
+  - Fixed missing hamburger menu for feature settings in WebUI
+  - Fixed missing back button in Settings on mobile WebUI
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.9.1
 
 - 🔊 **ElevenLabs TTS Engine**: Premium cloud TTS with configurable Stability, Similarity, and Style sliders. Supports Flash v2.5 (~75ms latency), Multilingual v2 (29 languages), and v3 (best quality). Available in both the desktop app and WebUI Settings page.
   - **Narration Filters**: SillyTavern-style filters — narrate quoted dialogue only, or ignore asterisked actions. Configurable per-character.
@@ -146,7 +167,7 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
   - Fixed ElevenLabs hitting 429 rate limit errors by capping concurrency at 3
   - Switched ElevenLabs to MP3 output format to fix audio playback issues with WAV concatenation
 
-## 🆕 What's New in V0.9.0
+### What's New in V0.9.0
 
 - 💾 **Database Optimization**: Converted all delete operations from soft-delete to hard-delete, eliminating massive DB bloat from accumulated "ghost" rows. Existing bloat is automatically purged on upgrade (e.g. 334MB → 2MB).
 - ☁️ **Cloud Sync Overhaul**:
@@ -202,9 +223,6 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 - 🎛️ **Extended Max Output Tokens**: Increased from 2,048 to 16,384 for thinking models.
 - 🛡️ **Pre-Release Safety**: Beta builds use a separate database to prevent schema conflicts.
 - 📄 **License Change**: Switched from GPLv3 to **AGPL-3.0** for v0.9.0+.
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.8.1
 
