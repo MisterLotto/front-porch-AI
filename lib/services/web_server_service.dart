@@ -1313,6 +1313,15 @@ class WebServerService extends ChangeNotifier {
           // Backend runtime state
           'koboldRunning': _llmProvider?.koboldService.isRunning ?? false,
           'koboldReady': _llmProvider?.koboldService.isReady ?? false,
+          // RAG / Memory
+          'ragEnabled': s.ragEnabled,
+          'ragRetrievalCount': s.ragRetrievalCount,
+          'ragWindowSize': s.ragWindowSize,
+          'ragEmbeddingSource': s.ragEmbeddingSource,
+          'ragEmbeddingModel': s.ragEmbeddingModel,
+          // Auto-persona
+          'autoPersonaEnabled': s.autoPersonaEnabled,
+          'autoPersonaInterval': s.autoPersonaInterval,
         }),
         headers: {'Content-Type': 'application/json'},
       );
@@ -1515,6 +1524,17 @@ class WebServerService extends ChangeNotifier {
           await s.setWebServerPin(newPin);
         }
       }
+
+      // RAG / Memory
+      if (body.containsKey('ragEnabled')) await s.setRagEnabled(body['ragEnabled'] as bool);
+      if (body.containsKey('ragRetrievalCount')) await s.setRagRetrievalCount((body['ragRetrievalCount'] as num).toInt());
+      if (body.containsKey('ragWindowSize')) await s.setRagWindowSize((body['ragWindowSize'] as num).toInt());
+      if (body.containsKey('ragEmbeddingSource')) await s.setRagEmbeddingSource(body['ragEmbeddingSource'].toString());
+      if (body.containsKey('ragEmbeddingModel')) await s.setRagEmbeddingModel(body['ragEmbeddingModel'].toString());
+
+      // Auto-persona
+      if (body.containsKey('autoPersonaEnabled')) await s.setAutoPersonaEnabled(body['autoPersonaEnabled'] as bool);
+      if (body.containsKey('autoPersonaInterval')) await s.setAutoPersonaInterval((body['autoPersonaInterval'] as num).toInt());
 
       return shelf.Response.ok(
         jsonEncode({'status': 'ok'}),

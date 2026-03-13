@@ -878,7 +878,32 @@
         const newMax = v + 1;
         while (state.greetingTones.length > newMax) state.greetingTones.pop();
         saveState();
+        renderStep2_Guided();
       }),
+      (() => {
+        const toneSec = el('div', {style:'margin-top:12px'});
+        toneSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:4px'}, 'Greeting Tones'));
+        const maxTones = state.altGreetingCount + 1;
+        toneSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.25);font-size:11px;margin-bottom:8px'},
+          state.altGreetingCount === 0
+            ? 'Tone for the first message.'
+            : `Select up to ${maxTones} — one per greeting.`
+        ));
+        const toneToggle = (opt, wrap, options, opts) => {
+          const arr = state.greetingTones;
+          const idx = arr.indexOf(opt);
+          if (idx >= 0) {
+            if (arr.length > 1) arr.splice(idx, 1);
+          } else {
+            if (arr.length >= maxTones) arr.splice(arr.length - 1, 1);
+            arr.push(opt);
+          }
+          saveState();
+          _renderChipsInto(wrap, options, arr, toneToggle, opts);
+        };
+        toneSec.appendChild(buildChips('chips-guided-tones', GREETING_TONES, state.greetingTones, toneToggle, {multi:true, nsfwFilter:true}));
+        return toneSec;
+      })(),
       (() => {
         const loreRow = el('div', {style:'margin-top:8px'});
         const loreToggle = el('div', {style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'});

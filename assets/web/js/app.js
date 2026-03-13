@@ -352,6 +352,12 @@
     // Expose switchPage for external modules (chargen save redirect)
     window._fpSwitchPage = switchPage;
 
+    // Mobile back buttons on sidebar pages
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.mobile-back-btn');
+        if (btn) switchPage(btn.dataset.back || 'home');
+    });
+
     // ═══════════════════════════════════════════════════════════
     // CHARACTER GRID (HOME PAGE)
     // ═══════════════════════════════════════════════════════════
@@ -1882,7 +1888,7 @@
                 document.body.appendChild(overlay);
             }
             const f2 = v => parseFloat(v).toFixed(2);
-            overlay.innerHTML = `<div class="modal" style="min-width:500px;max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
+            overlay.innerHTML = `<div class="modal" style="min-width:min(500px,95vw);max-width:min(700px,95vw);max-height:85vh;display:flex;flex-direction:column;">
                 <div class="modal-title">⚙ Chat / Sampler Settings</div>
                 <div style="overflow-y:auto;flex:1;padding:12px 0;">
                     <div class="slider-row"><label class="slider-label">Temperature</label>
@@ -2095,10 +2101,116 @@
                 const action = btn.dataset.action;
                 if (action === 'model') $('#btn-rp-model').click();
                 if (action === 'samplers') $('#btn-rp-chat').click();
+                if (action === 'memory') $('#btn-rp-memory').click();
                 if (action === 'tts') $('#btn-rp-tts').click();
                 if (action === 'edit') $('#btn-edit-char').click();
             });
         }
+
+        // ── Memory / RAG modal ──
+        $('#btn-rp-memory').addEventListener('click', async () => {
+            const data = await apiJson('/api/settings');
+            if (!data) return;
+            let overlay = $('#rp-memory-modal');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'rp-memory-modal';
+                overlay.className = 'modal-overlay';
+                document.body.appendChild(overlay);
+            }
+            const ragCount = data.ragRetrievalCount ?? 10;
+            const ragWin = data.ragWindowSize ?? 5;
+            const apInt = data.autoPersonaInterval ?? 5;
+
+            overlay.innerHTML = `<div class="modal" style="min-width:min(500px,95vw);max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
+                <div class="modal-title">💾 Memory (RAG)</div>
+                <div style="overflow-y:auto;flex:1;padding:12px 0;">
+                    <div class="toggle-row"><span>Enable RAG Memory</span>
+                        <label class="toggle-switch"><input type="checkbox" id="m-rag-enabled" ${data.ragEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+                    <div id="m-rag-fields" style="${data.ragEnabled ? '' : 'display:none'};margin-top:8px">
+                        <div class="slider-row"><label class="slider-label">Memories per turn</label>
+                            <input type="range" id="m-rag-retrieval" min="0" max="50" step="1" value="${ragCount}" class="settings-slider">
+                            <span class="slider-value" id="m-rag-retrieval-val">${ragCount === 0 ? 'All' : ragCount}</span></div>
+                        <div class="slider-row"><label class="slider-label">Window size</label>
+                            <input type="range" id="m-rag-window" min="3" max="10" step="1" value="${ragWin}" class="settings-slider">
+                            <span class="slider-value" id="m-rag-window-val">${ragWin}</span></div>
+                        <div class="settings-field" style="margin-top:8px"><label class="field-label">Embedding source</label>
+                            <select id="m-rag-source" class="settings-select">
+                                <option value="auto" ${data.ragEmbeddingSource === 'auto' ? 'selected' : ''}>Auto</option>
+                                <option value="onnx" ${data.ragEmbeddingSource === 'onnx' ? 'selected' : ''}>ONNX Local</option>
+                                <option value="kobold" ${data.ragEmbeddingSource === 'kobold' ? 'selected' : ''}>KoboldCpp</option>
+                                <option value="api" ${data.ragEmbeddingSource === 'api' ? 'selected' : ''}>API</option>
+                            </select></div>
+                        <div class="settings-field" style="margin-top:8px"><label class="field-label">API model</label>
+                            <input type="text" id="m-rag-model" class="settings-input" value="${esc(data.ragEmbeddingModel || '')}" placeholder="text-embedding-3-small"></div>
+                        <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;color:rgba(255,255,255,0.4);font-size:11px;margin-top:8px">
+                            ℹ️ Embeds messages in the background. API embedding uses tokens.</div>
+                        <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0"></div>
+                        <div class="toggle-row"><span>✨ Auto-update persona</span>
+                            <label class="toggle-switch"><input type="checkbox" id="m-auto-persona" ${data.autoPersonaEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+                        <div id="m-persona-fields" style="${data.autoPersonaEnabled ? '' : 'display:none'};margin-top:4px">
+                            <div class="slider-row"><label class="slider-label">Extract every</label>
+                                <input type="range" id="m-persona-interval" min="5" max="50" step="5" value="${apInt}" class="settings-slider">
+                                <span class="slider-value" id="m-persona-interval-val">${apInt} msgs</span></div>
+                            <div style="font-size:11px;color:rgba(255,255,255,0.3)">
+                                Extracts personal facts from your messages using the LLM.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-outlined" id="m-rag-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="m-rag-save">Save</button>
+                </div>
+            </div>`;
+            overlay.classList.add('active');
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('active'); });
+
+            // Toggle visibility
+            overlay.querySelector('#m-rag-enabled')?.addEventListener('change', (e) => {
+                const f = overlay.querySelector('#m-rag-fields');
+                if (f) f.style.display = e.target.checked ? 'block' : 'none';
+            });
+            overlay.querySelector('#m-auto-persona')?.addEventListener('change', (e) => {
+                const f = overlay.querySelector('#m-persona-fields');
+                if (f) f.style.display = e.target.checked ? 'block' : 'none';
+            });
+            // Slider feedback
+            overlay.querySelector('#m-rag-retrieval')?.addEventListener('input', (e) => {
+                const v = parseInt(e.target.value);
+                const s = overlay.querySelector('#m-rag-retrieval-val');
+                if (s) s.textContent = v === 0 ? 'All' : v;
+            });
+            overlay.querySelector('#m-rag-window')?.addEventListener('input', (e) => {
+                const s = overlay.querySelector('#m-rag-window-val');
+                if (s) s.textContent = e.target.value;
+            });
+            overlay.querySelector('#m-persona-interval')?.addEventListener('input', (e) => {
+                const s = overlay.querySelector('#m-persona-interval-val');
+                if (s) s.textContent = e.target.value + ' msgs';
+            });
+            // Cancel
+            overlay.querySelector('#m-rag-cancel').addEventListener('click', () => overlay.classList.remove('active'));
+            // Save
+            overlay.querySelector('#m-rag-save').addEventListener('click', async () => {
+                const payload = {
+                    ragEnabled: overlay.querySelector('#m-rag-enabled').checked,
+                    ragRetrievalCount: parseInt(overlay.querySelector('#m-rag-retrieval').value),
+                    ragWindowSize: parseInt(overlay.querySelector('#m-rag-window').value),
+                    ragEmbeddingSource: overlay.querySelector('#m-rag-source').value,
+                    ragEmbeddingModel: overlay.querySelector('#m-rag-model').value,
+                    autoPersonaEnabled: overlay.querySelector('#m-auto-persona').checked,
+                    autoPersonaInterval: parseInt(overlay.querySelector('#m-persona-interval').value),
+                };
+                const res = await api('/api/settings', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+                if (res && res.ok) {
+                    overlay.classList.remove('active');
+                    loadSettings();
+                }
+            });
+        });
 
         $('#btn-rp-tts').addEventListener('click', async () => {
             // Open TTS settings as modal overlay
@@ -2357,7 +2469,7 @@
             document.body.appendChild(overlay);
         }
 
-        overlay.innerHTML = `<div class="modal" style="min-width:700px;max-width:900px;max-height:85vh;display:flex;flex-direction:column;">
+        overlay.innerHTML = `<div class="modal" style="min-width:min(700px,95vw);max-width:min(900px,95vw);max-height:85vh;display:flex;flex-direction:column;">
             <div class="modal-title">Edit Character</div>
             <p style="color:var(--text-muted);text-align:center;padding:24px">Loading character data...</p>
         </div>`;
@@ -2592,7 +2704,7 @@
             loreOverlay.className = 'modal-overlay active';
             loreOverlay.style.zIndex = '1001';
             loreOverlay.innerHTML = `
-                <div class="modal" style="min-width:450px;">
+                <div class="modal" style="min-width:min(450px,95vw);">
                     <div class="modal-title">Edit Lorebook Entry</div>
                     <div style="display:flex;flex-direction:column;gap:12px">
                         <div style="display:flex;align-items:center;gap:12px">
@@ -2793,6 +2905,39 @@
         const igModel = $('#setting-imgen-model');
         if (igModel) igModel.value = data.imageGenModel || '';
 
+        // RAG / Memory
+        const ragCb = $('#setting-rag-enabled');
+        if (ragCb) ragCb.checked = data.ragEnabled ?? false;
+        const ragFields = $('#rag-config-fields');
+        if (ragFields) ragFields.style.display = (data.ragEnabled) ? 'block' : 'none';
+        const ragRetrieval = $('#setting-rag-retrieval');
+        if (ragRetrieval) {
+            ragRetrieval.value = data.ragRetrievalCount ?? 10;
+            const rv = $('#rag-retrieval-value');
+            if (rv) rv.textContent = data.ragRetrievalCount == 0 ? 'All' : data.ragRetrievalCount;
+        }
+        const ragWindow = $('#setting-rag-window');
+        if (ragWindow) {
+            ragWindow.value = data.ragWindowSize ?? 5;
+            const wv = $('#rag-window-value');
+            if (wv) wv.textContent = data.ragWindowSize ?? 5;
+        }
+        const ragSource = $('#setting-rag-source');
+        if (ragSource) ragSource.value = data.ragEmbeddingSource || 'auto';
+        const ragModel = $('#setting-rag-model');
+        if (ragModel) ragModel.value = data.ragEmbeddingModel || '';
+        // Auto-persona
+        const apCb = $('#setting-auto-persona');
+        if (apCb) apCb.checked = data.autoPersonaEnabled ?? false;
+        const apFields = $('#auto-persona-fields');
+        if (apFields) apFields.style.display = (data.autoPersonaEnabled) ? 'block' : 'none';
+        const apInterval = $('#setting-persona-interval');
+        if (apInterval) {
+            apInterval.value = data.autoPersonaInterval ?? 5;
+            const iv = $('#persona-interval-value');
+            if (iv) iv.textContent = (data.autoPersonaInterval ?? 5) + ' msgs';
+        }
+
         // Font scale
         const scaleSlider = $('#setting-text-scale');
         if (scaleSlider) {
@@ -2931,7 +3076,7 @@
         let overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.innerHTML = `
-            <div class="modal" style="min-width:460px;">
+            <div class="modal" style="min-width:min(460px,95vw);">
                 <div class="modal-title">Edit Persona</div>
                 <div style="display:flex;flex-direction:column;gap:12px;">
                     <label style="color:var(--text-secondary);font-size:13px;">Title
@@ -2980,7 +3125,7 @@
         }
 
         overlay.innerHTML = `
-            <div class="modal" style="min-width:460px;">
+            <div class="modal" style="min-width:min(460px,95vw);">
                 <div class="modal-title">Create Persona</div>
                 <div style="display:flex;flex-direction:column;gap:12px;">
                     <label style="color:var(--text-secondary);font-size:13px;">Title
@@ -3097,7 +3242,7 @@
             `).join('');
 
             overlay.innerHTML = `
-                <div class="modal" style="min-width:520px;max-height:80vh;display:flex;flex-direction:column;">
+                <div class="modal" style="min-width:min(520px,95vw);max-height:80vh;display:flex;flex-direction:column;">
                     <div class="modal-title">${isEdit ? 'Edit' : 'Create'} World</div>
                     <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding:4px">
                         <div><label class="slider-label" style="display:block;margin-bottom:4px">Name</label>
@@ -3318,6 +3463,54 @@
                 }),
             });
             if (res && res.ok) showInfoModal('Saved', 'Image generation settings saved.');
+        });
+
+        // RAG / Memory save
+        $('#btn-save-rag')?.addEventListener('click', async () => {
+            const res = await api('/api/settings', {
+                method: 'POST',
+                body: JSON.stringify({
+                    ragEnabled: $('#setting-rag-enabled')?.checked || false,
+                    ragRetrievalCount: parseInt($('#setting-rag-retrieval')?.value) || 10,
+                    ragWindowSize: parseInt($('#setting-rag-window')?.value) || 5,
+                    ragEmbeddingSource: $('#setting-rag-source')?.value || 'auto',
+                    ragEmbeddingModel: $('#setting-rag-model')?.value || '',
+                    autoPersonaEnabled: $('#setting-auto-persona')?.checked || false,
+                    autoPersonaInterval: parseInt($('#setting-persona-interval')?.value) || 5,
+                }),
+            });
+            if (res && res.ok) showInfoModal('Saved', 'Memory settings saved.');
+        });
+
+        // RAG toggle — show/hide config fields
+        $('#setting-rag-enabled')?.addEventListener('change', () => {
+            const fields = $('#rag-config-fields');
+            if (fields) fields.style.display = $('#setting-rag-enabled').checked ? 'block' : 'none';
+        });
+
+        // RAG retrieval slider — update label
+        $('#setting-rag-retrieval')?.addEventListener('input', () => {
+            const val = parseInt($('#setting-rag-retrieval').value);
+            const label = $('#rag-retrieval-value');
+            if (label) label.textContent = val === 0 ? 'All' : val;
+        });
+
+        // RAG window slider — update label
+        $('#setting-rag-window')?.addEventListener('input', () => {
+            const label = $('#rag-window-value');
+            if (label) label.textContent = $('#setting-rag-window').value;
+        });
+
+        // Auto-persona toggle — show/hide interval
+        $('#setting-auto-persona')?.addEventListener('change', () => {
+            const fields = $('#auto-persona-fields');
+            if (fields) fields.style.display = $('#setting-auto-persona').checked ? 'block' : 'none';
+        });
+
+        // Auto-persona interval slider — update label
+        $('#setting-persona-interval')?.addEventListener('input', () => {
+            const label = $('#persona-interval-value');
+            if (label) label.textContent = $('#setting-persona-interval').value + ' msgs';
         });
 
         // Reasoning toggle

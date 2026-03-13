@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <title>Front Porch AI</title>
   <meta name="description" content="Front Porch AI — Local AI Chat Companion">
   <link rel="stylesheet" href="/css/style.css">
@@ -205,6 +205,7 @@
             <div id="appbar-overflow-menu" class="appbar-overflow-menu">
               <button data-action="model">🧠 Model</button>
               <button data-action="samplers">⚙ Samplers</button>
+              <button data-action="memory">💾 Memory</button>
               <button data-action="tts">🔊 TTS</button>
               <button data-action="edit">✏️ Edit Character</button>
             </div>
@@ -261,7 +262,10 @@
       <div id="page-create" class="page">
         <div class="page-scroll">
           <div class="page-header">
-            <h1>Create Character</h1>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <h1>Create Character</h1>
+            </div>
           </div>
           <div class="settings-section">
             <div class="section-title">Import Character Card</div>
@@ -320,7 +324,10 @@
       <div id="page-creator" class="page">
         <div class="page-scroll">
           <div class="page-header">
-            <h1>✨ AI Character Creator</h1>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <h1>✨ AI Character Creator</h1>
+            </div>
             <p class="page-subtitle">Generate a complete character card with AI assistance</p>
           </div>
 
@@ -346,7 +353,10 @@
       <div id="page-models" class="page">
         <div class="page-scroll">
           <div class="page-header">
-            <h1>Model Manager</h1>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <h1>Model Manager</h1>
+            </div>
           </div>
           <div class="settings-tabs" id="model-tabs">
             <button class="tab-btn active" data-tab="models-current">My Models</button>
@@ -424,7 +434,10 @@
       <div id="page-settings" class="page">
         <div class="page-scroll">
           <div class="page-header">
-            <h1>Settings</h1>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <h1>Settings</h1>
+            </div>
           </div>
           <div class="settings-tabs" id="settings-tabs">
             <button class="tab-btn active" data-tab="settings-general">General</button>
@@ -623,6 +636,64 @@
             </div>
 
             <div class="settings-section">
+              <div class="section-title">Memory (RAG)</div>
+              <div class="toggle-row">
+                <span>Enable RAG Memory</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="setting-rag-enabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div id="rag-config-fields" style="display:none;margin-top:8px">
+                <div class="slider-row">
+                  <label class="slider-label">Memories per turn</label>
+                  <input type="range" id="setting-rag-retrieval" min="0" max="50" step="1" value="10" class="settings-slider">
+                  <span id="rag-retrieval-value" class="slider-value">10</span>
+                </div>
+                <div class="slider-row">
+                  <label class="slider-label">Window size</label>
+                  <input type="range" id="setting-rag-window" min="3" max="10" step="1" value="5" class="settings-slider">
+                  <span id="rag-window-value" class="slider-value">5</span>
+                </div>
+                <div class="settings-field" style="margin-top:8px">
+                  <label class="field-label">Embedding source</label>
+                  <select id="setting-rag-source" class="settings-select">
+                    <option value="auto">Auto</option>
+                    <option value="onnx">ONNX Local</option>
+                    <option value="kobold">KoboldCpp</option>
+                    <option value="api">API</option>
+                  </select>
+                </div>
+                <div class="settings-field" style="margin-top:8px">
+                  <label class="field-label">API model</label>
+                  <input type="text" id="setting-rag-model" class="settings-input" placeholder="text-embedding-3-small">
+                </div>
+                <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;color:rgba(255,255,255,0.4);font-size:11px;margin-top:8px">
+                  ℹ️ Embeds messages in the background. API embedding uses tokens.
+                </div>
+                <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0"></div>
+                <div class="toggle-row">
+                  <span>✨ Auto-update persona</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="setting-auto-persona">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div id="auto-persona-fields" style="display:none;margin-top:4px">
+                  <div class="slider-row">
+                    <label class="slider-label">Extract every</label>
+                    <input type="range" id="setting-persona-interval" min="5" max="50" step="5" value="5" class="settings-slider">
+                    <span id="persona-interval-value" class="slider-value">5 msgs</span>
+                  </div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.3)">
+                    Extracts personal facts from your messages using the LLM. View facts in Persona settings.
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-primary" id="btn-save-rag" style="margin-top:12px;width:100%">Save Memory Settings</button>
+            </div>
+
+            <div class="settings-section">
               <div class="section-title">Font Size Scale</div>
               <div class="slider-row">
                 <input type="range" id="setting-text-scale" min="0.7" max="2.0" step="0.1" value="1.0"
@@ -710,7 +781,10 @@
       <div id="page-persona" class="page">
         <div class="page-scroll">
           <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
-            <h1>User Persona</h1>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <h1>User Persona</h1>
+            </div>
             <button class="btn btn-primary" id="btn-create-persona" style="font-size:13px;padding:8px 16px">+ New
               Persona</button>
           </div>
@@ -724,9 +798,12 @@
       <div id="page-worlds" class="page">
         <div class="page-scroll">
           <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
-            <div>
-              <h1>Worlds</h1>
-              <p class="page-subtitle">Global lorebook & world definitions that can be attached to any character</p>
+            <div style="display:flex;align-items:center;gap:8px;flex:1">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <div>
+                <h1>Worlds</h1>
+                <p class="page-subtitle">Global lorebook & world definitions that can be attached to any character</p>
+              </div>
             </div>
             <button class="btn btn-primary" id="btn-create-world">+ New World</button>
           </div>
@@ -738,7 +815,10 @@
       <div id="page-sync" class="page">
         <div class="page-scroll">
           <div class="page-header">
-            <h1>Cloud Sync</h1>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="mobile-back-btn" data-back="home">←</button>
+              <h1>Cloud Sync</h1>
+            </div>
             <p class="page-subtitle">Sync your data across devices using cloud storage</p>
           </div>
 
@@ -868,6 +948,7 @@
         <div class="btn-row">
           <button id="btn-rp-chat" class="btn btn-outlined">⚙ Chat</button>
           <button id="btn-rp-model" class="btn btn-outlined">🧠 Model</button>
+          <button id="btn-rp-memory" class="btn btn-outlined">💾 Memory</button>
           <button id="btn-rp-tts" class="btn btn-outlined">🔊 TTS</button>
         </div>
       </div>
