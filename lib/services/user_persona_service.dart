@@ -28,6 +28,7 @@ class UserPersona {
   final String name;
   final String description;
   final String persona;
+  final List<String> learnedFacts;
   final String? avatarPath;
 
   /// Returns title if set, otherwise name — used for display in persona list
@@ -39,6 +40,7 @@ class UserPersona {
     this.name = 'User',
     this.description = '',
     this.persona = '',
+    this.learnedFacts = const [],
     this.avatarPath,
   });
 
@@ -47,6 +49,7 @@ class UserPersona {
     String? name,
     String? description,
     String? persona,
+    List<String>? learnedFacts,
     String? avatarPath,
   }) {
     return UserPersona(
@@ -55,6 +58,7 @@ class UserPersona {
       name: name ?? this.name,
       description: description ?? this.description,
       persona: persona ?? this.persona,
+      learnedFacts: learnedFacts ?? this.learnedFacts,
       avatarPath: avatarPath ?? this.avatarPath,
     );
   }
@@ -66,6 +70,7 @@ class UserPersona {
       'name': name,
       'description': description,
       'persona': persona,
+      'learned_facts': learnedFacts,
       'avatar_path': avatarPath,
     };
   }
@@ -77,6 +82,7 @@ class UserPersona {
       name: json['name'] ?? 'User',
       description: json['description'] ?? '',
       persona: json['persona'] ?? '',
+      learnedFacts: (json['learned_facts'] as List?)?.cast<String>() ?? const [],
       avatarPath: json['avatar_path'],
     );
   }
@@ -127,6 +133,7 @@ class UserPersonaService extends ChangeNotifier {
           name: p.name,
           description: p.description,
           persona: p.persona,
+          learnedFacts: _parseFactsList(p.learnedFacts),
           avatarPath: p.avatarPath,
         )).toList();
 
@@ -180,6 +187,7 @@ class UserPersonaService extends ChangeNotifier {
         name: Value(updatedPersona.name),
         description: Value(updatedPersona.description),
         persona: Value(updatedPersona.persona),
+        learnedFacts: Value(jsonEncode(updatedPersona.learnedFacts)),
         avatarPath: Value(updatedPersona.avatarPath),
         isActive: Value(updatedPersona.id == _activePersonaId),
       ));
@@ -257,5 +265,50 @@ class UserPersonaService extends ChangeNotifier {
   /// Reload personas from DB (e.g. after cloud sync import).
   Future<void> reload() async {
     await _loadPersonas();
+  }
+
+  /// Parse a JSON string of facts into a List<String>, handling errors.
+  static List<String> _parseFactsList(String json) {
+    try {
+      if (json.isEmpty || json == '[]') return [];
+      return List<String>.from(jsonDecode(json) as List);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Add a learned fact to the active persona.
+  Future<void> addLearnedFact(String fact) async {
+    final current = persona;
+    final facts = List<String>.from(current.learnedFacts);
+    if (facts.contains(fact)) return; // dedup
+    facts.add(fact);
+    await updatePersona(current.copyWith(learnedFacts: facts));
+  }
+
+  /// Add multiple learned facts, deduplicating against existing.
+  Future<void> addLearnedFacts(List<String> newFacts) async {
+    final current = persona;
+    final facts = List<String>.from(current.learnedFacts);
+    bool added = false;
+    for (final fact in newFacts) {
+      if (!facts.contains(fact) && fact.trim().isNotEmpty) {
+        facts.add(fact);
+        added = true;
+      }
+    }
+    if (added) {
+      await updatePersona(current.copyWith(learnedFacts: facts));
+    }
+  }
+
+  /// Remove a learned fact by index.
+  Future<void> removeLearnedFact(int index) async {
+    final current = persona;
+    final facts = List<String>.from(current.learnedFacts);
+    if (index >= 0 && index < facts.length) {
+      facts.removeAt(index);
+      await updatePersona(current.copyWith(learnedFacts: facts));
+    }
   }
 }

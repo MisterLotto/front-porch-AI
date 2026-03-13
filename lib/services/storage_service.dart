@@ -155,6 +155,17 @@ class StorageService extends ChangeNotifier {
   // Banned phrases (anti-slop)
   List<String> _bannedPhrases = [];
 
+  // RAG memory settings
+  bool _ragEnabled = false;
+  int _ragRetrievalCount = 10;
+  int _ragWindowSize = 5;
+  String _ragEmbeddingSource = 'auto'; // 'auto', 'onnx', 'kobold', 'api'
+  String _ragEmbeddingModel = 'text-embedding-3-small';
+
+  // Auto-persona settings
+  bool _autoPersonaEnabled = false;
+  int _autoPersonaInterval = 10; // every N user messages
+
   // Getters
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
@@ -234,6 +245,13 @@ class StorageService extends ChangeNotifier {
   int get summaryMaxWords => _summaryMaxWords;
   String get summaryPrompt => _summaryPrompt;
   List<String> get bannedPhrases => List.unmodifiable(_bannedPhrases);
+  bool get ragEnabled => _ragEnabled;
+  int get ragRetrievalCount => _ragRetrievalCount;
+  int get ragWindowSize => _ragWindowSize;
+  String get ragEmbeddingSource => _ragEmbeddingSource;
+  String get ragEmbeddingModel => _ragEmbeddingModel;
+  bool get autoPersonaEnabled => _autoPersonaEnabled;
+  int get autoPersonaInterval => _autoPersonaInterval;
 
   StorageService() {
     _init();
@@ -370,6 +388,17 @@ class StorageService extends ChangeNotifier {
         _bannedPhrases = [];
       }
     }
+
+    // RAG memory settings
+    _ragEnabled = _prefs?.getBool('rag_enabled') ?? false;
+    _ragRetrievalCount = _prefs?.getInt('rag_retrieval_count') ?? 5;
+    _ragWindowSize = _prefs?.getInt('rag_window_size') ?? 5;
+    _ragEmbeddingSource = _prefs?.getString('rag_embedding_source') ?? 'auto';
+    _ragEmbeddingModel = _prefs?.getString('rag_embedding_model') ?? 'text-embedding-3-small';
+
+    // Auto-persona settings
+    _autoPersonaEnabled = _prefs?.getBool('auto_persona_enabled') ?? false;
+    _autoPersonaInterval = _prefs?.getInt('auto_persona_interval') ?? 10;
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -969,6 +998,50 @@ class StorageService extends ChangeNotifier {
   Future<void> setBannedPhrases(List<String> value) async {
     _bannedPhrases = value.where((s) => s.isNotEmpty).toList();
     await _prefs?.setString('banned_phrases', jsonEncode(_bannedPhrases));
+    notifyListeners();
+  }
+
+  // RAG memory setters
+  Future<void> setRagEnabled(bool value) async {
+    _ragEnabled = value;
+    await _prefs?.setBool('rag_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setRagRetrievalCount(int value) async {
+    _ragRetrievalCount = value.clamp(0, 50);
+    await _prefs?.setInt('rag_retrieval_count', _ragRetrievalCount);
+    notifyListeners();
+  }
+
+  Future<void> setRagWindowSize(int value) async {
+    _ragWindowSize = value.clamp(2, 15);
+    await _prefs?.setInt('rag_window_size', _ragWindowSize);
+    notifyListeners();
+  }
+
+  Future<void> setRagEmbeddingSource(String value) async {
+    _ragEmbeddingSource = value;
+    await _prefs?.setString('rag_embedding_source', value);
+    notifyListeners();
+  }
+
+  Future<void> setRagEmbeddingModel(String value) async {
+    _ragEmbeddingModel = value;
+    await _prefs?.setString('rag_embedding_model', value);
+    notifyListeners();
+  }
+
+  // Auto-persona setters
+  Future<void> setAutoPersonaEnabled(bool value) async {
+    _autoPersonaEnabled = value;
+    await _prefs?.setBool('auto_persona_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoPersonaInterval(int value) async {
+    _autoPersonaInterval = value.clamp(5, 50);
+    await _prefs?.setInt('auto_persona_interval', _autoPersonaInterval);
     notifyListeners();
   }
 }

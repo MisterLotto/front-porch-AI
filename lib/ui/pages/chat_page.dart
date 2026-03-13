@@ -16,7 +16,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
 import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:drift/drift.dart' as drift;
+import 'package:front_porch_ai/database/database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -41,6 +45,7 @@ import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/call_overlay.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -1046,6 +1051,14 @@ class _ChatPageState extends State<ChatPage> {
             },
           ),
 
+          // Hamburger Menu (Chat options, Impersonate, Context, RAG, Objective)
+          IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white70),
+            padding: EdgeInsets.zero,
+            tooltip: 'Menu',
+            onPressed: () => _showHamburgerMenu(context, chatService),
+          ),
+
           // Chat Management Menu
           PopupMenuButton<String>(
             icon: const Icon(Icons.folder_open, color: Colors.white70),
@@ -1104,38 +1117,6 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
             ],
-          ),
-          
-          // Magic Wand (Quick Impersonate)
-          IconButton(
-            icon: const Icon(Icons.auto_fix_high, color: Colors.white70),
-            padding: EdgeInsets.zero,
-            tooltip: 'Impersonate',
-            onPressed: chatService.isGenerating ? null : () {
-              final prefix = _controller.text;
-              chatService.impersonateUser(
-                prefix: prefix,
-                onToken: (accumulated) {
-                  _controller.text = accumulated;
-                  _controller.selection = TextSelection.fromPosition(
-                    TextPosition(offset: accumulated.length),
-                  );
-                },
-              );
-            },
-          ),
-
-          // Context Budget Viewer
-          IconButton(
-            icon: const Icon(Icons.analytics_outlined, color: Colors.white70),
-            padding: EdgeInsets.zero,
-            tooltip: 'Context Budget',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => ContextViewerDialog(chatService: chatService),
-              );
-            },
           ),
 
           // Image Generation Menu
@@ -1376,6 +1357,95 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   /// Wraps a sidebar widget with a draggable resize handle on its left edge.
+  void _showHamburgerMenu(BuildContext context, ChatService chatService) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F2937),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // ── Impersonate ──
+              ListTile(
+                leading: const Icon(Icons.auto_fix_high, color: Colors.amberAccent, size: 20),
+                title: const Text('Impersonate', style: TextStyle(color: Colors.white, fontSize: 14)),
+                subtitle: const Text('AI writes your next message', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                onTap: chatService.isGenerating ? null : () {
+                  Navigator.pop(sheetCtx);
+                  final prefix = _controller.text;
+                  chatService.impersonateUser(
+                    prefix: prefix,
+                    onToken: (accumulated) {
+                      _controller.text = accumulated;
+                      _controller.selection = TextSelection.fromPosition(
+                        TextPosition(offset: accumulated.length),
+                      );
+                    },
+                  );
+                },
+              ),
+              const Divider(color: Colors.white10, height: 1),
+
+              // ── Context Budget ──
+              ListTile(
+                leading: const Icon(Icons.analytics_outlined, color: Colors.cyanAccent, size: 20),
+                title: const Text('Context Budget', style: TextStyle(color: Colors.white, fontSize: 14)),
+                subtitle: const Text('View token budget breakdown', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  showDialog(
+                    context: context,
+                    builder: (_) => ContextViewerDialog(chatService: chatService),
+                  );
+                },
+              ),
+              const Divider(color: Colors.white10, height: 1),
+
+              // ── Memory (RAG) — inline ──
+              const SizedBox(height: 8),
+              _MemorySection(chatService: chatService),
+              const SizedBox(height: 8),
+              const Divider(color: Colors.white10, height: 1),
+
+              // ── Objective — inline ──
+              const SizedBox(height: 8),
+              _ObjectiveSection(chatService: chatService),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showNoMicDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -2323,6 +2393,78 @@ class _MessageBubbleState extends State<_MessageBubble> {
                             ],
                           ],
                         ),
+                      );
+                    },
+                  ),
+                // Suggest actions button + action pills (last bot message only)
+                if (!message.isUser && message.sender != 'System')
+                  Consumer<ChatService>(
+                    builder: (context, chatService, _) {
+                      final isLast = index == chatService.messages.length - 1 && !chatService.isGenerating;
+                      if (!isLast) return const SizedBox.shrink();
+
+                      final actions = chatService.suggestedActions;
+                      final isGenerating = chatService.isGeneratingActions;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // "Suggest actions" button
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: InkWell(
+                              onTap: isGenerating ? null : () => chatService.generateActions(),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (isGenerating)
+                                      const SizedBox(
+                                        width: 12, height: 12,
+                                        child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38),
+                                      )
+                                    else
+                                      const Icon(Icons.lightbulb_outline, size: 13, color: Colors.white30),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      isGenerating ? 'Thinking...' : 'Suggest actions',
+                                      style: const TextStyle(fontSize: 11, color: Colors.white30),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Action pills
+                          if (actions.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: actions.map((action) {
+                                  return InkWell(
+                                    onTap: () => chatService.sendMessage(action),
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.06),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: Colors.white12),
+                                      ),
+                                      child: Text(
+                                        action,
+                                        style: const TextStyle(fontSize: 12, color: Colors.white70),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                        ],
                       );
                     },
                   ),
@@ -3275,6 +3417,924 @@ class _SummarySectionState extends State<_SummarySection> {
           ],
         ],
       ],
+    );
+  }
+}
+
+/// Memory (RAG) sidebar section — shows enable toggle, config,
+/// embedding status, and per-character memory source picker.
+class _MemorySection extends StatefulWidget {
+  final ChatService chatService;
+  const _MemorySection({required this.chatService});
+
+  @override
+  State<_MemorySection> createState() => _MemorySectionState();
+}
+
+class _MemorySectionState extends State<_MemorySection> {
+  bool _showSettings = false;
+  bool _showSources = false;
+  Set<String> _selectedSources = {};
+  bool _sourcesLoaded = false;
+
+  /// Derive the embedding ID for a character card (must match ChatService._getCharacterIdFromCard)
+  String _embeddingId(CharacterCard card) {
+    if (card.imagePath != null) {
+      return p.basenameWithoutExtension(card.imagePath!);
+    }
+    return card.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+  }
+
+  /// Load current memorySources from DB
+  Future<void> _loadSources() async {
+    final activeChar = widget.chatService.activeCharacter;
+    if (activeChar == null || activeChar.dbId == null) return;
+    try {
+      final db = Provider.of<AppDatabase>(context, listen: false);
+      final dbChar = await db.getCharacterById(activeChar.dbId!);
+      final ms = dbChar.memorySources;
+      if (ms.isNotEmpty && ms != '[]') {
+        final decoded = List<String>.from(
+          (jsonDecode(ms) as List).map((e) => e.toString()),
+        );
+        setState(() {
+          _selectedSources = decoded.toSet();
+          _sourcesLoaded = true;
+        });
+      } else {
+        setState(() => _sourcesLoaded = true);
+      }
+    } catch (_) {
+      setState(() => _sourcesLoaded = true);
+    }
+  }
+
+  /// Save selected sources to DB
+  Future<void> _saveSources() async {
+    final activeChar = widget.chatService.activeCharacter;
+    if (activeChar == null || activeChar.dbId == null) return;
+    try {
+      final db = Provider.of<AppDatabase>(context, listen: false);
+      await db.updateCharacter(CharactersCompanion(
+        id: drift.Value(activeChar.dbId!),
+        memorySources: drift.Value(jsonEncode(_selectedSources.toList())),
+      ));
+      debugPrint('[RAG:UI] Saved memorySources: ${_selectedSources.toList()}');
+    } catch (e) {
+      debugPrint('[RAG:UI] Failed to save memorySources: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final storage = Provider.of<StorageService>(context);
+    final enabled = storage.ragEnabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header with enable toggle
+        Row(
+          children: [
+            const Icon(Icons.psychology, size: 16, color: Colors.purpleAccent),
+            const SizedBox(width: 6),
+            const Text('Memory (RAG)',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 13)),
+            const Spacer(),
+            SizedBox(
+              height: 28,
+              child: FittedBox(
+                child: Switch(
+                  value: enabled,
+                  onChanged: (val) => storage.setRagEnabled(val),
+                  activeTrackColor: Colors.purpleAccent,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        if (!enabled)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Retrieve relevant past messages that have fallen out of context, including from other characters\' conversations.',
+              style: TextStyle(fontSize: 11, color: Colors.white30),
+            ),
+          ),
+
+        if (enabled) ...[
+          const SizedBox(height: 6),
+          // Status indicator
+          Row(
+            children: [
+              Container(
+                width: 8, height: 8,
+                decoration: BoxDecoration(
+                  color: storage.ragEnabled ? Colors.greenAccent : Colors.redAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Embedding source: ${storage.ragEmbeddingSource}',
+                style: const TextStyle(fontSize: 10, color: Colors.white38),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Controls row
+          Row(
+            children: [
+              // Settings gear toggle
+              InkWell(
+                onTap: () => setState(() => _showSettings = !_showSettings),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.tune, size: 14,
+                        color: _showSettings ? Colors.purpleAccent : Colors.white38),
+                      const SizedBox(width: 4),
+                      Text('Settings',
+                        style: TextStyle(fontSize: 10,
+                          color: _showSettings ? Colors.purpleAccent : Colors.white38)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Sources toggle
+              InkWell(
+                onTap: () {
+                  setState(() => _showSources = !_showSources);
+                  if (_showSources && !_sourcesLoaded) _loadSources();
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.people, size: 14,
+                        color: _showSources ? Colors.purpleAccent : Colors.white38),
+                      const SizedBox(width: 4),
+                      Text('Sources${_selectedSources.isNotEmpty ? ' (${_selectedSources.length})' : ''}',
+                        style: TextStyle(fontSize: 10,
+                          color: _showSources ? Colors.purpleAccent : Colors.white38)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Data Bank button
+              InkWell(
+                onTap: () {
+                  final activeChar = widget.chatService.activeCharacter;
+                  if (activeChar == null) return;
+                  showDialog(
+                    context: context,
+                    builder: (_) => DataBankDialog(
+                      characterId: _embeddingId(activeChar),
+                      characterName: activeChar.name,
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.library_books, size: 14, color: Colors.white38),
+                      const SizedBox(width: 4),
+                      Text('Data Bank',
+                        style: TextStyle(fontSize: 10, color: Colors.white38)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Expandable settings
+          if (_showSettings) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Memories per turn
+                  Row(
+                    children: [
+                      const Text('Memories per turn', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                      const Spacer(),
+                      Text(storage.ragRetrievalCount == 0 ? 'All' : '${storage.ragRetrievalCount}',
+                        style: const TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      value: storage.ragRetrievalCount.toDouble(),
+                      min: 0, max: 50,
+                      divisions: 50,
+                      activeColor: Colors.purpleAccent,
+                      inactiveColor: Colors.white12,
+                      onChanged: (val) => storage.setRagRetrievalCount(val.round()),
+                    ),
+                  ),
+                  // Window size
+                  Row(
+                    children: [
+                      const Text('Window size', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                      const Spacer(),
+                      Text('${storage.ragWindowSize}',
+                        style: const TextStyle(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    ),
+                    child: Slider(
+                      value: storage.ragWindowSize.toDouble(),
+                      min: 3, max: 10,
+                      divisions: 7,
+                      activeColor: Colors.purpleAccent,
+                      inactiveColor: Colors.white12,
+                      onChanged: (val) => storage.setRagWindowSize(val.round()),
+                    ),
+                  ),
+                  // Embedding source
+                  Row(
+                    children: [
+                      const Text('Embedding source', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: storage.ragEmbeddingSource,
+                          dropdownColor: const Color(0xFF1F2937),
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            border: OutlineInputBorder(),
+                          ),
+                          isDense: true,
+                          items: const [
+                            DropdownMenuItem(value: 'auto', child: Text('Auto')),
+                            DropdownMenuItem(value: 'onnx', child: Text('ONNX Local')),
+                            DropdownMenuItem(value: 'kobold', child: Text('KoboldCpp')),
+                            DropdownMenuItem(value: 'api', child: Text('API')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) storage.setRagEmbeddingSource(val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  // API model name
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Text('API model', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: storage.ragEmbeddingModel,
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            border: OutlineInputBorder(),
+                            hintText: 'text-embedding-3-small',
+                            hintStyle: TextStyle(color: Colors.white24, fontSize: 11),
+                          ),
+                          onChanged: (val) => storage.setRagEmbeddingModel(val),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 12, color: Colors.amber),
+                      SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Embeds messages in the background. API embedding uses tokens.',
+                          style: TextStyle(fontSize: 10, color: Colors.amber),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(color: Colors.white12, height: 1),
+                  const SizedBox(height: 10),
+                  // Auto-persona toggle
+                  Row(
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 14, color: Colors.purpleAccent),
+                      const SizedBox(width: 6),
+                      const Text('Auto-update persona', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                      const Spacer(),
+                      SizedBox(
+                        height: 24,
+                        child: FittedBox(
+                          child: Switch(
+                            value: storage.autoPersonaEnabled,
+                            onChanged: (val) => storage.setAutoPersonaEnabled(val),
+                            activeTrackColor: Colors.purpleAccent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (storage.autoPersonaEnabled) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Extract every', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                        const Spacer(),
+                        Text('${storage.autoPersonaInterval} messages',
+                          style: const TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    Slider(
+                      value: storage.autoPersonaInterval.toDouble(),
+                      min: 5, max: 50,
+                      divisions: 9,
+                      activeColor: Colors.purpleAccent,
+                      onChanged: (val) => storage.setAutoPersonaInterval(val.round()),
+                    ),
+                    const Text(
+                      'Extracts personal facts from your messages using the LLM. View facts in Persona settings.',
+                      style: TextStyle(fontSize: 10, color: Colors.white24),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          // Expandable memory sources (cross-character picker)
+          if (_showSources) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Include memories from other characters:',
+                    style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  const SizedBox(height: 6),
+                  _buildCharacterSourceList(),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCharacterSourceList() {
+    final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+    final activeChar = widget.chatService.activeCharacter;
+    final activeEmbedId = activeChar != null ? _embeddingId(activeChar) : '';
+
+    // Get all characters except the current one
+    final otherChars = charRepo.characters
+        .where((c) => _embeddingId(c) != activeEmbedId)
+        .toList();
+
+    if (otherChars.isEmpty) {
+      return const Text('No other characters available.',
+        style: TextStyle(fontSize: 10, color: Colors.white30, fontStyle: FontStyle.italic));
+    }
+
+    return Column(
+      children: otherChars.map((char) {
+        final embedId = _embeddingId(char);
+        final isSelected = _selectedSources.contains(embedId);
+        return InkWell(
+          onTap: () {
+            setState(() {
+              if (isSelected) {
+                _selectedSources.remove(embedId);
+              } else {
+                _selectedSources.add(embedId);
+              }
+            });
+            _saveSources();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                Icon(
+                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                  size: 16,
+                  color: isSelected ? Colors.purpleAccent : Colors.white30,
+                ),
+                const SizedBox(width: 8),
+                if (char.imagePath != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(
+                      File(char.imagePath!),
+                      width: 20, height: 20,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 16, color: Colors.white30),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: Text(
+                    char.name,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isSelected ? Colors.white70 : Colors.white38,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Objective Section ──────────────────────────────────────────────────
+
+class _ObjectiveSection extends StatefulWidget {
+  final ChatService chatService;
+  const _ObjectiveSection({required this.chatService});
+
+  @override
+  State<_ObjectiveSection> createState() => _ObjectiveSectionState();
+}
+
+class _ObjectiveSectionState extends State<_ObjectiveSection> {
+  bool _expanded = false;
+  bool _generatingTasks = false;
+  bool _nsfw = false;
+  int _taskCount = 5;
+  final _goalController = TextEditingController();
+  final _manualTaskController = TextEditingController();
+
+  @override
+  void dispose() {
+    _goalController.dispose();
+    _manualTaskController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ChatService>(
+      builder: (context, chatService, _) {
+        final objective = chatService.activeObjective;
+        final tasks = chatService.objectiveTasks;
+        final hasObjective = objective != null;
+        final completedCount = tasks.where((t) => t['completed'] == true).length;
+        final currentTask = tasks.where((t) => t['completed'] != true).firstOrNull;
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              InkWell(
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Row(
+                  children: [
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 18,
+                      color: Colors.white54,
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.flag, size: 14, color: Colors.orangeAccent),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Objective',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
+                    ),
+                    const Spacer(),
+                    if (hasObjective)
+                      Text(
+                        '$completedCount/${tasks.length}',
+                        style: const TextStyle(fontSize: 10, color: Colors.white30),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Current task preview (always visible when collapsed)
+              if (!_expanded && hasObjective && currentTask != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '▸ ${currentTask['description']}',
+                  style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+
+              // Expanded content
+              if (_expanded) ...[
+                const SizedBox(height: 10),
+
+                if (!hasObjective) ...[
+                  // Goal input
+                  TextField(
+                    controller: _goalController,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Set a goal (e.g., "Escape the dungeon")',
+                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                      filled: true,
+                      fillColor: const Color(0xFF374151),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    onSubmitted: (text) async {
+                      if (text.trim().isEmpty) return;
+                      await chatService.setObjective(text);
+                      _goalController.clear();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final text = _goalController.text.trim();
+                        if (text.isEmpty) return;
+                        await chatService.setObjective(text);
+                        _goalController.clear();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orangeAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                      child: const Text('Set Objective'),
+                    ),
+                  ),
+                ] else ...[
+                  // Active objective display
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orangeAccent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.flag, size: 14, color: Colors.orangeAccent),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            objective.objective,
+                            style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // NSFW toggle
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.white24),
+                      const SizedBox(width: 4),
+                      const Text('NSFW', style: TextStyle(fontSize: 11, color: Colors.white38)),
+                      const Spacer(),
+                      SizedBox(
+                        height: 24,
+                        child: Switch(
+                          value: _nsfw,
+                          activeColor: Colors.redAccent,
+                          onChanged: (v) => setState(() => _nsfw = v),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Generate tasks + task count control
+                  if (tasks.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _generatingTasks ? null : () async {
+                              setState(() => _generatingTasks = true);
+                              await chatService.generateObjectiveTasks(taskCount: _taskCount, nsfw: _nsfw);
+                              if (mounted) setState(() => _generatingTasks = false);
+                            },
+                            icon: _generatingTasks
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.auto_awesome, size: 14),
+                            label: Text(_generatingTasks ? 'Generating...' : 'Generate Tasks'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF374151),
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Task count selector
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF374151),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: DropdownButton<int>(
+                            value: _taskCount,
+                            underline: const SizedBox.shrink(),
+                            dropdownColor: const Color(0xFF374151),
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            isDense: true,
+                            items: [3, 4, 5, 6, 7, 8, 10].map((n) => DropdownMenuItem(
+                              value: n,
+                              child: Text('$n'),
+                            )).toList(),
+                            onChanged: (v) => setState(() => _taskCount = v ?? 5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  // Manual task input
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _manualTaskController,
+                          style: const TextStyle(color: Colors.white, fontSize: 11),
+                          decoration: InputDecoration(
+                            hintText: 'Add a task manually...',
+                            hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                            filled: true,
+                            fillColor: const Color(0xFF374151),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          ),
+                          onSubmitted: (text) async {
+                            if (text.trim().isEmpty) return;
+                            await chatService.addManualTask(text);
+                            _manualTaskController.clear();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () async {
+                          final text = _manualTaskController.text.trim();
+                          if (text.isEmpty) return;
+                          await chatService.addManualTask(text);
+                          _manualTaskController.clear();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.add_circle_outline, size: 18, color: Colors.orangeAccent),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Task list
+                  if (tasks.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    ...tasks.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final task = entry.value;
+                      final completed = task['completed'] == true;
+                      final isCurrent = !completed &&
+                          tasks.take(i).every((t) => t['completed'] == true);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: InkWell(
+                          onTap: () => chatService.toggleTask(i),
+                          onLongPress: () => chatService.removeTask(i),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                completed ? Icons.check_box : Icons.check_box_outline_blank,
+                                size: 16,
+                                color: completed
+                                    ? Colors.greenAccent
+                                    : isCurrent
+                                        ? Colors.orangeAccent
+                                        : Colors.white24,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  task['description'] as String,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: completed
+                                        ? Colors.white30
+                                        : isCurrent
+                                            ? Colors.white
+                                            : Colors.white54,
+                                    decoration: completed ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                              ),
+                              if (isCurrent)
+                                const Text('◂', style: TextStyle(fontSize: 10, color: Colors.orangeAccent)),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+
+                  // Depth / Strength slider
+                  if (tasks.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text('🔥', style: TextStyle(fontSize: 10)),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderThemeData(
+                              trackHeight: 3,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                              activeTrackColor: objective.injectionDepth <= 2
+                                  ? Colors.redAccent
+                                  : objective.injectionDepth <= 6
+                                      ? Colors.orangeAccent
+                                      : Colors.blueGrey,
+                              inactiveTrackColor: Colors.white10,
+                              thumbColor: Colors.white70,
+                            ),
+                            child: Slider(
+                              value: objective.injectionDepth.toDouble(),
+                              min: 0,
+                              max: 10,
+                              divisions: 10,
+                              onChanged: (value) {
+                                chatService.updateObjectiveDepth(value.round());
+                              },
+                            ),
+                          ),
+                        ),
+                        const Text('🌊', style: TextStyle(fontSize: 10)),
+                      ],
+                    ),
+                    Center(
+                      child: Text(
+                        objective.injectionDepth <= 2
+                            ? 'Pushy — AI actively drives toward the task'
+                            : objective.injectionDepth <= 6
+                                ? 'Balanced — clear but not forceful'
+                                : 'Subtle — background hint only',
+                        style: const TextStyle(fontSize: 9, color: Colors.white30),
+                      ),
+                    ),
+                  ],
+
+                  // Check frequency
+                  if (tasks.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Text('Check every ', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                        SizedBox(
+                          width: 80,
+                          child: SliderTheme(
+                            data: const SliderThemeData(
+                              trackHeight: 2,
+                              thumbShape: RoundSliderThumbShape(enabledThumbRadius: 5),
+                              activeTrackColor: Colors.white30,
+                              inactiveTrackColor: Colors.white10,
+                              thumbColor: Colors.white54,
+                            ),
+                            child: Slider(
+                              value: objective.checkFrequency.toDouble(),
+                              min: 1,
+                              max: 10,
+                              divisions: 9,
+                              onChanged: (v) => chatService.updateCheckFrequency(v.round()),
+                            ),
+                          ),
+                        ),
+                        Text('${objective.checkFrequency} msgs',
+                            style: const TextStyle(fontSize: 10, color: Colors.white38)),
+                        const SizedBox(width: 8),
+                        chatService.isCheckingCompletion
+                          ? const SizedBox(
+                              width: 12, height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.greenAccent),
+                            )
+                          : InkWell(
+                              onTap: () => chatService.forceCheckCompletion(),
+                              child: const Padding(
+                                padding: EdgeInsets.all(2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle_outline, size: 12, color: Colors.greenAccent),
+                                    SizedBox(width: 2),
+                                    Text('Check now', style: TextStyle(fontSize: 10, color: Colors.greenAccent)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ],
+
+                  // Controls
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (tasks.isNotEmpty)
+                        InkWell(
+                          onTap: _generatingTasks ? null : () async {
+                            setState(() => _generatingTasks = true);
+                            await chatService.generateObjectiveTasks(taskCount: _taskCount, nsfw: _nsfw);
+                            if (mounted) setState(() => _generatingTasks = false);
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.refresh, size: 12, color: Colors.white30),
+                                SizedBox(width: 4),
+                                Text('Regen tasks', style: TextStyle(fontSize: 10, color: Colors.white30)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      InkWell(
+                        onTap: () => chatService.clearObjective(),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.close, size: 12, color: Colors.redAccent),
+                              SizedBox(width: 4),
+                              Text('Clear', style: TextStyle(fontSize: 10, color: Colors.redAccent)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

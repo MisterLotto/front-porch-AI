@@ -189,6 +189,18 @@ class $CharactersTable extends Characters
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _memorySourcesMeta = const VerificationMeta(
+    'memorySources',
+  );
+  @override
+  late final GeneratedColumn<String> memorySources = GeneratedColumn<String>(
+    'memory_sources',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -242,6 +254,7 @@ class $CharactersTable extends Characters
     folderId,
     lorebook,
     worldNames,
+    memorySources,
     createdAt,
     updatedAt,
     deletedAt,
@@ -373,6 +386,15 @@ class $CharactersTable extends Characters
         worldNames.isAcceptableOrUnknown(data['world_names']!, _worldNamesMeta),
       );
     }
+    if (data.containsKey('memory_sources')) {
+      context.handle(
+        _memorySourcesMeta,
+        memorySources.isAcceptableOrUnknown(
+          data['memory_sources']!,
+          _memorySourcesMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -464,6 +486,10 @@ class $CharactersTable extends Characters
         DriftSqlType.string,
         data['${effectivePrefix}world_names'],
       )!,
+      memorySources: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}memory_sources'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -502,6 +528,7 @@ class Character extends DataClass implements Insertable<Character> {
   final String? folderId;
   final String? lorebook;
   final String worldNames;
+  final String memorySources;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -522,6 +549,7 @@ class Character extends DataClass implements Insertable<Character> {
     this.folderId,
     this.lorebook,
     required this.worldNames,
+    required this.memorySources,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -555,6 +583,7 @@ class Character extends DataClass implements Insertable<Character> {
       map['lorebook'] = Variable<String>(lorebook);
     }
     map['world_names'] = Variable<String>(worldNames);
+    map['memory_sources'] = Variable<String>(memorySources);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -589,6 +618,7 @@ class Character extends DataClass implements Insertable<Character> {
           ? const Value.absent()
           : Value(lorebook),
       worldNames: Value(worldNames),
+      memorySources: Value(memorySources),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -623,6 +653,7 @@ class Character extends DataClass implements Insertable<Character> {
       folderId: serializer.fromJson<String?>(json['folderId']),
       lorebook: serializer.fromJson<String?>(json['lorebook']),
       worldNames: serializer.fromJson<String>(json['worldNames']),
+      memorySources: serializer.fromJson<String>(json['memorySources']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -650,6 +681,7 @@ class Character extends DataClass implements Insertable<Character> {
       'folderId': serializer.toJson<String?>(folderId),
       'lorebook': serializer.toJson<String?>(lorebook),
       'worldNames': serializer.toJson<String>(worldNames),
+      'memorySources': serializer.toJson<String>(memorySources),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -673,6 +705,7 @@ class Character extends DataClass implements Insertable<Character> {
     Value<String?> folderId = const Value.absent(),
     Value<String?> lorebook = const Value.absent(),
     String? worldNames,
+    String? memorySources,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -694,6 +727,7 @@ class Character extends DataClass implements Insertable<Character> {
     folderId: folderId.present ? folderId.value : this.folderId,
     lorebook: lorebook.present ? lorebook.value : this.lorebook,
     worldNames: worldNames ?? this.worldNames,
+    memorySources: memorySources ?? this.memorySources,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -732,6 +766,9 @@ class Character extends DataClass implements Insertable<Character> {
       worldNames: data.worldNames.present
           ? data.worldNames.value
           : this.worldNames,
+      memorySources: data.memorySources.present
+          ? data.memorySources.value
+          : this.memorySources,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -757,6 +794,7 @@ class Character extends DataClass implements Insertable<Character> {
           ..write('folderId: $folderId, ')
           ..write('lorebook: $lorebook, ')
           ..write('worldNames: $worldNames, ')
+          ..write('memorySources: $memorySources, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -782,6 +820,7 @@ class Character extends DataClass implements Insertable<Character> {
     folderId,
     lorebook,
     worldNames,
+    memorySources,
     createdAt,
     updatedAt,
     deletedAt,
@@ -806,6 +845,7 @@ class Character extends DataClass implements Insertable<Character> {
           other.folderId == this.folderId &&
           other.lorebook == this.lorebook &&
           other.worldNames == this.worldNames &&
+          other.memorySources == this.memorySources &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -828,6 +868,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
   final Value<String?> folderId;
   final Value<String?> lorebook;
   final Value<String> worldNames;
+  final Value<String> memorySources;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -849,6 +890,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     this.folderId = const Value.absent(),
     this.lorebook = const Value.absent(),
     this.worldNames = const Value.absent(),
+    this.memorySources = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -871,6 +913,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     this.folderId = const Value.absent(),
     this.lorebook = const Value.absent(),
     this.worldNames = const Value.absent(),
+    this.memorySources = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -894,6 +937,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     Expression<String>? folderId,
     Expression<String>? lorebook,
     Expression<String>? worldNames,
+    Expression<String>? memorySources,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -917,6 +961,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
       if (folderId != null) 'folder_id': folderId,
       if (lorebook != null) 'lorebook': lorebook,
       if (worldNames != null) 'world_names': worldNames,
+      if (memorySources != null) 'memory_sources': memorySources,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -941,6 +986,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     Value<String?>? folderId,
     Value<String?>? lorebook,
     Value<String>? worldNames,
+    Value<String>? memorySources,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -964,6 +1010,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
       folderId: folderId ?? this.folderId,
       lorebook: lorebook ?? this.lorebook,
       worldNames: worldNames ?? this.worldNames,
+      memorySources: memorySources ?? this.memorySources,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -1024,6 +1071,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     if (worldNames.present) {
       map['world_names'] = Variable<String>(worldNames.value);
     }
+    if (memorySources.present) {
+      map['memory_sources'] = Variable<String>(memorySources.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1058,6 +1108,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
           ..write('folderId: $folderId, ')
           ..write('lorebook: $lorebook, ')
           ..write('worldNames: $worldNames, ')
+          ..write('memorySources: $memorySources, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -3638,6 +3689,18 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _learnedFactsMeta = const VerificationMeta(
+    'learnedFacts',
+  );
+  @override
+  late final GeneratedColumn<String> learnedFacts = GeneratedColumn<String>(
+    'learned_facts',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _avatarPathMeta = const VerificationMeta(
     'avatarPath',
   );
@@ -3694,6 +3757,7 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
     name,
     description,
     persona,
+    learnedFacts,
     avatarPath,
     isActive,
     updatedAt,
@@ -3741,6 +3805,15 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
       context.handle(
         _personaMeta,
         persona.isAcceptableOrUnknown(data['persona']!, _personaMeta),
+      );
+    }
+    if (data.containsKey('learned_facts')) {
+      context.handle(
+        _learnedFactsMeta,
+        learnedFacts.isAcceptableOrUnknown(
+          data['learned_facts']!,
+          _learnedFactsMeta,
+        ),
       );
     }
     if (data.containsKey('avatar_path')) {
@@ -3796,6 +3869,10 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
         DriftSqlType.string,
         data['${effectivePrefix}persona'],
       )!,
+      learnedFacts: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}learned_facts'],
+      )!,
       avatarPath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}avatar_path'],
@@ -3827,6 +3904,7 @@ class Persona extends DataClass implements Insertable<Persona> {
   final String name;
   final String description;
   final String persona;
+  final String learnedFacts;
   final String? avatarPath;
   final bool isActive;
   final DateTime updatedAt;
@@ -3837,6 +3915,7 @@ class Persona extends DataClass implements Insertable<Persona> {
     required this.name,
     required this.description,
     required this.persona,
+    required this.learnedFacts,
     this.avatarPath,
     required this.isActive,
     required this.updatedAt,
@@ -3850,6 +3929,7 @@ class Persona extends DataClass implements Insertable<Persona> {
     map['name'] = Variable<String>(name);
     map['description'] = Variable<String>(description);
     map['persona'] = Variable<String>(persona);
+    map['learned_facts'] = Variable<String>(learnedFacts);
     if (!nullToAbsent || avatarPath != null) {
       map['avatar_path'] = Variable<String>(avatarPath);
     }
@@ -3868,6 +3948,7 @@ class Persona extends DataClass implements Insertable<Persona> {
       name: Value(name),
       description: Value(description),
       persona: Value(persona),
+      learnedFacts: Value(learnedFacts),
       avatarPath: avatarPath == null && nullToAbsent
           ? const Value.absent()
           : Value(avatarPath),
@@ -3890,6 +3971,7 @@ class Persona extends DataClass implements Insertable<Persona> {
       name: serializer.fromJson<String>(json['name']),
       description: serializer.fromJson<String>(json['description']),
       persona: serializer.fromJson<String>(json['persona']),
+      learnedFacts: serializer.fromJson<String>(json['learnedFacts']),
       avatarPath: serializer.fromJson<String?>(json['avatarPath']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -3905,6 +3987,7 @@ class Persona extends DataClass implements Insertable<Persona> {
       'name': serializer.toJson<String>(name),
       'description': serializer.toJson<String>(description),
       'persona': serializer.toJson<String>(persona),
+      'learnedFacts': serializer.toJson<String>(learnedFacts),
       'avatarPath': serializer.toJson<String?>(avatarPath),
       'isActive': serializer.toJson<bool>(isActive),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -3918,6 +4001,7 @@ class Persona extends DataClass implements Insertable<Persona> {
     String? name,
     String? description,
     String? persona,
+    String? learnedFacts,
     Value<String?> avatarPath = const Value.absent(),
     bool? isActive,
     DateTime? updatedAt,
@@ -3928,6 +4012,7 @@ class Persona extends DataClass implements Insertable<Persona> {
     name: name ?? this.name,
     description: description ?? this.description,
     persona: persona ?? this.persona,
+    learnedFacts: learnedFacts ?? this.learnedFacts,
     avatarPath: avatarPath.present ? avatarPath.value : this.avatarPath,
     isActive: isActive ?? this.isActive,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -3942,6 +4027,9 @@ class Persona extends DataClass implements Insertable<Persona> {
           ? data.description.value
           : this.description,
       persona: data.persona.present ? data.persona.value : this.persona,
+      learnedFacts: data.learnedFacts.present
+          ? data.learnedFacts.value
+          : this.learnedFacts,
       avatarPath: data.avatarPath.present
           ? data.avatarPath.value
           : this.avatarPath,
@@ -3959,6 +4047,7 @@ class Persona extends DataClass implements Insertable<Persona> {
           ..write('name: $name, ')
           ..write('description: $description, ')
           ..write('persona: $persona, ')
+          ..write('learnedFacts: $learnedFacts, ')
           ..write('avatarPath: $avatarPath, ')
           ..write('isActive: $isActive, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3974,6 +4063,7 @@ class Persona extends DataClass implements Insertable<Persona> {
     name,
     description,
     persona,
+    learnedFacts,
     avatarPath,
     isActive,
     updatedAt,
@@ -3988,6 +4078,7 @@ class Persona extends DataClass implements Insertable<Persona> {
           other.name == this.name &&
           other.description == this.description &&
           other.persona == this.persona &&
+          other.learnedFacts == this.learnedFacts &&
           other.avatarPath == this.avatarPath &&
           other.isActive == this.isActive &&
           other.updatedAt == this.updatedAt &&
@@ -4000,6 +4091,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
   final Value<String> name;
   final Value<String> description;
   final Value<String> persona;
+  final Value<String> learnedFacts;
   final Value<String?> avatarPath;
   final Value<bool> isActive;
   final Value<DateTime> updatedAt;
@@ -4011,6 +4103,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     this.name = const Value.absent(),
     this.description = const Value.absent(),
     this.persona = const Value.absent(),
+    this.learnedFacts = const Value.absent(),
     this.avatarPath = const Value.absent(),
     this.isActive = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -4023,6 +4116,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     this.name = const Value.absent(),
     this.description = const Value.absent(),
     this.persona = const Value.absent(),
+    this.learnedFacts = const Value.absent(),
     this.avatarPath = const Value.absent(),
     this.isActive = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -4035,6 +4129,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     Expression<String>? name,
     Expression<String>? description,
     Expression<String>? persona,
+    Expression<String>? learnedFacts,
     Expression<String>? avatarPath,
     Expression<bool>? isActive,
     Expression<DateTime>? updatedAt,
@@ -4047,6 +4142,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
       if (name != null) 'name': name,
       if (description != null) 'description': description,
       if (persona != null) 'persona': persona,
+      if (learnedFacts != null) 'learned_facts': learnedFacts,
       if (avatarPath != null) 'avatar_path': avatarPath,
       if (isActive != null) 'is_active': isActive,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -4061,6 +4157,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     Value<String>? name,
     Value<String>? description,
     Value<String>? persona,
+    Value<String>? learnedFacts,
     Value<String?>? avatarPath,
     Value<bool>? isActive,
     Value<DateTime>? updatedAt,
@@ -4073,6 +4170,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
       name: name ?? this.name,
       description: description ?? this.description,
       persona: persona ?? this.persona,
+      learnedFacts: learnedFacts ?? this.learnedFacts,
       avatarPath: avatarPath ?? this.avatarPath,
       isActive: isActive ?? this.isActive,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -4098,6 +4196,9 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     }
     if (persona.present) {
       map['persona'] = Variable<String>(persona.value);
+    }
+    if (learnedFacts.present) {
+      map['learned_facts'] = Variable<String>(learnedFacts.value);
     }
     if (avatarPath.present) {
       map['avatar_path'] = Variable<String>(avatarPath.value);
@@ -4125,6 +4226,7 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
           ..write('name: $name, ')
           ..write('description: $description, ')
           ..write('persona: $persona, ')
+          ..write('learnedFacts: $learnedFacts, ')
           ..write('avatarPath: $avatarPath, ')
           ..write('isActive: $isActive, ')
           ..write('updatedAt: $updatedAt, ')
@@ -4613,6 +4715,1565 @@ class WorldsCompanion extends UpdateCompanion<World> {
   }
 }
 
+class $MessageEmbeddingsTable extends MessageEmbeddings
+    with TableInfo<$MessageEmbeddingsTable, MessageEmbedding> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MessageEmbeddingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _positionStartMeta = const VerificationMeta(
+    'positionStart',
+  );
+  @override
+  late final GeneratedColumn<int> positionStart = GeneratedColumn<int>(
+    'position_start',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionEndMeta = const VerificationMeta(
+    'positionEnd',
+  );
+  @override
+  late final GeneratedColumn<int> positionEnd = GeneratedColumn<int>(
+    'position_end',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _embeddingMeta = const VerificationMeta(
+    'embedding',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> embedding = GeneratedColumn<Uint8List>(
+    'embedding',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dimensionsMeta = const VerificationMeta(
+    'dimensions',
+  );
+  @override
+  late final GeneratedColumn<int> dimensions = GeneratedColumn<int>(
+    'dimensions',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    characterId,
+    positionStart,
+    positionEnd,
+    content,
+    embedding,
+    dimensions,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'message_embeddings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MessageEmbedding> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('position_start')) {
+      context.handle(
+        _positionStartMeta,
+        positionStart.isAcceptableOrUnknown(
+          data['position_start']!,
+          _positionStartMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_positionStartMeta);
+    }
+    if (data.containsKey('position_end')) {
+      context.handle(
+        _positionEndMeta,
+        positionEnd.isAcceptableOrUnknown(
+          data['position_end']!,
+          _positionEndMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_positionEndMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('embedding')) {
+      context.handle(
+        _embeddingMeta,
+        embedding.isAcceptableOrUnknown(data['embedding']!, _embeddingMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_embeddingMeta);
+    }
+    if (data.containsKey('dimensions')) {
+      context.handle(
+        _dimensionsMeta,
+        dimensions.isAcceptableOrUnknown(data['dimensions']!, _dimensionsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dimensionsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MessageEmbedding map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MessageEmbedding(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      ),
+      positionStart: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position_start'],
+      )!,
+      positionEnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position_end'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      embedding: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}embedding'],
+      )!,
+      dimensions: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dimensions'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MessageEmbeddingsTable createAlias(String alias) {
+    return $MessageEmbeddingsTable(attachedDatabase, alias);
+  }
+}
+
+class MessageEmbedding extends DataClass
+    implements Insertable<MessageEmbedding> {
+  final String id;
+  final String sessionId;
+  final String? characterId;
+  final int positionStart;
+  final int positionEnd;
+  final String content;
+  final Uint8List embedding;
+  final int dimensions;
+  final DateTime createdAt;
+  const MessageEmbedding({
+    required this.id,
+    required this.sessionId,
+    this.characterId,
+    required this.positionStart,
+    required this.positionEnd,
+    required this.content,
+    required this.embedding,
+    required this.dimensions,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    if (!nullToAbsent || characterId != null) {
+      map['character_id'] = Variable<String>(characterId);
+    }
+    map['position_start'] = Variable<int>(positionStart);
+    map['position_end'] = Variable<int>(positionEnd);
+    map['content'] = Variable<String>(content);
+    map['embedding'] = Variable<Uint8List>(embedding);
+    map['dimensions'] = Variable<int>(dimensions);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  MessageEmbeddingsCompanion toCompanion(bool nullToAbsent) {
+    return MessageEmbeddingsCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      characterId: characterId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(characterId),
+      positionStart: Value(positionStart),
+      positionEnd: Value(positionEnd),
+      content: Value(content),
+      embedding: Value(embedding),
+      dimensions: Value(dimensions),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory MessageEmbedding.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MessageEmbedding(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      characterId: serializer.fromJson<String?>(json['characterId']),
+      positionStart: serializer.fromJson<int>(json['positionStart']),
+      positionEnd: serializer.fromJson<int>(json['positionEnd']),
+      content: serializer.fromJson<String>(json['content']),
+      embedding: serializer.fromJson<Uint8List>(json['embedding']),
+      dimensions: serializer.fromJson<int>(json['dimensions']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'characterId': serializer.toJson<String?>(characterId),
+      'positionStart': serializer.toJson<int>(positionStart),
+      'positionEnd': serializer.toJson<int>(positionEnd),
+      'content': serializer.toJson<String>(content),
+      'embedding': serializer.toJson<Uint8List>(embedding),
+      'dimensions': serializer.toJson<int>(dimensions),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  MessageEmbedding copyWith({
+    String? id,
+    String? sessionId,
+    Value<String?> characterId = const Value.absent(),
+    int? positionStart,
+    int? positionEnd,
+    String? content,
+    Uint8List? embedding,
+    int? dimensions,
+    DateTime? createdAt,
+  }) => MessageEmbedding(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    characterId: characterId.present ? characterId.value : this.characterId,
+    positionStart: positionStart ?? this.positionStart,
+    positionEnd: positionEnd ?? this.positionEnd,
+    content: content ?? this.content,
+    embedding: embedding ?? this.embedding,
+    dimensions: dimensions ?? this.dimensions,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  MessageEmbedding copyWithCompanion(MessageEmbeddingsCompanion data) {
+    return MessageEmbedding(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      positionStart: data.positionStart.present
+          ? data.positionStart.value
+          : this.positionStart,
+      positionEnd: data.positionEnd.present
+          ? data.positionEnd.value
+          : this.positionEnd,
+      content: data.content.present ? data.content.value : this.content,
+      embedding: data.embedding.present ? data.embedding.value : this.embedding,
+      dimensions: data.dimensions.present
+          ? data.dimensions.value
+          : this.dimensions,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessageEmbedding(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('characterId: $characterId, ')
+          ..write('positionStart: $positionStart, ')
+          ..write('positionEnd: $positionEnd, ')
+          ..write('content: $content, ')
+          ..write('embedding: $embedding, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    characterId,
+    positionStart,
+    positionEnd,
+    content,
+    $driftBlobEquality.hash(embedding),
+    dimensions,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MessageEmbedding &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.characterId == this.characterId &&
+          other.positionStart == this.positionStart &&
+          other.positionEnd == this.positionEnd &&
+          other.content == this.content &&
+          $driftBlobEquality.equals(other.embedding, this.embedding) &&
+          other.dimensions == this.dimensions &&
+          other.createdAt == this.createdAt);
+}
+
+class MessageEmbeddingsCompanion extends UpdateCompanion<MessageEmbedding> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<String?> characterId;
+  final Value<int> positionStart;
+  final Value<int> positionEnd;
+  final Value<String> content;
+  final Value<Uint8List> embedding;
+  final Value<int> dimensions;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const MessageEmbeddingsCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.positionStart = const Value.absent(),
+    this.positionEnd = const Value.absent(),
+    this.content = const Value.absent(),
+    this.embedding = const Value.absent(),
+    this.dimensions = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MessageEmbeddingsCompanion.insert({
+    required String id,
+    required String sessionId,
+    this.characterId = const Value.absent(),
+    required int positionStart,
+    required int positionEnd,
+    required String content,
+    required Uint8List embedding,
+    required int dimensions,
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       positionStart = Value(positionStart),
+       positionEnd = Value(positionEnd),
+       content = Value(content),
+       embedding = Value(embedding),
+       dimensions = Value(dimensions);
+  static Insertable<MessageEmbedding> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<String>? characterId,
+    Expression<int>? positionStart,
+    Expression<int>? positionEnd,
+    Expression<String>? content,
+    Expression<Uint8List>? embedding,
+    Expression<int>? dimensions,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (characterId != null) 'character_id': characterId,
+      if (positionStart != null) 'position_start': positionStart,
+      if (positionEnd != null) 'position_end': positionEnd,
+      if (content != null) 'content': content,
+      if (embedding != null) 'embedding': embedding,
+      if (dimensions != null) 'dimensions': dimensions,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MessageEmbeddingsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<String?>? characterId,
+    Value<int>? positionStart,
+    Value<int>? positionEnd,
+    Value<String>? content,
+    Value<Uint8List>? embedding,
+    Value<int>? dimensions,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return MessageEmbeddingsCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      characterId: characterId ?? this.characterId,
+      positionStart: positionStart ?? this.positionStart,
+      positionEnd: positionEnd ?? this.positionEnd,
+      content: content ?? this.content,
+      embedding: embedding ?? this.embedding,
+      dimensions: dimensions ?? this.dimensions,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (positionStart.present) {
+      map['position_start'] = Variable<int>(positionStart.value);
+    }
+    if (positionEnd.present) {
+      map['position_end'] = Variable<int>(positionEnd.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (embedding.present) {
+      map['embedding'] = Variable<Uint8List>(embedding.value);
+    }
+    if (dimensions.present) {
+      map['dimensions'] = Variable<int>(dimensions.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessageEmbeddingsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('characterId: $characterId, ')
+          ..write('positionStart: $positionStart, ')
+          ..write('positionEnd: $positionEnd, ')
+          ..write('content: $content, ')
+          ..write('embedding: $embedding, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DataBankEntriesTable extends DataBankEntries
+    with TableInfo<$DataBankEntriesTable, DataBankEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DataBankEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _embeddingMeta = const VerificationMeta(
+    'embedding',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> embedding = GeneratedColumn<Uint8List>(
+    'embedding',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dimensionsMeta = const VerificationMeta(
+    'dimensions',
+  );
+  @override
+  late final GeneratedColumn<int> dimensions = GeneratedColumn<int>(
+    'dimensions',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    characterId,
+    title,
+    content,
+    embedding,
+    dimensions,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'data_bank_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DataBankEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('embedding')) {
+      context.handle(
+        _embeddingMeta,
+        embedding.isAcceptableOrUnknown(data['embedding']!, _embeddingMeta),
+      );
+    }
+    if (data.containsKey('dimensions')) {
+      context.handle(
+        _dimensionsMeta,
+        dimensions.isAcceptableOrUnknown(data['dimensions']!, _dimensionsMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DataBankEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DataBankEntry(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      embedding: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}embedding'],
+      ),
+      dimensions: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dimensions'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DataBankEntriesTable createAlias(String alias) {
+    return $DataBankEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class DataBankEntry extends DataClass implements Insertable<DataBankEntry> {
+  final String id;
+  final String characterId;
+  final String title;
+  final String content;
+  final Uint8List? embedding;
+  final int dimensions;
+  final DateTime createdAt;
+  const DataBankEntry({
+    required this.id,
+    required this.characterId,
+    required this.title,
+    required this.content,
+    this.embedding,
+    required this.dimensions,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['character_id'] = Variable<String>(characterId);
+    map['title'] = Variable<String>(title);
+    map['content'] = Variable<String>(content);
+    if (!nullToAbsent || embedding != null) {
+      map['embedding'] = Variable<Uint8List>(embedding);
+    }
+    map['dimensions'] = Variable<int>(dimensions);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  DataBankEntriesCompanion toCompanion(bool nullToAbsent) {
+    return DataBankEntriesCompanion(
+      id: Value(id),
+      characterId: Value(characterId),
+      title: Value(title),
+      content: Value(content),
+      embedding: embedding == null && nullToAbsent
+          ? const Value.absent()
+          : Value(embedding),
+      dimensions: Value(dimensions),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory DataBankEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DataBankEntry(
+      id: serializer.fromJson<String>(json['id']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      title: serializer.fromJson<String>(json['title']),
+      content: serializer.fromJson<String>(json['content']),
+      embedding: serializer.fromJson<Uint8List?>(json['embedding']),
+      dimensions: serializer.fromJson<int>(json['dimensions']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'characterId': serializer.toJson<String>(characterId),
+      'title': serializer.toJson<String>(title),
+      'content': serializer.toJson<String>(content),
+      'embedding': serializer.toJson<Uint8List?>(embedding),
+      'dimensions': serializer.toJson<int>(dimensions),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  DataBankEntry copyWith({
+    String? id,
+    String? characterId,
+    String? title,
+    String? content,
+    Value<Uint8List?> embedding = const Value.absent(),
+    int? dimensions,
+    DateTime? createdAt,
+  }) => DataBankEntry(
+    id: id ?? this.id,
+    characterId: characterId ?? this.characterId,
+    title: title ?? this.title,
+    content: content ?? this.content,
+    embedding: embedding.present ? embedding.value : this.embedding,
+    dimensions: dimensions ?? this.dimensions,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  DataBankEntry copyWithCompanion(DataBankEntriesCompanion data) {
+    return DataBankEntry(
+      id: data.id.present ? data.id.value : this.id,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      title: data.title.present ? data.title.value : this.title,
+      content: data.content.present ? data.content.value : this.content,
+      embedding: data.embedding.present ? data.embedding.value : this.embedding,
+      dimensions: data.dimensions.present
+          ? data.dimensions.value
+          : this.dimensions,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DataBankEntry(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('title: $title, ')
+          ..write('content: $content, ')
+          ..write('embedding: $embedding, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    characterId,
+    title,
+    content,
+    $driftBlobEquality.hash(embedding),
+    dimensions,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DataBankEntry &&
+          other.id == this.id &&
+          other.characterId == this.characterId &&
+          other.title == this.title &&
+          other.content == this.content &&
+          $driftBlobEquality.equals(other.embedding, this.embedding) &&
+          other.dimensions == this.dimensions &&
+          other.createdAt == this.createdAt);
+}
+
+class DataBankEntriesCompanion extends UpdateCompanion<DataBankEntry> {
+  final Value<String> id;
+  final Value<String> characterId;
+  final Value<String> title;
+  final Value<String> content;
+  final Value<Uint8List?> embedding;
+  final Value<int> dimensions;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const DataBankEntriesCompanion({
+    this.id = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.content = const Value.absent(),
+    this.embedding = const Value.absent(),
+    this.dimensions = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DataBankEntriesCompanion.insert({
+    required String id,
+    required String characterId,
+    required String title,
+    required String content,
+    this.embedding = const Value.absent(),
+    this.dimensions = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       characterId = Value(characterId),
+       title = Value(title),
+       content = Value(content);
+  static Insertable<DataBankEntry> custom({
+    Expression<String>? id,
+    Expression<String>? characterId,
+    Expression<String>? title,
+    Expression<String>? content,
+    Expression<Uint8List>? embedding,
+    Expression<int>? dimensions,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (characterId != null) 'character_id': characterId,
+      if (title != null) 'title': title,
+      if (content != null) 'content': content,
+      if (embedding != null) 'embedding': embedding,
+      if (dimensions != null) 'dimensions': dimensions,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DataBankEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? characterId,
+    Value<String>? title,
+    Value<String>? content,
+    Value<Uint8List?>? embedding,
+    Value<int>? dimensions,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return DataBankEntriesCompanion(
+      id: id ?? this.id,
+      characterId: characterId ?? this.characterId,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      embedding: embedding ?? this.embedding,
+      dimensions: dimensions ?? this.dimensions,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (embedding.present) {
+      map['embedding'] = Variable<Uint8List>(embedding.value);
+    }
+    if (dimensions.present) {
+      map['dimensions'] = Variable<int>(dimensions.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DataBankEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('title: $title, ')
+          ..write('content: $content, ')
+          ..write('embedding: $embedding, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ObjectivesTable extends Objectives
+    with TableInfo<$ObjectivesTable, Objective> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ObjectivesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _objectiveMeta = const VerificationMeta(
+    'objective',
+  );
+  @override
+  late final GeneratedColumn<String> objective = GeneratedColumn<String>(
+    'objective',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tasksMeta = const VerificationMeta('tasks');
+  @override
+  late final GeneratedColumn<String> tasks = GeneratedColumn<String>(
+    'tasks',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _activeMeta = const VerificationMeta('active');
+  @override
+  late final GeneratedColumn<bool> active = GeneratedColumn<bool>(
+    'active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _checkFrequencyMeta = const VerificationMeta(
+    'checkFrequency',
+  );
+  @override
+  late final GeneratedColumn<int> checkFrequency = GeneratedColumn<int>(
+    'check_frequency',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(3),
+  );
+  static const VerificationMeta _injectionDepthMeta = const VerificationMeta(
+    'injectionDepth',
+  );
+  @override
+  late final GeneratedColumn<int> injectionDepth = GeneratedColumn<int>(
+    'injection_depth',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(4),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    characterId,
+    objective,
+    tasks,
+    active,
+    checkFrequency,
+    injectionDepth,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'objectives';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Objective> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('objective')) {
+      context.handle(
+        _objectiveMeta,
+        objective.isAcceptableOrUnknown(data['objective']!, _objectiveMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_objectiveMeta);
+    }
+    if (data.containsKey('tasks')) {
+      context.handle(
+        _tasksMeta,
+        tasks.isAcceptableOrUnknown(data['tasks']!, _tasksMeta),
+      );
+    }
+    if (data.containsKey('active')) {
+      context.handle(
+        _activeMeta,
+        active.isAcceptableOrUnknown(data['active']!, _activeMeta),
+      );
+    }
+    if (data.containsKey('check_frequency')) {
+      context.handle(
+        _checkFrequencyMeta,
+        checkFrequency.isAcceptableOrUnknown(
+          data['check_frequency']!,
+          _checkFrequencyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('injection_depth')) {
+      context.handle(
+        _injectionDepthMeta,
+        injectionDepth.isAcceptableOrUnknown(
+          data['injection_depth']!,
+          _injectionDepthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Objective map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Objective(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      objective: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}objective'],
+      )!,
+      tasks: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tasks'],
+      )!,
+      active: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}active'],
+      )!,
+      checkFrequency: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}check_frequency'],
+      )!,
+      injectionDepth: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}injection_depth'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ObjectivesTable createAlias(String alias) {
+    return $ObjectivesTable(attachedDatabase, alias);
+  }
+}
+
+class Objective extends DataClass implements Insertable<Objective> {
+  final String id;
+  final String characterId;
+  final String objective;
+  final String tasks;
+  final bool active;
+  final int checkFrequency;
+  final int injectionDepth;
+  final DateTime createdAt;
+  const Objective({
+    required this.id,
+    required this.characterId,
+    required this.objective,
+    required this.tasks,
+    required this.active,
+    required this.checkFrequency,
+    required this.injectionDepth,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['character_id'] = Variable<String>(characterId);
+    map['objective'] = Variable<String>(objective);
+    map['tasks'] = Variable<String>(tasks);
+    map['active'] = Variable<bool>(active);
+    map['check_frequency'] = Variable<int>(checkFrequency);
+    map['injection_depth'] = Variable<int>(injectionDepth);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ObjectivesCompanion toCompanion(bool nullToAbsent) {
+    return ObjectivesCompanion(
+      id: Value(id),
+      characterId: Value(characterId),
+      objective: Value(objective),
+      tasks: Value(tasks),
+      active: Value(active),
+      checkFrequency: Value(checkFrequency),
+      injectionDepth: Value(injectionDepth),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory Objective.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Objective(
+      id: serializer.fromJson<String>(json['id']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      objective: serializer.fromJson<String>(json['objective']),
+      tasks: serializer.fromJson<String>(json['tasks']),
+      active: serializer.fromJson<bool>(json['active']),
+      checkFrequency: serializer.fromJson<int>(json['checkFrequency']),
+      injectionDepth: serializer.fromJson<int>(json['injectionDepth']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'characterId': serializer.toJson<String>(characterId),
+      'objective': serializer.toJson<String>(objective),
+      'tasks': serializer.toJson<String>(tasks),
+      'active': serializer.toJson<bool>(active),
+      'checkFrequency': serializer.toJson<int>(checkFrequency),
+      'injectionDepth': serializer.toJson<int>(injectionDepth),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  Objective copyWith({
+    String? id,
+    String? characterId,
+    String? objective,
+    String? tasks,
+    bool? active,
+    int? checkFrequency,
+    int? injectionDepth,
+    DateTime? createdAt,
+  }) => Objective(
+    id: id ?? this.id,
+    characterId: characterId ?? this.characterId,
+    objective: objective ?? this.objective,
+    tasks: tasks ?? this.tasks,
+    active: active ?? this.active,
+    checkFrequency: checkFrequency ?? this.checkFrequency,
+    injectionDepth: injectionDepth ?? this.injectionDepth,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  Objective copyWithCompanion(ObjectivesCompanion data) {
+    return Objective(
+      id: data.id.present ? data.id.value : this.id,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      objective: data.objective.present ? data.objective.value : this.objective,
+      tasks: data.tasks.present ? data.tasks.value : this.tasks,
+      active: data.active.present ? data.active.value : this.active,
+      checkFrequency: data.checkFrequency.present
+          ? data.checkFrequency.value
+          : this.checkFrequency,
+      injectionDepth: data.injectionDepth.present
+          ? data.injectionDepth.value
+          : this.injectionDepth,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Objective(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('objective: $objective, ')
+          ..write('tasks: $tasks, ')
+          ..write('active: $active, ')
+          ..write('checkFrequency: $checkFrequency, ')
+          ..write('injectionDepth: $injectionDepth, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    characterId,
+    objective,
+    tasks,
+    active,
+    checkFrequency,
+    injectionDepth,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Objective &&
+          other.id == this.id &&
+          other.characterId == this.characterId &&
+          other.objective == this.objective &&
+          other.tasks == this.tasks &&
+          other.active == this.active &&
+          other.checkFrequency == this.checkFrequency &&
+          other.injectionDepth == this.injectionDepth &&
+          other.createdAt == this.createdAt);
+}
+
+class ObjectivesCompanion extends UpdateCompanion<Objective> {
+  final Value<String> id;
+  final Value<String> characterId;
+  final Value<String> objective;
+  final Value<String> tasks;
+  final Value<bool> active;
+  final Value<int> checkFrequency;
+  final Value<int> injectionDepth;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const ObjectivesCompanion({
+    this.id = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.objective = const Value.absent(),
+    this.tasks = const Value.absent(),
+    this.active = const Value.absent(),
+    this.checkFrequency = const Value.absent(),
+    this.injectionDepth = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ObjectivesCompanion.insert({
+    required String id,
+    required String characterId,
+    required String objective,
+    this.tasks = const Value.absent(),
+    this.active = const Value.absent(),
+    this.checkFrequency = const Value.absent(),
+    this.injectionDepth = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       characterId = Value(characterId),
+       objective = Value(objective);
+  static Insertable<Objective> custom({
+    Expression<String>? id,
+    Expression<String>? characterId,
+    Expression<String>? objective,
+    Expression<String>? tasks,
+    Expression<bool>? active,
+    Expression<int>? checkFrequency,
+    Expression<int>? injectionDepth,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (characterId != null) 'character_id': characterId,
+      if (objective != null) 'objective': objective,
+      if (tasks != null) 'tasks': tasks,
+      if (active != null) 'active': active,
+      if (checkFrequency != null) 'check_frequency': checkFrequency,
+      if (injectionDepth != null) 'injection_depth': injectionDepth,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ObjectivesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? characterId,
+    Value<String>? objective,
+    Value<String>? tasks,
+    Value<bool>? active,
+    Value<int>? checkFrequency,
+    Value<int>? injectionDepth,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return ObjectivesCompanion(
+      id: id ?? this.id,
+      characterId: characterId ?? this.characterId,
+      objective: objective ?? this.objective,
+      tasks: tasks ?? this.tasks,
+      active: active ?? this.active,
+      checkFrequency: checkFrequency ?? this.checkFrequency,
+      injectionDepth: injectionDepth ?? this.injectionDepth,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (objective.present) {
+      map['objective'] = Variable<String>(objective.value);
+    }
+    if (tasks.present) {
+      map['tasks'] = Variable<String>(tasks.value);
+    }
+    if (active.present) {
+      map['active'] = Variable<bool>(active.value);
+    }
+    if (checkFrequency.present) {
+      map['check_frequency'] = Variable<int>(checkFrequency.value);
+    }
+    if (injectionDepth.present) {
+      map['injection_depth'] = Variable<int>(injectionDepth.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ObjectivesCompanion(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('objective: $objective, ')
+          ..write('tasks: $tasks, ')
+          ..write('active: $active, ')
+          ..write('checkFrequency: $checkFrequency, ')
+          ..write('injectionDepth: $injectionDepth, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncMetaTable extends SyncMeta
     with TableInfo<$SyncMetaTable, SyncMetaData> {
   @override
@@ -4874,6 +6535,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $FoldersTable folders = $FoldersTable(this);
   late final $PersonasTable personas = $PersonasTable(this);
   late final $WorldsTable worlds = $WorldsTable(this);
+  late final $MessageEmbeddingsTable messageEmbeddings =
+      $MessageEmbeddingsTable(this);
+  late final $DataBankEntriesTable dataBankEntries = $DataBankEntriesTable(
+    this,
+  );
+  late final $ObjectivesTable objectives = $ObjectivesTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -4887,6 +6554,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     folders,
     personas,
     worlds,
+    messageEmbeddings,
+    dataBankEntries,
+    objectives,
     syncMeta,
   ];
 }
@@ -4909,6 +6579,7 @@ typedef $$CharactersTableCreateCompanionBuilder =
       Value<String?> folderId,
       Value<String?> lorebook,
       Value<String> worldNames,
+      Value<String> memorySources,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -4932,6 +6603,7 @@ typedef $$CharactersTableUpdateCompanionBuilder =
       Value<String?> folderId,
       Value<String?> lorebook,
       Value<String> worldNames,
+      Value<String> memorySources,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -5024,6 +6696,11 @@ class $$CharactersTableFilterComposer
 
   ColumnFilters<String> get worldNames => $composableBuilder(
     column: $table.worldNames,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get memorySources => $composableBuilder(
+    column: $table.memorySources,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5132,6 +6809,11 @@ class $$CharactersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get memorySources => $composableBuilder(
+    column: $table.memorySources,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -5221,6 +6903,11 @@ class $$CharactersTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get memorySources => $composableBuilder(
+    column: $table.memorySources,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -5278,6 +6965,7 @@ class $$CharactersTableTableManager
                 Value<String?> folderId = const Value.absent(),
                 Value<String?> lorebook = const Value.absent(),
                 Value<String> worldNames = const Value.absent(),
+                Value<String> memorySources = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -5299,6 +6987,7 @@ class $$CharactersTableTableManager
                 folderId: folderId,
                 lorebook: lorebook,
                 worldNames: worldNames,
+                memorySources: memorySources,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -5322,6 +7011,7 @@ class $$CharactersTableTableManager
                 Value<String?> folderId = const Value.absent(),
                 Value<String?> lorebook = const Value.absent(),
                 Value<String> worldNames = const Value.absent(),
+                Value<String> memorySources = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -5343,6 +7033,7 @@ class $$CharactersTableTableManager
                 folderId: folderId,
                 lorebook: lorebook,
                 worldNames: worldNames,
+                memorySources: memorySources,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -6580,6 +8271,7 @@ typedef $$PersonasTableCreateCompanionBuilder =
       Value<String> name,
       Value<String> description,
       Value<String> persona,
+      Value<String> learnedFacts,
       Value<String?> avatarPath,
       Value<bool> isActive,
       Value<DateTime> updatedAt,
@@ -6593,6 +8285,7 @@ typedef $$PersonasTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> description,
       Value<String> persona,
+      Value<String> learnedFacts,
       Value<String?> avatarPath,
       Value<bool> isActive,
       Value<DateTime> updatedAt,
@@ -6631,6 +8324,11 @@ class $$PersonasTableFilterComposer
 
   ColumnFilters<String> get persona => $composableBuilder(
     column: $table.persona,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get learnedFacts => $composableBuilder(
+    column: $table.learnedFacts,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6689,6 +8387,11 @@ class $$PersonasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get learnedFacts => $composableBuilder(
+    column: $table.learnedFacts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get avatarPath => $composableBuilder(
     column: $table.avatarPath,
     builder: (column) => ColumnOrderings(column),
@@ -6735,6 +8438,11 @@ class $$PersonasTableAnnotationComposer
 
   GeneratedColumn<String> get persona =>
       $composableBuilder(column: $table.persona, builder: (column) => column);
+
+  GeneratedColumn<String> get learnedFacts => $composableBuilder(
+    column: $table.learnedFacts,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get avatarPath => $composableBuilder(
     column: $table.avatarPath,
@@ -6784,6 +8492,7 @@ class $$PersonasTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String> persona = const Value.absent(),
+                Value<String> learnedFacts = const Value.absent(),
                 Value<String?> avatarPath = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -6795,6 +8504,7 @@ class $$PersonasTableTableManager
                 name: name,
                 description: description,
                 persona: persona,
+                learnedFacts: learnedFacts,
                 avatarPath: avatarPath,
                 isActive: isActive,
                 updatedAt: updatedAt,
@@ -6808,6 +8518,7 @@ class $$PersonasTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String> persona = const Value.absent(),
+                Value<String> learnedFacts = const Value.absent(),
                 Value<String?> avatarPath = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -6819,6 +8530,7 @@ class $$PersonasTableTableManager
                 name: name,
                 description: description,
                 persona: persona,
+                learnedFacts: learnedFacts,
                 avatarPath: avatarPath,
                 isActive: isActive,
                 updatedAt: updatedAt,
@@ -7083,6 +8795,807 @@ typedef $$WorldsTableProcessedTableManager =
       World,
       PrefetchHooks Function()
     >;
+typedef $$MessageEmbeddingsTableCreateCompanionBuilder =
+    MessageEmbeddingsCompanion Function({
+      required String id,
+      required String sessionId,
+      Value<String?> characterId,
+      required int positionStart,
+      required int positionEnd,
+      required String content,
+      required Uint8List embedding,
+      required int dimensions,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$MessageEmbeddingsTableUpdateCompanionBuilder =
+    MessageEmbeddingsCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<String?> characterId,
+      Value<int> positionStart,
+      Value<int> positionEnd,
+      Value<String> content,
+      Value<Uint8List> embedding,
+      Value<int> dimensions,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$MessageEmbeddingsTableFilterComposer
+    extends Composer<_$AppDatabase, $MessageEmbeddingsTable> {
+  $$MessageEmbeddingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get positionStart => $composableBuilder(
+    column: $table.positionStart,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get positionEnd => $composableBuilder(
+    column: $table.positionEnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MessageEmbeddingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MessageEmbeddingsTable> {
+  $$MessageEmbeddingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get positionStart => $composableBuilder(
+    column: $table.positionStart,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get positionEnd => $composableBuilder(
+    column: $table.positionEnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MessageEmbeddingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MessageEmbeddingsTable> {
+  $$MessageEmbeddingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get positionStart => $composableBuilder(
+    column: $table.positionStart,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get positionEnd => $composableBuilder(
+    column: $table.positionEnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get embedding =>
+      $composableBuilder(column: $table.embedding, builder: (column) => column);
+
+  GeneratedColumn<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$MessageEmbeddingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MessageEmbeddingsTable,
+          MessageEmbedding,
+          $$MessageEmbeddingsTableFilterComposer,
+          $$MessageEmbeddingsTableOrderingComposer,
+          $$MessageEmbeddingsTableAnnotationComposer,
+          $$MessageEmbeddingsTableCreateCompanionBuilder,
+          $$MessageEmbeddingsTableUpdateCompanionBuilder,
+          (
+            MessageEmbedding,
+            BaseReferences<
+              _$AppDatabase,
+              $MessageEmbeddingsTable,
+              MessageEmbedding
+            >,
+          ),
+          MessageEmbedding,
+          PrefetchHooks Function()
+        > {
+  $$MessageEmbeddingsTableTableManager(
+    _$AppDatabase db,
+    $MessageEmbeddingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MessageEmbeddingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MessageEmbeddingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MessageEmbeddingsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String?> characterId = const Value.absent(),
+                Value<int> positionStart = const Value.absent(),
+                Value<int> positionEnd = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<Uint8List> embedding = const Value.absent(),
+                Value<int> dimensions = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MessageEmbeddingsCompanion(
+                id: id,
+                sessionId: sessionId,
+                characterId: characterId,
+                positionStart: positionStart,
+                positionEnd: positionEnd,
+                content: content,
+                embedding: embedding,
+                dimensions: dimensions,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                Value<String?> characterId = const Value.absent(),
+                required int positionStart,
+                required int positionEnd,
+                required String content,
+                required Uint8List embedding,
+                required int dimensions,
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MessageEmbeddingsCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                characterId: characterId,
+                positionStart: positionStart,
+                positionEnd: positionEnd,
+                content: content,
+                embedding: embedding,
+                dimensions: dimensions,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MessageEmbeddingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MessageEmbeddingsTable,
+      MessageEmbedding,
+      $$MessageEmbeddingsTableFilterComposer,
+      $$MessageEmbeddingsTableOrderingComposer,
+      $$MessageEmbeddingsTableAnnotationComposer,
+      $$MessageEmbeddingsTableCreateCompanionBuilder,
+      $$MessageEmbeddingsTableUpdateCompanionBuilder,
+      (
+        MessageEmbedding,
+        BaseReferences<
+          _$AppDatabase,
+          $MessageEmbeddingsTable,
+          MessageEmbedding
+        >,
+      ),
+      MessageEmbedding,
+      PrefetchHooks Function()
+    >;
+typedef $$DataBankEntriesTableCreateCompanionBuilder =
+    DataBankEntriesCompanion Function({
+      required String id,
+      required String characterId,
+      required String title,
+      required String content,
+      Value<Uint8List?> embedding,
+      Value<int> dimensions,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$DataBankEntriesTableUpdateCompanionBuilder =
+    DataBankEntriesCompanion Function({
+      Value<String> id,
+      Value<String> characterId,
+      Value<String> title,
+      Value<String> content,
+      Value<Uint8List?> embedding,
+      Value<int> dimensions,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$DataBankEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $DataBankEntriesTable> {
+  $$DataBankEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DataBankEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DataBankEntriesTable> {
+  $$DataBankEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DataBankEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DataBankEntriesTable> {
+  $$DataBankEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get embedding =>
+      $composableBuilder(column: $table.embedding, builder: (column) => column);
+
+  GeneratedColumn<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$DataBankEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DataBankEntriesTable,
+          DataBankEntry,
+          $$DataBankEntriesTableFilterComposer,
+          $$DataBankEntriesTableOrderingComposer,
+          $$DataBankEntriesTableAnnotationComposer,
+          $$DataBankEntriesTableCreateCompanionBuilder,
+          $$DataBankEntriesTableUpdateCompanionBuilder,
+          (
+            DataBankEntry,
+            BaseReferences<_$AppDatabase, $DataBankEntriesTable, DataBankEntry>,
+          ),
+          DataBankEntry,
+          PrefetchHooks Function()
+        > {
+  $$DataBankEntriesTableTableManager(
+    _$AppDatabase db,
+    $DataBankEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DataBankEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DataBankEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DataBankEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<Uint8List?> embedding = const Value.absent(),
+                Value<int> dimensions = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DataBankEntriesCompanion(
+                id: id,
+                characterId: characterId,
+                title: title,
+                content: content,
+                embedding: embedding,
+                dimensions: dimensions,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String characterId,
+                required String title,
+                required String content,
+                Value<Uint8List?> embedding = const Value.absent(),
+                Value<int> dimensions = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DataBankEntriesCompanion.insert(
+                id: id,
+                characterId: characterId,
+                title: title,
+                content: content,
+                embedding: embedding,
+                dimensions: dimensions,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DataBankEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DataBankEntriesTable,
+      DataBankEntry,
+      $$DataBankEntriesTableFilterComposer,
+      $$DataBankEntriesTableOrderingComposer,
+      $$DataBankEntriesTableAnnotationComposer,
+      $$DataBankEntriesTableCreateCompanionBuilder,
+      $$DataBankEntriesTableUpdateCompanionBuilder,
+      (
+        DataBankEntry,
+        BaseReferences<_$AppDatabase, $DataBankEntriesTable, DataBankEntry>,
+      ),
+      DataBankEntry,
+      PrefetchHooks Function()
+    >;
+typedef $$ObjectivesTableCreateCompanionBuilder =
+    ObjectivesCompanion Function({
+      required String id,
+      required String characterId,
+      required String objective,
+      Value<String> tasks,
+      Value<bool> active,
+      Value<int> checkFrequency,
+      Value<int> injectionDepth,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$ObjectivesTableUpdateCompanionBuilder =
+    ObjectivesCompanion Function({
+      Value<String> id,
+      Value<String> characterId,
+      Value<String> objective,
+      Value<String> tasks,
+      Value<bool> active,
+      Value<int> checkFrequency,
+      Value<int> injectionDepth,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$ObjectivesTableFilterComposer
+    extends Composer<_$AppDatabase, $ObjectivesTable> {
+  $$ObjectivesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get objective => $composableBuilder(
+    column: $table.objective,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tasks => $composableBuilder(
+    column: $table.tasks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get active => $composableBuilder(
+    column: $table.active,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get checkFrequency => $composableBuilder(
+    column: $table.checkFrequency,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get injectionDepth => $composableBuilder(
+    column: $table.injectionDepth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ObjectivesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ObjectivesTable> {
+  $$ObjectivesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get objective => $composableBuilder(
+    column: $table.objective,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tasks => $composableBuilder(
+    column: $table.tasks,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get active => $composableBuilder(
+    column: $table.active,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get checkFrequency => $composableBuilder(
+    column: $table.checkFrequency,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get injectionDepth => $composableBuilder(
+    column: $table.injectionDepth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ObjectivesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ObjectivesTable> {
+  $$ObjectivesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get objective =>
+      $composableBuilder(column: $table.objective, builder: (column) => column);
+
+  GeneratedColumn<String> get tasks =>
+      $composableBuilder(column: $table.tasks, builder: (column) => column);
+
+  GeneratedColumn<bool> get active =>
+      $composableBuilder(column: $table.active, builder: (column) => column);
+
+  GeneratedColumn<int> get checkFrequency => $composableBuilder(
+    column: $table.checkFrequency,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get injectionDepth => $composableBuilder(
+    column: $table.injectionDepth,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$ObjectivesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ObjectivesTable,
+          Objective,
+          $$ObjectivesTableFilterComposer,
+          $$ObjectivesTableOrderingComposer,
+          $$ObjectivesTableAnnotationComposer,
+          $$ObjectivesTableCreateCompanionBuilder,
+          $$ObjectivesTableUpdateCompanionBuilder,
+          (
+            Objective,
+            BaseReferences<_$AppDatabase, $ObjectivesTable, Objective>,
+          ),
+          Objective,
+          PrefetchHooks Function()
+        > {
+  $$ObjectivesTableTableManager(_$AppDatabase db, $ObjectivesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ObjectivesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ObjectivesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ObjectivesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String> objective = const Value.absent(),
+                Value<String> tasks = const Value.absent(),
+                Value<bool> active = const Value.absent(),
+                Value<int> checkFrequency = const Value.absent(),
+                Value<int> injectionDepth = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ObjectivesCompanion(
+                id: id,
+                characterId: characterId,
+                objective: objective,
+                tasks: tasks,
+                active: active,
+                checkFrequency: checkFrequency,
+                injectionDepth: injectionDepth,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String characterId,
+                required String objective,
+                Value<String> tasks = const Value.absent(),
+                Value<bool> active = const Value.absent(),
+                Value<int> checkFrequency = const Value.absent(),
+                Value<int> injectionDepth = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ObjectivesCompanion.insert(
+                id: id,
+                characterId: characterId,
+                objective: objective,
+                tasks: tasks,
+                active: active,
+                checkFrequency: checkFrequency,
+                injectionDepth: injectionDepth,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ObjectivesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ObjectivesTable,
+      Objective,
+      $$ObjectivesTableFilterComposer,
+      $$ObjectivesTableOrderingComposer,
+      $$ObjectivesTableAnnotationComposer,
+      $$ObjectivesTableCreateCompanionBuilder,
+      $$ObjectivesTableUpdateCompanionBuilder,
+      (Objective, BaseReferences<_$AppDatabase, $ObjectivesTable, Objective>),
+      Objective,
+      PrefetchHooks Function()
+    >;
 typedef $$SyncMetaTableCreateCompanionBuilder =
     SyncMetaCompanion Function({
       Value<int> id,
@@ -7259,6 +9772,12 @@ class $AppDatabaseManager {
       $$PersonasTableTableManager(_db, _db.personas);
   $$WorldsTableTableManager get worlds =>
       $$WorldsTableTableManager(_db, _db.worlds);
+  $$MessageEmbeddingsTableTableManager get messageEmbeddings =>
+      $$MessageEmbeddingsTableTableManager(_db, _db.messageEmbeddings);
+  $$DataBankEntriesTableTableManager get dataBankEntries =>
+      $$DataBankEntriesTableTableManager(_db, _db.dataBankEntries);
+  $$ObjectivesTableTableManager get objectives =>
+      $$ObjectivesTableTableManager(_db, _db.objectives);
   $$SyncMetaTableTableManager get syncMeta =>
       $$SyncMetaTableTableManager(_db, _db.syncMeta);
 }

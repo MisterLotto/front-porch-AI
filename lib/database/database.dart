@@ -52,6 +52,7 @@ class Characters extends Table {
   TextColumn get folderId => text().nullable()();
   TextColumn get lorebook => text().nullable()(); // JSON blob
   TextColumn get worldNames => text().withDefault(const Constant('[]'))(); // JSON array
+  TextColumn get memorySources => text().withDefault(const Constant('[]'))(); // JSON array of character IDs for cross-character RAG
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -136,6 +137,7 @@ class Personas extends Table {
   TextColumn get name => text().withDefault(const Constant('User'))();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get persona => text().withDefault(const Constant(''))();
+  TextColumn get learnedFacts => text().withDefault(const Constant('[]'))(); // JSON array of fact strings from auto-persona
   TextColumn get avatarPath => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -159,6 +161,22 @@ class Worlds extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Message embeddings for RAG memory retrieval.
+class MessageEmbeddings extends Table {
+  TextColumn get id => text()();
+  TextColumn get sessionId => text()();
+  TextColumn get characterId => text().nullable()();
+  IntColumn get positionStart => integer()();
+  IntColumn get positionEnd => integer()();
+  TextColumn get content => text()();
+  BlobColumn get embedding => blob()();
+  IntColumn get dimensions => integer()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Single-row sync metadata for version-based cloud sync.
 class SyncMeta extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
@@ -169,9 +187,38 @@ class SyncMeta extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-// ── Database Definition ───────────────────────────────────────────────
+/// Data Bank entries — user-provided knowledge per character for RAG retrieval.
+class DataBankEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get characterId => text()();       // which character this belongs to
+  TextColumn get title => text()();              // user-given label
+  TextColumn get content => text()();            // the actual text content
+  BlobColumn get embedding => blob().nullable()(); // pre-computed embedding vector
+  IntColumn get dimensions => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
-@DriftDatabase(tables: [Characters, Sessions, Messages, Groups, Folders, Personas, Worlds, SyncMeta])
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Objectives — quest/task system for guided roleplay.
+class Objectives extends Table {
+  TextColumn get id => text()();
+  TextColumn get characterId => text()();         // which character this objective belongs to
+  TextColumn get objective => text()();            // the main goal
+  TextColumn get tasks => text().withDefault(const Constant('[]'))(); // JSON array of {description, completed}
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+  IntColumn get checkFrequency => integer().withDefault(const Constant(3))(); // check task completion every N messages
+  IntColumn get injectionDepth => integer().withDefault(const Constant(4))(); // how many messages from end to inject (0=strongest)
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── Database Definition ─────────────────────────────────────────────────
+
+@DriftDatabase(tables: [Characters, Sessions, Messages, Groups, Folders, Personas, Worlds, MessageEmbeddings, DataBankEntries, Objectives, SyncMeta])
 class AppDatabase extends _$AppDatabase {
   AppDatabase._internal(super.e);
 
@@ -255,7 +302,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -292,6 +339,73 @@ class AppDatabase extends _$AppDatabase {
         // v3→v4: add summary columns to sessions
         await customStatement('ALTER TABLE sessions ADD COLUMN summary TEXT');
         await customStatement('ALTER TABLE sessions ADD COLUMN summary_last_index INTEGER');
+      }
+      if (from < 5) {
+        // v4→v5: add message_embeddings table for RAG + memorySources on characters
+        await customStatement(
+          'CREATE TABLE IF NOT EXISTS message_embeddings ('
+          'id TEXT NOT NULL, '
+          'session_id TEXT NOT NULL, '
+          'character_id TEXT, '
+          'position_start INTEGER NOT NULL, '
+          'position_end INTEGER NOT NULL, '
+          'content TEXT NOT NULL, '
+          'embedding BLOB NOT NULL, '
+          'dimensions INTEGER NOT NULL, '
+          'created_at INTEGER NOT NULL DEFAULT 0, '
+          'PRIMARY KEY (id))',
+        );
+        // Add memorySources column to characters for cross-character RAG
+        try {
+          await customStatement("ALTER TABLE characters ADD COLUMN memory_sources TEXT NOT NULL DEFAULT '[]'");
+        } catch (_) {
+          // Column may already exist
+        }
+      }
+      if (from < 6) {
+        // v5→v6: add learnedFacts column to personas for auto-persona
+        try {
+          await customStatement("ALTER TABLE personas ADD COLUMN learned_facts TEXT NOT NULL DEFAULT '[]'");
+        } catch (_) {
+          // Column may already exist
+        }
+      }
+      if (from < 7) {
+        // v6→v7: add data_bank_entries table for knowledge base
+        await customStatement(
+          'CREATE TABLE IF NOT EXISTS data_bank_entries ('
+          'id TEXT NOT NULL, '
+          'character_id TEXT NOT NULL, '
+          'title TEXT NOT NULL, '
+          'content TEXT NOT NULL, '
+          'embedding BLOB, '
+          'dimensions INTEGER NOT NULL DEFAULT 0, '
+          'created_at INTEGER NOT NULL DEFAULT 0, '
+          'PRIMARY KEY (id))'
+        );
+      }
+      if (from < 8) {
+        // v7→v8: add objectives table for quest/task system
+        await customStatement(
+          'CREATE TABLE IF NOT EXISTS objectives ('
+          'id TEXT NOT NULL, '
+          'character_id TEXT NOT NULL, '
+          'objective TEXT NOT NULL, '
+          'tasks TEXT NOT NULL DEFAULT \'[]\', '
+          'active INTEGER NOT NULL DEFAULT 1, '
+          'check_frequency INTEGER NOT NULL DEFAULT 3, '
+          'injection_depth INTEGER NOT NULL DEFAULT 4, '
+          'created_at INTEGER NOT NULL DEFAULT 0, '
+          'PRIMARY KEY (id))'
+        );
+      }
+      if (from < 9) {
+        // v8→v9: add injection_depth column to objectives
+        try {
+          await customStatement("ALTER TABLE objectives ADD COLUMN injection_depth INTEGER NOT NULL DEFAULT 4");
+        } catch (_) {
+          // Column may already exist (fresh v8+ installs)
+        }
       }
     },
   );
@@ -856,6 +970,95 @@ class AppDatabase extends _$AppDatabase {
 
   Future<World?> getWorldByName(String name) =>
       (select(worlds)..where((w) => w.name.equals(name) & w.deletedAt.isNull())).getSingleOrNull();
+
+  // ── Embedding Queries ──────────────────────────────────────────────
+
+  Future<void> insertEmbedding(MessageEmbeddingsCompanion embedding) async {
+    if (!embedding.id.present) {
+      embedding = embedding.copyWith(id: Value(_uuid.v4()));
+    }
+    await into(messageEmbeddings).insert(embedding);
+  }
+
+  Future<void> insertEmbeddings(List<MessageEmbeddingsCompanion> embeddings) async {
+    final withIds = embeddings.map((e) =>
+      e.id.present ? e : e.copyWith(id: Value(_uuid.v4())),
+    ).toList();
+    await batch((b) => b.insertAll(messageEmbeddings, withIds));
+  }
+
+  /// Get all embeddings for a set of character IDs (for cross-character RAG search).
+  Future<List<MessageEmbedding>> getEmbeddingsForCharacters(List<String> characterIds) async {
+    if (characterIds.isEmpty) return [];
+    return (select(messageEmbeddings)
+      ..where((e) => e.characterId.isIn(characterIds)))
+      .get();
+  }
+
+  /// Get all embeddings for a specific session.
+  Future<List<MessageEmbedding>> getEmbeddingsForSession(String sessionId) =>
+      (select(messageEmbeddings)..where((e) => e.sessionId.equals(sessionId))).get();
+
+  /// Delete all embeddings for a session (cascading cleanup).
+  Future<int> deleteEmbeddingsForSession(String sessionId) =>
+      (delete(messageEmbeddings)..where((e) => e.sessionId.equals(sessionId))).go();
+
+  /// Delete all embeddings for a character.
+  Future<int> deleteEmbeddingsForCharacter(String characterId) =>
+      (delete(messageEmbeddings)..where((e) => e.characterId.equals(characterId))).go();
+
+  /// Count total embeddings (for debug/settings display).
+  Future<int> countEmbeddings() async {
+    final result = await customSelect('SELECT COUNT(*) AS cnt FROM message_embeddings').getSingle();
+    return result.read<int>('cnt');
+  }
+
+  // ── Data Bank Queries ────────────────────────────────────────────────────────
+
+  Future<void> insertDataBankEntry(DataBankEntriesCompanion entry) async {
+    if (!entry.id.present) {
+      entry = entry.copyWith(id: Value(_uuid.v4()));
+    }
+    await into(dataBankEntries).insert(entry);
+  }
+
+  Future<List<DataBankEntry>> getDataBankEntriesForCharacter(String characterId) =>
+      (select(dataBankEntries)..where((e) => e.characterId.equals(characterId))).get();
+
+  Future<void> updateDataBankEntry(DataBankEntriesCompanion entry) =>
+      (update(dataBankEntries)..where((e) => e.id.equals(entry.id.value))).write(entry);
+
+  Future<int> deleteDataBankEntry(String id) =>
+      (delete(dataBankEntries)..where((e) => e.id.equals(id))).go();
+
+  Future<int> deleteDataBankEntriesForCharacter(String characterId) =>
+      (delete(dataBankEntries)..where((e) => e.characterId.equals(characterId))).go();
+
+  // ── Objectives ─────────────────────────────────────────────────────
+
+  Future<List<Objective>> getObjectivesForCharacter(String characterId) =>
+      (select(objectives)..where((o) => o.characterId.equals(characterId))
+        ..orderBy([(o) => OrderingTerm(expression: o.createdAt, mode: OrderingMode.desc)]))
+      .get();
+
+  Future<Objective?> getActiveObjective(String characterId) =>
+      (select(objectives)..where((o) => o.characterId.equals(characterId) & o.active.equals(true))
+        ..limit(1))
+      .getSingleOrNull();
+
+  Future<void> insertObjective(ObjectivesCompanion entry) async {
+    final id = entry.id.present ? entry.id.value : const Uuid().v4();
+    await into(objectives).insert(entry.copyWith(id: Value(id)));
+  }
+
+  Future<void> updateObjective(ObjectivesCompanion entry) =>
+      (update(objectives)..where((o) => o.id.equals(entry.id.value))).write(entry);
+
+  Future<int> deleteObjective(String id) =>
+      (delete(objectives)..where((o) => o.id.equals(id))).go();
+
+  Future<int> deleteObjectivesForCharacter(String characterId) =>
+      (delete(objectives)..where((o) => o.characterId.equals(characterId))).go();
 
   // ── Soft Delete Cleanup ─────────────────────────────────────────────
 

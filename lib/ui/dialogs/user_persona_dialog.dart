@@ -202,6 +202,45 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
                 },
               ),
             ),
+            // Learned facts for active persona
+            if (service.persona.learnedFacts.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome, size: 16, color: Colors.purpleAccent),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Learned Facts (${service.persona.learnedFacts.length})',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Auto-extracted from your conversations:',
+                style: TextStyle(fontSize: 11, color: Colors.white30),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: List.generate(service.persona.learnedFacts.length, (i) {
+                  return Chip(
+                    label: Text(
+                      service.persona.learnedFacts[i],
+                      style: const TextStyle(fontSize: 11, color: Colors.white70),
+                    ),
+                    backgroundColor: const Color(0xFF374151),
+                    deleteIcon: const Icon(Icons.close, size: 14, color: Colors.white38),
+                    onDeleted: () => service.removeLearnedFact(i),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                }),
+              ),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,

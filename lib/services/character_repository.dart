@@ -333,7 +333,8 @@ class CharacterRepository extends ChangeNotifier {
         await worldRepo.saveWorld(world);
       }
       
-      addCharacter(card);
+      // Add to in-memory list (already inserted into DB above — do NOT call addCharacter() which would insert again)
+      _characters.add(card);
       return card;
       
     } catch (e) {

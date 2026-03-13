@@ -53,6 +53,8 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/database/data_migration_service.dart';
 import 'package:front_porch_ai/services/backup_service.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
+import 'package:front_porch_ai/services/embedding_service.dart';
+import 'package:front_porch_ai/services/memory_service.dart';
 
 
 import 'package:front_porch_ai/ui/widgets/setup_overlay.dart';
@@ -125,6 +127,12 @@ void main(List<String> args) async {
           create: (context) => WorldRepository(Provider.of<StorageService>(context, listen: false), db),
           update: (context, storage, previous) => previous ?? WorldRepository(storage, db),
         ),
+        ChangeNotifierProvider<EmbeddingService>(
+          create: (context) => EmbeddingService(
+            Provider.of<KoboldService>(context, listen: false),
+            Provider.of<StorageService>(context, listen: false),
+          ),
+        ),
         ChangeNotifierProxyProvider<StorageService, BackendManager>(
           create: (context) => BackendManager(Provider.of<StorageService>(context, listen: false)),
           update: (context, storage, previous) => previous ?? BackendManager(storage),
@@ -155,6 +163,19 @@ void main(List<String> args) async {
             chatService.setDatabase(db);
             chatService.setLLMProvider(Provider.of<LLMProvider>(context, listen: false));
             chatService.setCharacterRepository(Provider.of<CharacterRepository>(context, listen: false));
+            // Wire MemoryService for RAG
+            try {
+              final embeddingService = EmbeddingService(
+                Provider.of<KoboldService>(context, listen: false),
+                Provider.of<StorageService>(context, listen: false),
+              );
+              final memoryService = MemoryService(
+                embeddingService,
+                Provider.of<StorageService>(context, listen: false),
+                db,
+              );
+              chatService.setMemoryService(memoryService);
+            } catch (_) {}
             return chatService;
           },
           update: (context, kobold, persona, storage, worldRepo, previous) {

@@ -32,6 +32,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
+import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:drift/drift.dart' as drift;
 
@@ -129,6 +130,28 @@ class ChatService extends ChangeNotifier {
   LLMProvider? _llmProvider;
   CharacterRepository? _characterRepository;
   TtsService? _ttsService;
+  MemoryService? _memoryService;
+
+  // Action suggestions
+  List<String> _suggestedActions = [];
+  bool _isGeneratingActions = false;
+  List<String> get suggestedActions => _suggestedActions;
+  bool get isGeneratingActions => _isGeneratingActions;
+
+  // Objective/quest system
+  Objective? _activeObjective;
+  int _messagesSinceLastCheck = 0;
+  bool _isCheckingCompletion = false;
+  Objective? get activeObjective => _activeObjective;
+  List<Map<String, dynamic>> get objectiveTasks {
+    if (_activeObjective == null) return [];
+    try {
+      return (jsonDecode(_activeObjective!.tasks) as List)
+          .cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
 
   /// Update the database reference (e.g. after cloud sync replaces the DB file).
   void updateDatabase(AppDatabase db) { _db = db; }
@@ -387,6 +410,11 @@ class ChatService extends ChangeNotifier {
     _ttsService = service;
   }
 
+  /// Set the MemoryService after construction (for RAG memory retrieval).
+  void setMemoryService(MemoryService service) {
+    _memoryService = service;
+  }
+
   /// Wait for TTS to finish speaking, then apply the configured delay before auto-play.
   void _waitForTtsThenContinue() {
     if (!_autoPlayActive || !_observerMode) return;
@@ -425,8 +453,13 @@ class ChatService extends ChangeNotifier {
     _turnIndex = 0;
 
     _activeCharacter = character;
+
+    // Load active objective for this character
+    _loadActiveObjective();
     _messages.clear();
     _currentSessionId = null;
+    _summary = '';
+    _summaryLastIndex = 0;
     _isLoadingSession = true;
     notifyListeners();
     
@@ -984,6 +1017,7 @@ class ChatService extends ChangeNotifier {
 
   Future<void> sendMessage(String text) async {
     if ((_activeCharacter == null && _activeGroup == null) || text.trim().isEmpty) return;
+    clearSuggestions();
 
     // In observer mode, route to sendDirectorNote instead
     if (_observerMode && _activeGroup != null) {
@@ -1001,6 +1035,10 @@ class ChatService extends ChangeNotifier {
 
     // User message counts as a message towards depth
     _decrementLoreDepth();
+
+    // Check objective task completion BEFORE generating response
+    // so the AI gets the updated task in its prompt
+    await _maybeCheckTaskCompletionSync();
 
     await _generateResponse(GenerationMode.normal);
   }
@@ -1540,6 +1578,55 @@ class ChatService extends ChangeNotifier {
         droppedMessages = _messages.length - 1;
       }
 
+      // ── RAG Memory Retrieval ──
+      // When messages are dropped from context, search for relevant past memories
+      String memoriesBlock = '';
+      if (droppedMessages > 0 && _memoryService != null && _storageService.ragEnabled) {
+        debugPrint('[RAG:Chat] ── Prompt assembly: $droppedMessages messages dropped, triggering retrieval ──');
+        try {
+          // Use last 3 messages as the query
+          final queryMessages = _messages.reversed.take(3).map((m) => '${m.sender}: ${m.displayText}').join('\n');
+
+          final sourceIds = await _getMemorySourceIds();
+          debugPrint('[RAG:Chat] Memory source IDs: $sourceIds');
+
+          final memories = await _memoryService!.retrieve(
+            queryText: queryMessages,
+            sourceCharacterIds: sourceIds,
+            currentSessionId: _currentSessionId ?? '',
+            inContextStart: droppedMessages, // only search messages that are out of context
+            limit: _storageService.ragRetrievalCount == 0 ? 9999 : _storageService.ragRetrievalCount,
+          );
+
+          if (memories.isNotEmpty) {
+            // Cap memory injection to ~30% of the total context budget
+            final contextSize = _storageService.contextSize;
+            final memoryBudget = (contextSize * 0.30).round();
+            final includedMemories = <String>[];
+            int usedTokens = 0;
+            for (final m in memories) {
+              final memTokens = (m.content.length / 4).ceil();
+              if (usedTokens + memTokens > memoryBudget && includedMemories.isNotEmpty) {
+                debugPrint('[RAG:Chat] ⚠ Trimmed ${memories.length - includedMemories.length} memories to fit budget ($memoryBudget tokens)');
+                break;
+              }
+              usedTokens += memTokens;
+              includedMemories.add('- ${m.content}');
+            }
+            if (includedMemories.isNotEmpty) {
+              memoriesBlock = '[Relevant memories from past conversations:\n${includedMemories.join('\n')}]\n';
+              debugPrint('[RAG:Chat] ✅ Injecting ${includedMemories.length}/${memories.length} memories (~$usedTokens tokens, budget: $memoryBudget)');
+            }
+          } else {
+            debugPrint('[RAG:Chat] No relevant memories found for this turn');
+          }
+        } catch (e) {
+          debugPrint('[RAG:Chat] ✗ RAG retrieval failed: $e');
+        }
+      } else if (droppedMessages > 0 && _storageService.ragEnabled) {
+        debugPrint('[RAG:Chat] ⚠ $droppedMessages messages dropped but RAG not operational (service=${_memoryService != null}, operational=${_memoryService?.isOperational ?? false})');
+      }
+
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
@@ -1547,6 +1634,7 @@ class ChatService extends ChangeNotifier {
           "$mesExampleBlock"
           "<START>\n"
           "$summaryBlock"
+          "$memoriesBlock"
           "$history"
           "$postHistoryBlock"
           "$authorNoteBlock"
@@ -1561,6 +1649,7 @@ class ChatService extends ChangeNotifier {
         'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
         'Examples': (mesExampleBlock.length / 4).ceil(),
         'Summary': (summaryBlock.length / 4).ceil(),
+        'Retrieved Memories': (memoriesBlock.length / 4).ceil(),
         'Chat History': (history.length / 4).ceil(),
         'Post-History': (postHistoryBlock.length / 4).ceil(),
         'Author\'s Note': (authorNoteBlock.length / 4).ceil(),
@@ -1886,6 +1975,16 @@ class ChatService extends ChangeNotifier {
         // Check if summary needs updating (fire-and-forget)
         _maybeUpdateSummary();
 
+        // Embed messages for RAG memory (fire-and-forget)
+        _maybeEmbedMessages();
+
+        // Extract persona facts from user messages (fire-and-forget)
+        // Note: action suggestions are NOT auto-triggered here.
+        // The user must explicitly request them via the UI button.
+        _maybeExtractFacts();
+
+        // (Task completion check now runs pre-generation in sendMessage)
+
         // Auto-play: if director mode is active, queue the next character
         if (_autoPlayActive && _observerMode && _activeGroup != null) {
           // If TTS is active, wait for it to finish before starting the delay
@@ -2090,6 +2189,15 @@ class ChatService extends ChangeNotifier {
       included.insert(0, msgText);
     }
 
+    // Inject objective at specified depth in conversation history
+    final objectiveBlock = _getObjectiveInjection();
+    if (objectiveBlock.isNotEmpty && _activeObjective != null) {
+      final depth = _activeObjective!.injectionDepth;
+      // Insert at 'depth' messages from the end (0 = right before last message)
+      final insertIndex = included.length - depth.clamp(0, included.length);
+      included.insert(insertIndex, objectiveBlock.trim());
+    }
+
     // If messages were dropped, prepend a separator
     String history = included.join('\n');
     if (droppedCount > 0) {
@@ -2221,6 +2329,658 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  /// Embed message windows for RAG memory retrieval (fire-and-forget).
+  /// Called after each generation completes. Only embeds new windows that
+  /// haven't been embedded yet.
+  void _maybeEmbedMessages() {
+    if (_memoryService == null || !_storageService.ragEnabled) return;
+    if (_currentSessionId == null) return;
+    if (_messages.length < _storageService.ragWindowSize) return;
+
+    final characterId = _getCharacterId();
+
+    // Format messages for embedding
+    final formatted = _messages.map((m) {
+      if (m.characterId == '__director__') {
+        return '[Director: ${m.text}]';
+      }
+      return '${m.sender}: ${m.text}';
+    }).toList();
+
+    debugPrint('[RAG:Chat] ▶ Triggering background embedding (session: $_currentSessionId, char: $characterId, ${formatted.length} msgs)');
+
+    // Fire and forget — don't await
+    _memoryService!.embedMessageWindow(
+      sessionId: _currentSessionId!,
+      characterId: characterId,
+      formattedMessages: formatted,
+      totalMessageCount: _messages.length,
+    );
+  }
+
+  // ── Action Suggestions ────────────────────────────────────────────────
+
+  /// Clear suggestions (called when user sends any message).
+  void clearSuggestions() {
+    if (_suggestedActions.isNotEmpty || _isGeneratingActions) {
+      _suggestedActions = [];
+      _isGeneratingActions = false;
+      notifyListeners();
+    }
+  }
+
+  /// Generate action suggestions on demand (called from UI button).
+  Future<void> generateActions() async {
+    if (_isGeneratingActions) return;
+    if (_llmProvider == null) return;
+    if (_messages.isEmpty) return;
+
+    _isGeneratingActions = true;
+    _suggestedActions = [];
+    notifyListeners();
+
+    try {
+      final llmService = _llmProvider!.activeService;
+      if (llmService == null || !llmService.isReady) {
+        debugPrint('[Actions] ✗ LLM not ready');
+        return;
+      }
+
+      // Build context from recent messages (last 6)
+      final recentMessages = _messages.length > 6
+          ? _messages.sublist(_messages.length - 6)
+          : _messages;
+
+      final contextText = recentMessages.map((m) {
+        return '${m.sender}: ${m.text}';
+      }).join('\n');
+
+      final charName = _activeCharacter?.name ?? 'the character';
+      final userName = _userPersonaService.persona.name;
+
+      final prompt =
+          'Suggest 4 short actions $userName could do next. '
+          'Each action must be a BRIEF LABEL (5-10 words max) describing what to do, NOT a full response. '
+          'Think of these as button labels or menu items.\n\n'
+          'Examples of GOOD actions:\n'
+          '1. Kiss her and pull her closer\n'
+          '2. Ask about her day at work\n'
+          '3. Tease her by pulling away\n'
+          '4. Suggest moving somewhere private\n\n'
+          'Examples of BAD actions (too long, too detailed):\n'
+          '1. *I lean in and press my lips against hers, tasting...*\n\n'
+          'Recent conversation:\n$contextText\n\n'
+          'Write 4 short action labels for $userName (numbered 1-4, one per line):';
+
+      final params = GenerationParams(
+        prompt: prompt,
+        maxLength: 300,
+        temperature: 0.8,
+        stopSequences: ['\n\n\n'],
+      );
+
+      String responseText = '';
+      await for (final chunk in llmService.generateStream(params)) {
+        responseText += chunk;
+      }
+      responseText = responseText.trim();
+
+      debugPrint('[Actions] Raw response:\n$responseText');
+
+      // Parse numbered list: "1. Action" or "1) Action"
+      final lines = responseText.split('\n');
+      final actions = <String>[];
+
+      for (final line in lines) {
+        final match = RegExp(r'^\s*\d+[\.\)]\s*(.+)$').firstMatch(line.trim());
+        if (match != null) {
+          final action = match.group(1)!.trim();
+          if (action.isNotEmpty) actions.add(action);
+        }
+      }
+
+      if (actions.isNotEmpty) {
+        _suggestedActions = actions.take(6).toList(); // cap at 6
+        debugPrint('[Actions] ✅ Generated ${_suggestedActions.length} suggestions');
+      } else {
+        debugPrint('[Actions] ✗ Could not parse any actions from response');
+      }
+    } catch (e) {
+      debugPrint('[Actions] ✗ Generation failed: $e');
+    } finally {
+      _isGeneratingActions = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Objective System ───────────────────────────────────────────────────
+
+  /// Load the active objective for the current character from DB.
+  Future<void> _loadActiveObjective() async {
+    if (_activeCharacter == null) {
+      _activeObjective = null;
+      return;
+    }
+    try {
+      final charId = _getCharacterIdFromCard(_activeCharacter!);
+      _activeObjective = await _db.getActiveObjective(charId);
+      if (_activeObjective != null) {
+        debugPrint('[Objective] Loaded: ${_activeObjective!.objective}');
+      }
+    } catch (e) {
+      debugPrint('[Objective] Failed to load: $e');
+    }
+    notifyListeners();
+  }
+
+  /// Build the prompt injection text for the current objective.
+  /// Wording intensity varies based on injection depth.
+  String _getObjectiveInjection() {
+    if (_activeObjective == null) return '';
+    final tasks = objectiveTasks;
+    if (tasks.isEmpty) return '';
+
+    final completedTasks = tasks
+        .where((t) => t['completed'] == true)
+        .map((t) => t['description'] as String)
+        .toList();
+    final currentTask = tasks
+        .where((t) => t['completed'] != true)
+        .map((t) => t['description'] as String)
+        .firstOrNull;
+
+    if (currentTask == null) return ''; // all tasks done
+
+    final depth = _activeObjective!.injectionDepth;
+    final sb = StringBuffer();
+
+    if (depth <= 2) {
+      // Strong — urgent directive
+      sb.writeln('[OBJECTIVE (IMPORTANT — actively drive the story toward this):');
+      sb.writeln('  Goal: ${_activeObjective!.objective}');
+      sb.writeln('  Current Task: $currentTask');
+      if (completedTasks.isNotEmpty) {
+        sb.writeln('  Completed: ${completedTasks.join(", ")}');
+      }
+      sb.writeln('  Guide the narrative toward completing the current task.]');
+    } else if (depth <= 6) {
+      // Moderate — clear but not pushy
+      sb.writeln('[Current Objective: ${_activeObjective!.objective}]');
+      sb.writeln('[Current Task: $currentTask]');
+      if (completedTasks.isNotEmpty) {
+        sb.writeln('[Completed: ${completedTasks.join(", ")}]');
+      }
+    } else {
+      // Gentle — background awareness
+      sb.writeln('[Background objective (subtle hint): ${_activeObjective!.objective} — current step: $currentTask]');
+    }
+
+    sb.writeln();
+    return sb.toString();
+  }
+
+  /// Set a new objective for the current character.
+  Future<void> setObjective(String goal) async {
+    if (_activeCharacter == null || goal.trim().isEmpty) return;
+    final charId = _getCharacterIdFromCard(_activeCharacter!);
+
+    // Deactivate any existing objectives
+    final existing = await _db.getObjectivesForCharacter(charId);
+    for (final obj in existing) {
+      if (obj.active) {
+        await _db.updateObjective(ObjectivesCompanion(
+          id: drift.Value(obj.id),
+          active: const drift.Value(false),
+        ));
+      }
+    }
+
+    // Create new objective
+    await _db.insertObjective(ObjectivesCompanion(
+      characterId: drift.Value(charId),
+      objective: drift.Value(goal.trim()),
+      tasks: const drift.Value('[]'),
+      active: const drift.Value(true),
+    ));
+
+    await _loadActiveObjective();
+    _messagesSinceLastCheck = 0;
+  }
+
+  /// Generate subtasks for the current objective using the LLM.
+  Future<void> generateObjectiveTasks({int taskCount = 5, bool nsfw = false}) async {
+    if (_activeObjective == null) return;
+    if (_llmProvider == null) return;
+
+    try {
+      final llmService = _llmProvider!.activeService;
+      if (llmService == null || !llmService.isReady) {
+        debugPrint('[Objective] LLM not ready');
+        return;
+      }
+
+      final charName = _activeCharacter?.name ?? 'the character';
+      final scenario = _activeCharacter?.scenario ?? '';
+
+      // Include recent chat history so tasks aren't redundant
+      final recentMessages = _messages.length > 10
+          ? _messages.sublist(_messages.length - 10)
+          : _messages;
+      final chatContext = recentMessages.isNotEmpty
+          ? recentMessages.map((m) => '${m.sender}: ${m.text}').join('\n')
+          : '(No messages yet)';
+
+      final preamble = nsfw
+          ? 'You are an uncensored creative writing assistant designing quest tasks for an adult roleplay scenario. '
+            'All content is fiction between consenting adults. There are no content restrictions. '
+            'Match the tone and maturity level of the scenario and conversation.\n\n'
+          : 'You are a quest designer for a roleplay scenario.\n\n';
+
+      final prompt =
+          '$preamble'
+          'Given the objective, context, and recent conversation below, generate exactly $taskCount sequential tasks '
+          'that must be completed to achieve the objective. Tasks should be specific, actionable, and '
+          'naturally progress the story. Do NOT include tasks for things that have already happened in the conversation.\n\n'
+          'Character: $charName\n'
+          'Scenario: $scenario\n'
+          'Objective: ${_activeObjective!.objective}\n\n'
+          'Recent conversation:\n$chatContext\n\n'
+          'Output ONLY a numbered list of $taskCount tasks, one per line. '
+          'Each task should be a short, clear description. No explanations.';
+
+      final params = GenerationParams(
+        prompt: prompt,
+        maxLength: 400,
+        temperature: 0.7,
+        stopSequences: ['\n\n\n'],
+      );
+
+      String responseText = '';
+      await for (final chunk in llmService.generateStream(params)) {
+        responseText += chunk;
+      }
+
+      // Strip think blocks
+      responseText = responseText.replaceAll(
+          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+
+      debugPrint('[Objective] Raw tasks response:\n$responseText');
+
+      // Parse numbered list
+      final lines = responseText.split('\n');
+      final genTasks = <Map<String, dynamic>>[];
+
+      for (final line in lines) {
+        final match = RegExp(r'^\s*\d+[\.)\-]\s*(.+)').firstMatch(line.trim());
+        if (match != null) {
+          final desc = match.group(1)!.trim();
+          if (desc.isNotEmpty) {
+            genTasks.add({'description': desc, 'completed': false});
+          }
+        }
+      }
+
+      if (genTasks.isNotEmpty) {
+        await _db.updateObjective(ObjectivesCompanion(
+          id: drift.Value(_activeObjective!.id),
+          tasks: drift.Value(jsonEncode(genTasks)),
+        ));
+        await _loadActiveObjective();
+        debugPrint('[Objective] Generated ${genTasks.length} tasks');
+      } else {
+        debugPrint('[Objective] Could not parse tasks from response');
+      }
+    } catch (e) {
+      debugPrint('[Objective] Task generation failed: $e');
+    }
+  }
+
+  /// Manually toggle a task's completion status.
+  Future<void> toggleTask(int taskIndex) async {
+    if (_activeObjective == null) return;
+    final tasks = objectiveTasks;
+    if (taskIndex < 0 || taskIndex >= tasks.length) return;
+
+    tasks[taskIndex]['completed'] = !(tasks[taskIndex]['completed'] as bool);
+    await _db.updateObjective(ObjectivesCompanion(
+      id: drift.Value(_activeObjective!.id),
+      tasks: drift.Value(jsonEncode(tasks)),
+    ));
+    await _loadActiveObjective();
+  }
+
+  /// Clear the active objective.
+  Future<void> clearObjective() async {
+    if (_activeObjective == null) return;
+    await _db.updateObjective(ObjectivesCompanion(
+      id: drift.Value(_activeObjective!.id),
+      active: const drift.Value(false),
+    ));
+    _activeObjective = null;
+    _messagesSinceLastCheck = 0;
+    notifyListeners();
+  }
+
+  /// Update the injection depth for the active objective.
+  Future<void> updateObjectiveDepth(int depth) async {
+    if (_activeObjective == null) return;
+    await _db.updateObjective(ObjectivesCompanion(
+      id: drift.Value(_activeObjective!.id),
+      injectionDepth: drift.Value(depth),
+    ));
+    await _loadActiveObjective();
+  }
+
+  /// Add a manually created task to the active objective.
+  Future<void> addManualTask(String description) async {
+    if (_activeObjective == null || description.trim().isEmpty) return;
+    final tasks = objectiveTasks;
+    tasks.add({'description': description.trim(), 'completed': false});
+    await _db.updateObjective(ObjectivesCompanion(
+      id: drift.Value(_activeObjective!.id),
+      tasks: drift.Value(jsonEncode(tasks)),
+    ));
+    await _loadActiveObjective();
+  }
+
+  /// Remove a task from the active objective.
+  Future<void> removeTask(int taskIndex) async {
+    if (_activeObjective == null) return;
+    final tasks = objectiveTasks;
+    if (taskIndex < 0 || taskIndex >= tasks.length) return;
+    tasks.removeAt(taskIndex);
+    await _db.updateObjective(ObjectivesCompanion(
+      id: drift.Value(_activeObjective!.id),
+      tasks: drift.Value(jsonEncode(tasks)),
+    ));
+    await _loadActiveObjective();
+  }
+
+  /// Update how often task completion is checked.
+  Future<void> updateCheckFrequency(int frequency) async {
+    if (_activeObjective == null) return;
+    await _db.updateObjective(ObjectivesCompanion(
+      id: drift.Value(_activeObjective!.id),
+      checkFrequency: drift.Value(frequency),
+    ));
+    await _loadActiveObjective();
+  }
+
+  /// Check if the current task has been completed (called periodically).
+  /// Manually trigger a completion check (called from UI "Check now" button).
+  void forceCheckCompletion() {
+    if (_activeObjective == null) return;
+    _checkTaskCompletionInBackground();
+    notifyListeners(); // trigger UI to show spinner
+  }
+
+  /// Whether a completion check is currently running.
+  bool get isCheckingCompletion => _isCheckingCompletion;
+
+  /// Synchronous version — awaits the check. Used pre-generation.
+  Future<void> _maybeCheckTaskCompletionSync() async {
+    if (_activeObjective == null) return;
+    if (_llmProvider == null) return;
+    if (_isCheckingCompletion) return;
+
+    _messagesSinceLastCheck++;
+    if (_messagesSinceLastCheck < (_activeObjective?.checkFrequency ?? 3)) return;
+    _messagesSinceLastCheck = 0;
+
+    await _checkTaskCompletionInBackground();
+  }
+
+  void _maybeCheckTaskCompletion() {
+    if (_activeObjective == null) return;
+    _messagesSinceLastCheck++;
+
+    final freq = _activeObjective!.checkFrequency;
+    if (_messagesSinceLastCheck < freq) return;
+    _messagesSinceLastCheck = 0;
+
+    debugPrint('[Objective] Checking task completion (every $freq messages)');
+    _checkTaskCompletionInBackground();
+  }
+
+  Future<void> _checkTaskCompletionInBackground() async {
+    if (_isCheckingCompletion) return;
+    _isCheckingCompletion = true;
+
+    try {
+      final llmService = _llmProvider?.activeService;
+      if (llmService == null || !llmService.isReady) return;
+
+      final tasks = objectiveTasks;
+      final currentTask = tasks
+          .where((t) => t['completed'] != true)
+          .map((t) => t['description'] as String)
+          .firstOrNull;
+      if (currentTask == null) return;
+
+      // Get the last several messages as context
+      final recentMessages = _messages.length > 8
+          ? _messages.sublist(_messages.length - 8)
+          : _messages;
+      final contextText = recentMessages.map((m) =>
+          '${m.sender}: ${m.text}').join('\n');
+
+      final prompt =
+          'You are evaluating whether a roleplay task has been completed based on recent conversation. '
+          'Be generous in your assessment — if the events in the conversation show the task has been '
+          'accomplished, partially fulfilled, or naturally resolved, answer YES.\n\n'
+          'Task to evaluate: "$currentTask"\n\n'
+          'Recent conversation:\n$contextText\n\n'
+          'Has this task been completed or effectively resolved? Answer only YES or NO:';
+
+      final params = GenerationParams(
+        prompt: prompt,
+        maxLength: 1024,
+        temperature: 0.1,
+        stopSequences: [],
+      );
+
+      String responseText = '';
+      await for (final chunk in llmService.generateStream(params)) {
+        responseText += chunk;
+      }
+
+      // Strip think blocks
+      responseText = responseText.replaceAll(
+          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+
+      debugPrint('[Objective] Completion check for "$currentTask": $responseText');
+
+      if (responseText.toUpperCase().contains('YES')) {
+        final taskIndex = tasks.indexWhere(
+            (t) => t['description'] == currentTask && t['completed'] != true);
+        if (taskIndex >= 0) {
+          tasks[taskIndex]['completed'] = true;
+          await _db.updateObjective(ObjectivesCompanion(
+            id: drift.Value(_activeObjective!.id),
+            tasks: drift.Value(jsonEncode(tasks)),
+          ));
+          await _loadActiveObjective();
+          debugPrint('[Objective] Task completed: $currentTask');
+        }
+      }
+    } catch (e) {
+      debugPrint('[Objective] Completion check failed: $e');
+    } finally {
+      _isCheckingCompletion = false;
+      notifyListeners();
+    }
+  }
+
+  int _userMessagesSinceLastExtract = 0;
+  bool _isExtractingFacts = false;
+
+  /// Extract personal facts from recent user messages using the LLM.
+  /// Fires async (non-blocking) every N user messages when auto-persona is enabled.
+  void _maybeExtractFacts() {
+    if (!_storageService.autoPersonaEnabled) return;
+    if (_llmProvider == null) return;
+    if (_isExtractingFacts) return;
+
+    // Count user messages in this session
+    _userMessagesSinceLastExtract++;
+    if (_userMessagesSinceLastExtract < _storageService.autoPersonaInterval) return;
+    _userMessagesSinceLastExtract = 0;
+
+    debugPrint('[RAG:Persona] ▶ Triggering fact extraction (every ${_storageService.autoPersonaInterval} user messages)');
+    _extractFactsInBackground();
+  }
+
+  Future<void> _extractFactsInBackground() async {
+    if (_isExtractingFacts) return;
+    _isExtractingFacts = true;
+
+    try {
+      final llmService = _llmProvider!.activeService;
+      if (llmService == null || !llmService.isReady) {
+        debugPrint('[RAG:Persona] ✗ LLM not ready, skipping extraction');
+        return;
+      }
+
+      // Get recent user messages (last N messages, user only)
+      final userMessages = _messages
+          .where((m) => m.isUser && m.characterId != '__director__')
+          .toList();
+
+      if (userMessages.isEmpty) {
+        debugPrint('[RAG:Persona] No user messages to extract from');
+        return;
+      }
+
+      // Take last 10 user messages
+      final recentUserMsgs = userMessages.length > 10
+          ? userMessages.sublist(userMessages.length - 10)
+          : userMessages;
+
+      final existingFacts = _userPersonaService.persona.learnedFacts;
+
+      // Build extraction prompt
+      final userMsgText = recentUserMsgs
+          .map((m) => '${m.sender}: ${m.displayText}')
+          .join('\n');
+
+      final existingFactsText = existingFacts.isNotEmpty
+          ? 'Existing known facts (do NOT repeat these):\n${existingFacts.map((f) => '- $f').join('\n')}\n\n'
+          : '';
+
+      final extractionPrompt =
+          'You are a fact extraction assistant. Read the following messages from a user named "${_userPersonaService.persona.name}" '
+          'and extract any NEW personal facts about them. Focus on: preferences, relationships, background, personality traits, '
+          'habits, likes/dislikes, physical descriptions, and life details.\n\n'
+          '${existingFactsText}'
+          'Recent messages from ${_userPersonaService.persona.name}:\n$userMsgText\n\n'
+          'Return ONLY a valid JSON array of short factual statements about the user. '
+          'Each fact should be a single concise sentence. If no new facts are found, return an empty array [].\n'
+          'Example: ["Likes cats", "Has a sister named Sarah", "Works as a programmer"]\n'
+          'Response:';
+
+      debugPrint('[RAG:Persona] Sending extraction prompt (${extractionPrompt.length} chars, ${recentUserMsgs.length} user messages)');
+
+      final params = GenerationParams(
+        prompt: extractionPrompt,
+        maxLength: 1024,
+        temperature: 0.3,
+        stopSequences: [],
+      );
+
+      String responseText = '';
+      await for (final chunk in llmService.generateStream(params)) {
+        responseText += chunk;
+      }
+
+      // Strip think blocks (for thinking models)
+      responseText = responseText.replaceAll(
+          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+
+      debugPrint('[RAG:Persona] Raw response: $responseText');
+
+      // Parse JSON array from response
+      // Handle cases where the model wraps in markdown code blocks
+      var jsonStr = responseText;
+      if (jsonStr.contains('```')) {
+        final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
+        if (match != null) jsonStr = match.group(1)!.trim();
+      }
+
+      // Try to find a JSON array in the response
+      List<String> facts = [];
+      final arrayMatch = RegExp(r'\[.*\]', dotAll: true).firstMatch(jsonStr);
+      if (arrayMatch != null) {
+        try {
+          facts = List<String>.from(jsonDecode(arrayMatch.group(0)!) as List);
+        } catch (_) {
+          debugPrint('[RAG:Persona] JSON parse failed, trying line parser');
+        }
+      }
+
+      // Fallback: parse numbered/bulleted list lines (e.g. "- Likes cats" or "1. Has a dog")
+      if (facts.isEmpty) {
+        final lines = responseText.split('\n');
+        for (final line in lines) {
+          final cleaned = line.replaceFirst(RegExp(r'^\s*[-•*]\s*'), '')
+                              .replaceFirst(RegExp(r'^\s*\d+[.)]\s*'), '')
+                              .replaceAll('"', '')
+                              .trim();
+          if (cleaned.length > 3 && cleaned.length < 200) {
+            facts.add(cleaned);
+          }
+        }
+      }
+
+      if (facts.isEmpty) {
+        debugPrint('[RAG:Persona] ✗ No facts extracted from response');
+        return;
+      }
+
+      debugPrint('[RAG:Persona] ✅ Extracted ${facts.length} new fact(s):');
+      for (final fact in facts) {
+        debugPrint('[RAG:Persona]   • $fact');
+      }
+
+      await _userPersonaService.addLearnedFacts(facts);
+      debugPrint('[RAG:Persona] Facts saved to persona');
+    } catch (e) {
+      debugPrint('[RAG:Persona] ✗ Extraction failed: $e');
+    } finally {
+      _isExtractingFacts = false;
+    }
+  }
+
+  /// Get the list of character IDs to search for RAG memory retrieval.
+  /// Reads the current character's `memorySources` from the DB and includes
+  /// those characters' embedding IDs alongside the current character.
+  Future<List<String>> _getMemorySourceIds() async {
+    final currentId = _getCharacterId();
+    final sourceIds = <String>[currentId]; // always include self
+
+    // Look up cross-character sources from DB
+    if (_activeCharacter != null && _db != null && _activeCharacter!.dbId != null) {
+      try {
+        final dbChar = await _db!.getCharacterById(_activeCharacter!.dbId!);
+        final ms = dbChar.memorySources;
+        if (ms.isNotEmpty && ms != '[]') {
+          final decoded = List<String>.from(
+            (jsonDecode(ms) as List).map((e) => e.toString()),
+          );
+          for (final id in decoded) {
+            if (!sourceIds.contains(id)) sourceIds.add(id);
+          }
+          if (decoded.isNotEmpty) {
+            debugPrint('[RAG:Chat] Cross-character sources: $decoded');
+          }
+        }
+      } catch (e) {
+        debugPrint('[RAG:Chat] Failed to read memorySources: $e');
+      }
+    }
+
+    return sourceIds;
+  }
+
   /// Generate a summary of the chat history using the active LLM.
   Future<void> _generateSummaryInBackground() async {
     if (_llmProvider == null) return;
@@ -2255,9 +3015,26 @@ class ChatService extends ChangeNotifier {
         previousSummaryBlock = 'Previous summary:\n$_summary\n\n';
       }
 
+      // Retrieve ALL RAG content chunks to ground the summary in real content
+      String ragGroundingBlock = '';
+      if (_memoryService != null && _memoryService!.isOperational) {
+        try {
+          final sourceIds = await _getMemorySourceIds();
+          final allChunks = await _memoryService!.getAllContentForCharacters(sourceIds);
+          if (allChunks.isNotEmpty) {
+            ragGroundingBlock = 'Archived conversation content (use this as the primary source of truth):\n'
+                '${allChunks.join('\n---\n')}\n\n';
+            debugPrint('[Summary] Including ${allChunks.length} RAG chunks as grounding');
+          }
+        } catch (e) {
+          debugPrint('[Summary] RAG grounding retrieval failed: $e');
+        }
+      }
+
       final summaryRequestPrompt =
           'The following is a conversation between $userName and $charName.\n\n'
           '$previousSummaryBlock'
+          '$ragGroundingBlock'
           'Chat history:\n$chatHistoryForSummary\n\n'
           '$summaryPromptTemplate\n\n'
           'Here is the summary of the conversation so far:\n';
