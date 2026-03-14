@@ -676,6 +676,24 @@
                     Extracts personal facts from your messages using the LLM. View facts in Persona settings.
                   </div>
                 </div>
+                <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0"></div>
+                <div class="toggle-row">
+                  <span>🧬 Character Evolution</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="setting-char-evolution">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <div id="char-evolution-fields" style="display:none;margin-top:4px">
+                  <div class="slider-row">
+                    <label class="slider-label">Evolve every</label>
+                    <input type="range" id="setting-evolution-interval" min="10" max="50" step="5" value="20" class="settings-slider">
+                    <span id="evolution-interval-value" class="slider-value">20 msgs</span>
+                  </div>
+                  <div style="font-size:11px;color:rgba(255,255,255,0.3)">
+                    Character personality &amp; scenario evolve based on conversations. Originals are always preserved.
+                  </div>
+                </div>
               </div>
               <button class="btn btn-primary" id="btn-save-rag" style="margin-top:12px;width:100%">Save Memory Settings</button>
             </div>

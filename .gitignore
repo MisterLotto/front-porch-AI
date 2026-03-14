@@ -98,3 +98,6 @@ aur-beta/Front_Porch_AI-Linux.AppImage
 aur/front-porch-ai-bin-*.tar.gz
 aur_key
 aur_key.pub
+
+# Rust build artifacts
+tools/embed_server/target/

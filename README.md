@@ -124,21 +124,25 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 
 ## 🆕 What's New in V0.9.2
 
-- 🎯 **Objective / Goals System**: Set session-level objectives that guide the AI's behavior. Goals persist across messages and shift the conversation toward your desired outcome without manual steering.
-- 🧠 **RAG-Grounded Summaries**: Chat summaries now use Retrieval-Augmented Generation with an embedded vector store for more accurate, context-aware rolling summaries. Includes configurable retrieval count, window size, and embedding source.
-- 📊 **Data Bank Dialog**: New unified UI for browsing and managing RAG memory entries, embedding stats, and persona-linked memory.
-- 🔞 **NSFW Content Toggle**: Global on/off switch for NSFW content filtering, with per-character override support.
+- 🧠 **RAG Memory — The AI Remembers**: Local semantic memory powered by a lightweight ONNX embedding engine. Past conversations are automatically indexed and retrieved when relevant — the AI recalls what happened 50 messages ago, in a different session, or even with a different character. Runs entirely on your CPU, no cloud needed, ~25MB footprint.
+  - **Data Bank**: Browse, search, and manage your stored memories with a unified UI showing embedding stats and per-character memory.
+  - **RAG-Grounded Summaries**: Rolling chat summaries now pull from the vector store for more accurate, context-aware recaps instead of relying solely on recent messages.
+  - **WebUI RAG Menu**: Full RAG configuration (retrieval count, window size, toggle) available directly in the WebUI hamburger menu.
+- 🧬 **Character Evolution**: Characters grow through conversation. The Evolve system discovers new traits, relationships, and situation changes — and the AI sees both the original character card and how they've developed, so growth feels natural without losing who the character is.
+- 👤 **User Persona Awareness**: Your self-description and facts the AI has learned about you are now woven into every conversation. The AI knows your name, your preferences, and your history — across all characters.
+- 🎯 **Objectives / Goals**: Set session-level objectives that steer the AI toward a narrative outcome. Goals persist across messages and subtly shape conversation direction without manual prompt engineering.
+- 🔞 **NSFW Content Toggle**: Global on/off switch for NSFW content filtering, with per-character override for granular control.
 - 📱 **WebUI Mobile Improvements**:
-  - Fixed chat input bar clipped off the bottom in Safari (viewport height + safe area insets)
+  - Fixed chat input bar clipped off the bottom in Safari
   - Added back buttons to all Settings sub-sections on mobile
   - Compact modals and responsive layout fixes for small screens
-- 🍔 **WebUI RAG / Memory Menu**: New hamburger menu entry for RAG settings — configure retrieval count, window size, embedding model, and toggle RAG on/off directly from the WebUI.
-- 🎵 **Greeting Tones in Guided Creator**: The guided character creator now supports greeting tone selection (Romantic, Adventure, Comedy, etc.) — matching the existing automated creator and Flutter app.
-- 🍎 **Intel Mac Detection**: Automatically detects Intel-based Macs and disables KoboldCpp (which requires Apple Silicon). A warning banner guides users to Remote API mode across the Flutter app, WebUI settings, model modal, and character creator.
-- 📖 **Lorebook World-Building Focus**: Lorebook generation prompts rewritten to produce world lore (locations, factions, magic systems, cultures, creatures) instead of character biography. New per-category prompt guidance and expanded categories (added Flora/Fauna, renamed History/Lore → History/Events).
+- 🎵 **Greeting Tones in Guided Creator**: The guided character creator now supports greeting tone selection (Romantic, Adventure, Comedy, etc.) — matching the automated creator.
+- 🍎 **Intel Mac Detection**: Automatically detects Intel-based Macs and disables KoboldCpp with a warning banner guiding users to Remote API mode.
+- 📖 **Lorebook World-Building Focus**: Lorebook generation now produces world lore (locations, factions, magic systems, cultures, creatures) instead of character biography. Expanded categories include Flora/Fauna and History/Events.
 - 🐛 **Bug Fixes**:
-  - Fixed missing hamburger menu for feature settings in WebUI
-  - Fixed missing back button in Settings on mobile WebUI
+  - Fixed ElevenLabs voice selection showing raw voice ID instead of friendly name
+  - Fixed TTS narration filter not handling multi-line `*action*` blocks
+  - Fixed TTS quote filter not matching curly quotes
 
 <details>
 <summary><strong>📦 Previous Releases</strong></summary>

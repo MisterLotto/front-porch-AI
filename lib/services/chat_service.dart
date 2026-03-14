@@ -394,6 +394,30 @@ class ChatService extends ChangeNotifier {
     _characterRepository = repo;
   }
 
+  /// Build the user persona block for the generation prompt.
+  /// Layered: user's self-description is ground truth, learned facts are additive.
+  String _buildUserPersonaBlock(String userName) {
+    final persona = _userPersonaService.persona;
+    final description = persona.description.trim();
+    final facts = persona.learnedFacts;
+
+    // Nothing to inject
+    if (description.isEmpty && facts.isEmpty) return '';
+
+    final buf = StringBuffer();
+    buf.writeln("$userName's Persona: $description");
+
+    if (facts.isNotEmpty) {
+      buf.writeln('[Discovered traits — observations learned from conversation. '
+          'The user\'s self-description above takes priority if there is a conflict.]');
+      for (final fact in facts) {
+        buf.writeln('- $fact');
+      }
+    }
+    buf.writeln();
+    return buf.toString();
+  }
+
   /// Set the LLMProvider after construction (to break circular dependency in provider tree).
   void setLLMProvider(LLMProvider provider) {
     _llmProvider = provider;
@@ -456,6 +480,8 @@ class ChatService extends ChangeNotifier {
 
     // Load active objective for this character
     _loadActiveObjective();
+    // Load evolved personality/scenario from DB
+    _loadEvolvedFields();
     _messages.clear();
     _currentSessionId = null;
     _summary = '';
@@ -1215,21 +1241,25 @@ class ChatService extends ChangeNotifier {
       }
 
       // Persona & scenario
+      // Use evolved versions if character evolution is enabled and available
       String personaBlock;
       if (_activeGroup != null) {
         final personas = _groupCharacters.map((ch) =>
-          "${ch.name}'s Persona: ${ch.replacePlaceholders(ch.personality, userName: userName)}").toList();
+          "${ch.name}'s Persona: ${ch.replacePlaceholders(_getEffectivePersonality(ch), userName: userName)}").toList();
         personaBlock = personas.join('\n');
       } else {
-        personaBlock = "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(speakingCharacter.personality, userName: userName)}";
+        personaBlock = "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(_getEffectivePersonality(speakingCharacter), userName: userName)}";
       }
+
+      // User persona — inject user's self-description + learned facts
+      final userPersonaBlock = _buildUserPersonaBlock(userName);
 
       String rawScenario = '';
       if (_activeGroup != null && _activeGroup!.scenario.isNotEmpty) {
         rawScenario = _activeGroup!.scenario;
       } else {
         final scenarioChar = _activeGroup != null ? _groupCharacters.first : speakingCharacter;
-        rawScenario = scenarioChar.scenario;
+        rawScenario = _getEffectiveScenario(scenarioChar);
       }
       final scenario = speakingCharacter.replacePlaceholders(rawScenario, userName: userName);
 
@@ -1277,6 +1307,7 @@ class ChatService extends ChangeNotifier {
       final fixedContent = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
+          "$userPersonaBlock"
           "Scenario: $scenario\n"
           "$mesExampleBlock"
           "<START>\n"
@@ -1302,6 +1333,7 @@ class ChatService extends ChangeNotifier {
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
+          "$userPersonaBlock"
           "Scenario: $scenario\n"
           "$mesExampleBlock"
           "<START>\n"
@@ -1483,12 +1515,15 @@ class ChatService extends ChangeNotifier {
       String personaBlock;
       if (_activeGroup != null) {
         personaBlock = _groupCharacters.map((ch) {
-          final persona = ch.replacePlaceholders(ch.personality, userName: userName);
+          final persona = ch.replacePlaceholders(_getEffectivePersonality(ch), userName: userName);
           return "${ch.name}'s Persona: $persona";
         }).join('\n');
       } else {
-        personaBlock = "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(speakingCharacter.personality, userName: userName)}";
+        personaBlock = "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(_getEffectivePersonality(speakingCharacter), userName: userName)}";
       }
+
+      // User persona — inject user's self-description + learned facts
+      final userPersonaBlock = _buildUserPersonaBlock(userName);
 
       // Scenario — use group scenario override if set, else first character
       final String rawScenario;
@@ -1496,7 +1531,7 @@ class ChatService extends ChangeNotifier {
         rawScenario = _activeGroup!.scenario;
       } else {
         final scenarioChar = _activeGroup != null ? _groupCharacters.first : speakingCharacter;
-        rawScenario = scenarioChar.scenario;
+        rawScenario = _getEffectiveScenario(scenarioChar);
       }
       final scenario = speakingCharacter.replacePlaceholders(rawScenario, userName: userName);
 
@@ -1550,6 +1585,7 @@ class ChatService extends ChangeNotifier {
       final fixedContent = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
+          "$userPersonaBlock"
           "Scenario: $scenario\n"
           "$mesExampleBlock"
           "<START>\n"
@@ -1630,6 +1666,7 @@ class ChatService extends ChangeNotifier {
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
+          "$userPersonaBlock"
           "Scenario: $scenario\n"
           "$mesExampleBlock"
           "<START>\n"
@@ -1982,6 +2019,9 @@ class ChatService extends ChangeNotifier {
         // Note: action suggestions are NOT auto-triggered here.
         // The user must explicitly request them via the UI button.
         _maybeExtractFacts();
+
+        // Evolve character personality/scenario (fire-and-forget)
+        _maybeEvolveCharacter();
 
         // (Task completion check now runs pre-generation in sendMessage)
 
@@ -2948,6 +2988,318 @@ class ChatService extends ChangeNotifier {
     } finally {
       _isExtractingFacts = false;
     }
+  }
+
+  // ── Character Evolution ─────────────────────────────────────────────────
+
+  int _userMessagesSinceLastEvolution = 0;
+  bool _isEvolvingCharacter = false;
+  String _evolutionStatus = '';
+
+  /// Get the effective personality for a character.
+  /// When evolution exists, returns a layered block: original as foundation,
+  /// evolved traits as additive growth. This prevents contradictions.
+  String _getEffectivePersonality(CharacterCard card) {
+    if (!_storageService.characterEvolutionEnabled) return card.personality;
+    final evolved = _evolvedPersonalities[_getCharacterIdFromCard(card)];
+    if (evolved == null || evolved.isEmpty) return card.personality;
+    // Layered: original is ground truth, evolved is additive growth
+    return '${card.personality}\n\n'
+        '[Character Growth — the following reflects how ${card.name} has changed through interactions. '
+        'These traits build on the original personality above. If there is a contradiction, '
+        'the growth represents genuine character development, not a replacement of core identity.]\n'
+        '$evolved';
+  }
+
+  /// Get the effective scenario for a character.
+  /// When evolution exists, returns both original scenario and evolved situation.
+  String _getEffectiveScenario(CharacterCard card) {
+    if (!_storageService.characterEvolutionEnabled) return card.scenario;
+    final evolved = _evolvedScenarios[_getCharacterIdFromCard(card)];
+    if (evolved == null || evolved.isEmpty) return card.scenario;
+    // Layered: original scenario + evolved current situation
+    return '${card.scenario}\n\n'
+        '[Current Situation — the scenario has evolved through interactions:]\n'
+        '$evolved';
+  }
+
+  /// Cached evolved fields (loaded from DB on character load)
+  final Map<String, String> _evolvedPersonalities = {};
+  final Map<String, String> _evolvedScenarios = {};
+  int _characterEvolutionCount = 0;
+  int get characterEvolutionCount => _characterEvolutionCount;
+
+  /// Public getter: evolved personality for the active character (null if none)
+  String? get getEffectivePersonality {
+    if (_activeCharacter == null) return null;
+    final charId = _getCharacterIdFromCard(_activeCharacter!);
+    final evolved = _evolvedPersonalities[charId];
+    return (evolved != null && evolved.isNotEmpty) ? evolved : null;
+  }
+
+  /// Public getter: evolved scenario for the active character (null if none)
+  String? get getEffectiveScenario {
+    if (_activeCharacter == null) return null;
+    final charId = _getCharacterIdFromCard(_activeCharacter!);
+    final evolved = _evolvedScenarios[charId];
+    return (evolved != null && evolved.isNotEmpty) ? evolved : null;
+  }
+
+  /// Load evolved fields from DB for the active character
+  Future<void> _loadEvolvedFields() async {
+    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
+    try {
+      final dbChar = await _db!.getCharacterById(_activeCharacter!.dbId!);
+      final charId = _getCharacterIdFromCard(_activeCharacter!);
+      _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
+      _evolvedScenarios[charId] = dbChar.evolvedScenario;
+      _characterEvolutionCount = dbChar.evolutionCount;
+    } catch (e) {
+      debugPrint('[Evolution] Failed to load evolved fields: $e');
+    }
+  }
+
+  /// Whether evolution extraction is currently running.
+  bool get isEvolvingCharacter => _isEvolvingCharacter;
+
+  /// Current status message during evolution.
+  String get evolutionStatus => _evolutionStatus;
+
+  /// Manually trigger character evolution now (for imported/existing chats).
+  /// Returns true if evolution was triggered, false if preconditions not met.
+  Future<bool> triggerEvolutionNow() async {
+    if (_llmProvider == null) return false;
+    if (_isEvolvingCharacter) return false;
+    if (_activeCharacter == null || _activeCharacter!.dbId == null) return false;
+    if (_messages.length < 4) return false; // need some history
+
+    debugPrint('[Evolution] ▶ Manual evolution triggered');
+    await _extractCharacterEvolution();
+    return true;
+  }
+
+  /// Trigger evolution check after each generation.
+  void _maybeEvolveCharacter() {
+    if (!_storageService.characterEvolutionEnabled) return;
+    if (_llmProvider == null) return;
+    if (_isEvolvingCharacter) return;
+    if (_activeCharacter == null) return;
+
+    _userMessagesSinceLastEvolution++;
+    if (_userMessagesSinceLastEvolution < _storageService.evolutionInterval) return;
+    _userMessagesSinceLastEvolution = 0;
+
+    debugPrint('[Evolution] ▶ Triggering character evolution (every ${_storageService.evolutionInterval} user messages)');
+    _extractCharacterEvolution();
+  }
+
+  /// Extract evolved personality + scenario from conversation memories.
+  Future<void> _extractCharacterEvolution() async {
+    if (_isEvolvingCharacter) return;
+    _isEvolvingCharacter = true;
+    _evolutionStatus = 'Preparing evolution...';
+    notifyListeners();
+
+    try {
+      final llmService = _llmProvider!.activeService;
+      if (llmService == null || !llmService.isReady) {
+        debugPrint('[Evolution] ✗ LLM not ready');
+        return;
+      }
+      if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
+
+      final charName = _activeCharacter!.name;
+      final userName = _userPersonaService.persona.name;
+      final originalPersonality = _activeCharacter!.personality;
+      final originalScenario = _activeCharacter!.scenario;
+      final charId = _getCharacterIdFromCard(_activeCharacter!);
+
+      // Get current evolved versions (or originals if first time)
+      final currentPersonality = _evolvedPersonalities[charId]?.isNotEmpty == true
+          ? _evolvedPersonalities[charId]!
+          : originalPersonality;
+      final currentScenario = _evolvedScenarios[charId]?.isNotEmpty == true
+          ? _evolvedScenarios[charId]!
+          : originalScenario;
+
+      // Gather context: RAG memories + summary + recent messages
+      String memoryContext = '';
+      if (_memoryService != null && _memoryService!.isOperational) {
+        _evolutionStatus = 'Gathering memories...';
+        notifyListeners();
+        try {
+          final sourceIds = await _getMemorySourceIds();
+          final chunks = await _memoryService!.getAllContentForCharacters(sourceIds);
+          if (chunks.isNotEmpty) {
+            // Take last 10 chunks to keep prompt reasonable
+            final recent = chunks.length > 10 ? chunks.sublist(chunks.length - 10) : chunks;
+            memoryContext = 'Conversation memories:\n${recent.join('\n---\n')}\n\n';
+          }
+        } catch (e) {
+          debugPrint('[Evolution] RAG retrieval failed: $e');
+        }
+      }
+
+      String summaryContext = '';
+      if (_summary.isNotEmpty) {
+        summaryContext = 'Chat summary: $_summary\n\n';
+      }
+
+      // Recent messages for immediate context
+      final recentMsgs = _messages.length > 10
+          ? _messages.sublist(_messages.length - 10)
+          : _messages;
+      final recentContext = recentMsgs
+          .map((m) => '${m.sender}: ${m.displayText}')
+          .join('\n');
+
+      final prompt =
+          'You are analyzing how a roleplay character has evolved through their interactions. '
+          'Based on the conversation history and memories below, rewrite the character\'s personality '
+          'and scenario to reflect how they have grown, changed, or been affected by events.\n\n'
+          'IMPORTANT RULES:\n'
+          '- Preserve the character\'s core identity — don\'t change who they fundamentally are\n'
+          '- Add or modify traits based on what actually happened in conversations\n'
+          '- Update the scenario to reflect the current state of the story/relationship\n'
+          '- Keep the same level of detail as the originals\n'
+          '- Use {{char}} for the character name and {{user}} for the user name\n\n'
+          'Character name: $charName\n'
+          'User name: $userName\n\n'
+          'Original personality:\n$originalPersonality\n\n'
+          'Current personality:\n$currentPersonality\n\n'
+          'Original scenario:\n$originalScenario\n\n'
+          'Current scenario:\n$currentScenario\n\n'
+          '$memoryContext'
+          '$summaryContext'
+          'Recent conversation:\n$recentContext\n\n'
+          'Return a JSON object with exactly two keys: "personality" and "scenario". '
+          'Each value should be the full rewritten text for that field.\n'
+          'Response:';
+
+      debugPrint('[Evolution] Sending extraction prompt (${prompt.length} chars)');
+
+      _evolutionStatus = 'Analyzing conversation with LLM...';
+      notifyListeners();
+
+      final params = GenerationParams(
+        prompt: prompt,
+        maxLength: 2048,
+        temperature: 0.4,
+        stopSequences: [],
+      );
+
+      String responseText = '';
+      await for (final chunk in llmService.generateStream(params)) {
+        responseText += chunk;
+      }
+
+      // Strip think blocks
+      responseText = responseText.replaceAll(
+          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+
+      debugPrint('[Evolution] Raw response: ${responseText.substring(0, responseText.length.clamp(0, 200))}...');
+
+      _evolutionStatus = 'Parsing evolved traits...';
+      notifyListeners();
+
+      // Parse JSON from response
+      var jsonStr = responseText;
+      if (jsonStr.contains('```')) {
+        final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
+        if (match != null) jsonStr = match.group(1)!.trim();
+      }
+
+      // Find JSON object
+      final objMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(jsonStr);
+      if (objMatch == null) {
+        debugPrint('[Evolution] ✗ No JSON object found in response');
+        return;
+      }
+
+      try {
+        final parsed = jsonDecode(objMatch.group(0)!) as Map<String, dynamic>;
+        final newPersonality = parsed['personality'] as String?;
+        final newScenario = parsed['scenario'] as String?;
+
+        if (newPersonality == null || newPersonality.isEmpty ||
+            newScenario == null || newScenario.isEmpty) {
+          debugPrint('[Evolution] ✗ Parsed JSON missing required fields');
+          return;
+        }
+
+        // Store in DB
+        final newCount = _characterEvolutionCount + 1;
+        await _db!.updateCharacter(CharactersCompanion(
+          id: drift.Value(_activeCharacter!.dbId!),
+          evolvedPersonality: drift.Value(newPersonality),
+          evolvedScenario: drift.Value(newScenario),
+          evolutionCount: drift.Value(newCount),
+        ));
+
+        // Update cache
+        _evolvedPersonalities[charId] = newPersonality;
+        _evolvedScenarios[charId] = newScenario;
+        _characterEvolutionCount = newCount;
+
+        debugPrint('[Evolution] ✅ Character evolved (count: $newCount)');
+        debugPrint('[Evolution] Personality: ${newPersonality.substring(0, newPersonality.length.clamp(0, 100))}...');
+        debugPrint('[Evolution] Scenario: ${newScenario.substring(0, newScenario.length.clamp(0, 100))}...');
+        notifyListeners();
+      } catch (e) {
+        debugPrint('[Evolution] ✗ JSON parse failed: $e');
+      }
+    } catch (e) {
+      debugPrint('[Evolution] ✗ Evolution failed: $e');
+    } finally {
+      _isEvolvingCharacter = false;
+      _evolutionStatus = '';
+      notifyListeners();
+    }
+  }
+
+  /// Reset evolved fields back to original for the active character.
+  Future<void> resetCharacterEvolution() async {
+    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
+    final charId = _getCharacterIdFromCard(_activeCharacter!);
+
+    await _db!.updateCharacter(CharactersCompanion(
+      id: drift.Value(_activeCharacter!.dbId!),
+      evolvedPersonality: const drift.Value(''),
+      evolvedScenario: const drift.Value(''),
+      evolutionCount: const drift.Value(0),
+    ));
+
+    _evolvedPersonalities.remove(charId);
+    _evolvedScenarios.remove(charId);
+    _characterEvolutionCount = 0;
+    notifyListeners();
+    debugPrint('[Evolution] Reset to original for $charId');
+  }
+
+  /// Update the evolved personality text manually (user edits).
+  Future<void> updateEvolvedPersonality(String text) async {
+    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
+    final charId = _getCharacterIdFromCard(_activeCharacter!);
+
+    await _db!.updateCharacter(CharactersCompanion(
+      id: drift.Value(_activeCharacter!.dbId!),
+      evolvedPersonality: drift.Value(text),
+    ));
+    _evolvedPersonalities[charId] = text;
+    notifyListeners();
+  }
+
+  /// Update the evolved scenario text manually (user edits).
+  Future<void> updateEvolvedScenario(String text) async {
+    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
+    final charId = _getCharacterIdFromCard(_activeCharacter!);
+
+    await _db!.updateCharacter(CharactersCompanion(
+      id: drift.Value(_activeCharacter!.dbId!),
+      evolvedScenario: drift.Value(text),
+    ));
+    _evolvedScenarios[charId] = text;
+    notifyListeners();
   }
 
   /// Get the list of character IDs to search for RAG memory retrieval.

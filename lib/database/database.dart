@@ -53,6 +53,9 @@ class Characters extends Table {
   TextColumn get lorebook => text().nullable()(); // JSON blob
   TextColumn get worldNames => text().withDefault(const Constant('[]'))(); // JSON array
   TextColumn get memorySources => text().withDefault(const Constant('[]'))(); // JSON array of character IDs for cross-character RAG
+  TextColumn get evolvedPersonality => text().withDefault(const Constant(''))(); // LLM-evolved personality overlay
+  TextColumn get evolvedScenario => text().withDefault(const Constant(''))(); // LLM-evolved scenario overlay
+  IntColumn get evolutionCount => integer().withDefault(const Constant(0))(); // number of evolutions
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -302,7 +305,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -406,6 +409,18 @@ class AppDatabase extends _$AppDatabase {
         } catch (_) {
           // Column may already exist (fresh v8+ installs)
         }
+      }
+      if (from < 10) {
+        // v9→v10: add character evolution columns
+        try {
+          await customStatement("ALTER TABLE characters ADD COLUMN evolved_personality TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE characters ADD COLUMN evolved_scenario TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE characters ADD COLUMN evolution_count INTEGER NOT NULL DEFAULT 0");
+        } catch (_) {}
       }
     },
   );

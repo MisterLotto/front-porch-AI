@@ -43,13 +43,18 @@ class EmbeddingService extends ChangeNotifier {
   Future<void> checkAvailability() async {
     debugPrint('[RAG:Embed] ── Checking embedding availability ──');
 
-    // Auto-start sidecar if available
+    // Auto-start sidecar if available but not running
     if (_sidecar != null && _sidecar.isUsable && !_sidecar.isRunning) {
       debugPrint('[RAG:Embed] Auto-starting ONNX embedding sidecar...');
       await _sidecar.startServer();
+    }
+
+    // Wait for model to be ready (whether we just started or it was already running)
+    if (_sidecar != null && _sidecar.isRunning && !_sidecar.modelReady) {
+      debugPrint('[RAG:Embed] Waiting for model to finish loading...');
       final ready = await _sidecar.waitForModelReady();
       if (!ready) {
-        debugPrint('[RAG:Embed] Sidecar started but model not ready: ${_sidecar.error}');
+        debugPrint('[RAG:Embed] Sidecar running but model not ready: ${_sidecar.error}');
         _available = false;
         notifyListeners();
         return;

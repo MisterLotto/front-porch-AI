@@ -42,6 +42,7 @@ import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/web_server_service.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
+import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -617,7 +618,15 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(_engineDisplayName(storageService.ttsEngine), style: const TextStyle(fontWeight: FontWeight.bold)),
                       Text(
                         storageService.ttsEnabled
-                            ? 'Enabled — Voice: ${storageService.ttsVoiceModel.isEmpty ? "Not set" : storageService.ttsVoiceModel}'
+                            ? () {
+                                final voiceKey = storageService.ttsVoiceModel;
+                                if (voiceKey.isEmpty) return 'Enabled — Voice: Not set';
+                                // Look up friendly name from available voices
+                                final ttsService = Provider.of<TtsService>(context, listen: false);
+                                final match = ttsService.activeVoices.where((v) => v.id == voiceKey);
+                                final displayName = match.isNotEmpty ? match.first.name : voiceKey;
+                                return 'Enabled — Voice: $displayName';
+                              }()
                             : 'Disabled',
                         style: TextStyle(fontSize: 12, color: Colors.white54),
                       ),

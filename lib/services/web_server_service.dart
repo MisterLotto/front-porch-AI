@@ -1342,6 +1342,9 @@ class WebServerService extends ChangeNotifier {
           // Auto-persona
           'autoPersonaEnabled': s.autoPersonaEnabled,
           'autoPersonaInterval': s.autoPersonaInterval,
+          // Character evolution
+          'characterEvolutionEnabled': s.characterEvolutionEnabled,
+          'evolutionInterval': s.evolutionInterval,
         }),
         headers: {'Content-Type': 'application/json'},
       );
@@ -1553,6 +1556,10 @@ class WebServerService extends ChangeNotifier {
       // Auto-persona
       if (body.containsKey('autoPersonaEnabled')) await s.setAutoPersonaEnabled(body['autoPersonaEnabled'] as bool);
       if (body.containsKey('autoPersonaInterval')) await s.setAutoPersonaInterval((body['autoPersonaInterval'] as num).toInt());
+
+      // Character evolution
+      if (body.containsKey('characterEvolutionEnabled')) await s.setCharacterEvolutionEnabled(body['characterEvolutionEnabled'] as bool);
+      if (body.containsKey('evolutionInterval')) await s.setEvolutionInterval((body['evolutionInterval'] as num).toInt());
 
       return shelf.Response.ok(
         jsonEncode({'status': 'ok'}),

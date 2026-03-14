@@ -796,14 +796,18 @@ class TtsService extends ChangeNotifier {
     var result = text;
 
     // ── Narration filters (SillyTavern-style) ──
-    // Step 1: If ignoreAsterisks, remove all *...* blocks (including quotes inside them)
+    // Step 1: If ignoreAsterisks, remove all *...* blocks (including content inside them)
     if (_storageService.ttsIgnoreAsterisks) {
-      result = result.replaceAll(RegExp(r'\*[^*]*\*'), '');
+      // Handle multi-line action blocks: *action across\nmultiple lines*
+      result = result.replaceAll(RegExp(r'\*[^*]+\*', dotAll: true), ' ');
     }
-    // Step 2: If narrateQuotedOnly, extract only text within "..." quotes
+    // Step 2: If narrateQuotedOnly, extract only text within quotes (straight or curly)
     if (_storageService.ttsNarrateQuotedOnly) {
-      final quotes = RegExp(r'"([^"]+)"').allMatches(result).map((m) => m.group(0)!).toList();
-      result = quotes.isNotEmpty ? quotes.join('... ') : '';
+      // Match both straight "..." and curly "..." quotes
+      final quotePattern = RegExp(r'(?:"([^"]+)"|["\u201C]([^\u201D"]+)["\u201D])');
+      final matches = quotePattern.allMatches(result);
+      final extracted = matches.map((m) => m.group(1) ?? m.group(2) ?? '').where((s) => s.trim().isNotEmpty).toList();
+      result = extracted.isNotEmpty ? extracted.join('... ') : '';
     }
 
     // ── Standard cleanup ──

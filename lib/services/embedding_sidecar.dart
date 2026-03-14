@@ -25,8 +25,8 @@ import 'package:path/path.dart' as p;
 
 /// Manages the lifecycle of the local ONNX embedding server sidecar.
 ///
-/// The server is a PyInstaller-bundled Python process that runs
-/// nomic-embed-text-v1.5 on localhost:5055.
+/// The server is a Rust binary that runs nomic-embed-text-v1.5
+/// via ONNX Runtime on localhost:5055.
 class EmbeddingSidecar extends ChangeNotifier {
   static const int port = 5055;
   static const String _baseUrl = 'http://localhost:$port';
@@ -75,12 +75,12 @@ class EmbeddingSidecar extends ChangeNotifier {
     return null;
   }
 
-  /// Path to embed_server.py for dev mode (run via python3).
-  String? get _devScriptPath {
+  /// Path to the Rust embed_server binary for dev mode.
+  String? get _devBinaryPath {
     final execDir = File(Platform.resolvedExecutable).parent.path;
     var dir = Directory(execDir);
     for (int i = 0; i < 8; i++) {
-      final candidate = File(p.join(dir.path, 'embed_server.py'));
+      final candidate = File(p.join(dir.path, 'tools', 'embed_server', 'target', 'release', 'embed_server'));
       if (candidate.existsSync()) return candidate.path;
       final parent = dir.parent;
       if (parent.path == dir.path) break;
@@ -89,8 +89,8 @@ class EmbeddingSidecar extends ChangeNotifier {
     return null;
   }
 
-  /// Whether we can run the sidecar (either binary or dev script).
-  bool get isUsable => _binaryPath != null || _devScriptPath != null;
+  /// Whether we can run the sidecar (either bundled binary or dev binary).
+  bool get isUsable => _binaryPath != null || _devBinaryPath != null;
 
   /// Start the embedding server. Returns when the server is listening
   /// (but model may still be loading in background).
@@ -102,20 +102,31 @@ class EmbeddingSidecar extends ChangeNotifier {
     _downloadProgress = -1;
     notifyListeners();
 
+    // Check if a server from a previous session is already listening (e.g. hot restart)
     try {
-      final binaryPath = _binaryPath;
-      final devScript = _devScriptPath;
+      final response = await http.Client()
+          .get(Uri.parse('$_baseUrl/health'))
+          .timeout(const Duration(seconds: 1));
+      if (response.statusCode == 200) {
+        debugPrint('[EmbedSidecar] Found existing server on port $port — adopting');
+        _isRunning = true;
+        _statusMessage = 'Adopted existing server';
+        _modelReady = false; // Will be updated by waitForModelReady
+        notifyListeners();
+        return;
+      }
+    } catch (_) {
+      // No existing server — proceed with starting a new one
+    }
+
+    try {
+      final binaryPath = _binaryPath ?? _devBinaryPath;
 
       if (binaryPath != null) {
-        // Release mode: run bundled binary
         if (!Platform.isWindows) {
           await Process.run('chmod', ['+x', binaryPath]);
         }
         _process = await Process.start(binaryPath, []);
-      } else if (devScript != null) {
-        // Dev mode: run via python3
-        final pythonCmd = Platform.isWindows ? 'python' : 'python3';
-        _process = await Process.start(pythonCmd, [devScript]);
       } else {
         _error = 'Embedding server binary not found';
         _statusMessage = 'Error';

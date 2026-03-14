@@ -166,6 +166,10 @@ class StorageService extends ChangeNotifier {
   bool _autoPersonaEnabled = false;
   int _autoPersonaInterval = 10; // every N user messages
 
+  // Character evolution settings
+  bool _characterEvolutionEnabled = false;
+  int _evolutionInterval = 20; // evolve every N user messages
+
   // Getters
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
@@ -252,6 +256,8 @@ class StorageService extends ChangeNotifier {
   String get ragEmbeddingModel => _ragEmbeddingModel;
   bool get autoPersonaEnabled => _autoPersonaEnabled;
   int get autoPersonaInterval => _autoPersonaInterval;
+  bool get characterEvolutionEnabled => _characterEvolutionEnabled;
+  int get evolutionInterval => _evolutionInterval;
 
   StorageService() {
     _init();
@@ -399,6 +405,10 @@ class StorageService extends ChangeNotifier {
     // Auto-persona settings
     _autoPersonaEnabled = _prefs?.getBool('auto_persona_enabled') ?? false;
     _autoPersonaInterval = _prefs?.getInt('auto_persona_interval') ?? 10;
+
+    // Character evolution settings
+    _characterEvolutionEnabled = _prefs?.getBool('character_evolution_enabled') ?? false;
+    _evolutionInterval = _prefs?.getInt('evolution_interval') ?? 20;
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -1042,6 +1052,19 @@ class StorageService extends ChangeNotifier {
   Future<void> setAutoPersonaInterval(int value) async {
     _autoPersonaInterval = value.clamp(5, 50);
     await _prefs?.setInt('auto_persona_interval', _autoPersonaInterval);
+    notifyListeners();
+  }
+
+  // Character evolution setters
+  Future<void> setCharacterEvolutionEnabled(bool value) async {
+    _characterEvolutionEnabled = value;
+    await _prefs?.setBool('character_evolution_enabled', value);
+    notifyListeners();
+  }
+
+  Future<void> setEvolutionInterval(int value) async {
+    _evolutionInterval = value.clamp(10, 50);
+    await _prefs?.setInt('evolution_interval', _evolutionInterval);
     notifyListeners();
   }
 }

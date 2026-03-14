@@ -2122,6 +2122,7 @@
             const ragCount = data.ragRetrievalCount ?? 10;
             const ragWin = data.ragWindowSize ?? 5;
             const apInt = data.autoPersonaInterval ?? 5;
+            const evoInt = data.evolutionInterval ?? 20;
 
             overlay.innerHTML = `<div class="modal" style="min-width:min(500px,95vw);max-width:700px;max-height:85vh;display:flex;flex-direction:column;">
                 <div class="modal-title">💾 Memory (RAG)</div>
@@ -2147,6 +2148,16 @@
                             <div style="font-size:11px;color:rgba(255,255,255,0.3)">
                                 Extracts personal facts from your messages using the LLM.</div>
                         </div>
+                        <div style="border-top:1px solid rgba(255,255,255,0.08);margin:12px 0"></div>
+                        <div class="toggle-row"><span>🧬 Character Evolution</span>
+                            <label class="toggle-switch"><input type="checkbox" id="m-char-evolution" ${data.characterEvolutionEnabled ? 'checked' : ''}><span class="toggle-slider"></span></label></div>
+                        <div id="m-evolution-fields" style="${data.characterEvolutionEnabled ? '' : 'display:none'};margin-top:4px">
+                            <div class="slider-row"><label class="slider-label">Evolve every</label>
+                                <input type="range" id="m-evolution-interval" min="10" max="50" step="5" value="${evoInt}" class="settings-slider">
+                                <span class="slider-value" id="m-evolution-interval-val">${evoInt} msgs</span></div>
+                            <div style="font-size:11px;color:rgba(255,255,255,0.3)">
+                                Personality & scenario evolve based on conversations. Originals are always preserved.</div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -2166,6 +2177,10 @@
                 const f = overlay.querySelector('#m-persona-fields');
                 if (f) f.style.display = e.target.checked ? 'block' : 'none';
             });
+            overlay.querySelector('#m-char-evolution')?.addEventListener('change', (e) => {
+                const f = overlay.querySelector('#m-evolution-fields');
+                if (f) f.style.display = e.target.checked ? 'block' : 'none';
+            });
             // Slider feedback
             overlay.querySelector('#m-rag-retrieval')?.addEventListener('input', (e) => {
                 const v = parseInt(e.target.value);
@@ -2180,6 +2195,10 @@
                 const s = overlay.querySelector('#m-persona-interval-val');
                 if (s) s.textContent = e.target.value + ' msgs';
             });
+            overlay.querySelector('#m-evolution-interval')?.addEventListener('input', (e) => {
+                const s = overlay.querySelector('#m-evolution-interval-val');
+                if (s) s.textContent = e.target.value + ' msgs';
+            });
             // Cancel
             overlay.querySelector('#m-rag-cancel').addEventListener('click', () => overlay.classList.remove('active'));
             // Save
@@ -2190,6 +2209,8 @@
                     ragWindowSize: parseInt(overlay.querySelector('#m-rag-window').value),
                     autoPersonaEnabled: overlay.querySelector('#m-auto-persona').checked,
                     autoPersonaInterval: parseInt(overlay.querySelector('#m-persona-interval').value),
+                    characterEvolutionEnabled: overlay.querySelector('#m-char-evolution').checked,
+                    evolutionInterval: parseInt(overlay.querySelector('#m-evolution-interval').value),
                 };
                 const res = await api('/api/settings', {
                     method: 'POST',
@@ -2945,6 +2966,17 @@
             const iv = $('#persona-interval-value');
             if (iv) iv.textContent = (data.autoPersonaInterval ?? 5) + ' msgs';
         }
+        // Character evolution
+        const evoCb = $('#setting-char-evolution');
+        if (evoCb) evoCb.checked = data.characterEvolutionEnabled ?? false;
+        const evoFields = $('#char-evolution-fields');
+        if (evoFields) evoFields.style.display = (data.characterEvolutionEnabled) ? 'block' : 'none';
+        const evoInterval = $('#setting-evolution-interval');
+        if (evoInterval) {
+            evoInterval.value = data.evolutionInterval ?? 20;
+            const ev = $('#evolution-interval-value');
+            if (ev) ev.textContent = (data.evolutionInterval ?? 20) + ' msgs';
+        }
 
         // Font scale
         const scaleSlider = $('#setting-text-scale');
@@ -3483,6 +3515,8 @@
                     ragWindowSize: parseInt($('#setting-rag-window')?.value) || 5,
                     autoPersonaEnabled: $('#setting-auto-persona')?.checked || false,
                     autoPersonaInterval: parseInt($('#setting-persona-interval')?.value) || 5,
+                    characterEvolutionEnabled: $('#setting-char-evolution')?.checked || false,
+                    evolutionInterval: parseInt($('#setting-evolution-interval')?.value) || 20,
                 }),
             });
             if (res && res.ok) showInfoModal('Saved', 'Memory settings saved.');
@@ -3517,6 +3551,18 @@
         $('#setting-persona-interval')?.addEventListener('input', () => {
             const label = $('#persona-interval-value');
             if (label) label.textContent = $('#setting-persona-interval').value + ' msgs';
+        });
+
+        // Character evolution toggle — show/hide interval
+        $('#setting-char-evolution')?.addEventListener('change', () => {
+            const fields = $('#char-evolution-fields');
+            if (fields) fields.style.display = $('#setting-char-evolution').checked ? 'block' : 'none';
+        });
+
+        // Evolution interval slider — update label
+        $('#setting-evolution-interval')?.addEventListener('input', () => {
+            const label = $('#evolution-interval-value');
+            if (label) label.textContent = $('#setting-evolution-interval').value + ' msgs';
         });
 
         // Reasoning toggle

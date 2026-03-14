@@ -113,10 +113,13 @@ jobs:
           echo "    path: ci/flutter_inappwebview_linux_stub" >> pubspec.yaml
           flutter pub get
 
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Build Application
         run: flutter build ${{ matrix.platform }} --release
 
-      - name: Bundle TTS Engines (Kokoro + Piper as standalone binaries)
+      - name: Bundle ML Engines (Kokoro TTS, Piper TTS, Whisper STT, ONNX Embeddings)
         shell: bash
         run: |
           DEST="${{ matrix.build_path }}/piper"
@@ -124,7 +127,7 @@ jobs:
 
           # Install TTS dependencies + PyInstaller
           pip install --upgrade pip
-          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper sentence-transformers
+          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper
 
           # Build Kokoro TTS as a standalone directory bundle
           echo "Building Kokoro TTS binary..."
@@ -184,23 +187,17 @@ jobs:
             --noconfirm
           echo "Whisper STT built at: $STT_DEST/whisper_stt/"
 
-          # Build Embedding Server as a standalone directory bundle
-          echo "Building Embedding Server binary..."
-          pyinstaller embed_server.py \
-            --onedir \
-            --name embed_server \
-            --collect-all sentence_transformers \
-            --hidden-import sentence_transformers \
-            --hidden-import transformers \
-            --hidden-import tokenizers \
-            --hidden-import huggingface_hub \
-            --hidden-import onnxruntime \
-            --hidden-import numpy \
-            --distpath "$STT_DEST" \
-            --workpath ./build_tmp/embed \
-            --specpath ./build_tmp/embed \
-            --clean \
-            --noconfirm
+          # Build Embedding Server (Rust binary)
+          echo "Building Embedding Server (Rust)..."
+          cd tools/embed_server
+          cargo build --release
+          cd ../.. 
+          EMBED_BINARY="tools/embed_server/target/release/embed_server"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            EMBED_BINARY="tools/embed_server/target/release/embed_server.exe"
+          fi
+          mkdir -p "$STT_DEST/embed_server"
+          cp "$EMBED_BINARY" "$STT_DEST/embed_server/"
           echo "Embedding server built at: $STT_DEST/embed_server/"
 
           # For macOS, copy into the app bundle Resources

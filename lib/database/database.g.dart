@@ -201,6 +201,40 @@ class $CharactersTable extends Characters
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _evolvedPersonalityMeta =
+      const VerificationMeta('evolvedPersonality');
+  @override
+  late final GeneratedColumn<String> evolvedPersonality =
+      GeneratedColumn<String>(
+        'evolved_personality',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  static const VerificationMeta _evolvedScenarioMeta =
+      const VerificationMeta('evolvedScenario');
+  @override
+  late final GeneratedColumn<String> evolvedScenario = GeneratedColumn<String>(
+    'evolved_scenario',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _evolutionCountMeta =
+      const VerificationMeta('evolutionCount');
+  @override
+  late final GeneratedColumn<int> evolutionCount = GeneratedColumn<int>(
+    'evolution_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -255,6 +289,9 @@ class $CharactersTable extends Characters
     lorebook,
     worldNames,
     memorySources,
+    evolvedPersonality,
+    evolvedScenario,
+    evolutionCount,
     createdAt,
     updatedAt,
     deletedAt,
@@ -395,6 +432,33 @@ class $CharactersTable extends Characters
         ),
       );
     }
+    if (data.containsKey('evolved_personality')) {
+      context.handle(
+        _evolvedPersonalityMeta,
+        evolvedPersonality.isAcceptableOrUnknown(
+          data['evolved_personality']!,
+          _evolvedPersonalityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('evolved_scenario')) {
+      context.handle(
+        _evolvedScenarioMeta,
+        evolvedScenario.isAcceptableOrUnknown(
+          data['evolved_scenario']!,
+          _evolvedScenarioMeta,
+        ),
+      );
+    }
+    if (data.containsKey('evolution_count')) {
+      context.handle(
+        _evolutionCountMeta,
+        evolutionCount.isAcceptableOrUnknown(
+          data['evolution_count']!,
+          _evolutionCountMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -490,6 +554,18 @@ class $CharactersTable extends Characters
         DriftSqlType.string,
         data['${effectivePrefix}memory_sources'],
       )!,
+      evolvedPersonality: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}evolved_personality'],
+      )!,
+      evolvedScenario: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}evolved_scenario'],
+      )!,
+      evolutionCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}evolution_count'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -529,6 +605,9 @@ class Character extends DataClass implements Insertable<Character> {
   final String? lorebook;
   final String worldNames;
   final String memorySources;
+  final String evolvedPersonality;
+  final String evolvedScenario;
+  final int evolutionCount;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -550,6 +629,9 @@ class Character extends DataClass implements Insertable<Character> {
     this.lorebook,
     required this.worldNames,
     required this.memorySources,
+    required this.evolvedPersonality,
+    required this.evolvedScenario,
+    required this.evolutionCount,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -584,6 +666,9 @@ class Character extends DataClass implements Insertable<Character> {
     }
     map['world_names'] = Variable<String>(worldNames);
     map['memory_sources'] = Variable<String>(memorySources);
+    map['evolved_personality'] = Variable<String>(evolvedPersonality);
+    map['evolved_scenario'] = Variable<String>(evolvedScenario);
+    map['evolution_count'] = Variable<int>(evolutionCount);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -619,6 +704,9 @@ class Character extends DataClass implements Insertable<Character> {
           : Value(lorebook),
       worldNames: Value(worldNames),
       memorySources: Value(memorySources),
+      evolvedPersonality: Value(evolvedPersonality),
+      evolvedScenario: Value(evolvedScenario),
+      evolutionCount: Value(evolutionCount),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -654,6 +742,9 @@ class Character extends DataClass implements Insertable<Character> {
       lorebook: serializer.fromJson<String?>(json['lorebook']),
       worldNames: serializer.fromJson<String>(json['worldNames']),
       memorySources: serializer.fromJson<String>(json['memorySources']),
+      evolvedPersonality: serializer.fromJson<String>(json['evolvedPersonality']),
+      evolvedScenario: serializer.fromJson<String>(json['evolvedScenario']),
+      evolutionCount: serializer.fromJson<int>(json['evolutionCount']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -682,6 +773,9 @@ class Character extends DataClass implements Insertable<Character> {
       'lorebook': serializer.toJson<String?>(lorebook),
       'worldNames': serializer.toJson<String>(worldNames),
       'memorySources': serializer.toJson<String>(memorySources),
+      'evolvedPersonality': serializer.toJson<String>(evolvedPersonality),
+      'evolvedScenario': serializer.toJson<String>(evolvedScenario),
+      'evolutionCount': serializer.toJson<int>(evolutionCount),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -706,6 +800,9 @@ class Character extends DataClass implements Insertable<Character> {
     Value<String?> lorebook = const Value.absent(),
     String? worldNames,
     String? memorySources,
+    String? evolvedPersonality,
+    String? evolvedScenario,
+    int? evolutionCount,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -728,6 +825,9 @@ class Character extends DataClass implements Insertable<Character> {
     lorebook: lorebook.present ? lorebook.value : this.lorebook,
     worldNames: worldNames ?? this.worldNames,
     memorySources: memorySources ?? this.memorySources,
+    evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
+    evolvedScenario: evolvedScenario ?? this.evolvedScenario,
+    evolutionCount: evolutionCount ?? this.evolutionCount,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -769,6 +869,15 @@ class Character extends DataClass implements Insertable<Character> {
       memorySources: data.memorySources.present
           ? data.memorySources.value
           : this.memorySources,
+      evolvedPersonality: data.evolvedPersonality.present
+          ? data.evolvedPersonality.value
+          : this.evolvedPersonality,
+      evolvedScenario: data.evolvedScenario.present
+          ? data.evolvedScenario.value
+          : this.evolvedScenario,
+      evolutionCount: data.evolutionCount.present
+          ? data.evolutionCount.value
+          : this.evolutionCount,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -795,6 +904,9 @@ class Character extends DataClass implements Insertable<Character> {
           ..write('lorebook: $lorebook, ')
           ..write('worldNames: $worldNames, ')
           ..write('memorySources: $memorySources, ')
+          ..write('evolvedPersonality: $evolvedPersonality, ')
+          ..write('evolvedScenario: $evolvedScenario, ')
+          ..write('evolutionCount: $evolutionCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -803,7 +915,7 @@ class Character extends DataClass implements Insertable<Character> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     name,
     description,
@@ -821,10 +933,13 @@ class Character extends DataClass implements Insertable<Character> {
     lorebook,
     worldNames,
     memorySources,
+    evolvedPersonality,
+    evolvedScenario,
+    evolutionCount,
     createdAt,
     updatedAt,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -846,6 +961,9 @@ class Character extends DataClass implements Insertable<Character> {
           other.lorebook == this.lorebook &&
           other.worldNames == this.worldNames &&
           other.memorySources == this.memorySources &&
+          other.evolvedPersonality == this.evolvedPersonality &&
+          other.evolvedScenario == this.evolvedScenario &&
+          other.evolutionCount == this.evolutionCount &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -869,6 +987,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
   final Value<String?> lorebook;
   final Value<String> worldNames;
   final Value<String> memorySources;
+  final Value<String> evolvedPersonality;
+  final Value<String> evolvedScenario;
+  final Value<int> evolutionCount;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -891,6 +1012,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     this.lorebook = const Value.absent(),
     this.worldNames = const Value.absent(),
     this.memorySources = const Value.absent(),
+    this.evolvedPersonality = const Value.absent(),
+    this.evolvedScenario = const Value.absent(),
+    this.evolutionCount = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -914,6 +1038,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     this.lorebook = const Value.absent(),
     this.worldNames = const Value.absent(),
     this.memorySources = const Value.absent(),
+    this.evolvedPersonality = const Value.absent(),
+    this.evolvedScenario = const Value.absent(),
+    this.evolutionCount = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -938,6 +1065,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     Expression<String>? lorebook,
     Expression<String>? worldNames,
     Expression<String>? memorySources,
+    Expression<String>? evolvedPersonality,
+    Expression<String>? evolvedScenario,
+    Expression<int>? evolutionCount,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -962,6 +1092,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
       if (lorebook != null) 'lorebook': lorebook,
       if (worldNames != null) 'world_names': worldNames,
       if (memorySources != null) 'memory_sources': memorySources,
+      if (evolvedPersonality != null) 'evolved_personality': evolvedPersonality,
+      if (evolvedScenario != null) 'evolved_scenario': evolvedScenario,
+      if (evolutionCount != null) 'evolution_count': evolutionCount,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -987,6 +1120,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     Value<String?>? lorebook,
     Value<String>? worldNames,
     Value<String>? memorySources,
+    Value<String>? evolvedPersonality,
+    Value<String>? evolvedScenario,
+    Value<int>? evolutionCount,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -1011,6 +1147,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
       lorebook: lorebook ?? this.lorebook,
       worldNames: worldNames ?? this.worldNames,
       memorySources: memorySources ?? this.memorySources,
+      evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
+      evolvedScenario: evolvedScenario ?? this.evolvedScenario,
+      evolutionCount: evolutionCount ?? this.evolutionCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -1074,6 +1213,15 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     if (memorySources.present) {
       map['memory_sources'] = Variable<String>(memorySources.value);
     }
+    if (evolvedPersonality.present) {
+      map['evolved_personality'] = Variable<String>(evolvedPersonality.value);
+    }
+    if (evolvedScenario.present) {
+      map['evolved_scenario'] = Variable<String>(evolvedScenario.value);
+    }
+    if (evolutionCount.present) {
+      map['evolution_count'] = Variable<int>(evolutionCount.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1109,6 +1257,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
           ..write('lorebook: $lorebook, ')
           ..write('worldNames: $worldNames, ')
           ..write('memorySources: $memorySources, ')
+          ..write('evolvedPersonality: $evolvedPersonality, ')
+          ..write('evolvedScenario: $evolvedScenario, ')
+          ..write('evolutionCount: $evolutionCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
