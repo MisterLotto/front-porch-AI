@@ -63,8 +63,8 @@ jobs:
             FLUTTER_VERSION="${VERSION}+0"
           fi
           echo "Setting version to: $FLUTTER_VERSION"
-          # Extract the display version (without build number) for the Dart constant
-          DISPLAY_VERSION=$(echo "$FLUTTER_VERSION" | sed 's/+.*//')
+          # Use the full version (including 4th part if present) for the Dart display constant
+          DISPLAY_VERSION="$VERSION"
           # Use Python for cross-platform reliability (sed can fail silently with Windows \r\n line endings)
           python3 -c "
           import re
