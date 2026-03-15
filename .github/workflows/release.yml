@@ -225,6 +225,13 @@ jobs:
           echo "Embedding server bundled at: $STT_DEST/embed_server/"
           ls -la "$STT_DEST/embed_server/"
 
+      - name: Re-sign macOS App (ad-hoc)
+        if: matrix.platform == 'macos'
+        run: |
+          APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app | head -1)
+          echo "Re-signing $APP_NAME after ML engine bundling..."
+          codesign --force --deep --sign - "$APP_NAME"
+          echo "✓ Ad-hoc signature applied"
 
       - name: Package Windows (zip)
         if: matrix.platform == 'windows'
