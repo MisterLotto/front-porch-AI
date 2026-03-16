@@ -221,6 +221,7 @@ class UpdateService extends ChangeNotifier {
       exit(0);
     } catch (e) {
       debugPrint('Install now failed: $e');
+      rethrow;
     }
   }
 
@@ -314,18 +315,20 @@ class UpdateService extends ChangeNotifier {
     final appParent = File(currentApp).parent.path;
     debugPrint('macOS update: replacing $currentApp from $dmgPath');
 
-    // Mount the DMG
+    // Mount the DMG (no -quiet: we need stdout to find the mount point)
     final mountResult = await Process.run('hdiutil', [
-      'attach', dmgPath, '-nobrowse', '-quiet', '-mountrandom', '/tmp',
+      'attach', dmgPath, '-nobrowse', '-noverify', '-mountrandom', '/tmp',
     ]);
     if (mountResult.exitCode != 0) {
       throw Exception('Failed to mount DMG: ${mountResult.stderr}');
     }
 
-    // Parse mount point from hdiutil output
-    // Output format: "/dev/diskN  Apple_HFS  /tmp/dmg.XXXXX"
+    // Parse mount point from the last line of hdiutil output.
+    // Format: "/dev/disk4s1  Apple_HFS  /private/tmp/dmg.XXXXX"
+    // Fields are separated by spaces; the mount path is the last field.
     final mountOutput = (mountResult.stdout as String).trim();
-    final mountPoint = mountOutput.split(RegExp(r'\t+')).last.trim();
+    final lastLine = mountOutput.split('\n').last.trim();
+    final mountPoint = lastLine.split(RegExp(r'\s+')).last.trim();
     debugPrint('DMG mounted at: $mountPoint');
 
     try {

@@ -117,7 +117,7 @@ class DataMigrationService {
           postHistoryInstructions: Value(card.postHistoryInstructions),
           alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
           tags: Value(jsonEncode(card.tags)),
-          imagePath: Value(card.imagePath),
+          imagePath: Value(card.imagePath != null ? card.imagePath!.split(RegExp(r'[/\\]')).last : null),
           ttsVoice: Value(card.ttsVoice),
           lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
           worldNames: Value(jsonEncode(card.worldNames)),

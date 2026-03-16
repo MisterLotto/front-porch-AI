@@ -53,6 +53,18 @@ class CharacterRepository extends ChangeNotifier {
     loadCharacters();
   }
 
+  /// Extract the basename from a potentially full path (handles / and \).
+  /// Returns the input unchanged if it's already a basename.
+  static String _toBasename(String path) {
+    return path.split(RegExp(r'[/\\]')).last;
+  }
+
+  /// Resolve a stored image path (basename or full path) to the local full path.
+  String _resolveImagePath(String stored) {
+    final basename = _toBasename(stored);
+    return '${_storage.charactersDir.path}/$basename';
+  }
+
   /// Update the database reference (e.g. after cloud sync replaces the DB file).
   void updateDatabase(AppDatabase db) { _db = db; }
 
@@ -63,25 +75,22 @@ class CharacterRepository extends ChangeNotifier {
     try {
       final dbChars = await _db.getAllCharacters();
       _characters.clear();
-      
-      // Get local characters directory for path rebasing (cross-platform sync)
-      final localCharDir = _storage.charactersDir.path;
 
       for (final c in dbChars) {
         final card = _characterFromRow(c);
 
-        // Rebase imagePath if it doesn't exist locally (synced from another OS)
-        if (card.imagePath != null && !File(card.imagePath!).existsSync()) {
-          // Use regex split to handle both / and \ (p.basename fails with Windows paths on Linux)
-          final filename = card.imagePath!.split(RegExp(r'[/\\]')).last;
-          final rebasedPath = '$localCharDir/$filename';
-          if (File(rebasedPath).existsSync()) {
-            card.imagePath = rebasedPath;
-            // Update ONLY the imagePath in the DB (preserves all other data)
+        // Normalize DB path to basename-only (one-time migration for old full paths).
+        // Then resolve to local full path for runtime use.
+        if (card.imagePath != null) {
+          final basename = _toBasename(card.imagePath!);
+          if (basename != card.imagePath) {
+            // DB still has a full path — strip it to basename for portability
             if (card.dbId != null) {
-              await _db.updateCharacterImagePath(card.dbId!, rebasedPath);
+              await _db.updateCharacterImagePath(card.dbId!, basename);
             }
           }
+          // Always resolve to local full path for in-memory use
+          card.imagePath = _resolveImagePath(basename);
         }
 
         _characters.add(card);
@@ -170,7 +179,8 @@ class CharacterRepository extends ChangeNotifier {
   }
 
   Future<void> addCharacter(CharacterCard character) async {
-    // Persist to database immediately so data survives hot reload / crash
+    // Store basename only in DB for cross-platform portability
+    final dbImagePath = character.imagePath != null ? _toBasename(character.imagePath!) : null;
     final dbId = await _db.insertCharacterReturningId(CharactersCompanion(
       name: Value(character.name),
       description: Value(character.description),
@@ -182,7 +192,7 @@ class CharacterRepository extends ChangeNotifier {
       postHistoryInstructions: Value(character.postHistoryInstructions),
       alternateGreetings: Value(jsonEncode(character.alternateGreetings)),
       tags: Value(jsonEncode(character.tags)),
-      imagePath: Value(character.imagePath),
+      imagePath: Value(dbImagePath),
       ttsVoice: Value(character.ttsVoice),
       lorebook: Value(character.lorebook != null ? jsonEncode(character.lorebook!.toJson()) : null),
       worldNames: Value(jsonEncode(character.worldNames)),
@@ -304,6 +314,8 @@ class CharacterRepository extends ChangeNotifier {
       card.imagePath = destPath;
 
       // Insert into database
+      // Store basename only in DB for cross-platform portability
+      final dbImagePath = card.imagePath != null ? _toBasename(card.imagePath!) : null;
       final dbId = await _db.insertCharacterReturningId(CharactersCompanion(
         name: Value(card.name),
         description: Value(card.description),
@@ -315,7 +327,7 @@ class CharacterRepository extends ChangeNotifier {
         postHistoryInstructions: Value(card.postHistoryInstructions),
         alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
         tags: Value(jsonEncode(card.tags)),
-        imagePath: Value(card.imagePath),
+        imagePath: Value(dbImagePath),
         ttsVoice: Value(card.ttsVoice),
         lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
         worldNames: Value(jsonEncode(card.worldNames)),
@@ -397,8 +409,9 @@ class CharacterRepository extends ChangeNotifier {
       // Overwrite the existing file with updated data
       await v2Service.saveCardAsPng(card, card.imagePath!, card.imagePath!);
       
-      // Update in database
+      // Update in database — store basename only for cross-platform portability
       if (card.dbId != null) {
+        final dbImagePath = card.imagePath != null ? _toBasename(card.imagePath!) : null;
         await _db.updateCharacter(CharactersCompanion(
           id: Value(card.dbId!),
           name: Value(card.name),
@@ -411,7 +424,7 @@ class CharacterRepository extends ChangeNotifier {
           postHistoryInstructions: Value(card.postHistoryInstructions),
           alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
           tags: Value(jsonEncode(card.tags)),
-          imagePath: Value(card.imagePath),
+          imagePath: Value(dbImagePath),
           ttsVoice: Value(card.ttsVoice),
           lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
           worldNames: Value(jsonEncode(card.worldNames)),

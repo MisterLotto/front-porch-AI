@@ -554,7 +554,10 @@ class WebServerService extends ChangeNotifier {
         return shelf.Response.notFound('No avatar');
       }
 
-      final file = File(character.imagePath!);
+      // DB stores basename only — resolve to full local path
+      final basename = p.basename(character.imagePath!);
+      final fullPath = p.join(_storageService.charactersDir.path, basename);
+      final file = File(fullPath);
       if (!file.existsSync()) {
         return shelf.Response.notFound('Avatar file not found');
       }
@@ -698,7 +701,7 @@ class WebServerService extends ChangeNotifier {
         postHistoryInstructions: Value(body['postHistoryInstructions']?.toString() ?? character.postHistoryInstructions),
         alternateGreetings: Value(body.containsKey('alternateGreetings') ? jsonEncode(body['alternateGreetings']) : character.alternateGreetings),
         tags: Value(body.containsKey('tags') ? jsonEncode(body['tags']) : character.tags),
-        imagePath: Value(character.imagePath),
+        imagePath: Value(character.imagePath != null ? p.basename(character.imagePath!) : null),
         ttsVoice: Value(character.ttsVoice),
         folderId: Value(character.folderId),
         lorebook: Value(body.containsKey('lorebook') ? _normalizeLorebookForDb(body['lorebook']) : character.lorebook),
@@ -1923,7 +1926,10 @@ class WebServerService extends ChangeNotifier {
       // Load avatar PNG or create placeholder
       Uint8List pngBytes;
       if (character.imagePath != null && character.imagePath!.isNotEmpty) {
-        final file = File(character.imagePath!);
+        // DB stores basename only — resolve to full local path
+        final imgBasename = p.basename(character.imagePath!);
+        final imgFullPath = p.join(_storageService.charactersDir.path, imgBasename);
+        final file = File(imgFullPath);
         if (file.existsSync()) {
           pngBytes = file.readAsBytesSync();
         } else {
@@ -2108,7 +2114,7 @@ class WebServerService extends ChangeNotifier {
             postHistoryInstructions: Value(card.postHistoryInstructions),
             alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
             tags: Value(jsonEncode(card.tags)),
-            imagePath: Value(card.imagePath),
+            imagePath: Value(card.imagePath != null ? p.basename(card.imagePath!) : null),
             ttsVoice: Value(card.ttsVoice),
             lorebook: Value(card.lorebook != null ? jsonEncode(card.lorebook!.toJson()) : null),
             worldNames: Value(jsonEncode(card.worldNames)),
@@ -3956,7 +3962,7 @@ class WebServerService extends ChangeNotifier {
         postHistoryInstructions: const Value(''),
         alternateGreetings: Value(jsonEncode(altGreetings)),
         tags: Value(jsonEncode(tags)),
-        imagePath: Value(imagePath),
+        imagePath: Value(imagePath != null ? p.basename(imagePath) : null),
         ttsVoice: const Value(null),
         lorebook: Value(lorebookJson),
         worldNames: const Value('[]'),

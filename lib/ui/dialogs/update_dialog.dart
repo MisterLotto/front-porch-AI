@@ -192,7 +192,21 @@ class UpdateDialog extends StatelessWidget {
           child: const Text('Later', style: TextStyle(color: Colors.white54)),
         ),
         ElevatedButton.icon(
-          onPressed: () => service.installNow(),
+          onPressed: () async {
+            try {
+              await service.installNow();
+            } catch (e) {
+              if (context.mounted) {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Update failed: $e'),
+                    backgroundColor: Colors.red.shade700,
+                  ),
+                );
+              }
+            }
+          },
           icon: const Icon(Icons.install_desktop, size: 18),
           label: const Text('Install Now'),
           style: ElevatedButton.styleFrom(

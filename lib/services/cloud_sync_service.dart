@@ -239,7 +239,13 @@ class CloudSyncService extends ChangeNotifier {
     const remotePath = '/FrontPorchAI/front_porch.db';
     await _provider!.uploadFile(localPath, remotePath);
     _pendingSchemaUpgrade = false;
-    debugPrint('[CloudSync] Force-uploaded local database to cloud');
+
+    // Persist that we've uploaded this schema version so the upgrade
+    // dialog doesn't reappear on next launch (Google Drive eventual
+    // consistency may return the old file briefly).
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('cloud_schema_uploaded', db.schemaVersion);
+    debugPrint('[CloudSync] Force-uploaded local database to cloud (schema v${db.schemaVersion})');
     notifyListeners();
   }
 
@@ -327,8 +333,25 @@ class CloudSyncService extends ChangeNotifier {
 
     if (remoteSchema > 0 && remoteSchema < localSchema) {
       // Remote is OLDER → this device has a newer app version.
-      // Allow downloading (Drift migration will upgrade it), but don't
-      // auto-upload the upgraded DB. The caller must confirm first.
+      // Check if the user already confirmed and uploaded this schema version.
+      // Google Drive eventual consistency may return the old file briefly,
+      // so we persist the upload flag to avoid re-showing the dialog.
+      final prefs = await SharedPreferences.getInstance();
+      final uploadedSchema = prefs.getInt('cloud_schema_uploaded') ?? 0;
+      if (uploadedSchema >= localSchema) {
+        // Already uploaded — just overwrite the stale remote copy.
+        debugPrint('[CloudSync] Remote schema v$remoteSchema < local v$localSchema, '
+            'but v$uploadedSchema was already uploaded — overwriting remote.');
+        await db.bumpSyncVersion();
+        await db.checkpoint();
+        await _provider!.uploadFile(localPath, remotePath);
+        _syncedFiles++;
+        _processedFiles++;
+        notifyListeners();
+        return;
+      }
+
+      // First time seeing this mismatch — prompt user before uploading.
       debugPrint('[CloudSync] Remote schema v$remoteSchema < local v$localSchema — will download and migrate.');
 
       if (localVersion == 0 && remoteInfo != null) {
