@@ -2089,6 +2089,7 @@ class ChatService extends ChangeNotifier {
       }
 
     } catch (e) {
+      final wasCancelled = _cancelRequested;
       _drainTimer?.cancel();
       _drainTimer = null;
       _tokenBuffer.clear();
@@ -2097,6 +2098,27 @@ class ChatService extends ChangeNotifier {
       _generationProgress = 0.0;
       _isBuffering = false;
       _generationStartTime = null;
+
+      // User-initiated cancel — keep the partial response, no error message
+      if (wasCancelled) {
+        // Signal clean completion to SSE listeners
+        _tokenBroadcast.add('__DONE__');
+        if (_sentenceBuffer.trim().isNotEmpty) {
+          _sentenceBroadcast.add(_sentenceBuffer.trim());
+          _sentenceBuffer = '';
+        }
+        _sentenceBroadcast.add('__DONE__');
+
+        // Restore original model if swapped for call mode
+        if (_originalModelName != null && _llmProvider != null) {
+          _llmProvider!.openRouterService.configure(modelName: _originalModelName);
+        }
+
+        // Save the partial response so regen/continue work
+        await _saveChat();
+        notifyListeners();
+        return;
+      }
 
       // Build user-friendly error message
       String errorMsg = e.toString();
