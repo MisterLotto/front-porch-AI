@@ -2574,7 +2574,7 @@
 
             const avatarSrc = pendingAvatarBase64
                 ? 'data:image/png;base64,' + pendingAvatarBase64
-                : `/api/characters/${currentCharacterId}/avatar?t=${Date.now()}`;
+                : `/api/characters/${currentCharacterId}/avatar?token=${encodeURIComponent(token)}&t=${Date.now()}`;
 
             return `<div style="display:flex;flex-direction:column;gap:14px;padding:8px">
                 <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
