@@ -701,7 +701,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
           await personaService.reload();
           await groupRepo.reload();
           await worldRepo.loadWorlds();
-          chatService.clearChat();
+          await chatService.reloadCurrentSession();
         }
 
         if (mounted) {
@@ -1016,7 +1016,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
           await personaService.reload();
           await groupRepo.reload();
           await worldRepo.loadWorlds();
-          chatService.clearChat();
+          await chatService.reloadCurrentSession();
         }
 
         // Show confirmation dialog before uploading v3 DB to cloud
@@ -1100,7 +1100,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
           await personaService.reload();
           await groupRepo.reload();
           await worldRepo.loadWorlds();
-          chatService.clearChat();
+          await chatService.reloadCurrentSession();
         }
       }
     } catch (e) {

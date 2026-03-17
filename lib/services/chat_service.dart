@@ -2302,6 +2302,16 @@ class ChatService extends ChangeNotifier {
   }
 
 
+  /// Reload the current session from the database without clearing messages first.
+  /// Used after cloud sync or DB migration updates the database — preserves the
+  /// user's active chat instead of wiping it.
+  Future<void> reloadCurrentSession() async {
+    if (_currentSessionId == null) return;
+    debugPrint('[ChatService] 🔄 reloadCurrentSession: reloading session $_currentSessionId '
+        '(currently ${_messages.length} messages in memory)');
+    await loadSession(_currentSessionId!);
+  }
+
   void clearChat() async {
     debugPrint('[ChatService] 🟡 clearChat: clearing ${_messages.length} messages');
     _messages.clear();
