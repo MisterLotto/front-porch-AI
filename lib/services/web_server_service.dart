@@ -1903,6 +1903,11 @@ class WebServerService extends ChangeNotifier {
       final personas = await _db!.getAllPersonas();
       final existing = personas.firstWhere((p) => p.id == id);
 
+      // Handle learnedFacts if provided
+      final String learnedFactsJson = body.containsKey('learnedFacts')
+          ? jsonEncode(body['learnedFacts'])
+          : existing.learnedFacts;
+
       final companion = PersonasCompanion(
         id: Value(existing.id),
         title: Value(body['title']?.toString() ?? existing.title),
@@ -1911,6 +1916,7 @@ class WebServerService extends ChangeNotifier {
         persona: Value(existing.persona),
         avatarPath: Value(existing.avatarPath),
         isActive: Value(existing.isActive),
+        learnedFacts: Value(learnedFactsJson),
         updatedAt: Value(DateTime.now()),
       );
 

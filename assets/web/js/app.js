@@ -2228,8 +2228,8 @@
 
         $('#btn-rp-databank')?.addEventListener('click', () => showDataBankModal());
 
-        // Persona avatar button in input bar — navigates to persona page
-        $('#btn-persona')?.addEventListener('click', () => switchPage('persona'));
+        // Persona avatar button in input bar — opens persona popup modal
+        $('#btn-persona')?.addEventListener('click', () => _showPersonaModal());
 
         $('#btn-rp-tts').addEventListener('click', async () => {
             // Open TTS settings as modal overlay
@@ -2988,47 +2988,191 @@
     // USER PERSONA (right panel)
     // ═══════════════════════════════════════════════════════════
 
-    async function _renderUserPersonaSection() {
-        const contentEl = document.getElementById('rp-persona-content');
-        if (!contentEl) return;
-
+    async function _showPersonaModal() {
+        let personas = [];
         try {
-            const res = await fetch('/api/personas', {
-                headers: {'Authorization': `Bearer ${token}`}
-            });
-            if (!res.ok) throw new Error('Failed to load personas');
-            const personas = await res.json();
+            const res = await fetch('/api/personas', { headers: {'Authorization': `Bearer ${token}`} });
+            if (res.ok) personas = await res.json();
+        } catch (e) { console.error('Persona load error:', e); return; }
+
+        let overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'persona-modal-overlay';
+
+        function renderList() {
             const active = personas.find(p => p.isActive) || personas[0];
+            const activeFacts = active?.learnedFacts || [];
 
-            if (!active) {
-                contentEl.innerHTML = '<div style="color:rgba(255,255,255,0.3)">No persona configured.</div>';
-                return;
-            }
-
-            const facts = active.learnedFacts || [];
-            let html = `
-                <div style="margin-bottom:8px">
-                    <span style="font-weight:600;color:rgba(255,255,255,0.8)">${esc(active.name || 'Unnamed')}</span>
-                    ${active.title ? `<span style="color:rgba(255,255,255,0.3);margin-left:6px;font-size:11px">(${esc(active.title)})</span>` : ''}
-                </div>`;
-            if (active.description) {
-                html += `<div style="color:rgba(255,255,255,0.5);margin-bottom:8px;font-size:11px">${esc(active.description)}</div>`;
-            }
-            if (facts.length > 0) {
-                html += `<div style="margin-top:8px">
-                    <div style="font-size:11px;color:rgba(255,255,255,0.38);margin-bottom:4px">Learned Facts (${facts.length})</div>
-                    <div style="padding:8px;background:#0D1117;border-radius:6px;border:1px solid rgba(139,92,246,0.2);max-height:120px;overflow-y:auto">
-                        ${facts.map(f => `<div style="font-size:11px;color:rgba(255,255,255,0.54);padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.05)">• ${esc(f)}</div>`).join('')}
+            let personaItems = personas.map((p, i) => {
+                const isActive = active && p.id === active.id;
+                return `<div style="margin-bottom:8px;padding:10px 12px;background:${isActive ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.05)'};border-radius:8px;${isActive ? 'border:1px solid #3B82F6' : 'border:1px solid transparent'};display:flex;align-items:center;gap:10px;cursor:pointer" data-persona-id="${p.id}" class="persona-item">
+                    <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;color:rgba(255,255,255,0.7);flex-shrink:0">👤</div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:600;color:white;font-size:14px">${esc(p.title || p.name || 'Unnamed')}</div>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title ? p.name : (p.description || ''))}</div>
+                    </div>
+                    <div style="display:flex;gap:4px;flex-shrink:0">
+                        ${!isActive ? `<button class="btn btn-outlined persona-select-btn" data-idx="${i}" style="font-size:10px;padding:2px 8px">Select</button>` : ''}
+                        <button class="btn btn-outlined persona-edit-btn" data-idx="${i}" style="font-size:10px;padding:2px 6px">✏️</button>
+                        ${personas.length > 1 ? `<button class="btn btn-outlined persona-delete-btn" data-idx="${i}" style="font-size:10px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,0.3)">🗑</button>` : ''}
                     </div>
                 </div>`;
-            } else {
-                html += `<div style="color:rgba(255,255,255,0.24);font-size:11px;margin-top:4px">No learned facts yet. They will be discovered as you chat.</div>`;
+            }).join('');
+
+            let factsHtml = '';
+            if (activeFacts.length > 0) {
+                const chips = activeFacts.map((f, i) =>
+                    `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:#374151;border-radius:12px;font-size:11px;color:rgba(255,255,255,0.7);margin:2px">
+                        ${esc(f)}
+                        <button class="fact-delete-btn" data-idx="${i}" style="background:none;border:none;color:rgba(255,255,255,0.38);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">✕</button>
+                    </span>`
+                ).join('');
+
+                factsHtml = `
+                    <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:12px;padding-top:12px">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                            <span style="font-size:14px">✨</span>
+                            <span style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.7)">Learned Facts (${activeFacts.length})</span>
+                            ${activeFacts.length > 10 ? `<button class="btn btn-outlined" id="btn-clear-facts" style="margin-left:auto;font-size:10px;padding:2px 8px;color:#f87171;border-color:rgba(248,113,113,0.3)">🗑 Clear All</button>` : ''}
+                        </div>
+                        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:6px">Auto-extracted from your conversations:</div>
+                        <div style="max-height:120px;overflow-y:auto">${chips}</div>
+                    </div>`;
             }
-            contentEl.innerHTML = html;
-        } catch (e) {
-            contentEl.innerHTML = '<div style="color:rgba(255,255,255,0.3)">Failed to load persona.</div>';
-            console.error('Persona load error:', e);
+
+            overlay.innerHTML = `
+                <div class="modal" style="width:600px;max-height:500px;display:flex;flex-direction:column">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                        <h2 style="margin:0;color:white;font-size:24px">User Personas</h2>
+                        <button class="btn btn-outlined" id="persona-close" style="padding:4px 8px;font-size:14px">✕</button>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;margin-bottom:12px">${personaItems}</div>
+                    ${factsHtml}
+                    <button class="btn" id="btn-add-persona" style="width:100%;margin-top:12px;background:#3B82F6;padding:10px">➕ Add New Persona</button>
+                </div>`;
+
+            // Bind events
+            overlay.querySelector('#persona-close').onclick = () => overlay.remove();
+            overlay.querySelector('#btn-add-persona').onclick = () => renderEditForm(null);
+
+            overlay.querySelectorAll('.persona-select-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    await apiJson('/api/personas/active', { method: 'POST', body: JSON.stringify({ id: personas[idx].id }) });
+                    personas.forEach(p => p.isActive = false);
+                    personas[idx].isActive = true;
+                    renderList();
+                };
+            });
+            overlay.querySelectorAll('.persona-edit-btn').forEach(btn => {
+                btn.onclick = () => renderEditForm(personas[parseInt(btn.dataset.idx)]);
+            });
+            overlay.querySelectorAll('.persona-delete-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    if (!confirm(`Delete "${personas[idx].name}"?`)) return;
+                    await apiJson('/api/personas/delete', { method: 'POST', body: JSON.stringify({ id: personas[idx].id }) });
+                    personas.splice(idx, 1);
+                    renderList();
+                };
+            });
+            overlay.querySelectorAll('.fact-delete-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    const factIdx = parseInt(btn.dataset.idx);
+                    const active = personas.find(p => p.isActive) || personas[0];
+                    if (!active) return;
+                    active.learnedFacts.splice(factIdx, 1);
+                    await apiJson('/api/personas/update', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: active.id, learnedFacts: active.learnedFacts }),
+                    });
+                    renderList();
+                };
+            });
+            const clearBtn = overlay.querySelector('#btn-clear-facts');
+            if (clearBtn) {
+                clearBtn.onclick = async () => {
+                    if (!confirm('Remove all learned facts? This cannot be undone.')) return;
+                    const active = personas.find(p => p.isActive) || personas[0];
+                    if (!active) return;
+                    active.learnedFacts = [];
+                    await apiJson('/api/personas/update', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: active.id, learnedFacts: [] }),
+                    });
+                    renderList();
+                };
+            }
+            overlay.querySelectorAll('.persona-item').forEach(item => {
+                item.onclick = async (e) => {
+                    if (e.target.closest('button')) return;
+                    const id = item.dataset.personaId;
+                    await apiJson('/api/personas/active', { method: 'POST', body: JSON.stringify({ id }) });
+                    personas.forEach(p => p.isActive = (p.id === id));
+                    renderList();
+                };
+            });
         }
+
+        function renderEditForm(persona) {
+            overlay.innerHTML = `
+                <div class="modal" style="width:600px;max-height:500px;display:flex;flex-direction:column">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+                        <h2 style="margin:0;color:white;font-size:24px">${persona ? 'Edit Persona' : 'Create Persona'}</h2>
+                        <button class="btn btn-outlined" id="persona-edit-cancel" style="padding:4px 8px;font-size:14px">✕</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:16px;flex:1">
+                        <div>
+                            <label class="slider-label" style="display:block;margin-bottom:4px">Title (optional)</label>
+                            <input type="text" id="pe-title" class="settings-text-input" value="${esc(persona?.title || '')}" placeholder="Label to distinguish this persona">
+                        </div>
+                        <div>
+                            <label class="slider-label" style="display:block;margin-bottom:4px">Name *</label>
+                            <input type="text" id="pe-name" class="settings-text-input" value="${esc(persona?.name || '')}" placeholder="Name sent to the AI">
+                        </div>
+                        <div>
+                            <label class="slider-label" style="display:block;margin-bottom:4px">Description *</label>
+                            <textarea id="pe-desc" class="settings-textarea" rows="3" placeholder="Describe this persona">${esc(persona?.description || '')}</textarea>
+                        </div>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                        <button class="btn btn-outlined" id="pe-cancel">Cancel</button>
+                        <button class="btn" id="pe-save" style="background:#3B82F6">Save</button>
+                    </div>
+                </div>`;
+
+            overlay.querySelector('#persona-edit-cancel').onclick = () => renderList();
+            overlay.querySelector('#pe-cancel').onclick = () => renderList();
+            overlay.querySelector('#pe-save').onclick = async () => {
+                const name = document.getElementById('pe-name').value.trim();
+                const desc = document.getElementById('pe-desc').value.trim();
+                if (!name) { alert('Name is required'); return; }
+                if (!desc) { alert('Description is required'); return; }
+                const title = document.getElementById('pe-title').value.trim();
+
+                if (persona) {
+                    await apiJson('/api/personas/update', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: persona.id, title, name, description: desc }),
+                    });
+                    Object.assign(persona, { title, name, description: desc });
+                } else {
+                    const result = await apiJson('/api/personas', {
+                        method: 'POST',
+                        body: JSON.stringify({ title, name, description: desc, persona: '' }),
+                    });
+                    // Reload personas to get the new one
+                    try {
+                        const res = await fetch('/api/personas', { headers: {'Authorization': `Bearer ${token}`} });
+                        if (res.ok) personas = await res.json();
+                    } catch (_) {}
+                }
+                renderList();
+            };
+        }
+
+        document.body.appendChild(overlay);
+        renderList();
     }
 
     // ═══════════════════════════════════════════════════════════
