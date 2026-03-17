@@ -899,9 +899,6 @@
         // ── Character Evolution section ──
         _renderEvolutionSection(char);
 
-        // ── User Persona section ──
-        _renderUserPersonaSection();
-
         // Author's note will be loaded from chat state once SSE connects
 
         // Switch to chat page and show right panel
@@ -2230,6 +2227,9 @@
         });
 
         $('#btn-rp-databank')?.addEventListener('click', () => showDataBankModal());
+
+        // Persona avatar button in input bar — navigates to persona page
+        $('#btn-persona')?.addEventListener('click', () => switchPage('persona'));
 
         $('#btn-rp-tts').addEventListener('click', async () => {
             // Open TTS settings as modal overlay
