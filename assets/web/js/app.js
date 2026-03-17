@@ -2223,6 +2223,8 @@
             });
         });
 
+        $('#btn-rp-databank')?.addEventListener('click', () => showDataBankModal());
+
         $('#btn-rp-tts').addEventListener('click', async () => {
             // Open TTS settings as modal overlay
             const data = await apiJson('/api/settings');
@@ -2510,6 +2512,7 @@
         let lorebook = data.lorebook && data.lorebook.entries ? { entries: [...data.lorebook.entries] } : { entries: [] };
         let selectedWorlds = Array.isArray(data.worldNames) ? [...data.worldNames] : [];
         let activeTab = 'details';
+        let pendingAvatarBase64 = null; // base64 of new avatar to upload on save
 
         function render() {
             const modal = overlay.querySelector('.modal');
@@ -2563,7 +2566,24 @@
                 <span class="stop-seq-chip">${esc(t)} <button class="ec-remove-tag" data-idx="${i}" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0 2px;">✕</button></span>
             `).join('');
 
+            const avatarSrc = pendingAvatarBase64
+                ? 'data:image/png;base64,' + pendingAvatarBase64
+                : `/api/characters/${currentCharacterId}/avatar?t=${Date.now()}`;
+
             return `<div style="display:flex;flex-direction:column;gap:14px;padding:8px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+                    <div style="position:relative;cursor:pointer" id="ec-avatar-wrap">
+                        <img id="ec-avatar-img" src="${avatarSrc}" alt="avatar"
+                             style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--bg-card)"
+                             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                        <div style="display:none;width:96px;height:96px;border-radius:50%;background:var(--bg-card);border:2px solid var(--border);align-items:center;justify-content:center;font-size:40px;color:var(--text-muted)">👤</div>
+                        <div style="position:absolute;bottom:0;right:0;width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;border:2px solid var(--bg-main)">
+                            <span style="font-size:14px">📷</span>
+                        </div>
+                    </div>
+                    <span style="font-size:11px;color:var(--text-muted)">Click to change avatar</span>
+                    <input type="file" id="ec-avatar-input" accept="image/*" style="display:none">
+                </div>
                 ${field('ec-name', 'Name', data.name, 1)}
                 ${field('ec-desc', 'Description', data.description, 6)}
                 ${field('ec-personality', 'Personality', data.personality, 6)}
@@ -2643,6 +2663,24 @@
         }
 
         function bindDetailsTab(modal) {
+            // Avatar pick
+            const avatarWrap = modal.querySelector('#ec-avatar-wrap');
+            const avatarInput = modal.querySelector('#ec-avatar-input');
+            if (avatarWrap && avatarInput) {
+                avatarWrap.addEventListener('click', () => avatarInput.click());
+                avatarInput.addEventListener('change', () => {
+                    const file = avatarInput.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const b64 = ev.target.result.split(',')[1];
+                        pendingAvatarBase64 = b64;
+                        const img = modal.querySelector('#ec-avatar-img');
+                        if (img) { img.src = ev.target.result; img.style.display = 'block'; img.nextElementSibling.style.display = 'none'; }
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
             // Add alt greeting
             modal.querySelector('#btn-ec-add-alt')?.addEventListener('click', () => {
                 altGreetings.push('');
@@ -2798,6 +2836,16 @@
             });
 
             if (res && res.ok) {
+                // Upload avatar if changed
+                if (pendingAvatarBase64) {
+                    await api('/api/characters/' + currentCharacterId + '/avatar', {
+                        method: 'POST',
+                        body: JSON.stringify({ data: pendingAvatarBase64 }),
+                    });
+                    // Refresh the avatar in the right panel
+                    const rpImg = $('#rp-char-img');
+                    if (rpImg) rpImg.src = `/api/characters/${currentCharacterId}/avatar?t=${Date.now()}`;
+                }
                 currentCharacterName = payload.name;
                 const nameEl = $('#chat-char-name');
                 if (nameEl) nameEl.textContent = payload.name;
@@ -2813,6 +2861,148 @@
         }
 
         render();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DATA BANK MODAL
+    // ═══════════════════════════════════════════════════════════
+
+    function showDataBankModal() {
+        if (!currentCharacterId) return;
+
+        let overlay = document.getElementById('databank-modal');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'databank-modal';
+            overlay.className = 'modal-overlay';
+            document.body.appendChild(overlay);
+        }
+
+        overlay.innerHTML = `<div class="modal" style="min-width:min(600px,95vw);max-width:min(800px,95vw);max-height:85vh;display:flex;flex-direction:column;">
+            <div class="modal-title">📚 Data Bank — ${esc(currentCharacterName)}</div>
+            <p style="color:var(--text-muted);text-align:center;padding:24px">Loading...</p>
+        </div>`;
+        overlay.classList.add('active');
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('active'); });
+
+        _loadDataBank(overlay);
+    }
+
+    async function _loadDataBank(overlay) {
+        const entries = await apiJson(`/api/characters/${currentCharacterId}/databank`);
+        if (!Array.isArray(entries)) {
+            overlay.querySelector('.modal').innerHTML = `
+                <div class="modal-title">📚 Data Bank</div>
+                <p style="color:var(--text-muted);padding:16px">Failed to load Data Bank entries.</p>
+                <div class="modal-actions"><button class="btn btn-outlined" onclick="this.closest('.modal-overlay').classList.remove('active')">Close</button></div>`;
+            return;
+        }
+
+        function renderDB() {
+            const modal = overlay.querySelector('.modal');
+            let listHtml = '';
+            if (entries.length === 0) {
+                listHtml = '<p style="color:var(--text-muted);text-align:center;padding:24px">No Data Bank entries yet. Add knowledge that will be injected into context via RAG.</p>';
+            } else {
+                listHtml = entries.map((e, i) => `
+                    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                            <strong style="color:var(--text-primary);font-size:13px">${esc(e.title)}</strong>
+                            <div style="display:flex;gap:6px">
+                                <button class="btn-icon db-edit" data-idx="${i}" title="Edit">✏️</button>
+                                <button class="btn-icon db-delete" data-idx="${i}" title="Delete">🗑️</button>
+                            </div>
+                        </div>
+                        <div style="color:var(--text-secondary);font-size:12px;white-space:pre-wrap;max-height:80px;overflow:hidden">${esc(e.content)}</div>
+                    </div>
+                `).join('');
+            }
+
+            modal.innerHTML = `
+                <div class="modal-title" style="display:flex;justify-content:space-between;align-items:center">
+                    <span>📚 Data Bank — ${esc(currentCharacterName)}</span>
+                    <button class="btn btn-primary" id="btn-db-add" style="font-size:12px;padding:4px 12px">+ Add Entry</button>
+                </div>
+                <div style="overflow-y:auto;flex:1;padding:8px">${listHtml}</div>
+                <div class="modal-actions">
+                    <button class="btn btn-outlined" id="btn-db-close">Close</button>
+                </div>
+            `;
+
+            modal.querySelector('#btn-db-close').addEventListener('click', () => overlay.classList.remove('active'));
+            modal.querySelector('#btn-db-add').addEventListener('click', () => showEditDBEntryModal(null, overlay, entries, renderDB));
+
+            modal.querySelectorAll('.db-edit').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    showEditDBEntryModal(entries[idx], overlay, entries, renderDB);
+                });
+            });
+
+            modal.querySelectorAll('.db-delete').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    const entry = entries[idx];
+                    const res = await api(`/api/characters/${currentCharacterId}/databank/${entry.id}/delete`, { method: 'POST' });
+                    if (res && res.ok) { entries.splice(idx, 1); renderDB(); }
+                });
+            });
+        }
+
+        renderDB();
+    }
+
+    function showEditDBEntryModal(entry, parentOverlay, entries, renderParent) {
+        const isNew = !entry;
+        let dbOverlay = document.createElement('div');
+        dbOverlay.className = 'modal-overlay active';
+        dbOverlay.style.zIndex = '1001';
+        dbOverlay.innerHTML = `
+            <div class="modal" style="min-width:min(450px,95vw);">
+                <div class="modal-title">${isNew ? 'New Data Bank Entry' : 'Edit Data Bank Entry'}</div>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                    <div>
+                        <label class="slider-label" style="display:block;margin-bottom:4px">Title</label>
+                        <input type="text" id="dbe-title" class="settings-text-input" value="${esc(entry?.title || '')}" placeholder="Entry title...">
+                    </div>
+                    <div>
+                        <label class="slider-label" style="display:block;margin-bottom:4px">Content</label>
+                        <textarea id="dbe-content" class="settings-textarea" rows="8" placeholder="Knowledge content...">${esc(entry?.content || '')}</textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-outlined" id="btn-dbe-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-dbe-save">Save</button>
+                </div>
+            </div>`;
+        document.body.appendChild(dbOverlay);
+
+        dbOverlay.querySelector('#btn-dbe-cancel').addEventListener('click', () => dbOverlay.remove());
+        dbOverlay.addEventListener('click', (e) => { if (e.target === dbOverlay) dbOverlay.remove(); });
+        dbOverlay.querySelector('#btn-dbe-save').addEventListener('click', async () => {
+            const title = dbOverlay.querySelector('#dbe-title').value.trim() || 'Untitled';
+            const content = dbOverlay.querySelector('#dbe-content').value;
+
+            if (isNew) {
+                const res = await apiJson(`/api/characters/${currentCharacterId}/databank`, {
+                    method: 'POST',
+                    body: JSON.stringify({ title, content }),
+                });
+                if (res && res.id) {
+                    entries.push({ id: res.id, title, content, characterId: currentCharacterId });
+                }
+            } else {
+                await api(`/api/characters/${currentCharacterId}/databank/${entry.id}/update`, {
+                    method: 'POST',
+                    body: JSON.stringify({ title, content }),
+                });
+                entry.title = title;
+                entry.content = content;
+            }
+
+            dbOverlay.remove();
+            renderParent();
+        });
     }
 
     // ═══════════════════════════════════════════════════════════

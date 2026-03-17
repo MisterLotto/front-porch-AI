@@ -52,6 +52,8 @@ import 'package:front_porch_ai/services/embedding_sidecar.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:drift/drift.dart' show Value;
 
 /// Embedded HTTP server that serves the web UI and REST API.
@@ -197,9 +199,16 @@ class WebServerService extends ChangeNotifier {
     router.get('/api/characters/<id>/sessions', _handleGetSessions);
     router.get('/api/characters/<id>/detail', _handleGetCharacterDetail);
     router.post('/api/characters/<id>/edit', _handleEditCharacter);
+    router.post('/api/characters/<id>/avatar', _handleUploadAvatar);
     router.post('/api/characters/<id>/delete', _handleDeleteCharacter);
     router.get('/api/characters/<id>/export.png', _handleExportCharacterPng);
     router.post('/api/characters/import', _handleImportCharacter);
+
+    // ── Data Bank routes ──
+    router.get('/api/characters/<id>/databank', _handleGetDataBank);
+    router.post('/api/characters/<id>/databank', _handleCreateDataBankEntry);
+    router.post('/api/characters/<id>/databank/<entryId>/update', _handleUpdateDataBankEntry);
+    router.post('/api/characters/<id>/databank/<entryId>/delete', _handleDeleteDataBankEntry);
 
     // ── Chat routes ──
     router.get('/api/chat/state', _handleGetChatState);
@@ -723,6 +732,178 @@ class WebServerService extends ChangeNotifier {
       );
     } catch (e) {
       return _errorResponse(500, 'Failed to update character: $e');
+    }
+  }
+
+  /// POST /api/characters/<id>/avatar — Upload a new avatar image.
+  /// Body: { "data": "<base64 PNG>" }
+  Future<shelf.Response> _handleUploadAvatar(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final dataBase64 = body['data']?.toString() ?? '';
+      if (dataBase64.isEmpty) {
+        return _errorResponse(400, 'Base64 image data required');
+      }
+
+      final bytes = base64Decode(dataBase64);
+      final character = await _db!.getCharacterById(id);
+
+      // Save to charactersDir
+      final charDir = _storageService.charactersDir;
+      await charDir.create(recursive: true);
+
+      final safeName = character.name
+          .replaceAll(RegExp(r'[^\w\s-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filename = '${safeName}_$timestamp.png';
+      final destPath = p.join(charDir.path, filename);
+      await File(destPath).writeAsBytes(bytes);
+
+      // Embed V2 card data
+      try {
+        final card = CharacterCard(
+          name: character.name,
+          description: character.description,
+          personality: character.personality,
+          scenario: character.scenario,
+          firstMessage: character.firstMessage,
+          mesExample: character.mesExample,
+          systemPrompt: character.systemPrompt,
+          postHistoryInstructions: character.postHistoryInstructions,
+          alternateGreetings: character.alternateGreetings.isNotEmpty
+              ? List<String>.from(jsonDecode(character.alternateGreetings))
+              : [],
+          tags: character.tags.isNotEmpty
+              ? List<String>.from(jsonDecode(character.tags))
+              : [],
+        );
+        await V2CardService().saveCardAsPng(card, destPath, destPath);
+      } catch (e) {
+        debugPrint('[WebServer] Failed to embed V2 card data: $e');
+      }
+
+      // Update character's imagePath in DB
+      await _db!.updateCharacter(CharactersCompanion(
+        id: Value(character.id),
+        name: Value(character.name),
+        description: Value(character.description),
+        scenario: Value(character.scenario),
+        personality: Value(character.personality),
+        firstMessage: Value(character.firstMessage),
+        mesExample: Value(character.mesExample),
+        systemPrompt: Value(character.systemPrompt),
+        postHistoryInstructions: Value(character.postHistoryInstructions),
+        alternateGreetings: Value(character.alternateGreetings),
+        tags: Value(character.tags),
+        imagePath: Value(filename),
+        ttsVoice: Value(character.ttsVoice),
+        folderId: Value(character.folderId),
+        lorebook: Value(character.lorebook),
+        worldNames: Value(character.worldNames),
+        createdAt: Value(character.createdAt),
+        updatedAt: Value(DateTime.now()),
+      ));
+
+      if (_characterRepository != null) {
+        await _characterRepository!.loadCharacters();
+      }
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'filename': filename}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to upload avatar: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Data Bank API
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// GET /api/characters/<id>/databank — List all Data Bank entries.
+  Future<shelf.Response> _handleGetDataBank(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final entries = await _db!.getDataBankEntriesForCharacter(id);
+      final result = entries.map((e) => {
+        'id': e.id,
+        'characterId': e.characterId,
+        'title': e.title,
+        'content': e.content,
+        'createdAt': e.createdAt.toIso8601String(),
+      }).toList();
+      return shelf.Response.ok(
+        jsonEncode(result),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to get data bank: $e');
+    }
+  }
+
+  /// POST /api/characters/<id>/databank — Create a new entry.
+  Future<shelf.Response> _handleCreateDataBankEntry(shelf.Request request, String id) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final title = body['title']?.toString() ?? 'Untitled';
+      final content = body['content']?.toString() ?? '';
+      final entryId = 'db_${DateTime.now().millisecondsSinceEpoch}_${id.hashCode.abs()}';
+
+      await _db!.insertDataBankEntry(DataBankEntriesCompanion(
+        id: Value(entryId),
+        characterId: Value(id),
+        title: Value(title),
+        content: Value(content),
+      ));
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': entryId}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to create data bank entry: $e');
+    }
+  }
+
+  /// POST /api/characters/<id>/databank/<entryId>/update — Update an entry.
+  Future<shelf.Response> _handleUpdateDataBankEntry(shelf.Request request, String id, String entryId) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      final body = jsonDecode(await request.readAsString());
+      await _db!.updateDataBankEntry(DataBankEntriesCompanion(
+        id: Value(entryId),
+        characterId: Value(id),
+        title: Value(body['title']?.toString() ?? ''),
+        content: Value(body['content']?.toString() ?? ''),
+      ));
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to update data bank entry: $e');
+    }
+  }
+
+  /// POST /api/characters/<id>/databank/<entryId>/delete — Delete an entry.
+  Future<shelf.Response> _handleDeleteDataBankEntry(shelf.Request request, String id, String entryId) async {
+    if (_db == null) return _errorResponse(503, 'Database not available');
+
+    try {
+      await _db!.deleteDataBankEntry(entryId);
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to delete data bank entry: $e');
     }
   }
 
