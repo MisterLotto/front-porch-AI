@@ -29,8 +29,9 @@ import 'package:front_porch_ai/services/tts_voice_info.dart';
 class OpenAiTtsEngine implements TtsEngine {
   String apiKey;
   String model;
+  String baseUrl;
 
-  OpenAiTtsEngine({this.apiKey = '', this.model = 'tts-1'});
+  OpenAiTtsEngine({this.apiKey = '', this.model = 'tts-1', this.baseUrl = 'https://api.openai.com/v1'});
   static int _fileCounter = 0;
 
   @override
@@ -53,8 +54,10 @@ class OpenAiTtsEngine implements TtsEngine {
     }
 
     try {
+      // Strip trailing slash from baseUrl to avoid double-slash
+      final url = baseUrl.endsWith('/') ? '${baseUrl}audio/speech' : '$baseUrl/audio/speech';
       final response = await http.post(
-        Uri.parse('https://api.openai.com/v1/audio/speech'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',

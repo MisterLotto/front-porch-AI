@@ -78,6 +78,7 @@ class TtsService extends ChangeNotifier {
       case 'openai':
         _openaiEngine.apiKey = _storageService.openaiTtsApiKey;
         _openaiEngine.model = _storageService.openaiTtsModel;
+        _openaiEngine.baseUrl = _storageService.openaiTtsBaseUrl;
         return _openaiEngine;
       case 'elevenlabs':
         _elevenlabsEngine.apiKey = _storageService.elevenlabsApiKey;

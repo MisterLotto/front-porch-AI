@@ -92,6 +92,7 @@ class StorageService extends ChangeNotifier {
   bool _ttsAutoPlay = false;
   String _openaiTtsApiKey = '';
   String _openaiTtsModel = 'tts-1'; // 'tts-1' or 'tts-1-hd'
+  String _openaiTtsBaseUrl = 'https://api.openai.com/v1'; // customizable endpoint for OpenAI-compatible TTS
   String _elevenlabsApiKey = '';
   String _elevenlabsModel = 'eleven_flash_v2_5';
   double _elevenlabsStability = 0.5;
@@ -211,6 +212,7 @@ class StorageService extends ChangeNotifier {
   bool get ttsAutoPlay => _ttsAutoPlay;
   String get openaiTtsApiKey => _openaiTtsApiKey;
   String get openaiTtsModel => _openaiTtsModel;
+  String get openaiTtsBaseUrl => _openaiTtsBaseUrl;
   String get elevenlabsApiKey => _elevenlabsApiKey;
   String get elevenlabsModel => _elevenlabsModel;
   double get elevenlabsStability => _elevenlabsStability;
@@ -333,6 +335,7 @@ class StorageService extends ChangeNotifier {
     _openaiTtsApiKey = _prefs?.getString('openai_tts_api_key') ?? '';
     _ttsConcurrency = _prefs?.getInt('tts_concurrency') ?? Platform.numberOfProcessors.clamp(1, 16);
     _openaiTtsModel = _prefs?.getString('openai_tts_model') ?? 'tts-1';
+    _openaiTtsBaseUrl = _prefs?.getString('openai_tts_base_url') ?? 'https://api.openai.com/v1';
     _elevenlabsApiKey = _prefs?.getString('elevenlabs_api_key') ?? '';
     _elevenlabsModel = _prefs?.getString('elevenlabs_model') ?? 'eleven_flash_v2_5';
     _elevenlabsStability = _prefs?.getDouble('elevenlabs_stability') ?? 0.5;
@@ -783,6 +786,12 @@ class StorageService extends ChangeNotifier {
   Future<void> setOpenaiTtsModel(String value) async {
     _openaiTtsModel = value;
     await _prefs?.setString('openai_tts_model', value);
+    notifyListeners();
+  }
+
+  Future<void> setOpenaiTtsBaseUrl(String value) async {
+    _openaiTtsBaseUrl = value;
+    await _prefs?.setString('openai_tts_base_url', value);
     notifyListeners();
   }
 

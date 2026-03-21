@@ -37,6 +37,7 @@ class TtsSettingsDialog extends StatefulWidget {
 class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
   List<String> _installedPiperVoices = [];
   final _apiKeyController = TextEditingController();
+  final _baseUrlController = TextEditingController();
   bool _obscureApiKey = true;
 
   @override
@@ -45,11 +46,13 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
     _loadInstalledVoices();
     final storage = Provider.of<StorageService>(context, listen: false);
     _apiKeyController.text = storage.openaiTtsApiKey;
+    _baseUrlController.text = storage.openaiTtsBaseUrl;
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _baseUrlController.dispose();
     super.dispose();
   }
 
@@ -557,6 +560,39 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
         onChanged: (val) {
           if (val != null) storage.setOpenaiTtsModel(val);
         },
+      ),
+      const SizedBox(height: 12),
+
+      // Base URL
+      const Text('API Base URL',
+          style: TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      const Text('Change this to use an OpenAI-compatible TTS provider',
+          style: TextStyle(color: Colors.white24, fontSize: 11)),
+      const SizedBox(height: 8),
+      TextField(
+        controller: _baseUrlController,
+        style: const TextStyle(color: Colors.white, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'https://api.openai.com/v1',
+          hintStyle: const TextStyle(color: Colors.white24),
+          filled: true,
+          fillColor: Colors.black26,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.restore, color: Colors.white38, size: 18),
+            tooltip: 'Reset to OpenAI default',
+            onPressed: () {
+              _baseUrlController.text = 'https://api.openai.com/v1';
+              storage.setOpenaiTtsBaseUrl('https://api.openai.com/v1');
+            },
+          ),
+        ),
+        onChanged: (val) => storage.setOpenaiTtsBaseUrl(val.trim()),
       ),
       const SizedBox(height: 12),
 
