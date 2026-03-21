@@ -257,6 +257,13 @@ class _HomePageState extends State<HomePage> {
                       label: const Text('Bulk Import'),
                       style: _buttonStyle(),
                     ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _importByaf(context),
+                      icon: const Icon(Icons.archive_outlined),
+                      label: const Text('Import BYAF'),
+                      style: _buttonStyle(),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
