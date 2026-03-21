@@ -175,6 +175,14 @@ void main(List<String> args) async {
               );
               chatService.setMemoryService(memoryService);
             } catch (_) {}
+            // Wire TtsService after the provider tree is fully built
+            // (TtsService is registered later in the tree, so it's not available yet)
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              try {
+                final tts = Provider.of<TtsService>(context, listen: false);
+                chatService.setTtsService(tts);
+              } catch (_) {}
+            });
             return chatService;
           },
           update: (context, kobold, persona, storage, worldRepo, previous) {

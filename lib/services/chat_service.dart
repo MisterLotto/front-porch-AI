@@ -2068,6 +2068,11 @@ class ChatService extends ChangeNotifier {
         // (Task completion check now runs pre-generation in sendMessage)
 
         // TTS auto-play: speak the new character message automatically
+        debugPrint('TTS auto-play check: ttsService=${_ttsService != null}, '
+            'ttsEnabled=${_storageService.ttsEnabled}, '
+            'ttsAutoPlay=${_storageService.ttsAutoPlay}, '
+            'hasMessages=${_messages.isNotEmpty}, '
+            'lastIsUser=${_messages.isNotEmpty ? _messages.last.isUser : "N/A"}');
         if (_ttsService != null &&
             _storageService.ttsEnabled &&
             _storageService.ttsAutoPlay &&
@@ -2085,6 +2090,8 @@ class ChatService extends ChangeNotifier {
           } else {
             voiceKey = _activeCharacter?.ttsVoice;
           }
+          debugPrint('TTS auto-play FIRING: voice=$voiceKey, msgId=$msgId, '
+              'text="${lastMsg.displayText.substring(0, lastMsg.displayText.length.clamp(0, 60))}..."');
           _ttsService!.speak(
             lastMsg.displayText,
             voiceKey: voiceKey,
