@@ -225,13 +225,23 @@ jobs:
           echo "Embedding server bundled at: $STT_DEST/embed_server/"
           ls -la "$STT_DEST/embed_server/"
 
-      - name: Re-sign macOS App (ad-hoc)
+      - name: Re-sign macOS App (ad-hoc with entitlements)
         if: matrix.platform == 'macos'
         run: |
           APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app | head -1)
+          ENTITLEMENTS="${{ github.workspace }}/macos/Runner/Release.entitlements"
           echo "Re-signing $APP_NAME after ML engine bundling..."
-          codesign --force --deep --sign - "$APP_NAME"
-          echo "✓ Ad-hoc signature applied"
+          echo "Using entitlements: $ENTITLEMENTS"
+          # Sign inner frameworks/helpers first (inside-out signing)
+          find "$APP_NAME/Contents/Frameworks" -name "*.framework" -o -name "*.dylib" | while read f; do
+            codesign --force --sign - "$f" 2>/dev/null || true
+          done
+          find "$APP_NAME/Contents/Resources" -type f -perm +111 | while read f; do
+            codesign --force --sign - "$f" 2>/dev/null || true
+          done
+          # Sign the main app with entitlements (preserves file picker, network, etc.)
+          codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP_NAME"
+          echo "✓ Ad-hoc signature applied with entitlements"
 
       - name: Package Windows (zip)
         if: matrix.platform == 'windows'
