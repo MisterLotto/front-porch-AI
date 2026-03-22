@@ -42,6 +42,8 @@ import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
@@ -1419,6 +1421,8 @@ class _ChatPageState extends State<ChatPage> {
                   context: context,
                   builder: (_) => ContextViewerDialog(chatService: chatService),
                 );
+              } else if (value == 'fork_group') {
+                _showForkToGroupDialog(context, chatService);
               }
             },
             itemBuilder: (context) => [
@@ -1481,6 +1485,17 @@ class _ChatPageState extends State<ChatPage> {
                       Icon(Icons.psychology_alt, size: 20, color: Colors.tealAccent),
                       SizedBox(width: 12),
                       Text('Character Evolution'),
+                    ],
+                  ),
+                ),
+              if (chatService.activeCharacter != null)
+                const PopupMenuItem(
+                  value: 'fork_group',
+                  child: Row(
+                    children: [
+                      Icon(Icons.group_add, size: 20, color: Colors.purpleAccent),
+                      SizedBox(width: 12),
+                      Text('Fork to Group Chat'),
                     ],
                   ),
                 ),
@@ -2274,6 +2289,8 @@ class _ChatPageState extends State<ChatPage> {
                 final ch = chars[index];
                 final color = _groupCharacterColor(index);
                 final isNext = chatService.nextCharacter?.name == ch.name;
+                final evolutionCount = chatService.getEvolutionCountFor(ch);
+                final canRemove = chars.length > 2 && !chatService.isGenerating;
                 return GestureDetector(
                   onTap: chatService.isGenerating ? null : () => chatService.setNextCharacter(ch),
                   child: Container(
@@ -2292,7 +2309,23 @@ class _ChatPageState extends State<ChatPage> {
                             ? Text(ch.name[0], style: const TextStyle(fontWeight: FontWeight.bold))
                             : null,
                       ),
-                      title: Text(ch.name, style: const TextStyle(fontSize: 14)),
+                      title: Row(
+                        children: [
+                          Expanded(child: Text(ch.name, style: const TextStyle(fontSize: 14))),
+                          if (Provider.of<StorageService>(context, listen: false).characterEvolutionEnabled && evolutionCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.tealAccent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Evolved $evolutionCount\u00d7',
+                                style: const TextStyle(fontSize: 9, color: Colors.tealAccent),
+                              ),
+                            ),
+                        ],
+                      ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -2300,23 +2333,46 @@ class _ChatPageState extends State<ChatPage> {
                             ch.description.length > 40 ? '${ch.description.substring(0, 40)}...' : ch.description,
                             style: const TextStyle(fontSize: 11, color: Colors.white38),
                           ),
-                          TextButton.icon(
-                            onPressed: () => _showVoicePickerForCharacter(ch),
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: const Size(0, 24),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            icon: Icon(Icons.record_voice_over, size: 12, color: ch.ttsVoice != null ? Colors.amberAccent : Colors.white24),
-                            label: Text(
-                              ch.ttsVoice ?? 'Default voice',
-                              style: TextStyle(fontSize: 10, color: ch.ttsVoice != null ? Colors.amberAccent : Colors.white24),
-                            ),
+                          Row(
+                            children: [
+                              TextButton.icon(
+                                onPressed: () => _showVoicePickerForCharacter(ch),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(0, 24),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: Icon(Icons.record_voice_over, size: 12, color: ch.ttsVoice != null ? Colors.amberAccent : Colors.white24),
+                                label: Text(
+                                  ch.ttsVoice ?? 'Default voice',
+                                  style: TextStyle(fontSize: 10, color: ch.ttsVoice != null ? Colors.amberAccent : Colors.white24),
+                                ),
+                              ),
+                              if (Provider.of<StorageService>(context, listen: false).characterEvolutionEnabled)
+                                TextButton.icon(
+                                  onPressed: chatService.isEvolvingCharacter ? null : () async {
+                                    await chatService.triggerEvolutionNow(target: ch);
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(0, 24),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  icon: Icon(Icons.psychology_alt, size: 12, color: Colors.tealAccent.withValues(alpha: 0.7)),
+                                  label: Text(
+                                    'Evolve',
+                                    style: TextStyle(fontSize: 10, color: Colors.tealAccent.withValues(alpha: 0.7)),
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),
-                      trailing: isNext
-                          ? Container(
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isNext)
+                            Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.purpleAccent.withValues(alpha: 0.2),
@@ -2324,13 +2380,41 @@ class _ChatPageState extends State<ChatPage> {
                                 border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.4)),
                               ),
                               child: const Text('Next ▶', style: TextStyle(fontSize: 10, color: Colors.purpleAccent, fontWeight: FontWeight.bold)),
-                            )
-                          : null,
+                            ),
+                          if (canRemove)
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                              tooltip: 'Remove from group',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                              onPressed: () async {
+                                final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+                                await chatService.removeCharacterFromGroup(ch, groupRepo);
+                              },
+                            ),
+                        ],
+                      ),
                       dense: true,
                     ),
                   ),
                 );
               },
+            ),
+          ),
+          // ── Add Character Button ──
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: chatService.isGenerating ? null : () => _showAddCharacterToGroupDialog(context, chatService),
+                icon: const Icon(Icons.person_add, size: 16, color: Colors.purpleAccent),
+                label: const Text('Add Character', style: TextStyle(color: Colors.purpleAccent, fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.purpleAccent.withValues(alpha: 0.4)),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
             ),
           ),
         ],
@@ -2396,6 +2480,272 @@ class _ChatPageState extends State<ChatPage> {
           ),
         );
       },
+    );
+  }
+
+  /// Show dialog to fork current 1:1 chat into a group chat.
+  void _showForkToGroupDialog(BuildContext context, ChatService chatService) {
+    final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+    final currentCharId = chatService.activeCharacter != null
+        ? (chatService.activeCharacter!.imagePath != null
+            ? p.basenameWithoutExtension(chatService.activeCharacter!.imagePath!)
+            : chatService.activeCharacter!.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_'))
+        : '';
+
+    // Get all characters except the current one
+    final available = charRepo.characters.where((c) {
+      final id = c.imagePath != null
+          ? p.basenameWithoutExtension(c.imagePath!)
+          : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+      return id != currentCharId;
+    }).toList();
+
+    final selected = <CharacterCard>{};
+    final nameController = TextEditingController(
+      text: chatService.activeCharacter?.name ?? 'Group',
+    );
+    final scenarioController = TextEditingController();
+    var turnOrder = TurnOrder.roundRobin;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1F2937),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Colors.purpleAccent, width: 0.5),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.group_add, color: Colors.purpleAccent),
+              SizedBox(width: 10),
+              Text('Fork to Group Chat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            height: 450,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Group Name',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: scenarioController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Scenario (optional)',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    hintText: 'Set the scene for the group conversation...',
+                    hintStyle: TextStyle(color: Colors.white24),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Text('Turn Order:', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const SizedBox(width: 12),
+                    ChoiceChip(
+                      label: const Text('Round Robin'),
+                      selected: turnOrder == TurnOrder.roundRobin,
+                      selectedColor: Colors.purpleAccent,
+                      onSelected: (_) => setDialogState(() => turnOrder = TurnOrder.roundRobin),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Random'),
+                      selected: turnOrder == TurnOrder.random,
+                      selectedColor: Colors.purpleAccent,
+                      onSelected: (_) => setDialogState(() => turnOrder = TurnOrder.random),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Select characters to add (${selected.length} selected):',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: available.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No other characters available.\nImport or create characters first.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white38),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: available.length,
+                          itemBuilder: (context, index) {
+                            final ch = available[index];
+                            final isSelected = selected.contains(ch);
+                            return CheckboxListTile(
+                              value: isSelected,
+                              activeColor: Colors.purpleAccent,
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  if (val == true) {
+                                    selected.add(ch);
+                                  } else {
+                                    selected.remove(ch);
+                                  }
+                                  // Update group name
+                                  final names = [chatService.activeCharacter!.name, ...selected.map((c) => c.name)];
+                                  nameController.text = names.join(' & ');
+                                });
+                              },
+                              secondary: CircleAvatar(
+                                radius: 18,
+                                backgroundImage: ch.imagePath != null ? FileImage(File(ch.imagePath!)) : null,
+                                child: ch.imagePath == null ? Text(ch.name[0]) : null,
+                              ),
+                              title: Text(ch.name, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                              subtitle: Text(
+                                ch.description.length > 50 ? '${ch.description.substring(0, 50)}...' : ch.description,
+                                style: const TextStyle(fontSize: 11, color: Colors.white38),
+                              ),
+                              dense: true,
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.call_split),
+              label: const Text('Fork'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purpleAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: selected.isEmpty
+                  ? null
+                  : () async {
+                      Navigator.pop(ctx);
+                      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+                      final group = await chatService.forkToGroupChat(
+                        selected.toList(),
+                        groupRepo,
+                        groupName: nameController.text.trim(),
+                        scenario: scenarioController.text.trim(),
+                        turnOrder: turnOrder,
+                      );
+                      if (group != null && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Group "${group.name}" created from fork!'),
+                            backgroundColor: Colors.purpleAccent.shade700,
+                          ),
+                        );
+                      }
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show dialog to add a character to the active group chat.
+  void _showAddCharacterToGroupDialog(BuildContext context, ChatService chatService) {
+    final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+    final currentIds = chatService.activeGroup?.characterIds ?? [];
+
+    // Get characters not already in the group
+    final available = charRepo.characters.where((c) {
+      final id = c.imagePath != null
+          ? p.basenameWithoutExtension(c.imagePath!)
+          : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+      return !currentIds.contains(id);
+    }).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F2937),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.purpleAccent, width: 0.5),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.person_add, color: Colors.purpleAccent),
+            SizedBox(width: 10),
+            Text('Add Character', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SizedBox(
+          width: 380,
+          height: 350,
+          child: available.isEmpty
+              ? const Center(
+                  child: Text(
+                    'All characters are already in this group.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: available.length,
+                  itemBuilder: (context, index) {
+                    final ch = available[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 20,
+                        backgroundImage: ch.imagePath != null ? FileImage(File(ch.imagePath!)) : null,
+                        child: ch.imagePath == null ? Text(ch.name[0]) : null,
+                      ),
+                      title: Text(ch.name, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                      subtitle: Text(
+                        ch.description.length > 50 ? '${ch.description.substring(0, 50)}...' : ch.description,
+                        style: const TextStyle(fontSize: 11, color: Colors.white38),
+                      ),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+                        final success = await chatService.addCharacterToGroup(ch, groupRepo);
+                        if (success && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${ch.name} added to group!'),
+                              backgroundColor: Colors.purpleAccent.shade700,
+                            ),
+                          );
+                        }
+                      },
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      hoverColor: Colors.white10,
+                      dense: true,
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2480,11 +2830,40 @@ class _MessageBubbleState extends State<_MessageBubble> {
                         )),
                         const Spacer(),
                       ] else if (!message.isUser) ...[
-                        Text(message.sender, style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: widget.senderColor ?? Colors.blueAccent,
-                        )),
+                        Builder(
+                          builder: (context) {
+                            final chatService = Provider.of<ChatService>(context, listen: false);
+                            final nameWidget = Text(message.sender, style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: widget.senderColor ?? Colors.blueAccent,
+                            ));
+                            if (chatService.isGroupMode) {
+                              return GestureDetector(
+                                onTap: () {
+                                  final ch = chatService.groupCharacters
+                                      .where((c) => c.name == message.sender)
+                                      .firstOrNull;
+                                  if (ch != null) {
+                                    chatService.setNextCharacter(ch);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('${message.sender} will respond next'),
+                                        duration: const Duration(seconds: 1),
+                                        backgroundColor: widget.senderColor ?? Colors.blueAccent,
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: nameWidget,
+                                ),
+                              );
+                            }
+                            return nameWidget;
+                          },
+                        ),
                         const Spacer(),
                       ],
                       // TTS speaker button

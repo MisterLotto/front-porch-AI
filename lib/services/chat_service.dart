@@ -28,6 +28,7 @@ import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
@@ -630,8 +631,163 @@ class ChatService extends ChangeNotifier {
       await _saveChat();
     }
 
+    // Load evolved fields for all group characters
+    _loadGroupEvolvedFields();
+
     _isLoadingSession = false;
     notifyListeners();
+  }
+
+  /// Fork the current 1:1 chat into a new group chat, copying all messages.
+  /// The original 1:1 session remains untouched.
+  Future<GroupChat?> forkToGroupChat(
+    List<CharacterCard> additionalCharacters,
+    GroupChatRepository groupRepo, {
+    String? groupName,
+    String? scenario,
+    TurnOrder turnOrder = TurnOrder.roundRobin,
+  }) async {
+    if (_isGenerating) return null;
+    if (_activeCharacter == null || _characterRepository == null) return null;
+    if (_messages.isEmpty) return null;
+    if (_db == null) return null;
+
+    final originalCharId = _getCharacterIdFromCard(_activeCharacter!);
+    final allCharIds = [originalCharId, ...additionalCharacters.map(_getCharacterIdFromCard)];
+
+    // Build a default group name
+    final name = groupName?.isNotEmpty == true
+        ? groupName!
+        : [_activeCharacter!.name, ...additionalCharacters.map((c) => c.name)].join(' & ');
+
+    // Create the group
+    final group = GroupChat(
+      id: 'group_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      characterIds: allCharIds,
+      turnOrder: turnOrder,
+      scenario: scenario ?? '',
+    );
+    await groupRepo.save(group);
+
+    // Create a new session for the group and copy all messages
+    final newSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    final copiedMessages = <MessagesCompanion>[];
+    for (int i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      // Back-fill characterId on AI messages (null in 1:1 mode)
+      String? charId = m.characterId;
+      if (!m.isUser && charId == null) {
+        charId = originalCharId;
+      }
+      copiedMessages.add(MessagesCompanion(
+        sessionId: drift.Value(newSessionId),
+        position: drift.Value(i),
+        sender: drift.Value(m.sender),
+        isUser: drift.Value(m.isUser),
+        characterId: drift.Value(charId),
+        swipes: drift.Value(jsonEncode(m.swipes)),
+        swipeIndex: drift.Value(m.swipeIndex),
+        swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+      ));
+    }
+
+    // Insert the new session
+    await _db!.upsertSession(SessionsCompanion.insert(
+      id: newSessionId,
+      groupId: drift.Value(group.id),
+      name: drift.Value(_sessionName),
+      description: drift.Value(_sessionDescription),
+      authorNote: drift.Value(_authorNote),
+      authorNoteDepth: drift.Value(_authorNoteStrength),
+      summary: drift.Value(_summary.isEmpty ? null : _summary),
+      summaryLastIndex: drift.Value(_summaryLastIndex > 0 ? _summaryLastIndex : null),
+      parentSession: drift.Value(_currentSessionId),
+      forkIndex: drift.Value(_messages.length - 1),
+      createdAt: drift.Value(DateTime.now()),
+      updatedAt: drift.Value(DateTime.now()),
+    ));
+    if (copiedMessages.isNotEmpty) {
+      await _db!.insertMessages(copiedMessages);
+    }
+
+    debugPrint('[ChatService] \u{1F500} Forked 1:1 chat to group "${group.name}" '
+        '(${_messages.length} messages copied)');
+
+    // Switch to the new group (this loads the session we just created)
+    await setActiveGroup(group);
+
+    return group;
+  }
+
+  /// Add a character to the currently active group chat.
+  Future<bool> addCharacterToGroup(
+    CharacterCard character,
+    GroupChatRepository groupRepo,
+  ) async {
+    if (_activeGroup == null || _characterRepository == null) return false;
+    if (_isGenerating) return false;
+    if (_db == null) return false;
+
+    final charId = _getCharacterIdFromCard(character);
+    if (_activeGroup!.characterIds.contains(charId)) return false; // already in group
+
+    _activeGroup!.characterIds.add(charId);
+    await groupRepo.save(_activeGroup!);
+
+    // Re-resolve character cards
+    _groupCharacters = _activeGroup!.characterIds
+        .map((id) => _characterRepository!.characters.where(
+              (c) => _getCharacterIdFromCard(c) == id,
+            ).firstOrNull)
+        .whereType<CharacterCard>()
+        .toList();
+
+    // Load evolved fields for the new character
+    if (character.dbId != null) {
+      try {
+        final dbChar = await _db!.getCharacterById(character.dbId!);
+        _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
+        _evolvedScenarios[charId] = dbChar.evolvedScenario;
+        _groupEvolutionCounts[charId] = dbChar.evolutionCount;
+      } catch (_) {}
+    }
+
+    debugPrint('[ChatService] \u{2795} Added ${character.name} to group ${_activeGroup!.name}');
+    notifyListeners();
+    return true;
+  }
+
+  /// Remove a character from the currently active group chat.
+  /// Returns false if the group would have fewer than 2 characters.
+  Future<bool> removeCharacterFromGroup(
+    CharacterCard character,
+    GroupChatRepository groupRepo,
+  ) async {
+    if (_activeGroup == null || _characterRepository == null) return false;
+    if (_isGenerating) return false;
+    if (_activeGroup!.characterIds.length <= 2) return false; // enforce minimum
+
+    final charId = _getCharacterIdFromCard(character);
+    _activeGroup!.characterIds.remove(charId);
+    await groupRepo.save(_activeGroup!);
+
+    // Re-resolve character cards
+    _groupCharacters = _activeGroup!.characterIds
+        .map((id) => _characterRepository!.characters.where(
+              (c) => _getCharacterIdFromCard(c) == id,
+            ).firstOrNull)
+        .whereType<CharacterCard>()
+        .toList();
+
+    // Clamp turn index to valid range
+    if (_groupCharacters.isNotEmpty) {
+      _turnIndex = _turnIndex % _groupCharacters.length;
+    }
+
+    debugPrint('[ChatService] \u{2796} Removed ${character.name} from group ${_activeGroup!.name}');
+    notifyListeners();
+    return true;
   }
 
   /// Returns a stable ID string for a character card.
@@ -3132,6 +3288,7 @@ class ChatService extends ChangeNotifier {
   int get characterEvolutionCount => _characterEvolutionCount;
 
   /// Public getter: evolved personality for the active character (null if none)
+  /// In group mode, returns null — use getEvolvedPersonalityFor(card) instead.
   String? get getEffectivePersonality {
     if (_activeCharacter == null) return null;
     final charId = _getCharacterIdFromCard(_activeCharacter!);
@@ -3140,12 +3297,36 @@ class ChatService extends ChangeNotifier {
   }
 
   /// Public getter: evolved scenario for the active character (null if none)
+  /// In group mode, returns null — use getEvolvedScenarioFor(card) instead.
   String? get getEffectiveScenario {
     if (_activeCharacter == null) return null;
     final charId = _getCharacterIdFromCard(_activeCharacter!);
     final evolved = _evolvedScenarios[charId];
     return (evolved != null && evolved.isNotEmpty) ? evolved : null;
   }
+
+  /// Get evolved personality for a specific character (works in both 1:1 and group mode).
+  String? getEvolvedPersonalityFor(CharacterCard card) {
+    final charId = _getCharacterIdFromCard(card);
+    final evolved = _evolvedPersonalities[charId];
+    return (evolved != null && evolved.isNotEmpty) ? evolved : null;
+  }
+
+  /// Get evolved scenario for a specific character (works in both 1:1 and group mode).
+  String? getEvolvedScenarioFor(CharacterCard card) {
+    final charId = _getCharacterIdFromCard(card);
+    final evolved = _evolvedScenarios[charId];
+    return (evolved != null && evolved.isNotEmpty) ? evolved : null;
+  }
+
+  /// Get evolution count for a specific character.
+  int getEvolutionCountFor(CharacterCard card) {
+    final charId = _getCharacterIdFromCard(card);
+    return _groupEvolutionCounts[charId] ?? 0;
+  }
+
+  /// Per-character evolution counts (for group mode).
+  final Map<String, int> _groupEvolutionCounts = {};
 
   /// Load evolved fields from DB for the active character
   Future<void> _loadEvolvedFields() async {
@@ -3156,8 +3337,26 @@ class ChatService extends ChangeNotifier {
       _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
       _evolvedScenarios[charId] = dbChar.evolvedScenario;
       _characterEvolutionCount = dbChar.evolutionCount;
+      _groupEvolutionCounts[charId] = dbChar.evolutionCount;
     } catch (e) {
       debugPrint('[Evolution] Failed to load evolved fields: $e');
+    }
+  }
+
+  /// Load evolved fields for all characters in the active group.
+  Future<void> _loadGroupEvolvedFields() async {
+    if (_activeGroup == null) return;
+    for (final ch in _groupCharacters) {
+      if (ch.dbId == null) continue;
+      try {
+        final dbChar = await _db.getCharacterById(ch.dbId!);
+        final charId = _getCharacterIdFromCard(ch);
+        _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
+        _evolvedScenarios[charId] = dbChar.evolvedScenario;
+        _groupEvolutionCounts[charId] = dbChar.evolutionCount;
+      } catch (e) {
+        debugPrint('[Evolution] Failed to load evolved fields for ${ch.name}: $e');
+      }
     }
   }
 
@@ -3168,15 +3367,18 @@ class ChatService extends ChangeNotifier {
   String get evolutionStatus => _evolutionStatus;
 
   /// Manually trigger character evolution now (for imported/existing chats).
-  /// Returns true if evolution was triggered, false if preconditions not met.
-  Future<bool> triggerEvolutionNow() async {
+  /// In group mode, pass a target character. Returns true if evolution was triggered.
+  Future<bool> triggerEvolutionNow({CharacterCard? target}) async {
     if (_llmProvider == null) return false;
     if (_isEvolvingCharacter) return false;
-    if (_activeCharacter == null || _activeCharacter!.dbId == null) return false;
     if (_messages.length < 4) return false; // need some history
 
-    debugPrint('[Evolution] ▶ Manual evolution triggered');
-    await _extractCharacterEvolution();
+    // Determine target character
+    final card = target ?? _activeCharacter;
+    if (card == null || card.dbId == null) return false;
+
+    debugPrint('[Evolution] ▶ Manual evolution triggered for ${card.name}');
+    await _extractCharacterEvolution(targetCharacter: card);
     return true;
   }
 
@@ -3185,18 +3387,32 @@ class ChatService extends ChangeNotifier {
     if (!_storageService.characterEvolutionEnabled) return;
     if (_llmProvider == null) return;
     if (_isEvolvingCharacter) return;
-    if (_activeCharacter == null) return;
+
+    // In group mode, evolve the character who just spoke
+    CharacterCard? target;
+    if (_activeGroup != null) {
+      if (_messages.isNotEmpty && !_messages.last.isUser) {
+        final lastSender = _messages.last.sender;
+        target = _groupCharacters.where((c) => c.name == lastSender).firstOrNull;
+      }
+      if (target == null) return;
+    } else {
+      target = _activeCharacter;
+      if (target == null) return;
+    }
 
     _userMessagesSinceLastEvolution++;
     if (_userMessagesSinceLastEvolution < _storageService.evolutionInterval) return;
     _userMessagesSinceLastEvolution = 0;
 
-    debugPrint('[Evolution] ▶ Triggering character evolution (every ${_storageService.evolutionInterval} user messages)');
-    _extractCharacterEvolution();
+    debugPrint('[Evolution] ▶ Triggering character evolution for ${target.name} '
+        '(every ${_storageService.evolutionInterval} user messages)');
+    _extractCharacterEvolution(targetCharacter: target);
   }
 
   /// Extract evolved personality + scenario from conversation memories.
-  Future<void> _extractCharacterEvolution() async {
+  /// Accepts an optional [targetCharacter] for group mode support.
+  Future<void> _extractCharacterEvolution({CharacterCard? targetCharacter}) async {
     if (_isEvolvingCharacter) return;
     _isEvolvingCharacter = true;
     _evolutionStatus = 'Preparing evolution...';
@@ -3208,13 +3424,15 @@ class ChatService extends ChangeNotifier {
         debugPrint('[Evolution] ✗ LLM not ready');
         return;
       }
-      if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
 
-      final charName = _activeCharacter!.name;
+      final card = targetCharacter ?? _activeCharacter;
+      if (card == null || card.dbId == null) return;
+
+      final charName = card.name;
       final userName = _userPersonaService.persona.name;
-      final originalPersonality = _activeCharacter!.personality;
-      final originalScenario = _activeCharacter!.scenario;
-      final charId = _getCharacterIdFromCard(_activeCharacter!);
+      final originalPersonality = card.personality;
+      final originalScenario = card.scenario;
+      final charId = _getCharacterIdFromCard(card);
 
       // Get current evolved versions (or originals if first time)
       final currentPersonality = _evolvedPersonalities[charId]?.isNotEmpty == true
@@ -3330,9 +3548,10 @@ class ChatService extends ChangeNotifier {
         }
 
         // Store in DB
-        final newCount = _characterEvolutionCount + 1;
+        final oldCount = _groupEvolutionCounts[charId] ?? _characterEvolutionCount;
+        final newCount = oldCount + 1;
         await _db!.updateCharacter(CharactersCompanion(
-          id: drift.Value(_activeCharacter!.dbId!),
+          id: drift.Value(card.dbId!),
           evolvedPersonality: drift.Value(newPersonality),
           evolvedScenario: drift.Value(newScenario),
           evolutionCount: drift.Value(newCount),
@@ -3341,9 +3560,10 @@ class ChatService extends ChangeNotifier {
         // Update cache
         _evolvedPersonalities[charId] = newPersonality;
         _evolvedScenarios[charId] = newScenario;
-        _characterEvolutionCount = newCount;
+        _groupEvolutionCounts[charId] = newCount;
+        if (_activeCharacter != null) _characterEvolutionCount = newCount;
 
-        debugPrint('[Evolution] ✅ Character evolved (count: $newCount)');
+        debugPrint('[Evolution] ✅ ${charName} evolved (count: $newCount)');
         debugPrint('[Evolution] Personality: ${newPersonality.substring(0, newPersonality.length.clamp(0, 100))}...');
         debugPrint('[Evolution] Scenario: ${newScenario.substring(0, newScenario.length.clamp(0, 100))}...');
         notifyListeners();
@@ -3359,13 +3579,15 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  /// Reset evolved fields back to original for the active character.
-  Future<void> resetCharacterEvolution() async {
-    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
-    final charId = _getCharacterIdFromCard(_activeCharacter!);
+  /// Reset evolved fields back to original for a character.
+  /// In 1:1 mode, targets the active character. In group mode, pass an explicit target.
+  Future<void> resetCharacterEvolution({CharacterCard? target}) async {
+    final card = target ?? _activeCharacter;
+    if (card == null || card.dbId == null) return;
+    final charId = _getCharacterIdFromCard(card);
 
     await _db!.updateCharacter(CharactersCompanion(
-      id: drift.Value(_activeCharacter!.dbId!),
+      id: drift.Value(card.dbId!),
       evolvedPersonality: const drift.Value(''),
       evolvedScenario: const drift.Value(''),
       evolutionCount: const drift.Value(0),
@@ -3373,18 +3595,23 @@ class ChatService extends ChangeNotifier {
 
     _evolvedPersonalities.remove(charId);
     _evolvedScenarios.remove(charId);
-    _characterEvolutionCount = 0;
+    _groupEvolutionCounts.remove(charId);
+    if (_activeCharacter != null && _getCharacterIdFromCard(_activeCharacter!) == charId) {
+      _characterEvolutionCount = 0;
+    }
     notifyListeners();
-    debugPrint('[Evolution] Reset to original for $charId');
+    debugPrint('[Evolution] Reset to original for ${card.name}');
   }
 
   /// Update the evolved personality text manually (user edits).
-  Future<void> updateEvolvedPersonality(String text) async {
-    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
-    final charId = _getCharacterIdFromCard(_activeCharacter!);
+  /// In group mode, pass an explicit target character.
+  Future<void> updateEvolvedPersonality(String text, {CharacterCard? target}) async {
+    final card = target ?? _activeCharacter;
+    if (card == null || card.dbId == null) return;
+    final charId = _getCharacterIdFromCard(card);
 
     await _db!.updateCharacter(CharactersCompanion(
-      id: drift.Value(_activeCharacter!.dbId!),
+      id: drift.Value(card.dbId!),
       evolvedPersonality: drift.Value(text),
     ));
     _evolvedPersonalities[charId] = text;
@@ -3392,12 +3619,14 @@ class ChatService extends ChangeNotifier {
   }
 
   /// Update the evolved scenario text manually (user edits).
-  Future<void> updateEvolvedScenario(String text) async {
-    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
-    final charId = _getCharacterIdFromCard(_activeCharacter!);
+  /// In group mode, pass an explicit target character.
+  Future<void> updateEvolvedScenario(String text, {CharacterCard? target}) async {
+    final card = target ?? _activeCharacter;
+    if (card == null || card.dbId == null) return;
+    final charId = _getCharacterIdFromCard(card);
 
     await _db!.updateCharacter(CharactersCompanion(
-      id: drift.Value(_activeCharacter!.dbId!),
+      id: drift.Value(card.dbId!),
       evolvedScenario: drift.Value(text),
     ));
     _evolvedScenarios[charId] = text;
