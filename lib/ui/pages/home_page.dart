@@ -1634,39 +1634,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showCreateGroupDialog(BuildContext context, CharacterRepository repo) {
-    // Show pre-alpha warning first
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F2937),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
-            SizedBox(width: 8),
-            Text('Pre-Alpha Feature', style: TextStyle(color: Colors.white)),
-          ],
-        ),
-        content: const Text(
-          'Group Chat is a pre-alpha feature. Expect rough edges and results that may vary depending on your model and backend.',
-          style: TextStyle(color: Colors.white70, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white38)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showCreateGroupDialogInner(context, repo);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
+    _showCreateGroupDialogInner(context, repo);
   }
 
   void _showCreateGroupDialogInner(BuildContext context, CharacterRepository repo) {

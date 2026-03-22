@@ -624,10 +624,6 @@
                 <span style="font-size:20px">👥</span> Create Group Chat
             </h2>
 
-            <div class="group-warn-banner">
-                ⚠️ Pre-Alpha Feature — expect rough edges depending on model quality
-            </div>
-
             <div class="group-chips" id="group-chips">
                 ${selectedChars.map(c => `<span class="group-chip">${esc(c.name)}</span>`).join('')}
             </div>
