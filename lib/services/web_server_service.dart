@@ -272,6 +272,10 @@ class WebServerService extends ChangeNotifier {
     router.post('/api/groups/update', _handleUpdateGroup);
     router.post('/api/groups/delete', _handleDeleteGroup);
     router.post('/api/groups/select', _handleSelectGroup);
+    router.post('/api/groups/fork', _handleForkToGroup);
+    router.post('/api/groups/add-character', _handleGroupAddCharacter);
+    router.post('/api/groups/remove-character', _handleGroupRemoveCharacter);
+    router.post('/api/groups/set-next', _handleGroupSetNext);
 
     // ── AI generation route ──
     router.post('/api/generate', _handleGenerate);
@@ -995,6 +999,18 @@ class WebServerService extends ChangeNotifier {
         'messages': messagesJson,
         'isGenerating': chat.isGenerating,
         'isGroupMode': chat.isGroupMode,
+        'groupId': chat.activeGroup?.id,
+        'groupMembers': chat.isGroupMode ? chat.groupCharacters.map((c) {
+          final charId = c.imagePath != null
+              ? p.basenameWithoutExtension(c.imagePath!)
+              : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+          return {
+            'name': c.name,
+            'charId': charId,
+            'hasAvatar': c.imagePath != null && c.imagePath!.isNotEmpty,
+            'dbId': c.dbId,
+          };
+        }).toList() : null,
         'tokensPerSecond': chat.tokensPerSecond,
         'tokensGenerated': chat.tokensGenerated,
         'authorNote': chat.authorNote,
@@ -2494,6 +2510,145 @@ class WebServerService extends ChangeNotifier {
       );
     } catch (e) {
       return _errorResponse(500, 'Failed to select group: $e');
+    }
+  }
+
+  /// POST /api/groups/fork — Fork the current 1:1 chat into a new group.
+  /// Body: { character_ids: [...], group_name?, scenario?, turn_order? }
+  Future<shelf.Response> _handleForkToGroup(shelf.Request request) async {
+    if (_chatService == null || _groupChatRepository == null || _characterRepository == null) {
+      return _errorResponse(503, 'Services not available');
+    }
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final charIds = List<String>.from(body['character_ids'] ?? []);
+      if (charIds.isEmpty) return _errorResponse(400, 'character_ids required');
+
+      // Resolve character cards from IDs
+      final additionalChars = <CharacterCard>[];
+      for (final cid in charIds) {
+        final match = _characterRepository!.characters.where((c) {
+          final id = c.imagePath != null
+              ? p.basenameWithoutExtension(c.imagePath!)
+              : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+          return id == cid;
+        }).firstOrNull;
+        if (match != null) additionalChars.add(match);
+      }
+
+      if (additionalChars.isEmpty) return _errorResponse(400, 'No valid characters found');
+
+      final turnOrder = TurnOrder.values.firstWhere(
+        (e) => e.name == (body['turn_order'] ?? 'roundRobin'),
+        orElse: () => TurnOrder.roundRobin,
+      );
+
+      final group = await _chatService!.forkToGroupChat(
+        additionalChars,
+        _groupChatRepository!,
+        groupName: body['group_name']?.toString(),
+        scenario: body['scenario']?.toString(),
+        turnOrder: turnOrder,
+      );
+
+      if (group == null) return _errorResponse(500, 'Fork failed');
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'id': group.id, 'name': group.name}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fork to group: $e');
+    }
+  }
+
+  /// POST /api/groups/add-character — Add a character to the active group.
+  /// Body: { character_id: "..." }
+  Future<shelf.Response> _handleGroupAddCharacter(shelf.Request request) async {
+    if (_chatService == null || _groupChatRepository == null || _characterRepository == null) {
+      return _errorResponse(503, 'Services not available');
+    }
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final charId = body['character_id']?.toString() ?? '';
+      if (charId.isEmpty) return _errorResponse(400, 'character_id required');
+
+      final match = _characterRepository!.characters.where((c) {
+        final id = c.imagePath != null
+            ? p.basenameWithoutExtension(c.imagePath!)
+            : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+        return id == charId;
+      }).firstOrNull;
+
+      if (match == null) return _errorResponse(404, 'Character not found');
+
+      final ok = await _chatService!.addCharacterToGroup(match, _groupChatRepository!);
+      if (!ok) return _errorResponse(400, 'Could not add character (already in group or not in group mode)');
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to add character: $e');
+    }
+  }
+
+  /// POST /api/groups/remove-character — Remove a character from the active group.
+  /// Body: { character_id: "..." }
+  Future<shelf.Response> _handleGroupRemoveCharacter(shelf.Request request) async {
+    if (_chatService == null || _groupChatRepository == null || _characterRepository == null) {
+      return _errorResponse(503, 'Services not available');
+    }
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final charId = body['character_id']?.toString() ?? '';
+      if (charId.isEmpty) return _errorResponse(400, 'character_id required');
+
+      final match = _characterRepository!.characters.where((c) {
+        final id = c.imagePath != null
+            ? p.basenameWithoutExtension(c.imagePath!)
+            : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+        return id == charId;
+      }).firstOrNull;
+
+      if (match == null) return _errorResponse(404, 'Character not found');
+
+      final ok = await _chatService!.removeCharacterFromGroup(match, _groupChatRepository!);
+      if (!ok) return _errorResponse(400, 'Could not remove character (min 2 required or not in group mode)');
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok'}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to remove character: $e');
+    }
+  }
+
+  /// POST /api/groups/set-next — Set the next character to speak in a group.
+  /// Body: { character_name: "..." }
+  Future<shelf.Response> _handleGroupSetNext(shelf.Request request) async {
+    if (_chatService == null) return _errorResponse(503, 'Chat service not available');
+    try {
+      final body = jsonDecode(await request.readAsString());
+      final name = body['character_name']?.toString() ?? '';
+      if (name.isEmpty) return _errorResponse(400, 'character_name required');
+
+      final match = _chatService!.groupCharacters
+          .where((c) => c.name == name)
+          .firstOrNull;
+
+      if (match == null) return _errorResponse(404, 'Character not found in group');
+
+      _chatService!.setNextCharacter(match);
+
+      return shelf.Response.ok(
+        jsonEncode({'status': 'ok', 'next': name}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to set next character: $e');
     }
   }
 
