@@ -228,8 +228,15 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     // Trigger silent autoconfig on load if model is present
-    if (_selectedModelPath != null) {
+    // BUT only if user hasn't manually customized GPU layers.
+    // A non-zero persisted gpuLayers means the user or a previous
+    // explicit auto-config set it — don't silently overwrite.
+    if (_selectedModelPath != null && storage.gpuLayers == 0) {
       _applyAutoConfiguration(silent: true);
+    } else if (_selectedModelPath != null) {
+      // Respect previously saved settings — just load them into the UI
+      _gpuLayersController.text = storage.gpuLayers.toString();
+      _contextSizeController.text = storage.contextSize.toString();
     }
   }
 
