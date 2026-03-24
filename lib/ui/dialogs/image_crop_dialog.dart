@@ -72,9 +72,15 @@ class _ImageCropDialogState extends State<ImageCropDialog> {
     _cropController.crop();
   }
 
-  void _onCropped(Uint8List croppedBytes) {
+  void _onCropped(CropResult result) {
+    // Default to empty bytes in case of failure.
+    Uint8List bytes = Uint8List(0);
+    // If the crop was successful, extract the image bytes.
+    if (result is CropSuccess) {
+      bytes = result.croppedImage;
+    }
     if (mounted) {
-      Navigator.of(context).pop(croppedBytes);
+      Navigator.of(context).pop(bytes);
     }
   }
 
