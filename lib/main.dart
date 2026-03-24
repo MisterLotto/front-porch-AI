@@ -87,6 +87,10 @@ void main(List<String> args) async {
   final db = await AppDatabase.instance();
   final needsMigration = !await DataMigrationService.isMigrated();
 
+  // Run integrity check before anything else touches the DB
+  final dbHealthy = await db.integrityCheck();
+  _MyAppState._dbHealthy = dbHealthy;
+
   // Purge rows that were soft-deleted more than 30 days ago
   try { await db.purgeSoftDeletes(); } catch (_) {}
 
@@ -300,8 +304,11 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WindowListener {
+  static bool _dbHealthy = true; // set from main() before runApp
   bool _updateChecked = false;
   bool _isMigrating = false;
+  bool _isDbCorrupt = false;
+  List<File> _availableBackups = [];
   String _migrationStep = '';
   int _migrationCurrent = 0;
   int _migrationTotal = 1;
@@ -321,6 +328,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
     windowManager.addListener(this);
     // Run migration after first frame, then reunification if needed
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _checkDbHealth();
       await _runMigrationIfNeeded();
       await _runReunificationIfNeeded();
     });
@@ -411,6 +419,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
                   _checkForUpdates(context);
                   _runCloudSync(context);
                   _autoStartWebServer(context);
+                  // Start auto-backup (always on, every 10 minutes)
+                  BackupService.startAutoBackup();
                   // Wire TtsService into ChatService (can't be done during provider
                   // creation because TtsService is registered later in the tree)
                   try {
@@ -440,6 +450,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
                     const MainLayout(),
                     const SetupOverlay(),
                     const RemoteLockOverlay(),
+                    if (_isDbCorrupt)
+                      _buildCorruptionOverlay(),
                     if (_isMigrating)
                       _buildMigrationOverlay(),
                     if (_isReunifying)
@@ -453,6 +465,238 @@ class _MyAppState extends State<MyApp> with WindowListener {
       },
     );
   }
+
+  // ── DB Health Check ─────────────────────────────────────────────────
+
+  Future<void> _checkDbHealth() async {
+    if (_dbHealthy) return;
+
+    // DB is corrupt — load available backups and show overlay
+    final backups = await BackupService.listBackups();
+    if (mounted) {
+      setState(() {
+        _isDbCorrupt = true;
+        _availableBackups = backups;
+      });
+    }
+  }
+
+  Widget _buildCorruptionOverlay() {
+    return Positioned.fill(
+      child: Material(
+        color: const Color(0xFF0F172A),
+        child: Center(
+          child: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Warning icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.red.shade700, Colors.orange.shade600],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withValues(alpha: 0.3),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, size: 40, color: Colors.white),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'Database Issue Detected',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'An integrity check found possible corruption.\n'
+                  'This can happen after a power failure or crash.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (_availableBackups.isNotEmpty) ...[
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 220),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Available Backups',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Flexible(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: _availableBackups.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 4),
+                            itemBuilder: (context, index) {
+                              final backup = _availableBackups[index];
+                              final stat = backup.statSync();
+                              final age = DateTime.now().difference(stat.modified);
+                              final sizeKb = (stat.size / 1024).toStringAsFixed(0);
+                              String ageStr;
+                              if (age.inDays > 0) {
+                                ageStr = '${age.inDays}d ago';
+                              } else if (age.inHours > 0) {
+                                ageStr = '${age.inHours}h ago';
+                              } else {
+                                ageStr = '${age.inMinutes}m ago';
+                              }
+                              return InkWell(
+                                onTap: () => _restoreBackup(backup),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.03),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.restore, size: 18, color: Colors.blueAccent.shade100),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          ageStr,
+                                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                                        ),
+                                      ),
+                                      Text(
+                                        '$sizeKb KB',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.4),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 18, color: Colors.orange.shade300),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'No backups available to restore from.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // Continue anyway
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () {
+                      if (mounted) setState(() => _isDbCorrupt = false);
+                    },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      foregroundColor: Colors.white.withValues(alpha: 0.6),
+                    ),
+                    child: const Text('Continue Without Restoring'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restoreBackup(File backup) async {
+    if (mounted) {
+      setState(() {
+        _isDbCorrupt = false;
+        _isMigrating = true;
+        _migrationStep = 'Restoring backup...';
+        _migrationCurrent = 1;
+        _migrationTotal = 2;
+      });
+    }
+
+    try {
+      await BackupService.restoreBackup(backup.path);
+
+      if (mounted) {
+        setState(() {
+          _migrationStep = 'Reopening database...';
+          _migrationCurrent = 2;
+        });
+      }
+
+      // Re-open the database
+      await AppDatabase.instance();
+
+      if (mounted) {
+        setState(() => _isMigrating = false);
+      }
+
+      debugPrint('[DB] Backup restored successfully from: ${backup.path}');
+    } catch (e) {
+      debugPrint('[DB] Backup restore failed: $e');
+      if (mounted) {
+        setState(() => _isMigrating = false);
+      }
+    }
+  }
+
+  // ── Data Migration ──────────────────────────────────────────────────
 
   Future<void> _runMigrationIfNeeded() async {
     final needsMigration = Provider.of<bool>(context, listen: false);

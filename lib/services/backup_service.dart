@@ -16,16 +16,41 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/database/database.dart';
 
-/// Creates timestamped backups of the SQLite database before cloud sync.
+/// Creates timestamped backups of the SQLite database.
+/// Auto-backup runs every 10 minutes and is always on.
 /// Keeps the most recent [maxBackups] copies and prunes older ones.
 class BackupService {
-  static const int maxBackups = 5;
+  static const int maxBackups = 10;
+  static const Duration _autoBackupInterval = Duration(minutes: 10);
   static const String _backupDir = 'backups';
+  static Timer? _autoBackupTimer;
+
+  /// Start the automatic backup timer (every 10 minutes).
+  /// Safe to call multiple times — will not create duplicate timers.
+  static void startAutoBackup() {
+    if (_autoBackupTimer != null) return;
+    debugPrint('[Backup] Auto-backup started (every ${_autoBackupInterval.inMinutes} minutes)');
+    _autoBackupTimer = Timer.periodic(_autoBackupInterval, (_) async {
+      try {
+        await createBackup();
+        await pruneBackups();
+      } catch (e) {
+        debugPrint('[Backup] Auto-backup failed: $e');
+      }
+    });
+  }
+
+  /// Stop the automatic backup timer.
+  static void stopAutoBackup() {
+    _autoBackupTimer?.cancel();
+    _autoBackupTimer = null;
+  }
 
   /// Get the backup directory path (creates it if needed).
   static Future<Directory> _getBackupDir() async {

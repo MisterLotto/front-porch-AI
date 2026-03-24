@@ -268,7 +268,13 @@ class AppDatabase extends _$AppDatabase {
     }
 
     _dbPath = file.path;
-    _instance = AppDatabase._internal(NativeDatabase.createInBackground(file));
+    _instance = AppDatabase._internal(NativeDatabase.createInBackground(
+      file,
+      setup: (db) {
+        db.execute('PRAGMA synchronous = FULL');
+        debugPrint('[DB] PRAGMA synchronous = FULL set');
+      },
+    ));
     return _instance!;
   }
 
@@ -284,6 +290,23 @@ class AppDatabase extends _$AppDatabase {
     await customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
   }
 
+  /// Run a fast integrity check on the database.
+  /// Returns `true` if the database is healthy, `false` if corruption is detected.
+  Future<bool> integrityCheck() async {
+    try {
+      final result = await customSelect('PRAGMA quick_check').get();
+      if (result.isNotEmpty && result.first.data.values.first == 'ok') {
+        debugPrint('[DB] Integrity check passed');
+        return true;
+      }
+      debugPrint('[DB] Integrity check FAILED: ${result.map((r) => r.data).toList()}');
+      return false;
+    } catch (e) {
+      debugPrint('[DB] Integrity check error: $e');
+      return false;
+    }
+  }
+
   /// Close the database and clear the singleton so the next call to
   /// [instance()] will open a fresh connection to the file on disk.
   /// Used after cloud sync downloads a new .db file.
@@ -296,12 +319,18 @@ class AppDatabase extends _$AppDatabase {
 
   /// For testing: create an in-memory database.
   factory AppDatabase.forTesting() {
-    return AppDatabase._internal(NativeDatabase.createInBackground(File(':memory:')));
+    return AppDatabase._internal(NativeDatabase.createInBackground(
+      File(':memory:'),
+      setup: (db) => db.execute('PRAGMA synchronous = FULL'),
+    ));
   }
 
   /// Open a specific DB file for reunification (runs migrations, not a singleton).
   factory AppDatabase.forReunification(File file) {
-    return AppDatabase._internal(NativeDatabase.createInBackground(file));
+    return AppDatabase._internal(NativeDatabase.createInBackground(
+      file,
+      setup: (db) => db.execute('PRAGMA synchronous = FULL'),
+    ));
   }
 
   @override

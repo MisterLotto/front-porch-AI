@@ -43,6 +43,8 @@
     let isSelectingForGroup = false;
     let selectedForGroup = new Set(); // Set of charId strings
     let allCharactersCache = [];      // cached character list for group modal
+    let isCurrentlyGroupMode = false; // tracks whether active chat is a group
+    let currentGroupMembers = [];     // current group member data from chat state
 
     // ── DOM refs ──
     const $ = (sel) => document.querySelector(sel);
@@ -622,10 +624,6 @@
                 <span style="font-size:20px">👥</span> Create Group Chat
             </h2>
 
-            <div class="group-warn-banner">
-                ⚠️ Pre-Alpha Feature — expect rough edges depending on model quality
-            </div>
-
             <div class="group-chips" id="group-chips">
                 ${selectedChars.map(c => `<span class="group-chip">${esc(c.name)}</span>`).join('')}
             </div>
@@ -993,6 +991,14 @@
                 }).join('');
             }
         }
+
+        // Track group mode and update overflow menu buttons
+        isCurrentlyGroupMode = !!data.isGroupMode;
+        currentGroupMembers = data.groupMembers || [];
+        const forkBtn = $('#btn-fork-group');
+        const membersBtn = $('#btn-group-members');
+        if (forkBtn) forkBtn.style.display = isCurrentlyGroupMode ? 'none' : '';
+        if (membersBtn) membersBtn.style.display = isCurrentlyGroupMode ? '' : 'none';
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1382,10 +1388,16 @@
             </button>
         ` : '';
 
+        // Make sender name clickable in group mode to set as next speaker
+        const senderClickable = !isUser && isCurrentlyGroupMode;
+        const senderNameHtml = senderClickable
+            ? `<span class="message-sender-name group-clickable" data-sender="${esc(senderName)}" title="Click to set as next speaker" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px">${esc(senderName)}</span>`
+            : `<span class="message-sender-name">${esc(senderName)}</span>`;
+
         el.innerHTML = `
             ${actionsHtml}
             <div class="message-sender">
-                <span class="message-sender-name">${esc(senderName)}</span>
+                ${senderNameHtml}
                 ${ttsBtn}
             </div>
             ${thinkingHtml}
@@ -1752,6 +1764,23 @@
 
         // Message actions (delegated)
         $('#chat-messages').addEventListener('click', (e) => {
+            // Handle group sender name click (set next character)
+            const senderSpan = e.target.closest('.message-sender-name.group-clickable');
+            if (senderSpan) {
+                const name = senderSpan.dataset.sender;
+                if (name) {
+                    api('/api/groups/set-next', {
+                        method: 'POST',
+                        body: JSON.stringify({ character_name: name }),
+                    }).then(res => {
+                        if (res && res.ok) {
+                            _showToast(`${name} will respond next`, '#8B5CF6');
+                        }
+                    });
+                }
+                return;
+            }
+
             const actionBtn = e.target.closest('[data-action]');
             if (actionBtn) {
                 const action = actionBtn.dataset.action;
@@ -2109,6 +2138,8 @@
                 if (action === 'memory') $('#btn-rp-memory').click();
                 if (action === 'tts') $('#btn-rp-tts').click();
                 if (action === 'edit') $('#btn-edit-char').click();
+                if (action === 'fork_group') _showForkToGroupModal();
+                if (action === 'group_members') _showGroupMembersModal();
             });
         }
 
@@ -4830,6 +4861,305 @@
 
     // ═══════════════════════════════════════════════════════════
     // INITIALIZATION
+    // ═══════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════
+    // TOAST NOTIFICATION
+    // ═══════════════════════════════════════════════════════════
+
+    function _showToast(message, color = '#8B5CF6') {
+        let toast = document.getElementById('fp-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'fp-toast';
+            toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:8px;color:#fff;font-size:13px;z-index:10000;opacity:0;transition:opacity 0.3s;pointer-events:none;max-width:300px;text-align:center';
+            document.body.appendChild(toast);
+        }
+        toast.style.background = color;
+        toast.textContent = message;
+        toast.style.opacity = '1';
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FORK TO GROUP MODAL
+    // ═══════════════════════════════════════════════════════════
+
+    async function _showForkToGroupModal() {
+        // Fetch all characters for the picker
+        const chars = await apiJson('/api/characters');
+        if (!chars) return;
+        const charList = chars.characters || chars;
+
+        // Filter out the current character (already in the fork)
+        const currentCharLower = (currentCharacterName || '').toLowerCase();
+        const otherChars = charList.filter(c => c.name.toLowerCase() !== currentCharLower);
+
+        const selected = new Set();
+        let turnOrder = 'roundRobin';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = 'fork-group-modal';
+
+        function renderModal() {
+            overlay.innerHTML = `
+            <div class="modal" style="max-width:500px;max-height:80vh;overflow-y:auto">
+                <div class="modal-title">🍴 Fork to Group Chat</div>
+                <p style="color:var(--text-muted);font-size:13px;margin:0 0 12px">
+                    Creates a new group chat with the current conversation history.
+                    The original 1:1 chat is preserved.
+                </p>
+
+                <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">Group Name</label>
+                <input type="text" id="fork-group-name" class="settings-text-input" value="${esc(currentCharacterName || 'Group')} & Friends" style="width:100%;margin-bottom:12px">
+
+                <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">Scenario (optional)</label>
+                <textarea id="fork-group-scenario" class="settings-textarea" rows="2" placeholder="Set the scene for the group conversation..." style="width:100%;margin-bottom:12px"></textarea>
+
+                <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">Turn Order</label>
+                <div style="display:flex;gap:8px;margin-bottom:12px">
+                    <button class="btn btn-sm ${turnOrder === 'roundRobin' ? 'btn-primary' : 'btn-outlined'}" data-order="roundRobin">🔄 Round Robin</button>
+                    <button class="btn btn-sm ${turnOrder === 'random' ? 'btn-primary' : 'btn-outlined'}" data-order="random">🎲 Random</button>
+                </div>
+
+                <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px">Add Characters to Group (select 1+)</label>
+                <div style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:4px">
+                    ${otherChars.map(c => `
+                        <div class="fork-char-item" data-charid="${esc(c.charId)}" style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;cursor:pointer;${selected.has(c.charId) ? 'background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4)' : 'background:rgba(255,255,255,0.03)'}">
+                            <span style="font-size:16px">${selected.has(c.charId) ? '☑' : '☐'}</span>
+                            <span style="color:#fff;font-size:13px">${esc(c.name)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div class="modal-actions" style="margin-top:16px">
+                    <button class="btn btn-outlined" id="fork-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="fork-create" ${selected.size === 0 ? 'disabled' : ''} style="background:#8B5CF6">Fork (${selected.size} selected)</button>
+                </div>
+            </div>`;
+
+            // Turn order toggles
+            overlay.querySelectorAll('[data-order]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    turnOrder = btn.dataset.order;
+                    renderModal();
+                });
+            });
+
+            // Character selection
+            overlay.querySelectorAll('.fork-char-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const cid = item.dataset.charid;
+                    if (selected.has(cid)) selected.delete(cid);
+                    else selected.add(cid);
+                    renderModal();
+                });
+            });
+
+            // Cancel
+            overlay.querySelector('#fork-cancel').addEventListener('click', () => {
+                overlay.remove();
+            });
+
+            // Create
+            overlay.querySelector('#fork-create').addEventListener('click', async () => {
+                const name = overlay.querySelector('#fork-group-name').value.trim();
+                const scenario = overlay.querySelector('#fork-group-scenario').value.trim();
+                const createBtn = overlay.querySelector('#fork-create');
+                createBtn.disabled = true;
+                createBtn.textContent = 'Forking...';
+
+                const res = await apiJson('/api/groups/fork', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        character_ids: [...selected],
+                        group_name: name || undefined,
+                        scenario: scenario || undefined,
+                        turn_order: turnOrder,
+                    }),
+                });
+
+                if (res && res.id) {
+                    overlay.remove();
+                    _showToast('Group chat created!', '#4ADE80');
+                    // Select the new group
+                    const selectRes = await apiJson('/api/groups/select', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: res.id }),
+                    });
+                    if (selectRes) {
+                        currentCharacterId = res.id;
+                        currentCharacterName = res.name;
+                        currentCharacterDesc = '';
+                        currentCharacterHasAvatar = false;
+                        showChatView(res.name, '', false);
+                    }
+                } else {
+                    createBtn.disabled = false;
+                    createBtn.textContent = `Fork (${selected.size} selected)`;
+                    _showToast('Failed to fork to group', '#EF4444');
+                }
+            });
+        }
+
+        document.body.appendChild(overlay);
+        renderModal();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // GROUP MEMBERS MODAL
+    // ═══════════════════════════════════════════════════════════
+
+    async function _showGroupMembersModal() {
+        if (!isCurrentlyGroupMode) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay active';
+        overlay.id = 'group-members-modal';
+
+        async function renderModal() {
+            // Refresh group members from state
+            const stateData = await apiJson('/api/chat/state');
+            if (stateData) {
+                currentGroupMembers = stateData.groupMembers || [];
+            }
+
+            overlay.innerHTML = `
+            <div class="modal" style="max-width:440px;max-height:80vh;overflow-y:auto">
+                <div class="modal-title">👥 Group Members</div>
+                <div style="display:flex;flex-direction:column;gap:6px;margin:12px 0">
+                    ${currentGroupMembers.map(m => `
+                        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,0.05);border-radius:8px">
+                            <span style="font-size:14px;color:#fff;flex:1">${esc(m.name)}</span>
+                            <button class="btn btn-sm" style="font-size:11px;padding:2px 8px;cursor:pointer;color:rgba(139,92,246,0.9);border:1px solid rgba(139,92,246,0.3);background:none" data-setnext="${esc(m.name)}" title="Set as next speaker">▶ Next</button>
+                            ${currentGroupMembers.length > 2
+                                ? `<button class="btn btn-sm" style="font-size:11px;padding:2px 8px;cursor:pointer;color:#EF4444;border:1px solid rgba(239,68,68,0.3);background:none" data-remove="${esc(m.charId)}" title="Remove from group">✕</button>`
+                                : ''}
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="modal-actions" style="justify-content:space-between">
+                    <button class="btn btn-outlined" id="gm-add" style="color:#4ADE80;border-color:rgba(74,222,128,0.3)">+ Add Character</button>
+                    <button class="btn btn-outlined" id="gm-close">Close</button>
+                </div>
+            </div>`;
+
+            // Set next speaker
+            overlay.querySelectorAll('[data-setnext]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const name = btn.dataset.setnext;
+                    await api('/api/groups/set-next', {
+                        method: 'POST',
+                        body: JSON.stringify({ character_name: name }),
+                    });
+                    _showToast(`${name} will respond next`, '#8B5CF6');
+                });
+            });
+
+            // Remove character
+            overlay.querySelectorAll('[data-remove]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const charId = btn.dataset.remove;
+                    const res = await api('/api/groups/remove-character', {
+                        method: 'POST',
+                        body: JSON.stringify({ character_id: charId }),
+                    });
+                    if (res && res.ok) {
+                        _showToast('Character removed', '#FBBF24');
+                        await renderModal();
+                        pollChatState();
+                    } else {
+                        _showToast('Cannot remove (min 2 required)', '#EF4444');
+                    }
+                });
+            });
+
+            // Add character
+            overlay.querySelector('#gm-add').addEventListener('click', async () => {
+                const chars = await apiJson('/api/characters');
+                if (!chars) return;
+                const charList = chars.characters || chars;
+                const memberIds = new Set(currentGroupMembers.map(m => m.charId));
+                const available = charList.filter(c => !memberIds.has(c.charId));
+
+                if (available.length === 0) {
+                    _showToast('No more characters available', '#FBBF24');
+                    return;
+                }
+
+                // Show a quick picker
+                overlay.innerHTML = `
+                <div class="modal" style="max-width:440px;max-height:80vh;overflow-y:auto">
+                    <div class="modal-title">Add Character to Group</div>
+                    <div style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin:12px 0">
+                        ${available.map(c => `
+                            <div class="fork-char-item" data-addid="${esc(c.charId)}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.05);border-radius:8px;cursor:pointer">
+                                <span style="font-size:14px;color:#fff">${esc(c.name)}</span>
+                                <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">${esc((c.description || '').substring(0, 40))}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-outlined" id="gm-add-back">← Back</button>
+                    </div>
+                </div>`;
+
+                overlay.querySelectorAll('[data-addid]').forEach(item => {
+                    item.addEventListener('click', async () => {
+                        const cid = item.dataset.addid;
+                        const res = await api('/api/groups/add-character', {
+                            method: 'POST',
+                            body: JSON.stringify({ character_id: cid }),
+                        });
+                        if (res && res.ok) {
+                            _showToast('Character added!', '#4ADE80');
+                            await renderModal();
+                            pollChatState();
+                        } else {
+                            _showToast('Failed to add character', '#EF4444');
+                        }
+                    });
+                });
+
+                overlay.querySelector('#gm-add-back').addEventListener('click', () => renderModal());
+            });
+
+            // Close
+            overlay.querySelector('#gm-close').addEventListener('click', () => overlay.remove());
+        }
+
+        document.body.appendChild(overlay);
+        await renderModal();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SHOW CHAT VIEW (for group redirect after fork)
+    // ═══════════════════════════════════════════════════════════
+
+    function showChatView(name, desc, hasAvatar) {
+        $('#chat-char-name').textContent = name;
+        $('#chat-char-desc').textContent = desc || '';
+        const avatarEl = $('#chat-avatar');
+        if (hasAvatar && currentCharacterId) {
+            avatarEl.src = `/api/characters/${currentCharacterId}/avatar?token=${encodeURIComponent(token)}`;
+            avatarEl.style.display = '';
+        } else {
+            avatarEl.style.display = 'none';
+        }
+        updateModelLabel();
+        switchPage('chat');
+        $('#right-panel').classList.add('active');
+        $('#chat-messages').innerHTML = '';
+        lastMessageCount = 0;
+        window._lastMessages = null;
+        connectSSE();
+        startPolling();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // INIT
     // ═══════════════════════════════════════════════════════════
 
     function init() {

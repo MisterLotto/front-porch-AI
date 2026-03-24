@@ -105,7 +105,9 @@ class OpenRouterService extends LLMService {
   /// Returns a human-readable status message.
   Future<String> testConnection() async {
     if (_apiUrl.isEmpty) return 'API URL is empty.';
-    if (_apiKey.isEmpty) return 'API key is empty.';
+    // Allow empty API key for local backends (localhost / 127.0.0.1)
+    final isLocal = _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
+    if (_apiKey.isEmpty && !isLocal) return 'API key is empty.';
 
     final client = http.Client();
     try {
@@ -136,7 +138,9 @@ class OpenRouterService extends LLMService {
 
   /// Fetch the list of available models with pricing info from the API.
   Future<List<RemoteModelInfo>> fetchAvailableModels() async {
-    if (_apiUrl.isEmpty || _apiKey.isEmpty) return [];
+    if (_apiUrl.isEmpty) return [];
+    final isLocal = _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
+    if (_apiKey.isEmpty && !isLocal) return [];
 
     final client = http.Client();
     try {
