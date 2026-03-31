@@ -253,7 +253,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
 
     // Update avatar if changed
     if (_newAvatarPath != null) {
-      widget.character.imagePath = p.basename(_newAvatarPath!);
+      widget.character.imagePath = _newAvatarPath!;
 
       // Embed V2 card data into the new avatar PNG
       try {

@@ -122,25 +122,42 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
 
-## 🆕 What's New in V0.9.5
+## 🆕 What's New in V0.9.6
 
-- 📖 **Porch Stories — AI Novel Generator**: Transform character chat histories into full-length novels. A multi-stage AI pipeline takes your concept from story bible to published prose, with a skeuomorphic book reader for immersive reading.
-  - **5-Stage Pipeline**: Chat Distiller → Story Architect → Scene Weaver → Beat Crafter → Prose Writer — each stage refining the narrative from raw concept to polished prose.
-  - **Chat History Integration**: Import past character conversations as canon source material. The AI distills your chat sessions into a chronological event timeline and novelizes what actually happened.
-  - **Character Role Assignment**: Assign roles (Protagonist, Antagonist, Supporting, Love Interest, Mentor) to imported characters. First-selected character defaults to Protagonist.
-  - **User Self-Insert**: Toggle "Play as a character?" to inject your active persona into the story cast with a role of your choice.
-  - **Story Customization**: Full creative control — POV (First/Third Person), act count (1–5), genre & mood multi-select, prose length, narrative pace, dialogue density, maturity rating, and writing style.
-  - **Skeuomorphic Book Reader**: Realistic page-flip book UI with animated page turns, vintage paper textures, and act/scene dividers.
-  - **Read-Along (Multi-Voice TTS)**: "Read to me" mode with per-character voice casting. Assign TTS voices to characters in the dashboard — each character's dialogue is spoken in their own voice, with narration in the default voice. 3-page deep audio pre-buffering with a live buffer indicator.
-  - **Table of Contents Drawer**: Pull-out TOC listing all acts and scenes with one-tap navigation.
-  - **Scene Regeneration**: Regenerate any scene from the reader with context-aware continuity — the AI receives both backward context (previous scene) and forward context (next scene) to maintain narrative flow.
-  - **Reading Progress Bar**: Subtle amber progress bar tracking your position through the book.
-  - **Prompt Tier Support**: Choose between Frontier (best quality) and Fast (speed-optimized) AI generation tiers.
+This release significantly expands Front Porch AI's visual capabilities, natively integrating your favorite local image generation backends, and vastly streamlining the AI Character Creator pipeline.
+
+**🖼️ Local Image Generation Workflows (Beta)**
+*   **Full Backend Support:** Natively connect to **A1111**, **Forge**, **SDNext**, and **Draw Things** instances on your local network.
+*   **Live Model Switching (A1111/Forge):** Select and load different Checkpoint models directly from the Front Porch UI drop-downs. No need to tab over to your backend console!
+*   **Dedicated Unload Controls (A1111/Forge):** Added manual buttons to explicitly force-unload models inside A1111 and Forge. When switching local models mid-generation, Front Porch will now safely swap them via API without needing backend restarts.
+*   **LoRA Injection (A1111/Forge/SDNext):** Added a dedicated LoRA dropdown to dynamically inject character concepts or art styles alongside a weight slider directly from the chat UI.
+
+**🧠 AI Character Creator Upgrades**
+*   **"Easy Mode" Quick Create:** Brand new to the Character Creator! Just type a character's Name and an optional `Concept` sentence ("A gruff dwarven blacksmith who writes poetry") and the AI will fully invent and flesh out an entire lore-accurate Tavern card for you. No more endless form fields!
+*   **World Lore Extraction (RAG-Lite):** You can now paste Wiki URLs (like Fandom or wikia pages) or upload local `.txt` / `.pdf` lore documents directly into both the Quick and Guided generators! The system will read, summarize, and inject this world-building context directly into the character's creation prompt so they fit flawlessly into their fictional universe.
+*   **Pipeline Optimization:** We removed the overarching `system_prompt` from the LLM's character generation instructions. This saves massive context token overhead while generating the character's core traits. The desired system prompt is now cleanly appended at the very end when the Tavern card is finalized.
+
+**⚙️ Settings UI Overhaul**
+*   **Menu Splitting:** The massive, monolithic Settings screen has been completely overhauled and split into dedicated, categorized pages! It is now vastly easier to configure your backend, image generator, and text-to-speech settings without endless scrolling.
+
+**🗣️ The Prompt Paradigm Engine**
+*   **Model Agnostic Prompts:** You can now flip a toggle in Image Settings between **Natural Language** and **Danbooru Tags**.
+*   Running a modern FLUX or SD3 model? Use Natural Language so the LLM writes rich, cohesive prose.
+*   Running a classic SD 1.5 or Illustrious anime model? Switch to Tags, and the LLM will mathematically output flat, comma-separated Danbooru tags. 
+*   **Deep Integration:** This setting applies to *both* in-chat selfie requests and the internal appearance generation inside the Character Creator.
+
+**✂️ Upgraded Avatar Cropping**
+*   AI-generated Character portraits now automatically invoke our custom Crop Tool before saving.
+*   **"Zoom Out" Padding:** Generated an amazing portrait but it's framed too tightly? We've added a brand-new **Zoom Out (Pad Canvas)** button. This expands the image's canvas with your background color, allowing you to perfectly shrink close-ups to fit into the required 2:3 character card aspect ratio!
+
+**🐛 Bug Fixes & Maintenance**
+*   **The "Grey Box" Fix:** Overhauled how character avatars are loaded. Avatars remain cross-platform portable without breaking or corrupting into grey boxes during active chat sessions!
+*   Cleaned up blank state messages inside the Review step of the Character Creator.
 
 <details>
 <summary><strong>📦 Previous Releases</strong></summary>
 
-### What's New in V0.9.4.1
+### What's New in V0.9.5
 
 - 👥 **Group Chat Enhancements**: Fork any 1:1 conversation into a group chat, preserving full message history. Add or remove characters mid-conversation without losing context. Character Evolution now works per-character within groups.
 - 🛡️ **Database Power-Failure Protection**: SQLite now runs with `PRAGMA synchronous = FULL` and performs an integrity check (`PRAGMA quick_check`) on every startup. If corruption is detected, a recovery overlay offers one-tap restore from any available backup.
@@ -433,7 +450,7 @@ A huge thank you to the people who have helped shape Front Porch AI through thei
 
 
 <p align="center">
-  <img src="docs/screenshots/home.png" width="800" alt="Home Page - Character Grid with Folders">
+  <img src="docs/screenshots/home_new.png" width="800" alt="Home Page - Character Grid with Folders">
 </p>
 <p align="center">
   <em>Organize your collection with virtual folders and comprehensive search</em>
@@ -456,9 +473,10 @@ A powerful, cross-platform desktop application designed to streamline the manage
 - **V2 Smart Parsing**: Advanced V2 tEXt metadata extraction from PNG character cards.
 
 ### 🎨 Character Creation
-<img src="docs/screenshots/create.png" width="800" alt="Character Creation">
+<img src="docs/screenshots/ez_char_creator.png" width="800" alt="Easy Mode Character Creator">
 
 - **AI Character Creator**: Generate a complete character card from just a name and concept — the AI writes the personality, backstory, dialogue examples, system prompt, lorebook, and even an avatar. Multi-step wizard with editor passes for quality control.
+- **World Lore Integration (RAG-Lite)**: Paste Wiki URLs or attach local lore documents, and the generator will read and embed world-context into the character's core prompts.
 - **Manual Creation**: Build detailed character cards (V2 spec compatible) with a full-form UI — name, description, personality, scenario, first message, alternate greetings, tags, and avatar upload.
 
 ### 💬 Immersive Chat Experience
@@ -484,7 +502,7 @@ A powerful, cross-platform desktop application designed to streamline the manage
 - **User Personas**: Define your own persona name and description to influence how characters interact with you.
 
 ### 👥 Group Chat & Director Mode
-<img src="docs/screenshots/group_chat.png" width="800" alt="Group Chat with Director Mode">
+<img src="docs/screenshots/group_chat_new.png" width="800" alt="Group Chat with Director Mode">
 
 - **Multi-Character Conversations**: Create group chats with 2+ characters and watch them interact with each other and with you.
 - **Director Mode**: Take control of who speaks next — tap any character to direct the conversation flow.
@@ -492,6 +510,22 @@ A powerful, cross-platform desktop application designed to streamline the manage
 - **AI-Generated Scenarios**: One-tap ✨ Generate buttons for scenarios and first messages.
 
 <img src="docs/screenshots/group_chat_creator.png" width="400" alt="Group Chat Creator">
+
+### 🖼️ Local Image Generation Workflows
+<img src="docs/screenshots/local_image_gen.png" width="800" alt="Local Image Generation Interop">
+
+- **Full Backend Support**: Natively connect to Automatic1111, Forge, SDNext, and Draw Things instances.
+- **UI First Integration**: Generate character portraits and in-chat selfies directly from the Front Porch UI.
+- **Advanced Controls**: Dropdowns for live Model switching, LoRA injection, and a model Unload flush toggle.
+- **Prompt Paradigms**: Switch between Natural Language format (for FLUX / SD3) or Danbooru Tags (SD 1.5 / Anime models).
+
+### 📖 Porch Stories — AI Novel Generator
+<img src="docs/screenshots/Porch_stories_book.png" width="800" alt="Porch Stories Skeuomorphic Book Reader">
+
+- **Chat Distillation**: Imports character chat logs to distill into a coherent storyline timeline.
+- **Novel Generation pipeline**: Operates an autonomous 5-stage pipeline to turn ideas into fully written books.
+- **Skeuomorphic Reader**: Stunning page-flip animations, multi-voice audiobook TTS read-alongs, and an interactive Table of Contents.
+- **Character Role Assignment**: Cast your chat characters as the Protagonist, Antagonist, or Support.
 
 ### 🔊 Text-to-Speech
 <img src="docs/screenshots/tts_settings.png" width="400" alt="TTS Settings">
@@ -521,6 +555,12 @@ A powerful, cross-platform desktop application designed to streamline the manage
 - **Backup Management**: Automatic backups before every cloud sync, with one-click restore and manual backup creation.
 - **Upload-Only Characters**: Character PNGs upload automatically; downloads are user-initiated to keep you in control.
 - **Privacy-First**: Syncs only to accounts you own. No data ever passes through our servers.
+
+### ⚙️ Dedicated Settings Overhaul
+<img src="docs/screenshots/new_settings.png" width="800" alt="Advanced Settings Overhaul">
+
+- **Categorized Hub**: Intuitively tab through General, Voice & Media, and Backend Settings. 
+- **Hardware Telemetry**: View live readouts of your backend's Context Window sizes and VRAM footprint directly alongside your AI customizations.
 
 ### 🌍 World Building
 - **World Info**: Create shared lore that can be referenced by multiple characters.

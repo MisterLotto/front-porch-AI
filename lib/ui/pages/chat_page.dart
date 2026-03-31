@@ -114,6 +114,13 @@ class _ChatPageState extends State<ChatPage> {
   bool _imageConsentChecked = false;
   TtsService? _ttsService;
 
+  /// Resolve a character [imagePath] (basename or full path) to a [File].
+  /// Always use this instead of [File(imagePath)] directly.
+  File _resolveCharImage(String imagePath) {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    return storage.resolveCharacterImage(imagePath);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -274,12 +281,12 @@ class _ChatPageState extends State<ChatPage> {
                                         final senderChar = chatService.groupCharacters
                                             .where((c) => c.name == msg.sender)
                                             .firstOrNull;
-                                        senderImage = senderChar?.imagePath != null ? File(senderChar!.imagePath!) : null;
+                                        senderImage = senderChar?.imagePath != null ? _resolveCharImage(senderChar!.imagePath!) : null;
                                         final senderIdx = chatService.groupCharacters
                                             .indexWhere((c) => c.name == msg.sender);
                                         senderColor = _groupCharacterColor(senderIdx >= 0 ? senderIdx : 0);
                                       } else {
-                                        senderImage = character?.imagePath != null ? File(character!.imagePath!) : null;
+                                        senderImage = character?.imagePath != null ? _resolveCharImage(character!.imagePath!) : null;
                                       }
                                       return _MessageBubble(
                                         message: msg, 
@@ -495,7 +502,7 @@ class _ChatPageState extends State<ChatPage> {
       title: Row(
         children: [
           CircleAvatar(
-            backgroundImage: character.imagePath != null ? FileImage(File(character.imagePath!)) : null,
+            backgroundImage: character.imagePath != null ? FileImage(_resolveCharImage(character.imagePath!)) : null,
             child: character.imagePath == null ? const Icon(Icons.person) : null,
           ),
           const SizedBox(width: 12),
@@ -539,7 +546,7 @@ class _ChatPageState extends State<ChatPage> {
                     child: CircleAvatar(
                       radius: 16,
                       backgroundColor: _groupCharacterColor(i),
-                      backgroundImage: chars[i].imagePath != null ? FileImage(File(chars[i].imagePath!)) : null,
+                      backgroundImage: chars[i].imagePath != null ? FileImage(_resolveCharImage(chars[i].imagePath!)) : null,
                       child: chars[i].imagePath == null
                           ? Text(chars[i].name[0], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))
                           : null,
@@ -1309,7 +1316,8 @@ class _ChatPageState extends State<ChatPage> {
     void Function(String path)? onAccept;
     if (mode == ImageGenMode.characterPortrait && character != null) {
       onAccept = (imagePath) async {
-        // Store the full path — all display sites use File(imagePath) directly.
+        // Maintain full path in memory — CharacterRepository automatically extracts
+        // the basename when saving to the database for cross-platform safety.
         character.imagePath = imagePath;
         final charRepo = Provider.of<CharacterRepository>(context, listen: false);
         await charRepo.updateCharacter(character);
@@ -1834,7 +1842,7 @@ class _ChatPageState extends State<ChatPage> {
       child: Column(
         children: [
           if (character.imagePath != null)
-             Image.file(File(character.imagePath!), height: _sidebarWidth, width: _sidebarWidth, fit: BoxFit.cover),
+             Image.file(_resolveCharImage(character.imagePath!), height: _sidebarWidth, width: _sidebarWidth, fit: BoxFit.cover),
           
           // Action Buttons
           Container(
@@ -2309,7 +2317,7 @@ class _ChatPageState extends State<ChatPage> {
                       leading: CircleAvatar(
                         radius: 20,
                         backgroundColor: color,
-                        backgroundImage: ch.imagePath != null ? FileImage(File(ch.imagePath!)) : null,
+                        backgroundImage: ch.imagePath != null ? FileImage(_resolveCharImage(ch.imagePath!)) : null,
                         child: ch.imagePath == null
                             ? Text(ch.name[0], style: const TextStyle(fontWeight: FontWeight.bold))
                             : null,
@@ -2617,7 +2625,7 @@ class _ChatPageState extends State<ChatPage> {
                               },
                               secondary: CircleAvatar(
                                 radius: 18,
-                                backgroundImage: ch.imagePath != null ? FileImage(File(ch.imagePath!)) : null,
+                                backgroundImage: ch.imagePath != null ? FileImage(_resolveCharImage(ch.imagePath!)) : null,
                                 child: ch.imagePath == null ? Text(ch.name[0]) : null,
                               ),
                               title: Text(ch.name, style: const TextStyle(fontSize: 13, color: Colors.white)),
@@ -2718,7 +2726,7 @@ class _ChatPageState extends State<ChatPage> {
                     return ListTile(
                       leading: CircleAvatar(
                         radius: 20,
-                        backgroundImage: ch.imagePath != null ? FileImage(File(ch.imagePath!)) : null,
+                        backgroundImage: ch.imagePath != null ? FileImage(_resolveCharImage(ch.imagePath!)) : null,
                         child: ch.imagePath == null ? Text(ch.name[0]) : null,
                       ),
                       title: Text(ch.name, style: const TextStyle(fontSize: 13, color: Colors.white)),
@@ -4737,7 +4745,7 @@ class _MemorySectionState extends State<_MemorySection> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: Image.file(
-                      File(char.imagePath!),
+                      Provider.of<StorageService>(context, listen: false).resolveCharacterImage(char.imagePath!),
                       width: 20, height: 20,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 16, color: Colors.white30),

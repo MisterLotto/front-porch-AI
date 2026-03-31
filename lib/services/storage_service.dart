@@ -44,6 +44,23 @@ class StorageService extends ChangeNotifier {
 
   Directory get charactersDir => Directory(path.join(_rootPath ?? '', 'KoboldManager', 'Characters'));
 
+  /// Resolve a character [imagePath] (stored in the DB) to a [File].
+  ///
+  /// The DB may contain either:
+  ///   • A **basename** only — e.g. `"Maggie_1234567890.png"` (written by the
+  ///     manual avatar picker and older AI-generated entries).
+  ///   • A **full absolute path** — e.g. `/Users/.../Maggie_1234567890.png`
+  ///     (written by newer AI-generated entries before this fix).
+  ///
+  /// In both cases this returns the correct [File].  Pass the result to
+  /// [FileImage] or [Image.file] instead of [File(imagePath)] directly so
+  /// that the code remains valid when the app data directory moves or the
+  /// character card is used on a different machine.
+  File resolveCharacterImage(String imagePath) {
+    if (path.isAbsolute(imagePath)) return File(imagePath);
+    return File(path.join(charactersDir.path, imagePath));
+  }
+
   // Settings
   static const String defaultSystemPrompt = "You are an immersive roleplay partner. Embody {{char}} completely — personality, appearance, thought processes, emotions, behaviors, and speech patterns. You may also roleplay as any side characters introduced.\n\nEngage with {{user}} by depicting {{char}}'s actions, emotions, and dialogue. Develop the plot slowly and organically while driving the scenario forward. Never write {{user}}'s speech, actions, or decisions — allow them full control of their character.\n\nWrite in a vivid, creative, varied, and descriptive style. Use rich sensory detail for the environment, people, and events. Make each reply unique and end with an action or dialogue to keep momentum.\n\nMaintain consistency with established details — clothing, time of day, location, and prior events. Stay in character at all times.";
   String _systemPrompt = defaultSystemPrompt;
@@ -137,6 +154,7 @@ class StorageService extends ChangeNotifier {
   String _imageGenSize = '1024x1024';
   String _imageGenNegativePrompt = 'blurry, low quality, watermark, text';
   String _imageGenStyle = 'photorealistic';
+  String _imageGenPromptParadigm = 'natural'; // 'natural', 'tags'
   String _imageGenLora = '';        // selected LoRA filename (A1111/Forge/SDNext only)
   double _imageGenLoraWeight = 0.8; // LoRA strength 0.0–1.0
 
@@ -248,6 +266,7 @@ class StorageService extends ChangeNotifier {
   String get imageGenSize => _imageGenSize;
   String get imageGenNegativePrompt => _imageGenNegativePrompt;
   String get imageGenStyle => _imageGenStyle;
+  String get imageGenPromptParadigm => _imageGenPromptParadigm;
   String get imageGenLora => _imageGenLora;
   double get imageGenLoraWeight => _imageGenLoraWeight;
 
@@ -382,6 +401,7 @@ class StorageService extends ChangeNotifier {
     _imageGenSize = _prefs?.getString('image_gen_size') ?? '1024x1024';
     _imageGenNegativePrompt = _prefs?.getString('image_gen_negative_prompt') ?? 'blurry, low quality, watermark, text';
     _imageGenStyle = _prefs?.getString('image_gen_style') ?? 'photorealistic';
+    _imageGenPromptParadigm = _prefs?.getString('image_gen_prompt_paradigm') ?? 'natural';
     _imageGenLora = _prefs?.getString('image_gen_lora') ?? '';
     _imageGenLoraWeight = _prefs?.getDouble('image_gen_lora_weight') ?? 0.8;
 
@@ -988,6 +1008,12 @@ class StorageService extends ChangeNotifier {
   Future<void> setImageGenStyle(String value) async {
     _imageGenStyle = value;
     await _prefs?.setString('image_gen_style', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenPromptParadigm(String value) async {
+    _imageGenPromptParadigm = value;
+    await _prefs?.setString('image_gen_prompt_paradigm', value);
     notifyListeners();
   }
 

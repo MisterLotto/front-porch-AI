@@ -1977,6 +1977,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       userPersonaContext: userPersonaContext,
       worldLore: worldLore,
       generateDescription: true,
+      imageGenPromptParadigm: storage.imageGenPromptParadigm,
       onProgress: (accumulated) {
         lastRawOutput = accumulated;
         if (mounted) {
@@ -4899,6 +4900,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       characterContext: contextParts.join('\n'),
       userPersonaContext: userPersonaContext,
       generateDescription: true,
+      imageGenPromptParadigm: storage.imageGenPromptParadigm,
       onProgress: (accumulated) {
         lastRawOutput = accumulated;
         if (mounted) {
@@ -5369,6 +5371,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         if (_nsfwEnabled && nsfwParts.isNotEmpty) nsfwParts.join(', '),
       ].join('\n'),
       userPersonaContext: userPersonaContext,
+      imageGenPromptParadigm: storage.imageGenPromptParadigm,
       onProgress: (accumulated) {
         lastRawOutput = accumulated;
         if (mounted) {

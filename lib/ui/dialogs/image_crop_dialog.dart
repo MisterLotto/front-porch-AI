@@ -18,6 +18,7 @@
 
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:crop_your_image/crop_your_image.dart';
 
 /// A reusable dialog that lets the user interactively crop an image.
@@ -65,7 +66,53 @@ class ImageCropDialog extends StatefulWidget {
 
 class _ImageCropDialogState extends State<ImageCropDialog> {
   final _cropController = CropController();
+  late Uint8List _currentImageBytes;
   bool _isCropping = false;
+  bool _isPadding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentImageBytes = widget.imageBytes;
+  }
+
+  Future<void> _padImage() async {
+    setState(() => _isPadding = true);
+    // Yield to let UI show loading spinner
+    await Future.delayed(const Duration(milliseconds: 50));
+    
+    try {
+      final decoded = img.decodeImage(_currentImageBytes);
+      if (decoded != null) {
+        // Increase canvas size by 25%
+        final newWidth = (decoded.width * 1.25).toInt();
+        final newHeight = (decoded.height * 1.25).toInt();
+        
+        final padded = img.Image(width: newWidth, height: newHeight);
+        // Fill with app background color
+        img.fill(padded, color: img.ColorRgb8(26, 26, 46));
+        
+        // Center the original image on the new padded canvas
+        img.compositeImage(
+          padded, 
+          decoded, 
+          dstX: (newWidth - decoded.width) ~/ 2, 
+          dstY: (newHeight - decoded.height) ~/ 2,
+        );
+        
+        final newBytes = img.encodePng(padded);
+        if (mounted) {
+          setState(() {
+             _currentImageBytes = newBytes;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to pad image: $e');
+    } finally {
+      if (mounted) setState(() => _isPadding = false);
+    }
+  }
 
   void _onCropAndSave() {
     setState(() => _isCropping = true);
@@ -149,7 +196,7 @@ class _ImageCropDialogState extends State<ImageCropDialog> {
                 clipBehavior: Clip.antiAlias,
                 child: Crop(
                   controller: _cropController,
-                  image: widget.imageBytes,
+                  image: _currentImageBytes,
                   aspectRatio: widget.aspectRatioWidth / widget.aspectRatioHeight,
                   onCropped: _onCropped,
                   baseColor: const Color(0xFF111827),
@@ -170,15 +217,22 @@ class _ImageCropDialogState extends State<ImageCropDialog> {
                 border: Border(top: BorderSide(color: Colors.white10)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  TextButton.icon(
+                    onPressed: (_isCropping || _isPadding) ? null : _padImage,
+                    icon: _isPadding 
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blueAccent))
+                        : const Icon(Icons.zoom_out_map, size: 16, color: Colors.blueAccent),
+                    label: Text(_isPadding ? 'Zooming...' : 'Zoom Out (Pad Canvas)', style: const TextStyle(color: Colors.blueAccent)),
+                  ),
+                  const Spacer(),
                   TextButton(
-                    onPressed: _isCropping ? null : () => Navigator.of(context).pop(null),
+                    onPressed: (_isCropping || _isPadding) ? null : () => Navigator.of(context).pop(null),
                     child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
                   ),
                   const SizedBox(width: 16),
                   ElevatedButton.icon(
-                    onPressed: _isCropping ? null : _onCropAndSave,
+                    onPressed: (_isCropping || _isPadding) ? null : _onCropAndSave,
                     icon: _isCropping
                         ? const SizedBox(
                             width: 16,

@@ -391,6 +391,16 @@ class ImageGenService extends ChangeNotifier {
     'watercolor':     'Soft watercolor illustration with flowing color washes, delicate edges, and gentle translucent tones.',
   };
 
+  /// Legacy comma-separated tag modifiers for SD 1.5 / Illustrious models.
+  static const Map<String, String> legacyStyleModifiers = {
+    'photorealistic': 'photorealistic, cinematic lighting, sharp focus, highly detailed, 8k',
+    'anime':          'anime style, masterpiece, best quality, highly detailed, cel shading',
+    'fantasy_art':    'fantasy art, epic, dramatic lighting, highly detailed, painterly',
+    'oil_painting':   'oil painting, traditional media, brushstrokes, fine art',
+    'digital_art':    'digital art, polished, vibrant, illustration, high quality',
+    'watercolor':     'watercolor, translucent, soft washes, pastel, traditional media',
+  };
+
   /// Available style labels for UI display.
   static const Map<String, String> styleLabels = {
     'photorealistic': 'Photorealistic',
@@ -419,10 +429,14 @@ class ImageGenService extends ChangeNotifier {
     String? personaDescription,
     List<String>? recentMessages,
   }) async {
+    final paradigm = _storage.imageGenPromptParadigm; // 'natural' or 'tags'
+    final modifiers = paradigm == 'tags' ? legacyStyleModifiers : styleModifiers;
+
     // Custom prompt mode — no LLM needed, just append style
     if (mode == ImageGenMode.customPrompt) {
-      final styleSuffix = styleModifiers[style] ?? '';
-      final raw = '${customPrompt ?? ''}. $styleSuffix';
+      final styleSuffix = modifiers[style] ?? '';
+      final glue = paradigm == 'tags' ? ', ' : '. ';
+      final raw = '${customPrompt ?? ''}$glue$styleSuffix';
       return _truncate(raw, _maxPromptLength);
     }
 
@@ -460,7 +474,7 @@ class ImageGenService extends ChangeNotifier {
     }
 
     final rawContext = _truncate(contextParts.join('\n'), 2000);
-    final styleSuffix = styleModifiers[style] ?? '';
+    final styleSuffix = modifiers[style] ?? '';
 
     // If no LLM available, fall back to static prompt builder
     if (llmService == null || !llmService.isReady) {
@@ -498,14 +512,17 @@ class ImageGenService extends ChangeNotifier {
         modeInstruction = 'Describe the scene as a vivid image.';
     }
 
-    // Keep the LLM prompt concise — write natural language, not tags
-    final styleInstruction = styleSuffix.isNotEmpty ? ' $styleSuffix' : '';
+    // Determine prompt instruction based on selected paradigm
+    final isTags = paradigm == 'tags';
+    final formatInstruction = isTags
+        ? 'Write a flat, comma-separated list of visual danbooru tags describing the scene and characters — NO prose. NO sentences. ONLY tags.\nExample: masterpiece, best quality, 1girl, blonde hair, blue eyes, dynamic pose, outdoors'
+        : 'Write a single paragraph in natural, descriptive English — NOT a comma-separated tag list.\nBe vivid and specific about visual details: physical appearance, clothing, lighting, mood, setting.';
+
     final llmPrompt =
-        'You are writing an image generation prompt for a modern AI image model (such as FLUX or Stable Diffusion XL). '
-        'Write a single paragraph in natural, descriptive English — NOT a comma-separated tag list. '
-        'Be vivid and specific about visual details: physical appearance, clothing, lighting, mood, setting.\n'
+        'You are writing an image generation prompt for an AI image model.\n'
+        '$formatInstruction\n'
         '$modeInstruction\n'
-        'Keep it under 120 words. Do not include any character names. '
+        'Keep it under 100 words. Do not include any character names. '
         'End with the art style description.${styleSuffix.isNotEmpty ? " Art style: $styleSuffix" : ""}\n\n'
         'Context:\n$rawContext\n\n'
         'Image prompt:';
@@ -572,8 +589,14 @@ class ImageGenService extends ChangeNotifier {
       }
 
       // Ensure style is present
-      if (styleSuffix.isNotEmpty && !smartPrompt.toLowerCase().contains(styleSuffix.toLowerCase().substring(0, 10))) {
-        smartPrompt = '$smartPrompt. $styleSuffix';
+      if (styleSuffix.isNotEmpty && !smartPrompt.toLowerCase().contains(styleSuffix.toLowerCase().substring(0, 5))) {
+        final glue = isTags ? ', ' : '. ';
+        smartPrompt = '${smartPrompt.trim()}$glue$styleSuffix';
+      }
+      
+      if (isTags) {
+        // Tag paradigm logic (e.g. remove trailing periods, ensure commas)
+        smartPrompt = smartPrompt.replaceAll('.', ',');
       }
 
       debugPrint('ImageGen: Smart prompt crafted (${smartPrompt.length} chars)');

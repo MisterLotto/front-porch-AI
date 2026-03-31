@@ -129,7 +129,7 @@ class Sidebar extends StatelessWidget {
                 Tooltip(
                   message: 'Join our Discord Server',
                   child: GestureDetector(
-                    onTap: () => launchUrl(Uri.parse('https://discord.gg/EqJrJPjdT')),
+                    onTap: () => launchUrl(Uri.parse('https://discord.gg/e4tET6rpdv')),
                     child: const MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: Icon(Icons.discord, size: 20, color: Colors.white54),

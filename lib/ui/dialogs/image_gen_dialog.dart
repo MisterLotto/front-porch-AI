@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 
 /// Dialog that shows the image generation result with action buttons.
 ///
@@ -228,8 +229,16 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
     String? path;
     if (widget.mode == ImageGenMode.characterPortrait ||
         widget.mode == ImageGenMode.userAvatar) {
+      
+      // Let the user crop the generated avatar to correct 2:3 proportions
+      final croppedBytes = await ImageCropDialog.show(context, imageBytes: _imageBytes!);
+      if (croppedBytes == null) {
+        if (mounted) setState(() => _saving = false);
+        return; // User cancelled crop
+      }
+
       path = await service.saveAvatarToDisk(
-        _imageBytes,
+        croppedBytes,
         characterName: widget.characterName ?? widget.personaName,
       );
     } else {

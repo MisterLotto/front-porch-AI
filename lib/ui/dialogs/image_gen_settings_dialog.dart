@@ -895,6 +895,51 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
         ),
 
         const SizedBox(height: 20),
+        const Text('Prompt Format',
+            style: TextStyle(
+                color: Colors.white54,
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: storage.imageGenPromptParadigm,
+          dropdownColor: const Color(0xFF374151),
+          style: const TextStyle(color: Colors.white),
+          isExpanded: true,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.black26,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 10),
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: 'natural',
+              child: Text('Natural Language (FLUX / SD3)'),
+            ),
+            DropdownMenuItem(
+              value: 'tags',
+              child: Text('Danbooru Tags (SD 1.5 / Anime)'),
+            ),
+          ],
+          onChanged: (val) {
+            if (val != null) storage.setImageGenPromptParadigm(val);
+          },
+        ),
+        const SizedBox(height: 6),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            'How the LLM formats generated prompts. Use Tags for older anime models.',
+            style: TextStyle(color: Colors.white24, fontSize: 10),
+          ),
+        ),
+
+        const SizedBox(height: 20),
         const Text('Default Negative Prompt',
             style: TextStyle(
                 color: Colors.white54,

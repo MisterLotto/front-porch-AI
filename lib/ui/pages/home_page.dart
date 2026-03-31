@@ -91,6 +91,12 @@ class _HomePageState extends State<HomePage> {
     _refreshLastActivityCache();
   }
 
+  /// Resolve a character [imagePath] (basename or full path) to a [File].
+  File _resolveCharImage(String imagePath) {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    return storage.resolveCharacterImage(imagePath);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -981,7 +987,7 @@ class _HomePageState extends State<HomePage> {
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: character.imagePath != null
-                ? Image.file(File(character.imagePath!), fit: BoxFit.cover)
+                ? Image.file(_resolveCharImage(character.imagePath!), fit: BoxFit.cover)
                 : const Icon(Icons.person, size: 64, color: Colors.white24),
           ),
         ),
@@ -1054,7 +1060,7 @@ class _HomePageState extends State<HomePage> {
                     fit: StackFit.expand,
                     children: [
                       character.imagePath != null
-                          ? Image.file(File(character.imagePath!), fit: BoxFit.cover)
+                          ? Image.file(_resolveCharImage(character.imagePath!), fit: BoxFit.cover)
                           : Container(
                               color: Colors.grey.shade800,
                               child: const Icon(Icons.person, size: 32, color: Colors.white24),
@@ -1089,7 +1095,7 @@ class _HomePageState extends State<HomePage> {
                       flex: isCompact ? 4 : 3,
                       child: character.imagePath != null
                           ? Image.file(
-                              File(character.imagePath!),
+                              _resolveCharImage(character.imagePath!),
                               fit: BoxFit.cover,
                             )
                           : Container(
@@ -1352,7 +1358,7 @@ class _HomePageState extends State<HomePage> {
                                       border: Border.all(color: Colors.purpleAccent, width: 2),
                                       image: characters[i].imagePath != null
                                           ? DecorationImage(
-                                              image: FileImage(File(characters[i].imagePath!)),
+                                              image: FileImage(_resolveCharImage(characters[i].imagePath!)),
                                               fit: BoxFit.cover,
                                             )
                                           : null,
@@ -1742,17 +1748,18 @@ class _HomePageState extends State<HomePage> {
           ),
           content: SizedBox(
             width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // Selected characters preview
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: selectedChars.map((c) => Chip(
                     avatar: c.imagePath != null
-                        ? CircleAvatar(backgroundImage: FileImage(File(c.imagePath!)))
+                        ? CircleAvatar(backgroundImage: FileImage(_resolveCharImage(c.imagePath!)))
                         : const CircleAvatar(child: Icon(Icons.person, size: 14)),
                     label: Text(c.name, style: const TextStyle(color: Colors.white, fontSize: 12)),
                     backgroundColor: Colors.purpleAccent.withValues(alpha: 0.2),
@@ -1945,7 +1952,7 @@ class _HomePageState extends State<HomePage> {
                       child: Row(
                         children: [
                           c.imagePath != null
-                              ? CircleAvatar(radius: 12, backgroundImage: FileImage(File(c.imagePath!)))
+                              ? CircleAvatar(radius: 12, backgroundImage: FileImage(_resolveCharImage(c.imagePath!)))
                               : const CircleAvatar(radius: 12, child: Icon(Icons.person, size: 12)),
                           const SizedBox(width: 8),
                           Expanded(
@@ -2218,6 +2225,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ],
+            ),
             ),
           ),
           actions: [

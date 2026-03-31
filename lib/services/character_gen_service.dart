@@ -60,6 +60,7 @@ class CharacterGenService {
     required String concept,
     String personalityKeywords = '',
     String artStyle = '',
+    String imageGenPromptParadigm = 'natural',
     String greetingLength = 'Medium (2-4 paragraphs)',
     int altGreetingCount = 2,
     List<String> greetingTones = const ['Neutral'],
@@ -94,9 +95,9 @@ class CharacterGenService {
       sex: sex,
       relationship: relationship,
       descriptionDetail: descriptionDetail,
-      backstory: backstory,
       generateDescription: generateDescription,
       worldLore: worldLore,
+      imageGenPromptParadigm: imageGenPromptParadigm,
     );
 
     debugPrint('CharacterGen: Starting generation for "$name"');
@@ -758,6 +759,7 @@ Output ONLY the JSON:''';
     String backstory = '',
     bool generateDescription = false,
     String? worldLore,
+    String imageGenPromptParadigm = 'natural',
   }) {
     final keywordsLine = personalityKeywords.isNotEmpty
         ? 'Personality keywords: $personalityKeywords\n'
@@ -808,6 +810,11 @@ Output ONLY the JSON:''';
         ? ''
         : 'Do NOT generate a "description" key — the description is handled separately. ';
 
+    // Build image_prompt spec
+    final imagePromptSpec = imageGenPromptParadigm == 'tags'
+        ? '- "image_prompt": (string) flat comma-separated visual tags ONLY for an image generator. NO prose, NO sentences, NO names. ONLY tags in this format: "skin tone, gender, hair color + style, eye color, body type, outfit pieces, pose, setting, expression". Keep under 60 words'
+        : '- "image_prompt": (string) A rich, natural language descriptive sentence describing the character\'s physical appearance. Do NOT use comma separated tags. Keep under 100 words';
+
     // Key order: critical small fields FIRST so they survive output truncation.
     // Lorebook (the largest field) goes LAST so it gets clipped first if the
     // model runs out of output tokens — we can regenerate it separately.
@@ -821,7 +828,7 @@ ${descriptionSpec}- "personality": (string) 1-2 paragraphs, third person. ONLY i
 - "scenario": (string) 2-4 sentences MAX. Where/when/why {{user}} and {{char}} meet. ONLY the situation that frames the roleplay. No personality traits, no backstory, no system instructions — just the setting and circumstance. Keep it SHORT
 $sysSpec
 - "tags": (array of strings) 3-5 relevant tags
-- "image_prompt": (string) flat comma-separated visual tags ONLY for an image generator. NO prose, NO sentences, NO names. ONLY tags in this format: "skin tone, gender, hair color + style, eye color, body type, outfit pieces, pose, setting, expression". Keep under 60 words
+$imagePromptSpec
 - "example_dialogue": (string) 2-3 exchanges that model {{char}}'s unique voice, speech patterns, and pacing. Format: <START>\\n{{user}}: message\\n{{char}}: in-character response (show personality through word choice, mannerisms, and actions)\\n<START>\\n{{user}}: message\\n{{char}}: response. Each {{char}} response should be 2-4 sentences with action and dialogue
 $lorebookSpec
 FIELD RULES:
