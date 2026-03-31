@@ -307,6 +307,7 @@ class WebServerService extends ChangeNotifier {
     // ── Image gen local proxy routes ──
     router.post('/api/image-gen/test-connection', _handleImgenTestConnection);
     router.get('/api/image-gen/local-models', _handleImgenLocalModels);
+    router.get('/api/image-gen/loras', _handleImgenLoras);
     router.post('/api/image-gen/unload-model', _handleImgenUnloadModel);
     router.post('/api/image-gen/switch-model', _handleImgenSwitchModel);
 
@@ -4449,6 +4450,24 @@ class WebServerService extends ChangeNotifier {
       );
     } catch (e) {
       return _errorResponse(500, 'Failed to fetch models: $e');
+    }
+  }
+
+  /// GET /api/image-gen/loras?url=... — Fetch LoRA list from A1111/Forge/SDNext.
+  Future<shelf.Response> _handleImgenLoras(shelf.Request request) async {
+    if (_imageGenService == null) {
+      return _errorResponse(503, 'Image gen service not available');
+    }
+    try {
+      final url = request.url.queryParameters['url'] ?? '';
+      if (url.isEmpty) return _errorResponse(400, 'url query param is required');
+      final loras = await _imageGenService!.fetchA1111Loras(url);
+      return shelf.Response.ok(
+        jsonEncode({'loras': loras}),
+        headers: {'Content-Type': 'application/json'},
+      );
+    } catch (e) {
+      return _errorResponse(500, 'Failed to fetch LoRAs: $e');
     }
   }
 

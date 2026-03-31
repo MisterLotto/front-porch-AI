@@ -44,6 +44,10 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
   bool _switchingModel    = false;
   String _modelActionStatus = ''; // feedback message for unload/switch
 
+  // LoRA state (A1111/Forge/SDNext only)
+  List<String> _localLoras = [];
+  bool _loadingLoras = false;
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +100,19 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
     }
   }
 
+  Future<void> _fetchLocalLoras(String url) async {
+    if (url.isEmpty) return;
+    setState(() => _loadingLoras = true);
+    final service = Provider.of<ImageGenService>(context, listen: false);
+    final loras = await service.fetchA1111Loras(url);
+    if (mounted) {
+      setState(() {
+        _localLoras = loras;
+        _loadingLoras = false;
+      });
+    }
+  }
+
   Future<void> _testConnection() async {
     final url = _localUrlController.text.trim();
     if (url.isEmpty) return;
@@ -110,7 +127,12 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
         _connectionOk = ok;
         _testingConnection = false;
       });
-      if (ok) _fetchLocalModels(url);
+      if (ok) {
+        _fetchLocalModels(url);
+        // Fetch LoRAs for A1111-compatible backends (not Draw Things)
+        final storage = Provider.of<StorageService>(context, listen: false);
+        if (storage.imageGenBackend != 'drawthings') _fetchLocalLoras(url);
+      }
     }
   }
 
@@ -714,7 +736,98 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
         ],
 
         const SizedBox(height: 20),
+
+        // \u2500\u2500 LoRA selector (A1111 / Forge / SDNext only) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        if (!isDrawThings) ...[
+          const Divider(color: Colors.white12),
+          const SizedBox(height: 8),
+          const Text('LoRA',
+              style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          const Text(
+            'Applied to every generation via <lora:name:weight> in the prompt.',
+            style: TextStyle(color: Colors.white24, fontSize: 10),
+          ),
+          const SizedBox(height: 8),
+          if (_loadingLoras)
+            const SizedBox(
+              height: 20, width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.purpleAccent),
+            )
+          else
+            DropdownButtonFormField<String>(
+              value: _localLoras.contains(storage.imageGenLora)
+                  ? storage.imageGenLora
+                  : (storage.imageGenLora.isEmpty ? '' : null),
+              dropdownColor: const Color(0xFF374151),
+              style: const TextStyle(color: Colors.white),
+              isExpanded: true,
+              menuMaxHeight: 300,
+              decoration: InputDecoration(
+                hintText: _localLoras.isEmpty
+                    ? 'Test connection to load LoRAs'
+                    : 'Select a LoRA (optional)',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: Colors.black26,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+              ),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('\u2014 None \u2014',
+                    style: TextStyle(color: Colors.white54))),
+                ..._localLoras.map((l) => DropdownMenuItem(
+                    value: l,
+                    child: Text(l,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white)))),
+              ],
+              onChanged: (val) {
+                if (val != null) storage.setImageGenLora(val);
+              },
+            ),
+
+          // Weight slider — only shown when a LoRA is selected
+          if (storage.imageGenLora.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Text('Weight', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    value: storage.imageGenLoraWeight,
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 20,
+                    activeColor: Colors.purpleAccent,
+                    inactiveColor: Colors.white12,
+                    onChanged: (val) => storage.setImageGenLoraWeight(val),
+                  ),
+                ),
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    storage.imageGenLoraWeight.toStringAsFixed(2),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+        ],
+
         _buildSharedFields(storage),
+
 
       ],
     );

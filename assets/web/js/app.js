@@ -3367,6 +3367,7 @@
         const dtNotice     = $('#imgen-drawthings-notice');
         const unloadBtn    = $('#btn-imgen-unload-model');
         const switchBtn    = $('#btn-imgen-switch-model');
+        const loraPanel    = $('#imgen-lora-panel');
 
         if (remotePanel) remotePanel.style.display = backend === 'remote' ? '' : 'none';
         if (localPanel)  localPanel.style.display  = backend !== 'remote' ? '' : 'none';
@@ -3381,6 +3382,9 @@
                 ? '⇄ Load Selected Model in Draw Things'
                 : '⇄ Switch to Selected';
         }
+
+        // LoRA only supported on A1111/Forge/SDNext
+        if (loraPanel) loraPanel.style.display = backend === 'drawthings' ? 'none' : '';
     }
 
     async function _fetchLocalImgenModels(url, backend) {
@@ -3403,6 +3407,20 @@
         if (saved) {
             for (const opt of sel.options) { if (opt.value === saved) { opt.selected = true; break; } }
         }
+    }
+
+    async function _fetchLocalImgenLoras(url, savedLora) {
+        const sel         = $('#setting-imgen-lora');
+        const weightRow   = $('#imgen-lora-weight-row');
+        if (!sel) return;
+        const res = await apiJson(`/api/image-gen/loras?url=${encodeURIComponent(url)}`);
+        const loras = res?.loras || [];
+        sel.innerHTML = '<option value="">— None —</option>' +
+            loras.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+        if (savedLora) {
+            for (const opt of sel.options) { if (opt.value === savedLora) { opt.selected = true; break; } }
+        }
+        if (weightRow) weightRow.style.display = sel.value ? '' : 'none';
     }
 
     async function loadSettings() {
@@ -3553,6 +3571,30 @@
         if (igStyle) igStyle.value = data.imageGenStyle || 'photorealistic';
         const igNeg = $('#setting-imgen-negative-prompt');
         if (igNeg) igNeg.value = data.imageGenNegativePrompt || '';
+
+        // LoRA
+        const igLoraWeight = $('#setting-imgen-lora-weight');
+        const igLoraLabel  = $('#imgen-lora-weight-label');
+        if (igLoraWeight) igLoraWeight.value = data.imageGenLoraWeight ?? 0.8;
+        if (igLoraLabel)  igLoraLabel.textContent = parseFloat(data.imageGenLoraWeight ?? 0.8).toFixed(2);
+        // Fetch LoRA list if we have a URL and it's not Draw Things
+        const igBackendForLora = data.imageGenBackend;
+        const igUrlForLora     = data.localImageGenUrl || '';
+        if (igUrlForLora && igBackendForLora !== 'drawthings' && igBackendForLora !== 'remote') {
+            _fetchLocalImgenLoras(igUrlForLora, data.imageGenLora || '');
+        } else {
+            // Just pre-select saved value if list loads later
+            const loraSel = $('#setting-imgen-lora');
+            if (loraSel && data.imageGenLora) {
+                const opt = document.createElement('option');
+                opt.value = data.imageGenLora;
+                opt.textContent = data.imageGenLora;
+                opt.selected = true;
+                loraSel.appendChild(opt);
+            }
+            const weightRow = $('#imgen-lora-weight-row');
+            if (weightRow) weightRow.style.display = data.imageGenLora ? '' : 'none';
+        }
 
         // RAG / Memory
         const ragCb = $('#setting-rag-enabled');

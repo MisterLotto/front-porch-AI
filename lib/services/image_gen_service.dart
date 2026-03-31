@@ -149,16 +149,18 @@ class ImageGenService extends ChangeNotifier {
         }
         final imageSize = size ?? _storage.imageGenSize;
         final modelCheckpoint = model ?? _storage.imageGenModel;
+        // LoRAs only supported on A1111/Forge/SDNext — not Draw Things
+        final isDrawThings = _storage.imageGenBackend == 'drawthings';
         imageBytes = await _generateViaA1111(
           baseUrl: localUrl,
           prompt: prompt,
           negativePrompt: negativePrompt,
           size: imageSize,
           modelCheckpoint: modelCheckpoint,
-          // For Draw Things: switch to the selected checkpoint before each
-          // generation, creating a fresh "project" with that model.
-          // For A1111 this is also supported but may be slow if switching.
+          // Switch to the selected checkpoint before each generation
           switchModelFirst: modelCheckpoint.isNotEmpty,
+          loraName:   isDrawThings ? '' : _storage.imageGenLora,
+          loraWeight: _storage.imageGenLoraWeight,
         );
 
       } else {
@@ -378,13 +380,15 @@ class ImageGenService extends ChangeNotifier {
   }
 
   /// Style suffixes appended to the final image prompt.
+  /// Written as natural language so they work with FLUX, SD3, and SDXL
+  /// as well as older SD 1.5-based models.
   static const Map<String, String> styleModifiers = {
-    'photorealistic': 'Style: photorealistic, cinematic lighting, high detail, 8K',
-    'anime': 'Style: anime illustration, vibrant colors, cel-shaded, manga art',
-    'fantasy_art': 'Style: fantasy art, epic, painterly, detailed environment',
-    'oil_painting': 'Style: oil painting, classical, rich textures, fine art',
-    'digital_art': 'Style: digital art, modern, vibrant, professional illustration',
-    'watercolor': 'Style: watercolor painting, soft, flowing, delicate',
+    'photorealistic': 'Photorealistic with cinematic lighting, sharp focus, and highly detailed textures.',
+    'anime':          'Anime-style illustration with clean linework, expressive eyes, vibrant colors, and cel shading.',
+    'fantasy_art':    'Epic fantasy digital art with dramatic lighting, rich environmental detail, and a painterly quality.',
+    'oil_painting':   'Classical oil painting with visible brushstrokes, rich color depth, and fine art composition.',
+    'digital_art':    'Polished digital art with vibrant colors, clean lines, and professional illustration quality.',
+    'watercolor':     'Soft watercolor illustration with flowing color washes, delicate edges, and gentle translucent tones.',
   };
 
   /// Available style labels for UI display.
@@ -494,12 +498,15 @@ class ImageGenService extends ChangeNotifier {
         modeInstruction = 'Describe the scene as a vivid image.';
     }
 
-    // Keep the instruction SHORT — thinking models regurgitate verbose prompts
-    final styleInstruction = styleSuffix.isNotEmpty ? ' Art style: $styleSuffix.' : '';
-    final llmPrompt = 'Write a short image prompt (under 100 words) for an AI image generator.$styleInstruction\n'
+    // Keep the LLM prompt concise — write natural language, not tags
+    final styleInstruction = styleSuffix.isNotEmpty ? ' $styleSuffix' : '';
+    final llmPrompt =
+        'You are writing an image generation prompt for a modern AI image model (such as FLUX or Stable Diffusion XL). '
+        'Write a single paragraph in natural, descriptive English — NOT a comma-separated tag list. '
+        'Be vivid and specific about visual details: physical appearance, clothing, lighting, mood, setting.\n'
         '$modeInstruction\n'
-        'Describe ONLY visual details: appearance, scene, lighting, mood. '
-        'Use physical descriptions instead of names.\n\n'
+        'Keep it under 120 words. Do not include any character names. '
+        'End with the art style description.${styleSuffix.isNotEmpty ? " Art style: $styleSuffix" : ""}\n\n'
         'Context:\n$rawContext\n\n'
         'Image prompt:';
 
@@ -620,7 +627,7 @@ class ImageGenService extends ChangeNotifier {
         if (recentMessages != null && recentMessages.isNotEmpty) {
           parts.add('Recent events: ${_truncate(recentMessages.join(" "), 300)}');
         }
-        parts.add('Style: cinematic, atmospheric, detailed environment.');
+          parts.add('A wide establishing shot of the scene. Cinematic composition with atmospheric lighting.');
         raw = parts.join(' ');
 
       case ImageGenMode.fromLastMessage:
@@ -638,7 +645,7 @@ class ImageGenService extends ChangeNotifier {
         if (characterPersonality != null && characterPersonality.isNotEmpty) {
           parts.add('Personality: ${_truncate(characterPersonality, 200)}');
         }
-        parts.add('Style: detailed character portrait, expressive, high quality.');
+        parts.add('A detailed close-up portrait, expressive face, high quality rendering.');
         raw = parts.join(' ');
 
       case ImageGenMode.chatBackground:
@@ -649,7 +656,7 @@ class ImageGenService extends ChangeNotifier {
         if (worldInfo != null && worldInfo.isNotEmpty) {
           parts.add('Setting: ${_truncate(worldInfo, 300)}');
         }
-        parts.add('Style: wide panoramic landscape, atmospheric, suitable as a wallpaper background, no characters or people.');
+        parts.add('Wide panoramic landscape, atmospheric lighting, no people or characters, suitable as a scene background.');
         raw = parts.join(' ');
 
       case ImageGenMode.userAvatar:
@@ -660,7 +667,7 @@ class ImageGenService extends ChangeNotifier {
         if (personaDescription != null && personaDescription.isNotEmpty) {
           parts.add(_truncate(personaDescription, 400));
         }
-        parts.add('Style: detailed character portrait, expressive, high quality.');
+        parts.add('A detailed close-up portrait, expressive face, high quality rendering.');
         raw = parts.join(' ');
     }
 
@@ -730,6 +737,39 @@ class ImageGenService extends ChangeNotifier {
   /// Falls back to an empty list if the endpoint is not available.
   Future<List<String>> fetchDrawThingsModels(String baseUrl) =>
       fetchA1111Models(baseUrl);
+
+  /// Fetch LoRAs from an A1111 / Forge / SD.Next server.
+  ///
+  /// Endpoint: GET /sdapi/v1/loras
+  /// Returns a list of LoRA names (the `name` field from each entry).
+  /// Draw Things does not support this endpoint — returns empty list.
+  Future<List<String>> fetchA1111Loras(String baseUrl) async {
+    final client = http.Client();
+    try {
+      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/loras');
+      debugPrint('ImageGen: Fetching LoRAs from $uri');
+      final response = await client
+          .get(uri)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return [];
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+      return data
+          .map((e) {
+            final m = e as Map<String, dynamic>;
+            // Prefer alias if present and non-empty, else use name
+            final alias = m['alias']?.toString() ?? '';
+            final name  = m['name']?.toString() ?? '';
+            return alias.isNotEmpty ? alias : name;
+          })
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } catch (e) {
+      debugPrint('ImageGen: fetchA1111Loras failed: $e');
+      return [];
+    } finally {
+      client.close();
+    }
+  }
 
   /// Unload the currently active model from memory on a local server.
   ///
@@ -809,6 +849,8 @@ class ImageGenService extends ChangeNotifier {
     String size = '1024x1024',
     String modelCheckpoint = '',
     bool switchModelFirst = false,
+    String loraName = '',
+    double loraWeight = 0.8,
   }) async {
     // Switch model before generating if requested
     if (switchModelFirst && modelCheckpoint.isNotEmpty) {
@@ -819,10 +861,16 @@ class ImageGenService extends ChangeNotifier {
 
     final (width, height) = _parseSize(size);
     final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/txt2img');
-    debugPrint('ImageGen: POST $uri (A1111/DrawThings, model=${modelCheckpoint.isNotEmpty ? modelCheckpoint : "current"})');
+
+    // Inject LoRA into the prompt: <lora:name:weight>
+    final effectivePrompt = (loraName.isNotEmpty)
+        ? '$prompt <lora:$loraName:${loraWeight.toStringAsFixed(2)}>'
+        : prompt;
+
+    debugPrint('ImageGen: POST $uri (model=${modelCheckpoint.isNotEmpty ? modelCheckpoint : "current"}, lora=${loraName.isNotEmpty ? loraName : "none"})');
 
     final payload = <String, dynamic>{
-      'prompt': prompt,
+      'prompt': effectivePrompt,
       'negative_prompt': negativePrompt,
       'width': width,
       'height': height,

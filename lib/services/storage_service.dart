@@ -137,6 +137,8 @@ class StorageService extends ChangeNotifier {
   String _imageGenSize = '1024x1024';
   String _imageGenNegativePrompt = 'blurry, low quality, watermark, text';
   String _imageGenStyle = 'photorealistic';
+  String _imageGenLora = '';        // selected LoRA filename (A1111/Forge/SDNext only)
+  double _imageGenLoraWeight = 0.8; // LoRA strength 0.0–1.0
 
 
   // Web server settings
@@ -246,6 +248,8 @@ class StorageService extends ChangeNotifier {
   String get imageGenSize => _imageGenSize;
   String get imageGenNegativePrompt => _imageGenNegativePrompt;
   String get imageGenStyle => _imageGenStyle;
+  String get imageGenLora => _imageGenLora;
+  double get imageGenLoraWeight => _imageGenLoraWeight;
 
   bool get webServerEnabled => _webServerEnabled;
   int get webServerPort => _webServerPort;
@@ -378,6 +382,8 @@ class StorageService extends ChangeNotifier {
     _imageGenSize = _prefs?.getString('image_gen_size') ?? '1024x1024';
     _imageGenNegativePrompt = _prefs?.getString('image_gen_negative_prompt') ?? 'blurry, low quality, watermark, text';
     _imageGenStyle = _prefs?.getString('image_gen_style') ?? 'photorealistic';
+    _imageGenLora = _prefs?.getString('image_gen_lora') ?? '';
+    _imageGenLoraWeight = _prefs?.getDouble('image_gen_lora_weight') ?? 0.8;
 
 
     // Web server settings
@@ -982,6 +988,18 @@ class StorageService extends ChangeNotifier {
   Future<void> setImageGenStyle(String value) async {
     _imageGenStyle = value;
     await _prefs?.setString('image_gen_style', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenLora(String value) async {
+    _imageGenLora = value;
+    await _prefs?.setString('image_gen_lora', value);
+    notifyListeners();
+  }
+
+  Future<void> setImageGenLoraWeight(double value) async {
+    _imageGenLoraWeight = value.clamp(0.0, 1.0);
+    await _prefs?.setDouble('image_gen_lora_weight', _imageGenLoraWeight);
     notifyListeners();
   }
 

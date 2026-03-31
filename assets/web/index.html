@@ -710,6 +710,25 @@
                 <span id="imgen-model-action-status" style="font-size:11px;color:var(--text-muted);margin-top:4px;display:none;display:block"></span>
               </div>
 
+              <!-- LoRA selector (A1111/Forge/SDNext only, hidden for Draw Things) -->
+              <div id="imgen-lora-panel" style="margin-top:12px">
+                <hr style="border-color:rgba(255,255,255,0.06);margin:4px 0 12px">
+                <div class="settings-field">
+                  <label class="field-label">LoRA</label>
+                  <select id="setting-imgen-lora" class="settings-select">
+                    <option value="">— None —</option>
+                  </select>
+                  <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
+                    Applied via &lt;lora:name:weight&gt; in the prompt on every generation.
+                  </span>
+                </div>
+                <div class="settings-field" id="imgen-lora-weight-row" style="margin-top:8px;display:none">
+                  <label class="field-label">LoRA Weight: <span id="imgen-lora-weight-label">0.80</span></label>
+                  <input type="range" id="setting-imgen-lora-weight"
+                    min="0" max="1" step="0.05" value="0.8"
+                    style="width:100%;accent-color:#a78bfa">
+                </div>
+              </div>
 
               <!-- Shared settings -->
               <div class="settings-field" style="margin-top:12px">
