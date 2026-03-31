@@ -1309,9 +1309,8 @@ class _ChatPageState extends State<ChatPage> {
     void Function(String path)? onAccept;
     if (mode == ImageGenMode.characterPortrait && character != null) {
       onAccept = (imagePath) async {
-        // Store only the basename for cross-platform sync
-        final basename = p.basename(imagePath);
-        character.imagePath = basename;
+        // Store the full path — all display sites use File(imagePath) directly.
+        character.imagePath = imagePath;
         final charRepo = Provider.of<CharacterRepository>(context, listen: false);
         await charRepo.updateCharacter(character);
 
@@ -1331,7 +1330,7 @@ class _ChatPageState extends State<ChatPage> {
             tags: character.tags,
           );
           await v2Service.saveCardAsPng(card, imagePath, imagePath);
-          debugPrint('Embedded V2 card data into avatar: $basename');
+          debugPrint('Embedded V2 card data into avatar: $imagePath');
         } catch (e) {
           debugPrint('Failed to embed V2 card data: $e');
         }
