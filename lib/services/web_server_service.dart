@@ -4431,9 +4431,17 @@ class WebServerService extends ChangeNotifier {
       return _errorResponse(503, 'Image gen service not available');
     }
     try {
-      final url = request.url.queryParameters['url'] ?? '';
+      final url     = request.url.queryParameters['url'] ?? '';
+      final backend = request.url.queryParameters['backend'] ?? '';
       if (url.isEmpty) return _errorResponse(400, 'url query param is required');
-      final models = await _imageGenService!.fetchA1111Models(url);
+
+      final List<String> models;
+      if (backend == 'drawthings') {
+        models = await _imageGenService!.fetchDrawThingsModels(url);
+      } else {
+        // a1111 or unspecified — same endpoint, same result
+        models = await _imageGenService!.fetchA1111Models(url);
+      }
       return shelf.Response.ok(
         jsonEncode({'models': models}),
         headers: {'Content-Type': 'application/json'},
@@ -4442,6 +4450,7 @@ class WebServerService extends ChangeNotifier {
       return _errorResponse(500, 'Failed to fetch models: $e');
     }
   }
+
 
   // ══════════════════════════════════════════════════════════════════════
   // Porch Stories handlers

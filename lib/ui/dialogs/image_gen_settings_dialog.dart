@@ -77,7 +77,14 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
     if (url.isEmpty) return;
     setState(() => _loadingLocalModels = true);
     final service = Provider.of<ImageGenService>(context, listen: false);
-    final models = await service.fetchA1111Models(url);
+    final storage = Provider.of<StorageService>(context, listen: false);
+    // Use the backend-specific fetch method so Draw Things gets the right call
+    final List<String> models;
+    if (storage.imageGenBackend == 'drawthings') {
+      models = await service.fetchDrawThingsModels(url);
+    } else {
+      models = await service.fetchA1111Models(url);
+    }
     if (mounted) {
       setState(() {
         _localModels = models;
@@ -405,20 +412,40 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.black26,
+            color: isDrawThings
+                ? Colors.purple.withValues(alpha: 0.08)
+                : Colors.black26,
             borderRadius: BorderRadius.circular(8),
+            border: Border(
+              left: BorderSide(
+                color: isDrawThings ? Colors.purpleAccent : Colors.blue,
+                width: 3,
+              ),
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline, color: Colors.blue, size: 16),
+              Icon(
+                isDrawThings ? Icons.apple : Icons.info_outline,
+                color: isDrawThings ? Colors.purpleAccent : Colors.blue,
+                size: 16,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   isDrawThings
-                      ? 'Open Draw Things → Settings → Advanced → enable HTTP API Server. No API key needed.'
-                      : 'Start AUTOMATIC1111 with the --api flag (e.g. python launch.py --api). No API key needed.',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ? 'Open Draw Things → Settings → Advanced → enable HTTP API Server. '
+                        'If models load below, selecting one will switch Draw Things to it '
+                        'before each generation — a fresh "project" every time. '
+                        'If no models appear, select your model in Draw Things directly.'
+                      : 'Start AUTOMATIC1111 with the --api flag (e.g. python launch.py --api). '
+                        'Selecting a checkpoint below will switch models before each generation '
+                        'via POST /sdapi/v1/options.',
+                  style: TextStyle(
+                    color: isDrawThings ? Colors.white54 : Colors.white54,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -518,9 +545,12 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
             ),
           )
         else if (_localModels.isEmpty)
-          const Text(
-            'No models found — test the connection above to fetch them.',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+          Text(
+            isDrawThings
+                ? 'No models listed — if Draw Things has loaded a model, '
+                  'generation will use whatever is currently active in the app.'
+                : 'No models found — test the connection above to fetch them.',
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
           )
         else
           DropdownButtonFormField<String>(
@@ -732,9 +762,9 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
 
   /// Size selector — chip-style buttons.
   Widget _buildSizeSelector(StorageService storage) {
-    const sizes = ['512x512', '1024x1024', '1024x1792', '1792x1024'];
-    const labels = ['512²', '1024²', '1024×1792', '1792×1024'];
-    const descriptions = ['Small', 'Square', 'Portrait', 'Landscape'];
+    const sizes        = ['512x512', '768x768', '1024x1024', '1536x1024', '1024x1536'];
+    const labels       = ['512²',   '768²',    '1024²',     '1536×1024', '1024×1536'];
+    const descriptions = ['Small',  'Medium',  'Square',    'Landscape', 'Portrait'];
 
     return Wrap(
       spacing: 8,

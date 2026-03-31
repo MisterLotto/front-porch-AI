@@ -3371,11 +3371,20 @@
         if (dtNotice)    dtNotice.style.display     = backend === 'drawthings' ? 'block' : 'none';
     }
 
-    async function _fetchLocalImgenModels(url) {
+    async function _fetchLocalImgenModels(url, backend) {
         const sel = $('#setting-imgen-local-model');
         if (!sel) return;
-        const res = await apiJson(`/api/image-gen/local-models?url=${encodeURIComponent(url)}`);
+        const backendParam = backend ? `&backend=${encodeURIComponent(backend)}` : '';
+        const res = await apiJson(`/api/image-gen/local-models?url=${encodeURIComponent(url)}${backendParam}`);
         const models = res?.models || [];
+        if (models.length === 0) {
+            // Draw Things sometimes doesn't list models via this endpoint
+            const hint = backend === 'drawthings'
+                ? '— No models listed (model is selected in Draw Things app) —'
+                : '— No checkpoints found —';
+            sel.innerHTML = `<option value="">${hint}</option>`;
+            return;
+        }
         sel.innerHTML = '<option value="">— Select a checkpoint —</option>' +
             models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
         const saved = $('#setting-imgen-model')?.value;
@@ -4116,18 +4125,33 @@
 
         // Test local connection
         $('#btn-test-local-imgen')?.addEventListener('click', async () => {
-            const url = $('#setting-imgen-local-url')?.value?.trim();
+            const url     = $('#setting-imgen-local-url')?.value?.trim();
+            const backend = document.querySelector('input[name="imgen-backend"]:checked')?.value || '';
             if (!url) return;
             const statusEl = $('#imgen-connection-status');
-            if (statusEl) statusEl.textContent = '⏳ Testing...';
+            if (statusEl) statusEl.textContent = '⏳ Testing connection…';
             const res = await apiJson('/api/image-gen/test-connection', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ url }),
             });
             const ok = res?.ok === true;
-            if (statusEl) statusEl.textContent = ok ? '✅ Connected' : '❌ Connection failed';
-            if (ok) _fetchLocalImgenModels(url);
+            if (ok) {
+                if (statusEl) statusEl.textContent = '✅ Connected — loading models…';
+                await _fetchLocalImgenModels(url, backend);
+                const count = $('#setting-imgen-local-model')?.options?.length || 0;
+                if (statusEl) {
+                    if (count > 1) {
+                        statusEl.textContent = `✅ Connected — ${count - 1} model(s) found`;
+                    } else if (backend === 'drawthings') {
+                        statusEl.textContent = '✅ Connected — select model in Draw Things app';
+                    } else {
+                        statusEl.textContent = '✅ Connected — no models listed';
+                    }
+                }
+            } else {
+                if (statusEl) statusEl.textContent = '❌ Connection failed — is the server running?';
+            }
         });
 
         // RAG / Memory save

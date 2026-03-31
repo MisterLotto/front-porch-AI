@@ -670,9 +670,13 @@
               <div id="imgen-local-panel" style="display:none;margin-top:8px">
                 <div id="imgen-a1111-notice" style="padding:8px;background:rgba(59,130,246,0.08);border-radius:6px;border-left:3px solid #3B82F6;font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:10px">
                   🖥 <strong>AUTOMATIC1111:</strong> Launch with <code style="background:rgba(0,0,0,0.3);padding:2px 5px;border-radius:3px">--api</code> flag to enable the REST API.
+                  Selecting a checkpoint here will switch models before each generation via <code style="background:rgba(0,0,0,0.3);padding:2px 5px;border-radius:3px">POST /sdapi/v1/options</code>.
                 </div>
                 <div id="imgen-drawthings-notice" style="display:none;padding:8px;background:rgba(139,92,246,0.08);border-radius:6px;border-left:3px solid #8B5CF6;font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:10px">
                   🍎 <strong>Draw Things:</strong> Enable HTTP API in <em>Settings → Web API</em> within the Draw Things app.
+                  If models are listed below, selecting one will instruct Draw Things to switch to it before generating each image —
+                  think of this as creating a fresh project for every generation. If no models appear,
+                  select your model inside the Draw Things app directly before generating.
                 </div>
                 <div class="settings-field">
                   <label class="field-label">Server URL</label>
@@ -688,8 +692,12 @@
                   <select id="setting-imgen-local-model" class="settings-select">
                     <option value="">— Test connection to load checkpoints —</option>
                   </select>
+                  <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block">
+                    💡 The selected model will be loaded before each generation.
+                  </span>
                 </div>
               </div>
+
 
               <!-- Shared settings -->
               <div class="settings-field" style="margin-top:12px">

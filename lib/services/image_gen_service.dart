@@ -148,12 +148,19 @@ class ImageGenService extends ChangeNotifier {
           return null;
         }
         final imageSize = size ?? _storage.imageGenSize;
+        final modelCheckpoint = model ?? _storage.imageGenModel;
         imageBytes = await _generateViaA1111(
           baseUrl: localUrl,
           prompt: prompt,
           negativePrompt: negativePrompt,
           size: imageSize,
+          modelCheckpoint: modelCheckpoint,
+          // For Draw Things: switch to the selected checkpoint before each
+          // generation, creating a fresh "project" with that model.
+          // For A1111 this is also supported but may be slow if switching.
+          switchModelFirst: modelCheckpoint.isNotEmpty,
         );
+
       } else {
         // ── Remote API ─────────────────────────────────────────────────
         if (_storage.remoteApiKey.isEmpty) {
@@ -696,6 +703,7 @@ class ImageGenService extends ChangeNotifier {
   /// Fetch available checkpoints from an A1111 / Draw Things server.
   ///
   /// Returns model title strings, e.g. `["v1-5-pruned.safetensors [hash]"]`.
+  /// Both Draw Things and A1111 expose this at `/sdapi/v1/sd-models`.
   Future<List<String>> fetchA1111Models(String baseUrl) async {
     final client = http.Client();
     try {
@@ -716,19 +724,70 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// Fetch models from a Draw Things server.
+  ///
+  /// Draw Things exposes the same `/sdapi/v1/sd-models` endpoint as A1111.
+  /// Falls back to an empty list if the endpoint is not available.
+  Future<List<String>> fetchDrawThingsModels(String baseUrl) =>
+      fetchA1111Models(baseUrl);
+
+  /// Switch the active checkpoint on a local A1111 / Draw Things server.
+  ///
+  /// Calls `POST /sdapi/v1/options` with the model name.
+  /// Draw Things may silently accept this and switch models; A1111 will
+  /// trigger a model load (which can take 10–60 s).
+  ///
+  /// Returns true if the request was accepted (HTTP 200).
+  Future<bool> switchLocalModel(String baseUrl, String modelName) async {
+    if (modelName.isEmpty) return false;
+    final client = http.Client();
+    try {
+      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/options');
+      debugPrint('ImageGen: Switching checkpoint → $modelName');
+      final response = await client
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'sd_model_checkpoint': modelName}),
+          )
+          .timeout(const Duration(seconds: 90)); // model loads can be slow
+      final ok = response.statusCode == 200;
+      debugPrint('ImageGen: Checkpoint switch ${ok ? "accepted" : "rejected (${response.statusCode})"}');
+      return ok;
+    } catch (e) {
+      debugPrint('ImageGen: switchLocalModel failed: $e');
+      return false;
+    } finally {
+      client.close();
+    }
+  }
+
   /// Generate via AUTOMATIC1111 / Draw Things local server.
   ///
   /// Endpoint: POST {baseUrl}/sdapi/v1/txt2img
   /// Response: { "images": ["<base64>", ...] }
+  ///
+  /// When [modelCheckpoint] is non-empty and the backend is Draw Things,
+  /// the active model is switched via `POST /sdapi/v1/options` first,
+  /// mimicking "create a new project" with the selected model.
   Future<Uint8List> _generateViaA1111({
     required String baseUrl,
     required String prompt,
     String negativePrompt = '',
     String size = '1024x1024',
+    String modelCheckpoint = '',
+    bool switchModelFirst = false,
   }) async {
+    // Switch model before generating if requested
+    if (switchModelFirst && modelCheckpoint.isNotEmpty) {
+      _statusMessage = 'Loading model: $modelCheckpoint…';
+      notifyListeners();
+      await switchLocalModel(baseUrl, modelCheckpoint);
+    }
+
     final (width, height) = _parseSize(size);
     final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/txt2img');
-    debugPrint('ImageGen: POST $uri (A1111/DrawThings)');
+    debugPrint('ImageGen: POST $uri (A1111/DrawThings, model=${modelCheckpoint.isNotEmpty ? modelCheckpoint : "current"})');
 
     final payload = <String, dynamic>{
       'prompt': prompt,
@@ -740,6 +799,9 @@ class ImageGenService extends ChangeNotifier {
       'sampler_name': 'Euler a',
       'seed': -1,
       'batch_size': 1,
+      // Pass override_settings for A1111 compatibility (Draw Things may ignore)
+      if (modelCheckpoint.isNotEmpty)
+        'override_settings': {'sd_model_checkpoint': modelCheckpoint},
     };
 
     final client = http.Client();
@@ -750,7 +812,7 @@ class ImageGenService extends ChangeNotifier {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
-          .timeout(const Duration(seconds: 180));
+          .timeout(const Duration(seconds: 300)); // allow time for model load
 
       if (response.statusCode != 200) {
         String errorMsg = 'HTTP ${response.statusCode}';
