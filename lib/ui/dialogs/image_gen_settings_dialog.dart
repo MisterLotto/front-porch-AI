@@ -569,7 +569,7 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
                 fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         const Text(
-          'Fetched from the local server. Press Test to refresh.',
+          'Fetched from the local server after pressing Test.',
           style: TextStyle(color: Colors.white24, fontSize: 10),
         ),
         const SizedBox(height: 8),
@@ -585,8 +585,7 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
         else if (_localModels.isEmpty)
           Text(
             isDrawThings
-                ? 'No models listed — if Draw Things has loaded a model, '
-                  'generation will use whatever is currently active in the app.'
+                ? 'No models listed via API — switch the model directly in Draw Things, then press "Load Selected Model" to apply it.'
                 : 'No models found — test the connection above to fetch them.',
             style: const TextStyle(color: Colors.white38, fontSize: 11),
           )
