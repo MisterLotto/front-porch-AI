@@ -877,6 +877,9 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _runEvolutionWithDialog(BuildContext context, ChatService chat) {
+    // Track the count before evolution to detect success
+    final countBefore = chat.characterEvolutionCount;
+
     // Show the progress dialog immediately
     showDialog(
       context: context,
@@ -885,10 +888,36 @@ class _ChatPageState extends State<ChatPage> {
         builder: (context, chat, _) {
           final isEvolving = chat.isEvolvingCharacter;
           final status = chat.evolutionStatus;
+          final error = chat.evolutionError;
           final count = chat.characterEvolutionCount;
 
-          // Evolution finished — show results
-          if (!isEvolving && status.isEmpty && count > 0) {
+          // Evolution failed — show error
+          if (!isEvolving && error.isNotEmpty) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1F2937),
+              title: Row(
+                children: [
+                  const Icon(Icons.error_outline, size: 20, color: Colors.redAccent),
+                  const SizedBox(width: 8),
+                  const Text('Evolution Failed', style: TextStyle(fontSize: 14)),
+                ],
+              ),
+              content: SizedBox(
+                width: 400,
+                child: Text(error, style: const TextStyle(fontSize: 12, color: Colors.white54)),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          }
+
+          // Evolution finished successfully — show results
+          if (!isEvolving && status.isEmpty && count > countBefore) {
             final evolvedP = chat.getEffectivePersonality;
             final evolvedS = chat.getEffectiveScenario;
             return AlertDialog(
@@ -986,6 +1015,12 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ],
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel', style: TextStyle(color: Colors.white38)),
+              ),
+            ],
           );
         },
       ),
@@ -1842,7 +1877,7 @@ class _ChatPageState extends State<ChatPage> {
       child: Column(
         children: [
           if (character.imagePath != null)
-             Image.file(_resolveCharImage(character.imagePath!), height: _sidebarWidth, width: _sidebarWidth, fit: BoxFit.cover),
+             Image.file(_resolveCharImage(character.imagePath!), height: _sidebarWidth, width: _sidebarWidth, fit: BoxFit.cover, alignment: Alignment.topCenter),
           
           // Action Buttons
           Container(
@@ -4748,6 +4783,7 @@ class _MemorySectionState extends State<_MemorySection> {
                       Provider.of<StorageService>(context, listen: false).resolveCharacterImage(char.imagePath!),
                       width: 20, height: 20,
                       fit: BoxFit.cover,
+                      alignment: Alignment.topCenter,
                       errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 16, color: Colors.white30),
                     ),
                   ),

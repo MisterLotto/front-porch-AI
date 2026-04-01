@@ -29,25 +29,25 @@ class ImageCropDialog extends StatefulWidget {
   /// The raw image bytes to crop.
   final Uint8List imageBytes;
 
-  /// Aspect ratio width (default 2 for a 2:3 card ratio).
-  final double aspectRatioWidth;
+  /// Optional aspect ratio width. If null, free-form cropping is allowed.
+  final double? aspectRatioWidth;
 
-  /// Aspect ratio height (default 3 for a 2:3 card ratio).
-  final double aspectRatioHeight;
+  /// Optional aspect ratio height. If null, free-form cropping is allowed.
+  final double? aspectRatioHeight;
 
   const ImageCropDialog({
     super.key,
     required this.imageBytes,
-    this.aspectRatioWidth = 2,
-    this.aspectRatioHeight = 3,
+    this.aspectRatioWidth,
+    this.aspectRatioHeight,
   });
 
   /// Show the dialog and return cropped bytes, or null if cancelled.
   static Future<Uint8List?> show(
     BuildContext context, {
     required Uint8List imageBytes,
-    double aspectRatioWidth = 2,
-    double aspectRatioHeight = 3,
+    double? aspectRatioWidth,
+    double? aspectRatioHeight,
   }) {
     return showDialog<Uint8List?>(
       context: context,
@@ -176,7 +176,7 @@ class _ImageCropDialogState extends State<ImageCropDialog> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               child: Text(
-                'Drag to reposition the crop area. The image will be saved at the selected region.',
+                'Drag to reposition and resize the crop area. The image will be saved at the selected region.',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.5),
                   fontSize: 13,
@@ -197,7 +197,9 @@ class _ImageCropDialogState extends State<ImageCropDialog> {
                 child: Crop(
                   controller: _cropController,
                   image: _currentImageBytes,
-                  aspectRatio: widget.aspectRatioWidth / widget.aspectRatioHeight,
+                  aspectRatio: (widget.aspectRatioWidth != null && widget.aspectRatioHeight != null)
+                      ? widget.aspectRatioWidth! / widget.aspectRatioHeight!
+                      : null,
                   onCropped: _onCropped,
                   baseColor: const Color(0xFF111827),
                   maskColor: Colors.black.withValues(alpha: 0.6),

@@ -315,6 +315,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                                   ? DecorationImage(
                                       image: FileImage(File(_imagePath!)),
                                       fit: BoxFit.cover,
+                                      alignment: Alignment.topCenter,
                                     )
                                   : null,
                             ),

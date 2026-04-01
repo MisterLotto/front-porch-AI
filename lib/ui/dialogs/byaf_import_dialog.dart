@@ -97,6 +97,7 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                                 ? Image.file(
                                     File(preview.extractedImagePath!),
                                     fit: BoxFit.cover,
+                                    alignment: Alignment.topCenter,
                                     errorBuilder: (_, __, ___) => const Icon(
                                       Icons.person, color: Colors.white38, size: 48,
                                     ),

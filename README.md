@@ -122,7 +122,16 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
 
-## 🆕 What's New in V0.9.6
+## 🆕 What's New in V0.9.6.1
+
+This hotfix expands upon the `0.9.6` creator pipeline optimizations, squashing several Linux compiling errors while introducing key visual capabilities.
+
+**🖼️ Image Prompt Enhancements**
+*   **Context-Grounded Prompts:** The AI text-to-image prompt is now explicitly generated as the very last step in the Character Creator. It leverages the fully finalized character JSON and actively evaluates the 'Scenario / Setting' context to dictate the image's background, lighting, and pose!
+*   **Avatar Art Style:** We've brought the style selector into the 'Quick Create' tab, allowing users to explicitly enforce art styles (Anime, Realistic, Cartoon, etc.) onto the final output image without needing to type it manually.
+*   **Linux CI Bug Fixes:** Fixed severe string parsing and unclosed quote anomalies that caused 6000+ Dart exceptions on `flutter build` targeting Linux environments.
+
+### What's New in V0.9.6
 
 This release significantly expands Front Porch AI's visual capabilities, natively integrating your favorite local image generation backends, and vastly streamlining the AI Character Creator pipeline.
 

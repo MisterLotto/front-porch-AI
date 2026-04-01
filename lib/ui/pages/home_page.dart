@@ -987,7 +987,7 @@ class _HomePageState extends State<HomePage> {
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: character.imagePath != null
-                ? Image.file(_resolveCharImage(character.imagePath!), fit: BoxFit.cover)
+                ? Image.file(_resolveCharImage(character.imagePath!), fit: BoxFit.cover, alignment: Alignment.topCenter)
                 : const Icon(Icons.person, size: 64, color: Colors.white24),
           ),
         ),
@@ -1060,7 +1060,7 @@ class _HomePageState extends State<HomePage> {
                     fit: StackFit.expand,
                     children: [
                       character.imagePath != null
-                          ? Image.file(_resolveCharImage(character.imagePath!), fit: BoxFit.cover)
+                          ? Image.file(_resolveCharImage(character.imagePath!), fit: BoxFit.cover, alignment: Alignment.topCenter)
                           : Container(
                               color: Colors.grey.shade800,
                               child: const Icon(Icons.person, size: 32, color: Colors.white24),
@@ -1097,6 +1097,7 @@ class _HomePageState extends State<HomePage> {
                           ? Image.file(
                               _resolveCharImage(character.imagePath!),
                               fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
                             )
                           : Container(
                               color: Colors.grey.shade800,
@@ -1360,6 +1361,7 @@ class _HomePageState extends State<HomePage> {
                                           ? DecorationImage(
                                               image: FileImage(_resolveCharImage(characters[i].imagePath!)),
                                               fit: BoxFit.cover,
+                                              alignment: Alignment.topCenter,
                                             )
                                           : null,
                                       color: characters[i].imagePath == null ? Colors.grey.shade700 : null,

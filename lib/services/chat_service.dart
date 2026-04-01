@@ -3313,6 +3313,7 @@ class ChatService extends ChangeNotifier {
   int _userMessagesSinceLastEvolution = 0;
   bool _isEvolvingCharacter = false;
   String _evolutionStatus = '';
+  String _evolutionError = '';
 
   /// Get the effective personality for a character.
   /// When evolution exists, returns a layered block: original as foundation,
@@ -3426,6 +3427,9 @@ class ChatService extends ChangeNotifier {
   /// Current status message during evolution.
   String get evolutionStatus => _evolutionStatus;
 
+  /// Error message from the last evolution attempt (empty if no error).
+  String get evolutionError => _evolutionError;
+
   /// Manually trigger character evolution now (for imported/existing chats).
   /// In group mode, pass a target character. Returns true if evolution was triggered.
   Future<bool> triggerEvolutionNow({CharacterCard? target}) async {
@@ -3473,26 +3477,39 @@ class ChatService extends ChangeNotifier {
   /// Extract evolved personality + scenario from conversation memories.
   /// Accepts an optional [targetCharacter] for group mode support.
   Future<void> _extractCharacterEvolution({CharacterCard? targetCharacter}) async {
-    if (_isEvolvingCharacter) return;
+    if (_isEvolvingCharacter) {
+      debugPrint('[Evolution] ⚠ Already evolving, skipping');
+      return;
+    }
     _isEvolvingCharacter = true;
     _evolutionStatus = 'Preparing evolution...';
+    _evolutionError = '';
     notifyListeners();
 
     try {
       final llmService = _llmProvider!.activeService;
-      if (llmService == null || !llmService.isReady) {
-        debugPrint('[Evolution] ✗ LLM not ready');
+      debugPrint('[Evolution] ▶ Backend: ${llmService.backendName}, isReady: ${llmService.isReady}');
+      if (!llmService.isReady) {
+        debugPrint('[Evolution] ✗ LLM not ready — backend=${llmService.backendName}');
+        _evolutionError = 'LLM backend is not ready. Please check your connection.';
         return;
       }
 
       final card = targetCharacter ?? _activeCharacter;
-      if (card == null || card.dbId == null) return;
+      if (card == null || card.dbId == null) {
+        debugPrint('[Evolution] ✗ No character — card=$card, dbId=${card?.dbId}');
+        _evolutionError = 'No active character found.';
+        return;
+      }
 
       final charName = card.name;
       final userName = _userPersonaService.persona.name;
       final originalPersonality = card.personality;
       final originalScenario = card.scenario;
       final charId = _getCharacterIdFromCard(card);
+
+      debugPrint('[Evolution] Character: $charName (charId=$charId, dbId=${card.dbId})');
+      debugPrint('[Evolution] Personality length: ${originalPersonality.length}, Scenario length: ${originalScenario.length}');
 
       // Get current evolved versions (or originals if first time)
       final currentPersonality = _evolvedPersonalities[charId]?.isNotEmpty == true
@@ -3510,19 +3527,23 @@ class ChatService extends ChangeNotifier {
         try {
           final sourceIds = await _getMemorySourceIds();
           final chunks = await _memoryService!.getAllContentForCharacters(sourceIds);
+          debugPrint('[Evolution] RAG: ${chunks.length} memory chunks retrieved');
           if (chunks.isNotEmpty) {
             // Take last 10 chunks to keep prompt reasonable
             final recent = chunks.length > 10 ? chunks.sublist(chunks.length - 10) : chunks;
             memoryContext = 'Conversation memories:\n${recent.join('\n---\n')}\n\n';
           }
         } catch (e) {
-          debugPrint('[Evolution] RAG retrieval failed: $e');
+          debugPrint('[Evolution] RAG retrieval failed (non-fatal): $e');
         }
+      } else {
+        debugPrint('[Evolution] RAG not available (memoryService=${_memoryService != null}, operational=${_memoryService?.isOperational})');
       }
 
       String summaryContext = '';
       if (_summary.isNotEmpty) {
         summaryContext = 'Chat summary: $_summary\n\n';
+        debugPrint('[Evolution] Summary context: ${_summary.length} chars');
       }
 
       // Recent messages for immediate context
@@ -3533,6 +3554,8 @@ class ChatService extends ChangeNotifier {
           .map((m) => '${m.sender}: ${m.displayText}')
           .join('\n');
 
+      debugPrint('[Evolution] Messages: ${_messages.length} total, using ${recentMsgs.length} recent');
+
       final prompt =
           'You are analyzing how a roleplay character has evolved through their interactions. '
           'Based on the conversation history and memories below, rewrite the character\'s personality '
@@ -3542,7 +3565,8 @@ class ChatService extends ChangeNotifier {
           '- Add or modify traits based on what actually happened in conversations\n'
           '- Update the scenario to reflect the current state of the story/relationship\n'
           '- Keep the same level of detail as the originals\n'
-          '- Use {{char}} for the character name and {{user}} for the user name\n\n'
+          '- Use {{char}} for the character name and {{user}} for the user name\n'
+          '- Return ONLY a JSON object, no other text\n\n'
           'Character name: $charName\n'
           'User name: $userName\n\n'
           'Original personality:\n$originalPersonality\n\n'
@@ -3556,82 +3580,143 @@ class ChatService extends ChangeNotifier {
           'Each value should be the full rewritten text for that field.\n'
           'Response:';
 
-      debugPrint('[Evolution] Sending extraction prompt (${prompt.length} chars)');
+      debugPrint('[Evolution] Prompt built: ${prompt.length} chars');
 
       _evolutionStatus = 'Analyzing conversation with LLM...';
       notifyListeners();
 
+      // Dynamic maxLength: the model must reproduce personality + scenario in
+      // full, and think blocks can double the output.  Use a generous multiplier
+      // with a 4096-token floor so short descriptions still get plenty of room.
+      // Rough heuristic: 1 token ≈ 4 chars, so chars/4 ≈ tokens needed.
+      final estimatedOutputTokens = ((currentPersonality.length + currentScenario.length) / 4 * 3).ceil();
+      final maxLen = estimatedOutputTokens.clamp(4096, 16384);
+
       final params = GenerationParams(
         prompt: prompt,
-        maxLength: 2048,
+        maxLength: maxLen,
         temperature: 0.4,
         stopSequences: [],
+        reasoningEnabled: false,
       );
 
+      debugPrint('[Evolution] Sending to LLM (maxLength=$maxLen, temp=0.4)...');
+
       String responseText = '';
+      int chunkCount = 0;
       await for (final chunk in llmService.generateStream(params)) {
         responseText += chunk;
+        chunkCount++;
       }
 
+      debugPrint('[Evolution] LLM responded: $chunkCount chunks, ${responseText.length} chars total');
+
       // Strip think blocks
+      final preStripLength = responseText.length;
       responseText = responseText.replaceAll(
           RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+      if (responseText.length != preStripLength) {
+        debugPrint('[Evolution] Stripped think blocks: ${preStripLength - responseText.length} chars removed');
+      }
 
-      debugPrint('[Evolution] Raw response: ${responseText.substring(0, responseText.length.clamp(0, 200))}...');
+      if (responseText.isEmpty) {
+        debugPrint('[Evolution] ✗ LLM returned empty response after stripping');
+        _evolutionError = 'The LLM returned an empty response. Try again or check your backend.';
+        return;
+      }
+
+      // Log the full response for debugging (truncate for very long responses)
+      debugPrint('[Evolution] ── Response start ──');
+      if (responseText.length <= 500) {
+        debugPrint(responseText);
+      } else {
+        debugPrint('${responseText.substring(0, 250)}');
+        debugPrint('[...${responseText.length - 500} chars omitted...]');
+        debugPrint('${responseText.substring(responseText.length - 250)}');
+      }
+      debugPrint('[Evolution] ── Response end ──');
 
       _evolutionStatus = 'Parsing evolved traits...';
       notifyListeners();
 
-      // Parse JSON from response
+      // Parse JSON from response — try multiple strategies
+      String? newPersonality;
+      String? newScenario;
+
+      // Strategy 1: Extract from markdown code block
       var jsonStr = responseText;
       if (jsonStr.contains('```')) {
         final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
-        if (match != null) jsonStr = match.group(1)!.trim();
+        if (match != null) {
+          jsonStr = match.group(1)!.trim();
+          debugPrint('[Evolution] Extracted JSON from code block (${jsonStr.length} chars)');
+        }
       }
 
-      // Find JSON object
+      // Strategy 2: Find JSON object with greedy match
       final objMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(jsonStr);
-      if (objMatch == null) {
-        debugPrint('[Evolution] ✗ No JSON object found in response');
+      if (objMatch != null) {
+        final jsonCandidate = objMatch.group(0)!;
+        debugPrint('[Evolution] Found JSON candidate (${jsonCandidate.length} chars)');
+        try {
+          final parsed = jsonDecode(jsonCandidate) as Map<String, dynamic>;
+          newPersonality = parsed['personality'] as String?;
+          newScenario = parsed['scenario'] as String?;
+          debugPrint('[Evolution] JSON parsed OK — personality=${newPersonality?.length ?? 0} chars, scenario=${newScenario?.length ?? 0} chars');
+        } catch (e) {
+          debugPrint('[Evolution] JSON parse attempt failed: $e');
+          // Strategy 3: Try to fix truncated JSON — the model may have hit max tokens
+          // Look for the last complete string value
+          debugPrint('[Evolution] Attempting truncated JSON recovery...');
+          try {
+            // Try adding a closing brace to incomplete JSON
+            final fixedJson = '$jsonCandidate"}';
+            final parsed = jsonDecode(fixedJson) as Map<String, dynamic>;
+            newPersonality = parsed['personality'] as String?;
+            newScenario = parsed['scenario'] as String?;
+            debugPrint('[Evolution] Truncated JSON recovery succeeded');
+          } catch (_) {
+            debugPrint('[Evolution] Truncated JSON recovery failed');
+          }
+        }
+      } else {
+        debugPrint('[Evolution] ✗ No JSON object ({...}) found in response');
+      }
+
+      if (newPersonality == null || newPersonality.isEmpty ||
+          newScenario == null || newScenario.isEmpty) {
+        debugPrint('[Evolution] ✗ Missing fields — personality=${newPersonality != null ? "${newPersonality.length} chars" : "null"}, scenario=${newScenario != null ? "${newScenario.length} chars" : "null"}');
+        _evolutionError = newPersonality == null && newScenario == null
+            ? 'Could not parse the LLM response as JSON. Check the terminal for the raw response.'
+            : 'The LLM response was missing ${newPersonality == null || newPersonality.isEmpty ? "personality" : "scenario"} field.';
         return;
       }
 
-      try {
-        final parsed = jsonDecode(objMatch.group(0)!) as Map<String, dynamic>;
-        final newPersonality = parsed['personality'] as String?;
-        final newScenario = parsed['scenario'] as String?;
+      // Store in DB
+      final oldCount = _groupEvolutionCounts[charId] ?? _characterEvolutionCount;
+      final newCount = oldCount + 1;
+      debugPrint('[Evolution] Saving to DB (charId=$charId, dbId=${card.dbId}, count $oldCount → $newCount)');
+      await _db.updateCharacter(CharactersCompanion(
+        id: drift.Value(card.dbId!),
+        evolvedPersonality: drift.Value(newPersonality),
+        evolvedScenario: drift.Value(newScenario),
+        evolutionCount: drift.Value(newCount),
+      ));
 
-        if (newPersonality == null || newPersonality.isEmpty ||
-            newScenario == null || newScenario.isEmpty) {
-          debugPrint('[Evolution] ✗ Parsed JSON missing required fields');
-          return;
-        }
+      // Update cache
+      _evolvedPersonalities[charId] = newPersonality;
+      _evolvedScenarios[charId] = newScenario;
+      _groupEvolutionCounts[charId] = newCount;
+      if (_activeCharacter != null) _characterEvolutionCount = newCount;
 
-        // Store in DB
-        final oldCount = _groupEvolutionCounts[charId] ?? _characterEvolutionCount;
-        final newCount = oldCount + 1;
-        await _db!.updateCharacter(CharactersCompanion(
-          id: drift.Value(card.dbId!),
-          evolvedPersonality: drift.Value(newPersonality),
-          evolvedScenario: drift.Value(newScenario),
-          evolutionCount: drift.Value(newCount),
-        ));
-
-        // Update cache
-        _evolvedPersonalities[charId] = newPersonality;
-        _evolvedScenarios[charId] = newScenario;
-        _groupEvolutionCounts[charId] = newCount;
-        if (_activeCharacter != null) _characterEvolutionCount = newCount;
-
-        debugPrint('[Evolution] ✅ ${charName} evolved (count: $newCount)');
-        debugPrint('[Evolution] Personality: ${newPersonality.substring(0, newPersonality.length.clamp(0, 100))}...');
-        debugPrint('[Evolution] Scenario: ${newScenario.substring(0, newScenario.length.clamp(0, 100))}...');
-        notifyListeners();
-      } catch (e) {
-        debugPrint('[Evolution] ✗ JSON parse failed: $e');
-      }
-    } catch (e) {
-      debugPrint('[Evolution] ✗ Evolution failed: $e');
+      debugPrint('[Evolution] ✅ ${charName} evolved successfully (count: $newCount)');
+      debugPrint('[Evolution] Personality preview: ${newPersonality.substring(0, newPersonality.length.clamp(0, 100))}...');
+      debugPrint('[Evolution] Scenario preview: ${newScenario.substring(0, newScenario.length.clamp(0, 100))}...');
+      notifyListeners();
+    } catch (e, stack) {
+      debugPrint('[Evolution] ✗ Evolution failed with exception: $e');
+      debugPrint('[Evolution] Stack trace: $stack');
+      _evolutionError = 'Evolution failed: $e';
     } finally {
       _isEvolvingCharacter = false;
       _evolutionStatus = '';

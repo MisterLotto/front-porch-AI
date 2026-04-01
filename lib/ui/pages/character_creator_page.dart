@@ -112,6 +112,11 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
 
   String _selectedPersonaId = ''; // '' = None (blank slate)
 
+  // ── Quick Mode Controllers ──
+  final _quickScenarioController = TextEditingController();
+  List<String> _quickSelectedTones = ['Neutral'];
+  int _quickGreetingCount = 0;
+
   // ── Guided Mode Controllers ──
   final _guidedVisionController = TextEditingController();
   final _guidedAppearanceController = TextEditingController();
@@ -891,6 +896,8 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     _firstMessageController.dispose();
     _exampleDialogueController.dispose();
     _systemPromptController.dispose();
+    _quickScenarioController.dispose();
+    
     // Guided controllers
     _guidedVisionController.dispose();
     _guidedAppearanceController.dispose();
@@ -1661,7 +1668,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Quick Create', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                        Text('Two fields and you\'re done.', style: TextStyle(fontSize: 13, color: Colors.white38)),
+                        Text('Name it, describe it, generate.', style: TextStyle(fontSize: 13, color: Colors.white38)),
                       ],
                     ),
                   ),
@@ -1719,6 +1726,137 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.greenAccent, width: 2)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
+              ),
+              const SizedBox(height: 24),
+
+              // Scenario field
+              const Text('Scenario / Setting (optional)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              const Text(
+                'Where does the story take place? What\'s the situation? The AI will build on this.',
+                style: TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _quickScenarioController,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                maxLines: 3,
+                minLines: 2,
+                onChanged: (_) {
+                  setState(() {});
+                  _saveState();
+                },
+                decoration: InputDecoration(
+                  hintText: 'A modern coffee shop where they work as a barista, a fantasy guild hall, a space station...',
+                  hintStyle: const TextStyle(color: Colors.white12, fontSize: 12),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white12)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.greenAccent, width: 2)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Art style
+              const Text('Avatar Art Style', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: _artStyles.map((style) {
+                  final isSelected = _artStyle == style;
+                  return ChoiceChip(
+                    label: Text(style),
+                    selected: isSelected,
+                    onSelected: (_) { setState(() => _artStyle = style); _saveState(); },
+                    selectedColor: Colors.greenAccent.shade700,
+                    backgroundColor: const Color(0xFF1E293B),
+                    labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 13),
+                    side: BorderSide(color: isSelected ? Colors.greenAccent.shade700 : Colors.white12),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              // Greeting tones
+              const Text('Greeting Tone', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Text(
+                _quickGreetingCount == 0
+                    ? 'Tone for the first message.'
+                    : 'Select up to ${_quickGreetingCount + 1} — one per greeting.',
+                style: const TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _greetingTones.where((tone) => tone != 'Spicy/NSFW' || _quickNsfwEnabled).map((tone) {
+                  final isSelected = _quickSelectedTones.contains(tone);
+                  final maxTones = _quickGreetingCount + 1;
+                  final atLimit = _quickSelectedTones.length >= maxTones && !isSelected;
+                  return FilterChip(
+                    label: Text(tone),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          if (atLimit) _quickSelectedTones.remove(_quickSelectedTones.last);
+                          _quickSelectedTones.add(tone);
+                        } else if (_quickSelectedTones.length > 1) {
+                          _quickSelectedTones.remove(tone);
+                        }
+                      });
+                      _saveState();
+                    },
+                    selectedColor: Colors.greenAccent.shade700,
+                    backgroundColor: const Color(0xFF1E293B),
+                    checkmarkColor: Colors.white,
+                    labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 13),
+                    side: BorderSide(color: isSelected ? Colors.greenAccent.shade700 : Colors.white12),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              // Number of greetings
+              const Text('Number of Greetings', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              const Text(
+                'How many first messages to generate (1 main + alternates).',
+                style: TextStyle(color: Colors.white24, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Slider(
+                      value: _quickGreetingCount.toDouble(),
+                      min: 0,
+                      max: 5,
+                      divisions: 5,
+                      activeColor: Colors.greenAccent.shade700,
+                      inactiveColor: Colors.white12,
+                      label: _quickGreetingCount == 0 ? '1 greeting' : '1 + $_quickGreetingCount alt${_quickGreetingCount == 1 ? '' : 's'}',
+                      onChanged: (val) {
+                        setState(() {
+                          _quickGreetingCount = val.round();
+                          final maxTones = _quickGreetingCount + 1;
+                          while (_quickSelectedTones.length > maxTones) _quickSelectedTones.remove(_quickSelectedTones.last);
+                        });
+                        _saveState();
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 80,
+                    child: Text(
+                      _quickGreetingCount == 0 ? '1 greeting' : '1 + $_quickGreetingCount',
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
 
@@ -1949,7 +2087,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     final worldLore = await _extractWorldLore(llmProvider);
 
     final genService = CharacterGenService(llmService);
-    String lastRawOutput = '';
     String? genError;
 
     // Quick mode defaults — everything the wizard normally asks for
@@ -1961,10 +2098,10 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       name: name,
       concept: quickConcept,
       personalityKeywords: '',
-      artStyle: 'Anime',
+      artStyle: _artStyle,
       greetingLength: 'Medium (2-4 paragraphs)',
-      altGreetingCount: 2,
-      greetingTones: const ['Neutral'],
+      altGreetingCount: _quickGreetingCount,
+      greetingTones: _quickSelectedTones,
       generateLorebook: true,
       loreCategories: const [],
       loreDepth: 'Standard',
@@ -1972,6 +2109,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       age: '',
       sex: '',
       relationship: '',
+      scenario: _quickScenarioController.text.trim(),
       backstory: '',
       characterContext: '',
       userPersonaContext: userPersonaContext,
@@ -1979,7 +2117,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       generateDescription: true,
       imageGenPromptParadigm: storage.imageGenPromptParadigm,
       onProgress: (accumulated) {
-        lastRawOutput = accumulated;
         if (mounted) {
           setState(() {
             _generationPreview = accumulated;
@@ -2005,9 +2142,9 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       return;
     }
 
-    // Try to extract image prompt from raw output if any
-    if (lastRawOutput.isNotEmpty) {
-      _imagePrompt = genService.extractImagePrompt(lastRawOutput, characterName: name);
+    // Use the dedicated image prompt generated at the end of the pipeline
+    if (genService.generatedImagePrompt != null) {
+      _imagePrompt = genService.generatedImagePrompt;
     }
 
     // Populate review-step controllers so the fields aren't blank
@@ -4875,7 +5012,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     }
 
     final genService = CharacterGenService(llmService);
-    String lastRawOutput = '';
+
 
     final card = await genService.generateCharacter(
       name: name,
@@ -4902,7 +5039,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       generateDescription: true,
       imageGenPromptParadigm: storage.imageGenPromptParadigm,
       onProgress: (accumulated) {
-        lastRawOutput = accumulated;
         if (mounted) {
           setState(() {
             _generationPreview = accumulated;
@@ -4914,8 +5050,8 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       onError: (error) { if (mounted) setState(() => _generationStatus = 'Error: $error'); },
     );
 
-    // Extract image prompt
-    _imagePrompt = genService.extractImagePrompt(lastRawOutput, characterName: name);
+    // Fetch the dedicated image prompt
+    _imagePrompt = genService.generatedImagePrompt;
 
     if (card != null) {
       _generatedCard = card;
@@ -5294,8 +5430,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     
     final genService = CharacterGenService(llmService);
 
-    String lastRawOutput = '';
-    String? genError;
+
     // Build appearance + NSFW context
     final appearanceParts = <String>[];
     final effectiveRace = _customRaceController.text.trim().isNotEmpty ? _customRaceController.text.trim() : _race;
@@ -5373,7 +5508,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       userPersonaContext: userPersonaContext,
       imageGenPromptParadigm: storage.imageGenPromptParadigm,
       onProgress: (accumulated) {
-        lastRawOutput = accumulated;
+
         if (mounted) {
           setState(() {
             _generationPreview = accumulated;
@@ -5389,7 +5524,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         }
       },
       onError: (error) {
-        genError = error;
+
         if (mounted) {
           setState(() {
             _generationStatus = 'Error: $error';
@@ -5398,8 +5533,8 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       },
     );
 
-    // Extract image prompt before moving to review
-    _imagePrompt = genService.extractImagePrompt(lastRawOutput, characterName: _nameController.text.trim());
+    // Fetch the dedicated image prompt before moving to review
+    _imagePrompt = genService.generatedImagePrompt;
 
     if (card != null) {
       // Inject user-authored description (from magic wand)

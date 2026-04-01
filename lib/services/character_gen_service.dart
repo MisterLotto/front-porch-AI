@@ -36,6 +36,7 @@ class CharacterGenService {
 
   /// The raw LLM output from the last base card generation, for image prompt extraction.
   String? lastRawOutput;
+  String? generatedImagePrompt;
 
   /// Per-category descriptions for lorebook generation prompts.
   static const _loreCategoryDescriptions = {
@@ -73,6 +74,7 @@ class CharacterGenService {
     String relationship = '',
     String descriptionDetail = '2-3 paragraphs',
     String backstory = '',
+    String scenario = '',
     String characterContext = '',
     String userPersonaContext = '',
     String? worldLore,
@@ -96,8 +98,8 @@ class CharacterGenService {
       relationship: relationship,
       descriptionDetail: descriptionDetail,
       generateDescription: generateDescription,
+      scenario: scenario,
       worldLore: worldLore,
-      imageGenPromptParadigm: imageGenPromptParadigm,
     );
 
     debugPrint('CharacterGen: Starting generation for "$name"');
@@ -128,7 +130,6 @@ class CharacterGenService {
     final missingFields = <String>[];
     if (card.personality.trim().isEmpty) missingFields.add('personality');
     if (card.scenario.trim().isEmpty) missingFields.add('scenario');
-    if (card.mesExample.trim().isEmpty) missingFields.add('example_dialogue');
 
     if (missingFields.isNotEmpty) {
       debugPrint('CharacterGen: Truncation detected — missing: ${missingFields.join(", ")}');
@@ -155,13 +156,9 @@ class CharacterGenService {
         if (card.scenario.trim().isEmpty && recoveryCard.scenario.trim().isNotEmpty) {
           card.scenario = recoveryCard.scenario;
         }
-        if (card.mesExample.trim().isEmpty && recoveryCard.mesExample.trim().isNotEmpty) {
-          card.mesExample = recoveryCard.mesExample;
-        }
         debugPrint('CharacterGen: Recovery filled ${missingFields.length - [
           if (card.personality.trim().isEmpty) 'personality',
           if (card.scenario.trim().isEmpty) 'scenario',
-          if (card.mesExample.trim().isEmpty) 'example_dialogue',
         ].length} fields');
       }
     }
@@ -184,7 +181,7 @@ class CharacterGenService {
       // Rewrite description and personality using the interview voice
       onStatus?.call('Enriching character profile from interview...');
       onProgress?.call('');
-      await _enrichCardFromInterview(
+      await _enrichCardAndGenerateExamples(
         card: card,
         name: name,
         interviewTranscript: interviewTranscript,
@@ -285,6 +282,17 @@ class CharacterGenService {
       card.alternateGreetings = alts;
     }
 
+    // ── Step 5: Generate Tailored Image Prompt ────────────────
+    onStatus?.call('Drafting illustration prompt...');
+    onProgress?.call('');
+    generatedImagePrompt = await _generateImagePrompt(
+      name: name,
+      description: card.description,
+      scenario: card.scenario,
+      artStyle: artStyle,
+      imageGenPromptParadigm: imageGenPromptParadigm,
+      onProgress: onProgress,
+    );
 
     onStatus?.call('Character generated!');
     return card;
@@ -423,9 +431,10 @@ Respond with ONLY the JSON:''';
     return transcript.toString().trim();
   }
 
-  /// Use the completed interview transcript to rewrite description and personality
-  /// with richer, voice-consistent prose grounded in the character's own words.
-  Future<void> _enrichCardFromInterview({
+  /// Use the completed interview transcript to rewrite description, personality,
+  /// and generate example dialogues with richer, voice-consistent prose grounded in the
+  /// character's own words.
+  Future<void> _enrichCardAndGenerateExamples({
     required CharacterCard card,
     required String name,
     required String interviewTranscript,
@@ -433,8 +442,8 @@ Respond with ONLY the JSON:''';
   }) async {
     final prompt = '''
 You have just completed an in-character interview with $name.
-Using the interview answers below as your source of truth, rewrite two fields
-for this character card. Output ONLY a JSON object with exactly two keys.
+Using the interview answers below as your source of truth, rewrite two fields and generate a third
+for this character card. Output ONLY a JSON object with exactly three keys.
 No markdown. No explanation. Just raw JSON.
 
 INTERVIEW TRANSCRIPT:
@@ -450,12 +459,13 @@ Rewrite these fields using the specific details, voice, and texture revealed in 
 
 - "description": (string) Third-person. Physical appearance ONLY: body, face, hair, eyes, clothing, posture, distinguishing marks. Use specific details that emerged in the interview — not generic adjectives. 2-3 paragraphs. Do NOT include personality, backstory, or scenario.
 - "personality": (string) Third-person. Inner traits, motivations, fears, speech patterns, behavioral quirks, relationship style — grounded in what the character revealed. 2-3 paragraphs. Do NOT repeat physical appearance or scenario.
+- "example_dialogue": (string) Generate 2-3 example dialogue exchanges showing {{char}}'s exact speech patterns, vocabulary, cadence, and emotional register revealed in the interview. Keep the <START>\\n{{user}}: ...\\n{{char}}: ... format. Each {{char}} response should feel authentically voiced — include verbal tics, slang, emotional reactions, and mannerisms the character demonstrated.
 
 Use {{char}} for the character name and {{user}} for the user throughout.
 
 Respond with ONLY the JSON:''';
 
-    final output = await _callLLM(prompt, maxLen: 2048, minLen: 200, onProgress: onProgress);
+    final output = await _callLLM(prompt, maxLen: 4096, minLen: 200, onProgress: onProgress);
     if (output == null) {
       debugPrint('CharacterGen: Interview enrichment got no response — keeping original fields');
       return;
@@ -466,6 +476,7 @@ Respond with ONLY the JSON:''';
       final data = json.decode(cleaned) as Map<String, dynamic>;
       final newDesc = data['description']?.toString().trim() ?? '';
       final newPers = data['personality']?.toString().trim() ?? '';
+      final newExamples = data['example_dialogue']?.toString().trim() ?? '';
 
       // Only update if the enriched versions are substantively longer/different
       if (newDesc.isNotEmpty && newDesc.length >= card.description.length * 0.5) {
@@ -475,6 +486,10 @@ Respond with ONLY the JSON:''';
       if (newPers.isNotEmpty && newPers.length >= card.personality.length * 0.5) {
         card.personality = newPers;
         debugPrint('CharacterGen: Personality enriched (${newPers.length} chars)');
+      }
+      if (newExamples.isNotEmpty && newExamples.length > 50) {
+        card.mesExample = newExamples;
+        debugPrint('CharacterGen: Example dialogue generated (${newExamples.length} chars)');
       }
     } catch (e) {
       debugPrint('CharacterGen: Interview enrichment parse failed: $e — keeping original fields');
@@ -601,9 +616,6 @@ Respond with ONLY the JSON:''';
           break;
         case 'scenario':
           fieldSpecs.add('- "scenario": (string) 1 paragraph, the default conversation setting');
-          break;
-        case 'example_dialogue':
-          fieldSpecs.add('- "example_dialogue": (string) format: <START>\\n{{user}}: message\\n{{char}}: response\\n<START>\\n{{user}}: message\\n{{char}}: response');
           break;
       }
     }
@@ -757,9 +769,9 @@ Output ONLY the JSON:''';
     String relationship = '',
     String descriptionDetail = '2-3 paragraphs',
     String backstory = '',
+    String scenario = '',
     bool generateDescription = false,
     String? worldLore,
-    String imageGenPromptParadigm = 'natural',
   }) {
     final keywordsLine = personalityKeywords.isNotEmpty
         ? 'Personality keywords: $personalityKeywords\n'
@@ -771,6 +783,9 @@ Output ONLY the JSON:''';
         : '';
     final backstoryLine = backstory.isNotEmpty
         ? 'Backstory: $backstory\n'
+        : '';
+    final scenarioLine = scenario.isNotEmpty
+        ? 'Scenario/Setting: $scenario\n'
         : '';
     final loreLine = (worldLore != null && worldLore.trim().isNotEmpty)
         ? '\n[ESTABLISHED WORLD LORE/RULES]:\n$worldLore\n(Must strictly adhere to the above facts, terminology, and locations)\n'
@@ -810,11 +825,6 @@ Output ONLY the JSON:''';
         ? ''
         : 'Do NOT generate a "description" key — the description is handled separately. ';
 
-    // Build image_prompt spec
-    final imagePromptSpec = imageGenPromptParadigm == 'tags'
-        ? '- "image_prompt": (string) flat comma-separated visual tags ONLY for an image generator. NO prose, NO sentences, NO names. ONLY tags in this format: "skin tone, gender, hair color + style, eye color, body type, outfit pieces, pose, setting, expression". Keep under 60 words'
-        : '- "image_prompt": (string) A rich, natural language descriptive sentence describing the character\'s physical appearance. Do NOT use comma separated tags. Keep under 100 words';
-
     // Key order: critical small fields FIRST so they survive output truncation.
     // Lorebook (the largest field) goes LAST so it gets clipped first if the
     // model runs out of output tokens — we can regenerate it separately.
@@ -822,18 +832,16 @@ Output ONLY the JSON:''';
 
 Character name: $name
 Concept: $concept
-$ageLine$sexLine$relationshipLine$backstoryLine$keywordsLine$loreLine
+$ageLine$sexLine$relationshipLine$backstoryLine$scenarioLine$keywordsLine$loreLine
 Required JSON keys (generate them IN THIS ORDER):
 ${descriptionSpec}- "personality": (string) 1-2 paragraphs, third person. ONLY inner traits, social style, motives, quirks, and behavioral tics. Do NOT repeat physical appearance or scenario/setting info here — those belong in other fields
 - "scenario": (string) 2-4 sentences MAX. Where/when/why {{user}} and {{char}} meet. ONLY the situation that frames the roleplay. No personality traits, no backstory, no system instructions — just the setting and circumstance. Keep it SHORT
 $sysSpec
 - "tags": (array of strings) 3-5 relevant tags
-$imagePromptSpec
-- "example_dialogue": (string) 2-3 exchanges that model {{char}}'s unique voice, speech patterns, and pacing. Format: <START>\\n{{user}}: message\\n{{char}}: in-character response (show personality through word choice, mannerisms, and actions)\\n<START>\\n{{user}}: message\\n{{char}}: response. Each {{char}} response should be 2-4 sentences with action and dialogue
 $lorebookSpec
 FIELD RULES:
 - Keep each field focused — do NOT leak content between fields (e.g. personality in description, backstory in scenario)
-- Balance token length across fields — no single field should dominate. Aim for ~500-2200 tokens total across description, personality, scenario, and example_dialogue
+- Balance token length across fields — no single field should dominate. Aim for ~500-2200 tokens total across description, personality, and scenario
 - ${descriptionNote}Do NOT include first_message or alternate_greetings — those are generated separately
 - Use {{char}} for character name and {{user}} for user name throughout
 
@@ -854,19 +862,15 @@ Respond with ONLY the JSON:''';
     String interviewTranscript = '',
     String? worldLore,
   }) {
-    String lengthSpec;
     String lengthEnforcement;
     switch (length) {
       case 'Short (1-2 paragraphs)':
-        lengthSpec = '1-2 substantial paragraphs (minimum 100 words)';
         lengthEnforcement = 'Write at least 100 words. Each paragraph should be 3-5 sentences minimum.';
         break;
       case 'Long (4-6 paragraphs)':
-        lengthSpec = '4-6 rich paragraphs (minimum 500 words)';
         lengthEnforcement = 'Write at least 500 words across 4-6 full paragraphs. Each paragraph MUST be 4-6 sentences. Include detailed scene-setting, inner monologue, environmental descriptions, and character mannerisms. DO NOT stop early or summarize. Fill the space with vivid, immersive prose.';
         break;
       default:
-        lengthSpec = '2-4 paragraphs (minimum 250 words)';
         lengthEnforcement = 'Write at least 250 words across 2-4 paragraphs. Each paragraph should be 3-5 sentences.';
     }
 
@@ -1518,40 +1522,38 @@ $greeting''';
     return [];
   }
 
-  /// Extract the image prompt from the generated JSON (if present).
-  /// Optionally strip [characterName] since image models don't know character names.
-  String? extractImagePrompt(String rawOutput, {String characterName = ''}) {
-    final cleaned = _stripContent(rawOutput);
-    String? prompt;
-    try {
-      final data = json.decode(cleaned) as Map<String, dynamic>;
-      prompt = _getString(data, 'image_prompt');
-    } catch (_) {
-      // Try regex extraction as fallback
-      try {
-        final data = _regexExtract(cleaned);
-        prompt = data['image_prompt'] as String?;
-      } catch (_) {
-        return null;
-      }
-    }
+  /// Generates a tailored, highly specific image prompt based on the FINAL character card.
+  /// Grounds the prompt heavily in the character's physical description and current scenario.
+  Future<String?> _generateImagePrompt({
+    required String name,
+    required String description,
+    required String scenario,
+    required String artStyle,
+    required String imageGenPromptParadigm,
+    void Function(String)? onProgress,
+  }) async {
+    final formatInstruction = imageGenPromptParadigm == 'tags'
+        ? 'Output ONLY flat comma-separated visual tags. NO prose, NO sentences, NO names. ONLY tags in this format: "skin tone, gender, hair color + style, eye color, body type, outfit pieces, pose, setting, expression, lighting, camera angle, $artStyle style". Keep under 60 words.'
+        : 'Output A rich, natural language descriptive paragraph detailing the character\'s physical appearance in the scene. Do NOT use comma-separated tags. Do NOT use names. Keep under 100 words. Describe the scene as a $artStyle style illustration.';
 
-    // Strip character name from image prompt — image models don't know who "Kara Darkshadow" is
-    if (prompt != null && characterName.isNotEmpty) {
-      // Remove full name
-      prompt = prompt.replaceAll(RegExp(RegExp.escape(characterName), caseSensitive: false), '').trim();
-      // Also remove individual name parts (e.g. "Kara" or "Darkshadow")
-      for (final part in characterName.split(RegExp(r'\s+'))) {
-        if (part.length > 2) { // Skip very short parts like "of", "de"
-          prompt = prompt!.replaceAll(RegExp('\\b${RegExp.escape(part)}\\b', caseSensitive: false), '').trim();
-        }
-      }
-      // Clean up any double commas/spaces left behind
-      prompt = prompt!.replaceAll(RegExp(r',\s*,'), ',').replaceAll(RegExp(r'\s{2,}'), ' ').trim();
-      if (prompt.startsWith(',')) prompt = prompt.substring(1).trim();
-      if (prompt.endsWith(',')) prompt = prompt.substring(0, prompt.length - 1).trim();
-    }
+    final prompt = '''Write an image generation prompt for an illustration of this character.
+You MUST follow the requested format perfectly. Do NOT include introductory text, markdown, or JSON. Just the raw prompt string.
 
-    return prompt;
+== CONTEXT ==
+Character description: $description
+Current scenario setting: $scenario
+
+== INSTRUCTIONS ==
+Ground the image entirely in the visual details from the description, and use the scenario to dictate the background environment, lighting, and pose. Do NOT use the character's name in the output.
+
+$formatInstruction
+
+Begin:''';
+
+    final output = await _callLLM(prompt, maxLen: 1024, minLen: 20, onProgress: onProgress);
+    if (output == null) return null;
+    
+    // Clean string just in case
+    return output.trim().replaceAll(RegExp(r'^"|"$'), '').trim();
   }
 }

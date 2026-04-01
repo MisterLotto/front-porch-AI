@@ -1173,6 +1173,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                                       Image.file(
                                         File(imgPath),
                                         fit: BoxFit.cover,
+                                        alignment: Alignment.topCenter,
                                         errorBuilder: (_, __, ___) => Container(
                                           color: Colors.black26,
                                           child: const Icon(Icons.person, color: Colors.white24, size: 48),
