@@ -4222,20 +4222,10 @@ class WebServerService extends ChangeNotifier {
         card.description = concept;
       }
 
-      // Extract image prompt from raw generation output (matches Flutter app)
-      String imagePrompt = '';
-      if (genService.lastRawOutput != null) {
-        imagePrompt = genService.extractImagePrompt(genService.lastRawOutput!) ?? '';
-      }
-      if (imagePrompt.isNotEmpty) {
-        // Strip character name from prompt (prevents text artifacts in image)
-        if (name.isNotEmpty) {
-          imagePrompt = imagePrompt.replaceAll(RegExp(RegExp.escape(name), caseSensitive: false), '').trim();
-          imagePrompt = imagePrompt.replaceAll(RegExp(r'\s{2,}'), ' ').replaceAll(RegExp(r'^[,\.\s]+'), '');
-        }
-        // Append art style as a tag
-        imagePrompt = '$imagePrompt, $artStyle style';
-      } else if (card.description.isNotEmpty) {
+      // Extract image prompt from the generation service (matches Flutter app)
+      String imagePrompt = genService.generatedImagePrompt ?? '';
+      
+      if (imagePrompt.isEmpty && card.description.isNotEmpty) {
         // Fallback: build from description
         final desc = card.description.length > 400
             ? card.description.substring(0, 400)
