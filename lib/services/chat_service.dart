@@ -88,11 +88,38 @@ class ChatMessage {
   }
 
   int? thinkingStartTime; // Runtime only, for live timer
+  Map<String, dynamic>? metadata; // Legacy single metadata
+  List<Map<String, dynamic>?> swipeMetadata; // Per-swipe metadata
 
-  ChatMessage({required String text, required this.sender, required this.isUser, this.characterId, List<String>? swipes, int? swipeIndex, List<int>? swipeDurations})
+  Map<String, dynamic>? get activeMetadata {
+    if (swipeIndex >= 0 && swipeIndex < swipeMetadata.length) {
+      return swipeMetadata[swipeIndex] ?? metadata;
+    }
+    return metadata;
+  }
+
+  set activeMetadata(Map<String, dynamic>? value) {
+    while (swipeMetadata.length <= swipeIndex) {
+      swipeMetadata.add(null);
+    }
+    swipeMetadata[swipeIndex] = value;
+  }
+
+  ChatMessage({
+    required String text, 
+    required this.sender, 
+    required this.isUser, 
+    this.characterId, 
+    List<String>? swipes, 
+    int? swipeIndex, 
+    List<int>? swipeDurations, 
+    this.metadata,
+    List<Map<String, dynamic>?>? swipeMetadata,
+  })
     : swipes = swipes ?? [text],
       swipeIndex = swipeIndex ?? 0,
-      swipeDurations = swipeDurations ?? [0];
+      swipeDurations = swipeDurations ?? [0],
+      swipeMetadata = swipeMetadata ?? [metadata];
 
   Map<String, dynamic> toJson() {
     return {
@@ -103,6 +130,8 @@ class ChatMessage {
       'swipes': swipes,
       'swipe_index': swipeIndex,
       'swipe_durations': swipeDurations,
+      if (metadata != null) 'metadata': metadata,
+      if (swipeMetadata.any((e) => e != null)) 'swipe_metadata': swipeMetadata,
     };
   }
 
@@ -110,6 +139,9 @@ class ChatMessage {
     final List<String>? savedSwipes = (json['swipes'] as List<dynamic>?)?.map((e) => e.toString()).toList();
     final List<int>? savedDurations = (json['swipe_durations'] as List<dynamic>?)?.map((e) => (e as num).toInt()).toList();
     final String fallbackText = json['text'] ?? '';
+    final List<Map<String, dynamic>?>? savedSwipeMetadata = (json['swipe_metadata'] as List<dynamic>?)
+        ?.map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null).toList();
+        
     return ChatMessage(
       text: fallbackText,
       sender: json['sender'] ?? '',
@@ -118,6 +150,8 @@ class ChatMessage {
       swipes: savedSwipes ?? [fallbackText],
       swipeIndex: json['swipe_index'] ?? 0,
       swipeDurations: savedDurations ?? [0],
+      metadata: json['metadata'] != null ? Map<String, dynamic>.from(json['metadata']) : null,
+      swipeMetadata: savedSwipeMetadata,
     );
   }
 }
@@ -159,6 +193,7 @@ class ChatService extends ChangeNotifier {
 
   CharacterCard? _activeCharacter;
   final List<ChatMessage> _messages = [];
+  Map<String, dynamic>? _pendingRealismMetadata; // stores deltas for the next generation
   bool _isGenerating = false;
   bool _isLoadingSession = false;
   bool _cancelRequested = false;
@@ -212,6 +247,30 @@ class ChatService extends ChangeNotifier {
   int _summaryLastIndex = 0;
   bool _summaryPaused = false;
   bool _isSummaryGenerating = false;
+
+  // ── Realism Mode ──
+  bool _realismEnabled = false; // master toggle
+
+  // Relationship
+  int _affectionScore = 0; // long-term bond (-10 to +15)
+  int _relationshipTier = 2; // 1=Stranger, 2=Acquaintance, 3=Friend, 4=Close Friend, 5=Intimate
+
+  // Short-term mood
+  int _shortTermMood = 0; // -5 to +5
+  int _moodDecayCounter = 0;
+
+  // Emotional state
+  String _characterEmotion = '';
+  String _emotionIntensity = ''; // mild/moderate/strong
+
+  // Passage of time
+  String _timeOfDay = 'morning';
+  int _dayCount = 1;
+
+  // NSFW cooldown & lust
+  bool _nsfwCooldownEnabled = false;
+  int _cooldownTurnsRemaining = 0;
+  int _arousalLevel = 0; // -3 to 10 scale
 
   // ── Context / Prompt Budget ──
   Map<String, int> _lastPromptBudget = {};
@@ -369,6 +428,38 @@ class ChatService extends ChangeNotifier {
   bool get summaryPaused => _summaryPaused;
   int get summaryLastIndex => _summaryLastIndex;
   bool get isSummaryGenerating => _isSummaryGenerating;
+  int get affectionScore => _affectionScore;
+  int get relationshipTier => _relationshipTier;
+  bool get realismEnabled => _realismEnabled;
+  int get shortTermMood => _shortTermMood;
+  String get characterEmotion => _characterEmotion;
+  String get emotionIntensity => _emotionIntensity;
+  String get timeOfDay => _timeOfDay;
+  int get dayCount => _dayCount;
+  bool get nsfwCooldownEnabled => _nsfwCooldownEnabled;
+  int get cooldownTurnsRemaining => _cooldownTurnsRemaining;
+  int get arousalLevel => _arousalLevel;
+
+  /// Human-readable tier name for the current relationship level.
+  String get relationshipTierName {
+    switch (_relationshipTier) {
+      case 1: return 'Stranger';
+      case 2: return 'Acquaintance';
+      case 3: return 'Friend';
+      case 4: return 'Close Friend';
+      case 5: return 'Intimate';
+      default: return 'Unknown';
+    }
+  }
+
+  /// Human-readable mood label.
+  String get moodLabel {
+    if (_shortTermMood >= 3) return 'Delighted';
+    if (_shortTermMood >= 1) return 'Pleased';
+    if (_shortTermMood == 0) return 'Neutral';
+    if (_shortTermMood >= -2) return 'Annoyed';
+    return 'Upset';
+  }
 
   void setAuthorNote(String note, {int? strength}) {
     _authorNote = note;
@@ -854,6 +945,18 @@ class ChatService extends ChangeNotifier {
       summaryLastIndex: drift.Value(_summaryLastIndex > 0 ? _summaryLastIndex : null),
       parentSession: drift.Value(_parentSessionId),
       forkIndex: drift.Value(_forkIndex),
+      affectionScore: drift.Value(_affectionScore),
+      relationshipTier: drift.Value(_relationshipTier),
+      realismEnabled: drift.Value(_realismEnabled),
+      shortTermMood: drift.Value(_shortTermMood),
+      moodDecayCounter: drift.Value(_moodDecayCounter),
+      characterEmotion: drift.Value(_characterEmotion),
+      emotionIntensity: drift.Value(_emotionIntensity),
+      timeOfDay: drift.Value(_timeOfDay),
+      dayCount: drift.Value(_dayCount),
+      nsfwCooldownEnabled: drift.Value(_nsfwCooldownEnabled),
+      arousalLevel: drift.Value(_arousalLevel),
+      cooldownTurnsRemaining: drift.Value(_cooldownTurnsRemaining),
       createdAt: drift.Value(createdAt),
       updatedAt: drift.Value(DateTime.now()),
     ));
@@ -872,6 +975,8 @@ class ChatService extends ChangeNotifier {
         swipes: drift.Value(jsonEncode(m.swipes)),
         swipeIndex: drift.Value(m.swipeIndex),
         swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+        metadata: drift.Value(m.metadata != null ? jsonEncode(m.metadata) : null),
+        swipeMetadata: drift.Value(m.swipeMetadata.any((e) => e != null) ? jsonEncode(m.swipeMetadata) : null),
       ));
     }
     if (messageBatch.isNotEmpty) {
@@ -905,6 +1010,18 @@ class ChatService extends ChangeNotifier {
     _sessionDescription = lastSession.description;
     _parentSessionId = lastSession.parentSession;
     _forkIndex = lastSession.forkIndex;
+    _affectionScore = lastSession.affectionScore;
+    _relationshipTier = lastSession.relationshipTier;
+    _realismEnabled = lastSession.realismEnabled;
+    _shortTermMood = lastSession.shortTermMood;
+    _moodDecayCounter = lastSession.moodDecayCounter;
+    _characterEmotion = lastSession.characterEmotion;
+    _emotionIntensity = lastSession.emotionIntensity;
+    _timeOfDay = lastSession.timeOfDay;
+    _dayCount = lastSession.dayCount;
+    _nsfwCooldownEnabled = lastSession.nsfwCooldownEnabled;
+    _arousalLevel = lastSession.arousalLevel;
+    _cooldownTurnsRemaining = lastSession.cooldownTurnsRemaining;
 
     // Load messages
     try {
@@ -926,6 +1043,10 @@ class ChatService extends ChangeNotifier {
           swipes: swipes,
           swipeIndex: m.swipeIndex,
           swipeDurations: swipeDurations,
+          metadata: m.metadata != null ? Map<String, dynamic>.from(jsonDecode(m.metadata!)) : null,
+          swipeMetadata: m.swipeMetadata != null 
+              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>).map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null).toList() 
+              : null,
         ));
       }
 
@@ -1024,6 +1145,10 @@ class ChatService extends ChangeNotifier {
           swipes: swipes,
           swipeIndex: m.swipeIndex,
           swipeDurations: swipeDurations,
+          metadata: m.metadata != null ? Map<String, dynamic>.from(jsonDecode(m.metadata!)) : null,
+          swipeMetadata: m.swipeMetadata != null 
+              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>).map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null).toList() 
+              : null,
         ));
       }
 
@@ -1036,6 +1161,18 @@ class ChatService extends ChangeNotifier {
       _sessionDescription = session.description;
       _parentSessionId = session.parentSession;
       _forkIndex = session.forkIndex;
+      _affectionScore = session.affectionScore;
+      _relationshipTier = session.relationshipTier;
+      _realismEnabled = session.realismEnabled;
+      _shortTermMood = session.shortTermMood;
+      _moodDecayCounter = session.moodDecayCounter;
+      _characterEmotion = session.characterEmotion;
+      _emotionIntensity = session.emotionIntensity;
+      _timeOfDay = session.timeOfDay;
+      _dayCount = session.dayCount;
+      _nsfwCooldownEnabled = session.nsfwCooldownEnabled;
+      _arousalLevel = session.arousalLevel;
+      _cooldownTurnsRemaining = session.cooldownTurnsRemaining;
 
       if (_messages.isNotEmpty) {
         _scanLorebook(_messages.last.text);
@@ -1264,6 +1401,16 @@ class ChatService extends ChangeNotifier {
     // so the AI gets the updated task in its prompt
     await _maybeCheckTaskCompletionSync();
 
+    // Evaluate realism systems before generating response
+    if (_realismEnabled && _activeGroup == null) {
+      _applyMoodDecay();
+      if (_cooldownTurnsRemaining > 0) {
+        _cooldownTurnsRemaining--;
+      }
+      await _evaluateRelationshipCall();
+      await _evaluateSceneStateCall();
+    }
+
     await _generateResponse(GenerationMode.normal);
   }
 
@@ -1328,15 +1475,44 @@ class ChatService extends ChangeNotifier {
       final lastMsg = _messages.removeLast();
       notifyListeners();
 
+      // Revert realism state from the rejected swipe and re-evaluate
+      if (_realismEnabled) {
+        if (lastMsg.activeMetadata != null) {
+          final bondDelta = lastMsg.activeMetadata!['bond_delta'] as int? ?? 0;
+          final moodDelta = lastMsg.activeMetadata!['mood_delta'] as int? ?? 0;
+          final arousalDelta = lastMsg.activeMetadata!['arousal_delta'] as int? ?? 0;
+          
+          if (bondDelta != 0) {
+             _affectionScore = (_affectionScore - bondDelta).clamp(-10, 15);
+             if (_affectionScore < 0) _relationshipTier = 1;
+             else if (_affectionScore <= 3) _relationshipTier = 2;
+             else if (_affectionScore <= 7) _relationshipTier = 3;
+             else if (_affectionScore <= 11) _relationshipTier = 4;
+             else _relationshipTier = 5;
+          }
+          if (moodDelta != 0) {
+             _shortTermMood = (_shortTermMood - moodDelta).clamp(-5, 5);
+          }
+          if (arousalDelta != 0 && _nsfwCooldownEnabled) {
+             _arousalLevel = (_arousalLevel - arousalDelta).clamp(-3, 10);
+          }
+        }
+        
+        await _evaluateRelationshipCall();
+        await _evaluateSceneStateCall();
+      }
+
       // Generate into a new message — it will be appended by _generateResponse
       await _generateResponse(GenerationMode.normal);
 
       // After generation, merge the new response as a swipe on the original message
       if (_messages.isNotEmpty && !_messages.last.isUser && _messages.last.sender != 'System') {
         final newText = _messages.last.text;
+        final newMetadata = _messages.last.activeMetadata;
         _messages.removeLast();
         lastMsg.swipes.add(newText);
         lastMsg.swipeIndex = lastMsg.swipes.length - 1;
+        lastMsg.activeMetadata = newMetadata;
         _messages.add(lastMsg);
         await _saveChat();
         notifyListeners();
@@ -1353,10 +1529,13 @@ class ChatService extends ChangeNotifier {
 
     final newIndex = msg.swipeIndex + direction;
 
+    final oldIndex = msg.swipeIndex;
+
     // Swiping left
     if (direction < 0) {
       if (newIndex >= 0) {
         msg.swipeIndex = newIndex;
+        _syncRealismStateForSwipe(msg, oldIndex, newIndex);
         await _saveChat();
         notifyListeners();
       }
@@ -1367,11 +1546,52 @@ class ChatService extends ChangeNotifier {
     if (newIndex < msg.swipes.length) {
       // Navigate to existing swipe
       msg.swipeIndex = newIndex;
+      _syncRealismStateForSwipe(msg, oldIndex, newIndex);
       await _saveChat();
       notifyListeners();
     } else if (messageIndex == _messages.length - 1 && !_isGenerating) {
       // Past last swipe on last message — regenerate
       await regenerateLastMessage();
+    }
+  }
+
+  void _syncRealismStateForSwipe(ChatMessage msg, int oldIndex, int newIndex) {
+    if (!_realismEnabled) return;
+    
+    final oldMeta = (oldIndex >= 0 && oldIndex < msg.swipeMetadata.length) 
+        ? (msg.swipeMetadata[oldIndex] ?? msg.metadata) 
+        : msg.metadata;
+        
+    final newMeta = (newIndex >= 0 && newIndex < msg.swipeMetadata.length) 
+        ? (msg.swipeMetadata[newIndex] ?? msg.metadata) 
+        : msg.metadata;
+        
+    final oldBond = oldMeta != null ? (oldMeta['bond_delta'] as int? ?? 0) : 0;
+    final oldMood = oldMeta != null ? (oldMeta['mood_delta'] as int? ?? 0) : 0;
+    final oldArousal = oldMeta != null ? (oldMeta['arousal_delta'] as int? ?? 0) : 0;
+    
+    final newBond = newMeta != null ? (newMeta['bond_delta'] as int? ?? 0) : 0;
+    final newMood = newMeta != null ? (newMeta['mood_delta'] as int? ?? 0) : 0;
+    final newArousal = newMeta != null ? (newMeta['arousal_delta'] as int? ?? 0) : 0;
+    
+    if (oldBond != newBond) {
+      final diff = newBond - oldBond;
+      _affectionScore = (_affectionScore + diff).clamp(-10, 15);
+      if (_affectionScore < 0) _relationshipTier = 1;
+      else if (_affectionScore <= 3) _relationshipTier = 2;
+      else if (_affectionScore <= 7) _relationshipTier = 3;
+      else if (_affectionScore <= 11) _relationshipTier = 4;
+      else _relationshipTier = 5;
+    }
+    
+    if (oldMood != newMood) {
+      final diff = newMood - oldMood;
+      _shortTermMood = (_shortTermMood + diff).clamp(-5, 5);
+    }
+    
+    if (oldArousal != newArousal && _nsfwCooldownEnabled) {
+      final diff = newArousal - oldArousal;
+      _arousalLevel = (_arousalLevel + diff).clamp(-3, 10);
     }
   }
 
@@ -1790,6 +2010,16 @@ class ChatService extends ChangeNotifier {
 
       // ── Context Shift: budget-aware history trimming ──
 
+      // Realism injection blocks — compute early so they're in the token budget
+      String realismBlock = '';
+      if (_realismEnabled && _activeGroup == null) {
+        final relationship = _getRelationshipInjection();
+        final emotion = _getEmotionInjection();
+        final time = _getTimeInjection();
+        final cooldown = _getNsfwCooldownInjection();
+        realismBlock = '$relationship$emotion$time$cooldown';
+      }
+
       // Calculate token cost of all fixed sections to determine chat history budget
       final fixedContent = "$systemPrompt\n"
           "$loreContent"
@@ -1801,6 +2031,7 @@ class ChatService extends ChangeNotifier {
           "$summaryBlock"
           "$postHistoryBlock"
           "$authorNoteBlock"
+          "$realismBlock"
           "$suffix";
       final fixedTokens = await _countTokens(fixedContent);
       final contextBudget = _storageService.contextSize;
@@ -1877,6 +2108,8 @@ class ChatService extends ChangeNotifier {
         debugPrint('[RAG:Chat] ⚠ $droppedMessages messages dropped but RAG not operational (service=${_memoryService != null}, operational=${_memoryService?.isOperational ?? false})');
       }
 
+      // Realism injection was already computed above for budget
+
       final prompt = "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
@@ -1889,6 +2122,7 @@ class ChatService extends ChangeNotifier {
           "$history"
           "$postHistoryBlock"
           "$authorNoteBlock"
+          "$realismBlock"
           "$suffix";
 
       // Track prompt budget for context viewer
@@ -1904,6 +2138,7 @@ class ChatService extends ChangeNotifier {
         'Chat History': (history.length / 4).ceil(),
         'Post-History': (postHistoryBlock.length / 4).ceil(),
         'Author\'s Note': (authorNoteBlock.length / 4).ceil(),
+        'Realism Mode': (realismBlock.length / 4).ceil(),
         if (droppedMessages > 0) 'Dropped Messages': droppedMessages,
       };
       // Remove zero-value entries
@@ -1976,15 +2211,25 @@ class ChatService extends ChangeNotifier {
         originalText = _messages.last.text;
         targetSender = _messages.last.sender;
         isUserTarget = _messages.last.isUser;
+        // Merge metadata if continuing
+        if (_pendingRealismMetadata != null) {
+          _messages.last.activeMetadata ??= {};
+          _messages.last.activeMetadata!.addAll(_pendingRealismMetadata!);
+          _pendingRealismMetadata = null;
+        }
       } else {
         targetSender = mode == GenerationMode.normal ? speakingCharacter.name : _userPersonaService.persona.name;
         isUserTarget = mode == GenerationMode.impersonate;
+        final initialMetadata = _pendingRealismMetadata != null ? Map<String, dynamic>.from(_pendingRealismMetadata!) : null;
         _messages.add(ChatMessage(
           text: "",
           sender: targetSender,
           isUser: isUserTarget,
           characterId: mode == GenerationMode.normal ? _getCharacterIdForCard(speakingCharacter) : null,
+          metadata: initialMetadata,
+          swipeMetadata: initialMetadata != null ? [initialMetadata] : null,
         ));
+        _pendingRealismMetadata = null;
       }
 
       // Helper to update the visible message from buffer
@@ -3923,4 +4168,389 @@ class ChatService extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // ── Realism Mode ────────────────────────────────────────────────────────
+
+  /// Shared helper: strip think blocks and extract text after them.
+  String _stripThinkBlocks(String text) {
+    String cleaned = text
+        .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
+        .trim();
+    final unclosed = cleaned.indexOf('<think>');
+    if (unclosed >= 0) {
+      cleaned = cleaned.substring(0, unclosed).trim();
+    }
+    return cleaned;
+  }
+
+  /// Shared helper: fire a lightweight LLM call and return the raw response.
+  Future<String?> _fireLLMEval(String prompt) async {
+    if (_llmProvider == null) return null;
+    final llm = _llmProvider!.activeService;
+    if (!llm.isReady) return null;
+
+    final params = GenerationParams(
+      prompt: prompt,
+      maxLength: 8000,
+      temperature: 0.1,
+      reasoningEnabled: false,
+      stopSequences: [],
+    );
+
+    String response = '';
+    await for (final chunk in llm.generateStream(params)) {
+      response += chunk;
+    }
+    return response.isEmpty ? null : response;
+  }
+
+  // ── Prompt Injection Builders ──
+
+  String _getRelationshipInjection() {
+    if (!_realismEnabled) return '';
+    final charName = _activeCharacter?.name ?? 'the character';
+
+    String moodNote = '';
+    if (_shortTermMood >= 3) {
+      moodNote = '$charName is currently delighted and very positively disposed toward {{user}}.';
+    } else if (_shortTermMood >= 1) {
+      moodNote = '$charName is currently in a good mood and pleased with {{user}}.';
+    } else if (_shortTermMood == 0) {
+      moodNote = '$charName has a neutral mood toward {{user}} right now.';
+    } else if (_shortTermMood >= -2) {
+      moodNote = '$charName is currently annoyed or mildly upset with {{user}} due to recent behavior.';
+    } else {
+      moodNote = '$charName is currently very upset or hurt by {{user}}\'s recent behavior. '
+          'This should strongly color their response even if the long-term bond is high.';
+    }
+
+    String bondGuidance;
+    switch (_relationshipTier) {
+      case 1:
+        bondGuidance = '$charName is guarded and formal with {{user}}. '
+            'They keep conversations surface-level and deflect personal questions. '
+            'They are NOT open to flirting, romance, or provocative content.';
+      case 2:
+        bondGuidance = '$charName is polite and friendly with {{user}} but maintains clear boundaries. '
+            'Small talk and casual conversation are natural. '
+            'They are NOT open to romance or provocative content.';
+      case 3:
+        bondGuidance = '$charName is warm and friendly with {{user}}. '
+            'They enjoy conversations and share personal thoughts freely. '
+            'Light teasing and playful banter are natural. '
+            'However, they are NOT ready for romantic advances.';
+      case 4:
+        bondGuidance = '$charName is emotionally open and vulnerable with {{user}}. '
+            'They trust {{user}} deeply. Playful flirting and romantic tension are natural. '
+            'They are receptive to deeper emotional connection.';
+      case 5:
+        bondGuidance = '$charName fully trusts {{user}} and is completely open. '
+            'All forms of emotional and romantic expression are natural.';
+      default:
+        bondGuidance = '';
+    }
+
+    return '[OOC Note regarding Relationship:\n'
+        ' Long-Term Bond: $relationshipTierName\n'
+        ' Current Mood: $moodLabel\n'
+        ' $bondGuidance\n'
+        ' $moodNote\n'
+        ' CRITICAL: Do NOT mention out-of-character terms or UI logic like tiers, scores, levels, or relationship states in your dialogue. Show, do not tell.]\n';
+  }
+
+  String _getEmotionInjection() {
+    if (!_realismEnabled || _characterEmotion.isEmpty) return '';
+    final charName = _activeCharacter?.name ?? 'the character';
+    final cap = _characterEmotion.substring(0, 1).toUpperCase() + _characterEmotion.substring(1);
+    return '[$charName\'s Current Emotional State: $cap ($_emotionIntensity)\n'
+        ' This should subtly influence $charName\'s tone, body language, and word choice.]\n';
+  }
+
+  String _getTimeInjection() {
+    if (!_realismEnabled) return '';
+    final timeLabel = _timeOfDay.replaceAll('_', ' ');
+    final cap = timeLabel.substring(0, 1).toUpperCase() + timeLabel.substring(1);
+    return '[Scene Time: $cap, Day $_dayCount\n'
+        ' Describe appropriate lighting, atmosphere, and environmental details.]\n';
+  }
+
+  String _getNsfwCooldownInjection() {
+    if (!_realismEnabled || !_nsfwCooldownEnabled) return '';
+    
+    final charName = _activeCharacter?.name ?? 'the character';
+    String statePrompt = '[OOC Note regarding Physical State:\n';
+    
+    if (_cooldownTurnsRemaining > 0) {
+      statePrompt += ' $charName recently experienced climax and is in a natural refractory/recovery period.\n'
+          ' They should behave realistically: relaxed, possibly tired, affectionate but\n'
+          ' not sexually eager. If {{user}} pushes for immediate sexual activity,\n'
+          ' $charName should respond with gentle reluctance or suggest resting first.\n';
+    } else {
+      String arousalDesc;
+      if (_arousalLevel <= -2) {
+        arousalDesc = 'completely unaroused and physically deadened. They will actively reject or pull away from sexual advances';
+      } else if (_arousalLevel == 0) {
+        arousalDesc = 'physically dormant/neutral. They are not currently aroused';
+      } else if (_arousalLevel <= 3) {
+        arousalDesc = 'mildly flustered or experiencing a low hum of physical arousal';
+      } else if (_arousalLevel <= 6) {
+        arousalDesc = 'visibly aroused, highly receptive, and eager for physical intimacy';
+      } else if (_arousalLevel <= 9) {
+        arousalDesc = 'heavily aroused, breathing hard, and aggressively pursuing sexual release';
+      } else {
+        arousalDesc = 'feverish with lust, entirely consumed by the desperate need for immediate climax';
+      }
+      statePrompt += ' $charName is currently $arousalDesc.\n';
+    }
+    
+    statePrompt += ' CRITICAL: Do NOT use terms like "cooldown", "turns", or "mechanics" in dialogue. Show, do not tell.]\n';
+    return statePrompt;
+  }
+
+  // ── LLM Evaluation Calls ──
+
+  Future<void> _evaluateRelationshipCall() async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+
+    final recentCount = _messages.length < 6 ? _messages.length : 6;
+    final recent = _messages.reversed.take(recentCount).toList().reversed
+        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+
+    final charName = _activeCharacter!.name;
+    final userName = _userPersonaService.persona.name;
+
+    final prompt = 'Analyze the user\'s behavior in this recent conversation between $userName and $charName.\n\n'
+        'Evaluate TWO things${_nsfwCooldownEnabled ? ' (and an optional third)' : ''}:\n'
+        '1. "relationship_delta": How does this affect the long-term bond? (-2 to +2)\n'
+        '   +2: Deeply engaging, sincere | +1: Friendly | 0: Neutral | -1: Rude | -2: Hostile\n'
+        '2. "mood": How would $charName feel RIGHT NOW? (-5 to +5)\n'
+        '   +5: Overjoyed | +3: Very pleased | 0: Neutral | -3: Hurt/angry | -5: Devastated\n'
+        '${_nsfwCooldownEnabled ? '3. "arousal_delta": (If flirtatious/NSFW) Does this interaction increase/decrease physical arousal? (-2 to +2)\\n' : ''}\n'
+        'Recent conversation:\n$recent\n\n'
+        'Respond with ONLY a JSON object: {"relationship_delta": <number>, "mood": <number>, ${_nsfwCooldownEnabled ? '"arousal_delta": <number>, ' : ''}"reason": "<brief>"}';
+
+    try {
+      debugPrint('[Realism:Relationship] Evaluating...');
+      final raw = await _fireLLMEval(prompt);
+      if (raw == null) return;
+
+      final searchText = _stripThinkBlocks(raw);
+      final text = searchText.isNotEmpty ? searchText : raw;
+
+      final deltaMatch = RegExp(r'"relationship_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      int bondDelta = 0;
+      if (deltaMatch != null) {
+        bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-2, 2);
+        _applyScoreDelta(bondDelta);
+      }
+
+      final moodMatch = RegExp(r'"mood"\s*:\s*(-?\d+)').firstMatch(text);
+      int moodDelta = 0;
+      if (moodMatch != null) {
+        final parsedMood = (int.tryParse(moodMatch.group(1)!) ?? 0).clamp(-5, 5);
+        moodDelta = parsedMood - _shortTermMood;
+        _shortTermMood = parsedMood;
+        _moodDecayCounter = 0;
+        debugPrint('[Realism:Relationship] Mood: $_shortTermMood ($moodLabel)');
+      }
+
+      int arousalDelta = 0;
+      if (_nsfwCooldownEnabled) {
+        final arousalMatch = RegExp(r'"arousal_delta"\s*:\s*(-?\d+)').firstMatch(text);
+        if (arousalMatch != null) {
+          arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(-2, 2);
+          _arousalLevel = (_arousalLevel + arousalDelta).clamp(-3, 10);
+        }
+      }
+
+      if (bondDelta != 0 || moodDelta != 0 || arousalDelta != 0) {
+        _pendingRealismMetadata = {
+          'bond_delta': bondDelta,
+          'mood_delta': moodDelta,
+          'mood_label': moodLabel,
+          if (arousalDelta != 0) 'arousal_delta': arousalDelta,
+        };
+      }
+
+      final reasonMatch = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
+      debugPrint('[Realism:Relationship] Reason: ${reasonMatch?.group(1) ?? 'unknown'}');
+      _saveChat();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Realism:Relationship] Failed: $e');
+    }
+  }
+
+  Future<void> _evaluateSceneStateCall() async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+
+    final recentCount = _messages.length < 6 ? _messages.length : 6;
+    final recent = _messages.reversed.take(recentCount).toList().reversed
+        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+
+    final charName = _activeCharacter!.name;
+
+    String nsfwField = '';
+    String nsfwInstr = '';
+    // Only ask about climax when cooldown isn't already running
+    if (_nsfwCooldownEnabled && _cooldownTurnsRemaining <= 0) {
+      nsfwField = ', "climax_detected": <true|false>';
+      nsfwInstr = '\n4. "climax_detected": Did a character ACTUALLY reach orgasm/climax in these messages? '
+          'This must be an EVENT that is actively happening or just happened — '
+          'a character physically reaching climax/orgasm in the scene. '
+          'Do NOT set true for: mentions of past events, dirty talk, innuendo, '
+          'arousal, sexual activity that hasn\'t reached completion, or words like "cum" '
+          'used casually. ONLY set true if an orgasm is explicitly occurring right now.';
+    }
+
+    final prompt = 'Analyze the current scene state involving $charName.\n\n'
+        'Evaluate:\n'
+        '1. "emotion": $charName\'s current emotional state (one word, be nuanced: calm, yearning, resentful, ecstatic, melancholy, flustered, anxious, etc.)\n'
+        '2. "emotion_intensity": How strong? (mild, moderate, or strong)\n'
+        '3. "time_of_day": Current time? (dawn, morning, late_morning, afternoon, evening, night)\n'
+        '   Pacing: If the conversational flow or scene naturally transitions to a later time period, output the new time period. Otherwise, default back to: $_timeOfDay\n'
+        '   "new_day": Has a new day started? (true/false)$nsfwInstr\n\n'
+        'Recent conversation:\n$recent\n\n'
+        'Respond with ONLY a JSON object: {"emotion": "<word>", "emotion_intensity": "<level>", '
+        '"time_of_day": "<period>", "new_day": <bool>$nsfwField, "reason": "<brief>"}';
+
+    try {
+      debugPrint('[Realism:Scene] Evaluating...');
+      final raw = await _fireLLMEval(prompt);
+      if (raw == null) return;
+
+      final searchText = _stripThinkBlocks(raw);
+      final text = searchText.isNotEmpty ? searchText : raw;
+
+      final emotionMatch = RegExp(r'"emotion"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (emotionMatch != null) {
+        _characterEmotion = emotionMatch.group(1)!.toLowerCase().trim();
+      }
+
+      final intensityMatch = RegExp(r'"emotion_intensity"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (intensityMatch != null) {
+        _emotionIntensity = intensityMatch.group(1)!.toLowerCase().trim();
+      }
+
+      bool dayIncremented = false;
+      final validTimes = ['dawn', 'morning', 'late_morning', 'afternoon', 'evening', 'night'];
+      final currentIndex = validTimes.indexOf(_timeOfDay);
+
+      final timeMatch = RegExp(r'"time_of_day"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (timeMatch != null) {
+        final t = timeMatch.group(1)!.toLowerCase().trim();
+        final targetIndex = validTimes.indexOf(t);
+
+        if (targetIndex != -1 && targetIndex != currentIndex) {
+          if (targetIndex > currentIndex) {
+            // Cap forward progression to exactly +1 slot maximum
+            _timeOfDay = validTimes[currentIndex + 1];
+          } else if (targetIndex < currentIndex) {
+            // The LLM jumped backward (e.g. night -> morning), indicating a new day
+            _timeOfDay = validTimes[0]; // Reset to dawn
+            _dayCount++;
+            dayIncremented = true;
+            debugPrint('[Realism:Scene] Time rolled over! Day $_dayCount');
+          }
+        }
+      }
+
+      if (!dayIncremented) {
+        final newDayMatch = RegExp(r'"new_day"\s*:\s*(true|false)').firstMatch(text);
+        // Only allow explicit new_day triggers if the time is already late enough
+        if (newDayMatch != null && newDayMatch.group(1) == 'true' && currentIndex >= validTimes.indexOf('evening')) {
+          _dayCount++;
+          _timeOfDay = validTimes[0];
+          debugPrint('[Realism:Scene] New day explicitly triggered! Day $_dayCount');
+        }
+      }
+
+      if (_nsfwCooldownEnabled && _cooldownTurnsRemaining <= 0) {
+        final climaxMatch = RegExp(r'"climax_detected"\s*:\s*(true|false)').firstMatch(text);
+        if (climaxMatch != null && climaxMatch.group(1) == 'true') {
+          _cooldownTurnsRemaining = 5;
+          _arousalLevel = -3; // Refractory period reset
+          debugPrint('[Realism:Scene] Climax detected \u2014 cooldown started (5 turns), arousal reset to -3');
+        }
+      }
+
+      debugPrint('[Realism:Scene] Emotion: $_characterEmotion ($_emotionIntensity), '
+          'Time: $_timeOfDay, Day: $_dayCount');
+      _saveChat();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Realism:Scene] Failed: $e');
+    }
+  }
+
+  // ── Score / State Helpers ──
+
+  void _applyScoreDelta(int delta) {
+    if (delta == 0) return;
+    final oldScore = _affectionScore;
+    final oldTier = _relationshipTier;
+
+    _affectionScore = (_affectionScore + delta).clamp(-10, 15);
+
+    if (_affectionScore < 0) {
+      _relationshipTier = 1;
+    } else if (_affectionScore <= 3) {
+      _relationshipTier = 2;
+    } else if (_affectionScore <= 7) {
+      _relationshipTier = 3;
+    } else if (_affectionScore <= 11) {
+      _relationshipTier = 4;
+    } else {
+      _relationshipTier = 5;
+    }
+
+    if (_affectionScore != oldScore || _relationshipTier != oldTier) {
+      debugPrint('[Realism] Bond: $oldScore \u2192 $_affectionScore, '
+          'Tier: $oldTier \u2192 $_relationshipTier ($relationshipTierName)');
+    }
+  }
+
+  void _applyMoodDecay() {
+    if (_shortTermMood == 0) return;
+    _moodDecayCounter++;
+    if (_moodDecayCounter >= 3) {
+      _moodDecayCounter = 0;
+      if (_shortTermMood > 0) {
+        _shortTermMood--;
+      } else {
+        _shortTermMood++;
+      }
+      debugPrint('[Realism] Mood decay: $_shortTermMood ($moodLabel)');
+    }
+  }
+
+  // ── Public Toggle Methods ──
+
+  Future<void> setRealismEnabled(bool enabled) async {
+    _realismEnabled = enabled;
+    if (!enabled) {
+      _affectionScore = 0;
+      _relationshipTier = 2;
+      _shortTermMood = 0;
+      _moodDecayCounter = 0;
+      _characterEmotion = '';
+      _emotionIntensity = '';
+      _timeOfDay = 'morning';
+      _dayCount = 1;
+      _cooldownTurnsRemaining = 0;
+    }
+    await _saveChat();
+    notifyListeners();
+  }
+
+  Future<void> setNsfwCooldownEnabled(bool enabled) async {
+    _nsfwCooldownEnabled = enabled;
+    if (!enabled) {
+      _cooldownTurnsRemaining = 0;
+      _arousalLevel = 0;
+    }
+    await _saveChat();
+    notifyListeners();
+  }
 }
+

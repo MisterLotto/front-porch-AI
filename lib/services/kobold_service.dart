@@ -27,7 +27,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:path/path.dart' as path;
 
-class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowListener implements LLMService {
+class KoboldService extends ChangeNotifier with WidgetsBindingObserver implements LLMService {
   final StorageService _storageService;
   Process? _process;
   bool _isRunning = false;
@@ -61,13 +61,11 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
   KoboldService(this._storageService) {
     _purgeLogs();
     WidgetsBinding.instance.addObserver(this);
-    windowManager.addListener(this);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    windowManager.removeListener(this);
     stopKobold();
     super.dispose();
   }
@@ -76,17 +74,6 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver, WindowLi
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
       stopKobold();
-    }
-  }
-
-  @override
-  void onWindowClose() async {
-    // Only stop the backend — window destruction is handled by _MyAppState.
-    // Calling windowManager.destroy() here caused a double-destroy race that
-    // triggered "FlutterEngineRemoveView kInvalidArguments" and a segfault.
-    bool isPreventClose = await windowManager.isPreventClose();
-    if (isPreventClose) {
-      await stopKobold();
     }
   }
 

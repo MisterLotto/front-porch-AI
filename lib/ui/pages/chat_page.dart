@@ -2035,6 +2035,10 @@ class _ChatPageState extends State<ChatPage> {
                 _AuthorNoteSection(chatService: chatService),
                 const SizedBox(height: 16),
 
+                // ── Realism Mode ──
+                _RealismSection(chatService: chatService),
+                const SizedBox(height: 16),
+
                 // ── Objective (promoted from hamburger menu) ──
                 _ObjectiveSection(chatService: chatService),
                 const SizedBox(height: 16),
@@ -3121,6 +3125,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
                     externalImagesAllowed: widget.externalImagesAllowed,
                     onRequestImagePermission: widget.onRequestImagePermission,
                   ),
+                  if (message.activeMetadata != null)
+                    _buildRealismIndicator(message.activeMetadata!),
                   // Swipe arrows for alternate greetings on first message
                   if (index == 0 && !message.isUser)
                     Consumer<ChatService>(
@@ -3403,6 +3409,82 @@ class _MessageBubbleState extends State<_MessageBubble> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRealismIndicator(Map<String, dynamic> metadata) {
+    final bondDelta = metadata['bond_delta'] as int? ?? 0;
+    final moodDelta = metadata['mood_delta'] as int? ?? 0;
+    final moodLabel = metadata['mood_label'] as String? ?? '';
+    final arousalDelta = metadata['arousal_delta'] as int? ?? 0;
+    
+    if (bondDelta == 0 && moodDelta == 0 && arousalDelta == 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black12,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (bondDelta != 0) ...[
+              Icon(
+                bondDelta > 0 ? Icons.favorite : Icons.heart_broken, 
+                size: 11, 
+                color: bondDelta > 0 ? Colors.pinkAccent : Colors.white38
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Bond: ${bondDelta > 0 ? '+$bondDelta' : '$bondDelta'}', 
+                style: TextStyle(
+                  fontSize: 10, 
+                  fontWeight: FontWeight.w600,
+                  color: bondDelta > 0 ? Colors.pinkAccent : Colors.white38
+                )
+              ),
+              if (moodDelta != 0 || arousalDelta != 0) const SizedBox(width: 10),
+            ],
+            if (moodDelta != 0) ...[
+              Icon(
+                moodDelta > 0 ? Icons.sentiment_satisfied : Icons.sentiment_dissatisfied, 
+                size: 11, 
+                color: moodDelta > 0 ? Colors.greenAccent : Colors.redAccent
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Mood: ${moodLabel.isNotEmpty ? moodLabel : (moodDelta > 0 ? '+$moodDelta' : '$moodDelta')}', 
+                style: TextStyle(
+                  fontSize: 10, 
+                  fontWeight: FontWeight.w600,
+                  color: moodDelta > 0 ? Colors.greenAccent : Colors.redAccent
+                )
+              ),
+              if (arousalDelta != 0) const SizedBox(width: 10),
+            ],
+            if (arousalDelta != 0) ...[
+              Icon(
+                arousalDelta > 0 ? Icons.local_fire_department : Icons.ac_unit, 
+                size: 11, 
+                color: arousalDelta > 0 ? Colors.deepOrangeAccent : Colors.lightBlueAccent
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Lust: ${arousalDelta > 0 ? '+$arousalDelta' : '$arousalDelta'}', 
+                style: TextStyle(
+                  fontSize: 10, 
+                  fontWeight: FontWeight.w600,
+                  color: arousalDelta > 0 ? Colors.deepOrangeAccent : Colors.lightBlueAccent
+                )
+              ),
+            ]
+          ],
+        ),
       ),
     );
   }
@@ -5312,6 +5394,391 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
+// ── Realism Mode Section ──────────────────────────────────────────────
+
+class _RealismSection extends StatefulWidget {
+  final ChatService chatService;
+  const _RealismSection({required this.chatService});
+
+  @override
+  State<_RealismSection> createState() => _RealismSectionState();
+}
+
+class _RealismSectionState extends State<_RealismSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ChatService>(
+      builder: (context, chat, _) {
+        final enabled = chat.realismEnabled;
+
+        // Bond colors per tier
+        Color bondColor;
+        switch (chat.relationshipTier) {
+          case 1: bondColor = Colors.blueGrey;
+          case 2: bondColor = Colors.lightBlue;
+          case 3: bondColor = Colors.greenAccent;
+          case 4: bondColor = Colors.orangeAccent;
+          case 5: bondColor = Colors.pinkAccent;
+          default: bondColor = Colors.white30;
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Collapsible Header ──
+              InkWell(
+                onTap: () => setState(() => _expanded = !_expanded),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _expanded ? Icons.expand_more : Icons.chevron_right,
+                        size: 16,
+                        color: Colors.white38,
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.theater_comedy, size: 14, color: Colors.white54),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Realism Mode',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        height: 24,
+                        child: Switch(
+                          value: enabled,
+                          activeColor: Colors.tealAccent,
+                          onChanged: chat.isGenerating ? null : (val) {
+                            chat.setRealismEnabled(val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Expanded Content ──
+              if (enabled && _expanded)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Divider(color: Colors.white12, height: 1),
+                      const SizedBox(height: 10),
+
+                      // ── Bond ──
+                      Row(
+                        children: [
+                          Icon(Icons.favorite, size: 13, color: bondColor),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Bond: ${chat.relationshipTierName}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: bondColor),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${chat.affectionScore}/15',
+                            style: const TextStyle(fontSize: 10, color: Colors.white38),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: ((chat.affectionScore + 10) / 25).clamp(0.0, 1.0),
+                          minHeight: 5,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation<Color>(bondColor),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      // Tier dots
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(5, (i) {
+                          return Container(
+                            width: 7, height: 7,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: (i + 1) <= chat.relationshipTier ? bondColor : Colors.white12,
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Mood ──
+                      Row(
+                        children: [
+                          Icon(
+                            chat.shortTermMood >= 1 ? Icons.sentiment_satisfied
+                                : chat.shortTermMood <= -1 ? Icons.sentiment_dissatisfied
+                                : Icons.sentiment_neutral,
+                            size: 13,
+                            color: chat.shortTermMood >= 1 ? Colors.greenAccent
+                                : chat.shortTermMood <= -1 ? Colors.redAccent
+                                : Colors.white38,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Mood: ${chat.moodLabel}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: chat.shortTermMood >= 1 ? Colors.greenAccent
+                                  : chat.shortTermMood <= -1 ? Colors.redAccent
+                                  : Colors.white54,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${chat.shortTermMood}/5',
+                            style: const TextStyle(fontSize: 10, color: Colors.white38),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: ((chat.shortTermMood + 5) / 10).clamp(0.0, 1.0),
+                          minHeight: 4,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            chat.shortTermMood >= 1 ? Colors.greenAccent
+                                : chat.shortTermMood <= -1 ? Colors.redAccent
+                                : Colors.white30,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Emotion ──
+                      if (chat.characterEmotion.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            Text(
+                              _emotionEmoji(chat.characterEmotion),
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                '${chat.characterEmotion.substring(0, 1).toUpperCase()}${chat.characterEmotion.substring(1)} (${chat.emotionIntensity})',
+                                style: const TextStyle(fontSize: 12, color: Colors.white54),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      if (chat.nsfwCooldownEnabled) ...[
+                        // ── Lust ──
+                        Row(
+                          children: [
+                            Icon(
+                              chat.arousalLevel >= 4 ? Icons.local_fire_department
+                                  : chat.arousalLevel <= -1 ? Icons.ac_unit
+                                  : Icons.favorite_border,
+                              size: 13,
+                              color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                  : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                  : Colors.white38,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Lust: ${chat.arousalLevel >= 9 ? 'Feverish' : chat.arousalLevel >= 6 ? 'Heavy' : chat.arousalLevel >= 3 ? 'Mild' : chat.arousalLevel < 0 ? 'Deadened' : 'Dormant'}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                    : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                    : Colors.white54,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${chat.arousalLevel.clamp(0, 10)}/10',
+                              style: const TextStyle(fontSize: 10, color: Colors.white38),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: (chat.arousalLevel / 10).clamp(0.0, 1.0),
+                            minHeight: 4,
+                            backgroundColor: Colors.white10,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                  : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                  : Colors.white30,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // ── Time of Day ──
+                      Row(
+                        children: [
+                          Text(
+                            _timeEmoji(chat.timeOfDay),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            _timeLabel(chat.timeOfDay),
+                            style: const TextStyle(fontSize: 12, color: Colors.white54),
+                          ),
+                          const Spacer(),
+                          Text(
+                            'Day ${chat.dayCount}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white38),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Time period dots
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          for (final period in ['dawn', 'morning', 'late_morning', 'afternoon', 'evening', 'night'])
+                            Column(
+                              children: [
+                                Container(
+                                  width: 7, height: 7,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: chat.timeOfDay == period
+                                        ? Colors.amber
+                                        : Colors.white12,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _timeDotLabel(period),
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: chat.timeOfDay == period ? Colors.amber : Colors.white24,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── NSFW Cooldown ──
+                      Row(
+                        children: [
+                          const Icon(Icons.timer, size: 13, color: Colors.white38),
+                          const SizedBox(width: 5),
+                          const Text(
+                            'NSFW Cooldown',
+                            style: TextStyle(fontSize: 12, color: Colors.white54),
+                          ),
+                          const Spacer(),
+                          SizedBox(
+                            height: 20,
+                            child: Switch(
+                              value: chat.nsfwCooldownEnabled,
+                              activeColor: Colors.deepOrangeAccent,
+                              onChanged: chat.isGenerating ? null : (val) {
+                                chat.setNsfwCooldownEnabled(val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (chat.nsfwCooldownEnabled && chat.cooldownTurnsRemaining > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '⏳ Cooling down... ${chat.cooldownTurnsRemaining} turns',
+                          style: const TextStyle(fontSize: 11, color: Colors.deepOrangeAccent),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _emotionEmoji(String emotion) {
+    switch (emotion.toLowerCase()) {
+      case 'amused': case 'playful': case 'happy': return '😄';
+      case 'angry': case 'furious': return '😠';
+      case 'sad': case 'melancholy': return '😢';
+      case 'anxious': case 'nervous': case 'worried': return '😰';
+      case 'excited': case 'thrilled': return '🤩';
+      case 'flirtatious': case 'aroused': return '😏';
+      case 'calm': case 'relaxed': case 'content': return '😌';
+      case 'suspicious': case 'wary': return '🤨';
+      case 'fearful': case 'scared': return '😨';
+      case 'embarrassed': case 'flustered': return '😳';
+      case 'annoyed': case 'irritated': return '😤';
+      case 'confused': case 'conflicted': return '😕';
+      case 'protective': return '🛡️';
+      default: return '🎭';
+    }
+  }
+
+  String _timeEmoji(String time) {
+    switch (time) {
+      case 'dawn': return '🌅';
+      case 'morning': return '☀️';
+      case 'late_morning': return '🌤️';
+      case 'afternoon': return '☀️';
+      case 'evening': return '🌇';
+      case 'night': return '🌙';
+      default: return '🕐';
+    }
+  }
+
+  String _timeLabel(String time) {
+    switch (time) {
+      case 'dawn': return 'Dawn';
+      case 'morning': return 'Morning';
+      case 'late_morning': return 'Late Morning';
+      case 'afternoon': return 'Afternoon';
+      case 'evening': return 'Evening';
+      case 'night': return 'Night';
+      default: return time;
+    }
+  }
+
+  String _timeDotLabel(String period) {
+    switch (period) {
+      case 'dawn': return 'D';
+      case 'morning': return 'M';
+      case 'late_morning': return 'LM';
+      case 'afternoon': return 'A';
+      case 'evening': return 'E';
+      case 'night': return 'N';
+      default: return '';
+    }
+  }
+}
+
 
 // ── Objective Section ──────────────────────────────────────────────────
 

@@ -423,11 +423,11 @@ class _MyAppState extends State<MyApp> with WindowListener {
       debugPrint('AG_DEBUG: Error stopping embedding sidecar on close: $e');
     }
 
-    // On Linux, windowManager.destroy() triggers a Flutter engine bug:
+    // On Linux and Windows, windowManager.destroy() can trigger a Flutter engine bug:
     //   "FlutterEngineRemoveView returned kInvalidArguments"
-    //   "Segmentation fault (core dumped)"
+    //   "Segmentation fault (core dumped)" or a native crash popup on Windows 11.
     // Workaround: exit(0) after cleanup to bypass the buggy view teardown.
-    if (Platform.isLinux) {
+    if (Platform.isLinux || Platform.isWindows) {
       exit(0);
     } else {
       await windowManager.destroy();

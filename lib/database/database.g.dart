@@ -1397,6 +1397,154 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _affectionScoreMeta = const VerificationMeta(
+    'affectionScore',
+  );
+  @override
+  late final GeneratedColumn<int> affectionScore = GeneratedColumn<int>(
+    'affection_score',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _relationshipTierMeta = const VerificationMeta(
+    'relationshipTier',
+  );
+  @override
+  late final GeneratedColumn<int> relationshipTier = GeneratedColumn<int>(
+    'relationship_tier',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(2),
+  );
+  static const VerificationMeta _realismEnabledMeta = const VerificationMeta(
+    'realismEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> realismEnabled = GeneratedColumn<bool>(
+    'realism_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("realism_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _shortTermMoodMeta = const VerificationMeta(
+    'shortTermMood',
+  );
+  @override
+  late final GeneratedColumn<int> shortTermMood = GeneratedColumn<int>(
+    'short_term_mood',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _moodDecayCounterMeta = const VerificationMeta(
+    'moodDecayCounter',
+  );
+  @override
+  late final GeneratedColumn<int> moodDecayCounter = GeneratedColumn<int>(
+    'mood_decay_counter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _characterEmotionMeta = const VerificationMeta(
+    'characterEmotion',
+  );
+  @override
+  late final GeneratedColumn<String> characterEmotion = GeneratedColumn<String>(
+    'character_emotion',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _emotionIntensityMeta = const VerificationMeta(
+    'emotionIntensity',
+  );
+  @override
+  late final GeneratedColumn<String> emotionIntensity = GeneratedColumn<String>(
+    'emotion_intensity',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _timeOfDayMeta = const VerificationMeta(
+    'timeOfDay',
+  );
+  @override
+  late final GeneratedColumn<String> timeOfDay = GeneratedColumn<String>(
+    'time_of_day',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('morning'),
+  );
+  static const VerificationMeta _dayCountMeta = const VerificationMeta(
+    'dayCount',
+  );
+  @override
+  late final GeneratedColumn<int> dayCount = GeneratedColumn<int>(
+    'day_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _nsfwCooldownEnabledMeta =
+      const VerificationMeta('nsfwCooldownEnabled');
+  @override
+  late final GeneratedColumn<bool> nsfwCooldownEnabled = GeneratedColumn<bool>(
+    'nsfw_cooldown_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("nsfw_cooldown_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _arousalLevelMeta = const VerificationMeta(
+    'arousalLevel',
+  );
+  @override
+  late final GeneratedColumn<int> arousalLevel = GeneratedColumn<int>(
+    'arousal_level',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cooldownTurnsRemainingMeta =
+      const VerificationMeta('cooldownTurnsRemaining');
+  @override
+  late final GeneratedColumn<int> cooldownTurnsRemaining = GeneratedColumn<int>(
+    'cooldown_turns_remaining',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1445,6 +1593,18 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     summaryLastIndex,
     parentSession,
     forkIndex,
+    affectionScore,
+    relationshipTier,
+    realismEnabled,
+    shortTermMood,
+    moodDecayCounter,
+    characterEmotion,
+    emotionIntensity,
+    timeOfDay,
+    dayCount,
+    nsfwCooldownEnabled,
+    arousalLevel,
+    cooldownTurnsRemaining,
     createdAt,
     updatedAt,
     deletedAt,
@@ -1541,6 +1701,108 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         forkIndex.isAcceptableOrUnknown(data['fork_index']!, _forkIndexMeta),
       );
     }
+    if (data.containsKey('affection_score')) {
+      context.handle(
+        _affectionScoreMeta,
+        affectionScore.isAcceptableOrUnknown(
+          data['affection_score']!,
+          _affectionScoreMeta,
+        ),
+      );
+    }
+    if (data.containsKey('relationship_tier')) {
+      context.handle(
+        _relationshipTierMeta,
+        relationshipTier.isAcceptableOrUnknown(
+          data['relationship_tier']!,
+          _relationshipTierMeta,
+        ),
+      );
+    }
+    if (data.containsKey('realism_enabled')) {
+      context.handle(
+        _realismEnabledMeta,
+        realismEnabled.isAcceptableOrUnknown(
+          data['realism_enabled']!,
+          _realismEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('short_term_mood')) {
+      context.handle(
+        _shortTermMoodMeta,
+        shortTermMood.isAcceptableOrUnknown(
+          data['short_term_mood']!,
+          _shortTermMoodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('mood_decay_counter')) {
+      context.handle(
+        _moodDecayCounterMeta,
+        moodDecayCounter.isAcceptableOrUnknown(
+          data['mood_decay_counter']!,
+          _moodDecayCounterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('character_emotion')) {
+      context.handle(
+        _characterEmotionMeta,
+        characterEmotion.isAcceptableOrUnknown(
+          data['character_emotion']!,
+          _characterEmotionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('emotion_intensity')) {
+      context.handle(
+        _emotionIntensityMeta,
+        emotionIntensity.isAcceptableOrUnknown(
+          data['emotion_intensity']!,
+          _emotionIntensityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('time_of_day')) {
+      context.handle(
+        _timeOfDayMeta,
+        timeOfDay.isAcceptableOrUnknown(data['time_of_day']!, _timeOfDayMeta),
+      );
+    }
+    if (data.containsKey('day_count')) {
+      context.handle(
+        _dayCountMeta,
+        dayCount.isAcceptableOrUnknown(data['day_count']!, _dayCountMeta),
+      );
+    }
+    if (data.containsKey('nsfw_cooldown_enabled')) {
+      context.handle(
+        _nsfwCooldownEnabledMeta,
+        nsfwCooldownEnabled.isAcceptableOrUnknown(
+          data['nsfw_cooldown_enabled']!,
+          _nsfwCooldownEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('arousal_level')) {
+      context.handle(
+        _arousalLevelMeta,
+        arousalLevel.isAcceptableOrUnknown(
+          data['arousal_level']!,
+          _arousalLevelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cooldown_turns_remaining')) {
+      context.handle(
+        _cooldownTurnsRemainingMeta,
+        cooldownTurnsRemaining.isAcceptableOrUnknown(
+          data['cooldown_turns_remaining']!,
+          _cooldownTurnsRemainingMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1612,6 +1874,54 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.int,
         data['${effectivePrefix}fork_index'],
       ),
+      affectionScore: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}affection_score'],
+      )!,
+      relationshipTier: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}relationship_tier'],
+      )!,
+      realismEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}realism_enabled'],
+      )!,
+      shortTermMood: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}short_term_mood'],
+      )!,
+      moodDecayCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mood_decay_counter'],
+      )!,
+      characterEmotion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_emotion'],
+      )!,
+      emotionIntensity: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}emotion_intensity'],
+      )!,
+      timeOfDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}time_of_day'],
+      )!,
+      dayCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}day_count'],
+      )!,
+      nsfwCooldownEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}nsfw_cooldown_enabled'],
+      )!,
+      arousalLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}arousal_level'],
+      )!,
+      cooldownTurnsRemaining: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cooldown_turns_remaining'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1645,6 +1955,18 @@ class Session extends DataClass implements Insertable<Session> {
   final int? summaryLastIndex;
   final String? parentSession;
   final int? forkIndex;
+  final int affectionScore;
+  final int relationshipTier;
+  final bool realismEnabled;
+  final int shortTermMood;
+  final int moodDecayCounter;
+  final String characterEmotion;
+  final String emotionIntensity;
+  final String timeOfDay;
+  final int dayCount;
+  final bool nsfwCooldownEnabled;
+  final int arousalLevel;
+  final int cooldownTurnsRemaining;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -1660,6 +1982,18 @@ class Session extends DataClass implements Insertable<Session> {
     this.summaryLastIndex,
     this.parentSession,
     this.forkIndex,
+    required this.affectionScore,
+    required this.relationshipTier,
+    required this.realismEnabled,
+    required this.shortTermMood,
+    required this.moodDecayCounter,
+    required this.characterEmotion,
+    required this.emotionIntensity,
+    required this.timeOfDay,
+    required this.dayCount,
+    required this.nsfwCooldownEnabled,
+    required this.arousalLevel,
+    required this.cooldownTurnsRemaining,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -1694,6 +2028,18 @@ class Session extends DataClass implements Insertable<Session> {
     if (!nullToAbsent || forkIndex != null) {
       map['fork_index'] = Variable<int>(forkIndex);
     }
+    map['affection_score'] = Variable<int>(affectionScore);
+    map['relationship_tier'] = Variable<int>(relationshipTier);
+    map['realism_enabled'] = Variable<bool>(realismEnabled);
+    map['short_term_mood'] = Variable<int>(shortTermMood);
+    map['mood_decay_counter'] = Variable<int>(moodDecayCounter);
+    map['character_emotion'] = Variable<String>(characterEmotion);
+    map['emotion_intensity'] = Variable<String>(emotionIntensity);
+    map['time_of_day'] = Variable<String>(timeOfDay);
+    map['day_count'] = Variable<int>(dayCount);
+    map['nsfw_cooldown_enabled'] = Variable<bool>(nsfwCooldownEnabled);
+    map['arousal_level'] = Variable<int>(arousalLevel);
+    map['cooldown_turns_remaining'] = Variable<int>(cooldownTurnsRemaining);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -1729,6 +2075,18 @@ class Session extends DataClass implements Insertable<Session> {
       forkIndex: forkIndex == null && nullToAbsent
           ? const Value.absent()
           : Value(forkIndex),
+      affectionScore: Value(affectionScore),
+      relationshipTier: Value(relationshipTier),
+      realismEnabled: Value(realismEnabled),
+      shortTermMood: Value(shortTermMood),
+      moodDecayCounter: Value(moodDecayCounter),
+      characterEmotion: Value(characterEmotion),
+      emotionIntensity: Value(emotionIntensity),
+      timeOfDay: Value(timeOfDay),
+      dayCount: Value(dayCount),
+      nsfwCooldownEnabled: Value(nsfwCooldownEnabled),
+      arousalLevel: Value(arousalLevel),
+      cooldownTurnsRemaining: Value(cooldownTurnsRemaining),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -1754,6 +2112,22 @@ class Session extends DataClass implements Insertable<Session> {
       summaryLastIndex: serializer.fromJson<int?>(json['summaryLastIndex']),
       parentSession: serializer.fromJson<String?>(json['parentSession']),
       forkIndex: serializer.fromJson<int?>(json['forkIndex']),
+      affectionScore: serializer.fromJson<int>(json['affectionScore']),
+      relationshipTier: serializer.fromJson<int>(json['relationshipTier']),
+      realismEnabled: serializer.fromJson<bool>(json['realismEnabled']),
+      shortTermMood: serializer.fromJson<int>(json['shortTermMood']),
+      moodDecayCounter: serializer.fromJson<int>(json['moodDecayCounter']),
+      characterEmotion: serializer.fromJson<String>(json['characterEmotion']),
+      emotionIntensity: serializer.fromJson<String>(json['emotionIntensity']),
+      timeOfDay: serializer.fromJson<String>(json['timeOfDay']),
+      dayCount: serializer.fromJson<int>(json['dayCount']),
+      nsfwCooldownEnabled: serializer.fromJson<bool>(
+        json['nsfwCooldownEnabled'],
+      ),
+      arousalLevel: serializer.fromJson<int>(json['arousalLevel']),
+      cooldownTurnsRemaining: serializer.fromJson<int>(
+        json['cooldownTurnsRemaining'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -1774,6 +2148,18 @@ class Session extends DataClass implements Insertable<Session> {
       'summaryLastIndex': serializer.toJson<int?>(summaryLastIndex),
       'parentSession': serializer.toJson<String?>(parentSession),
       'forkIndex': serializer.toJson<int?>(forkIndex),
+      'affectionScore': serializer.toJson<int>(affectionScore),
+      'relationshipTier': serializer.toJson<int>(relationshipTier),
+      'realismEnabled': serializer.toJson<bool>(realismEnabled),
+      'shortTermMood': serializer.toJson<int>(shortTermMood),
+      'moodDecayCounter': serializer.toJson<int>(moodDecayCounter),
+      'characterEmotion': serializer.toJson<String>(characterEmotion),
+      'emotionIntensity': serializer.toJson<String>(emotionIntensity),
+      'timeOfDay': serializer.toJson<String>(timeOfDay),
+      'dayCount': serializer.toJson<int>(dayCount),
+      'nsfwCooldownEnabled': serializer.toJson<bool>(nsfwCooldownEnabled),
+      'arousalLevel': serializer.toJson<int>(arousalLevel),
+      'cooldownTurnsRemaining': serializer.toJson<int>(cooldownTurnsRemaining),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -1792,6 +2178,18 @@ class Session extends DataClass implements Insertable<Session> {
     Value<int?> summaryLastIndex = const Value.absent(),
     Value<String?> parentSession = const Value.absent(),
     Value<int?> forkIndex = const Value.absent(),
+    int? affectionScore,
+    int? relationshipTier,
+    bool? realismEnabled,
+    int? shortTermMood,
+    int? moodDecayCounter,
+    String? characterEmotion,
+    String? emotionIntensity,
+    String? timeOfDay,
+    int? dayCount,
+    bool? nsfwCooldownEnabled,
+    int? arousalLevel,
+    int? cooldownTurnsRemaining,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -1811,6 +2209,19 @@ class Session extends DataClass implements Insertable<Session> {
         ? parentSession.value
         : this.parentSession,
     forkIndex: forkIndex.present ? forkIndex.value : this.forkIndex,
+    affectionScore: affectionScore ?? this.affectionScore,
+    relationshipTier: relationshipTier ?? this.relationshipTier,
+    realismEnabled: realismEnabled ?? this.realismEnabled,
+    shortTermMood: shortTermMood ?? this.shortTermMood,
+    moodDecayCounter: moodDecayCounter ?? this.moodDecayCounter,
+    characterEmotion: characterEmotion ?? this.characterEmotion,
+    emotionIntensity: emotionIntensity ?? this.emotionIntensity,
+    timeOfDay: timeOfDay ?? this.timeOfDay,
+    dayCount: dayCount ?? this.dayCount,
+    nsfwCooldownEnabled: nsfwCooldownEnabled ?? this.nsfwCooldownEnabled,
+    arousalLevel: arousalLevel ?? this.arousalLevel,
+    cooldownTurnsRemaining:
+        cooldownTurnsRemaining ?? this.cooldownTurnsRemaining,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -1840,6 +2251,38 @@ class Session extends DataClass implements Insertable<Session> {
           ? data.parentSession.value
           : this.parentSession,
       forkIndex: data.forkIndex.present ? data.forkIndex.value : this.forkIndex,
+      affectionScore: data.affectionScore.present
+          ? data.affectionScore.value
+          : this.affectionScore,
+      relationshipTier: data.relationshipTier.present
+          ? data.relationshipTier.value
+          : this.relationshipTier,
+      realismEnabled: data.realismEnabled.present
+          ? data.realismEnabled.value
+          : this.realismEnabled,
+      shortTermMood: data.shortTermMood.present
+          ? data.shortTermMood.value
+          : this.shortTermMood,
+      moodDecayCounter: data.moodDecayCounter.present
+          ? data.moodDecayCounter.value
+          : this.moodDecayCounter,
+      characterEmotion: data.characterEmotion.present
+          ? data.characterEmotion.value
+          : this.characterEmotion,
+      emotionIntensity: data.emotionIntensity.present
+          ? data.emotionIntensity.value
+          : this.emotionIntensity,
+      timeOfDay: data.timeOfDay.present ? data.timeOfDay.value : this.timeOfDay,
+      dayCount: data.dayCount.present ? data.dayCount.value : this.dayCount,
+      nsfwCooldownEnabled: data.nsfwCooldownEnabled.present
+          ? data.nsfwCooldownEnabled.value
+          : this.nsfwCooldownEnabled,
+      arousalLevel: data.arousalLevel.present
+          ? data.arousalLevel.value
+          : this.arousalLevel,
+      cooldownTurnsRemaining: data.cooldownTurnsRemaining.present
+          ? data.cooldownTurnsRemaining.value
+          : this.cooldownTurnsRemaining,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -1860,6 +2303,18 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('summaryLastIndex: $summaryLastIndex, ')
           ..write('parentSession: $parentSession, ')
           ..write('forkIndex: $forkIndex, ')
+          ..write('affectionScore: $affectionScore, ')
+          ..write('relationshipTier: $relationshipTier, ')
+          ..write('realismEnabled: $realismEnabled, ')
+          ..write('shortTermMood: $shortTermMood, ')
+          ..write('moodDecayCounter: $moodDecayCounter, ')
+          ..write('characterEmotion: $characterEmotion, ')
+          ..write('emotionIntensity: $emotionIntensity, ')
+          ..write('timeOfDay: $timeOfDay, ')
+          ..write('dayCount: $dayCount, ')
+          ..write('nsfwCooldownEnabled: $nsfwCooldownEnabled, ')
+          ..write('arousalLevel: $arousalLevel, ')
+          ..write('cooldownTurnsRemaining: $cooldownTurnsRemaining, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -1868,7 +2323,7 @@ class Session extends DataClass implements Insertable<Session> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     characterId,
     groupId,
@@ -1880,10 +2335,22 @@ class Session extends DataClass implements Insertable<Session> {
     summaryLastIndex,
     parentSession,
     forkIndex,
+    affectionScore,
+    relationshipTier,
+    realismEnabled,
+    shortTermMood,
+    moodDecayCounter,
+    characterEmotion,
+    emotionIntensity,
+    timeOfDay,
+    dayCount,
+    nsfwCooldownEnabled,
+    arousalLevel,
+    cooldownTurnsRemaining,
     createdAt,
     updatedAt,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1899,6 +2366,18 @@ class Session extends DataClass implements Insertable<Session> {
           other.summaryLastIndex == this.summaryLastIndex &&
           other.parentSession == this.parentSession &&
           other.forkIndex == this.forkIndex &&
+          other.affectionScore == this.affectionScore &&
+          other.relationshipTier == this.relationshipTier &&
+          other.realismEnabled == this.realismEnabled &&
+          other.shortTermMood == this.shortTermMood &&
+          other.moodDecayCounter == this.moodDecayCounter &&
+          other.characterEmotion == this.characterEmotion &&
+          other.emotionIntensity == this.emotionIntensity &&
+          other.timeOfDay == this.timeOfDay &&
+          other.dayCount == this.dayCount &&
+          other.nsfwCooldownEnabled == this.nsfwCooldownEnabled &&
+          other.arousalLevel == this.arousalLevel &&
+          other.cooldownTurnsRemaining == this.cooldownTurnsRemaining &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -1916,6 +2395,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<int?> summaryLastIndex;
   final Value<String?> parentSession;
   final Value<int?> forkIndex;
+  final Value<int> affectionScore;
+  final Value<int> relationshipTier;
+  final Value<bool> realismEnabled;
+  final Value<int> shortTermMood;
+  final Value<int> moodDecayCounter;
+  final Value<String> characterEmotion;
+  final Value<String> emotionIntensity;
+  final Value<String> timeOfDay;
+  final Value<int> dayCount;
+  final Value<bool> nsfwCooldownEnabled;
+  final Value<int> arousalLevel;
+  final Value<int> cooldownTurnsRemaining;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -1932,6 +2423,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.summaryLastIndex = const Value.absent(),
     this.parentSession = const Value.absent(),
     this.forkIndex = const Value.absent(),
+    this.affectionScore = const Value.absent(),
+    this.relationshipTier = const Value.absent(),
+    this.realismEnabled = const Value.absent(),
+    this.shortTermMood = const Value.absent(),
+    this.moodDecayCounter = const Value.absent(),
+    this.characterEmotion = const Value.absent(),
+    this.emotionIntensity = const Value.absent(),
+    this.timeOfDay = const Value.absent(),
+    this.dayCount = const Value.absent(),
+    this.nsfwCooldownEnabled = const Value.absent(),
+    this.arousalLevel = const Value.absent(),
+    this.cooldownTurnsRemaining = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -1949,6 +2452,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.summaryLastIndex = const Value.absent(),
     this.parentSession = const Value.absent(),
     this.forkIndex = const Value.absent(),
+    this.affectionScore = const Value.absent(),
+    this.relationshipTier = const Value.absent(),
+    this.realismEnabled = const Value.absent(),
+    this.shortTermMood = const Value.absent(),
+    this.moodDecayCounter = const Value.absent(),
+    this.characterEmotion = const Value.absent(),
+    this.emotionIntensity = const Value.absent(),
+    this.timeOfDay = const Value.absent(),
+    this.dayCount = const Value.absent(),
+    this.nsfwCooldownEnabled = const Value.absent(),
+    this.arousalLevel = const Value.absent(),
+    this.cooldownTurnsRemaining = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -1966,6 +2481,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<int>? summaryLastIndex,
     Expression<String>? parentSession,
     Expression<int>? forkIndex,
+    Expression<int>? affectionScore,
+    Expression<int>? relationshipTier,
+    Expression<bool>? realismEnabled,
+    Expression<int>? shortTermMood,
+    Expression<int>? moodDecayCounter,
+    Expression<String>? characterEmotion,
+    Expression<String>? emotionIntensity,
+    Expression<String>? timeOfDay,
+    Expression<int>? dayCount,
+    Expression<bool>? nsfwCooldownEnabled,
+    Expression<int>? arousalLevel,
+    Expression<int>? cooldownTurnsRemaining,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -1983,6 +2510,20 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (summaryLastIndex != null) 'summary_last_index': summaryLastIndex,
       if (parentSession != null) 'parent_session': parentSession,
       if (forkIndex != null) 'fork_index': forkIndex,
+      if (affectionScore != null) 'affection_score': affectionScore,
+      if (relationshipTier != null) 'relationship_tier': relationshipTier,
+      if (realismEnabled != null) 'realism_enabled': realismEnabled,
+      if (shortTermMood != null) 'short_term_mood': shortTermMood,
+      if (moodDecayCounter != null) 'mood_decay_counter': moodDecayCounter,
+      if (characterEmotion != null) 'character_emotion': characterEmotion,
+      if (emotionIntensity != null) 'emotion_intensity': emotionIntensity,
+      if (timeOfDay != null) 'time_of_day': timeOfDay,
+      if (dayCount != null) 'day_count': dayCount,
+      if (nsfwCooldownEnabled != null)
+        'nsfw_cooldown_enabled': nsfwCooldownEnabled,
+      if (arousalLevel != null) 'arousal_level': arousalLevel,
+      if (cooldownTurnsRemaining != null)
+        'cooldown_turns_remaining': cooldownTurnsRemaining,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2002,6 +2543,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<int?>? summaryLastIndex,
     Value<String?>? parentSession,
     Value<int?>? forkIndex,
+    Value<int>? affectionScore,
+    Value<int>? relationshipTier,
+    Value<bool>? realismEnabled,
+    Value<int>? shortTermMood,
+    Value<int>? moodDecayCounter,
+    Value<String>? characterEmotion,
+    Value<String>? emotionIntensity,
+    Value<String>? timeOfDay,
+    Value<int>? dayCount,
+    Value<bool>? nsfwCooldownEnabled,
+    Value<int>? arousalLevel,
+    Value<int>? cooldownTurnsRemaining,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -2019,6 +2572,19 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       summaryLastIndex: summaryLastIndex ?? this.summaryLastIndex,
       parentSession: parentSession ?? this.parentSession,
       forkIndex: forkIndex ?? this.forkIndex,
+      affectionScore: affectionScore ?? this.affectionScore,
+      relationshipTier: relationshipTier ?? this.relationshipTier,
+      realismEnabled: realismEnabled ?? this.realismEnabled,
+      shortTermMood: shortTermMood ?? this.shortTermMood,
+      moodDecayCounter: moodDecayCounter ?? this.moodDecayCounter,
+      characterEmotion: characterEmotion ?? this.characterEmotion,
+      emotionIntensity: emotionIntensity ?? this.emotionIntensity,
+      timeOfDay: timeOfDay ?? this.timeOfDay,
+      dayCount: dayCount ?? this.dayCount,
+      nsfwCooldownEnabled: nsfwCooldownEnabled ?? this.nsfwCooldownEnabled,
+      arousalLevel: arousalLevel ?? this.arousalLevel,
+      cooldownTurnsRemaining:
+          cooldownTurnsRemaining ?? this.cooldownTurnsRemaining,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -2062,6 +2628,44 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (forkIndex.present) {
       map['fork_index'] = Variable<int>(forkIndex.value);
     }
+    if (affectionScore.present) {
+      map['affection_score'] = Variable<int>(affectionScore.value);
+    }
+    if (relationshipTier.present) {
+      map['relationship_tier'] = Variable<int>(relationshipTier.value);
+    }
+    if (realismEnabled.present) {
+      map['realism_enabled'] = Variable<bool>(realismEnabled.value);
+    }
+    if (shortTermMood.present) {
+      map['short_term_mood'] = Variable<int>(shortTermMood.value);
+    }
+    if (moodDecayCounter.present) {
+      map['mood_decay_counter'] = Variable<int>(moodDecayCounter.value);
+    }
+    if (characterEmotion.present) {
+      map['character_emotion'] = Variable<String>(characterEmotion.value);
+    }
+    if (emotionIntensity.present) {
+      map['emotion_intensity'] = Variable<String>(emotionIntensity.value);
+    }
+    if (timeOfDay.present) {
+      map['time_of_day'] = Variable<String>(timeOfDay.value);
+    }
+    if (dayCount.present) {
+      map['day_count'] = Variable<int>(dayCount.value);
+    }
+    if (nsfwCooldownEnabled.present) {
+      map['nsfw_cooldown_enabled'] = Variable<bool>(nsfwCooldownEnabled.value);
+    }
+    if (arousalLevel.present) {
+      map['arousal_level'] = Variable<int>(arousalLevel.value);
+    }
+    if (cooldownTurnsRemaining.present) {
+      map['cooldown_turns_remaining'] = Variable<int>(
+        cooldownTurnsRemaining.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2091,6 +2695,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('summaryLastIndex: $summaryLastIndex, ')
           ..write('parentSession: $parentSession, ')
           ..write('forkIndex: $forkIndex, ')
+          ..write('affectionScore: $affectionScore, ')
+          ..write('relationshipTier: $relationshipTier, ')
+          ..write('realismEnabled: $realismEnabled, ')
+          ..write('shortTermMood: $shortTermMood, ')
+          ..write('moodDecayCounter: $moodDecayCounter, ')
+          ..write('characterEmotion: $characterEmotion, ')
+          ..write('emotionIntensity: $emotionIntensity, ')
+          ..write('timeOfDay: $timeOfDay, ')
+          ..write('dayCount: $dayCount, ')
+          ..write('nsfwCooldownEnabled: $nsfwCooldownEnabled, ')
+          ..write('arousalLevel: $arousalLevel, ')
+          ..write('cooldownTurnsRemaining: $cooldownTurnsRemaining, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -2202,6 +2818,28 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _metadataMeta = const VerificationMeta(
+    'metadata',
+  );
+  @override
+  late final GeneratedColumn<String> metadata = GeneratedColumn<String>(
+    'metadata',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _swipeMetadataMeta = const VerificationMeta(
+    'swipeMetadata',
+  );
+  @override
+  late final GeneratedColumn<String> swipeMetadata = GeneratedColumn<String>(
+    'swipe_metadata',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2236,6 +2874,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     swipes,
     swipeIndex,
     swipeDurations,
+    metadata,
+    swipeMetadata,
     updatedAt,
     deletedAt,
   ];
@@ -2318,6 +2958,21 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('metadata')) {
+      context.handle(
+        _metadataMeta,
+        metadata.isAcceptableOrUnknown(data['metadata']!, _metadataMeta),
+      );
+    }
+    if (data.containsKey('swipe_metadata')) {
+      context.handle(
+        _swipeMetadataMeta,
+        swipeMetadata.isAcceptableOrUnknown(
+          data['swipe_metadata']!,
+          _swipeMetadataMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2375,6 +3030,14 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}swipe_durations'],
       )!,
+      metadata: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}metadata'],
+      ),
+      swipeMetadata: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}swipe_metadata'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -2402,6 +3065,8 @@ class Message extends DataClass implements Insertable<Message> {
   final String swipes;
   final int swipeIndex;
   final String swipeDurations;
+  final String? metadata;
+  final String? swipeMetadata;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const Message({
@@ -2414,6 +3079,8 @@ class Message extends DataClass implements Insertable<Message> {
     required this.swipes,
     required this.swipeIndex,
     required this.swipeDurations,
+    this.metadata,
+    this.swipeMetadata,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -2431,6 +3098,12 @@ class Message extends DataClass implements Insertable<Message> {
     map['swipes'] = Variable<String>(swipes);
     map['swipe_index'] = Variable<int>(swipeIndex);
     map['swipe_durations'] = Variable<String>(swipeDurations);
+    if (!nullToAbsent || metadata != null) {
+      map['metadata'] = Variable<String>(metadata);
+    }
+    if (!nullToAbsent || swipeMetadata != null) {
+      map['swipe_metadata'] = Variable<String>(swipeMetadata);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
@@ -2451,6 +3124,12 @@ class Message extends DataClass implements Insertable<Message> {
       swipes: Value(swipes),
       swipeIndex: Value(swipeIndex),
       swipeDurations: Value(swipeDurations),
+      metadata: metadata == null && nullToAbsent
+          ? const Value.absent()
+          : Value(metadata),
+      swipeMetadata: swipeMetadata == null && nullToAbsent
+          ? const Value.absent()
+          : Value(swipeMetadata),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -2473,6 +3152,8 @@ class Message extends DataClass implements Insertable<Message> {
       swipes: serializer.fromJson<String>(json['swipes']),
       swipeIndex: serializer.fromJson<int>(json['swipeIndex']),
       swipeDurations: serializer.fromJson<String>(json['swipeDurations']),
+      metadata: serializer.fromJson<String?>(json['metadata']),
+      swipeMetadata: serializer.fromJson<String?>(json['swipeMetadata']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -2490,6 +3171,8 @@ class Message extends DataClass implements Insertable<Message> {
       'swipes': serializer.toJson<String>(swipes),
       'swipeIndex': serializer.toJson<int>(swipeIndex),
       'swipeDurations': serializer.toJson<String>(swipeDurations),
+      'metadata': serializer.toJson<String?>(metadata),
+      'swipeMetadata': serializer.toJson<String?>(swipeMetadata),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -2505,6 +3188,8 @@ class Message extends DataClass implements Insertable<Message> {
     String? swipes,
     int? swipeIndex,
     String? swipeDurations,
+    Value<String?> metadata = const Value.absent(),
+    Value<String?> swipeMetadata = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => Message(
@@ -2517,6 +3202,10 @@ class Message extends DataClass implements Insertable<Message> {
     swipes: swipes ?? this.swipes,
     swipeIndex: swipeIndex ?? this.swipeIndex,
     swipeDurations: swipeDurations ?? this.swipeDurations,
+    metadata: metadata.present ? metadata.value : this.metadata,
+    swipeMetadata: swipeMetadata.present
+        ? swipeMetadata.value
+        : this.swipeMetadata,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -2537,6 +3226,10 @@ class Message extends DataClass implements Insertable<Message> {
       swipeDurations: data.swipeDurations.present
           ? data.swipeDurations.value
           : this.swipeDurations,
+      metadata: data.metadata.present ? data.metadata.value : this.metadata,
+      swipeMetadata: data.swipeMetadata.present
+          ? data.swipeMetadata.value
+          : this.swipeMetadata,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -2554,6 +3247,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('swipes: $swipes, ')
           ..write('swipeIndex: $swipeIndex, ')
           ..write('swipeDurations: $swipeDurations, ')
+          ..write('metadata: $metadata, ')
+          ..write('swipeMetadata: $swipeMetadata, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -2571,6 +3266,8 @@ class Message extends DataClass implements Insertable<Message> {
     swipes,
     swipeIndex,
     swipeDurations,
+    metadata,
+    swipeMetadata,
     updatedAt,
     deletedAt,
   );
@@ -2587,6 +3284,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.swipes == this.swipes &&
           other.swipeIndex == this.swipeIndex &&
           other.swipeDurations == this.swipeDurations &&
+          other.metadata == this.metadata &&
+          other.swipeMetadata == this.swipeMetadata &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -2601,6 +3300,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String> swipes;
   final Value<int> swipeIndex;
   final Value<String> swipeDurations;
+  final Value<String?> metadata;
+  final Value<String?> swipeMetadata;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -2614,6 +3315,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.swipes = const Value.absent(),
     this.swipeIndex = const Value.absent(),
     this.swipeDurations = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.swipeMetadata = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2628,6 +3331,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.swipes = const Value.absent(),
     this.swipeIndex = const Value.absent(),
     this.swipeDurations = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.swipeMetadata = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2646,6 +3351,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? swipes,
     Expression<int>? swipeIndex,
     Expression<String>? swipeDurations,
+    Expression<String>? metadata,
+    Expression<String>? swipeMetadata,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -2660,6 +3367,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (swipes != null) 'swipes': swipes,
       if (swipeIndex != null) 'swipe_index': swipeIndex,
       if (swipeDurations != null) 'swipe_durations': swipeDurations,
+      if (metadata != null) 'metadata': metadata,
+      if (swipeMetadata != null) 'swipe_metadata': swipeMetadata,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2676,6 +3385,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String>? swipes,
     Value<int>? swipeIndex,
     Value<String>? swipeDurations,
+    Value<String?>? metadata,
+    Value<String?>? swipeMetadata,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -2690,6 +3401,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       swipes: swipes ?? this.swipes,
       swipeIndex: swipeIndex ?? this.swipeIndex,
       swipeDurations: swipeDurations ?? this.swipeDurations,
+      metadata: metadata ?? this.metadata,
+      swipeMetadata: swipeMetadata ?? this.swipeMetadata,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -2726,6 +3439,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (swipeDurations.present) {
       map['swipe_durations'] = Variable<String>(swipeDurations.value);
     }
+    if (metadata.present) {
+      map['metadata'] = Variable<String>(metadata.value);
+    }
+    if (swipeMetadata.present) {
+      map['swipe_metadata'] = Variable<String>(swipeMetadata.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -2750,6 +3469,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('swipes: $swipes, ')
           ..write('swipeIndex: $swipeIndex, ')
           ..write('swipeDurations: $swipeDurations, ')
+          ..write('metadata: $metadata, ')
+          ..write('swipeMetadata: $swipeMetadata, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -7695,6 +8416,18 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<int?> summaryLastIndex,
       Value<String?> parentSession,
       Value<int?> forkIndex,
+      Value<int> affectionScore,
+      Value<int> relationshipTier,
+      Value<bool> realismEnabled,
+      Value<int> shortTermMood,
+      Value<int> moodDecayCounter,
+      Value<String> characterEmotion,
+      Value<String> emotionIntensity,
+      Value<String> timeOfDay,
+      Value<int> dayCount,
+      Value<bool> nsfwCooldownEnabled,
+      Value<int> arousalLevel,
+      Value<int> cooldownTurnsRemaining,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -7713,6 +8446,18 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<int?> summaryLastIndex,
       Value<String?> parentSession,
       Value<int?> forkIndex,
+      Value<int> affectionScore,
+      Value<int> relationshipTier,
+      Value<bool> realismEnabled,
+      Value<int> shortTermMood,
+      Value<int> moodDecayCounter,
+      Value<String> characterEmotion,
+      Value<String> emotionIntensity,
+      Value<String> timeOfDay,
+      Value<int> dayCount,
+      Value<bool> nsfwCooldownEnabled,
+      Value<int> arousalLevel,
+      Value<int> cooldownTurnsRemaining,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -7780,6 +8525,66 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<int> get forkIndex => $composableBuilder(
     column: $table.forkIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get affectionScore => $composableBuilder(
+    column: $table.affectionScore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get relationshipTier => $composableBuilder(
+    column: $table.relationshipTier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get realismEnabled => $composableBuilder(
+    column: $table.realismEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shortTermMood => $composableBuilder(
+    column: $table.shortTermMood,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get moodDecayCounter => $composableBuilder(
+    column: $table.moodDecayCounter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterEmotion => $composableBuilder(
+    column: $table.characterEmotion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get emotionIntensity => $composableBuilder(
+    column: $table.emotionIntensity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get timeOfDay => $composableBuilder(
+    column: $table.timeOfDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dayCount => $composableBuilder(
+    column: $table.dayCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get nsfwCooldownEnabled => $composableBuilder(
+    column: $table.nsfwCooldownEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get arousalLevel => $composableBuilder(
+    column: $table.arousalLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cooldownTurnsRemaining => $composableBuilder(
+    column: $table.cooldownTurnsRemaining,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7863,6 +8668,66 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get affectionScore => $composableBuilder(
+    column: $table.affectionScore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get relationshipTier => $composableBuilder(
+    column: $table.relationshipTier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get realismEnabled => $composableBuilder(
+    column: $table.realismEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shortTermMood => $composableBuilder(
+    column: $table.shortTermMood,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get moodDecayCounter => $composableBuilder(
+    column: $table.moodDecayCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterEmotion => $composableBuilder(
+    column: $table.characterEmotion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get emotionIntensity => $composableBuilder(
+    column: $table.emotionIntensity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get timeOfDay => $composableBuilder(
+    column: $table.timeOfDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dayCount => $composableBuilder(
+    column: $table.dayCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get nsfwCooldownEnabled => $composableBuilder(
+    column: $table.nsfwCooldownEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get arousalLevel => $composableBuilder(
+    column: $table.arousalLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cooldownTurnsRemaining => $composableBuilder(
+    column: $table.cooldownTurnsRemaining,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -7933,6 +8798,62 @@ class $$SessionsTableAnnotationComposer
   GeneratedColumn<int> get forkIndex =>
       $composableBuilder(column: $table.forkIndex, builder: (column) => column);
 
+  GeneratedColumn<int> get affectionScore => $composableBuilder(
+    column: $table.affectionScore,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get relationshipTier => $composableBuilder(
+    column: $table.relationshipTier,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get realismEnabled => $composableBuilder(
+    column: $table.realismEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get shortTermMood => $composableBuilder(
+    column: $table.shortTermMood,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get moodDecayCounter => $composableBuilder(
+    column: $table.moodDecayCounter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get characterEmotion => $composableBuilder(
+    column: $table.characterEmotion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get emotionIntensity => $composableBuilder(
+    column: $table.emotionIntensity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get timeOfDay =>
+      $composableBuilder(column: $table.timeOfDay, builder: (column) => column);
+
+  GeneratedColumn<int> get dayCount =>
+      $composableBuilder(column: $table.dayCount, builder: (column) => column);
+
+  GeneratedColumn<bool> get nsfwCooldownEnabled => $composableBuilder(
+    column: $table.nsfwCooldownEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get arousalLevel => $composableBuilder(
+    column: $table.arousalLevel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cooldownTurnsRemaining => $composableBuilder(
+    column: $table.cooldownTurnsRemaining,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -7982,6 +8903,18 @@ class $$SessionsTableTableManager
                 Value<int?> summaryLastIndex = const Value.absent(),
                 Value<String?> parentSession = const Value.absent(),
                 Value<int?> forkIndex = const Value.absent(),
+                Value<int> affectionScore = const Value.absent(),
+                Value<int> relationshipTier = const Value.absent(),
+                Value<bool> realismEnabled = const Value.absent(),
+                Value<int> shortTermMood = const Value.absent(),
+                Value<int> moodDecayCounter = const Value.absent(),
+                Value<String> characterEmotion = const Value.absent(),
+                Value<String> emotionIntensity = const Value.absent(),
+                Value<String> timeOfDay = const Value.absent(),
+                Value<int> dayCount = const Value.absent(),
+                Value<bool> nsfwCooldownEnabled = const Value.absent(),
+                Value<int> arousalLevel = const Value.absent(),
+                Value<int> cooldownTurnsRemaining = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -7998,6 +8931,18 @@ class $$SessionsTableTableManager
                 summaryLastIndex: summaryLastIndex,
                 parentSession: parentSession,
                 forkIndex: forkIndex,
+                affectionScore: affectionScore,
+                relationshipTier: relationshipTier,
+                realismEnabled: realismEnabled,
+                shortTermMood: shortTermMood,
+                moodDecayCounter: moodDecayCounter,
+                characterEmotion: characterEmotion,
+                emotionIntensity: emotionIntensity,
+                timeOfDay: timeOfDay,
+                dayCount: dayCount,
+                nsfwCooldownEnabled: nsfwCooldownEnabled,
+                arousalLevel: arousalLevel,
+                cooldownTurnsRemaining: cooldownTurnsRemaining,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -8016,6 +8961,18 @@ class $$SessionsTableTableManager
                 Value<int?> summaryLastIndex = const Value.absent(),
                 Value<String?> parentSession = const Value.absent(),
                 Value<int?> forkIndex = const Value.absent(),
+                Value<int> affectionScore = const Value.absent(),
+                Value<int> relationshipTier = const Value.absent(),
+                Value<bool> realismEnabled = const Value.absent(),
+                Value<int> shortTermMood = const Value.absent(),
+                Value<int> moodDecayCounter = const Value.absent(),
+                Value<String> characterEmotion = const Value.absent(),
+                Value<String> emotionIntensity = const Value.absent(),
+                Value<String> timeOfDay = const Value.absent(),
+                Value<int> dayCount = const Value.absent(),
+                Value<bool> nsfwCooldownEnabled = const Value.absent(),
+                Value<int> arousalLevel = const Value.absent(),
+                Value<int> cooldownTurnsRemaining = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -8032,6 +8989,18 @@ class $$SessionsTableTableManager
                 summaryLastIndex: summaryLastIndex,
                 parentSession: parentSession,
                 forkIndex: forkIndex,
+                affectionScore: affectionScore,
+                relationshipTier: relationshipTier,
+                realismEnabled: realismEnabled,
+                shortTermMood: shortTermMood,
+                moodDecayCounter: moodDecayCounter,
+                characterEmotion: characterEmotion,
+                emotionIntensity: emotionIntensity,
+                timeOfDay: timeOfDay,
+                dayCount: dayCount,
+                nsfwCooldownEnabled: nsfwCooldownEnabled,
+                arousalLevel: arousalLevel,
+                cooldownTurnsRemaining: cooldownTurnsRemaining,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -8070,6 +9039,8 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<String> swipes,
       Value<int> swipeIndex,
       Value<String> swipeDurations,
+      Value<String?> metadata,
+      Value<String?> swipeMetadata,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -8085,6 +9056,8 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<String> swipes,
       Value<int> swipeIndex,
       Value<String> swipeDurations,
+      Value<String?> metadata,
+      Value<String?> swipeMetadata,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -8141,6 +9114,16 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get swipeDurations => $composableBuilder(
     column: $table.swipeDurations,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get metadata => $composableBuilder(
+    column: $table.metadata,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get swipeMetadata => $composableBuilder(
+    column: $table.swipeMetadata,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8209,6 +9192,16 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get metadata => $composableBuilder(
+    column: $table.metadata,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get swipeMetadata => $composableBuilder(
+    column: $table.swipeMetadata,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -8262,6 +9255,14 @@ class $$MessagesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get metadata =>
+      $composableBuilder(column: $table.metadata, builder: (column) => column);
+
+  GeneratedColumn<String> get swipeMetadata => $composableBuilder(
+    column: $table.swipeMetadata,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -8306,6 +9307,8 @@ class $$MessagesTableTableManager
                 Value<String> swipes = const Value.absent(),
                 Value<int> swipeIndex = const Value.absent(),
                 Value<String> swipeDurations = const Value.absent(),
+                Value<String?> metadata = const Value.absent(),
+                Value<String?> swipeMetadata = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -8319,6 +9322,8 @@ class $$MessagesTableTableManager
                 swipes: swipes,
                 swipeIndex: swipeIndex,
                 swipeDurations: swipeDurations,
+                metadata: metadata,
+                swipeMetadata: swipeMetadata,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -8334,6 +9339,8 @@ class $$MessagesTableTableManager
                 Value<String> swipes = const Value.absent(),
                 Value<int> swipeIndex = const Value.absent(),
                 Value<String> swipeDurations = const Value.absent(),
+                Value<String?> metadata = const Value.absent(),
+                Value<String?> swipeMetadata = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -8347,6 +9354,8 @@ class $$MessagesTableTableManager
                 swipes: swipes,
                 swipeIndex: swipeIndex,
                 swipeDurations: swipeDurations,
+                metadata: metadata,
+                swipeMetadata: swipeMetadata,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,

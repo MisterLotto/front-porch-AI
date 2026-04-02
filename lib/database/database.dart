@@ -77,6 +77,18 @@ class Sessions extends Table {
   IntColumn get summaryLastIndex => integer().nullable()(); // message index at last summary update
   TextColumn get parentSession => text().nullable()();
   IntColumn get forkIndex => integer().nullable()();
+  IntColumn get affectionScore => integer().withDefault(const Constant(0))(); // long-term bond score
+  IntColumn get relationshipTier => integer().withDefault(const Constant(2))(); // 1-5, default Acquaintance
+  BoolColumn get realismEnabled => boolean().withDefault(const Constant(false))(); // master realism toggle
+  IntColumn get shortTermMood => integer().withDefault(const Constant(0))(); // -5 to +5
+  IntColumn get moodDecayCounter => integer().withDefault(const Constant(0))(); // msgs since last mood change
+  TextColumn get characterEmotion => text().withDefault(const Constant(''))(); // e.g. "amused"
+  TextColumn get emotionIntensity => text().withDefault(const Constant(''))(); // mild/moderate/strong
+  TextColumn get timeOfDay => text().withDefault(const Constant('morning'))(); // dawn/morning/etc
+  IntColumn get dayCount => integer().withDefault(const Constant(1))(); // starts at Day 1
+  BoolColumn get nsfwCooldownEnabled => boolean().withDefault(const Constant(false))(); // sub-toggle
+  IntColumn get arousalLevel => integer().withDefault(const Constant(0))(); // 0 to 10 scale
+  IntColumn get cooldownTurnsRemaining => integer().withDefault(const Constant(0))(); // 0 = no cooldown
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -96,6 +108,8 @@ class Messages extends Table {
   TextColumn get swipes => text().withDefault(const Constant('[]'))(); // JSON array
   IntColumn get swipeIndex => integer().withDefault(const Constant(0))();
   TextColumn get swipeDurations => text().withDefault(const Constant('[]'))(); // JSON array
+  TextColumn get metadata => text().nullable()();
+  TextColumn get swipeMetadata => text().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -347,7 +361,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -476,6 +490,67 @@ class AppDatabase extends _$AppDatabase {
           'deleted_at INTEGER, '
           'PRIMARY KEY (id))'
         );
+      }
+      if (from < 12) {
+        // v11→v12: add relationship tracker columns to sessions
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN affection_score INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN relationship_tier INTEGER NOT NULL DEFAULT 2');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN relationship_enabled INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+      }
+      if (from < 13) {
+        // v12→v13: Realism Mode — rename relationship_enabled → realism_enabled, add new columns
+        // Rename: SQLite doesn't support RENAME COLUMN on older versions, so we add the new col
+        // and copy data if the old one exists.
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN realism_enabled INTEGER NOT NULL DEFAULT 0');
+          // Copy existing relationship_enabled values to realism_enabled
+          await customStatement('UPDATE sessions SET realism_enabled = relationship_enabled');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN short_term_mood INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN mood_decay_counter INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN character_emotion TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN emotion_intensity TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN time_of_day TEXT NOT NULL DEFAULT 'morning'");
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN day_count INTEGER NOT NULL DEFAULT 1');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN nsfw_cooldown_enabled INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN cooldown_turns_remaining INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+      }
+      if (from < 14) {
+        // v13→v14: add metadata columns to messages
+        try {
+          await customStatement('ALTER TABLE messages ADD COLUMN metadata TEXT');
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE messages ADD COLUMN swipe_metadata TEXT');
+        } catch (_) {}
+      }
+      if (from < 15) {
+        // v14→v15: add arousal tracker to sessions
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN arousal_level INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
       }
     },
   );
