@@ -104,3 +104,7 @@ aur_key.pub
 # Rust build artifacts
 tools/embed_server/target/
 *.png
+
+# Testing
+test/
+tests/
