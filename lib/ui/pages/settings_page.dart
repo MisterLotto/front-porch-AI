@@ -382,6 +382,7 @@ class _SettingsPageState extends State<SettingsPage> {
       modelSizeMb: modelSize,
       requestedContextSize: userContext,
       kvBytesPerToken: kvBytesPerToken,
+      kvQuantizationLevel: Provider.of<StorageService>(context, listen: false).kvQuantizationLevel,
     );
 
     setState(() {
@@ -2081,9 +2082,15 @@ class _SettingsPageState extends State<SettingsPage> {
                               
                               // Use exact KV cost if parsed, else fallback to 100MB per 1k heuristic
                               final kvBytesPerToken = snapshot.data;
-                              final contextVramMb = kvBytesPerToken != null 
+                              double contextVramMb = kvBytesPerToken != null 
                                   ? (contextSize * kvBytesPerToken / (1024 * 1024))
                                   : (contextSize / 1024 * 100.0);
+                                  
+                              if (storageService.kvQuantizationLevel == 1) {
+                                contextVramMb *= 0.5;
+                              } else if (storageService.kvQuantizationLevel == 2) {
+                                contextVramMb *= 0.25;
+                              }
 
                               final gpuLayers = int.tryParse(_gpuLayersController.text) ?? 0;
                               // If GPU layers < 99, only part of model is on GPU
@@ -2330,6 +2337,41 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     );
                   }),
+                  const SizedBox(height: 12),
+                  const Divider(color: Colors.white10),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('KV Cache Quantization:', style: TextStyle(fontSize: 13, color: Colors.white70)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: storageService.kvQuantizationLevel,
+                            isExpanded: true,
+                            dropdownColor: const Color(0xFF374151),
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            onChanged: (val) {
+                              if (val != null) {
+                                storageService.setKvQuantizationLevel(val);
+                                setState(() {}); // Refresh VRAM gauge
+                              }
+                            },
+                            items: const [
+                              DropdownMenuItem(value: 0, child: Text('0 - None (Highest Quality, FP16)')),
+                              DropdownMenuItem(value: 1, child: Text('1 - 8-Bit Q8 (~50% VRAM Savings)')),
+                              DropdownMenuItem(value: 2, child: Text('2 - 4-Bit Q4 (~75% VRAM Savings)')),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Quantizes the context window to save significant VRAM with minimal quality loss. Note: KoboldCPP dynamically disables Context Shifting when this is active.',
+                        child: Icon(Icons.info_outline, size: 16, color: Colors.tealAccent.withValues(alpha: 0.5)),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'Larger context = more memory per conversation. Auto-configure adjusts GPU layers to fit.',
