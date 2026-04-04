@@ -5606,6 +5606,7 @@ class _RealismSectionState extends State<_RealismSection> {
                           activeColor: Colors.tealAccent,
                           onChanged: chat.isGenerating ? null : (val) {
                             chat.setRealismEnabled(val);
+                            if (val) setState(() => _expanded = true);
                           },
                         ),
                       ),
@@ -5962,6 +5963,20 @@ class _NsfwEnhancementsSectionState extends State<_NsfwEnhancementsSection> {
                   'NSFW Enhancements',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.deepOrangeAccent),
                 ),
+                if (widget.chat.nsfwCooldownEnabled && widget.chat.cooldownTurnsRemaining > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.deepOrange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '⏳ Refractory: ${widget.chat.cooldownTurnsRemaining} turns',
+                      style: const TextStyle(fontSize: 10, color: Colors.deepOrangeAccent, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 SizedBox(
                   height: 20,
@@ -6047,7 +6062,7 @@ class _NsfwEnhancementsSectionState extends State<_NsfwEnhancementsSection> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      '⏳ Cooling down... ${widget.chat.cooldownTurnsRemaining} turns',
+                      '⏳ Refractory Period: ${widget.chat.cooldownTurnsRemaining} turns remaining',
                       style: const TextStyle(fontSize: 11, color: Colors.deepOrangeAccent),
                     ),
                   ),
