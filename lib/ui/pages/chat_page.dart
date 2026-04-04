@@ -5502,11 +5502,14 @@ class _RealismSectionState extends State<_RealismSection> {
                           children: [
                             Icon(chat.relationshipTier < 0 ? Icons.heart_broken : Icons.favorite, size: 13, color: shortTermColor),
                             const SizedBox(width: 5),
-                            Text(
-                              'Short-Term Bond: ${chat.shortTermTierName}',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: shortTermColor),
+                            Expanded(
+                              child: Text(
+                                'Short-Term Bond: ${chat.shortTermTierName}',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: shortTermColor),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Text(
                               '${chat.affectionScore.abs()}/${chat.shortTermProgressTarget}',
                               style: const TextStyle(fontSize: 10, color: Colors.white38),
@@ -5533,11 +5536,14 @@ class _RealismSectionState extends State<_RealismSection> {
                           children: [
                             Icon(chat.longTermTier < 0 ? Icons.heart_broken_sharp : Icons.monitor_heart, size: 13, color: longTermColor),
                             const SizedBox(width: 5),
-                            Text(
-                              'Long-Term Bond: ${chat.longTermTierName}',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: longTermColor),
+                            Expanded(
+                              child: Text(
+                                'Long-Term Bond: ${chat.longTermTierName}',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: longTermColor),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Text(
                               '${chat.longTermScore.abs()}/${chat.longTermProgressTarget}',
                               style: const TextStyle(fontSize: 10, color: Colors.white38),
@@ -5568,15 +5574,18 @@ class _RealismSectionState extends State<_RealismSection> {
                               color: chat.trustLevel < 0 ? Colors.redAccent : Colors.amber,
                             ),
                             const SizedBox(width: 5),
-                            Text(
-                              'Trust: ${chat.trustTierName}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: chat.trustLevel < 0 ? Colors.redAccent : Colors.amber,
+                            Expanded(
+                              child: Text(
+                                'Trust: ${chat.trustTierName}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: chat.trustLevel < 0 ? Colors.redAccent : Colors.amber,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Text(
                               '${chat.trustLevel.abs()}/${chat.trustProgressTarget}',
                               style: const TextStyle(fontSize: 10, color: Colors.white38),
@@ -5611,16 +5620,19 @@ class _RealismSectionState extends State<_RealismSection> {
                                 : Colors.white38,
                           ),
                           const SizedBox(width: 5),
-                          Text(
-                            'Mood: ${chat.moodLabel}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: chat.shortTermMood >= 1 ? Colors.greenAccent
-                                  : chat.shortTermMood <= -1 ? Colors.redAccent
-                                  : Colors.white54,
+                          Expanded(
+                            child: Text(
+                              'Mood: ${chat.moodLabel}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: chat.shortTermMood >= 1 ? Colors.greenAccent
+                                    : chat.shortTermMood <= -1 ? Colors.redAccent
+                                    : Colors.white54,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           Text(
                             '${chat.shortTermMood.abs()}/20',
                             style: const TextStyle(fontSize: 10, color: Colors.white38),
@@ -5678,16 +5690,19 @@ class _RealismSectionState extends State<_RealismSection> {
                                   : Colors.white38,
                             ),
                             const SizedBox(width: 5),
-                            Text(
-                              'Lust: ${chat.arousalLevel >= 9 ? 'Feverish' : chat.arousalLevel >= 6 ? 'Heavy' : chat.arousalLevel >= 3 ? 'Mild' : chat.arousalLevel < 0 ? 'Deadened' : 'Dormant'}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
-                                    : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
-                                    : Colors.white54,
+                            Expanded(
+                              child: Text(
+                                'Lust: ${chat.arousalLevel >= 9 ? 'Feverish' : chat.arousalLevel >= 6 ? 'Heavy' : chat.arousalLevel >= 3 ? 'Mild' : chat.arousalLevel < 0 ? 'Deadened' : 'Dormant'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                      : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                      : Colors.white54,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Text(
                               '${chat.arousalLevel.clamp(0, 10)}/10',
                               style: const TextStyle(fontSize: 10, color: Colors.white38),
