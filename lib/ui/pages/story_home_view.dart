@@ -409,7 +409,7 @@ class _StoryHomeViewState extends State<StoryHomeView> {
     switch (tier) {
       case PromptTier.frontier: return 'Frontier';
       case PromptTier.largLocal: return '70B+';
-      case PromptTier.smallLocal: return '7-13B';
+      case PromptTier.smallLocal: return '7-34B';
     }
   }
 

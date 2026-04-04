@@ -1220,6 +1220,15 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const PopupMenuItem(
+                        value: 'duplicate',
+                        child: ListTile(
+                          leading: Icon(Icons.copy, color: Colors.white70, size: 20),
+                          title: Text('Duplicate Character', style: TextStyle(color: Colors.white)),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
                         value: 'export',
                         child: ListTile(
                           leading: Icon(Icons.upload, color: Colors.white70, size: 20),
@@ -1253,6 +1262,9 @@ class _HomePageState extends State<HomePage> {
                     switch (value) {
                       case 'edit':
                         _editCharacter(context, character);
+                        break;
+                      case 'duplicate':
+                        _duplicateCharacter(context, character);
                         break;
                       case 'export':
                         _exportCharacter(context, character);
@@ -2489,6 +2501,19 @@ class _HomePageState extends State<HomePage> {
      if (context.mounted) {
        Provider.of<CharacterRepository>(context, listen: false).loadCharacters();
      }
+  }
+
+  Future<void> _duplicateCharacter(BuildContext context, CharacterCard character) async {
+    try {
+      await Provider.of<CharacterRepository>(context, listen: false).duplicateCharacter(character);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Character duplicated successfully.')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to duplicate: $e')));
+      }
+    }
   }
 
   Future<void> _importCharacter(BuildContext context) async {

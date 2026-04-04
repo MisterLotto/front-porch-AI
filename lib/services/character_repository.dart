@@ -447,4 +447,78 @@ class CharacterRepository extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<CharacterCard?> duplicateCharacter(CharacterCard card) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final newName = '${card.name} (duplicate)';
+      
+      // Clone the card model
+      final clonedCard = CharacterCard(
+        name: newName,
+        description: card.description,
+        personality: card.personality,
+        scenario: card.scenario,
+        firstMessage: card.firstMessage,
+        mesExample: card.mesExample,
+        systemPrompt: card.systemPrompt,
+        postHistoryInstructions: card.postHistoryInstructions,
+        alternateGreetings: List.from(card.alternateGreetings),
+        tags: List.from(card.tags),
+        ttsVoice: card.ttsVoice,
+        lorebook: card.lorebook != null ? Lorebook(entries: List.from(card.lorebook!.entries)) : null,
+        worldNames: List.from(card.worldNames),
+      );
+
+      // Handle image file duplication if exists
+      if (card.imagePath != null) {
+        final originalFile = File(card.imagePath!);
+        if (await originalFile.exists()) {
+          final charDir = _storage.charactersDir;
+          if (!await charDir.exists()) {
+            await charDir.create(recursive: true);
+          }
+          final safeName = newName.replaceAll(RegExp(r'[^\w\s\-]'), '').replaceAll(' ', '_');
+          final destPath = '${charDir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.png';
+          await originalFile.copy(destPath);
+          clonedCard.imagePath = destPath;
+
+          // Now write the V2 card data to the *new* PNG
+          final v2Service = V2CardService();
+          await v2Service.saveCardAsPng(clonedCard, destPath, destPath);
+        }
+      }
+
+      // Insert into database
+      final dbImagePath = clonedCard.imagePath != null ? _toBasename(clonedCard.imagePath!) : null;
+      final dbId = await _db.insertCharacterReturningId(CharactersCompanion(
+        name: Value(clonedCard.name),
+        description: Value(clonedCard.description),
+        personality: Value(clonedCard.personality),
+        scenario: Value(clonedCard.scenario),
+        firstMessage: Value(clonedCard.firstMessage),
+        mesExample: Value(clonedCard.mesExample),
+        systemPrompt: Value(clonedCard.systemPrompt),
+        postHistoryInstructions: Value(clonedCard.postHistoryInstructions),
+        alternateGreetings: Value(jsonEncode(clonedCard.alternateGreetings)),
+        tags: Value(jsonEncode(clonedCard.tags)),
+        imagePath: Value(dbImagePath),
+        ttsVoice: Value(clonedCard.ttsVoice),
+        lorebook: Value(clonedCard.lorebook != null ? jsonEncode(clonedCard.lorebook!.toJson()) : null),
+        worldNames: Value(jsonEncode(clonedCard.worldNames)),
+      ));
+      clonedCard.dbId = dbId;
+      
+      _characters.add(clonedCard);
+      return clonedCard;
+      
+    } catch (e) {
+      debugPrint('[Duplicate] Error duplicating character: $e');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

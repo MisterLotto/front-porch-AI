@@ -519,6 +519,14 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
+      actions: [
+        IconButton(
+          icon: Icon(_sidebarWidth > 0 ? Icons.last_page : Icons.first_page, color: Colors.white70),
+          tooltip: 'Toggle Sidebar',
+          onPressed: () => setState(() => _sidebarWidth = _sidebarWidth > 0 ? 0 : 300),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 
@@ -568,6 +576,14 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
+      actions: [
+        IconButton(
+          icon: Icon(_sidebarWidth > 0 ? Icons.last_page : Icons.first_page, color: Colors.white70),
+          tooltip: 'Toggle Sidebar',
+          onPressed: () => setState(() => _sidebarWidth = _sidebarWidth > 0 ? 0 : 300),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 
@@ -1845,7 +1861,12 @@ class _ChatPageState extends State<ChatPage> {
           child: GestureDetector(
             onHorizontalDragUpdate: (details) {
               setState(() {
-                _sidebarWidth = (_sidebarWidth - details.delta.dx).clamp(100, double.infinity);
+                double newWidth = _sidebarWidth - details.delta.dx;
+                if (newWidth < 150) {
+                  _sidebarWidth = 0; // Snap to closed
+                } else {
+                  _sidebarWidth = newWidth.clamp(150, 600);
+                }
               });
             },
             child: Container(
@@ -1864,7 +1885,8 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
         ),
-        SizedBox(width: _sidebarWidth, child: child),
+        if (_sidebarWidth > 0)
+          SizedBox(width: _sidebarWidth, child: child),
       ],
     );
   }
@@ -1985,56 +2007,7 @@ class _ChatPageState extends State<ChatPage> {
                 const SizedBox(height: 16),
 
                 // ── Lorebook Triggers ──
-                const Text('Lorebook Triggers', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
-                const SizedBox(height: 8),
-                if (character.lorebook != null && character.lorebook!.entries.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // List entries with status dots
-                      if (character.lorebook!.entries.where((e) => e.enabled).isEmpty)
-                         const Text('No enabled entries.', style: TextStyle(color: Colors.white30, fontSize: 12)),
-                      
-                      ...character.lorebook!.entries.where((e) => e.enabled).map((entry) {
-                         Color dotColor = Colors.redAccent;
-                         if (entry.constant) {
-                           dotColor = Colors.blueAccent;
-                         } else if (entry.isTriggered) {
-                           dotColor = Colors.greenAccent;
-                         }
-
-                         return Padding(
-                           padding: const EdgeInsets.symmetric(vertical: 4.0),
-                           child: Row(
-                             children: [
-                               Container(
-                                 width: 8,
-                                 height: 8,
-                                 decoration: BoxDecoration(
-                                   color: dotColor,
-                                   shape: BoxShape.circle,
-                                 ),
-                               ),
-                               const SizedBox(width: 8),
-                               Expanded(
-                                 child: Text(
-                                   entry.key.isEmpty && entry.constant ? 'Always Active' : entry.displayName, 
-                                   style: TextStyle(
-                                     color: (entry.isTriggered || entry.constant) ? Colors.white : Colors.white54,
-                                     fontSize: 12
-                                   ),
-                                   maxLines: 1,
-                                   overflow: TextOverflow.ellipsis,
-                                 ),
-                               ),
-                             ],
-                           ),
-                         );
-                      }),
-                    ],
-                  )
-                else
-                  const Text('No lorebook entries.', style: TextStyle(color: Colors.white30, fontSize: 12)),
+                _LorebookSection(character: character),
                   
                 const SizedBox(height: 16),
                 // ── Author's Note ──
@@ -3875,20 +3848,149 @@ class _ExternalImageWidgetState extends State<_ExternalImageWidget> {
   }
 }
 
-class _SidebarSection extends StatelessWidget {
+class _SidebarSection extends StatefulWidget {
   final String title;
   final String content;
+  final bool initiallyExpanded;
 
-  const _SidebarSection({required this.title, required this.content});
+  const _SidebarSection({
+    required this.title, 
+    required this.content,
+    this.initiallyExpanded = false,
+  });
+
+  @override
+  State<_SidebarSection> createState() => _SidebarSectionState();
+}
+
+class _SidebarSectionState extends State<_SidebarSection> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
-        const SizedBox(height: 4),
-        Text(content, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Row(
+              children: [
+                Icon(
+                  _expanded ? Icons.expand_more : Icons.chevron_right,
+                  size: 16,
+                  color: Colors.white38,
+                ),
+                const SizedBox(width: 4),
+                Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 20.0), // Indent content slightly to align with text
+            child: Text(widget.content, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _LorebookSection extends StatefulWidget {
+  final CharacterCard character;
+  const _LorebookSection({required this.character});
+
+  @override
+  State<_LorebookSection> createState() => _LorebookSectionState();
+}
+
+class _LorebookSectionState extends State<_LorebookSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Row(
+              children: [
+                Icon(
+                  _expanded ? Icons.expand_more : Icons.chevron_right,
+                  size: 16,
+                  color: Colors.white38,
+                ),
+                const SizedBox(width: 4),
+                const Text('Lorebook Triggers', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 20.0),
+            child: widget.character.lorebook != null && widget.character.lorebook!.entries.isNotEmpty
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.character.lorebook!.entries.where((e) => e.enabled).isEmpty)
+                         const Text('No enabled entries.', style: TextStyle(color: Colors.white30, fontSize: 12)),
+                      
+                      ...widget.character.lorebook!.entries.where((e) => e.enabled).map((entry) {
+                         Color dotColor = Colors.redAccent;
+                         if (entry.constant) {
+                           dotColor = Colors.blueAccent;
+                         } else if (entry.isTriggered) {
+                           dotColor = Colors.greenAccent;
+                         }
+
+                         return Padding(
+                           padding: const EdgeInsets.symmetric(vertical: 4.0),
+                           child: Row(
+                             children: [
+                               Container(
+                                 width: 8,
+                                 height: 8,
+                                 decoration: BoxDecoration(
+                                   color: dotColor,
+                                   shape: BoxShape.circle,
+                                 ),
+                               ),
+                               const SizedBox(width: 8),
+                               Expanded(
+                                 child: Text(
+                                   entry.key.isEmpty && entry.constant ? 'Always Active' : entry.displayName, 
+                                   style: TextStyle(
+                                     color: (entry.isTriggered || entry.constant) ? Colors.white : Colors.white54,
+                                     fontSize: 12
+                                   ),
+                                   maxLines: 1,
+                                   overflow: TextOverflow.ellipsis,
+                                 ),
+                               ),
+                             ],
+                           ),
+                         );
+                      }),
+                    ],
+                  )
+                : const Text('No lorebook entries.', style: TextStyle(color: Colors.white30, fontSize: 12)),
+          ),
+        ],
       ],
     );
   }
@@ -4062,6 +4164,7 @@ class _SummarySection extends StatefulWidget {
 class _SummarySectionState extends State<_SummarySection> {
   late TextEditingController _controller;
   bool _showSettings = false;
+  bool _expanded = false;
 
   @override
   void initState() {
@@ -4093,266 +4196,292 @@ class _SummarySectionState extends State<_SummarySection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header with enable toggle
-        Row(
-          children: [
-            const Icon(Icons.auto_stories, size: 16, color: Colors.tealAccent),
-            const SizedBox(width: 6),
-            const Text('Chat Summary',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 13)),
-            const Spacer(),
-            if (enabled && widget.chatService.isSummaryGenerating)
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: SizedBox(
-                  width: 14, height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.tealAccent),
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Row(
+              children: [
+                Icon(
+                  _expanded ? Icons.expand_more : Icons.chevron_right,
+                  size: 16,
+                  color: Colors.white38,
                 ),
-              ),
-            SizedBox(
-              height: 28,
-              child: FittedBox(
-                child: Switch(
-                  value: enabled,
-                  onChanged: (val) => storage.setSummaryEnabled(val),
-                  activeTrackColor: Colors.tealAccent,
-                ),
-              ),
-            ),
-          ],
-        ),
-
-        if (!enabled)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text(
-              'Auto-summarize conversations so the AI remembers earlier events even after they leave the context window.',
-              style: TextStyle(fontSize: 11, color: Colors.white30),
-            ),
-          ),
-
-        if (enabled) ...[
-          const SizedBox(height: 8),
-          // Summary text field
-          TextField(
-            controller: _controller,
-            maxLines: 6,
-            minLines: 2,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-            decoration: InputDecoration(
-              hintText: 'No summary yet. It will generate after enough messages...',
-              hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
-              filled: true,
-              fillColor: const Color(0xFF111827),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white12),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.white12),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.tealAccent),
-              ),
-              contentPadding: const EdgeInsets.all(10),
-            ),
-            onChanged: (val) {
-              widget.chatService.setSummary(val);
-            },
-          ),
-          const SizedBox(height: 6),
-          // Controls row
-          Row(
-            children: [
-              // Pause/Resume toggle
-              InkWell(
-                onTap: () => widget.chatService.setSummaryPaused(!widget.chatService.summaryPaused),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        widget.chatService.summaryPaused ? Icons.play_arrow : Icons.pause,
-                        size: 14,
-                        color: widget.chatService.summaryPaused ? Colors.orangeAccent : Colors.white38,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.chatService.summaryPaused ? 'Paused' : 'Auto',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: widget.chatService.summaryPaused ? Colors.orangeAccent : Colors.white38,
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 4),
+                const Icon(Icons.auto_stories, size: 14, color: Colors.tealAccent),
+                const SizedBox(width: 6),
+                const Text('Chat Summary',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 13)),
+                const Spacer(),
+                if (enabled && widget.chatService.isSummaryGenerating)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.tealAccent),
+                    ),
+                  ),
+                SizedBox(
+                  height: 28,
+                  child: FittedBox(
+                    child: Switch(
+                      value: enabled,
+                      onChanged: (val) {
+                         storage.setSummaryEnabled(val);
+                         if (val) setState(() => _expanded = true);
+                      },
+                      activeTrackColor: Colors.tealAccent,
+                    ),
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+
+        if (_expanded) ...[
+          if (!enabled)
+            const Padding(
+              padding: EdgeInsets.only(top: 4, left: 20),
+              child: Text(
+                'Auto-summarize conversations so the AI remembers earlier events even after they leave the context window.',
+                style: TextStyle(fontSize: 11, color: Colors.white30),
               ),
-              const SizedBox(width: 8),
-              // Settings gear toggle
-              InkWell(
-                onTap: () => setState(() => _showSettings = !_showSettings),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Icon(Icons.tune, size: 14,
-                    color: _showSettings ? Colors.tealAccent : Colors.white38),
+            ),
+
+          if (enabled) ...[
+            const SizedBox(height: 8),
+            // Summary text field
+            Padding(
+              padding: const EdgeInsets.only(left: 20.0),
+              child: TextField(
+                controller: _controller,
+                maxLines: 6,
+                minLines: 2,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'No summary yet. It will generate after enough messages...',
+                  hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                  filled: true,
+                  fillColor: const Color(0xFF111827),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.white12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.white12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Colors.tealAccent),
+                  ),
+                  contentPadding: const EdgeInsets.all(10),
+                ),
+                onChanged: (val) {
+                  widget.chatService.setSummary(val);
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Controls row
+            Padding(
+              padding: const EdgeInsets.only(left: 20),
+              child: Row(
+                children: [
+                  // Pause/Resume toggle
+                  InkWell(
+                    onTap: () => widget.chatService.setSummaryPaused(!widget.chatService.summaryPaused),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            widget.chatService.summaryPaused ? Icons.play_arrow : Icons.pause,
+                            size: 14,
+                            color: widget.chatService.summaryPaused ? Colors.orangeAccent : Colors.white38,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.chatService.summaryPaused ? 'Paused' : 'Auto',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: widget.chatService.summaryPaused ? Colors.orangeAccent : Colors.white38,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Settings gear toggle
+                  InkWell(
+                    onTap: () => setState(() => _showSettings = !_showSettings),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Icon(Icons.tune, size: 14,
+                        color: _showSettings ? Colors.tealAccent : Colors.white38),
+                    ),
+                  ),
+                  const Spacer(),
+                  // Regenerate button
+                  InkWell(
+                    onTap: widget.chatService.isSummaryGenerating
+                        ? null
+                        : () => widget.chatService.forceSummaryUpdate(),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh, size: 14,
+                            color: widget.chatService.isSummaryGenerating ? Colors.white12 : Colors.tealAccent),
+                          const SizedBox(width: 4),
+                          Text('Regen',
+                            style: TextStyle(fontSize: 10,
+                              color: widget.chatService.isSummaryGenerating ? Colors.white12 : Colors.tealAccent)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.chatService.summaryLastIndex > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 24),
+                child: Text(
+                  'Last updated at message #${widget.chatService.summaryLastIndex}',
+                  style: const TextStyle(fontSize: 10, color: Colors.white24),
                 ),
               ),
-              const Spacer(),
-              // Regenerate button
-              InkWell(
-                onTap: widget.chatService.isSummaryGenerating
-                    ? null
-                    : () => widget.chatService.forceSummaryUpdate(),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+
+            // Expandable settings panel
+            if (_showSettings) ...[
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.only(left: 20),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111827),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.refresh, size: 14,
-                        color: widget.chatService.isSummaryGenerating ? Colors.white12 : Colors.tealAccent),
-                      const SizedBox(width: 4),
-                      Text('Regen',
-                        style: TextStyle(fontSize: 10,
-                          color: widget.chatService.isSummaryGenerating ? Colors.white12 : Colors.tealAccent)),
+                      // Update Interval
+                      Row(
+                        children: [
+                          const Text('Update every', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                          const Spacer(),
+                          Text('${storage.summaryInterval} messages',
+                            style: const TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 3,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                        ),
+                        child: Slider(
+                          value: storage.summaryInterval.toDouble(),
+                          min: 3,
+                          max: 50,
+                          divisions: 47,
+                          activeColor: Colors.tealAccent,
+                          inactiveColor: Colors.white12,
+                          onChanged: (val) => storage.setSummaryInterval(val.toInt()),
+                        ),
+                      ),
+                      // Max Words
+                      Row(
+                        children: [
+                          const Text('Max words', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                          const Spacer(),
+                          Text('${storage.summaryMaxWords}',
+                            style: const TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 3,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                        ),
+                        child: Slider(
+                          value: storage.summaryMaxWords.toDouble(),
+                          min: 50,
+                          max: 1000,
+                          divisions: 19,
+                          activeColor: Colors.tealAccent,
+                          inactiveColor: Colors.white12,
+                          onChanged: (val) => storage.setSummaryMaxWords(val.toInt()),
+                        ),
+                      ),
+                      // Summary Prompt
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Text('Summary Prompt', style: TextStyle(fontSize: 11, color: Colors.white54)),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () {
+                              storage.setSummaryPrompt(StorageService.defaultSummaryPrompt);
+                              setState(() {});
+                            },
+                            child: const Text('Reset', style: TextStyle(fontSize: 10, color: Colors.tealAccent)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: TextEditingController(text: storage.summaryPrompt),
+                        maxLines: 3,
+                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                        decoration: InputDecoration(
+                          hintText: 'Instructions for summarizing...',
+                          hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                          filled: true,
+                          fillColor: const Color(0xFF0D1117),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: const BorderSide(color: Colors.white12),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: const BorderSide(color: Colors.white12),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: const BorderSide(color: Colors.tealAccent),
+                          ),
+                          contentPadding: const EdgeInsets.all(8),
+                        ),
+                        onChanged: (val) => storage.setSummaryPrompt(val),
+                      ),
+                      const SizedBox(height: 6),
+                      const Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 12, color: Colors.amber),
+                          SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Uses your active LLM — consumes tokens on paid APIs.',
+                              style: TextStyle(fontSize: 10, color: Colors.amber),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
               ),
             ],
-          ),
-          if (widget.chatService.summaryLastIndex > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Last updated at message #${widget.chatService.summaryLastIndex}',
-                style: const TextStyle(fontSize: 10, color: Colors.white24),
-              ),
-            ),
-
-          // Expandable settings panel
-          if (_showSettings) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111827),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Update Interval
-                  Row(
-                    children: [
-                      const Text('Update every', style: TextStyle(fontSize: 11, color: Colors.white54)),
-                      const Spacer(),
-                      Text('${storage.summaryInterval} messages',
-                        style: const TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    ),
-                    child: Slider(
-                      value: storage.summaryInterval.toDouble(),
-                      min: 3,
-                      max: 50,
-                      divisions: 47,
-                      activeColor: Colors.tealAccent,
-                      inactiveColor: Colors.white12,
-                      onChanged: (val) => storage.setSummaryInterval(val.toInt()),
-                    ),
-                  ),
-                  // Max Words
-                  Row(
-                    children: [
-                      const Text('Max words', style: TextStyle(fontSize: 11, color: Colors.white54)),
-                      const Spacer(),
-                      Text('${storage.summaryMaxWords}',
-                        style: const TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    ),
-                    child: Slider(
-                      value: storage.summaryMaxWords.toDouble(),
-                      min: 50,
-                      max: 1000,
-                      divisions: 19,
-                      activeColor: Colors.tealAccent,
-                      inactiveColor: Colors.white12,
-                      onChanged: (val) => storage.setSummaryMaxWords(val.toInt()),
-                    ),
-                  ),
-                  // Summary Prompt
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Text('Summary Prompt', style: TextStyle(fontSize: 11, color: Colors.white54)),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          storage.setSummaryPrompt(StorageService.defaultSummaryPrompt);
-                          setState(() {});
-                        },
-                        child: const Text('Reset', style: TextStyle(fontSize: 10, color: Colors.tealAccent)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  TextField(
-                    controller: TextEditingController(text: storage.summaryPrompt),
-                    maxLines: 3,
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                    decoration: InputDecoration(
-                      hintText: 'Instructions for summarizing...',
-                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
-                      filled: true,
-                      fillColor: const Color(0xFF0D1117),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(color: Colors.white12),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(color: Colors.white12),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(color: Colors.tealAccent),
-                      ),
-                      contentPadding: const EdgeInsets.all(8),
-                    ),
-                    onChanged: (val) => storage.setSummaryPrompt(val),
-                  ),
-                  const SizedBox(height: 6),
-                  const Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 12, color: Colors.amber),
-                      SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Uses your active LLM — consumes tokens on paid APIs.',
-                          style: TextStyle(fontSize: 10, color: Colors.amber),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
           ],
         ],
       ],
@@ -5833,6 +5962,18 @@ class _NsfwEnhancementsSectionState extends State<_NsfwEnhancementsSection> {
                   'NSFW Enhancements',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.deepOrangeAccent),
                 ),
+                const Spacer(),
+                SizedBox(
+                  height: 20,
+                  child: Switch(
+                    value: widget.chat.nsfwCooldownEnabled,
+                    activeColor: Colors.deepOrangeAccent,
+                    onChanged: widget.chat.isGenerating ? null : (val) {
+                      widget.chat.setNsfwCooldownEnabled(val);
+                      if (val) setState(() => _expanded = true);
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -5900,28 +6041,7 @@ class _NsfwEnhancementsSectionState extends State<_NsfwEnhancementsSection> {
                   const SizedBox(height: 12),
                 ],
 
-                // ── Cum Cooldown ──
-                Row(
-                  children: [
-                    const Icon(Icons.timer, size: 13, color: Colors.white38),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'Cum Cooldown',
-                      style: TextStyle(fontSize: 12, color: Colors.white54),
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      height: 20,
-                      child: Switch(
-                        value: widget.chat.nsfwCooldownEnabled,
-                        activeColor: Colors.deepOrangeAccent,
-                        onChanged: widget.chat.isGenerating ? null : (val) {
-                          widget.chat.setNsfwCooldownEnabled(val);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+
                 if (widget.chat.nsfwCooldownEnabled && widget.chat.cooldownTurnsRemaining > 0) ...[
                   const SizedBox(height: 4),
                   Align(

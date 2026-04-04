@@ -278,6 +278,9 @@ class StorageService extends ChangeNotifier {
   int get summaryMaxWords => _summaryMaxWords;
   String get summaryPrompt => _summaryPrompt;
   List<String> get bannedPhrases => List.unmodifiable(_bannedPhrases);
+
+  int get kvQuantizationLevel => _kvQuantizationLevel;
+  int _kvQuantizationLevel = 0;
   bool get ragEnabled => _ragEnabled;
   int get ragRetrievalCount => _ragRetrievalCount;
   int get ragWindowSize => _ragWindowSize;
@@ -362,6 +365,7 @@ class StorageService extends ChangeNotifier {
     _ttsAutoPlay = _prefs?.getBool('tts_auto_play') ?? false;
     _openaiTtsApiKey = _prefs?.getString('openai_tts_api_key') ?? '';
     _ttsConcurrency = _prefs?.getInt('tts_concurrency') ?? Platform.numberOfProcessors.clamp(1, 16);
+    _kvQuantizationLevel = _prefs?.getInt('kv_quantization_level') ?? 0;
     _openaiTtsModel = _prefs?.getString('openai_tts_model') ?? 'tts-1';
     _openaiTtsBaseUrl = _prefs?.getString('openai_tts_base_url') ?? 'https://api.openai.com/v1';
     _elevenlabsApiKey = _prefs?.getString('elevenlabs_api_key') ?? '';
@@ -873,6 +877,12 @@ class StorageService extends ChangeNotifier {
   Future<void> setTtsConcurrency(int value) async {
     _ttsConcurrency = value.clamp(1, 16);
     await _prefs?.setInt('tts_concurrency', _ttsConcurrency);
+    notifyListeners();
+  }
+
+  Future<void> setKvQuantizationLevel(int value) async {
+    _kvQuantizationLevel = value;
+    await _prefs?.setInt('kv_quantization_level', value);
     notifyListeners();
   }
 

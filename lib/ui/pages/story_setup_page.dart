@@ -776,7 +776,7 @@ class _StorySetupPageState extends State<StorySetupPage> {
     switch (tier) {
       case PromptTier.frontier: return 'Frontier API Models';
       case PromptTier.largLocal: return 'Large Local Models (70B+)';
-      case PromptTier.smallLocal: return 'Small Local Models (7-13B)';
+      case PromptTier.smallLocal: return 'Small/Mid Local Models (7-34B)';
     }
   }
 
@@ -784,7 +784,7 @@ class _StorySetupPageState extends State<StorySetupPage> {
     switch (tier) {
       case PromptTier.frontier: return 'GPT-4, Claude, Gemini -- best quality, requires internet';
       case PromptTier.largLocal: return 'Locally run large models -- good quality, fully offline';
-      case PromptTier.smallLocal: return 'Locally run small models -- fast but output may vary';
+      case PromptTier.smallLocal: return 'Locally run small/mid models -- fast but output may vary';
     }
   }
 

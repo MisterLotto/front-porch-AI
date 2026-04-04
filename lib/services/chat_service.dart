@@ -3184,15 +3184,29 @@ class ChatService extends ChangeNotifier {
 
       debugPrint('[Actions] Raw response:\n$responseText');
 
-      // Parse numbered list: "1. Action" or "1) Action"
+      // Parse numbered list: "1. Action", "-", "*", or bullet
       final lines = responseText.split('\n');
-      final actions = <String>[];
+      var actions = <String>[];
 
       for (final line in lines) {
-        final match = RegExp(r'^\s*\d+[\.\)]\s*(.+)$').firstMatch(line.trim());
+        var cleanLine = line.trim().replaceAll(RegExp(r'^\*+|\*+$|^_+|_+$'), '').trim();
+        final match = RegExp(r'^\s*(?:\d+[\.\)]|[-*•]|)\s*(.+)$').firstMatch(cleanLine);
         if (match != null) {
-          final action = match.group(1)!.trim();
-          if (action.isNotEmpty) actions.add(action);
+          final action = match.group(1)!.trim().replaceAll(RegExp(r'\*$'), '');
+          // Ignore conversational filler lines
+          if (action.isNotEmpty && !action.toLowerCase().contains('here are') && !action.endsWith(':')) {
+            actions.add(action);
+          }
+        }
+      }
+      
+      // Fallback if LLM just output raw lines
+      if (actions.isEmpty) {
+        for (final line in lines) {
+          final cleanLine = line.trim();
+          if (cleanLine.isNotEmpty && !cleanLine.endsWith(':') && !cleanLine.toLowerCase().contains('here are')) {
+             actions.add(cleanLine);
+          }
         }
       }
 

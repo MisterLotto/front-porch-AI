@@ -138,6 +138,16 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
       args.add('--noflashattention');  // Flash attention kernel crashes on many AMD GPUs
     }
     // Note: Metal is used automatically on macOS Apple Silicon, no flag needed
+    
+    // Add KV Cache Quantization if enabled
+    if (_storageService.kvQuantizationLevel > 0) {
+      args.add('--quantkv');
+      args.add(_storageService.kvQuantizationLevel.toString());
+      if (!useRocm) {
+        // Flash attention is strictly required to quantize V-cache. ROCm falls back to K-cache quantization implicitly.
+        args.add('--flashattention');
+      }
+    }
 
     try {
       print('AG_DEBUG: === STARTING KOBOLDCPP ===');
