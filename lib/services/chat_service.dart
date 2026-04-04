@@ -4833,12 +4833,13 @@ class ChatService extends ChangeNotifier {
     final prompt =
         'Read the following character response and answer ONE question.\n\n'
         'RESPONSE:\n$responseText\n\n'
-        'Question: Did $charName PHYSICALLY reach climax/orgasm in this response? '
+        'Question: Did $charName (and ONLY $charName) PHYSICALLY reach climax/orgasm in this response? '
         'This must be an event actively occurring or just occurred in the text — '
-        'a character physically reaching orgasm right now. '
+        '$charName specifically physically reaching orgasm right now. '
+        'If the response describes the user climaxing, but NOT $charName, you MUST answer false.\n'
         'Do NOT answer true for: dirty talk, innuendo, arousal build-up, '
         'sexual activity that has not yet reached completion, or casual use of words like "cum". '
-        'ONLY answer true if an orgasm/climax is unambiguously depicted as actively happening.\n\n'
+        'ONLY answer true if $charName\'s orgasm/climax is unambiguously depicted as actively happening.\n\n'
         'Respond with ONLY a JSON object: {"climax_detected": <true|false>, "reason": "<brief>"}';
 
     try {
