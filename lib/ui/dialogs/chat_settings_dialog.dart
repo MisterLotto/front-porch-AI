@@ -186,40 +186,6 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         const SizedBox(height: 8),
                         _buildSlider('Chat Text Size', storageService.textScale, 0.5, 2.0, (val) => storageService.setTextScale(val), divisions: 30, tooltip: 'Scale the chat text size up or down.'),
                         const SizedBox(height: 16),
-                        const Text('Chat Background', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 280,
-                          child: GridView.count(
-                            crossAxisCount: 5,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                            childAspectRatio: 1.4,
-                            children: [
-                              _buildBgThumbnail(storageService, 'none', 'None', null),
-                              _buildBgThumbnail(storageService, 'cyberpunk_bedroom', 'Cyberpunk', 'assets/backgrounds/cyberpunk_bedroom.png'),
-                              _buildBgThumbnail(storageService, 'coffee_shop', 'Coffee Shop', 'assets/backgrounds/coffee_shop.png'),
-                              _buildBgThumbnail(storageService, 'beach', 'Beach', 'assets/backgrounds/beach.png'),
-                              _buildBgThumbnail(storageService, 'futuristic_city', 'Neon City', 'assets/backgrounds/futuristic_city.png'),
-                              _buildBgThumbnail(storageService, 'edm_rave', 'EDM Rave', 'assets/backgrounds/edm_rave.png'),
-                              _buildBgThumbnail(storageService, 'cozy_library', 'Library', 'assets/backgrounds/cozy_library.png'),
-                              _buildBgThumbnail(storageService, 'rainy_japan', 'Rainy Japan', 'assets/backgrounds/rainy_japan.png'),
-                              _buildBgThumbnail(storageService, 'space_station', 'Space', 'assets/backgrounds/space_station.png'),
-                              _buildBgThumbnail(storageService, 'enchanted_forest', 'Forest', 'assets/backgrounds/enchanted_forest.png'),
-                              _buildBgThumbnail(storageService, 'anime_cherry_blossom', 'Sakura', 'assets/backgrounds/anime_cherry_blossom.png'),
-                              _buildBgThumbnail(storageService, 'anime_rooftop', 'Rooftop', 'assets/backgrounds/anime_rooftop.png'),
-                              _buildBgThumbnail(storageService, 'anime_rooftop_sunset', 'Sunset', 'assets/backgrounds/anime_rooftop_sunset.png'),
-                              _buildBgThumbnail(storageService, 'cherry_blossom', 'Blossom', 'assets/backgrounds/cherry_blossom.png'),
-                              _buildBgThumbnail(storageService, 'beach_waves', 'Waves', 'assets/backgrounds/beach_waves.png'),
-                              _buildBgThumbnail(storageService, 'waifu_gaming_room', 'Waifu Game', 'assets/backgrounds/waifu_gaming_room.png'),
-                              _buildBgThumbnail(storageService, 'waifu_beach_bar', 'Waifu Bar', 'assets/backgrounds/waifu_beach_bar.png'),
-                              _buildBgThumbnail(storageService, 'waifu_garden', 'Waifu Garden', 'assets/backgrounds/waifu_garden.png'),
-                              _buildBgThumbnail(storageService, 'waifu_neon', 'Waifu Neon', 'assets/backgrounds/waifu_neon.png'),
-                              _buildBgThumbnail(storageService, 'waifu_beach', 'Waifu Beach', 'assets/backgrounds/waifu_beach.png'),
-                            ],
-                          ),
-                        ),
-                       const SizedBox(height: 8),
                        Row(
                          children: [
                            const Text('Smooth Output Buffer', style: TextStyle(color: Colors.white)),
@@ -433,51 +399,6 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           inactiveColor: Colors.white24,
         ),
       ],
-    );
-  }
-
-  Widget _buildBgThumbnail(StorageService storageService, String key, String label, String? assetPath) {
-    final isSelected = storageService.chatBackground == key;
-    return GestureDetector(
-      onTap: () => storageService.setChatBackground(key),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? Colors.blueAccent : Colors.white24,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (assetPath != null)
-              Image.asset(assetPath, fit: BoxFit.cover)
-            else
-              Container(
-                color: const Color(0xFF111827),
-                child: const Center(child: Icon(Icons.block, color: Colors.white38, size: 20)),
-              ),
-            Positioned(
-              left: 0, right: 0, bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                color: Colors.black54,
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: isSelected ? Colors.blueAccent : Colors.white70,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -32,6 +32,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/background_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/model_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
@@ -1930,6 +1931,24 @@ class _ChatPageState extends State<ChatPage> {
                     },
                     icon: const Icon(Icons.edit, size: 16),
                     label: const Text('Edit Character'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const BackgroundSettingsDialog(),
+                      );
+                    },
+                    icon: const Icon(Icons.wallpaper, size: 16),
+                    label: const Text('Backgrounds'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white70,
                       side: const BorderSide(color: Colors.white24),
