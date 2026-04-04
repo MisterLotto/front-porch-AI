@@ -4575,8 +4575,8 @@ class ChatService extends ChangeNotifier {
         '   +5: Incredible immediate chemistry | +2: Friendly | 0: Neutral | -2: Annoyed/Rude | -5: Deeply Hostile/Violent\n'
         '2. "mood_shift": Based purely on their specific personality, how does $charName\'s mood SHIFT? (-3 to +3)\n'
         '   +3: Massive positive spike | +1: Slight lift | 0: Unchanged | -1: Irritated | -3: Deeply hurt/furious\n'
-        '3. "trust_delta": Does $userName\'s action build or destroy TRUTH and TRUST? (-2 to +2)\n'
-        '   Are they lying? Keeping secrets? Or being vulnerable? Trust is SEPARATE from affection.\n'
+        '3. "trust_delta": Does $userName\'s action build or destroy TRUTH and TRUST? (-100 to +10)\n'
+        '   +2: Honest/Vulnerable | 0: Neutral | -5: Lie/Evasive | -100: MASSIVE unforgivable betrayal. Trust can be instantly shattered!\n'
         '${_nsfwCooldownEnabled ? '4. "arousal_delta": Does this interaction increase/decrease physical arousal? (-2 to +2)\n   Base this heavily on their personality. Highly sexual/dominant characters should gain arousal (+1/+2) very easily from slight teasing, submission, or power dynamics.\n' : ''}\n'
         'Recent conversation:\n$recent\n\n'
         'Respond with ONLY a JSON object: {"relationship_delta": <number>, "mood_shift": <number>, "trust_delta": <number>, ${_nsfwCooldownEnabled ? '"arousal_delta": <number>, ' : ''}"reason": "<brief>"}';
@@ -4610,7 +4610,7 @@ class ChatService extends ChangeNotifier {
       int trustDelta = 0;
       final trustMatch = RegExp(r'"trust_delta"\s*:\s*(-?\d+)').firstMatch(text);
       if (trustMatch != null) {
-        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-2, 2);
+        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-100, 10);
         if (trustDelta != 0) {
           _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
           debugPrint('[Realism:Relationship] Trust shifted by $trustDelta -> $_trustLevel');
