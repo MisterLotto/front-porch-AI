@@ -57,6 +57,8 @@ class _SettingsPageState extends State<SettingsPage> {
   final _contextSizeController = TextEditingController(text: '8192');
   double _contextSizeValue = 8192;
   final _apiController = TextEditingController();
+  final _remoteApiUrlController = TextEditingController();
+  final _remoteApiKeyController = TextEditingController();
   bool _useVulkan = false;
   bool _useCublas = false;
   bool _useMetal = false;
@@ -80,6 +82,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _bannedPhrasesController = TextEditingController(
       text: Provider.of<StorageService>(context, listen: false).bannedPhrases.join('\n'),
     );
+    _remoteApiUrlController.text = Provider.of<StorageService>(context, listen: false).remoteApiUrl;
+    _remoteApiKeyController.text = Provider.of<StorageService>(context, listen: false).remoteApiKey;
     
     // Sync local state with storage
     final storage = Provider.of<StorageService>(context, listen: false);
@@ -248,6 +252,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _gpuLayersController.dispose();
     _contextSizeController.dispose();
     _apiController.dispose();
+    _remoteApiUrlController.dispose();
+    _remoteApiKeyController.dispose();
     _bannedPhrasesController.dispose();
     super.dispose();
   }
@@ -1356,21 +1362,18 @@ class _SettingsPageState extends State<SettingsPage> {
                       _buildApiPresetChip(
                         label: '🖥️ LM Studio',
                         url: 'http://localhost:1234/v1',
-                        clearKey: true,
                         storageService: storageService,
                         context: context,
                       ),
                       _buildApiPresetChip(
                         label: '🌐 OpenRouter',
                         url: 'https://openrouter.ai/api/v1',
-                        clearKey: false,
                         storageService: storageService,
                         context: context,
                       ),
                       _buildApiPresetChip(
                         label: '⚡ Nano-GPT',
                         url: 'https://nano-gpt.com/api/v1',
-                        clearKey: false,
                         storageService: storageService,
                         context: context,
                       ),
@@ -1380,7 +1383,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Text('API URL', style: theme.textTheme.bodySmall),
                   const SizedBox(height: 4),
                   TextFormField(
-                    initialValue: storageService.remoteApiUrl,
+                    controller: _remoteApiUrlController,
                     decoration: InputDecoration(
                       hintText: 'https://openrouter.ai/api/v1',
                       filled: true,
@@ -1394,7 +1397,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Text('API Key', style: theme.textTheme.bodySmall),
                   const SizedBox(height: 4),
                   TextFormField(
-                    initialValue: storageService.remoteApiKey,
+                    controller: _remoteApiKeyController,
                     obscureText: true,
                     decoration: InputDecoration(
                       hintText: 'sk-or-...',
@@ -1770,6 +1773,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildAdvancedTab(BuildContext context) {
      final storageService = Provider.of<StorageService>(context);
      final hardwareService = Provider.of<HardwareService>(context);
+     final llmProvider = Provider.of<LLMProvider>(context);
      final theme = Theme.of(context);
 
      return SingleChildScrollView(
@@ -2033,7 +2037,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
            const SizedBox(height: 16),
-           // Hardware Info with VRAM Gauge
+           // Hardware Info with VRAM Gauge (always shown)
             Container(
                padding: const EdgeInsets.all(16),
                decoration: BoxDecoration(
@@ -2062,123 +2066,147 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(height: 16),
                         // VRAM Gauge
-                        FutureBuilder<int?>(
-                          future: _selectedModelPath != null 
-                              ? Provider.of<ModelManager>(context, listen: false).getKvCacheBytesPerToken(_selectedModelPath!)
-                              : Future.value(null),
-                          builder: (context, snapshot) {
-                            final totalVram = hardwareService.hardwareInfo!.vramMb.toDouble();
-                            if (totalVram <= 0) return const SizedBox.shrink();
+                        if (llmProvider.isLocal)
+                          FutureBuilder<int?>(
+                            future: _selectedModelPath != null 
+                                ? Provider.of<ModelManager>(context, listen: false).getKvCacheBytesPerToken(_selectedModelPath!)
+                                : Future.value(null),
+                            builder: (context, snapshot) {
+                              final totalVram = hardwareService.hardwareInfo!.vramMb.toDouble();
+                              if (totalVram <= 0) return const SizedBox.shrink();
 
-                            // Estimate model VRAM usage from model size
-                            final modelSizeMb = _getSelectedModelSizeMb();
-                            final contextSize = int.tryParse(_contextSizeController.text) ?? 4096;
-                            
-                            // Use exact KV cost if parsed, else fallback to 100MB per 1k heuristic
-                            final kvBytesPerToken = snapshot.data;
-                            final contextVramMb = kvBytesPerToken != null 
-                                ? (contextSize * kvBytesPerToken / (1024 * 1024))
-                                : (contextSize / 1024 * 100.0);
+                              // Estimate model VRAM usage from model size
+                              final modelSizeMb = _getSelectedModelSizeMb();
+                              final contextSize = int.tryParse(_contextSizeController.text) ?? 4096;
+                              
+                              // Use exact KV cost if parsed, else fallback to 100MB per 1k heuristic
+                              final kvBytesPerToken = snapshot.data;
+                              final contextVramMb = kvBytesPerToken != null 
+                                  ? (contextSize * kvBytesPerToken / (1024 * 1024))
+                                  : (contextSize / 1024 * 100.0);
 
-                            final gpuLayers = int.tryParse(_gpuLayersController.text) ?? 0;
-                            // If GPU layers < 99, only part of model is on GPU
-                            final modelVramMb = gpuLayers >= 99
-                                ? modelSizeMb.toDouble()
-                                : (modelSizeMb * (gpuLayers / 40.0)).clamp(0, modelSizeMb.toDouble());
-                            final usedVram = modelVramMb + contextVramMb;
-                          final usedRatio = (usedVram / totalVram).clamp(0.0, 1.0);
-                          final modelRatio = (modelVramMb / totalVram).clamp(0.0, 1.0);
-                          final contextRatio = (contextVramMb / totalVram).clamp(0.0, usedRatio);
-                          final freeVram = (totalVram - usedVram).clamp(0, totalVram);
+                              final gpuLayers = int.tryParse(_gpuLayersController.text) ?? 0;
+                              // If GPU layers < 99, only part of model is on GPU
+                              final modelVramMb = gpuLayers >= 99
+                                  ? modelSizeMb.toDouble()
+                                  : (modelSizeMb * (gpuLayers / 40.0)).clamp(0, modelSizeMb.toDouble());
+                              final usedVram = modelVramMb + contextVramMb;
+                              final usedRatio = (usedVram / totalVram).clamp(0.0, 1.0);
+                              final modelRatio = (modelVramMb / totalVram).clamp(0.0, 1.0);
+                              final contextRatio = (contextVramMb / totalVram).clamp(0.0, usedRatio);
+                              final freeVram = (totalVram - usedVram).clamp(0, totalVram);
 
-                          Color gaugeColor;
-                          if (usedRatio > 0.95) {
-                            gaugeColor = Colors.redAccent;
-                          } else if (usedRatio > 0.8) {
-                            gaugeColor = Colors.orangeAccent;
-                          } else {
-                            gaugeColor = Colors.greenAccent;
-                          }
+                              Color gaugeColor;
+                              if (usedRatio > 0.95) {
+                                gaugeColor = Colors.redAccent;
+                              } else if (usedRatio > 0.8) {
+                                gaugeColor = Colors.orangeAccent;
+                              } else {
+                                gaugeColor = Colors.greenAccent;
+                              }
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // VRAM bar
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final totalWidth = constraints.maxWidth;
-                                  final modelWidth = totalWidth * modelRatio;
-                                  final contextWidth = totalWidth * contextRatio;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // VRAM bar
+                                  LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final totalWidth = constraints.maxWidth;
+                                      final modelWidth = totalWidth * modelRatio;
+                                      final contextWidth = totalWidth * contextRatio;
 
-                                  return ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: SizedBox(
-                                      height: 20,
-                                      child: Stack(
-                                        children: [
-                                          // Background (free)
-                                          Container(
-                                            width: double.infinity,
-                                            color: Colors.white.withValues(alpha: 0.08),
-                                          ),
-                                          // Model portion (starts at left)
-                                          Positioned(
-                                            left: 0,
-                                            top: 0,
-                                            bottom: 0,
-                                            width: modelWidth,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  colors: [Colors.blueAccent, Colors.blue.shade700],
-                                                ),
+                                      return ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: SizedBox(
+                                          height: 20,
+                                          child: Stack(
+                                            children: [
+                                              // Background (free)
+                                              Container(
+                                                width: double.infinity,
+                                                color: Colors.white.withValues(alpha: 0.08),
                                               ),
-                                            ),
-                                          ),
-                                          // Context portion (starts exactly where model ends)
-                                          if (contextWidth > 0)
-                                            Positioned(
-                                              left: modelWidth,
-                                              top: 0,
-                                              bottom: 0,
-                                              width: contextWidth,
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    colors: [Colors.tealAccent, Colors.teal.shade700],
+                                              // Model portion (starts at left)
+                                              Positioned(
+                                                left: 0,
+                                                top: 0,
+                                                bottom: 0,
+                                                width: modelWidth,
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
+                                                      colors: [Colors.blueAccent, Colors.blue.shade700],
+                                                    ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                        ],
-                                      ),
+                                              // Context portion (starts exactly where model ends)
+                                              if (contextWidth > 0)
+                                                Positioned(
+                                                  left: modelWidth,
+                                                  top: 0,
+                                                  bottom: 0,
+                                                  width: contextWidth,
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        colors: [Colors.tealAccent, Colors.teal.shade700],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Legend
+                                  Row(
+                                    children: [
+                                      _buildVramLegendDot(Colors.blueAccent, 'Model ~${modelVramMb.round()} MB'),
+                                      const SizedBox(width: 16),
+                                      _buildVramLegendDot(Colors.tealAccent, 'Context ~${contextVramMb.round()} MB'),
+                                      const SizedBox(width: 16),
+                                      _buildVramLegendDot(Colors.white24, 'Free ~${freeVram.round()} MB'),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${usedVram.round()} / ${totalVram.round()} MB used',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: gaugeColor,
+                                      fontWeight: FontWeight.w500,
                                     ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 8),
-                              // Legend
-                              Row(
-                                children: [
-                                  _buildVramLegendDot(Colors.blueAccent, 'Model ~${modelVramMb.round()} MB'),
-                                  const SizedBox(width: 16),
-                                  _buildVramLegendDot(Colors.tealAccent, 'Context ~${contextVramMb.round()} MB'),
-                                  const SizedBox(width: 16),
-                                  _buildVramLegendDot(Colors.white24, 'Free ~${freeVram.round()} MB'),
+                                  ),
                                 ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${usedVram.round()} / ${totalVram.round()} MB used',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: gaugeColor,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              );
+                            },
+                          )
+                        else ...[
+                          // Remote API — show total VRAM only, no usage estimate
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              height: 20,
+                              width: double.infinity,
+                              color: Colors.white.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              _buildVramLegendDot(Colors.white24, 'Total ${hardwareService.hardwareInfo!.vramMb} MB'),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Remote API — GPU not in use',
+                                style: TextStyle(fontSize: 10, color: Colors.white38),
                               ),
                             ],
-                          );
-                        }),
+                          ),
+                        ],
                       ],
                     ),
             ),
@@ -2958,7 +2986,6 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildApiPresetChip({
     required String label,
     required String url,
-    required bool clearKey,
     required StorageService storageService,
     required BuildContext context,
   }) {
@@ -2979,14 +3006,17 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
       onPressed: () async {
+        // Always preserve the API key in storage - just change the URL
+        // LM Studio won't use an API key since it's local, and when we switch
+        // back to Nano-GPT/OpenRouter, the key will still be there.
         storageService.setRemoteApiUrl(url);
-        if (clearKey) storageService.setRemoteApiKey('');
+        _remoteApiUrlController.text = url;
 
-        // Auto-configure and fetch models
+        // Configure OpenRouter with stored values (apiKey persists across switches)
         final openRouter = Provider.of<OpenRouterService>(context, listen: false);
         openRouter.configure(
           apiUrl: url,
-          apiKey: clearKey ? '' : storageService.remoteApiKey,
+          apiKey: storageService.remoteApiKey,
         );
 
         setState(() => _isFetchingModels = true);
