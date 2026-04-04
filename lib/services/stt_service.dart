@@ -213,8 +213,8 @@ class SttService extends ChangeNotifier {
 
     try {
       final modelSize = _storageService.whisperModel;
-      final appDir = await getApplicationSupportDirectory();
-      final modelDir = p.join(appDir.path, 'whisper');
+      final root = _storageService.rootPath ?? (await getApplicationDocumentsDirectory()).path;
+      final modelDir = p.join(root, 'system', 'whisper_models');
       await Directory(modelDir).create(recursive: true);
 
       final request = jsonEncode({
@@ -635,8 +635,8 @@ class SttService extends ChangeNotifier {
     try {
       final modelSize = _storageService.whisperModel;
 
-      final appDir = await getApplicationSupportDirectory();
-      final modelDir = p.join(appDir.path, 'whisper');
+      final root = _storageService.rootPath ?? (await getApplicationDocumentsDirectory()).path;
+      final modelDir = p.join(root, 'system', 'whisper_models');
       await Directory(modelDir).create(recursive: true);
 
       final request = jsonEncode({

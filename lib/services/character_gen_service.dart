@@ -18,6 +18,7 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:front_porch_ai/utils/json_sanitizer.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
@@ -104,19 +105,36 @@ class CharacterGenService {
 
     debugPrint('CharacterGen: Starting generation for "$name"');
 
-    final baseOutput = await _callLLM(basePrompt, onProgress: onProgress);
-    lastRawOutput = baseOutput; // Store for image prompt extraction
-    if (baseOutput == null) {
-      onError?.call('LLM returned empty response for base card.');
-      return null;
+    int attempts = 0;
+    CharacterCard? card;
+
+    while (attempts < 2 && card == null) {
+      if (attempts > 0) {
+        onStatus?.call('JSON Parse failed. Retrying generation...');
+        debugPrint('CharacterGen: Retrying generation (Attempt ${attempts + 1})');
+      }
+
+      final baseOutput = await _callLLM(basePrompt, onProgress: attempts == 0 ? onProgress : null);
+      lastRawOutput = baseOutput; // Store for image prompt extraction
+      
+      if (baseOutput == null) {
+        if (attempts == 1) {
+          onError?.call('LLM returned empty response for base card.');
+          return null;
+        }
+        attempts++;
+        continue;
+      }
+
+      final cleaned = JsonSanitizer.sanitize(baseOutput);
+      debugPrint('CharacterGen: Base output cleaned (${cleaned.length} chars)');
+
+      card = _parseCharacterJson(cleaned, name);
+      attempts++;
     }
 
-    final cleaned = _stripContent(baseOutput);
-    debugPrint('CharacterGen: Base output cleaned (${cleaned.length} chars)');
-
-    final card = _parseCharacterJson(cleaned, name);
     if (card == null) {
-      onError?.call('Failed to parse base card JSON. Try a different model.');
+      onError?.call('Failed to parse base card JSON after multiple attempts. Try a different model or prompt.');
       return null;
     }
 
@@ -1232,35 +1250,7 @@ $greeting''';
 
   /// Strip thinking tags, markdown wrappers, and other LLM artifacts.
   String _stripContent(String raw) {
-    String cleaned = raw;
-
-    // Strip <think> blocks (closed and unclosed)
-    cleaned = cleaned
-        .replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '')
-        .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '');
-
-    // Strip markdown code fences
-    cleaned = cleaned
-        .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
-        .replaceAll(RegExp(r'^```\s*$', multiLine: true), '');
-
-    // Strip leading/trailing whitespace
-    cleaned = cleaned.trim();
-
-    // If there's a "JSON:" marker, take only what follows
-    final jsonMarker = RegExp(r'JSON:\s*').firstMatch(cleaned);
-    if (jsonMarker != null) {
-      cleaned = cleaned.substring(jsonMarker.end).trim();
-    }
-
-    // Try to extract just the JSON object if there's surrounding text
-    final jsonStart = cleaned.indexOf('{');
-    final jsonEnd = cleaned.lastIndexOf('}');
-    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-    }
-
-    return cleaned;
+    return JsonSanitizer.sanitize(raw);
   }
 
   // ═════════════════════════════════════════════════════════════

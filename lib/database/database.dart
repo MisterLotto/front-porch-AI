@@ -93,6 +93,13 @@ class Sessions extends Table {
   BoolColumn get nsfwCooldownEnabled => boolean().withDefault(const Constant(false))(); // sub-toggle
   IntColumn get arousalLevel => integer().withDefault(const Constant(0))(); // 0 to 10 scale
   IntColumn get cooldownTurnsRemaining => integer().withDefault(const Constant(0))(); // 0 = no cooldown
+  
+  // Realism Engine v3.0 Behavioral Mechanics
+  IntColumn get trustLevel => integer().withDefault(const Constant(0))(); // -100 to 100 paranoia/trust
+  TextColumn get activeFixation => text().withDefault(const Constant(''))(); // ongoing obsession topic
+  IntColumn get fixationLifespan => integer().withDefault(const Constant(0))(); // decay turns
+  TextColumn get spatialStance => text().withDefault(const Constant(''))(); // physical anchor
+  
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -365,7 +372,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -569,6 +576,21 @@ class AppDatabase extends _$AppDatabase {
         } catch (_) {}
         try {
           await customStatement('ALTER TABLE sessions ADD COLUMN short_term_deltas_summary INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+      }
+      if (from < 17) {
+        // v16→v17: add behavioral Realism Mechanics
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN trust_level INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN active_fixation TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN fixation_lifespan INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN spatial_stance TEXT NOT NULL DEFAULT ''");
         } catch (_) {}
       }
     },

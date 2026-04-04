@@ -39,7 +39,7 @@ class TtsService extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   // Engines
-  final KokoroEngine _kokoroEngine = KokoroEngine();
+  late final KokoroEngine _kokoroEngine = KokoroEngine(_storageService);
   final OpenAiTtsEngine _openaiEngine = OpenAiTtsEngine();
   final ElevenLabsTtsEngine _elevenlabsEngine = ElevenLabsTtsEngine();
 

@@ -59,6 +59,7 @@ import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
+import 'package:front_porch_ai/services/file_consolidation_service.dart';
 
 
 import 'package:front_porch_ai/ui/widgets/setup_overlay.dart';
@@ -86,6 +87,11 @@ void main(List<String> args) async {
     });
   }
   
+  // Consolidate files BEFORE loading database or any configs.
+  try { await FileConsolidationService.consolidate(); } catch (e) {
+    debugPrint('Fatal error during file consolidation: $e');
+  }
+
   // Initialize database
   final db = await AppDatabase.instance();
   final needsMigration = !await DataMigrationService.isMigrated();
@@ -214,7 +220,10 @@ void main(List<String> args) async {
               previous ?? SetupService(storage, backend, kobold),
         ),
         ChangeNotifierProvider(create: (_) => UpdateService()),
-        ChangeNotifierProvider(create: (_) => VoiceManager()),
+        ChangeNotifierProxyProvider<StorageService, VoiceManager>(
+          create: (context) => VoiceManager(Provider.of<StorageService>(context, listen: false)),
+          update: (context, storage, previous) => previous ?? VoiceManager(storage),
+        ),
         ChangeNotifierProxyProvider2<StorageService, VoiceManager, TtsService>(
           create: (context) => TtsService(
             Provider.of<StorageService>(context, listen: false),

@@ -2852,10 +2852,10 @@ class WebServerService extends ChangeNotifier {
   // Image Cache Proxy
   // ─────────────────────────────────────────────────────────────────────
 
-  /// Returns the image_cache directory path (same as Flutter app uses).
+  /// Returns the image_cache directory path.
   Future<Directory> _getImageCacheDir() async {
-    final appDir = await getApplicationSupportDirectory();
-    final dir = Directory('${appDir.path}/image_cache');
+    final root = _storageService.rootPath ?? (await getApplicationDocumentsDirectory()).path;
+    final dir = Directory(p.join(root, 'system', 'image_cache'));
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }

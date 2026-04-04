@@ -99,7 +99,12 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       }
     }
 
-    final suggestion = OptimizationService.calculateSettings(hardware, modelSizeMb: modelSize);
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final suggestion = OptimizationService.calculateSettings(
+      hardware, 
+      modelSizeMb: modelSize,
+      kvQuantizationLevel: storage.kvQuantizationLevel,
+    );
 
     setState(() {
       _gpuLayersController.text = suggestion.gpuLayers.toString();
@@ -528,6 +533,39 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                 controller: _contextSizeController,
                 isNumber: true,
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Text('KV Quantization:', style: TextStyle(fontSize: 13, color: Colors.white70)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: Provider.of<StorageService>(context).kvQuantizationLevel,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF374151),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  onChanged: (val) {
+                    if (val != null) {
+                      Provider.of<StorageService>(context, listen: false).setKvQuantizationLevel(val);
+                      setState(() {});
+                    }
+                  },
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('0 - None (FP16)')),
+                    DropdownMenuItem(value: 1, child: Text('1 - 8-Bit Q8')),
+                    DropdownMenuItem(value: 2, child: Text('2 - 4-Bit Q4')),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Tooltip(
+              message: 'Quantizes the context window to save significant VRAM with minimal quality loss. Note: KoboldCPP dynamically disables Context Shifting when this is active.',
+              child: Icon(Icons.info_outline, size: 16, color: Colors.white54),
             ),
           ],
         ),

@@ -121,8 +121,34 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
+## 🆕 What's New in V0.9.6.3
 
-## 🆕 What's New in V0.9.6.2
+This update introduces **Realism Engine 2.0**, bringing deep, RPG-style progression to your characters alongside significant quality-of-life UI improvements!
+
+**⚙️ Realism Engine 2.0: Deep Progression Systems**
+*   **Long-Term Relationship Scaling:** Characters now possess an active memory of your bond that grows over time. The engine tracks the overarching trajectory of your relationship, dynamically injecting context that transforms their tone from distant strangers to deeply bonded companions across extensive storylines.
+*   **Dynamic Trust Mechanics:** A brand new, diegetic trust system requires you to genuinely earn a character's confidence. Interactions, promises kept, and narrative choices will actively shift their psychological trust gauge, changing how vulnerable and open they allow themselves to be with your persona.
+*   **Character Level-Up System:** Characters now organically 'level up' their emotional depth and narrative complexity as your storylines progress, unlocking more nuanced reactions and specialized conversational avenues the longer you engage with them!
+
+**🖥️ UI / UX Optimization**
+*   **Collapsible Sidebar Modules:** Both the *Lorebook Triggers* and *Chat Summary* side panels have been rebuilt as collapsible dropdowns! They now default to a perfectly compact, closed state—massively saving vertical screen space and reducing clutter while chatting. 
+*   **Creator Polish:** Standardized terminology in the AI Creator fields, improved visual scaling for physical attributes, and added explicit "7-34B" parameter sizing guides in the local model selection screens to help users pick the perfect model tier.
+
+**🎴 Character Management**
+*   **One-Click Duplication:** Right-clicking (or long-pressing) any character card on the Home Screen now reveals a brand new **Duplicate Character** option! This will immediately spin up an exact, perfectly cloned copy of that character's `.png` V2 card, Database records, and settings with a `(duplicate)` nametag. *Perfect for risk-free system prompt experiments or branching alternate storylines!*
+
+**🧠 Fault-Tolerant AI Generator**
+*   **JSON Sanitation & Auto-Retries:** Under the hood, the AI Character Creator is significantly smarter when dealing with quirky local models. We implemented an automatic regex sanitization pipeline and a seamless, invisible 2-attempt retry loop that actively catches and repairs truncated or malformed JSON formats natively!
+
+
+
+
+
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.9.6.2
 
 Introducing the brand new **Realism Engine**, a backend module designed to give characters deep, nuanced emotional awareness and completely autonomous time-tracking capabilities.
 
@@ -135,7 +161,7 @@ Introducing the brand new **Realism Engine**, a backend module designed to give 
 *   **Autonomous Pacing:** The engine actively monitors conversational flow and organically phases into subsequent periods of the day. Characters possess complete temporal awareness and will naturally react to the shift from morning to night as the story unfolds.
 *   **Temporal Guardrails:** Strict backend limits pace the progression organically, ensuring the AI maintains a realistic timeline without rapidly skipping multiple time-slots or erratically triggering new days.
 
-## 🆕 What's New in V0.9.6.1
+### What's New in V0.9.6.1
 
 This hotfix expands upon the `0.9.6` creator pipeline optimizations, squashing several Linux compiling errors while introducing key visual capabilities.
 
@@ -175,9 +201,6 @@ This release significantly expands Front Porch AI's visual capabilities, nativel
 **🐛 Bug Fixes & Maintenance**
 *   **The "Grey Box" Fix:** Overhauled how character avatars are loaded. Avatars remain cross-platform portable without breaking or corrupting into grey boxes during active chat sessions!
 *   Cleaned up blank state messages inside the Review step of the Character Creator.
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.9.5
 

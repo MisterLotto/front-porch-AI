@@ -44,6 +44,7 @@ class OptimizationService {
     int modelSizeMb = 0,
     int? requestedContextSize,
     int? kvBytesPerToken,
+    int kvQuantizationLevel = 0,
   }) {
     int vram = hardware.vramMb;
     
@@ -64,11 +65,18 @@ class OptimizationService {
     // If user specified a context size, respect it and adjust GPU layers
     if (requestedContextSize != null && requestedContextSize > 0) {
       // Use exact KV cost if known, otherwise fall back to ~100 MB per 1K heuristic
-      final contextVramMb = kvBytesPerToken != null
-          ? (requestedContextSize * kvBytesPerToken / (1024 * 1024)).round()
-          : (requestedContextSize / 1024 * 100.0).round();
+      double contextVramMb = kvBytesPerToken != null
+          ? (requestedContextSize * kvBytesPerToken / (1024 * 1024))
+          : (requestedContextSize / 1024 * 100.0);
           
-      final availableForLayers = vram - contextVramMb - 200; // 200MB safety margin
+      // Apply KV Cache Quantization multiplier
+      if (kvQuantizationLevel == 1) {
+        contextVramMb *= 0.5; // Q8 is ~50% the size of f16
+      } else if (kvQuantizationLevel == 2) {
+        contextVramMb *= 0.25; // Q4 is ~25% the size of f16
+      }
+          
+      final availableForLayers = vram - contextVramMb.round() - 200; // 200MB safety margin
 
       int gpuLayers;
       String reasoning;

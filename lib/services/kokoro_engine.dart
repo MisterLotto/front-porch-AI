@@ -23,12 +23,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/tts_engine.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
 
 /// Kokoro TTS engine — high-quality local TTS using kokoro-onnx.
 ///
 /// Uses a Python subprocess with kokoro-onnx to generate audio.
 /// Model files (~300MB) are downloaded on first use.
 class KokoroEngine implements TtsEngine {
+  final StorageService _storageService;
+  KokoroEngine(this._storageService);
   static const _modelUrl =
       'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx';
   static const _voicesUrl =
@@ -43,8 +46,8 @@ class KokoroEngine implements TtsEngine {
 
   /// Get the directory where Kokoro model files are stored.
   Future<String> get _modelDir async {
-    final appDir = await getApplicationSupportDirectory();
-    return p.join(appDir.path, 'kokoro');
+    final root = _storageService.rootPath ?? (await getApplicationDocumentsDirectory()).path;
+    return p.join(root, 'system', 'kokoro_models');
   }
 
   /// Get the directory containing bundled TTS binaries.

@@ -1419,7 +1419,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    defaultValue: const Constant(2),
+    defaultValue: const Constant(0),
   );
   static const VerificationMeta _longTermScoreMeta = const VerificationMeta(
     'longTermScore',
@@ -1592,6 +1592,54 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _trustLevelMeta = const VerificationMeta(
+    'trustLevel',
+  );
+  @override
+  late final GeneratedColumn<int> trustLevel = GeneratedColumn<int>(
+    'trust_level',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _activeFixationMeta = const VerificationMeta(
+    'activeFixation',
+  );
+  @override
+  late final GeneratedColumn<String> activeFixation = GeneratedColumn<String>(
+    'active_fixation',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _fixationLifespanMeta = const VerificationMeta(
+    'fixationLifespan',
+  );
+  @override
+  late final GeneratedColumn<int> fixationLifespan = GeneratedColumn<int>(
+    'fixation_lifespan',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _spatialStanceMeta = const VerificationMeta(
+    'spatialStance',
+  );
+  @override
+  late final GeneratedColumn<String> spatialStance = GeneratedColumn<String>(
+    'spatial_stance',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1656,6 +1704,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     nsfwCooldownEnabled,
     arousalLevel,
     cooldownTurnsRemaining,
+    trustLevel,
+    activeFixation,
+    fixationLifespan,
+    spatialStance,
     createdAt,
     updatedAt,
     deletedAt,
@@ -1890,6 +1942,39 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('trust_level')) {
+      context.handle(
+        _trustLevelMeta,
+        trustLevel.isAcceptableOrUnknown(data['trust_level']!, _trustLevelMeta),
+      );
+    }
+    if (data.containsKey('active_fixation')) {
+      context.handle(
+        _activeFixationMeta,
+        activeFixation.isAcceptableOrUnknown(
+          data['active_fixation']!,
+          _activeFixationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fixation_lifespan')) {
+      context.handle(
+        _fixationLifespanMeta,
+        fixationLifespan.isAcceptableOrUnknown(
+          data['fixation_lifespan']!,
+          _fixationLifespanMeta,
+        ),
+      );
+    }
+    if (data.containsKey('spatial_stance')) {
+      context.handle(
+        _spatialStanceMeta,
+        spatialStance.isAcceptableOrUnknown(
+          data['spatial_stance']!,
+          _spatialStanceMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2025,6 +2110,22 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.int,
         data['${effectivePrefix}cooldown_turns_remaining'],
       )!,
+      trustLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}trust_level'],
+      )!,
+      activeFixation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}active_fixation'],
+      )!,
+      fixationLifespan: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fixation_lifespan'],
+      )!,
+      spatialStance: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}spatial_stance'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2074,6 +2175,10 @@ class Session extends DataClass implements Insertable<Session> {
   final bool nsfwCooldownEnabled;
   final int arousalLevel;
   final int cooldownTurnsRemaining;
+  final int trustLevel;
+  final String activeFixation;
+  final int fixationLifespan;
+  final String spatialStance;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -2105,6 +2210,10 @@ class Session extends DataClass implements Insertable<Session> {
     required this.nsfwCooldownEnabled,
     required this.arousalLevel,
     required this.cooldownTurnsRemaining,
+    required this.trustLevel,
+    required this.activeFixation,
+    required this.fixationLifespan,
+    required this.spatialStance,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -2155,6 +2264,10 @@ class Session extends DataClass implements Insertable<Session> {
     map['nsfw_cooldown_enabled'] = Variable<bool>(nsfwCooldownEnabled);
     map['arousal_level'] = Variable<int>(arousalLevel);
     map['cooldown_turns_remaining'] = Variable<int>(cooldownTurnsRemaining);
+    map['trust_level'] = Variable<int>(trustLevel);
+    map['active_fixation'] = Variable<String>(activeFixation);
+    map['fixation_lifespan'] = Variable<int>(fixationLifespan);
+    map['spatial_stance'] = Variable<String>(spatialStance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -2206,6 +2319,10 @@ class Session extends DataClass implements Insertable<Session> {
       nsfwCooldownEnabled: Value(nsfwCooldownEnabled),
       arousalLevel: Value(arousalLevel),
       cooldownTurnsRemaining: Value(cooldownTurnsRemaining),
+      trustLevel: Value(trustLevel),
+      activeFixation: Value(activeFixation),
+      fixationLifespan: Value(fixationLifespan),
+      spatialStance: Value(spatialStance),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -2255,6 +2372,10 @@ class Session extends DataClass implements Insertable<Session> {
       cooldownTurnsRemaining: serializer.fromJson<int>(
         json['cooldownTurnsRemaining'],
       ),
+      trustLevel: serializer.fromJson<int>(json['trustLevel']),
+      activeFixation: serializer.fromJson<String>(json['activeFixation']),
+      fixationLifespan: serializer.fromJson<int>(json['fixationLifespan']),
+      spatialStance: serializer.fromJson<String>(json['spatialStance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -2293,6 +2414,10 @@ class Session extends DataClass implements Insertable<Session> {
       'nsfwCooldownEnabled': serializer.toJson<bool>(nsfwCooldownEnabled),
       'arousalLevel': serializer.toJson<int>(arousalLevel),
       'cooldownTurnsRemaining': serializer.toJson<int>(cooldownTurnsRemaining),
+      'trustLevel': serializer.toJson<int>(trustLevel),
+      'activeFixation': serializer.toJson<String>(activeFixation),
+      'fixationLifespan': serializer.toJson<int>(fixationLifespan),
+      'spatialStance': serializer.toJson<String>(spatialStance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -2327,6 +2452,10 @@ class Session extends DataClass implements Insertable<Session> {
     bool? nsfwCooldownEnabled,
     int? arousalLevel,
     int? cooldownTurnsRemaining,
+    int? trustLevel,
+    String? activeFixation,
+    int? fixationLifespan,
+    String? spatialStance,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -2365,6 +2494,10 @@ class Session extends DataClass implements Insertable<Session> {
     arousalLevel: arousalLevel ?? this.arousalLevel,
     cooldownTurnsRemaining:
         cooldownTurnsRemaining ?? this.cooldownTurnsRemaining,
+    trustLevel: trustLevel ?? this.trustLevel,
+    activeFixation: activeFixation ?? this.activeFixation,
+    fixationLifespan: fixationLifespan ?? this.fixationLifespan,
+    spatialStance: spatialStance ?? this.spatialStance,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -2438,6 +2571,18 @@ class Session extends DataClass implements Insertable<Session> {
       cooldownTurnsRemaining: data.cooldownTurnsRemaining.present
           ? data.cooldownTurnsRemaining.value
           : this.cooldownTurnsRemaining,
+      trustLevel: data.trustLevel.present
+          ? data.trustLevel.value
+          : this.trustLevel,
+      activeFixation: data.activeFixation.present
+          ? data.activeFixation.value
+          : this.activeFixation,
+      fixationLifespan: data.fixationLifespan.present
+          ? data.fixationLifespan.value
+          : this.fixationLifespan,
+      spatialStance: data.spatialStance.present
+          ? data.spatialStance.value
+          : this.spatialStance,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -2474,6 +2619,10 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('nsfwCooldownEnabled: $nsfwCooldownEnabled, ')
           ..write('arousalLevel: $arousalLevel, ')
           ..write('cooldownTurnsRemaining: $cooldownTurnsRemaining, ')
+          ..write('trustLevel: $trustLevel, ')
+          ..write('activeFixation: $activeFixation, ')
+          ..write('fixationLifespan: $fixationLifespan, ')
+          ..write('spatialStance: $spatialStance, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -2510,6 +2659,10 @@ class Session extends DataClass implements Insertable<Session> {
     nsfwCooldownEnabled,
     arousalLevel,
     cooldownTurnsRemaining,
+    trustLevel,
+    activeFixation,
+    fixationLifespan,
+    spatialStance,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2545,6 +2698,10 @@ class Session extends DataClass implements Insertable<Session> {
           other.nsfwCooldownEnabled == this.nsfwCooldownEnabled &&
           other.arousalLevel == this.arousalLevel &&
           other.cooldownTurnsRemaining == this.cooldownTurnsRemaining &&
+          other.trustLevel == this.trustLevel &&
+          other.activeFixation == this.activeFixation &&
+          other.fixationLifespan == this.fixationLifespan &&
+          other.spatialStance == this.spatialStance &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -2578,6 +2735,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<bool> nsfwCooldownEnabled;
   final Value<int> arousalLevel;
   final Value<int> cooldownTurnsRemaining;
+  final Value<int> trustLevel;
+  final Value<String> activeFixation;
+  final Value<int> fixationLifespan;
+  final Value<String> spatialStance;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -2610,6 +2771,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.nsfwCooldownEnabled = const Value.absent(),
     this.arousalLevel = const Value.absent(),
     this.cooldownTurnsRemaining = const Value.absent(),
+    this.trustLevel = const Value.absent(),
+    this.activeFixation = const Value.absent(),
+    this.fixationLifespan = const Value.absent(),
+    this.spatialStance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2643,6 +2808,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.nsfwCooldownEnabled = const Value.absent(),
     this.arousalLevel = const Value.absent(),
     this.cooldownTurnsRemaining = const Value.absent(),
+    this.trustLevel = const Value.absent(),
+    this.activeFixation = const Value.absent(),
+    this.fixationLifespan = const Value.absent(),
+    this.spatialStance = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2676,6 +2845,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<bool>? nsfwCooldownEnabled,
     Expression<int>? arousalLevel,
     Expression<int>? cooldownTurnsRemaining,
+    Expression<int>? trustLevel,
+    Expression<String>? activeFixation,
+    Expression<int>? fixationLifespan,
+    Expression<String>? spatialStance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2713,6 +2886,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (arousalLevel != null) 'arousal_level': arousalLevel,
       if (cooldownTurnsRemaining != null)
         'cooldown_turns_remaining': cooldownTurnsRemaining,
+      if (trustLevel != null) 'trust_level': trustLevel,
+      if (activeFixation != null) 'active_fixation': activeFixation,
+      if (fixationLifespan != null) 'fixation_lifespan': fixationLifespan,
+      if (spatialStance != null) 'spatial_stance': spatialStance,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2748,6 +2925,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<bool>? nsfwCooldownEnabled,
     Value<int>? arousalLevel,
     Value<int>? cooldownTurnsRemaining,
+    Value<int>? trustLevel,
+    Value<String>? activeFixation,
+    Value<int>? fixationLifespan,
+    Value<String>? spatialStance,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -2784,6 +2965,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       arousalLevel: arousalLevel ?? this.arousalLevel,
       cooldownTurnsRemaining:
           cooldownTurnsRemaining ?? this.cooldownTurnsRemaining,
+      trustLevel: trustLevel ?? this.trustLevel,
+      activeFixation: activeFixation ?? this.activeFixation,
+      fixationLifespan: fixationLifespan ?? this.fixationLifespan,
+      spatialStance: spatialStance ?? this.spatialStance,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -2881,6 +3066,18 @@ class SessionsCompanion extends UpdateCompanion<Session> {
         cooldownTurnsRemaining.value,
       );
     }
+    if (trustLevel.present) {
+      map['trust_level'] = Variable<int>(trustLevel.value);
+    }
+    if (activeFixation.present) {
+      map['active_fixation'] = Variable<String>(activeFixation.value);
+    }
+    if (fixationLifespan.present) {
+      map['fixation_lifespan'] = Variable<int>(fixationLifespan.value);
+    }
+    if (spatialStance.present) {
+      map['spatial_stance'] = Variable<String>(spatialStance.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2926,6 +3123,10 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('nsfwCooldownEnabled: $nsfwCooldownEnabled, ')
           ..write('arousalLevel: $arousalLevel, ')
           ..write('cooldownTurnsRemaining: $cooldownTurnsRemaining, ')
+          ..write('trustLevel: $trustLevel, ')
+          ..write('activeFixation: $activeFixation, ')
+          ..write('fixationLifespan: $fixationLifespan, ')
+          ..write('spatialStance: $spatialStance, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -8651,6 +8852,10 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<bool> nsfwCooldownEnabled,
       Value<int> arousalLevel,
       Value<int> cooldownTurnsRemaining,
+      Value<int> trustLevel,
+      Value<String> activeFixation,
+      Value<int> fixationLifespan,
+      Value<String> spatialStance,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -8685,6 +8890,10 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<bool> nsfwCooldownEnabled,
       Value<int> arousalLevel,
       Value<int> cooldownTurnsRemaining,
+      Value<int> trustLevel,
+      Value<String> activeFixation,
+      Value<int> fixationLifespan,
+      Value<String> spatialStance,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -8832,6 +9041,26 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<int> get cooldownTurnsRemaining => $composableBuilder(
     column: $table.cooldownTurnsRemaining,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get trustLevel => $composableBuilder(
+    column: $table.trustLevel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get activeFixation => $composableBuilder(
+    column: $table.activeFixation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fixationLifespan => $composableBuilder(
+    column: $table.fixationLifespan,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get spatialStance => $composableBuilder(
+    column: $table.spatialStance,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8995,6 +9224,26 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get trustLevel => $composableBuilder(
+    column: $table.trustLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get activeFixation => $composableBuilder(
+    column: $table.activeFixation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fixationLifespan => $composableBuilder(
+    column: $table.fixationLifespan,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get spatialStance => $composableBuilder(
+    column: $table.spatialStance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9141,6 +9390,26 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get trustLevel => $composableBuilder(
+    column: $table.trustLevel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get activeFixation => $composableBuilder(
+    column: $table.activeFixation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get fixationLifespan => $composableBuilder(
+    column: $table.fixationLifespan,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get spatialStance => $composableBuilder(
+    column: $table.spatialStance,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -9206,6 +9475,10 @@ class $$SessionsTableTableManager
                 Value<bool> nsfwCooldownEnabled = const Value.absent(),
                 Value<int> arousalLevel = const Value.absent(),
                 Value<int> cooldownTurnsRemaining = const Value.absent(),
+                Value<int> trustLevel = const Value.absent(),
+                Value<String> activeFixation = const Value.absent(),
+                Value<int> fixationLifespan = const Value.absent(),
+                Value<String> spatialStance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9238,6 +9511,10 @@ class $$SessionsTableTableManager
                 nsfwCooldownEnabled: nsfwCooldownEnabled,
                 arousalLevel: arousalLevel,
                 cooldownTurnsRemaining: cooldownTurnsRemaining,
+                trustLevel: trustLevel,
+                activeFixation: activeFixation,
+                fixationLifespan: fixationLifespan,
+                spatialStance: spatialStance,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -9272,6 +9549,10 @@ class $$SessionsTableTableManager
                 Value<bool> nsfwCooldownEnabled = const Value.absent(),
                 Value<int> arousalLevel = const Value.absent(),
                 Value<int> cooldownTurnsRemaining = const Value.absent(),
+                Value<int> trustLevel = const Value.absent(),
+                Value<String> activeFixation = const Value.absent(),
+                Value<int> fixationLifespan = const Value.absent(),
+                Value<String> spatialStance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9304,6 +9585,10 @@ class $$SessionsTableTableManager
                 nsfwCooldownEnabled: nsfwCooldownEnabled,
                 arousalLevel: arousalLevel,
                 cooldownTurnsRemaining: cooldownTurnsRemaining,
+                trustLevel: trustLevel,
+                activeFixation: activeFixation,
+                fixationLifespan: fixationLifespan,
+                spatialStance: spatialStance,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,

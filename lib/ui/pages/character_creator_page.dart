@@ -443,7 +443,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   static const _thighOptions = ['Slim', 'Average', 'Thick', 'Thunder'];
   static const _hipOptions = ['Narrow', 'Average', 'Wide', 'Extra Wide'];
   static const _shoulderOptions = ['Narrow', 'Average', 'Broad', 'V-Shape'];
-  static const _waistOptions = ['Thick', 'Average', 'Narrow', 'Wasp'];
+  static const _waistOptions = ['Wasp', 'Narrow', 'Average', 'Thick'];
 
   // ── NSFW Options ──
   static const _chestSizes = ['Flat', 'Small', 'Medium', 'Large', 'Huge'];
@@ -2486,7 +2486,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _inputLabel('Sex', required: false),
+                        _inputLabel('Gender', required: false),
                         const SizedBox(height: 8),
                         _styledTextField(controller: _sexController, hint: 'e.g. Female, Male...', maxLines: 1),
                       ],
@@ -3039,7 +3039,12 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                     Row(
                       children: [
                         const Text('Depth:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 4),
+                        const Tooltip(
+                          message: 'Controls how many consecutive generation steps the Lore Engine processes. Deep = more expansive lore structure but longer wait time.',
+                          child: Icon(Icons.info_outline, size: 14, color: Colors.white38),
+                        ),
+                        const SizedBox(width: 8),
                         ..._loreDepths.map((depth) {
                           final isSelected = _loreDepth == depth;
                           final count = depth == 'Light' ? '3-4' : depth == 'Deep' ? '10-15' : '5-8';
@@ -3389,7 +3394,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _inputLabel('Sex', required: false),
+                        _inputLabel('Gender', required: false),
                         const SizedBox(height: 8),
                         _styledTextField(
                           controller: _sexController,
@@ -3793,7 +3798,12 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                       Row(
                         children: [
                           const Text('Depth:', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 4),
+                          const Tooltip(
+                            message: 'Controls how many consecutive generation steps the Lore Engine processes. Deep = more expansive lore structure but longer wait time.',
+                            child: Icon(Icons.info_outline, size: 14, color: Colors.white38),
+                          ),
+                          const SizedBox(width: 8),
                           ..._loreDepths.map((depth) {
                             final isSelected = _loreDepth == depth;
                             final count = depth == 'Light' ? '3-4' : depth == 'Deep' ? '10-15' : '5-8';
