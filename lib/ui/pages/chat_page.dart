@@ -5676,55 +5676,7 @@ class _RealismSectionState extends State<_RealismSection> {
                         const SizedBox(height: 12),
                       ],
 
-                      if (chat.nsfwCooldownEnabled) ...[
-                        // ── Lust ──
-                        Row(
-                          children: [
-                            Icon(
-                              chat.arousalLevel >= 4 ? Icons.local_fire_department
-                                  : chat.arousalLevel <= -1 ? Icons.ac_unit
-                                  : Icons.favorite_border,
-                              size: 13,
-                              color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
-                                  : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
-                                  : Colors.white38,
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                'Lust: ${chat.arousalLevel >= 9 ? 'Feverish' : chat.arousalLevel >= 6 ? 'Heavy' : chat.arousalLevel >= 3 ? 'Mild' : chat.arousalLevel < 0 ? 'Deadened' : 'Dormant'}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
-                                      : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
-                                      : Colors.white54,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${chat.arousalLevel.clamp(0, 10)}/10',
-                              style: const TextStyle(fontSize: 10, color: Colors.white38),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: (chat.arousalLevel / 10).clamp(0.0, 1.0),
-                            minHeight: 4,
-                            backgroundColor: Colors.white10,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
-                                  : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
-                                  : Colors.white30,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+
 
                       // ── Time of Day ──
                       Row(
@@ -5776,35 +5728,119 @@ class _RealismSectionState extends State<_RealismSection> {
                       ),
                       const SizedBox(height: 12),
 
-                      // ── NSFW Cooldown ──
-                      Row(
-                        children: [
-                          const Icon(Icons.timer, size: 13, color: Colors.white38),
-                          const SizedBox(width: 5),
-                          const Text(
-                            'NSFW Cooldown',
-                            style: TextStyle(fontSize: 12, color: Colors.white54),
+                      // ── NSFW Enhancements Submenu ──
+                      Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 14, color: Colors.deepOrangeAccent),
+                              SizedBox(width: 5),
+                              Text(
+                                'NSFW Enhancements',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.deepOrangeAccent),
+                              ),
+                            ],
                           ),
-                          const Spacer(),
-                          SizedBox(
-                            height: 20,
-                            child: Switch(
-                              value: chat.nsfwCooldownEnabled,
-                              activeColor: Colors.deepOrangeAccent,
-                              onChanged: chat.isGenerating ? null : (val) {
-                                chat.setNsfwCooldownEnabled(val);
-                              },
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.deepOrange.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.deepOrange.withOpacity(0.2)),
+                              ),
+                              child: Column(
+                                children: [
+                                  // ── Lust ──
+                                  if (chat.nsfwCooldownEnabled) ...[
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          chat.arousalLevel >= 4 ? Icons.local_fire_department
+                                              : chat.arousalLevel <= -1 ? Icons.ac_unit
+                                              : Icons.favorite_border,
+                                          size: 13,
+                                          color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                              : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                              : Colors.white38,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Expanded(
+                                          child: Text(
+                                            'Lust: ${chat.arousalLevel >= 9 ? 'Feverish' : chat.arousalLevel >= 6 ? 'Heavy' : chat.arousalLevel >= 3 ? 'Mild' : chat.arousalLevel < 0 ? 'Deadened' : 'Dormant'}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                                  : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                                  : Colors.white54,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '${chat.arousalLevel.clamp(0, 10)}/10',
+                                          style: const TextStyle(fontSize: 10, color: Colors.white38),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: LinearProgressIndicator(
+                                        value: (chat.arousalLevel / 10).clamp(0.0, 1.0),
+                                        minHeight: 4,
+                                        backgroundColor: Colors.white10,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          chat.arousalLevel >= 4 ? Colors.deepOrangeAccent
+                                              : chat.arousalLevel <= -1 ? Colors.lightBlueAccent
+                                              : Colors.white30,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
+
+                                  // ── Cum Cooldown ──
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.timer, size: 13, color: Colors.white38),
+                                      const SizedBox(width: 5),
+                                      const Text(
+                                        'Cum Cooldown',
+                                        style: TextStyle(fontSize: 12, color: Colors.white54),
+                                      ),
+                                      const Spacer(),
+                                      SizedBox(
+                                        height: 20,
+                                        child: Switch(
+                                          value: chat.nsfwCooldownEnabled,
+                                          activeColor: Colors.deepOrangeAccent,
+                                          onChanged: chat.isGenerating ? null : (val) {
+                                            chat.setNsfwCooldownEnabled(val);
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (chat.nsfwCooldownEnabled && chat.cooldownTurnsRemaining > 0) ...[
+                                    const SizedBox(height: 4),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        '⏳ Cooling down... ${chat.cooldownTurnsRemaining} turns',
+                                        style: const TextStyle(fontSize: 11, color: Colors.deepOrangeAccent),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      if (chat.nsfwCooldownEnabled && chat.cooldownTurnsRemaining > 0) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '⏳ Cooling down... ${chat.cooldownTurnsRemaining} turns',
-                          style: const TextStyle(fontSize: 11, color: Colors.deepOrangeAccent),
+                          ],
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
