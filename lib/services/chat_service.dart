@@ -551,6 +551,51 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  int get trustLevel => _trustLevel;
+  int get trustTier => _calculateTier(_trustLevel);
+
+  String get trustTierName {
+    switch (trustTier) {
+      case 5: return 'Blind Trust';
+      case 4: return 'Implicit Trust';
+      case 3: return 'Deeply Trusting';
+      case 2: return 'Trusting';
+      case 1: return 'Benefit of Doubt';
+      case 0: return 'Neutral / Guarded';
+      case -1: return 'Wary';
+      case -2: return 'Suspicious';
+      case -3: return 'Distrustful';
+      case -4: return 'Paranoid';
+      case -5: return 'Absolute Distrust';
+      default: return 'Unknown';
+    }
+  }
+
+  int get trustProgressBase {
+    final absScore = _trustLevel.abs();
+    if (absScore < 10) return 0;
+    if (absScore < 25) return 10;
+    if (absScore < 45) return 25;
+    if (absScore < 70) return 45;
+    if (absScore < 100) return 70;
+    return 100;
+  }
+
+  int get trustProgressTarget {
+    final absScore = _trustLevel.abs();
+    if (absScore < 10) return 10;
+    if (absScore < 25) return 25;
+    if (absScore < 45) return 45;
+    if (absScore < 70) return 70;
+    return 100;
+  }
+
+  double get trustProgressPercent {
+    final current = _trustLevel.abs() - trustProgressBase;
+    final total = trustProgressTarget - trustProgressBase;
+    return (current / total).clamp(0.0, 1.0);
+  }
+
   /// Human-readable mood label containing exact emotion string and valence direction.
   String get moodLabel {
     String directionalLabel;

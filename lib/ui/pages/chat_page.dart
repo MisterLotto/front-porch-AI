@@ -5557,6 +5557,47 @@ class _RealismSectionState extends State<_RealismSection> {
                       ),
                       const SizedBox(height: 12),
 
+                      // ── Trust / Distrust ──
+                      Tooltip(
+                        message: 'Trust: Paranoia vs absolute faith. Dictates whether the character questions your motives or readily believes you.',
+                        child: Row(
+                          children: [
+                            Icon(
+                              chat.trustLevel < 0 ? Icons.vpn_key_off : Icons.vpn_key,
+                              size: 13,
+                              color: chat.trustLevel < 0 ? Colors.redAccent : Colors.amber,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Trust: ${chat.trustTierName}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: chat.trustLevel < 0 ? Colors.redAccent : Colors.amber,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${chat.trustLevel.abs()}/${chat.trustProgressTarget}',
+                              style: const TextStyle(fontSize: 10, color: Colors.white38),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: LinearProgressIndicator(
+                          value: chat.trustProgressPercent,
+                          minHeight: 5,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            chat.trustLevel < 0 ? Colors.redAccent : Colors.amber,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
                       // ── Mood ──
                       Row(
                         children: [
