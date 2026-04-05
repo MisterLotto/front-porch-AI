@@ -121,7 +121,22 @@ Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero Gene
 
 > **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
 
-## 🆕 What's New in V0.9.6.3
+## 🆕 What's New in V0.9.6.4
+
+This update brings critical quality-of-life enhancements to the text input experience and visualizes the complex inner workings of the Realism Engine.
+
+**🖥️ Realism Engine Streaming UI**
+*   **Live Evaluation Overlay:** The Realism Engine no longer thinks in the dark! During deeply complex emotional and timeline evaluations, a stunning, glassmorphic processing overlay now streams the LLM's raw JSON tokens live to your screen. This transparent, auto-scrolling terminal window cleanly visualizes exactly how the engine is weighting the character's internal state in real-time.
+*   **Fixation Tuning:** We gracefully lowered the priority of the *Fixation Engine* prompt, ensuring characters treat their active fixations as a subtle, ambient background thought rather than aggressively hijacking every conversation.
+
+**✍️ Native Desktop Spell Checking**
+*   **True Native Integration:** Completely bypassed Flutter's notoriously unreliable desktop spell check defaults. Front Porch AI now utilizes a custom native method channel to directly invoke **`NSSpellChecker` on macOS** and **`ISpellChecker` on Windows**.
+*   **Flawless Corrections:** Expect flawless, system-level accurate red underlines and right-click context menu spelling corrections across the Chat Input, Character Creator, and Settings pages.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.9.6.3
 
 This update introduces **Realism Engine 2.0**, bringing deep, RPG-style progression to your characters alongside significant quality-of-life UI improvements!
 
@@ -139,14 +154,6 @@ This update introduces **Realism Engine 2.0**, bringing deep, RPG-style progress
 
 **🧠 Fault-Tolerant AI Generator**
 *   **JSON Sanitation & Auto-Retries:** Under the hood, the AI Character Creator is significantly smarter when dealing with quirky local models. We implemented an automatic regex sanitization pipeline and a seamless, invisible 2-attempt retry loop that actively catches and repairs truncated or malformed JSON formats natively!
-
-
-
-
-
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### What's New in V0.9.6.2
 
