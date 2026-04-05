@@ -41,22 +41,20 @@ std::string Utf16ToUtf8(const std::wstring& utf16) {
   return utf8;
 }
 
-class SpellCheckPluginImpl : public flutter::Plugin {
+class SpellCheckPluginImpl {
  public:
-  static void RegisterWithRegistrar(flutter::PluginRegistrarWindows* registrar) {
+  static void RegisterWithMessenger(flutter::BinaryMessenger* messenger) {
     auto channel =
         std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-            registrar->messenger(), "front_porch_ai/spell_check",
+            messenger, "front_porch_ai/spell_check",
             &flutter::StandardMethodCodec::GetInstance());
 
-    auto plugin = std::make_unique<SpellCheckPluginImpl>();
+    auto plugin = std::make_shared<SpellCheckPluginImpl>();
 
     channel->SetMethodCallHandler(
-        [plugin_pointer = plugin.get()](const auto& call, auto result) {
-          plugin_pointer->HandleMethodCall(call, std::move(result));
+        [plugin](const auto& call, auto result) {
+          plugin->HandleMethodCall(call, std::move(result));
         });
-
-    registrar->AddPlugin(std::move(plugin));
   }
 
   SpellCheckPluginImpl() {
@@ -167,7 +165,7 @@ class SpellCheckPluginImpl : public flutter::Plugin {
 
 }  // namespace
 
-void SpellCheckPlugin::RegisterWithRegistrar(
-    flutter::PluginRegistrarWindows* registrar) {
-  SpellCheckPluginImpl::RegisterWithRegistrar(registrar);
+void SpellCheckPlugin::RegisterWithMessenger(
+    flutter::BinaryMessenger* messenger) {
+  SpellCheckPluginImpl::RegisterWithMessenger(messenger);
 }

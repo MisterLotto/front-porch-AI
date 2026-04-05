@@ -4,7 +4,7 @@
 #ifndef RUNNER_SPELL_CHECK_PLUGIN_H_
 #define RUNNER_SPELL_CHECK_PLUGIN_H_
 
-#include <flutter/plugin_registrar_windows.h>
+#include <flutter/binary_messenger.h>
 
 /// Registers the spell-check method-channel plugin with the Flutter engine.
 ///
@@ -13,8 +13,7 @@
 /// available on Windows 8+).
 class SpellCheckPlugin {
  public:
-  static void RegisterWithRegistrar(
-      flutter::PluginRegistrarWindows* registrar);
+  static void RegisterWithMessenger(flutter::BinaryMessenger* messenger);
 };
 
 #endif  // RUNNER_SPELL_CHECK_PLUGIN_H_
