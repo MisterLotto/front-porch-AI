@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/models/story_project.dart';
 import 'package:front_porch_ai/models/character_card.dart';
@@ -476,7 +477,7 @@ class _StorySetupPageState extends State<StorySetupPage> {
   }
 
   Widget _buildTextField(TextEditingController ctrl, String hint, {int maxLines = 1}) {
-    return TextField(
+    return AppTextField(
       controller: ctrl,
       maxLines: maxLines,
       style: const TextStyle(color: Colors.white),

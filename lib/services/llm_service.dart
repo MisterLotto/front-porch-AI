@@ -35,6 +35,10 @@ class GenerationParams {
   final bool reasoningEnabled;
   final String reasoningEffort;
   final List<String>? bannedPhrases;
+  /// Optional GBNF grammar string for constrained JSON output (KoboldCPP local only).
+  /// Never set this when reasoning/thinking mode is active — the <think> block
+  /// tokens would be illegal under the grammar and break generation.
+  final String? grammar;
 
   const GenerationParams({
     required this.prompt,
@@ -52,6 +56,7 @@ class GenerationParams {
     this.reasoningEnabled = false,
     this.reasoningEffort = 'medium',
     this.bannedPhrases,
+    this.grammar,
   });
 }
 

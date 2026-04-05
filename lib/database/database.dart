@@ -99,6 +99,7 @@ class Sessions extends Table {
   TextColumn get activeFixation => text().withDefault(const Constant(''))(); // ongoing obsession topic
   IntColumn get fixationLifespan => integer().withDefault(const Constant(0))(); // decay turns
   TextColumn get spatialStance => text().withDefault(const Constant(''))(); // physical anchor
+  BoolColumn get trustRepairPending => boolean().withDefault(const Constant(false))(); // repair window armed after severe trust drop
   
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -372,7 +373,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -591,6 +592,12 @@ class AppDatabase extends _$AppDatabase {
         } catch (_) {}
         try {
           await customStatement("ALTER TABLE sessions ADD COLUMN spatial_stance TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+      }
+      if (from < 18) {
+        // v17→v18: add trust repair window flag
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN trust_repair_pending INTEGER NOT NULL DEFAULT 0');
         } catch (_) {}
       }
     },

@@ -27,6 +27,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 
 /// Dialog for managing Data Bank entries (per-character knowledge base).
 /// Supports manual text entry and file import (txt, md, json, csv, pdf).
@@ -539,7 +540,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white70),
           ),
           const SizedBox(height: 12),
-          TextField(
+          AppTextField(
             controller: _titleController,
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
@@ -555,7 +556,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: _contentController,
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: const InputDecoration(

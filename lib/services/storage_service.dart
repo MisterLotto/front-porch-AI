@@ -193,6 +193,9 @@ class StorageService extends ChangeNotifier {
   bool _characterEvolutionEnabled = false;
   int _evolutionInterval = 20; // evolve every N user messages
 
+  // Realism Engine performance settings
+  bool _realismOneShotEval = false; // fuse relationship + scene eval into one LLM call
+
   // Getters
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
@@ -290,6 +293,7 @@ class StorageService extends ChangeNotifier {
   int get autoPersonaInterval => _autoPersonaInterval;
   bool get characterEvolutionEnabled => _characterEvolutionEnabled;
   int get evolutionInterval => _evolutionInterval;
+  bool get realismOneShotEval => _realismOneShotEval;
 
   StorageService() {
     _init();
@@ -449,6 +453,9 @@ class StorageService extends ChangeNotifier {
     // Character evolution settings
     _characterEvolutionEnabled = _prefs?.getBool('character_evolution_enabled') ?? false;
     _evolutionInterval = _prefs?.getInt('evolution_interval') ?? 20;
+
+    // Realism Engine performance settings
+    _realismOneShotEval = _prefs?.getBool('realism_one_shot_eval') ?? false;
 
     // Load saved prompts
     final promptsJson = _prefs?.getString('saved_prompts');
@@ -1147,6 +1154,12 @@ class StorageService extends ChangeNotifier {
   Future<void> setEvolutionInterval(int value) async {
     _evolutionInterval = value.clamp(10, 50);
     await _prefs?.setInt('evolution_interval', _evolutionInterval);
+    notifyListeners();
+  }
+
+  Future<void> setRealismOneShotEval(bool value) async {
+    _realismOneShotEval = value;
+    await _prefs?.setBool('realism_one_shot_eval', value);
     notifyListeners();
   }
 }

@@ -16,65 +16,51 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:ui' show Locale;
-import 'package:flutter/services.dart';
-import 'package:simple_spell_checker/simple_spell_checker.dart';
-import 'package:simple_spell_checker_en_lan/simple_spell_checker_en_lan.dart';
+import 'dart:ui' show Locale, TextRange;
 
-/// Custom [SpellCheckService] for Linux and Windows desktop,
-/// powered by [SimpleSpellChecker] with a bundled English dictionary.
-class DesktopSpellCheckService extends SpellCheckService {
-  static bool _registered = false;
-  late final _SpellCheckerHelper _checker;
+import 'package:flutter/services.dart'
+    show MethodChannel, SpellCheckService, SuggestionSpan;
 
-  DesktopSpellCheckService() {
-    if (!_registered) {
-      SimpleSpellCheckerEnRegister.registerLan();
-      _registered = true;
-    }
-    _checker = _SpellCheckerHelper(language: 'en', caseSensitive: false);
-  }
-
-  // Simple word boundary regex — matches alphabetical words and contractions
-  static final _wordPattern = RegExp(r"[a-zA-Z']+");
+/// A [SpellCheckService] backed by the native macOS `NSSpellChecker` and Windows `ISpellChecker` APIs.
+///
+/// Communicates with `SpellCheckPlugin` (Swift/C++) over the
+/// `front_porch_ai/spell_check` method channel.
+///
+/// This is the correct spell-check approach for macOS and Windows desktop Flutter apps.
+/// Flutter's built-in [DefaultSpellCheckService] is documented as
+/// "currently only supported by Android and iOS" and returns empty results
+/// on desktop. Flutter's `nativeSpellCheckServiceDefined` path requires the
+/// Flutter engine to register a native handler, which is unreliable on
+/// desktop. Calling the native APIs directly via a method channel
+/// bypasses both limitations.
+class DesktopSpellCheckService implements SpellCheckService {
+  static const _channel = MethodChannel('front_porch_ai/spell_check');
 
   @override
   Future<List<SuggestionSpan>?> fetchSpellCheckSuggestions(
     Locale locale,
     String text,
   ) async {
-    if (text.trim().isEmpty) return null;
+    try {
+      final rawResults = await _channel.invokeMethod<List<dynamic>>(
+        'spellCheck',
+        <String>[locale.toLanguageTag(), text],
+      );
+      if (rawResults == null) return null;
 
-    final suggestions = <SuggestionSpan>[];
-
-    for (final match in _wordPattern.allMatches(text)) {
-      final word = match.group(0)!;
-      // Skip very short words (1-2 chars) to reduce false positives
-      if (word.length <= 2) continue;
-      // Skip words that are all apostrophes
-      if (word.replaceAll("'", '').isEmpty) continue;
-
-      if (!_checker.checkWord(word)) {
-        suggestions.add(
-          SuggestionSpan(
-            TextRange(start: match.start, end: match.end),
-            <String>[], // No suggestions — just highlighting
+      return rawResults.map((dynamic item) {
+        final map = item as Map<dynamic, dynamic>;
+        return SuggestionSpan(
+          TextRange(
+            start: map['startIndex'] as int,
+            end:   map['endIndex']   as int,
           ),
+          (map['suggestions'] as List<dynamic>).cast<String>(),
         );
-      }
+      }).toList();
+    } catch (_) {
+      // Channel not registered (non-macOS build) or NSSpellChecker error.
+      return null;
     }
-
-    return suggestions.isEmpty ? null : suggestions;
   }
-
-  void dispose() {
-    _checker.dispose();
-  }
-}
-
-/// Subclass to expose the @protected [isWordValid] method.
-class _SpellCheckerHelper extends SimpleSpellChecker {
-  _SpellCheckerHelper({required super.language, super.caseSensitive});
-
-  bool checkWord(String word) => isWordValid(word);
 }

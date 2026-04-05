@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 
 class CreateCharacterPage extends StatefulWidget {
   const CreateCharacterPage({super.key});
@@ -231,9 +232,9 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
               ),
               const Divider(height: 1, color: Colors.white12),
               Expanded(
-                child: Padding(
+                  child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: TextField(
+                  child: AppTextField(
                     controller: expandedController,
                     maxLines: null,
                     expands: true,
@@ -559,10 +560,15 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
           ],
         ),
         const SizedBox(height: 8),
+        // TextFormField is used here to retain the `validator` integration with
+        // the enclosing Form widget. Spell check is applied explicitly since
+        // AppTextField wraps TextField (not TextFormField).
         TextFormField(
           controller: controller,
           maxLines: maxLines,
           validator: validator,
+          spellCheckConfiguration: AppTextField.platformSpellCheck(),
+          contextMenuBuilder: AppTextField.spellCheckContextMenuBuilder,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hint,

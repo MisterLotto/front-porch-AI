@@ -218,6 +218,7 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
     double xtcProbability = 0.5,
     List<String>? stopSequences,
     List<String>? bannedPhrases,
+    String? grammar,
   }) async* {
     final uri = Uri.parse('$_baseUrl/api/extra/generate/stream');
     final Map<String, dynamic> payload = {
@@ -250,6 +251,11 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
     // Anti-slop phrase banning (KoboldCpp-specific)
     if (bannedPhrases != null && bannedPhrases.isNotEmpty) {
       payload['banned_tokens'] = bannedPhrases;
+    }
+
+    // GBNF grammar-constrained output (KoboldCpp-specific, local non-thinking models only)
+    if (grammar != null && grammar.isNotEmpty) {
+      payload['grammar'] = grammar;
     }
 
     final request = http.Request('POST', uri);
@@ -306,6 +312,7 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
       xtcProbability: params.xtcProbability,
       stopSequences: params.stopSequences,
       bannedPhrases: params.bannedPhrases,
+      grammar: params.grammar,
     );
   }
 

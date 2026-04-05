@@ -26,6 +26,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/ui/pages/story_structure_page.dart';
 import 'package:front_porch_ai/ui/pages/story_reader_page.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/services/epub_generator_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 
@@ -801,7 +802,7 @@ class _StoryDashboardPageState extends State<StoryDashboardPage> {
               children: [
                 Text('Title', style: TextStyle(color: Colors.indigo.shade300, fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                TextField(
+                AppTextField(
                   controller: _actTitleControllers[index],
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   onChanged: (_) => setState(() {}),
@@ -815,7 +816,7 @@ class _StoryDashboardPageState extends State<StoryDashboardPage> {
                 const SizedBox(height: 12),
                 Text('Description', style: TextStyle(color: Colors.indigo.shade300, fontSize: 12, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                TextField(
+                AppTextField(
                   controller: _actDescControllers[index],
                   style: const TextStyle(color: Colors.white70, fontSize: 13),
                   maxLines: 8,

@@ -37,6 +37,7 @@ import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 
 /// Creator mode selection.
 enum CreatorMode { automated, guided, quick }
@@ -4280,7 +4281,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
     bool readOnly = false,
     bool enabled = true,
   }) {
-    return TextField(
+    return AppTextField(
       controller: controller,
       readOnly: readOnly,
       enabled: enabled,
@@ -4724,7 +4725,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         children: [
           Text(label, style: const TextStyle(color: Colors.blueAccent, fontSize: 13, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          TextField(
+          AppTextField(
             controller: controller,
             maxLines: maxLines,
             style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5),

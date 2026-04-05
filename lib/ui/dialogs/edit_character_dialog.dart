@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
@@ -204,7 +205,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: TextField(
+                  child: AppTextField(
                     controller: expandedController,
                     maxLines: null,
                     expands: true,
@@ -374,16 +375,16 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                      ),
                    ),
                    const SizedBox(height: 16),
-                   TextField(
-                     controller: contentController,
-                     maxLines: 5,
-                     style: const TextStyle(color: Colors.white),
-                     decoration: const InputDecoration(
-                       labelText: 'Content',
-                       filled: true,
-                       fillColor: Colors.black26,
-                     ),
-                   ),
+                    AppTextField(
+                      controller: contentController,
+                      maxLines: 5,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Content',
+                        filled: true,
+                        fillColor: Colors.black26,
+                      ),
+                    ),
                  ],
                ),
              ),
@@ -818,7 +819,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
           ],
         ),
         const SizedBox(height: 6),
-        TextField(
+        AppTextField(
           controller: controller,
           maxLines: maxLines,
           style: const TextStyle(color: Colors.white),

@@ -1640,6 +1640,20 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _trustRepairPendingMeta =
+      const VerificationMeta('trustRepairPending');
+  @override
+  late final GeneratedColumn<bool> trustRepairPending = GeneratedColumn<bool>(
+    'trust_repair_pending',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("trust_repair_pending" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1708,6 +1722,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     activeFixation,
     fixationLifespan,
     spatialStance,
+    trustRepairPending,
     createdAt,
     updatedAt,
     deletedAt,
@@ -1975,6 +1990,15 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('trust_repair_pending')) {
+      context.handle(
+        _trustRepairPendingMeta,
+        trustRepairPending.isAcceptableOrUnknown(
+          data['trust_repair_pending']!,
+          _trustRepairPendingMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2126,6 +2150,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}spatial_stance'],
       )!,
+      trustRepairPending: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}trust_repair_pending'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2179,6 +2207,7 @@ class Session extends DataClass implements Insertable<Session> {
   final String activeFixation;
   final int fixationLifespan;
   final String spatialStance;
+  final bool trustRepairPending;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -2214,6 +2243,7 @@ class Session extends DataClass implements Insertable<Session> {
     required this.activeFixation,
     required this.fixationLifespan,
     required this.spatialStance,
+    required this.trustRepairPending,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -2268,6 +2298,7 @@ class Session extends DataClass implements Insertable<Session> {
     map['active_fixation'] = Variable<String>(activeFixation);
     map['fixation_lifespan'] = Variable<int>(fixationLifespan);
     map['spatial_stance'] = Variable<String>(spatialStance);
+    map['trust_repair_pending'] = Variable<bool>(trustRepairPending);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -2323,6 +2354,7 @@ class Session extends DataClass implements Insertable<Session> {
       activeFixation: Value(activeFixation),
       fixationLifespan: Value(fixationLifespan),
       spatialStance: Value(spatialStance),
+      trustRepairPending: Value(trustRepairPending),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -2376,6 +2408,7 @@ class Session extends DataClass implements Insertable<Session> {
       activeFixation: serializer.fromJson<String>(json['activeFixation']),
       fixationLifespan: serializer.fromJson<int>(json['fixationLifespan']),
       spatialStance: serializer.fromJson<String>(json['spatialStance']),
+      trustRepairPending: serializer.fromJson<bool>(json['trustRepairPending']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -2418,6 +2451,7 @@ class Session extends DataClass implements Insertable<Session> {
       'activeFixation': serializer.toJson<String>(activeFixation),
       'fixationLifespan': serializer.toJson<int>(fixationLifespan),
       'spatialStance': serializer.toJson<String>(spatialStance),
+      'trustRepairPending': serializer.toJson<bool>(trustRepairPending),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -2456,6 +2490,7 @@ class Session extends DataClass implements Insertable<Session> {
     String? activeFixation,
     int? fixationLifespan,
     String? spatialStance,
+    bool? trustRepairPending,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -2498,6 +2533,7 @@ class Session extends DataClass implements Insertable<Session> {
     activeFixation: activeFixation ?? this.activeFixation,
     fixationLifespan: fixationLifespan ?? this.fixationLifespan,
     spatialStance: spatialStance ?? this.spatialStance,
+    trustRepairPending: trustRepairPending ?? this.trustRepairPending,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -2583,6 +2619,9 @@ class Session extends DataClass implements Insertable<Session> {
       spatialStance: data.spatialStance.present
           ? data.spatialStance.value
           : this.spatialStance,
+      trustRepairPending: data.trustRepairPending.present
+          ? data.trustRepairPending.value
+          : this.trustRepairPending,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -2623,6 +2662,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('activeFixation: $activeFixation, ')
           ..write('fixationLifespan: $fixationLifespan, ')
           ..write('spatialStance: $spatialStance, ')
+          ..write('trustRepairPending: $trustRepairPending, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -2663,6 +2703,7 @@ class Session extends DataClass implements Insertable<Session> {
     activeFixation,
     fixationLifespan,
     spatialStance,
+    trustRepairPending,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2702,6 +2743,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.activeFixation == this.activeFixation &&
           other.fixationLifespan == this.fixationLifespan &&
           other.spatialStance == this.spatialStance &&
+          other.trustRepairPending == this.trustRepairPending &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -2739,6 +2781,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String> activeFixation;
   final Value<int> fixationLifespan;
   final Value<String> spatialStance;
+  final Value<bool> trustRepairPending;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -2775,6 +2818,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.activeFixation = const Value.absent(),
     this.fixationLifespan = const Value.absent(),
     this.spatialStance = const Value.absent(),
+    this.trustRepairPending = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2812,6 +2856,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.activeFixation = const Value.absent(),
     this.fixationLifespan = const Value.absent(),
     this.spatialStance = const Value.absent(),
+    this.trustRepairPending = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2849,6 +2894,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? activeFixation,
     Expression<int>? fixationLifespan,
     Expression<String>? spatialStance,
+    Expression<bool>? trustRepairPending,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2890,6 +2936,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (activeFixation != null) 'active_fixation': activeFixation,
       if (fixationLifespan != null) 'fixation_lifespan': fixationLifespan,
       if (spatialStance != null) 'spatial_stance': spatialStance,
+      if (trustRepairPending != null)
+        'trust_repair_pending': trustRepairPending,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2929,6 +2977,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String>? activeFixation,
     Value<int>? fixationLifespan,
     Value<String>? spatialStance,
+    Value<bool>? trustRepairPending,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -2969,6 +3018,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       activeFixation: activeFixation ?? this.activeFixation,
       fixationLifespan: fixationLifespan ?? this.fixationLifespan,
       spatialStance: spatialStance ?? this.spatialStance,
+      trustRepairPending: trustRepairPending ?? this.trustRepairPending,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -3078,6 +3128,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (spatialStance.present) {
       map['spatial_stance'] = Variable<String>(spatialStance.value);
     }
+    if (trustRepairPending.present) {
+      map['trust_repair_pending'] = Variable<bool>(trustRepairPending.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3127,6 +3180,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('activeFixation: $activeFixation, ')
           ..write('fixationLifespan: $fixationLifespan, ')
           ..write('spatialStance: $spatialStance, ')
+          ..write('trustRepairPending: $trustRepairPending, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -8856,6 +8910,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String> activeFixation,
       Value<int> fixationLifespan,
       Value<String> spatialStance,
+      Value<bool> trustRepairPending,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -8894,6 +8949,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String> activeFixation,
       Value<int> fixationLifespan,
       Value<String> spatialStance,
+      Value<bool> trustRepairPending,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -9061,6 +9117,11 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<String> get spatialStance => $composableBuilder(
     column: $table.spatialStance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get trustRepairPending => $composableBuilder(
+    column: $table.trustRepairPending,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9244,6 +9305,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get trustRepairPending => $composableBuilder(
+    column: $table.trustRepairPending,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9410,6 +9476,11 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get trustRepairPending => $composableBuilder(
+    column: $table.trustRepairPending,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -9479,6 +9550,7 @@ class $$SessionsTableTableManager
                 Value<String> activeFixation = const Value.absent(),
                 Value<int> fixationLifespan = const Value.absent(),
                 Value<String> spatialStance = const Value.absent(),
+                Value<bool> trustRepairPending = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9515,6 +9587,7 @@ class $$SessionsTableTableManager
                 activeFixation: activeFixation,
                 fixationLifespan: fixationLifespan,
                 spatialStance: spatialStance,
+                trustRepairPending: trustRepairPending,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -9553,6 +9626,7 @@ class $$SessionsTableTableManager
                 Value<String> activeFixation = const Value.absent(),
                 Value<int> fixationLifespan = const Value.absent(),
                 Value<String> spatialStance = const Value.absent(),
+                Value<bool> trustRepairPending = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9589,6 +9663,7 @@ class $$SessionsTableTableManager
                 activeFixation: activeFixation,
                 fixationLifespan: fixationLifespan,
                 spatialStance: spatialStance,
+                trustRepairPending: trustRepairPending,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,

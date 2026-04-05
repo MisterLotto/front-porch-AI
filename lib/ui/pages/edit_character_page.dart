@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
@@ -239,9 +240,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               const Divider(height: 1, color: Colors.white12),
               Expanded(
-                child: Padding(
+                  child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: TextField(
+                  child: AppTextField(
                     controller: expandedController,
                     maxLines: null,
                     expands: true,
@@ -404,7 +405,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                      ),
                    ],
                    const SizedBox(height: 8),
-                   TextField(
+                   AppTextField(
                      controller: keyController,
                      enabled: !isConstant,
                      decoration: InputDecoration(
@@ -413,11 +414,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                      ),
                    ),
                    const SizedBox(height: 8),
-                   TextField(
-                     controller: contentController,
-                     decoration: const InputDecoration(labelText: 'Content'),
-                     maxLines: 5,
-                   ),
+                    AppTextField(
+                      controller: contentController,
+                      decoration: const InputDecoration(labelText: 'Content'),
+                      maxLines: 5,
+                    ),
                  ],
                ),
              ),
@@ -856,7 +857,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           ],
         ),
         const SizedBox(height: 8),
-        TextField(
+        AppTextField(
           controller: controller,
           maxLines: maxLines,
           style: const TextStyle(color: Colors.white),

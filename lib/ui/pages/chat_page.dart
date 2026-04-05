@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:ui';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
@@ -31,6 +32,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/background_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
@@ -486,6 +488,101 @@ class _ChatPageState extends State<ChatPage> {
                   },
                 ),
               ),
+            // Realism Engine processing overlay
+            if (chatService.isEvaluatingRealism)
+              Positioned.fill(
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.4), // Subtle dim over the blur
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 800, maxHeight: 600),
+                          child: Container(
+                            padding: const EdgeInsets.all(32),
+                            margin: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  const Color(0xFF1E293B).withOpacity(0.85),
+                                  const Color(0xFF0F172A).withOpacity(0.95),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.cyanAccent.withOpacity(0.2), width: 1.5),
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withOpacity(0.6), blurRadius: 40, offset: const Offset(0, 20)),
+                                BoxShadow(color: Colors.cyanAccent.withOpacity(0.04), blurRadius: 60, spreadRadius: 10),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(color: Colors.cyanAccent, strokeWidth: 2.5),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    const Icon(Icons.psychology, color: Colors.cyanAccent, size: 28),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Realism Engine Processing',
+                                      style: TextStyle(
+                                        fontSize: 20, 
+                                        color: Colors.white, 
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 32),
+                                Flexible(
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF020617).withOpacity(0.7), // Pitch dark for contrast
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                    ),
+                                    child: ListView(
+                                      reverse: true, // Auto-scrolls from bottom up
+                                      children: [
+                                        Text(
+                                          chatService.realismEvalStreamText.isEmpty
+                                              ? 'Initializing advanced evaluator...'
+                                              : chatService.realismEvalStreamText,
+                                          style: TextStyle(
+                                            color: Colors.cyanAccent.shade100, // Very readable crisp code color
+                                            fontSize: 14,
+                                            fontFamily: 'monospace',
+                                            height: 1.6,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -757,7 +854,7 @@ class _ChatPageState extends State<ChatPage> {
                 // Evolved personality (editable)
                 const Text('Evolved Personality', style: TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                TextField(
+                AppTextField(
                   controller: personalityController,
                   maxLines: 4,
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
@@ -791,7 +888,7 @@ class _ChatPageState extends State<ChatPage> {
                 // Evolved scenario (editable)
                 const Text('Evolved Scenario', style: TextStyle(fontSize: 11, color: Colors.tealAccent, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                TextField(
+                AppTextField(
                   controller: scenarioController,
                   maxLines: 4,
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
@@ -1230,7 +1327,7 @@ class _ChatPageState extends State<ChatPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
+              AppTextField(
                 controller: nameController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
@@ -1244,7 +1341,7 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
+              AppTextField(
                 controller: descController,
                 style: const TextStyle(color: Colors.white),
                 maxLines: 3,
@@ -1334,7 +1431,7 @@ class _ChatPageState extends State<ChatPage> {
           ),
           content: SizedBox(
             width: 400,
-            child: TextField(
+            child: AppTextField(
               controller: promptController,
               maxLines: 4,
               autofocus: true,
@@ -1432,14 +1529,45 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _buildInputArea(BuildContext context, ChatService chatService) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1F2937),
-        border: Border(top: BorderSide(color: Colors.white10)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ── Trust repair warning banner ──────────────────────────────────
+        // Shown when a severe trust drop has armed the one-shot repair window.
+        // Disappears automatically after the user sends their next message.
+        if (chatService.pendingTrustRepair)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: const Color(0xFF7C2D12),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orangeAccent),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Trust is on the line — your next message is your only chance to explain yourself.',
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── Input bar ────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1F2937),
+            border: Border(top: BorderSide(color: Colors.white10)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+
         children: [
           // Persona Switcher
           Consumer<UserPersonaService>(
@@ -1646,17 +1774,12 @@ class _ChatPageState extends State<ChatPage> {
           const SizedBox(width: 4),
 
           Expanded(
-            child: TextField(
+            child: AppTextField(
               controller: _controller,
               focusNode: _chatFocusNode,
               maxLines: 5,
               minLines: 1,
               textInputAction: TextInputAction.newline,
-              spellCheckConfiguration: (Platform.isLinux || Platform.isWindows)
-                  ? SpellCheckConfiguration(spellCheckService: DesktopSpellCheckService())
-                  : (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
-                      ? const SpellCheckConfiguration()
-                      : null,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: chatService.observerMode ? 'Direct the scene...' : 'Type a message...',
@@ -1819,8 +1942,10 @@ class _ChatPageState extends State<ChatPage> {
                 },
               ),
             ),
-        ],
-      ),
+          ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -2581,7 +2706,7 @@ class _ChatPageState extends State<ChatPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
+                AppTextField(
                   controller: nameController,
                   style: const TextStyle(color: Colors.white),
                   decoration: const InputDecoration(
@@ -2592,7 +2717,7 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                AppTextField(
                   controller: scenarioController,
                   style: const TextStyle(color: Colors.white),
                   maxLines: 3,
@@ -3497,7 +3622,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
         title: const Text('Edit Message'),
         content: SizedBox(
           width: 500,
-          child: TextField(
+          child: AppTextField(
             controller: controller,
             maxLines: 10,
             minLines: 3,
@@ -4060,7 +4185,7 @@ class _AuthorNoteSectionState extends State<_AuthorNoteSection> {
           ],
         ),
         const SizedBox(height: 8),
-        TextField(
+        AppTextField(
           controller: _controller,
           maxLines: 4,
           minLines: 2,
@@ -4273,7 +4398,7 @@ class _SummarySectionState extends State<_SummarySection> {
             // Summary text field
             Padding(
               padding: const EdgeInsets.only(left: 20.0),
-              child: TextField(
+              child: AppTextField(
                 controller: _controller,
                 maxLines: 6,
                 minLines: 2,
@@ -4458,7 +4583,7 @@ class _SummarySectionState extends State<_SummarySection> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      TextField(
+                      AppTextField(
                         controller: TextEditingController(text: storage.summaryPrompt),
                         maxLines: 3,
                         style: const TextStyle(color: Colors.white, fontSize: 11),
@@ -5099,7 +5224,7 @@ class _MemorySectionState extends State<_MemorySection> {
                 // Evolved personality (editable)
                 const Text('Evolved Personality', style: TextStyle(fontSize: 11, color: Colors.tealAccent)),
                 const SizedBox(height: 4),
-                TextField(
+                AppTextField(
                   controller: personalityController,
                   maxLines: 4,
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
@@ -5131,7 +5256,7 @@ class _MemorySectionState extends State<_MemorySection> {
                 // Evolved scenario (editable)
                 const Text('Evolved Scenario', style: TextStyle(fontSize: 11, color: Colors.tealAccent)),
                 const SizedBox(height: 4),
-                TextField(
+                AppTextField(
                   controller: scenarioController,
                   maxLines: 4,
                   style: const TextStyle(fontSize: 11, color: Colors.white70),
@@ -5567,6 +5692,7 @@ class _RealismSectionState extends State<_RealismSection> {
     return Consumer<ChatService>(
       builder: (context, chat, _) {
         final enabled = chat.realismEnabled;
+        final storageService = Provider.of<StorageService>(context);
 
         // Bond colors per tier
         Color getTierColor(int tier) {
@@ -5879,6 +6005,50 @@ class _RealismSectionState extends State<_RealismSection> {
 
                       // ── NSFW Enhancements Submenu ──
                       _NsfwEnhancementsSection(chat: chat),
+
+                      const SizedBox(height: 12),
+                      const Divider(color: Colors.white12, height: 1),
+                      const SizedBox(height: 10),
+
+                      // ── Realism Performance ──
+                      Row(
+                        children: [
+                          const Icon(Icons.speed, size: 14, color: Colors.tealAccent),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: RichText(
+                              overflow: TextOverflow.ellipsis,
+                              text: const TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'One-Shot Eval ',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.tealAccent),
+                                  ),
+                                  TextSpan(
+                                    text: '(Experimental)',
+                                    style: TextStyle(fontSize: 11, color: Colors.orange),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            height: 20,
+                            child: Switch(
+                              value: storageService.realismOneShotEval,
+                              activeColor: Colors.tealAccent,
+                              onChanged: chat.isGenerating ? null : (val) {
+                                storageService.setRealismOneShotEval(val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Fuses relationship + scene evals into a single LLM call to double the processing speed. May be less accurate on \u003c 8B param models.',
+                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
                     ],
                   ),
                 ),
@@ -6184,7 +6354,7 @@ class _ObjectiveSectionState extends State<_ObjectiveSection> {
 
                 if (!hasObjective) ...[
                   // Goal input
-                  TextField(
+                  AppTextField(
                     controller: _goalController,
                     style: const TextStyle(color: Colors.white, fontSize: 12),
                     decoration: InputDecoration(
@@ -6315,7 +6485,7 @@ class _ObjectiveSectionState extends State<_ObjectiveSection> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextField(
+                        child: AppTextField(
                           controller: _manualTaskController,
                           style: const TextStyle(color: Colors.white, fontSize: 11),
                           decoration: InputDecoration(

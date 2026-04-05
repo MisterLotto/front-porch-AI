@@ -37,6 +37,28 @@ import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:drift/drift.dart' as drift;
 
+// ── Realism Engine GBNF Grammars ─────────────────────────────────────────────
+// Used by KoboldCPP local backend when reasoning mode is OFF.
+// Forces JSON-structured output at the token-sampling level, guaranteeing the
+// model can't ramble past the closing } and doesn't need excessive max_tokens.
+//
+// Each grammar accepts any well-formed JSON object so optional fields
+// (e.g. arousal_delta) are naturally handled without a rigid schema.
+
+/// General-purpose JSON object grammar: accepts any flat {"key": value, ...}
+/// where values may be strings, numbers, or booleans. Sufficient for all
+/// Realism Engine evals which return small flat JSON objects.
+const String _kGbnfJsonObject = r'''
+root   ::= ws "{" ws members ws "}" ws
+members ::= pair (ws "," ws pair)*
+pair    ::= string ws ":" ws value
+value   ::= string | number | boolean | "null"
+string  ::= "\"" ([^"\\] | "\\" .)* "\""
+number  ::= "-"? ([0-9] | [1-9][0-9]*) ("." [0-9]+)? (([eE] [+-]? [0-9]+))?
+boolean ::= "true" | "false"
+ws      ::= [ \t\n\r]*
+''';
+
 enum GenerationMode { normal, continue_, impersonate }
 
 class ChatMessage {
@@ -237,7 +259,6 @@ class ChatService extends ChangeNotifier {
   bool _observerMode = false;
   bool _autoPlayActive = false;
   double directorDelaySec = 15.0; // seconds between auto-chat responses
-
   // ── Author's Note ──
   String _authorNote = '';
   int _authorNoteStrength = 4;
@@ -250,6 +271,8 @@ class ChatService extends ChangeNotifier {
 
   // ── Realism Mode ──
   bool _realismEnabled = false; // master toggle
+  bool _isEvaluatingRealism = false;
+  String _realismEvalStreamText = '';
 
   // Relationship (Short-Term / Tension)
   int _affectionScore = 0; 
@@ -283,6 +306,11 @@ class ChatService extends ChangeNotifier {
   String _activeFixation = '';
   int _fixationLifespan = 0; // turns until fixation naturally clears
   String _spatialStance = '';
+
+  // ── Trust Repair ──
+  // Armed on each severe trust drop (≥ -20 delta). Consumed on the very
+  // next user message, then resets so future drops each get one shot.
+  bool _pendingTrustRepair = false;
 
   // ── Context / Prompt Budget ──
   Map<String, int> _lastPromptBudget = {};
@@ -445,6 +473,8 @@ class ChatService extends ChangeNotifier {
   int get longTermScore => _longTermScore;
   int get longTermTier => _longTermTier;
   bool get realismEnabled => _realismEnabled;
+  bool get isEvaluatingRealism => _isEvaluatingRealism;
+  String get realismEvalStreamText => _realismEvalStreamText;
   int get shortTermMood => _shortTermMood;
   String get characterEmotion => _characterEmotion;
   String get emotionIntensity => _emotionIntensity;
@@ -553,6 +583,7 @@ class ChatService extends ChangeNotifier {
 
   int get trustLevel => _trustLevel;
   int get trustTier => _calculateTier(_trustLevel);
+  bool get pendingTrustRepair => _pendingTrustRepair;
 
   String get trustTierName {
     switch (trustTier) {
@@ -830,7 +861,7 @@ class ChatService extends ChangeNotifier {
     // Reset all lorebook triggers
     for (final ch in _groupCharacters) {
       if (ch.lorebook != null) {
-        for (var entry in ch.lorebook!.entries) {
+        for (final entry in ch.lorebook!.entries) {
           entry.isTriggered = false;
         }
       }
@@ -1126,6 +1157,7 @@ class ChatService extends ChangeNotifier {
       activeFixation: drift.Value(_activeFixation),
       fixationLifespan: drift.Value(_fixationLifespan),
       spatialStance: drift.Value(_spatialStance),
+      trustRepairPending: drift.Value(_pendingTrustRepair),
       createdAt: drift.Value(createdAt),
       updatedAt: drift.Value(DateTime.now()),
     ));
@@ -1369,6 +1401,7 @@ class ChatService extends ChangeNotifier {
       _activeFixation = session.activeFixation;
       _fixationLifespan = session.fixationLifespan;
       _spatialStance = session.spatialStance;
+      _pendingTrustRepair = session.trustRepairPending;
 
       if (_messages.isNotEmpty) {
         _scanLorebook(_messages.last.text);
@@ -1523,6 +1556,7 @@ class ChatService extends ChangeNotifier {
     
     _affectionScore = 0;
     _trustLevel = 0;
+    _pendingTrustRepair = false;
     _relationshipTier = 0;
     _longTermScore = 0;
     _longTermTier = 0;
@@ -1620,8 +1654,30 @@ class ChatService extends ChangeNotifier {
       if (_cooldownTurnsRemaining > 0) {
         _cooldownTurnsRemaining--;
       }
-      await _evaluateRelationshipCall();
-      await _evaluateSceneStateCall();
+      _isEvaluatingRealism = true;
+      _realismEvalStreamText = '';
+      notifyListeners();
+
+      void handleChunk(String chunk) {
+        _realismEvalStreamText += chunk;
+        notifyListeners();
+      }
+
+      // ── Trust repair intercept ───────────────────────────────────────
+      // Each severe drop arms exactly one repair shot. The window is
+      // consumed here and resets automatically for the next drop event.
+      if (_pendingTrustRepair) {
+        _pendingTrustRepair = false; // consume — resets for next drop
+        await _evaluateTrustRepairCall(text, onChunk: handleChunk);
+      } else if (_storageService.realismOneShotEval) {
+        await _evaluateOneShotCall(onChunk: handleChunk);
+      } else {
+        await _evaluateRelationshipCall(onChunk: handleChunk);
+        await _evaluateSceneStateCall(onChunk: handleChunk);
+      }
+
+      _isEvaluatingRealism = false;
+      notifyListeners();
     }
 
     await _generateResponse(GenerationMode.normal);
@@ -1715,9 +1771,25 @@ class ChatService extends ChangeNotifier {
              _trustLevel = (_trustLevel - trustDelta).clamp(-100, 100);
           }
         }
-        
-        await _evaluateRelationshipCall();
-        await _evaluateSceneStateCall();
+        // Set UI streaming state
+        _isEvaluatingRealism = true;
+        _realismEvalStreamText = '';
+        notifyListeners();
+
+        void handleChunk(String chunk) {
+          _realismEvalStreamText += chunk;
+          notifyListeners();
+        }
+
+        if (_storageService.realismOneShotEval) {
+          await _evaluateOneShotCall(onChunk: handleChunk);
+        } else {
+          await _evaluateRelationshipCall(onChunk: handleChunk);
+          await _evaluateSceneStateCall(onChunk: handleChunk);
+        }
+
+        _isEvaluatingRealism = false;
+        notifyListeners();
       }
 
       // Generate into a new message — it will be appended by _generateResponse
@@ -4396,8 +4468,30 @@ class ChatService extends ChangeNotifier {
     return cleaned;
   }
 
-  /// Shared helper: fire a lightweight LLM call and return the raw response.
-  Future<String?> _fireLLMEval(String prompt) async {
+  /// Returns a GBNF grammar string only when it is safe to use one:
+  /// - Backend must be KoboldCPP (local)
+  /// - Reasoning/thinking mode must be OFF (grammar would block <think> tokens)
+  /// Never call this for the API (OpenRouter) path.
+  String? _buildKoboldGrammar(String grammar) {
+    if (_llmProvider == null) return null;
+    // Only apply grammar to the local KoboldCPP backend
+    if (_llmProvider!.isLocal == false) return null;
+    // If reasoning is enabled the user has a thinking model loaded locally —
+    // grammar would prevent <think> from generating, so skip it.
+    if (_storageService.reasoningEnabled) return null;
+    return grammar;
+  }
+
+  /// Shared helper: fire a lightweight LLM eval call and return the raw response.
+  ///
+  /// Always adds `}\n` as a stop sequence so the model halts the moment it
+  /// closes the JSON object, regardless of backend or model type.
+  /// Thinking models (Kimi 2.5, GLM 5) will still think freely — they produce
+  /// the <think> block, then output the JSON, then hit `}\n` and stop.
+  ///
+  /// [grammar] is an optional GBNF string for KoboldCPP local + non-thinking
+  /// models only. Pass via [_buildKoboldGrammar] to get safe auto-gating.
+  Future<String?> _fireLLMEval(String prompt, {String? grammar, void Function(String)? onChunk}) async {
     if (_llmProvider == null) return null;
     final llm = _llmProvider!.activeService;
     if (!llm.isReady) return null;
@@ -4407,12 +4501,23 @@ class ChatService extends ChangeNotifier {
       maxLength: 8000,
       temperature: 0.1,
       reasoningEnabled: false,
-      stopSequences: [],
+      // Stop the moment the JSON object closes — works for all model types.
+      // The 8000 token ceiling stays as a safety net for long think chains.
+      stopSequences: ['}\n', '}'],
+      grammar: grammar,
     );
 
     String response = '';
     await for (final chunk in llm.generateStream(params)) {
       response += chunk;
+      onChunk?.call(chunk);
+      // Also bail out eagerly the moment we see the JSON closing brace,
+      // in case the stop sequence trims it and the stream continues briefly.
+      if (response.contains('}')) {
+        final stripped = _stripThinkBlocks(response);
+        final candidate = stripped.isNotEmpty ? stripped : response;
+        if (candidate.trimRight().endsWith('}') || candidate.contains('}\n')) break;
+      }
     }
     return response.isEmpty ? null : response;
   }
@@ -4509,7 +4614,7 @@ class ChatService extends ChangeNotifier {
     
     // 2. Fixation Mapping
     if (_activeFixation.isNotEmpty && _fixationLifespan > 0) {
-      block += '[Behavioral Anchor (OBSESSION): You are currently fixated on "$_activeFixation". Let this heavily influence your thoughts and aggressively steer the conversation back to this topic.]\n';
+      block += '[Background Thought: You have a lingering preoccupation about "$_activeFixation". Let this subtly flavor your internal monologue or mood, but do not aggressively force the conversation towards it unless naturally relevant.]\n';
     }
     
     // 3. Spatial Stance Mapping
@@ -4563,10 +4668,10 @@ class ChatService extends ChangeNotifier {
 
   // ── LLM Evaluation Calls ──
 
-  Future<void> _evaluateRelationshipCall() async {
+  Future<void> _evaluateRelationshipCall({void Function(String)? onChunk}) async {
     if (!_realismEnabled || _activeCharacter == null) return;
 
-    final recentCount = _messages.length < 6 ? _messages.length : 6;
+    final recentCount = _messages.length < 5 ? _messages.length : 5;
     final recent = _messages.reversed.take(recentCount).toList().reversed
         .map((m) => '${m.sender}: ${m.displayText}').join('\n');
 
@@ -4575,29 +4680,28 @@ class ChatService extends ChangeNotifier {
 
     String personalityInjection = '';
     if (_activeCharacter!.personality.isNotEmpty) {
-      // Truncate to save prompt budget if it's exceptionally long (focus on core traits)
-      final p = _activeCharacter!.personality.length > 600 ? _activeCharacter!.personality.substring(0, 600) : _activeCharacter!.personality;
+      final p = _activeCharacter!.personality.length > 500
+          ? _activeCharacter!.personality.substring(0, 500)
+          : _activeCharacter!.personality;
       personalityInjection = 'Account for $charName\'s specific personality traits:\n"$p"\n\n';
     }
 
-    final prompt = 'Analyze $userName\'s recent behavior toward $charName.\n\n'
+    final prompt = 'You are evaluating the relationship dynamic between $charName and $userName in a roleplay.\n\n'
         '$personalityInjection'
-        'Reactions are subjective! If $charName is sadistic or combative, insults might amuse or arouse them. '
-        'If $charName is proud, groveling apologies might disgust them. If they are submissive, dominance might please them. Evaluate based ONLY on their specific traits.\n\n'
-        'Evaluate THREE things${_nsfwCooldownEnabled ? ' (and an optional fourth)' : ''}:\n'
-        '1. "relationship_delta": How does this affect the short-term tension/status? (-5 to +5)\n'
-        '   +5: Incredible immediate chemistry | +2: Friendly | 0: Neutral | -2: Annoyed/Rude | -5: Deeply Hostile/Violent\n'
-        '2. "mood_shift": Based purely on their specific personality, how does $charName\'s mood SHIFT? (-3 to +3)\n'
-        '   +3: Massive positive spike | +1: Slight lift | 0: Unchanged | -1: Irritated | -3: Deeply hurt/furious\n'
-        '3. "trust_delta": Does $userName\'s action build or destroy TRUTH and TRUST? (-200 to +10)\n'
-        '   +2: Honest/Vulnerable | 0: Neutral | -5: Lie/Evasive | -200: MASSIVE unforgivable betrayal. Trust can be instantly shattered!\n'
-        '${_nsfwCooldownEnabled ? '4. "arousal_delta": Does this interaction increase/decrease physical arousal? (-2 to +2)\n   Base this heavily on their personality. Highly sexual/dominant characters should gain arousal (+1/+2) very easily from slight teasing, submission, or power dynamics.\n' : ''}\n'
+        'Reactions are subjective! They depend entirely on $charName\'s personality.\n\n'
+        '1. "relationship_delta": The short-term tension shift this turn. (-5 to +5)\n'
+        '   +5: Incredible chemistry/bond | +2: Friendly | 0: Neutral | -2: Annoyed | -5: Deeply hostile\n'
+        '2. "mood_shift": How $charName\'s mood shifts based on their personality. (-3 to +3)\n'
+        '3. "trust_delta": Does $userName\'s action build or destroy trust? (-200 to +10)\n'
+        '   +2: Honest interaction | 0: Neutral | -5: Minor lie discovered | -200: Massive unforgivable betrayal\n'
+        '4. "reason": One brief sentence explaining the shift based on the recent messages.\n\n'
         'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a JSON object: {"relationship_delta": <number>, "mood_shift": <number>, "trust_delta": <number>, ${_nsfwCooldownEnabled ? '"arousal_delta": <number>, ' : ''}"reason": "<brief>"}';
+        'Respond with ONLY a flat JSON object containing "relationship_delta", "mood_shift", "trust_delta", and "reason".';
 
     try {
-      debugPrint('[Realism:Relationship] Evaluating...');
-      final raw = await _fireLLMEval(prompt);
+      debugPrint('[Realism] Evaluating relationship dynamic...');
+      final raw = await _fireLLMEval(prompt,
+          grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
       if (raw == null) return;
 
       final searchText = _stripThinkBlocks(raw);
@@ -4628,6 +4732,12 @@ class ChatService extends ChangeNotifier {
         if (trustDelta != 0) {
           _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
           debugPrint('[Realism:Relationship] Trust shifted by $trustDelta -> $_trustLevel');
+          // Arm the repair window on any severe single-turn drop
+          if (trustDelta <= -20) {
+            _pendingTrustRepair = true;
+            debugPrint('[Realism:Trust] Severe drop — repair window armed');
+            notifyListeners();
+          }
         }
       }
 
@@ -4659,36 +4769,37 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  Future<void> _evaluateSceneStateCall() async {
+  Future<void> _evaluateSceneStateCall({void Function(String)? onChunk}) async {
     if (!_realismEnabled || _activeCharacter == null) return;
 
-    final recentCount = _messages.length < 6 ? _messages.length : 6;
+    final recentCount = _messages.length < 4 ? _messages.length : 4;
     final recent = _messages.reversed.take(recentCount).toList().reversed
         .map((m) => '${m.sender}: ${m.displayText}').join('\n');
 
     final charName = _activeCharacter!.name;
 
-    // climax_detected is intentionally handled post-generation in _checkClimaxInResponse
-    // This evaluator runs pre-generation on the user message — wrong time to detect climax.
-    const String nsfwField = '';
-    const String nsfwInstr = '';
+    final arousalField = _nsfwCooldownEnabled
+        ? ', "arousal_delta": <number -2 to +2>'
+        : '';
+    final arousalInstr = _nsfwCooldownEnabled
+        ? '5. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n'
+        : '';
 
-    final prompt = 'Analyze the current scene state involving $charName.\n\n'
-        'Evaluate:\n'
-        '1. "emotion": $charName\'s current emotional state (one word, be nuanced: calm, yearning, resentful, ecstatic, melancholy, flustered, anxious, etc.)\n'
-        '2. "emotion_intensity": How strong? (mild, moderate, or strong)\n'
-        '3. "time_of_day": Current time? (dawn, morning, late_morning, afternoon, evening, night)\n'
-        '   Pacing: Do not jump forward drastically. Advance natively when sensible, otherwise default to: $_timeOfDay\n'
-        '   "new_day": Has a new day explicitly started? (true/false)\n'
-        '4. "posture": What is their current spatial/physical stance? (e.g. "Cornered against the wall", "Sitting on the edge of the bed", "Pacing angrily"). If neutral, use "none".\n'
-        '5. "fixation_topic": Is there a severe emotional topic they are obsessing over right now? If no, or if resolved, output "none".$nsfwInstr\n\n'
+    final prompt = 'You are evaluating the current scene state for $charName.\n\n'
+        '1. "emotion": their overarching emotional state right now (one word, nuanced like "melancholy" or "amused")\n'
+        '2. "emotion_intensity": mild, moderate, or strong\n'
+        '3. "time_of_day": dawn, morning, late_morning, afternoon, evening, or night\n'
+        '   The current underlying time is $_timeOfDay. ONLY advance the time if the scene clearly moves forward!\n'
+        '4. "posture": Their overarching spatial/physical stance (a brief phrase like "leaning against the wall"), or "none"\n'
+        '$arousalInstr'
+        '"fixation_topic": Severe overarching emotional obsession active right now (brief), or "none"\n\n'
         'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a JSON object: {"emotion": "<word>", "emotion_intensity": "<level>", '
-        '"time_of_day": "<period>", "new_day": <bool>, "posture": "<brief>", "fixation_topic": "<brief>"$nsfwField, "reason": "<brief>"}';
+        'Respond with ONLY a JSON object containing all of the above fields$arousalField.';
 
     try {
-      debugPrint('[Realism:Scene] Evaluating...');
-      final raw = await _fireLLMEval(prompt);
+      debugPrint('[Realism] Evaluating scene state...');
+      final raw = await _fireLLMEval(prompt,
+          grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
       if (raw == null) return;
 
       final searchText = _stripThinkBlocks(raw);
@@ -4775,6 +4886,265 @@ class ChatService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('[Realism:Scene] Failed: $e');
+    }
+  }
+
+  /// ── One-Shot Eval (Experimental) ─────────────────────────────────────────
+  /// Fused replacement for _evaluateRelationshipCall + _evaluateSceneStateCall.
+  /// Issues a SINGLE LLM inference that evaluates all realism state fields at
+  /// once, cutting pre-generation blocking overhead from 2 calls to 1.
+  ///
+  /// Enable via Settings → Realism → "One-Shot Eval (Experimental)".
+  /// Not default because some models struggle with the combined prompt length.
+  Future<void> _evaluateOneShotCall({void Function(String)? onChunk}) async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+
+    final recentCount = _messages.length < 6 ? _messages.length : 6;
+    final recent = _messages.reversed.take(recentCount).toList().reversed
+        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+
+    final charName = _activeCharacter!.name;
+    final userName = _userPersonaService.persona.name;
+
+    String personalityInjection = '';
+    if (_activeCharacter!.personality.isNotEmpty) {
+      final p = _activeCharacter!.personality.length > 600
+          ? _activeCharacter!.personality.substring(0, 600)
+          : _activeCharacter!.personality;
+      personalityInjection = 'Account for $charName\'s specific personality traits:\n"$p"\n\n';
+    }
+
+    final arousalField = _nsfwCooldownEnabled
+        ? ', "arousal_delta": <number -2 to +2>'
+        : '';
+    final arousalInstr = _nsfwCooldownEnabled
+        ? '8. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n'
+        : '';
+
+    final prompt = 'You are evaluating the current state of a roleplay scene involving $charName.\n\n'
+        '$personalityInjection'
+        'Reactions are subjective! Evaluate relationship changes based on $charName\'s specific traits.\n\n'
+        'Evaluate ALL of the following at once:\n'
+        '1. "relationship_delta": Short-term tension shift. (-5 to +5)\n'
+        '   +5: Incredible chemistry | +2: Friendly | 0: Neutral | -2: Annoyed | -5: Deeply hostile\n'
+        '2. "mood_shift": How $charName\'s mood shifts based on their personality. (-3 to +3)\n'
+        '3. "trust_delta": Does $userName\'s action build or destroy trust? (-200 to +10)\n'
+        '   +2: Honest | 0: Neutral | -5: Lie | -200: Massive unforgivable betrayal\n'
+        '4. "emotion": $charName\'s current emotional state (one word, nuanced)\n'
+        '5. "emotion_intensity": mild, moderate, or strong\n'
+        '6. "time_of_day": dawn, morning, late_morning, afternoon, evening, or night\n'
+        '   Current time: $_timeOfDay — advance only if the scene clearly moves forward\n'
+        '7. "posture": $charName\'s spatial/physical stance (brief phrase), or "none"\n'
+        '$arousalInstr'
+        '"fixation_topic": Severe emotional obsession active right now (brief), or "none"\n'
+        '"reason": One brief sentence explaining the key relationship change\n\n'
+        'Recent conversation:\n$recent\n\n'
+        'Respond with ONLY a JSON object containing all fields above$arousalField.';
+
+    try {
+      debugPrint('[Realism:OneShot] Evaluating (fused call)...');
+      final raw = await _fireLLMEval(prompt,
+          grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      if (raw == null) return;
+
+      final searchText = _stripThinkBlocks(raw);
+      final text = searchText.isNotEmpty ? searchText : raw;
+
+      // ── Relationship fields ──
+      int bondDelta = 0;
+      final deltaMatch = RegExp(r'"relationship_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      if (deltaMatch != null) {
+        bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-5, 5);
+        _applyScoreDelta(bondDelta);
+      }
+
+      int moodDelta = 0;
+      final moodMatch = RegExp(r'"mood_shift"\s*:\s*(-?\d+)').firstMatch(text);
+      if (moodMatch != null) {
+        moodDelta = (int.tryParse(moodMatch.group(1)!) ?? 0).clamp(-3, 3);
+        if (moodDelta != 0) {
+          _shortTermMood = (_shortTermMood + moodDelta).clamp(-20, 20);
+          _moodDecayCounter = 0;
+          debugPrint('[Realism:OneShot] Mood shifted by $moodDelta -> $_shortTermMood ($moodLabel)');
+        }
+      }
+
+      int trustDelta = 0;
+      final trustMatch = RegExp(r'"trust_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      if (trustMatch != null) {
+        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 10);
+        if (trustDelta != 0) {
+          _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
+          debugPrint('[Realism:OneShot] Trust shifted by $trustDelta -> $_trustLevel');
+          // Arm the repair window on any severe single-turn drop
+          if (trustDelta <= -20) {
+            _pendingTrustRepair = true;
+            debugPrint('[Realism:Trust] Severe drop — repair window armed');
+            notifyListeners();
+          }
+        }
+      }
+
+      int arousalDelta = 0;
+      if (_nsfwCooldownEnabled) {
+        final arousalMatch = RegExp(r'"arousal_delta"\s*:\s*(-?\d+)').firstMatch(text);
+        if (arousalMatch != null) {
+          arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(-2, 2);
+          _arousalLevel = (_arousalLevel + arousalDelta).clamp(-3, 10);
+        }
+      }
+
+      if (bondDelta != 0 || moodDelta != 0 || arousalDelta != 0 || trustDelta != 0) {
+        _pendingRealismMetadata = {
+          'bond_delta': bondDelta,
+          'mood_delta': moodDelta,
+          'mood_label': moodLabel,
+          if (arousalDelta != 0) 'arousal_delta': arousalDelta,
+          if (trustDelta != 0) 'trust_delta': trustDelta,
+        };
+      }
+
+      // ── Scene fields ──
+      final emotionMatch = RegExp(r'"emotion"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (emotionMatch != null) {
+        _characterEmotion = emotionMatch.group(1)!.toLowerCase().trim();
+      }
+
+      final intensityMatch = RegExp(r'"emotion_intensity"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (intensityMatch != null) {
+        _emotionIntensity = intensityMatch.group(1)!.toLowerCase().trim();
+      }
+
+      final validTimes = ['dawn', 'morning', 'late_morning', 'afternoon', 'evening', 'night'];
+      final currentIndex = validTimes.indexOf(_timeOfDay);
+      final timeMatch = RegExp(r'"time_of_day"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (timeMatch != null) {
+        final t = timeMatch.group(1)!.toLowerCase().trim();
+        final targetIndex = validTimes.indexOf(t);
+        if (targetIndex != -1 && targetIndex != currentIndex) {
+          if (targetIndex > currentIndex) {
+            int jump = targetIndex - currentIndex;
+            if (jump > 2) jump = 2;
+            _timeOfDay = validTimes[currentIndex + jump];
+          } else {
+            _timeOfDay = validTimes[0];
+            _dayCount++;
+            debugPrint('[Realism:OneShot] Time rolled over! Day $_dayCount');
+          }
+        }
+      }
+
+      final postureMatch = RegExp(r'"posture"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (postureMatch != null) {
+        final p = postureMatch.group(1)!.trim();
+        _spatialStance = (p.toLowerCase() == 'none' || p.isEmpty) ? '' : p;
+      }
+
+      if (_fixationLifespan > 0) {
+        _fixationLifespan--;
+        if (_fixationLifespan == 0) {
+          _activeFixation = '';
+          debugPrint('[Realism:OneShot] Fixation decayed and cleared.');
+        }
+      }
+      final fixationMatch = RegExp(r'"fixation_topic"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (fixationMatch != null) {
+        final f = fixationMatch.group(1)!.trim();
+        if (f.toLowerCase() == 'none' || f.isEmpty) {
+          _activeFixation = '';
+          _fixationLifespan = 0;
+        } else if (f != _activeFixation) {
+          _activeFixation = f;
+          _fixationLifespan = 3;
+          debugPrint('[Realism:OneShot] New obsession: $f (3 turns)');
+        }
+      }
+
+      final reasonMatch = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
+      debugPrint('[Realism:OneShot] Done — Emotion: $_characterEmotion ($_emotionIntensity), '
+          'Time: $_timeOfDay, Reason: ${reasonMatch?.group(1) ?? 'unknown'}');
+
+      // Bundle full state snapshot for time-travel forking
+      _pendingRealismMetadata ??= {};
+      _pendingRealismMetadata!['realism_state'] = _captureRealismState();
+
+      _saveChat();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Realism:OneShot] Failed: $e — falling back to dual-call on next turn');
+    }
+  }
+
+  /// One-shot trust repair evaluator.
+  ///
+  /// Called automatically on the user's next message after a severe trust drop
+  /// (≥ -20 delta). Replaces the normal relationship eval for that turn.
+  /// The LLM weighs the explanation against character persona and chat history,
+  /// returning a trust_recovery value (0–60). Recovery is capped to prevent
+  /// instant restoration from Absolute Distrust.
+  Future<void> _evaluateTrustRepairCall(String userExplanation, {void Function(String)? onChunk}) async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+
+    final charName    = _activeCharacter!.name;
+    final persona     = _activeCharacter!.personality.length > 600
+        ? _activeCharacter!.personality.substring(0, 600)
+        : _activeCharacter!.personality;
+    final recentCount = _messages.length < 10 ? _messages.length : 10;
+    final history     = _messages.reversed.take(recentCount).toList().reversed
+        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+
+    final prompt =
+        'You are evaluating whether $charName should partially restore trust '
+        'after a severe breach caused by the previous interaction.\n\n'
+        'Character Persona: $persona\n\n'
+        'Recent chat history (last ~10 messages):\n$history\n\n'
+        'The user\'s trust-repair explanation is: "$userExplanation"\n\n'
+        'Evaluate ONLY whether this explanation is convincing given:\n'
+        '1. The character\'s personality — are they forgiving, stubborn, paranoid, naive?\n'
+        '2. The plausibility of the explanation against the chat history\n'
+        '3. Whether the explanation contradicts established facts\n\n'
+        'Rules:\n'
+        '- trust_recovery: 0 (rejected) to 60 (fully convincing)\n'
+        '- Paranoid/skeptical characters: give 0–20 even for good explanations\n'
+        '- Forgiving/naive characters: may give 30–60 for plausible explanations\n'
+        '- Do NOT give 60 unless the explanation perfectly resolves the breach\n'
+        '- "reason" must be 1 short sentence from the character\'s POV\n\n'
+        'Respond with ONLY: {"trust_recovery": <0-60>, "verdict": "accepted|partial|rejected", "reason": "<brief>"}\n';
+
+    try {
+      debugPrint('[Realism:TrustRepair] Evaluating repair attempt...');
+      final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      if (raw == null) return;
+
+      final text = _stripThinkBlocks(raw).trim();
+
+      final recoveryMatch = RegExp(r'"trust_recovery"\s*:\s*(\d+)').firstMatch(text);
+      final verdictMatch  = RegExp(r'"verdict"\s*:\s*"([^"]+)"').firstMatch(text);
+      final reasonMatch   = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
+
+      final recovery = (int.tryParse(recoveryMatch?.group(1) ?? '0') ?? 0).clamp(0, 60);
+      final verdict  = verdictMatch?.group(1) ?? 'rejected';
+      final reason   = reasonMatch?.group(1) ?? '';
+
+      if (recovery > 0) {
+        _trustLevel = (_trustLevel + recovery).clamp(-100, 100);
+        debugPrint('[Realism:TrustRepair] $verdict — recovered $recovery → $_trustLevel ($reason)');
+      } else {
+        debugPrint('[Realism:TrustRepair] Rejected — no recovery ($reason)');
+      }
+
+      // Surface verdict in message metadata so swipe history can record it
+      _pendingRealismMetadata = {
+        ...?_pendingRealismMetadata,
+        'trust_repair_verdict': verdict,
+        'trust_repair_recovery': recovery,
+        if (reason.isNotEmpty) 'trust_repair_reason': reason,
+      };
+
+      _saveChat();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Realism:TrustRepair] Failed: $e');
     }
   }
 
@@ -4867,7 +5237,8 @@ class ChatService extends ChangeNotifier {
 
     try {
       debugPrint('[Realism:Climax] Checking AI response for climax...');
-      final raw = await _fireLLMEval(prompt);
+      final raw = await _fireLLMEval(prompt,
+          grammar: _buildKoboldGrammar(_kGbnfJsonObject));
       if (raw == null) return;
 
       final searchText = _stripThinkBlocks(raw);

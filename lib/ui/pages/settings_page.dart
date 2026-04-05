@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/backend_manager.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/services/hardware_service.dart';
 import 'package:front_porch_ai/services/optimization_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
@@ -606,7 +607,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 8),
-          TextField(
+          AppTextField(
             controller: _systemPromptController,
             maxLines: 5,
             style: theme.textTheme.bodyMedium,

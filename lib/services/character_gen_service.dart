@@ -114,7 +114,7 @@ class CharacterGenService {
         debugPrint('CharacterGen: Retrying generation (Attempt ${attempts + 1})');
       }
 
-      final baseOutput = await _callLLM(basePrompt, onProgress: attempts == 0 ? onProgress : null);
+      final baseOutput = await _callLLM(basePrompt, isJsonMode: true, onProgress: attempts == 0 ? onProgress : null);
       lastRawOutput = baseOutput; // Store for image prompt extraction
       
       if (baseOutput == null) {
@@ -360,7 +360,7 @@ Example format: {"scenarios": ["Scenario one text.", "Scenario two text."]}
 
 Respond with ONLY the JSON:''';
 
-    final output = await _callLLM(prompt, maxLen: 1024, minLen: 100, onProgress: onProgress);
+    final output = await _callLLM(prompt, maxLen: 1024, minLen: 100, isJsonMode: true, onProgress: onProgress);
     if (output == null) {
       debugPrint('CharacterGen: Alt scenario generation failed — using default scenario for all alts');
       return [];
@@ -483,7 +483,7 @@ Use {{char}} for the character name and {{user}} for the user throughout.
 
 Respond with ONLY the JSON:''';
 
-    final output = await _callLLM(prompt, maxLen: 4096, minLen: 200, onProgress: onProgress);
+    final output = await _callLLM(prompt, maxLen: 4096, minLen: 200, isJsonMode: true, onProgress: onProgress);
     if (output == null) {
       debugPrint('CharacterGen: Interview enrichment got no response — keeping original fields');
       return;
@@ -520,10 +520,18 @@ Respond with ONLY the JSON:''';
 
   /// Call the LLM and collect all tokens. Returns raw text or null.
   /// Retries up to [maxRetries] times with exponential backoff on failure.
+  ///
+  /// [isJsonMode] — When true, adds `}\n` to stop sequences so the model halts
+  /// the moment the JSON object closes (safe for thinking models: they think
+  /// freely, then produce the JSON, then hit `}\n` and stop).
+  /// [grammar] — Optional GBNF grammar string for KoboldCPP local + non-thinking
+  /// backends. Pass null to skip (all API backends ignore this).
   Future<String?> _callLLM(String prompt, {
     int maxLen = 8192,
     int minLen = 64,
     int maxRetries = 3,
+    bool isJsonMode = false,
+    String? grammar,
     void Function(String accumulated)? onProgress,
   }) async {
     final promptEstTokens = (prompt.length / 4).ceil();
@@ -533,6 +541,13 @@ Respond with ONLY the JSON:''';
       int tokenCount = 0;
       bool repetitionDetected = false;
       try {
+        // JSON calls add `}\n` as a stop sequence so the model terminates the
+        // moment it closes the object — the large maxLen is still the safety net.
+        final stops = ['<END>', '</END>'];
+        if (isJsonMode) {
+          stops.addAll(['}\n', '}']);
+        }
+
         await for (final token in _llmService.generateStream(GenerationParams(
           prompt: prompt,
           maxLength: maxLen,
@@ -541,7 +556,8 @@ Respond with ONLY the JSON:''';
           repeatPenalty: 1.2,
           minP: 0.05,
           reasoningEnabled: false,
-          stopSequences: ['<END>', '</END>'],
+          stopSequences: stops,
+          grammar: grammar,
         ))) {
           accumulated += token;
           tokenCount++;
@@ -556,6 +572,9 @@ Respond with ONLY the JSON:''';
               break;
             }
           }
+
+          // Early-exit for JSON mode: stop streaming at the first complete JSON object.
+          if (isJsonMode && accumulated.contains('}')) break;
 
           // Strip <think> blocks from preview so reasoning isn't shown
           if (onProgress != null) {
@@ -650,7 +669,7 @@ Use {{char}} for character name and {{user}} for user name. Respond with ONLY th
 
     debugPrint('CharacterGen: Recovery prompt for ${missingFields.length} fields');
 
-    final output = await _callLLM(prompt, maxLen: 4096, onProgress: onProgress);
+    final output = await _callLLM(prompt, maxLen: 4096, isJsonMode: true, onProgress: onProgress);
     if (output == null) return null;
 
     final cleaned = _stripContent(output);
