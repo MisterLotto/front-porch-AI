@@ -721,9 +721,10 @@ class WebServerService extends ChangeNotifier {
           'lorebook': lorebook,
           'ttsVoice': c.ttsVoice,
           'imagePath': c.imagePath,
-          'evolvedPersonality': c.evolvedPersonality,
-          'evolvedScenario': c.evolvedScenario,
-          'evolutionCount': c.evolutionCount,
+          // Evolution state is per-session — read from the active chat session if available
+          'evolvedPersonality': _chatService?.getEffectivePersonality ?? '',
+          'evolvedScenario': _chatService?.getEffectiveScenario ?? '',
+          'evolutionCount': _chatService?.characterEvolutionCount ?? 0,
         }),
         headers: {'Content-Type': 'application/json'},
       );
@@ -2137,26 +2138,23 @@ class WebServerService extends ChangeNotifier {
   }
 
   Future<shelf.Response> _handleUpdateEvolution(shelf.Request request, String id) async {
-    if (_db == null) return _errorResponse(503, 'Database not available');
+    if (_chatService == null) return _errorResponse(503, 'Chat service not available');
 
     try {
-      final dbId = int.tryParse(id);
-      if (dbId == null) return _errorResponse(400, 'Invalid character ID');
-
       final bodyStr = await request.readAsString();
       final body = jsonDecode(bodyStr) as Map<String, dynamic>;
 
       final evolvedPersonality = body['evolvedPersonality']?.toString();
       final evolvedScenario = body['evolvedScenario']?.toString();
-      final evolutionCount = body['evolutionCount'] as int?;
 
-      final companion = CharactersCompanion(
-        id: Value(id),
-        evolvedPersonality: evolvedPersonality != null ? Value(evolvedPersonality) : const Value.absent(),
-        evolvedScenario: evolvedScenario != null ? Value(evolvedScenario) : const Value.absent(),
-        evolutionCount: evolutionCount != null ? Value(evolutionCount) : const Value.absent(),
-      );
-      await _db!.updateCharacter(companion);
+      // Route through the session-aware service methods so evolution is
+      // stored on the current session, not the character row.
+      if (evolvedPersonality != null) {
+        await _chatService!.updateEvolvedPersonality(evolvedPersonality);
+      }
+      if (evolvedScenario != null) {
+        await _chatService!.updateEvolvedScenario(evolvedScenario);
+      }
 
       return shelf.Response.ok(
         jsonEncode({'success': true}),

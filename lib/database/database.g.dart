@@ -1654,6 +1654,66 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _evolvedPersonalityMeta =
+      const VerificationMeta('evolvedPersonality');
+  @override
+  late final GeneratedColumn<String> evolvedPersonality =
+      GeneratedColumn<String>(
+        'evolved_personality',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
+  static const VerificationMeta _evolvedScenarioMeta = const VerificationMeta(
+    'evolvedScenario',
+  );
+  @override
+  late final GeneratedColumn<String> evolvedScenario = GeneratedColumn<String>(
+    'evolved_scenario',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _evolutionCountMeta = const VerificationMeta(
+    'evolutionCount',
+  );
+  @override
+  late final GeneratedColumn<int> evolutionCount = GeneratedColumn<int>(
+    'evolution_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _groupEvolvedPersonalitiesMeta =
+      const VerificationMeta('groupEvolvedPersonalities');
+  @override
+  late final GeneratedColumn<String> groupEvolvedPersonalities =
+      GeneratedColumn<String>(
+        'group_evolved_personalities',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
+  static const VerificationMeta _groupEvolvedScenariosMeta =
+      const VerificationMeta('groupEvolvedScenarios');
+  @override
+  late final GeneratedColumn<String> groupEvolvedScenarios =
+      GeneratedColumn<String>(
+        'group_evolved_scenarios',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1723,6 +1783,11 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     fixationLifespan,
     spatialStance,
     trustRepairPending,
+    evolvedPersonality,
+    evolvedScenario,
+    evolutionCount,
+    groupEvolvedPersonalities,
+    groupEvolvedScenarios,
     createdAt,
     updatedAt,
     deletedAt,
@@ -1999,6 +2064,51 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('evolved_personality')) {
+      context.handle(
+        _evolvedPersonalityMeta,
+        evolvedPersonality.isAcceptableOrUnknown(
+          data['evolved_personality']!,
+          _evolvedPersonalityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('evolved_scenario')) {
+      context.handle(
+        _evolvedScenarioMeta,
+        evolvedScenario.isAcceptableOrUnknown(
+          data['evolved_scenario']!,
+          _evolvedScenarioMeta,
+        ),
+      );
+    }
+    if (data.containsKey('evolution_count')) {
+      context.handle(
+        _evolutionCountMeta,
+        evolutionCount.isAcceptableOrUnknown(
+          data['evolution_count']!,
+          _evolutionCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('group_evolved_personalities')) {
+      context.handle(
+        _groupEvolvedPersonalitiesMeta,
+        groupEvolvedPersonalities.isAcceptableOrUnknown(
+          data['group_evolved_personalities']!,
+          _groupEvolvedPersonalitiesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('group_evolved_scenarios')) {
+      context.handle(
+        _groupEvolvedScenariosMeta,
+        groupEvolvedScenarios.isAcceptableOrUnknown(
+          data['group_evolved_scenarios']!,
+          _groupEvolvedScenariosMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2154,6 +2264,26 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.bool,
         data['${effectivePrefix}trust_repair_pending'],
       )!,
+      evolvedPersonality: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}evolved_personality'],
+      )!,
+      evolvedScenario: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}evolved_scenario'],
+      )!,
+      evolutionCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}evolution_count'],
+      )!,
+      groupEvolvedPersonalities: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_evolved_personalities'],
+      )!,
+      groupEvolvedScenarios: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_evolved_scenarios'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2208,6 +2338,11 @@ class Session extends DataClass implements Insertable<Session> {
   final int fixationLifespan;
   final String spatialStance;
   final bool trustRepairPending;
+  final String evolvedPersonality;
+  final String evolvedScenario;
+  final int evolutionCount;
+  final String groupEvolvedPersonalities;
+  final String groupEvolvedScenarios;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -2244,6 +2379,11 @@ class Session extends DataClass implements Insertable<Session> {
     required this.fixationLifespan,
     required this.spatialStance,
     required this.trustRepairPending,
+    required this.evolvedPersonality,
+    required this.evolvedScenario,
+    required this.evolutionCount,
+    required this.groupEvolvedPersonalities,
+    required this.groupEvolvedScenarios,
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
@@ -2299,6 +2439,13 @@ class Session extends DataClass implements Insertable<Session> {
     map['fixation_lifespan'] = Variable<int>(fixationLifespan);
     map['spatial_stance'] = Variable<String>(spatialStance);
     map['trust_repair_pending'] = Variable<bool>(trustRepairPending);
+    map['evolved_personality'] = Variable<String>(evolvedPersonality);
+    map['evolved_scenario'] = Variable<String>(evolvedScenario);
+    map['evolution_count'] = Variable<int>(evolutionCount);
+    map['group_evolved_personalities'] = Variable<String>(
+      groupEvolvedPersonalities,
+    );
+    map['group_evolved_scenarios'] = Variable<String>(groupEvolvedScenarios);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -2355,6 +2502,11 @@ class Session extends DataClass implements Insertable<Session> {
       fixationLifespan: Value(fixationLifespan),
       spatialStance: Value(spatialStance),
       trustRepairPending: Value(trustRepairPending),
+      evolvedPersonality: Value(evolvedPersonality),
+      evolvedScenario: Value(evolvedScenario),
+      evolutionCount: Value(evolutionCount),
+      groupEvolvedPersonalities: Value(groupEvolvedPersonalities),
+      groupEvolvedScenarios: Value(groupEvolvedScenarios),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -2409,6 +2561,17 @@ class Session extends DataClass implements Insertable<Session> {
       fixationLifespan: serializer.fromJson<int>(json['fixationLifespan']),
       spatialStance: serializer.fromJson<String>(json['spatialStance']),
       trustRepairPending: serializer.fromJson<bool>(json['trustRepairPending']),
+      evolvedPersonality: serializer.fromJson<String>(
+        json['evolvedPersonality'],
+      ),
+      evolvedScenario: serializer.fromJson<String>(json['evolvedScenario']),
+      evolutionCount: serializer.fromJson<int>(json['evolutionCount']),
+      groupEvolvedPersonalities: serializer.fromJson<String>(
+        json['groupEvolvedPersonalities'],
+      ),
+      groupEvolvedScenarios: serializer.fromJson<String>(
+        json['groupEvolvedScenarios'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -2452,6 +2615,13 @@ class Session extends DataClass implements Insertable<Session> {
       'fixationLifespan': serializer.toJson<int>(fixationLifespan),
       'spatialStance': serializer.toJson<String>(spatialStance),
       'trustRepairPending': serializer.toJson<bool>(trustRepairPending),
+      'evolvedPersonality': serializer.toJson<String>(evolvedPersonality),
+      'evolvedScenario': serializer.toJson<String>(evolvedScenario),
+      'evolutionCount': serializer.toJson<int>(evolutionCount),
+      'groupEvolvedPersonalities': serializer.toJson<String>(
+        groupEvolvedPersonalities,
+      ),
+      'groupEvolvedScenarios': serializer.toJson<String>(groupEvolvedScenarios),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -2491,6 +2661,11 @@ class Session extends DataClass implements Insertable<Session> {
     int? fixationLifespan,
     String? spatialStance,
     bool? trustRepairPending,
+    String? evolvedPersonality,
+    String? evolvedScenario,
+    int? evolutionCount,
+    String? groupEvolvedPersonalities,
+    String? groupEvolvedScenarios,
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -2534,6 +2709,12 @@ class Session extends DataClass implements Insertable<Session> {
     fixationLifespan: fixationLifespan ?? this.fixationLifespan,
     spatialStance: spatialStance ?? this.spatialStance,
     trustRepairPending: trustRepairPending ?? this.trustRepairPending,
+    evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
+    evolvedScenario: evolvedScenario ?? this.evolvedScenario,
+    evolutionCount: evolutionCount ?? this.evolutionCount,
+    groupEvolvedPersonalities:
+        groupEvolvedPersonalities ?? this.groupEvolvedPersonalities,
+    groupEvolvedScenarios: groupEvolvedScenarios ?? this.groupEvolvedScenarios,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -2622,6 +2803,21 @@ class Session extends DataClass implements Insertable<Session> {
       trustRepairPending: data.trustRepairPending.present
           ? data.trustRepairPending.value
           : this.trustRepairPending,
+      evolvedPersonality: data.evolvedPersonality.present
+          ? data.evolvedPersonality.value
+          : this.evolvedPersonality,
+      evolvedScenario: data.evolvedScenario.present
+          ? data.evolvedScenario.value
+          : this.evolvedScenario,
+      evolutionCount: data.evolutionCount.present
+          ? data.evolutionCount.value
+          : this.evolutionCount,
+      groupEvolvedPersonalities: data.groupEvolvedPersonalities.present
+          ? data.groupEvolvedPersonalities.value
+          : this.groupEvolvedPersonalities,
+      groupEvolvedScenarios: data.groupEvolvedScenarios.present
+          ? data.groupEvolvedScenarios.value
+          : this.groupEvolvedScenarios,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -2663,6 +2859,11 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('fixationLifespan: $fixationLifespan, ')
           ..write('spatialStance: $spatialStance, ')
           ..write('trustRepairPending: $trustRepairPending, ')
+          ..write('evolvedPersonality: $evolvedPersonality, ')
+          ..write('evolvedScenario: $evolvedScenario, ')
+          ..write('evolutionCount: $evolutionCount, ')
+          ..write('groupEvolvedPersonalities: $groupEvolvedPersonalities, ')
+          ..write('groupEvolvedScenarios: $groupEvolvedScenarios, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -2704,6 +2905,11 @@ class Session extends DataClass implements Insertable<Session> {
     fixationLifespan,
     spatialStance,
     trustRepairPending,
+    evolvedPersonality,
+    evolvedScenario,
+    evolutionCount,
+    groupEvolvedPersonalities,
+    groupEvolvedScenarios,
     createdAt,
     updatedAt,
     deletedAt,
@@ -2744,6 +2950,11 @@ class Session extends DataClass implements Insertable<Session> {
           other.fixationLifespan == this.fixationLifespan &&
           other.spatialStance == this.spatialStance &&
           other.trustRepairPending == this.trustRepairPending &&
+          other.evolvedPersonality == this.evolvedPersonality &&
+          other.evolvedScenario == this.evolvedScenario &&
+          other.evolutionCount == this.evolutionCount &&
+          other.groupEvolvedPersonalities == this.groupEvolvedPersonalities &&
+          other.groupEvolvedScenarios == this.groupEvolvedScenarios &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -2782,6 +2993,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<int> fixationLifespan;
   final Value<String> spatialStance;
   final Value<bool> trustRepairPending;
+  final Value<String> evolvedPersonality;
+  final Value<String> evolvedScenario;
+  final Value<int> evolutionCount;
+  final Value<String> groupEvolvedPersonalities;
+  final Value<String> groupEvolvedScenarios;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -2819,6 +3035,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.fixationLifespan = const Value.absent(),
     this.spatialStance = const Value.absent(),
     this.trustRepairPending = const Value.absent(),
+    this.evolvedPersonality = const Value.absent(),
+    this.evolvedScenario = const Value.absent(),
+    this.evolutionCount = const Value.absent(),
+    this.groupEvolvedPersonalities = const Value.absent(),
+    this.groupEvolvedScenarios = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2857,6 +3078,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.fixationLifespan = const Value.absent(),
     this.spatialStance = const Value.absent(),
     this.trustRepairPending = const Value.absent(),
+    this.evolvedPersonality = const Value.absent(),
+    this.evolvedScenario = const Value.absent(),
+    this.evolutionCount = const Value.absent(),
+    this.groupEvolvedPersonalities = const Value.absent(),
+    this.groupEvolvedScenarios = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2895,6 +3121,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<int>? fixationLifespan,
     Expression<String>? spatialStance,
     Expression<bool>? trustRepairPending,
+    Expression<String>? evolvedPersonality,
+    Expression<String>? evolvedScenario,
+    Expression<int>? evolutionCount,
+    Expression<String>? groupEvolvedPersonalities,
+    Expression<String>? groupEvolvedScenarios,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2938,6 +3169,13 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (spatialStance != null) 'spatial_stance': spatialStance,
       if (trustRepairPending != null)
         'trust_repair_pending': trustRepairPending,
+      if (evolvedPersonality != null) 'evolved_personality': evolvedPersonality,
+      if (evolvedScenario != null) 'evolved_scenario': evolvedScenario,
+      if (evolutionCount != null) 'evolution_count': evolutionCount,
+      if (groupEvolvedPersonalities != null)
+        'group_evolved_personalities': groupEvolvedPersonalities,
+      if (groupEvolvedScenarios != null)
+        'group_evolved_scenarios': groupEvolvedScenarios,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2978,6 +3216,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<int>? fixationLifespan,
     Value<String>? spatialStance,
     Value<bool>? trustRepairPending,
+    Value<String>? evolvedPersonality,
+    Value<String>? evolvedScenario,
+    Value<int>? evolutionCount,
+    Value<String>? groupEvolvedPersonalities,
+    Value<String>? groupEvolvedScenarios,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
@@ -3019,6 +3262,13 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       fixationLifespan: fixationLifespan ?? this.fixationLifespan,
       spatialStance: spatialStance ?? this.spatialStance,
       trustRepairPending: trustRepairPending ?? this.trustRepairPending,
+      evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
+      evolvedScenario: evolvedScenario ?? this.evolvedScenario,
+      evolutionCount: evolutionCount ?? this.evolutionCount,
+      groupEvolvedPersonalities:
+          groupEvolvedPersonalities ?? this.groupEvolvedPersonalities,
+      groupEvolvedScenarios:
+          groupEvolvedScenarios ?? this.groupEvolvedScenarios,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -3131,6 +3381,25 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (trustRepairPending.present) {
       map['trust_repair_pending'] = Variable<bool>(trustRepairPending.value);
     }
+    if (evolvedPersonality.present) {
+      map['evolved_personality'] = Variable<String>(evolvedPersonality.value);
+    }
+    if (evolvedScenario.present) {
+      map['evolved_scenario'] = Variable<String>(evolvedScenario.value);
+    }
+    if (evolutionCount.present) {
+      map['evolution_count'] = Variable<int>(evolutionCount.value);
+    }
+    if (groupEvolvedPersonalities.present) {
+      map['group_evolved_personalities'] = Variable<String>(
+        groupEvolvedPersonalities.value,
+      );
+    }
+    if (groupEvolvedScenarios.present) {
+      map['group_evolved_scenarios'] = Variable<String>(
+        groupEvolvedScenarios.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3181,6 +3450,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('fixationLifespan: $fixationLifespan, ')
           ..write('spatialStance: $spatialStance, ')
           ..write('trustRepairPending: $trustRepairPending, ')
+          ..write('evolvedPersonality: $evolvedPersonality, ')
+          ..write('evolvedScenario: $evolvedScenario, ')
+          ..write('evolutionCount: $evolutionCount, ')
+          ..write('groupEvolvedPersonalities: $groupEvolvedPersonalities, ')
+          ..write('groupEvolvedScenarios: $groupEvolvedScenarios, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -7168,6 +7442,21 @@ class $ObjectivesTable extends Objectives
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _isPrimaryMeta = const VerificationMeta(
+    'isPrimary',
+  );
+  @override
+  late final GeneratedColumn<bool> isPrimary = GeneratedColumn<bool>(
+    'is_primary',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_primary" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _checkFrequencyMeta = const VerificationMeta(
     'checkFrequency',
   );
@@ -7211,6 +7500,7 @@ class $ObjectivesTable extends Objectives
     objective,
     tasks,
     active,
+    isPrimary,
     checkFrequency,
     injectionDepth,
     createdAt,
@@ -7261,6 +7551,12 @@ class $ObjectivesTable extends Objectives
       context.handle(
         _activeMeta,
         active.isAcceptableOrUnknown(data['active']!, _activeMeta),
+      );
+    }
+    if (data.containsKey('is_primary')) {
+      context.handle(
+        _isPrimaryMeta,
+        isPrimary.isAcceptableOrUnknown(data['is_primary']!, _isPrimaryMeta),
       );
     }
     if (data.containsKey('check_frequency')) {
@@ -7316,6 +7612,10 @@ class $ObjectivesTable extends Objectives
         DriftSqlType.bool,
         data['${effectivePrefix}active'],
       )!,
+      isPrimary: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_primary'],
+      )!,
       checkFrequency: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}check_frequency'],
@@ -7343,6 +7643,7 @@ class Objective extends DataClass implements Insertable<Objective> {
   final String objective;
   final String tasks;
   final bool active;
+  final bool isPrimary;
   final int checkFrequency;
   final int injectionDepth;
   final DateTime createdAt;
@@ -7352,6 +7653,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     required this.objective,
     required this.tasks,
     required this.active,
+    required this.isPrimary,
     required this.checkFrequency,
     required this.injectionDepth,
     required this.createdAt,
@@ -7364,6 +7666,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     map['objective'] = Variable<String>(objective);
     map['tasks'] = Variable<String>(tasks);
     map['active'] = Variable<bool>(active);
+    map['is_primary'] = Variable<bool>(isPrimary);
     map['check_frequency'] = Variable<int>(checkFrequency);
     map['injection_depth'] = Variable<int>(injectionDepth);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -7377,6 +7680,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       objective: Value(objective),
       tasks: Value(tasks),
       active: Value(active),
+      isPrimary: Value(isPrimary),
       checkFrequency: Value(checkFrequency),
       injectionDepth: Value(injectionDepth),
       createdAt: Value(createdAt),
@@ -7394,6 +7698,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       objective: serializer.fromJson<String>(json['objective']),
       tasks: serializer.fromJson<String>(json['tasks']),
       active: serializer.fromJson<bool>(json['active']),
+      isPrimary: serializer.fromJson<bool>(json['isPrimary']),
       checkFrequency: serializer.fromJson<int>(json['checkFrequency']),
       injectionDepth: serializer.fromJson<int>(json['injectionDepth']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -7408,6 +7713,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       'objective': serializer.toJson<String>(objective),
       'tasks': serializer.toJson<String>(tasks),
       'active': serializer.toJson<bool>(active),
+      'isPrimary': serializer.toJson<bool>(isPrimary),
       'checkFrequency': serializer.toJson<int>(checkFrequency),
       'injectionDepth': serializer.toJson<int>(injectionDepth),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -7420,6 +7726,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     String? objective,
     String? tasks,
     bool? active,
+    bool? isPrimary,
     int? checkFrequency,
     int? injectionDepth,
     DateTime? createdAt,
@@ -7429,6 +7736,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     objective: objective ?? this.objective,
     tasks: tasks ?? this.tasks,
     active: active ?? this.active,
+    isPrimary: isPrimary ?? this.isPrimary,
     checkFrequency: checkFrequency ?? this.checkFrequency,
     injectionDepth: injectionDepth ?? this.injectionDepth,
     createdAt: createdAt ?? this.createdAt,
@@ -7442,6 +7750,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       objective: data.objective.present ? data.objective.value : this.objective,
       tasks: data.tasks.present ? data.tasks.value : this.tasks,
       active: data.active.present ? data.active.value : this.active,
+      isPrimary: data.isPrimary.present ? data.isPrimary.value : this.isPrimary,
       checkFrequency: data.checkFrequency.present
           ? data.checkFrequency.value
           : this.checkFrequency,
@@ -7460,6 +7769,7 @@ class Objective extends DataClass implements Insertable<Objective> {
           ..write('objective: $objective, ')
           ..write('tasks: $tasks, ')
           ..write('active: $active, ')
+          ..write('isPrimary: $isPrimary, ')
           ..write('checkFrequency: $checkFrequency, ')
           ..write('injectionDepth: $injectionDepth, ')
           ..write('createdAt: $createdAt')
@@ -7474,6 +7784,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     objective,
     tasks,
     active,
+    isPrimary,
     checkFrequency,
     injectionDepth,
     createdAt,
@@ -7487,6 +7798,7 @@ class Objective extends DataClass implements Insertable<Objective> {
           other.objective == this.objective &&
           other.tasks == this.tasks &&
           other.active == this.active &&
+          other.isPrimary == this.isPrimary &&
           other.checkFrequency == this.checkFrequency &&
           other.injectionDepth == this.injectionDepth &&
           other.createdAt == this.createdAt);
@@ -7498,6 +7810,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
   final Value<String> objective;
   final Value<String> tasks;
   final Value<bool> active;
+  final Value<bool> isPrimary;
   final Value<int> checkFrequency;
   final Value<int> injectionDepth;
   final Value<DateTime> createdAt;
@@ -7508,6 +7821,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     this.objective = const Value.absent(),
     this.tasks = const Value.absent(),
     this.active = const Value.absent(),
+    this.isPrimary = const Value.absent(),
     this.checkFrequency = const Value.absent(),
     this.injectionDepth = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -7519,6 +7833,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     required String objective,
     this.tasks = const Value.absent(),
     this.active = const Value.absent(),
+    this.isPrimary = const Value.absent(),
     this.checkFrequency = const Value.absent(),
     this.injectionDepth = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -7532,6 +7847,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     Expression<String>? objective,
     Expression<String>? tasks,
     Expression<bool>? active,
+    Expression<bool>? isPrimary,
     Expression<int>? checkFrequency,
     Expression<int>? injectionDepth,
     Expression<DateTime>? createdAt,
@@ -7543,6 +7859,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
       if (objective != null) 'objective': objective,
       if (tasks != null) 'tasks': tasks,
       if (active != null) 'active': active,
+      if (isPrimary != null) 'is_primary': isPrimary,
       if (checkFrequency != null) 'check_frequency': checkFrequency,
       if (injectionDepth != null) 'injection_depth': injectionDepth,
       if (createdAt != null) 'created_at': createdAt,
@@ -7556,6 +7873,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     Value<String>? objective,
     Value<String>? tasks,
     Value<bool>? active,
+    Value<bool>? isPrimary,
     Value<int>? checkFrequency,
     Value<int>? injectionDepth,
     Value<DateTime>? createdAt,
@@ -7567,6 +7885,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
       objective: objective ?? this.objective,
       tasks: tasks ?? this.tasks,
       active: active ?? this.active,
+      isPrimary: isPrimary ?? this.isPrimary,
       checkFrequency: checkFrequency ?? this.checkFrequency,
       injectionDepth: injectionDepth ?? this.injectionDepth,
       createdAt: createdAt ?? this.createdAt,
@@ -7592,6 +7911,9 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     if (active.present) {
       map['active'] = Variable<bool>(active.value);
     }
+    if (isPrimary.present) {
+      map['is_primary'] = Variable<bool>(isPrimary.value);
+    }
     if (checkFrequency.present) {
       map['check_frequency'] = Variable<int>(checkFrequency.value);
     }
@@ -7615,6 +7937,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
           ..write('objective: $objective, ')
           ..write('tasks: $tasks, ')
           ..write('active: $active, ')
+          ..write('isPrimary: $isPrimary, ')
           ..write('checkFrequency: $checkFrequency, ')
           ..write('injectionDepth: $injectionDepth, ')
           ..write('createdAt: $createdAt, ')
@@ -8911,6 +9234,11 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<int> fixationLifespan,
       Value<String> spatialStance,
       Value<bool> trustRepairPending,
+      Value<String> evolvedPersonality,
+      Value<String> evolvedScenario,
+      Value<int> evolutionCount,
+      Value<String> groupEvolvedPersonalities,
+      Value<String> groupEvolvedScenarios,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -8950,6 +9278,11 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<int> fixationLifespan,
       Value<String> spatialStance,
       Value<bool> trustRepairPending,
+      Value<String> evolvedPersonality,
+      Value<String> evolvedScenario,
+      Value<int> evolutionCount,
+      Value<String> groupEvolvedPersonalities,
+      Value<String> groupEvolvedScenarios,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
@@ -9122,6 +9455,31 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<bool> get trustRepairPending => $composableBuilder(
     column: $table.trustRepairPending,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get evolvedPersonality => $composableBuilder(
+    column: $table.evolvedPersonality,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get evolvedScenario => $composableBuilder(
+    column: $table.evolvedScenario,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get evolutionCount => $composableBuilder(
+    column: $table.evolutionCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get groupEvolvedPersonalities => $composableBuilder(
+    column: $table.groupEvolvedPersonalities,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get groupEvolvedScenarios => $composableBuilder(
+    column: $table.groupEvolvedScenarios,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9310,6 +9668,31 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get evolvedPersonality => $composableBuilder(
+    column: $table.evolvedPersonality,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get evolvedScenario => $composableBuilder(
+    column: $table.evolvedScenario,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get evolutionCount => $composableBuilder(
+    column: $table.evolutionCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get groupEvolvedPersonalities => $composableBuilder(
+    column: $table.groupEvolvedPersonalities,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get groupEvolvedScenarios => $composableBuilder(
+    column: $table.groupEvolvedScenarios,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9481,6 +9864,31 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get evolvedPersonality => $composableBuilder(
+    column: $table.evolvedPersonality,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get evolvedScenario => $composableBuilder(
+    column: $table.evolvedScenario,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get evolutionCount => $composableBuilder(
+    column: $table.evolutionCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get groupEvolvedPersonalities => $composableBuilder(
+    column: $table.groupEvolvedPersonalities,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get groupEvolvedScenarios => $composableBuilder(
+    column: $table.groupEvolvedScenarios,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -9551,6 +9959,11 @@ class $$SessionsTableTableManager
                 Value<int> fixationLifespan = const Value.absent(),
                 Value<String> spatialStance = const Value.absent(),
                 Value<bool> trustRepairPending = const Value.absent(),
+                Value<String> evolvedPersonality = const Value.absent(),
+                Value<String> evolvedScenario = const Value.absent(),
+                Value<int> evolutionCount = const Value.absent(),
+                Value<String> groupEvolvedPersonalities = const Value.absent(),
+                Value<String> groupEvolvedScenarios = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9588,6 +10001,11 @@ class $$SessionsTableTableManager
                 fixationLifespan: fixationLifespan,
                 spatialStance: spatialStance,
                 trustRepairPending: trustRepairPending,
+                evolvedPersonality: evolvedPersonality,
+                evolvedScenario: evolvedScenario,
+                evolutionCount: evolutionCount,
+                groupEvolvedPersonalities: groupEvolvedPersonalities,
+                groupEvolvedScenarios: groupEvolvedScenarios,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -9627,6 +10045,11 @@ class $$SessionsTableTableManager
                 Value<int> fixationLifespan = const Value.absent(),
                 Value<String> spatialStance = const Value.absent(),
                 Value<bool> trustRepairPending = const Value.absent(),
+                Value<String> evolvedPersonality = const Value.absent(),
+                Value<String> evolvedScenario = const Value.absent(),
+                Value<int> evolutionCount = const Value.absent(),
+                Value<String> groupEvolvedPersonalities = const Value.absent(),
+                Value<String> groupEvolvedScenarios = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -9664,6 +10087,11 @@ class $$SessionsTableTableManager
                 fixationLifespan: fixationLifespan,
                 spatialStance: spatialStance,
                 trustRepairPending: trustRepairPending,
+                evolvedPersonality: evolvedPersonality,
+                evolvedScenario: evolvedScenario,
+                evolutionCount: evolutionCount,
+                groupEvolvedPersonalities: groupEvolvedPersonalities,
+                groupEvolvedScenarios: groupEvolvedScenarios,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -11636,6 +12064,7 @@ typedef $$ObjectivesTableCreateCompanionBuilder =
       required String objective,
       Value<String> tasks,
       Value<bool> active,
+      Value<bool> isPrimary,
       Value<int> checkFrequency,
       Value<int> injectionDepth,
       Value<DateTime> createdAt,
@@ -11648,6 +12077,7 @@ typedef $$ObjectivesTableUpdateCompanionBuilder =
       Value<String> objective,
       Value<String> tasks,
       Value<bool> active,
+      Value<bool> isPrimary,
       Value<int> checkFrequency,
       Value<int> injectionDepth,
       Value<DateTime> createdAt,
@@ -11685,6 +12115,11 @@ class $$ObjectivesTableFilterComposer
 
   ColumnFilters<bool> get active => $composableBuilder(
     column: $table.active,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isPrimary => $composableBuilder(
+    column: $table.isPrimary,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11738,6 +12173,11 @@ class $$ObjectivesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isPrimary => $composableBuilder(
+    column: $table.isPrimary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get checkFrequency => $composableBuilder(
     column: $table.checkFrequency,
     builder: (column) => ColumnOrderings(column),
@@ -11779,6 +12219,9 @@ class $$ObjectivesTableAnnotationComposer
 
   GeneratedColumn<bool> get active =>
       $composableBuilder(column: $table.active, builder: (column) => column);
+
+  GeneratedColumn<bool> get isPrimary =>
+      $composableBuilder(column: $table.isPrimary, builder: (column) => column);
 
   GeneratedColumn<int> get checkFrequency => $composableBuilder(
     column: $table.checkFrequency,
@@ -11830,6 +12273,7 @@ class $$ObjectivesTableTableManager
                 Value<String> objective = const Value.absent(),
                 Value<String> tasks = const Value.absent(),
                 Value<bool> active = const Value.absent(),
+                Value<bool> isPrimary = const Value.absent(),
                 Value<int> checkFrequency = const Value.absent(),
                 Value<int> injectionDepth = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -11840,6 +12284,7 @@ class $$ObjectivesTableTableManager
                 objective: objective,
                 tasks: tasks,
                 active: active,
+                isPrimary: isPrimary,
                 checkFrequency: checkFrequency,
                 injectionDepth: injectionDepth,
                 createdAt: createdAt,
@@ -11852,6 +12297,7 @@ class $$ObjectivesTableTableManager
                 required String objective,
                 Value<String> tasks = const Value.absent(),
                 Value<bool> active = const Value.absent(),
+                Value<bool> isPrimary = const Value.absent(),
                 Value<int> checkFrequency = const Value.absent(),
                 Value<int> injectionDepth = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -11862,6 +12308,7 @@ class $$ObjectivesTableTableManager
                 objective: objective,
                 tasks: tasks,
                 active: active,
+                isPrimary: isPrimary,
                 checkFrequency: checkFrequency,
                 injectionDepth: injectionDepth,
                 createdAt: createdAt,

@@ -100,7 +100,16 @@ class Sessions extends Table {
   IntColumn get fixationLifespan => integer().withDefault(const Constant(0))(); // decay turns
   TextColumn get spatialStance => text().withDefault(const Constant(''))(); // physical anchor
   BoolColumn get trustRepairPending => boolean().withDefault(const Constant(false))(); // repair window armed after severe trust drop
-  
+
+  // Per-session character evolution (v19)
+  // 1:1 chats: plain evolved text
+  TextColumn get evolvedPersonality => text().withDefault(const Constant(''))();
+  TextColumn get evolvedScenario => text().withDefault(const Constant(''))();
+  IntColumn get evolutionCount => integer().withDefault(const Constant(0))();
+  // Group chats: JSON maps { charId → evolved text }
+  TextColumn get groupEvolvedPersonalities => text().withDefault(const Constant('{}'))();
+  TextColumn get groupEvolvedScenarios => text().withDefault(const Constant('{}'))();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -237,6 +246,7 @@ class Objectives extends Table {
   TextColumn get objective => text()();            // the main goal
   TextColumn get tasks => text().withDefault(const Constant('[]'))(); // JSON array of {description, completed}
   BoolColumn get active => boolean().withDefault(const Constant(true))();
+  BoolColumn get isPrimary => boolean().withDefault(const Constant(false))(); // Primary vs secondary goal
   IntColumn get checkFrequency => integer().withDefault(const Constant(3))(); // check task completion every N messages
   IntColumn get injectionDepth => integer().withDefault(const Constant(4))(); // how many messages from end to inject (0=strongest)
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -373,7 +383,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -598,6 +608,56 @@ class AppDatabase extends _$AppDatabase {
         // v17→v18: add trust repair window flag
         try {
           await customStatement('ALTER TABLE sessions ADD COLUMN trust_repair_pending INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+      }
+      if (from < 19) {
+        // v18→v19: per-session character evolution columns
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN evolved_personality TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN evolved_scenario TEXT NOT NULL DEFAULT ''");
+        } catch (_) {}
+        try {
+          await customStatement('ALTER TABLE sessions ADD COLUMN evolution_count INTEGER NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN group_evolved_personalities TEXT NOT NULL DEFAULT '{}'");
+        } catch (_) {}
+        try {
+          await customStatement("ALTER TABLE sessions ADD COLUMN group_evolved_scenarios TEXT NOT NULL DEFAULT '{}'");
+        } catch (_) {}
+        // Data preservation: copy existing character-level evolved data into
+        // all their matching (non-deleted) session rows so no user data is lost.
+        try {
+          final evolvedChars = await customSelect(
+            "SELECT id, evolved_personality, evolved_scenario, evolution_count "
+            "FROM characters "
+            "WHERE (evolved_personality != '' OR evolved_scenario != '') "
+            "AND deleted_at IS NULL",
+          ).get();
+          for (final row in evolvedChars) {
+            final charId = row.read<String>('id');
+            final ep = row.read<String>('evolved_personality');
+            final es = row.read<String>('evolved_scenario');
+            final ec = row.read<int>('evolution_count');
+            await customUpdate(
+              'UPDATE sessions SET evolved_personality = ?, evolved_scenario = ?, evolution_count = ? '
+              'WHERE character_id = ? AND deleted_at IS NULL',
+              variables: [Variable(ep), Variable(es), Variable(ec), Variable(charId)],
+              updates: {sessions},
+            );
+            debugPrint('[DB] v19 migration: copied evolution data for character $charId to their sessions');
+          }
+        } catch (e) {
+          debugPrint('[DB] v19 migration: data copy failed (non-fatal): $e');
+        }
+      }
+      if (from < 20) {
+        // v19→v20: multi-objective support (primary vs secondary goals)
+        try {
+          // Defaulting to 1 so any previously active goal becomes the primary goal
+          await customStatement('ALTER TABLE objectives ADD COLUMN is_primary INTEGER NOT NULL DEFAULT 1');
         } catch (_) {}
       }
     },
@@ -979,6 +1039,16 @@ class AppDatabase extends _$AppDatabase {
     return result;
   }
 
+  /// Partial-update a session — only writes fields that are explicitly set
+  /// (Value.present). Safe to call without providing the full row.
+  Future<bool> patchSession(SessionsCompanion session) async {
+    final rows = await (update(sessions)
+      ..where((s) => s.id.equals(session.id.value)))
+      .write(session);
+    await bumpSyncVersion();
+    return rows > 0;
+  }
+
   Future<int> deleteSessionById(String id) async {
     // Hard delete: also delete all messages in this session
     await (delete(messages)..where((m) => m.sessionId.equals(id))).go();
@@ -1234,10 +1304,13 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(o) => OrderingTerm(expression: o.createdAt, mode: OrderingMode.desc)]))
       .get();
 
-  Future<Objective?> getActiveObjective(String characterId) =>
+  Future<List<Objective>> getActiveObjectives(String characterId) =>
       (select(objectives)..where((o) => o.characterId.equals(characterId) & o.active.equals(true))
-        ..limit(1))
-      .getSingleOrNull();
+        ..orderBy([
+          (o) => OrderingTerm(expression: o.isPrimary, mode: OrderingMode.desc),
+          (o) => OrderingTerm(expression: o.createdAt, mode: OrderingMode.asc)
+        ]))
+      .get();
 
   Future<void> insertObjective(ObjectivesCompanion entry) async {
     final id = entry.id.present ? entry.id.value : const Uuid().v4();

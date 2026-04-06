@@ -66,7 +66,8 @@ class ChatMessage {
   int swipeIndex;
   final String sender;
   final bool isUser;
-  final String? characterId; // which character card sent this (null = user or 1:1 mode)
+  final String?
+  characterId; // which character card sent this (null = user or 1:1 mode)
   final List<int> swipeDurations; // thinking duration in ms per swipe
 
   String get text => swipes.isNotEmpty ? swipes[swipeIndex] : '';
@@ -81,9 +82,15 @@ class ChatMessage {
   String get displayText {
     final raw = text;
     // Strip completed think blocks
-    var result = raw.replaceAll(RegExp(r'<think>[\s\S]*?</think>\s*', caseSensitive: false), '');
+    var result = raw.replaceAll(
+      RegExp(r'<think>[\s\S]*?</think>\s*', caseSensitive: false),
+      '',
+    );
     // Strip in-progress think block (opened but not yet closed during streaming)
-    result = result.replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '');
+    result = result.replaceAll(
+      RegExp(r'<think>[\s\S]*$', caseSensitive: false),
+      '',
+    );
     return result.trim();
   }
 
@@ -91,17 +98,24 @@ class ChatMessage {
   /// Handles both completed and in-progress (streaming) think blocks.
   String? get thinkingContent {
     // Try completed think block first
-    final closed = RegExp(r'<think>([\s\S]*?)</think>', caseSensitive: false).firstMatch(text);
+    final closed = RegExp(
+      r'<think>([\s\S]*?)</think>',
+      caseSensitive: false,
+    ).firstMatch(text);
     if (closed != null) return closed.group(1)?.trim();
     // Try in-progress think block (no closing tag yet)
-    final open = RegExp(r'<think>([\s\S]*?)$', caseSensitive: false).firstMatch(text);
+    final open = RegExp(
+      r'<think>([\s\S]*?)$',
+      caseSensitive: false,
+    ).firstMatch(text);
     return open?.group(1)?.trim();
   }
 
   /// Whether this message has thinking content (either from tags or tracked duration)
   bool get hasThinking => thinkingContent != null || thinkingDurationMs > 0;
 
-  int get thinkingDurationMs => swipeIndex < swipeDurations.length ? swipeDurations[swipeIndex] : 0;
+  int get thinkingDurationMs =>
+      swipeIndex < swipeDurations.length ? swipeDurations[swipeIndex] : 0;
   set thinkingDurationMs(int value) {
     while (swipeDurations.length <= swipeIndex) {
       swipeDurations.add(0);
@@ -128,20 +142,19 @@ class ChatMessage {
   }
 
   ChatMessage({
-    required String text, 
-    required this.sender, 
-    required this.isUser, 
-    this.characterId, 
-    List<String>? swipes, 
-    int? swipeIndex, 
-    List<int>? swipeDurations, 
+    required String text,
+    required this.sender,
+    required this.isUser,
+    this.characterId,
+    List<String>? swipes,
+    int? swipeIndex,
+    List<int>? swipeDurations,
     this.metadata,
     List<Map<String, dynamic>?>? swipeMetadata,
-  })
-    : swipes = swipes ?? [text],
-      swipeIndex = swipeIndex ?? 0,
-      swipeDurations = swipeDurations ?? [0],
-      swipeMetadata = swipeMetadata ?? [metadata];
+  }) : swipes = swipes ?? [text],
+       swipeIndex = swipeIndex ?? 0,
+       swipeDurations = swipeDurations ?? [0],
+       swipeMetadata = swipeMetadata ?? [metadata];
 
   Map<String, dynamic> toJson() {
     return {
@@ -158,12 +171,19 @@ class ChatMessage {
   }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
-    final List<String>? savedSwipes = (json['swipes'] as List<dynamic>?)?.map((e) => e.toString()).toList();
-    final List<int>? savedDurations = (json['swipe_durations'] as List<dynamic>?)?.map((e) => (e as num).toInt()).toList();
+    final List<String>? savedSwipes = (json['swipes'] as List<dynamic>?)
+        ?.map((e) => e.toString())
+        .toList();
+    final List<int>? savedDurations =
+        (json['swipe_durations'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList();
     final String fallbackText = json['text'] ?? '';
-    final List<Map<String, dynamic>?>? savedSwipeMetadata = (json['swipe_metadata'] as List<dynamic>?)
-        ?.map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null).toList();
-        
+    final List<Map<String, dynamic>?>? savedSwipeMetadata =
+        (json['swipe_metadata'] as List<dynamic>?)
+            ?.map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null)
+            .toList();
+
     return ChatMessage(
       text: fallbackText,
       sender: json['sender'] ?? '',
@@ -172,7 +192,9 @@ class ChatMessage {
       swipes: savedSwipes ?? [fallbackText],
       swipeIndex: json['swipe_index'] ?? 0,
       swipeDurations: savedDurations ?? [0],
-      metadata: json['metadata'] != null ? Map<String, dynamic>.from(json['metadata']) : null,
+      metadata: json['metadata'] != null
+          ? Map<String, dynamic>.from(json['metadata'])
+          : null,
       swipeMetadata: savedSwipeMetadata,
     );
   }
@@ -196,26 +218,33 @@ class ChatService extends ChangeNotifier {
   bool get isGeneratingActions => _isGeneratingActions;
 
   // Objective/quest system
-  Objective? _activeObjective;
+  List<Objective> _activeObjectives = [];
   int _messagesSinceLastCheck = 0;
   bool _isCheckingCompletion = false;
-  Objective? get activeObjective => _activeObjective;
-  List<Map<String, dynamic>> get objectiveTasks {
-    if (_activeObjective == null) return [];
+
+  List<Objective> get activeObjectives => _activeObjectives;
+  Objective? get primaryObjective =>
+      _activeObjectives.where((o) => o.isPrimary).firstOrNull;
+  List<Objective> get secondaryObjectives =>
+      _activeObjectives.where((o) => !o.isPrimary).toList();
+
+  List<Map<String, dynamic>> tasksForObjective(Objective obj) {
     try {
-      return (jsonDecode(_activeObjective!.tasks) as List)
-          .cast<Map<String, dynamic>>();
+      return (jsonDecode(obj.tasks) as List).cast<Map<String, dynamic>>();
     } catch (_) {
       return [];
     }
   }
 
   /// Update the database reference (e.g. after cloud sync replaces the DB file).
-  void updateDatabase(AppDatabase db) { _db = db; }
+  void updateDatabase(AppDatabase db) {
+    _db = db;
+  }
 
   CharacterCard? _activeCharacter;
   final List<ChatMessage> _messages = [];
-  Map<String, dynamic>? _pendingRealismMetadata; // stores deltas for the next generation
+  Map<String, dynamic>?
+  _pendingRealismMetadata; // stores deltas for the next generation
   bool _isGenerating = false;
   bool _isLoadingSession = false;
   bool _cancelRequested = false;
@@ -229,16 +258,19 @@ class ChatService extends ChangeNotifier {
   final List<String> _tokenBuffer = [];
   Timer? _drainTimer;
   int _displayedTokenCount = 0;
-  final List<DateTime> _tokenTimestamps = []; // Rolling window for TPS measurement
+  final List<DateTime> _tokenTimestamps =
+      []; // Rolling window for TPS measurement
 
   // ── Web SSE token broadcast ──
   // External consumers (e.g. WebChatBridge) listen to this for real-time token streaming.
-  final StreamController<String> _tokenBroadcast = StreamController<String>.broadcast();
+  final StreamController<String> _tokenBroadcast =
+      StreamController<String>.broadcast();
   Stream<String> get tokenStream => _tokenBroadcast.stream;
 
   /// Emits complete sentences as they're detected during LLM token streaming.
   /// Used by call mode to start TTS on the first sentence immediately.
-  final StreamController<String> _sentenceBroadcast = StreamController<String>.broadcast();
+  final StreamController<String> _sentenceBroadcast =
+      StreamController<String>.broadcast();
   Stream<String> get sentenceStream => _sentenceBroadcast.stream;
   String _sentenceBuffer = ''; // accumulates tokens until a sentence boundary
 
@@ -272,11 +304,12 @@ class ChatService extends ChangeNotifier {
   // ── Realism Mode ──
   bool _realismEnabled = false; // master toggle
   bool _isEvaluatingRealism = false;
+  bool _isProcessingGreeting = false; // true while post-greeting baseline eval runs
   String _realismEvalStreamText = '';
 
   // Relationship (Short-Term / Tension)
-  int _affectionScore = 0; 
-  int _relationshipTier = 0; 
+  int _affectionScore = 0;
+  int _relationshipTier = 0;
 
   // Long-Term Bond
   int _longTermScore = 0;
@@ -285,7 +318,6 @@ class ChatService extends ChangeNotifier {
   int _shortTermDeltasSummary = 0;
 
   // Short-term mood
-  int _shortTermMood = 0; // -5 to +5
   int _moodDecayCounter = 0;
 
   // Emotional state
@@ -295,12 +327,13 @@ class ChatService extends ChangeNotifier {
   // Passage of time
   String _timeOfDay = 'morning';
   int _dayCount = 1;
+  int _startDayOfWeek = DateTime.now().weekday; // 1=Mon ... 7=Sun, set when session starts
 
   // NSFW cooldown & lust
   bool _nsfwCooldownEnabled = false;
   int _cooldownTurnsRemaining = 0;
   int _arousalLevel = 0; // -3 to 10 scale
-  
+
   // ── v3 Behavioral Mechanics ──
   int _trustLevel = 0; // -100 to 100
   String _activeFixation = '';
@@ -420,7 +453,9 @@ class ChatService extends ChangeNotifier {
   GroupChat? get activeGroup => _activeGroup;
   bool get observerMode => _observerMode;
   bool get autoPlayActive => _autoPlayActive;
-  List<CharacterCard> get groupCharacters => List.unmodifiable(_groupCharacters);
+  List<CharacterCard> get groupCharacters =>
+      List.unmodifiable(_groupCharacters);
+
   /// The character who will speak next in group mode.
   CharacterCard? get nextCharacter {
     if (_activeGroup == null || _groupCharacters.isEmpty) return null;
@@ -429,6 +464,7 @@ class ChatService extends ChangeNotifier {
     }
     return null; // random is chosen at generation time
   }
+
   double get tokensPerSecond {
     if (_tokenTimestamps.length < 2) return 0.0;
     // Use rolling window: tokens in the last 3 seconds
@@ -438,17 +474,24 @@ class ChatService extends ChangeNotifier {
     if (recent < 2) {
       // Fallback to overall average
       if (_generationStartTime == null || _tokensGenerated == 0) return 0.0;
-      final elapsed = now.difference(_generationStartTime!).inMilliseconds / 1000.0;
+      final elapsed =
+          now.difference(_generationStartTime!).inMilliseconds / 1000.0;
       return elapsed > 0 ? _tokensGenerated / elapsed : 0.0;
     }
     final windowStart = _tokenTimestamps.where((t) => t.isAfter(cutoff)).first;
     final windowElapsed = now.difference(windowStart).inMilliseconds / 1000.0;
     return windowElapsed > 0 ? recent / windowElapsed : 0.0;
   }
+
   int _greetingIndex = 0;
   int get greetingIndex => _greetingIndex;
 
-  ChatService(this._koboldService, this._userPersonaService, this._storageService, this._worldRepository);
+  ChatService(
+    this._koboldService,
+    this._userPersonaService,
+    this._storageService,
+    this._worldRepository,
+  );
 
   /// Set the database instance after construction.
   void setDatabase(AppDatabase db) {
@@ -474,15 +517,24 @@ class ChatService extends ChangeNotifier {
   int get longTermTier => _longTermTier;
   bool get realismEnabled => _realismEnabled;
   bool get isEvaluatingRealism => _isEvaluatingRealism;
+  bool get isProcessingGreeting => _isProcessingGreeting;
   String get realismEvalStreamText => _realismEvalStreamText;
-  int get shortTermMood => _shortTermMood;
   String get characterEmotion => _characterEmotion;
   String get emotionIntensity => _emotionIntensity;
   String get timeOfDay => _timeOfDay;
   int get dayCount => _dayCount;
+
+  /// The current narrative day of the week (e.g. 'Monday'), computed from
+  /// the session's anchor weekday plus elapsed in-story days.
+  String get narrativeWeekday {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final idx = (_startDayOfWeek - 1 + (_dayCount - 1)) % 7;
+    return days[idx];
+  }
   bool get nsfwCooldownEnabled => _nsfwCooldownEnabled;
   int get cooldownTurnsRemaining => _cooldownTurnsRemaining;
   int get arousalLevel => _arousalLevel;
+  String get activeFixation => _activeFixation;
 
   int get shortTermProgressTarget {
     final absScore = _affectionScore.abs();
@@ -549,35 +601,59 @@ class ChatService extends ChangeNotifier {
 
   String get shortTermTierName {
     switch (_relationshipTier) {
-      case 5: return 'Intimate';
-      case 4: return 'Close Friend';
-      case 3: return 'Friend';
-      case 2: return 'Acquaintance';
-      case 1: return 'Friendly';
-      case 0: return 'Stranger / Neutral';
-      case -1: return 'Annoyed';
-      case -2: return 'Frustrated';
-      case -3: return 'Disliked';
-      case -4: return 'Hostile';
-      case -5: return 'Bitter Enemy';
-      default: return 'Unknown';
+      case 5:
+        return 'Intimate';
+      case 4:
+        return 'Close Friend';
+      case 3:
+        return 'Friend';
+      case 2:
+        return 'Acquaintance';
+      case 1:
+        return 'Friendly';
+      case 0:
+        return 'Stranger / Neutral';
+      case -1:
+        return 'Annoyed';
+      case -2:
+        return 'Frustrated';
+      case -3:
+        return 'Disliked';
+      case -4:
+        return 'Hostile';
+      case -5:
+        return 'Bitter Enemy';
+      default:
+        return 'Unknown';
     }
   }
 
   String get longTermTierName {
     switch (_longTermTier) {
-      case 5: return 'Soulmate / Devoted';
-      case 4: return 'Unbreakable Bond';
-      case 3: return 'Deep Connection';
-      case 2: return 'Growing Trust';
-      case 1: return 'Establishing Trust';
-      case 0: return 'No Deep Ties';
-      case -1: return 'Distant';
-      case -2: return 'Fractured';
-      case -3: return 'Broken Trust';
-      case -4: return 'Deep Resentment';
-      case -5: return 'Nemesis';
-      default: return 'Unknown';
+      case 5:
+        return 'Soulmate / Devoted';
+      case 4:
+        return 'Unbreakable Bond';
+      case 3:
+        return 'Deep Connection';
+      case 2:
+        return 'Growing Trust';
+      case 1:
+        return 'Establishing Trust';
+      case 0:
+        return 'No Deep Ties';
+      case -1:
+        return 'Distant';
+      case -2:
+        return 'Fractured';
+      case -3:
+        return 'Broken Trust';
+      case -4:
+        return 'Deep Resentment';
+      case -5:
+        return 'Nemesis';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -587,18 +663,30 @@ class ChatService extends ChangeNotifier {
 
   String get trustTierName {
     switch (trustTier) {
-      case 5: return 'Blind Trust';
-      case 4: return 'Implicit Trust';
-      case 3: return 'Deeply Trusting';
-      case 2: return 'Trusting';
-      case 1: return 'Benefit of Doubt';
-      case 0: return 'Neutral / Guarded';
-      case -1: return 'Wary';
-      case -2: return 'Suspicious';
-      case -3: return 'Distrustful';
-      case -4: return 'Paranoid';
-      case -5: return 'Absolute Distrust';
-      default: return 'Unknown';
+      case 5:
+        return 'Blind Trust';
+      case 4:
+        return 'Implicit Trust';
+      case 3:
+        return 'Deeply Trusting';
+      case 2:
+        return 'Trusting';
+      case 1:
+        return 'Benefit of Doubt';
+      case 0:
+        return 'Neutral / Guarded';
+      case -1:
+        return 'Wary';
+      case -2:
+        return 'Suspicious';
+      case -3:
+        return 'Distrustful';
+      case -4:
+        return 'Paranoid';
+      case -5:
+        return 'Absolute Distrust';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -629,24 +717,14 @@ class ChatService extends ChangeNotifier {
 
   /// Human-readable mood label containing exact emotion string and valence direction.
   String get moodLabel {
-    String directionalLabel;
-    if (_shortTermMood >= 12) directionalLabel = 'Elated';
-    else if (_shortTermMood >= 5) directionalLabel = 'Pleased';
-    else if (_shortTermMood > 0) directionalLabel = 'Positive';
-    else if (_shortTermMood == 0) directionalLabel = 'Neutral';
-    else if (_shortTermMood > -5) directionalLabel = 'Negative';
-    else if (_shortTermMood > -12) directionalLabel = 'Hostile';
-    else directionalLabel = 'Furious';
-
-    if (_characterEmotion.isEmpty) {
-      return directionalLabel;
-    }
-    
-    // Capitalize explicitly defined emotion string
-    final capEmotion = _characterEmotion.substring(0, 1).toUpperCase() + _characterEmotion.substring(1);
-    
-    // In Neutral, maybe don't append bracketed text if there is an explicit emotion
-    return '$capEmotion [$directionalLabel]';
+    if (_characterEmotion.isEmpty) return 'Neutral';
+    final capEmotion =
+        _characterEmotion.substring(0, 1).toUpperCase() +
+        _characterEmotion.substring(1);
+    final intensity = _emotionIntensity.isNotEmpty
+        ? ' ($_emotionIntensity)'
+        : '';
+    return '$capEmotion$intensity';
   }
 
   void setAuthorNote(String note, {int? strength}) {
@@ -690,8 +768,10 @@ class ChatService extends ChangeNotifier {
     List<String> facts;
     if (allFacts.length > 15 && _memoryService != null) {
       // Build context from last few messages
-      final recentContext = _messages.reversed.take(3)
-          .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+      final recentContext = _messages.reversed
+          .take(3)
+          .map((m) => '${m.sender}: ${m.displayText}')
+          .join('\n');
       facts = await _userPersonaService.getRelevantFacts(
         conversationContext: recentContext,
         embedService: _memoryService!.embeddingService,
@@ -705,8 +785,10 @@ class ChatService extends ChangeNotifier {
     buf.writeln("$userName's Persona: $description");
 
     if (facts.isNotEmpty) {
-      buf.writeln('[Discovered traits — observations learned from conversation. '
-          'The user\'s self-description above takes priority if there is a conflict.]');
+      buf.writeln(
+        '[Discovered traits — observations learned from conversation. '
+        'The user\'s self-description above takes priority if there is a conflict.]',
+      );
       for (final fact in facts) {
         buf.writeln('- $fact');
       }
@@ -777,19 +859,21 @@ class ChatService extends ChangeNotifier {
 
     _activeCharacter = character;
 
-    // Load active objective for this character
-    _loadActiveObjective();
-    // Load evolved personality/scenario from DB
-    _loadEvolvedFields();
-    debugPrint('[ChatService] 🟡 setActiveCharacter: clearing messages '
-        '(had ${_messages.length}) for ${character?.name}, loading session...');
+    // Load active objectives for this character
+    _loadActiveObjectives();
+    // Note: evolved personality/scenario are now loaded inside _loadLastSession()
+    // (which runs below) so they are scoped to the session, not the character.
+    debugPrint(
+      '[ChatService] 🟡 setActiveCharacter: clearing messages '
+      '(had ${_messages.length}) for ${character?.name}, loading session...',
+    );
     _messages.clear();
     _currentSessionId = null;
     _summary = '';
     _summaryLastIndex = 0;
     _isLoadingSession = true;
     notifyListeners();
-    
+
     if (_activeCharacter != null) {
       // Reset lorebook trigger state
       if (_activeCharacter!.lorebook != null) {
@@ -799,7 +883,9 @@ class ChatService extends ChangeNotifier {
       }
       // Reset world lore triggers
       for (final worldName in _activeCharacter!.worldNames) {
-        final world = _worldRepository.worlds.where((w) => w.name == worldName).firstOrNull;
+        final world = _worldRepository.worlds
+            .where((w) => w.name == worldName)
+            .firstOrNull;
         if (world != null) {
           for (final entry in world.lorebook.entries) {
             entry.isTriggered = false;
@@ -809,15 +895,17 @@ class ChatService extends ChangeNotifier {
 
       // Try to load last session
       await _loadLastSession();
-      
+
       // If no session loaded, start fresh
       if (_messages.isEmpty) {
         if (_activeCharacter!.firstMessage.isNotEmpty) {
-           _messages.add(ChatMessage(
-            text: _buildFirstMessage(_activeCharacter!),
-            sender: _activeCharacter!.name,
-            isUser: false,
-          ));
+          _messages.add(
+            ChatMessage(
+              text: _buildFirstMessage(_activeCharacter!),
+              sender: _activeCharacter!.name,
+              isUser: false,
+            ),
+          );
           // Scan first message for lore
           _scanLorebook(_messages.last.text);
         }
@@ -840,8 +928,10 @@ class ChatService extends ChangeNotifier {
 
     // Clear 1:1 mode
     _activeCharacter = null;
-    debugPrint('[ChatService] 🟡 setActiveGroup: clearing messages '
-        '(had ${_messages.length}) for group ${group.name}');
+    debugPrint(
+      '[ChatService] 🟡 setActiveGroup: clearing messages '
+      '(had ${_messages.length}) for group ${group.name}',
+    );
     _messages.clear();
     _currentSessionId = null;
     _isLoadingSession = true;
@@ -852,9 +942,11 @@ class ChatService extends ChangeNotifier {
 
     // Resolve character IDs to cards
     _groupCharacters = group.characterIds
-        .map((id) => _characterRepository!.characters.where(
-              (c) => _getCharacterIdFromCard(c) == id,
-            ).firstOrNull)
+        .map(
+          (id) => _characterRepository!.characters
+              .where((c) => _getCharacterIdFromCard(c) == id)
+              .firstOrNull,
+        )
         .whereType<CharacterCard>()
         .toList();
 
@@ -866,7 +958,9 @@ class ChatService extends ChangeNotifier {
         }
       }
       for (final worldName in ch.worldNames) {
-        final world = _worldRepository.worlds.where((w) => w.name == worldName).firstOrNull;
+        final world = _worldRepository.worlds
+            .where((w) => w.name == worldName)
+            .firstOrNull;
         if (world != null) {
           for (final entry in world.lorebook.entries) {
             entry.isTriggered = false;
@@ -892,18 +986,22 @@ class ChatService extends ChangeNotifier {
       } else {
         // Fall back to first character's greeting
         final first = _groupCharacters.first;
-        greetingText = first.firstMessage.isNotEmpty ? _buildFirstMessage(first) : '';
+        greetingText = first.firstMessage.isNotEmpty
+            ? _buildFirstMessage(first)
+            : '';
         greetingSender = first.name;
         greetingCharId = _getCharacterIdFromCard(first);
       }
 
       if (greetingText.isNotEmpty) {
-        _messages.add(ChatMessage(
-          text: greetingText,
-          sender: greetingSender,
-          isUser: false,
-          characterId: greetingCharId,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: greetingText,
+            sender: greetingSender,
+            isUser: false,
+            characterId: greetingCharId,
+          ),
+        );
         _scanLorebook(_messages.last.text);
       }
       _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -932,12 +1030,18 @@ class ChatService extends ChangeNotifier {
     if (_db == null) return null;
 
     final originalCharId = _getCharacterIdFromCard(_activeCharacter!);
-    final allCharIds = [originalCharId, ...additionalCharacters.map(_getCharacterIdFromCard)];
+    final allCharIds = [
+      originalCharId,
+      ...additionalCharacters.map(_getCharacterIdFromCard),
+    ];
 
     // Build a default group name
     final name = groupName?.isNotEmpty == true
         ? groupName!
-        : [_activeCharacter!.name, ...additionalCharacters.map((c) => c.name)].join(' & ');
+        : [
+            _activeCharacter!.name,
+            ...additionalCharacters.map((c) => c.name),
+          ].join(' & ');
 
     // Create the group
     final group = GroupChat(
@@ -959,43 +1063,51 @@ class ChatService extends ChangeNotifier {
       if (!m.isUser && charId == null) {
         charId = originalCharId;
       }
-      copiedMessages.add(MessagesCompanion(
-        sessionId: drift.Value(newSessionId),
-        position: drift.Value(i),
-        sender: drift.Value(m.sender),
-        isUser: drift.Value(m.isUser),
-        characterId: drift.Value(charId),
-        swipes: drift.Value(jsonEncode(m.swipes)),
-        swipeIndex: drift.Value(m.swipeIndex),
-        swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
-      ));
+      copiedMessages.add(
+        MessagesCompanion(
+          sessionId: drift.Value(newSessionId),
+          position: drift.Value(i),
+          sender: drift.Value(m.sender),
+          isUser: drift.Value(m.isUser),
+          characterId: drift.Value(charId),
+          swipes: drift.Value(jsonEncode(m.swipes)),
+          swipeIndex: drift.Value(m.swipeIndex),
+          swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+        ),
+      );
     }
 
     // Insert the new session
-    await _db!.upsertSession(SessionsCompanion.insert(
-      id: newSessionId,
-      groupId: drift.Value(group.id),
-      name: drift.Value(_sessionName),
-      description: drift.Value(_sessionDescription),
-      authorNote: drift.Value(_authorNote),
-      authorNoteDepth: drift.Value(_authorNoteStrength),
-      summary: drift.Value(_summary.isEmpty ? null : _summary),
-      summaryLastIndex: drift.Value(_summaryLastIndex > 0 ? _summaryLastIndex : null),
-      parentSession: drift.Value(_currentSessionId),
-      forkIndex: drift.Value(_messages.length - 1),
-      trustLevel: drift.Value(_trustLevel),
-      activeFixation: drift.Value(_activeFixation),
-      fixationLifespan: drift.Value(_fixationLifespan),
-      spatialStance: drift.Value(_spatialStance),
-      createdAt: drift.Value(DateTime.now()),
-      updatedAt: drift.Value(DateTime.now()),
-    ));
+    await _db!.upsertSession(
+      SessionsCompanion.insert(
+        id: newSessionId,
+        groupId: drift.Value(group.id),
+        name: drift.Value(_sessionName),
+        description: drift.Value(_sessionDescription),
+        authorNote: drift.Value(_authorNote),
+        authorNoteDepth: drift.Value(_authorNoteStrength),
+        summary: drift.Value(_summary.isEmpty ? null : _summary),
+        summaryLastIndex: drift.Value(
+          _summaryLastIndex > 0 ? _summaryLastIndex : null,
+        ),
+        parentSession: drift.Value(_currentSessionId),
+        forkIndex: drift.Value(_messages.length - 1),
+        trustLevel: drift.Value(_trustLevel),
+        activeFixation: drift.Value(_activeFixation),
+        fixationLifespan: drift.Value(_fixationLifespan),
+        spatialStance: drift.Value(_spatialStance),
+        createdAt: drift.Value(DateTime.now()),
+        updatedAt: drift.Value(DateTime.now()),
+      ),
+    );
     if (copiedMessages.isNotEmpty) {
       await _db!.insertMessages(copiedMessages);
     }
 
-    debugPrint('[ChatService] \u{1F500} Forked 1:1 chat to group "${group.name}" '
-        '(${_messages.length} messages copied)');
+    debugPrint(
+      '[ChatService] \u{1F500} Forked 1:1 chat to group "${group.name}" '
+      '(${_messages.length} messages copied)',
+    );
 
     // Switch to the new group (this loads the session we just created)
     await setActiveGroup(group);
@@ -1013,30 +1125,42 @@ class ChatService extends ChangeNotifier {
     if (_db == null) return false;
 
     final charId = _getCharacterIdFromCard(character);
-    if (_activeGroup!.characterIds.contains(charId)) return false; // already in group
+    if (_activeGroup!.characterIds.contains(charId))
+      return false; // already in group
 
     _activeGroup!.characterIds.add(charId);
     await groupRepo.save(_activeGroup!);
 
     // Re-resolve character cards
     _groupCharacters = _activeGroup!.characterIds
-        .map((id) => _characterRepository!.characters.where(
-              (c) => _getCharacterIdFromCard(c) == id,
-            ).firstOrNull)
+        .map(
+          (id) => _characterRepository!.characters
+              .where((c) => _getCharacterIdFromCard(c) == id)
+              .firstOrNull,
+        )
         .whereType<CharacterCard>()
         .toList();
 
-    // Load evolved fields for the new character
-    if (character.dbId != null) {
+    // Load evolved fields for the new character from the current session's
+    // group JSON map columns (if a session is active).
+    if (_currentSessionId != null) {
       try {
-        final dbChar = await _db!.getCharacterById(character.dbId!);
-        _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
-        _evolvedScenarios[charId] = dbChar.evolvedScenario;
-        _groupEvolutionCounts[charId] = dbChar.evolutionCount;
+        final session = await _db!.getSessionById(_currentSessionId!);
+        if (session != null) {
+          final personalities = _tryParseJsonMap(
+            session.groupEvolvedPersonalities,
+          );
+          final scenarios = _tryParseJsonMap(session.groupEvolvedScenarios);
+          _evolvedPersonalities[charId] = personalities[charId] ?? '';
+          _evolvedScenarios[charId] = scenarios[charId] ?? '';
+          _groupEvolutionCounts[charId] = 0;
+        }
       } catch (_) {}
     }
 
-    debugPrint('[ChatService] \u{2795} Added ${character.name} to group ${_activeGroup!.name}');
+    debugPrint(
+      '[ChatService] \u{2795} Added ${character.name} to group ${_activeGroup!.name}',
+    );
     notifyListeners();
     return true;
   }
@@ -1057,9 +1181,11 @@ class ChatService extends ChangeNotifier {
 
     // Re-resolve character cards
     _groupCharacters = _activeGroup!.characterIds
-        .map((id) => _characterRepository!.characters.where(
-              (c) => _getCharacterIdFromCard(c) == id,
-            ).firstOrNull)
+        .map(
+          (id) => _characterRepository!.characters
+              .where((c) => _getCharacterIdFromCard(c) == id)
+              .firstOrNull,
+        )
         .whereType<CharacterCard>()
         .toList();
 
@@ -1068,7 +1194,9 @@ class ChatService extends ChangeNotifier {
       _turnIndex = _turnIndex % _groupCharacters.length;
     }
 
-    debugPrint('[ChatService] \u{2796} Removed ${character.name} from group ${_activeGroup!.name}');
+    debugPrint(
+      '[ChatService] \u{2796} Removed ${character.name} from group ${_activeGroup!.name}',
+    );
     notifyListeners();
     return true;
   }
@@ -1094,15 +1222,34 @@ class ChatService extends ChangeNotifier {
     return _getCharacterIdFromCard(card);
   }
 
+  /// Safely parse a JSON string into a mutable Map<String, String>.
+  /// Returns an empty map if [json] is null, empty, or invalid.
+  Map<String, String> _tryParseJsonMap(String? json) {
+    if (json == null || json.isEmpty || json == '{}') return {};
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map) {
+        return decoded.map(
+          (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
+        );
+      }
+    } catch (_) {}
+    return {};
+  }
+
   Future<void> _saveChat() async {
-    if ((_activeCharacter == null && _activeGroup == null) || _currentSessionId == null) return;
-    
+    if ((_activeCharacter == null && _activeGroup == null) ||
+        _currentSessionId == null)
+      return;
+
     // ── Safety guard: never overwrite existing session data with empty messages.
     // This prevents data loss if _messages is momentarily empty due to a rebuild
     // race, nav glitch, or any other transient state issue.
     if (_messages.isEmpty) {
-      debugPrint('[ChatService] ⚠ _saveChat called with empty messages for '
-          'session $_currentSessionId — skipping to protect existing data.');
+      debugPrint(
+        '[ChatService] ⚠ _saveChat called with empty messages for '
+        'session $_currentSessionId — skipping to protect existing data.',
+      );
       return;
     }
 
@@ -1125,60 +1272,71 @@ class ChatService extends ChangeNotifier {
     final createdAt = timestamp > 0
         ? DateTime.fromMillisecondsSinceEpoch(timestamp)
         : DateTime.now();
-    await _db.upsertSession(SessionsCompanion.insert(
-      id: _currentSessionId!,
-      characterId: drift.Value(characterDbId),
-      groupId: drift.Value(groupDbId),
-      name: drift.Value(_sessionName),
-      description: drift.Value(_sessionDescription),
-      authorNote: drift.Value(_authorNote),
-      authorNoteDepth: drift.Value(_authorNoteStrength),
-      summary: drift.Value(_summary.isEmpty ? null : _summary),
-      summaryLastIndex: drift.Value(_summaryLastIndex > 0 ? _summaryLastIndex : null),
-      parentSession: drift.Value(_parentSessionId),
-      forkIndex: drift.Value(_forkIndex),
-      affectionScore: drift.Value(_affectionScore),
-      relationshipTier: drift.Value(_relationshipTier),
-      longTermScore: drift.Value(_longTermScore),
-      longTermTier: drift.Value(_longTermTier),
-      turnsSinceLongTermCheck: drift.Value(_turnsSinceLongTermCheck),
-      shortTermDeltasSummary: drift.Value(_shortTermDeltasSummary),
-      realismEnabled: drift.Value(_realismEnabled),
-      shortTermMood: drift.Value(_shortTermMood),
-      moodDecayCounter: drift.Value(_moodDecayCounter),
-      characterEmotion: drift.Value(_characterEmotion),
-      emotionIntensity: drift.Value(_emotionIntensity),
-      timeOfDay: drift.Value(_timeOfDay),
-      dayCount: drift.Value(_dayCount),
-      nsfwCooldownEnabled: drift.Value(_nsfwCooldownEnabled),
-      arousalLevel: drift.Value(_arousalLevel),
-      cooldownTurnsRemaining: drift.Value(_cooldownTurnsRemaining),
-      trustLevel: drift.Value(_trustLevel),
-      activeFixation: drift.Value(_activeFixation),
-      fixationLifespan: drift.Value(_fixationLifespan),
-      spatialStance: drift.Value(_spatialStance),
-      trustRepairPending: drift.Value(_pendingTrustRepair),
-      createdAt: drift.Value(createdAt),
-      updatedAt: drift.Value(DateTime.now()),
-    ));
+    await _db.upsertSession(
+      SessionsCompanion.insert(
+        id: _currentSessionId!,
+        characterId: drift.Value(characterDbId),
+        groupId: drift.Value(groupDbId),
+        name: drift.Value(_sessionName),
+        description: drift.Value(_sessionDescription),
+        authorNote: drift.Value(_authorNote),
+        authorNoteDepth: drift.Value(_authorNoteStrength),
+        summary: drift.Value(_summary.isEmpty ? null : _summary),
+        summaryLastIndex: drift.Value(
+          _summaryLastIndex > 0 ? _summaryLastIndex : null,
+        ),
+        parentSession: drift.Value(_parentSessionId),
+        forkIndex: drift.Value(_forkIndex),
+        affectionScore: drift.Value(_affectionScore),
+        relationshipTier: drift.Value(_relationshipTier),
+        longTermScore: drift.Value(_longTermScore),
+        longTermTier: drift.Value(_longTermTier),
+        turnsSinceLongTermCheck: drift.Value(_turnsSinceLongTermCheck),
+        shortTermDeltasSummary: drift.Value(_shortTermDeltasSummary),
+        realismEnabled: drift.Value(_realismEnabled),
+        moodDecayCounter: drift.Value(_moodDecayCounter),
+        characterEmotion: drift.Value(_characterEmotion),
+        emotionIntensity: drift.Value(_emotionIntensity),
+        timeOfDay: drift.Value(_timeOfDay),
+        dayCount: drift.Value(_dayCount),
+        nsfwCooldownEnabled: drift.Value(_nsfwCooldownEnabled),
+        arousalLevel: drift.Value(_arousalLevel),
+        cooldownTurnsRemaining: drift.Value(_cooldownTurnsRemaining),
+        trustLevel: drift.Value(_trustLevel),
+        activeFixation: drift.Value(_activeFixation),
+        fixationLifespan: drift.Value(_fixationLifespan),
+        spatialStance: drift.Value(_spatialStance),
+        trustRepairPending: drift.Value(_pendingTrustRepair),
+        createdAt: drift.Value(createdAt),
+        updatedAt: drift.Value(DateTime.now()),
+      ),
+    );
 
     // Replace all messages for this session using the snapshot
     await _db.deleteMessagesForSession(_currentSessionId!);
     final messageBatch = <MessagesCompanion>[];
     for (int i = 0; i < snapshot.length; i++) {
       final m = snapshot[i];
-      messageBatch.add(MessagesCompanion(
-        sessionId: drift.Value(_currentSessionId!),
-        position: drift.Value(i),
-        sender: drift.Value(m.sender),
-        isUser: drift.Value(m.isUser),
-        characterId: drift.Value(m.characterId),
-        swipes: drift.Value(jsonEncode(m.swipes)),
-        swipeIndex: drift.Value(m.swipeIndex),
-        swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
-        metadata: drift.Value(m.metadata != null ? jsonEncode(m.metadata) : null),
-        swipeMetadata: drift.Value(m.swipeMetadata.any((e) => e != null) ? jsonEncode(m.swipeMetadata) : null),
-      ));
+      messageBatch.add(
+        MessagesCompanion(
+          sessionId: drift.Value(_currentSessionId!),
+          position: drift.Value(i),
+          sender: drift.Value(m.sender),
+          isUser: drift.Value(m.isUser),
+          characterId: drift.Value(m.characterId),
+          swipes: drift.Value(jsonEncode(m.swipes)),
+          swipeIndex: drift.Value(m.swipeIndex),
+          swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+          metadata: drift.Value(
+            m.metadata != null ? jsonEncode(m.metadata) : null,
+          ),
+          swipeMetadata: drift.Value(
+            m.swipeMetadata.any((e) => e != null)
+                ? jsonEncode(m.swipeMetadata)
+                : null,
+          ),
+        ),
+      );
     }
     if (messageBatch.isNotEmpty) {
       await _db.insertMessages(messageBatch);
@@ -1187,7 +1345,7 @@ class ChatService extends ChangeNotifier {
 
   Future<void> _loadLastSession() async {
     if (_activeCharacter == null && _activeGroup == null) return;
-    
+
     // Get sessions from DB
     List<Session> sessions;
     if (_activeGroup != null) {
@@ -1218,7 +1376,6 @@ class ChatService extends ChangeNotifier {
     _turnsSinceLongTermCheck = lastSession.turnsSinceLongTermCheck;
     _shortTermDeltasSummary = lastSession.shortTermDeltasSummary;
     _realismEnabled = lastSession.realismEnabled;
-    _shortTermMood = lastSession.shortTermMood;
     _moodDecayCounter = lastSession.moodDecayCounter;
     _characterEmotion = lastSession.characterEmotion;
     _emotionIntensity = lastSession.emotionIntensity;
@@ -1228,31 +1385,64 @@ class ChatService extends ChangeNotifier {
     _arousalLevel = lastSession.arousalLevel;
     _cooldownTurnsRemaining = lastSession.cooldownTurnsRemaining;
 
+    // Load per-session evolution (1:1 mode only — group is handled by _loadGroupEvolvedFields)
+    if (_activeCharacter != null) {
+      final charId = _getCharacterIdFromCard(_activeCharacter!);
+      _evolvedPersonalities[charId] = lastSession.evolvedPersonality;
+      _evolvedScenarios[charId] = lastSession.evolvedScenario;
+      _characterEvolutionCount = lastSession.evolutionCount;
+      _groupEvolutionCounts[charId] = lastSession.evolutionCount;
+    }
+
     // Load messages
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
-      debugPrint('[ChatService] 🟢 _loadLastSession: loading ${dbMessages.length} '
-          'messages for session $_currentSessionId');
+      debugPrint(
+        '[ChatService] 🟢 _loadLastSession: loading ${dbMessages.length} '
+        'messages for session $_currentSessionId',
+      );
       _messages.clear();
       for (final m in dbMessages) {
         List<String> swipes;
-        try { swipes = List<String>.from(jsonDecode(m.swipes)); } catch (_) { swipes = ['']; }
+        try {
+          swipes = List<String>.from(jsonDecode(m.swipes));
+        } catch (_) {
+          swipes = [''];
+        }
         List<int> swipeDurations;
-        try { swipeDurations = List<int>.from((jsonDecode(m.swipeDurations) as List).map((e) => (e as num).toInt())); } catch (_) { swipeDurations = [0]; }
+        try {
+          swipeDurations = List<int>.from(
+            (jsonDecode(m.swipeDurations) as List).map(
+              (e) => (e as num).toInt(),
+            ),
+          );
+        } catch (_) {
+          swipeDurations = [0];
+        }
 
-        _messages.add(ChatMessage(
-          text: swipes.isNotEmpty ? swipes[m.swipeIndex] : '',
-          sender: m.sender,
-          isUser: m.isUser,
-          characterId: m.characterId,
-          swipes: swipes,
-          swipeIndex: m.swipeIndex,
-          swipeDurations: swipeDurations,
-          metadata: m.metadata != null ? Map<String, dynamic>.from(jsonDecode(m.metadata!)) : null,
-          swipeMetadata: m.swipeMetadata != null 
-              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>).map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null).toList() 
-              : null,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: swipes.isNotEmpty ? swipes[m.swipeIndex] : '',
+            sender: m.sender,
+            isUser: m.isUser,
+            characterId: m.characterId,
+            swipes: swipes,
+            swipeIndex: m.swipeIndex,
+            swipeDurations: swipeDurations,
+            metadata: m.metadata != null
+                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
+                : null,
+            swipeMetadata: m.swipeMetadata != null
+                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
+                      .map(
+                        (e) => e != null
+                            ? Map<String, dynamic>.from(e as Map)
+                            : null,
+                      )
+                      .toList()
+                : null,
+          ),
+        );
       }
 
       if (_messages.isNotEmpty) {
@@ -1315,7 +1505,9 @@ class ChatService extends ChangeNotifier {
       });
     }
 
-    sessions.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    sessions.sort(
+      (a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime),
+    );
     return sessions;
   }
 
@@ -1327,34 +1519,58 @@ class ChatService extends ChangeNotifier {
 
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
-    
+
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
     try {
       final dbMessages = await _db.getMessagesForSession(sessionId);
-      debugPrint('[ChatService] 🟢 loadSession: loading ${dbMessages.length} '
-          'messages for session $sessionId');
+      debugPrint(
+        '[ChatService] 🟢 loadSession: loading ${dbMessages.length} '
+        'messages for session $sessionId',
+      );
       _messages.clear();
       for (final m in dbMessages) {
         List<String> swipes;
-        try { swipes = List<String>.from(jsonDecode(m.swipes)); } catch (_) { swipes = ['']; }
+        try {
+          swipes = List<String>.from(jsonDecode(m.swipes));
+        } catch (_) {
+          swipes = [''];
+        }
         List<int> swipeDurations;
-        try { swipeDurations = List<int>.from((jsonDecode(m.swipeDurations) as List).map((e) => (e as num).toInt())); } catch (_) { swipeDurations = [0]; }
+        try {
+          swipeDurations = List<int>.from(
+            (jsonDecode(m.swipeDurations) as List).map(
+              (e) => (e as num).toInt(),
+            ),
+          );
+        } catch (_) {
+          swipeDurations = [0];
+        }
 
-        _messages.add(ChatMessage(
-          text: swipes.isNotEmpty ? swipes[m.swipeIndex] : '',
-          sender: m.sender,
-          isUser: m.isUser,
-          characterId: m.characterId,
-          swipes: swipes,
-          swipeIndex: m.swipeIndex,
-          swipeDurations: swipeDurations,
-          metadata: m.metadata != null ? Map<String, dynamic>.from(jsonDecode(m.metadata!)) : null,
-          swipeMetadata: m.swipeMetadata != null 
-              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>).map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null).toList() 
-              : null,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: swipes.isNotEmpty ? swipes[m.swipeIndex] : '',
+            sender: m.sender,
+            isUser: m.isUser,
+            characterId: m.characterId,
+            swipes: swipes,
+            swipeIndex: m.swipeIndex,
+            swipeDurations: swipeDurations,
+            metadata: m.metadata != null
+                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
+                : null,
+            swipeMetadata: m.swipeMetadata != null
+                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
+                      .map(
+                        (e) => e != null
+                            ? Map<String, dynamic>.from(e as Map)
+                            : null,
+                      )
+                      .toList()
+                : null,
+          ),
+        );
       }
 
       _currentSessionId = sessionId;
@@ -1370,25 +1586,26 @@ class ChatService extends ChangeNotifier {
       _relationshipTier = session.relationshipTier;
       _longTermScore = session.longTermScore;
       _longTermTier = session.longTermTier;
-      
+
       // Realism Engine 2.0 Compatibility Migration
       // Old scale was 0-15. New scale is 0-150.
       // If we see an old chat that was Tier 5 but score 15, we scale it to match the new engine.
-      if (_affectionScore > 0 && _affectionScore <= 15 && _relationshipTier >= 3) {
+      if (_affectionScore > 0 &&
+          _affectionScore <= 15 &&
+          _relationshipTier >= 3) {
         _affectionScore = _affectionScore * 10;
         // Old high-tier bonds convert immediately into solid Long-Term bounds as well.
         if (_longTermScore == 0) {
-           _longTermScore = _affectionScore;
-           _longTermTier = _calculateTier(_longTermScore);
+          _longTermScore = _affectionScore;
+          _longTermTier = _calculateTier(_longTermScore);
         }
         _relationshipTier = _calculateTier(_affectionScore);
         debugPrint('[Realism] Legacy session migrated to REv2 scales.');
       }
-      
+
       _turnsSinceLongTermCheck = session.turnsSinceLongTermCheck;
       _shortTermDeltasSummary = session.shortTermDeltasSummary;
       _realismEnabled = session.realismEnabled;
-      _shortTermMood = session.shortTermMood;
       _moodDecayCounter = session.moodDecayCounter;
       _characterEmotion = session.characterEmotion;
       _emotionIntensity = session.emotionIntensity;
@@ -1402,6 +1619,15 @@ class ChatService extends ChangeNotifier {
       _fixationLifespan = session.fixationLifespan;
       _spatialStance = session.spatialStance;
       _pendingTrustRepair = session.trustRepairPending;
+
+      // Load per-session evolution (1:1 mode only — group handled by _loadGroupEvolvedFields)
+      if (_activeCharacter != null) {
+        final charId = _getCharacterIdFromCard(_activeCharacter!);
+        _evolvedPersonalities[charId] = session.evolvedPersonality;
+        _evolvedScenarios[charId] = session.evolvedScenario;
+        _characterEvolutionCount = session.evolutionCount;
+        _groupEvolutionCounts[charId] = session.evolutionCount;
+      }
 
       if (_messages.isNotEmpty) {
         _scanLorebook(_messages.last.text);
@@ -1417,11 +1643,13 @@ class ChatService extends ChangeNotifier {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    await _db.updateSession(SessionsCompanion(
-      id: drift.Value(sessionId),
-      name: drift.Value(name.isEmpty ? null : name),
-      updatedAt: drift.Value(DateTime.now()),
-    ));
+    await _db.updateSession(
+      SessionsCompanion(
+        id: drift.Value(sessionId),
+        name: drift.Value(name.isEmpty ? null : name),
+        updatedAt: drift.Value(DateTime.now()),
+      ),
+    );
 
     // Update in-memory if this is the current session
     if (sessionId == _currentSessionId) {
@@ -1431,15 +1659,20 @@ class ChatService extends ChangeNotifier {
   }
 
   /// Update the description of a session.
-  Future<void> updateSessionDescription(String sessionId, String description) async {
+  Future<void> updateSessionDescription(
+    String sessionId,
+    String description,
+  ) async {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    await _db.updateSession(SessionsCompanion(
-      id: drift.Value(sessionId),
-      description: drift.Value(description.isEmpty ? null : description),
-      updatedAt: drift.Value(DateTime.now()),
-    ));
+    await _db.updateSession(
+      SessionsCompanion(
+        id: drift.Value(sessionId),
+        description: drift.Value(description.isEmpty ? null : description),
+        updatedAt: drift.Value(DateTime.now()),
+      ),
+    );
 
     // Update in-memory if this is the current session
     if (sessionId == _currentSessionId) {
@@ -1451,27 +1684,40 @@ class ChatService extends ChangeNotifier {
   /// Create a new session by forking from message at [messageIndex].
   /// Copies messages 0..messageIndex into a new session and switches to it.
   Future<void> forkFromMessage(int messageIndex) async {
-    if ((_activeCharacter == null && _activeGroup == null) || _currentSessionId == null) return;
+    if ((_activeCharacter == null && _activeGroup == null) ||
+        _currentSessionId == null)
+      return;
     if (messageIndex < 0 || messageIndex >= _messages.length) return;
 
     final oldSessionId = _currentSessionId!;
-    final forkedMessages = _messages.sublist(0, messageIndex + 1).map((m) =>
-      ChatMessage(
-        text: m.text,
-        sender: m.sender,
-        isUser: m.isUser,
-        characterId: m.characterId,
-        swipes: List.from(m.swipes),
-        swipeIndex: m.swipeIndex,
-        swipeDurations: List.from(m.swipeDurations),
-        metadata: m.metadata != null ? Map<String, dynamic>.from(m.metadata!) : null,
-        swipeMetadata: m.swipeMetadata != null 
-            ? m.swipeMetadata!.map((e) => e != null ? Map<String, dynamic>.from(e) : null).toList() 
-            : null,
-      )
-    ).toList();
+    final forkedMessages = _messages
+        .sublist(0, messageIndex + 1)
+        .map(
+          (m) => ChatMessage(
+            text: m.text,
+            sender: m.sender,
+            isUser: m.isUser,
+            characterId: m.characterId,
+            swipes: List.from(m.swipes),
+            swipeIndex: m.swipeIndex,
+            swipeDurations: List.from(m.swipeDurations),
+            metadata: m.metadata != null
+                ? Map<String, dynamic>.from(m.metadata!)
+                : null,
+            swipeMetadata: m.swipeMetadata != null
+                ? m.swipeMetadata!
+                      .map(
+                        (e) => e != null ? Map<String, dynamic>.from(e) : null,
+                      )
+                      .toList()
+                : null,
+          ),
+        )
+        .toList();
 
-    debugPrint('[ChatService] 🟡 forkSession: clearing messages for fork at index $messageIndex');
+    debugPrint(
+      '[ChatService] 🟡 forkSession: clearing messages for fork at index $messageIndex',
+    );
     _messages.clear();
     _messages.addAll(forkedMessages);
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -1497,19 +1743,17 @@ class ChatService extends ChangeNotifier {
       final Map<String, dynamic> data = jsonDecode(jsonData);
       final List<dynamic> messages = data['messages'] ?? [];
 
-      debugPrint('[ChatService] 🟡 importFromSillyTavern: clearing messages for import');
+      debugPrint(
+        '[ChatService] 🟡 importFromSillyTavern: clearing messages for import',
+      );
       _messages.clear();
-      
+
       for (final msg in messages) {
         final String name = msg['name'] ?? '';
         final bool isUser = msg['is_user'] ?? false;
         final String text = msg['mes'] ?? '';
-        
-        _messages.add(ChatMessage(
-          text: text,
-          sender: name,
-          isUser: isUser,
-        ));
+
+        _messages.add(ChatMessage(text: text, sender: name, isUser: isUser));
       }
 
       // Create new session for imported chat
@@ -1535,10 +1779,7 @@ class ChatService extends ChangeNotifier {
     }).toList();
 
     final Map<String, dynamic> export = {
-      'chat_metadata': {
-        'note_prompt': '',
-        'note_interval': 0,
-      },
+      'chat_metadata': {'note_prompt': '', 'note_interval': 0},
       'messages': messages,
     };
 
@@ -1548,12 +1789,14 @@ class ChatService extends ChangeNotifier {
   Future<void> startNewChat() async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
-    debugPrint('[ChatService] 🟡 startNewChat: clearing messages (had ${_messages.length})');
+    debugPrint(
+      '[ChatService] 🟡 startNewChat: clearing messages (had ${_messages.length})',
+    );
     _messages.clear();
     _greetingIndex = 0;
     _summary = '';
     _summaryLastIndex = 0;
-    
+
     _affectionScore = 0;
     _trustLevel = 0;
     _pendingTrustRepair = false;
@@ -1563,35 +1806,89 @@ class ChatService extends ChangeNotifier {
     _turnsSinceLongTermCheck = 0;
     _shortTermDeltasSummary = 0;
 
+    // Clear the in-memory evolution cache so the new session starts with
+    // the original (unevolved) personality/scenario. The previous session's
+    // evolved data was still live in this map.
+    _evolvedPersonalities.clear();
+    _evolvedScenarios.clear();
+    _groupEvolutionCounts.clear();
+    _characterEvolutionCount = 0;
+
     if (_activeGroup != null && _groupCharacters.isNotEmpty) {
       // Group mode: greeting from first character
       final first = _groupCharacters.first;
       if (first.firstMessage.isNotEmpty) {
-        _messages.add(ChatMessage(
-          text: _buildFirstMessage(first),
-          sender: first.name,
-          isUser: false,
-          characterId: _getCharacterIdFromCard(first),
-        ));
+        _messages.add(
+          ChatMessage(
+            text: _buildFirstMessage(first),
+            sender: first.name,
+            isUser: false,
+            characterId: _getCharacterIdFromCard(first),
+          ),
+        );
         _scanLorebook(_messages.last.text);
       }
       _turnIndex = 0;
     } else if (_activeCharacter != null) {
       // 1:1 mode
       if (_activeCharacter!.firstMessage.isNotEmpty) {
-        _messages.add(ChatMessage(
-          text: _buildFirstMessage(_activeCharacter!),
-          sender: _activeCharacter!.name,
-          isUser: false,
-        ));
+        _messages.add(
+          ChatMessage(
+            text: _buildFirstMessage(_activeCharacter!),
+            sender: _activeCharacter!.name,
+            isUser: false,
+          ),
+        );
         _scanLorebook(_messages.last.text);
       }
     }
-    
+
+
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     await _saveChat();
     notifyListeners();
+
+    // ── Post-Greeting Realism Baseline ──────────────────────────────────
+    // If Realism is on and the character has an opening message, run a
+    // lightweight eval so the engine captures the emotional register and
+    // any implied pre-existing relationship embedded in the first message.
+    // This runs in the background so the UI isn't blocked.
+    if (_realismEnabled && _activeGroup == null && _messages.isNotEmpty) {
+      _runPostGreetingEval();
+    }
   }
+
+  /// Evaluates emotion + relationship baseline from the greeting message only.
+  /// Runs once per new session, silently in the background.
+  Future<void> _runPostGreetingEval() async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+    debugPrint('[Realism] Running post-greeting baseline eval...');
+    _isProcessingGreeting = true;
+    notifyListeners();
+    try {
+      await Future.wait([
+        _evaluateEmotionalStateCall(),
+        _evaluateRelationshipCall(),
+      ]);
+      // Store initial emotion in metadata on the greeting message itself
+      if (_messages.isNotEmpty) {
+        _messages.first.activeMetadata ??= {};
+        if (_characterEmotion.isNotEmpty) {
+          _messages.first.activeMetadata!['emotion_label'] = _characterEmotion;
+          _messages.first.activeMetadata!['realism_state'] = _captureRealismState();
+        }
+      }
+      await _saveChat();
+      notifyListeners();
+      debugPrint('[Realism] Post-greeting baseline: emotion=$_characterEmotion, bond=$_affectionScore, trust=$_trustLevel');
+    } catch (e) {
+      debugPrint('[Realism] Post-greeting eval failed: $e');
+    } finally {
+      _isProcessingGreeting = false;
+      notifyListeners();
+    }
+  }
+
 
   /// Cycle the first message through alternate greetings
   Future<void> cycleGreeting(int direction) async {
@@ -1609,22 +1906,29 @@ class ChatService extends ChangeNotifier {
       sender: _activeCharacter!.name,
       isUser: false,
     );
-    
+
     await _saveChat();
     notifyListeners();
+
+    // Re-run baseline eval for the new greeting
+    if (_realismEnabled && _activeGroup == null) {
+      _runPostGreetingEval();
+    }
   }
 
   String _buildFirstMessage(CharacterCard character, {String? greetingText}) {
     String msg = greetingText ?? character.firstMessage;
     // Use the robust replacement logic from the model
     return character.replacePlaceholders(
-      msg, 
-      userName: _userPersonaService.persona.name
+      msg,
+      userName: _userPersonaService.persona.name,
     );
   }
 
   Future<void> sendMessage(String text) async {
-    if ((_activeCharacter == null && _activeGroup == null) || text.trim().isEmpty) return;
+    if ((_activeCharacter == null && _activeGroup == null) ||
+        text.trim().isEmpty)
+      return;
     clearSuggestions();
 
     // In observer mode, route to sendDirectorNote instead
@@ -1672,8 +1976,18 @@ class ChatService extends ChangeNotifier {
       } else if (_storageService.realismOneShotEval) {
         await _evaluateOneShotCall(onChunk: handleChunk);
       } else {
-        await _evaluateRelationshipCall(onChunk: handleChunk);
-        await _evaluateSceneStateCall(onChunk: handleChunk);
+        await Future.wait([
+          _evaluateRelationshipCall(onChunk: handleChunk),
+          _evaluateEmotionalStateCall(onChunk: handleChunk),
+          _evaluatePhysicalStateCall(onChunk: handleChunk),
+          _evaluateNarrativeCall(onChunk: handleChunk),
+        ]);
+
+        // Synthesize metadata safely post-parallel
+        _pendingRealismMetadata ??= {};
+        _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
+        _pendingRealismMetadata!['realism_state'] = _captureRealismState();
+        _saveChat();
       }
 
       _isEvaluatingRealism = false;
@@ -1697,12 +2011,14 @@ class ChatService extends ChangeNotifier {
   Future<void> sendDirectorNote(String text) async {
     if (_activeGroup == null || text.trim().isEmpty) return;
 
-    _messages.add(ChatMessage(
-      text: text,
-      sender: 'Director',
-      isUser: true,
-      characterId: '__director__',
-    ));
+    _messages.add(
+      ChatMessage(
+        text: text,
+        sender: 'Director',
+        isUser: true,
+        characterId: '__director__',
+      ),
+    );
     await _saveChat();
     notifyListeners();
 
@@ -1749,26 +2065,32 @@ class ChatService extends ChangeNotifier {
         if (lastMsg.activeMetadata != null) {
           final bondDelta = lastMsg.activeMetadata!['bond_delta'] as int? ?? 0;
           final moodDelta = lastMsg.activeMetadata!['mood_delta'] as int? ?? 0;
-          final arousalDelta = lastMsg.activeMetadata!['arousal_delta'] as int? ?? 0;
-          final trustDelta = lastMsg.activeMetadata!['trust_delta'] as int? ?? 0;
-          
+          final arousalDelta =
+              lastMsg.activeMetadata!['arousal_delta'] as int? ?? 0;
+          final trustDelta =
+              lastMsg.activeMetadata!['trust_delta'] as int? ?? 0;
+
           if (bondDelta != 0) {
-             _affectionScore = (_affectionScore - bondDelta).clamp(-10, 15);
-             if (_affectionScore < 0) _relationshipTier = 1;
-             else if (_affectionScore <= 3) _relationshipTier = 2;
-             else if (_affectionScore <= 7) _relationshipTier = 3;
-             else if (_affectionScore <= 11) _relationshipTier = 4;
-             else _relationshipTier = 5;
+            _affectionScore = (_affectionScore - bondDelta).clamp(-10, 15);
+            if (_affectionScore < 0)
+              _relationshipTier = 1;
+            else if (_affectionScore <= 3)
+              _relationshipTier = 2;
+            else if (_affectionScore <= 7)
+              _relationshipTier = 3;
+            else if (_affectionScore <= 11)
+              _relationshipTier = 4;
+            else
+              _relationshipTier = 5;
           }
           if (moodDelta != 0) {
-             _shortTermMood = (_shortTermMood - moodDelta).clamp(-20, 20);
-             _moodDecayCounter = 0;
+            _moodDecayCounter = 0;
           }
           if (arousalDelta != 0 && _nsfwCooldownEnabled) {
-             _arousalLevel = (_arousalLevel - arousalDelta).clamp(-3, 10);
+            _arousalLevel = (_arousalLevel - arousalDelta).clamp(-3, 10);
           }
           if (trustDelta != 0) {
-             _trustLevel = (_trustLevel - trustDelta).clamp(-100, 100);
+            _trustLevel = (_trustLevel - trustDelta).clamp(-100, 100);
           }
         }
         // Set UI streaming state
@@ -1784,8 +2106,16 @@ class ChatService extends ChangeNotifier {
         if (_storageService.realismOneShotEval) {
           await _evaluateOneShotCall(onChunk: handleChunk);
         } else {
-          await _evaluateRelationshipCall(onChunk: handleChunk);
-          await _evaluateSceneStateCall(onChunk: handleChunk);
+          await Future.wait([
+            _evaluateRelationshipCall(onChunk: handleChunk),
+            _evaluateEmotionalStateCall(onChunk: handleChunk),
+            _evaluatePhysicalStateCall(onChunk: handleChunk),
+            _evaluateNarrativeCall(onChunk: handleChunk),
+          ]);
+          _pendingRealismMetadata ??= {};
+          _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
+          _pendingRealismMetadata!['realism_state'] = _captureRealismState();
+          _saveChat();
         }
 
         _isEvaluatingRealism = false;
@@ -1796,7 +2126,9 @@ class ChatService extends ChangeNotifier {
       await _generateResponse(GenerationMode.normal);
 
       // After generation, merge the new response as a swipe on the original message
-      if (_messages.isNotEmpty && !_messages.last.isUser && _messages.last.sender != 'System') {
+      if (_messages.isNotEmpty &&
+          !_messages.last.isUser &&
+          _messages.last.sender != 'System') {
         final newText = _messages.last.text;
         final newMetadata = _messages.last.activeMetadata;
         _messages.removeLast();
@@ -1847,22 +2179,26 @@ class ChatService extends ChangeNotifier {
 
   void _syncRealismStateForSwipe(ChatMessage msg, int oldIndex, int newIndex) {
     if (!_realismEnabled) return;
-    
+
     // Natively restore the frozen runtime variables for the selected alternate timeline
     _restoreRealismStateFromMessage(msg);
   }
 
   Future<void> continueGeneration() async {
     if (_messages.isEmpty || _isGenerating) return;
-    
+
     // Only continue if the last message is from a bot (non-user, non-system)
     if (!_messages.last.isUser && _messages.last.sender != 'System') {
       await _generateResponse(GenerationMode.continue_);
     }
   }
 
-  Future<void> impersonateUser({String prefix = '', required Function(String accumulated) onToken}) async {
-    if ((_activeCharacter == null && _activeGroup == null) || _isGenerating) return;
+  Future<void> impersonateUser({
+    String prefix = '',
+    required Function(String accumulated) onToken,
+  }) async {
+    if ((_activeCharacter == null && _activeGroup == null) || _isGenerating)
+      return;
 
     _isGenerating = true;
     _cancelRequested = false;
@@ -1884,46 +2220,66 @@ class ChatService extends ChangeNotifier {
       if (_activeGroup != null && _activeGroup!.systemPrompt.isNotEmpty) {
         systemPrompt = _activeGroup!.systemPrompt;
       } else if (_activeGroup != null) {
-        systemPrompt = _observerMode ? observerModeSystemPrompt : defaultGroupSystemPrompt;
+        systemPrompt = _observerMode
+            ? observerModeSystemPrompt
+            : defaultGroupSystemPrompt;
       } else if (speakingCharacter.systemPrompt.isNotEmpty) {
         systemPrompt = speakingCharacter.systemPrompt;
       } else if (_storageService.systemPrompt.isNotEmpty) {
         systemPrompt = _storageService.systemPrompt;
       } else {
         final isApi = _llmProvider != null && !_llmProvider!.isLocal;
-        systemPrompt = isApi ? defaultApiSystemPrompt : defaultKoboldSystemPrompt;
+        systemPrompt = isApi
+            ? defaultApiSystemPrompt
+            : defaultKoboldSystemPrompt;
       }
 
       // Lorebook
       String loreContent = '';
       List<String> activeLoreStrings = [];
-      final loreCharacters = _activeGroup != null ? _groupCharacters : [_activeCharacter!];
+      final loreCharacters = _activeGroup != null
+          ? _groupCharacters
+          : [_activeCharacter!];
       for (final ch in loreCharacters) {
         if (ch.lorebook != null) {
-          final activeEntries = ch.lorebook!.entries.where((e) => e.enabled && (e.isTriggered || e.constant));
+          final activeEntries = ch.lorebook!.entries.where(
+            (e) => e.enabled && (e.isTriggered || e.constant),
+          );
           activeLoreStrings.addAll(activeEntries.map((e) => e.content));
         }
         for (final worldName in ch.worldNames) {
-          final world = _worldRepository.worlds.where((w) => w.name == worldName).firstOrNull;
+          final world = _worldRepository.worlds
+              .where((w) => w.name == worldName)
+              .firstOrNull;
           if (world == null) continue;
-          final activeWorldEntries = world.lorebook.entries.where((e) => e.enabled && (e.isTriggered || e.constant));
+          final activeWorldEntries = world.lorebook.entries.where(
+            (e) => e.enabled && (e.isTriggered || e.constant),
+          );
           activeLoreStrings.addAll(activeWorldEntries.map((e) => e.content));
         }
       }
       if (activeLoreStrings.isNotEmpty) {
         loreContent = "Context Info:\n${activeLoreStrings.join('\n')}\n";
-        loreContent = speakingCharacter.replacePlaceholders(loreContent, userName: userName);
+        loreContent = speakingCharacter.replacePlaceholders(
+          loreContent,
+          userName: userName,
+        );
       }
 
       // Persona & scenario
       // Use evolved versions if character evolution is enabled and available
       String personaBlock;
       if (_activeGroup != null) {
-        final personas = _groupCharacters.map((ch) =>
-          "${ch.name}'s Persona: ${ch.replacePlaceholders(_getEffectivePersonality(ch), userName: userName)}").toList();
+        final personas = _groupCharacters
+            .map(
+              (ch) =>
+                  "${ch.name}'s Persona: ${ch.replacePlaceholders(_getEffectivePersonality(ch), userName: userName)}",
+            )
+            .toList();
         personaBlock = personas.join('\n');
       } else {
-        personaBlock = "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(_getEffectivePersonality(speakingCharacter), userName: userName)}";
+        personaBlock =
+            "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(_getEffectivePersonality(speakingCharacter), userName: userName)}";
       }
 
       // User persona — inject user's self-description + learned facts
@@ -1933,10 +2289,15 @@ class ChatService extends ChangeNotifier {
       if (_activeGroup != null && _activeGroup!.scenario.isNotEmpty) {
         rawScenario = _activeGroup!.scenario;
       } else {
-        final scenarioChar = _activeGroup != null ? _groupCharacters.first : speakingCharacter;
+        final scenarioChar = _activeGroup != null
+            ? _groupCharacters.first
+            : speakingCharacter;
         rawScenario = _getEffectiveScenario(scenarioChar);
       }
-      final scenario = speakingCharacter.replacePlaceholders(rawScenario, userName: userName);
+      final scenario = speakingCharacter.replacePlaceholders(
+        rawScenario,
+        userName: userName,
+      );
 
       String history = _buildChatHistory();
 
@@ -1950,18 +2311,22 @@ class ChatService extends ChangeNotifier {
       if (_activeGroup != null) {
         final examples = _groupCharacters
             .where((ch) => ch.mesExample.isNotEmpty)
-            .map((ch) => ch.replacePlaceholders(ch.mesExample, userName: userName))
+            .map(
+              (ch) => ch.replacePlaceholders(ch.mesExample, userName: userName),
+            )
             .toList();
         if (examples.isNotEmpty) {
           mesExampleBlock = '${examples.join('\n')}\n';
         }
       } else if (speakingCharacter.mesExample.isNotEmpty) {
-        mesExampleBlock = '${speakingCharacter.replacePlaceholders(speakingCharacter.mesExample, userName: userName)}\n';
+        mesExampleBlock =
+            '${speakingCharacter.replacePlaceholders(speakingCharacter.mesExample, userName: userName)}\n';
       }
 
       String postHistoryBlock = '';
       if (speakingCharacter.postHistoryInstructions.isNotEmpty) {
-        postHistoryBlock = '${speakingCharacter.replacePlaceholders(speakingCharacter.postHistoryInstructions, userName: userName)}\n';
+        postHistoryBlock =
+            '${speakingCharacter.replacePlaceholders(speakingCharacter.postHistoryInstructions, userName: userName)}\n';
       }
 
       String authorNoteBlock = '';
@@ -1979,7 +2344,8 @@ class ChatService extends ChangeNotifier {
           'Keep the response natural, and consistent with the scene.]\n';
 
       // ── Context Shift: budget-aware history trimming ──
-      final fixedContent = "$systemPrompt\n"
+      final fixedContent =
+          "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
           "$userPersonaBlock"
@@ -2005,7 +2371,8 @@ class ChatService extends ChangeNotifier {
             : '${lastMsg.sender}: ${lastMsg.text}';
       }
 
-      final prompt = "$systemPrompt\n"
+      final prompt =
+          "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
           "$userPersonaBlock"
@@ -2018,11 +2385,8 @@ class ChatService extends ChangeNotifier {
           "$impersonateInstruction"
           "$suffix";
 
-
       // Stop sequences: character names only (not user — we ARE the user)
-      final stopSequences = {
-        ..._storageService.stopSequences,
-      };
+      final stopSequences = {..._storageService.stopSequences};
       if (_activeGroup != null) {
         for (final ch in _groupCharacters) {
           stopSequences.add('\n${ch.name}:');
@@ -2040,13 +2404,17 @@ class ChatService extends ChangeNotifier {
         temperature: _storageService.temperature,
         repeatPenalty: _storageService.repeatPenalty,
         repPenTokens: _storageService.repeatPenaltyTokens,
-        dynatempRange: _storageService.dynamicTempEnabled ? _storageService.dynamicTempRange : null,
+        dynatempRange: _storageService.dynamicTempEnabled
+            ? _storageService.dynamicTempRange
+            : null,
         xtcThreshold: _storageService.xtcThreshold,
         xtcProbability: _storageService.xtcProbability,
         stopSequences: stopSequences.toList(),
         reasoningEnabled: false,
         reasoningEffort: _storageService.reasoningEffort,
-        bannedPhrases: _storageService.bannedPhrases.isNotEmpty ? _storageService.bannedPhrases : null,
+        bannedPhrases: _storageService.bannedPhrases.isNotEmpty
+            ? _storageService.bannedPhrases
+            : null,
       );
 
       final stream = llmService.generateStream(genParams);
@@ -2078,7 +2446,8 @@ class ChatService extends ChangeNotifier {
 
   /// Trigger the next character to speak in group mode.
   Future<void> triggerNextCharacter() async {
-    if (_activeGroup == null || _groupCharacters.isEmpty || _isGenerating) return;
+    if (_activeGroup == null || _groupCharacters.isEmpty || _isGenerating)
+      return;
     await _generateResponse(GenerationMode.normal);
   }
 
@@ -2123,12 +2492,15 @@ class ChatService extends ChangeNotifier {
       // Determine the speaking character first (needed for system prompt priority)
       CharacterCard speakingCharacter;
       if (_activeGroup != null) {
-        speakingCharacter = (mode == GenerationMode.continue_ && _messages.isNotEmpty && !_messages.last.isUser)
-          ? _groupCharacters.firstWhere(
-              (c) => c.name == _messages.last.sender,
-              orElse: () => _pickNextGroupCharacter(),
-            )
-          : _pickNextGroupCharacter();
+        speakingCharacter =
+            (mode == GenerationMode.continue_ &&
+                _messages.isNotEmpty &&
+                !_messages.last.isUser)
+            ? _groupCharacters.firstWhere(
+                (c) => c.name == _messages.last.sender,
+                orElse: () => _pickNextGroupCharacter(),
+              )
+            : _pickNextGroupCharacter();
       } else {
         speakingCharacter = _activeCharacter!;
       }
@@ -2141,7 +2513,9 @@ class ChatService extends ChangeNotifier {
         systemPrompt = _activeGroup!.systemPrompt;
       } else if (_activeGroup != null) {
         // Group mode, no custom prompt — use observer or default
-        systemPrompt = _observerMode ? observerModeSystemPrompt : defaultGroupSystemPrompt;
+        systemPrompt = _observerMode
+            ? observerModeSystemPrompt
+            : defaultGroupSystemPrompt;
       } else if (speakingCharacter.systemPrompt.isNotEmpty) {
         // Character has its own system prompt — use it
         systemPrompt = speakingCharacter.systemPrompt;
@@ -2151,28 +2525,39 @@ class ChatService extends ChangeNotifier {
       } else {
         // Single-char mode, no user prompt — pick default based on backend
         final isApi = _llmProvider != null && !_llmProvider!.isLocal;
-        systemPrompt = isApi ? defaultApiSystemPrompt : defaultKoboldSystemPrompt;
+        systemPrompt = isApi
+            ? defaultApiSystemPrompt
+            : defaultKoboldSystemPrompt;
       }
 
       // In call mode, inject voice-specific instructions for natural conversation
       if (_callMode && _storageService.callSystemPrompt.isNotEmpty) {
-        systemPrompt += '\n\n[Voice Call Mode] ${_storageService.callSystemPrompt}';
+        systemPrompt +=
+            '\n\n[Voice Call Mode] ${_storageService.callSystemPrompt}';
       }
 
       // Build Lorebook content from all relevant characters
       String loreContent = '';
       List<String> activeLoreStrings = [];
 
-      final loreCharacters = _activeGroup != null ? _groupCharacters : [_activeCharacter!];
+      final loreCharacters = _activeGroup != null
+          ? _groupCharacters
+          : [_activeCharacter!];
       for (final ch in loreCharacters) {
         if (ch.lorebook != null) {
-          final activeEntries = ch.lorebook!.entries.where((e) => e.enabled && (e.isTriggered || e.constant));
+          final activeEntries = ch.lorebook!.entries.where(
+            (e) => e.enabled && (e.isTriggered || e.constant),
+          );
           activeLoreStrings.addAll(activeEntries.map((e) => e.content));
         }
         for (final worldName in ch.worldNames) {
-          final world = _worldRepository.worlds.where((w) => w.name == worldName).firstOrNull;
+          final world = _worldRepository.worlds
+              .where((w) => w.name == worldName)
+              .firstOrNull;
           if (world == null) continue;
-          final activeWorldEntries = world.lorebook.entries.where((e) => e.enabled && (e.isTriggered || e.constant));
+          final activeWorldEntries = world.lorebook.entries.where(
+            (e) => e.enabled && (e.isTriggered || e.constant),
+          );
           activeLoreStrings.addAll(activeWorldEntries.map((e) => e.content));
         }
       }
@@ -2183,18 +2568,27 @@ class ChatService extends ChangeNotifier {
 
       // Apply replacements to lore content
       if (loreContent.isNotEmpty) {
-        loreContent = speakingCharacter.replacePlaceholders(loreContent, userName: userName);
+        loreContent = speakingCharacter.replacePlaceholders(
+          loreContent,
+          userName: userName,
+        );
       }
 
       // Build persona block(s)
       String personaBlock;
       if (_activeGroup != null) {
-        personaBlock = _groupCharacters.map((ch) {
-          final persona = ch.replacePlaceholders(_getEffectivePersonality(ch), userName: userName);
-          return "${ch.name}'s Persona: $persona";
-        }).join('\n');
+        personaBlock = _groupCharacters
+            .map((ch) {
+              final persona = ch.replacePlaceholders(
+                _getEffectivePersonality(ch),
+                userName: userName,
+              );
+              return "${ch.name}'s Persona: $persona";
+            })
+            .join('\n');
       } else {
-        personaBlock = "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(_getEffectivePersonality(speakingCharacter), userName: userName)}";
+        personaBlock =
+            "${speakingCharacter.name}'s Persona: ${speakingCharacter.replacePlaceholders(_getEffectivePersonality(speakingCharacter), userName: userName)}";
       }
 
       // User persona — inject user's self-description + learned facts
@@ -2205,13 +2599,18 @@ class ChatService extends ChangeNotifier {
       if (_activeGroup != null && _activeGroup!.scenario.isNotEmpty) {
         rawScenario = _activeGroup!.scenario;
       } else {
-        final scenarioChar = _activeGroup != null ? _groupCharacters.first : speakingCharacter;
+        final scenarioChar = _activeGroup != null
+            ? _groupCharacters.first
+            : speakingCharacter;
         rawScenario = _getEffectiveScenario(scenarioChar);
       }
-      final scenario = speakingCharacter.replacePlaceholders(rawScenario, userName: userName);
+      final scenario = speakingCharacter.replacePlaceholders(
+        rawScenario,
+        userName: userName,
+      );
 
       String suffix = "";
-      
+
       if (mode == GenerationMode.normal) {
         suffix = "\n${speakingCharacter.name}:";
       } else if (mode == GenerationMode.impersonate) {
@@ -2226,19 +2625,23 @@ class ChatService extends ChangeNotifier {
       if (_activeGroup != null) {
         final examples = _groupCharacters
             .where((ch) => ch.mesExample.isNotEmpty)
-            .map((ch) => ch.replacePlaceholders(ch.mesExample, userName: userName))
+            .map(
+              (ch) => ch.replacePlaceholders(ch.mesExample, userName: userName),
+            )
             .toList();
         if (examples.isNotEmpty) {
           mesExampleBlock = '${examples.join('\n')}\n';
         }
       } else if (speakingCharacter.mesExample.isNotEmpty) {
-        mesExampleBlock = '${speakingCharacter.replacePlaceholders(speakingCharacter.mesExample, userName: userName)}\n';
+        mesExampleBlock =
+            '${speakingCharacter.replacePlaceholders(speakingCharacter.mesExample, userName: userName)}\n';
       }
 
       // Build post-history instructions block
       String postHistoryBlock = '';
       if (speakingCharacter.postHistoryInstructions.isNotEmpty) {
-        postHistoryBlock = '${speakingCharacter.replacePlaceholders(speakingCharacter.postHistoryInstructions, userName: userName)}\n';
+        postHistoryBlock =
+            '${speakingCharacter.replacePlaceholders(speakingCharacter.postHistoryInstructions, userName: userName)}\n';
       }
 
       // Author's note — placed right before the character speaks for maximum influence
@@ -2260,7 +2663,8 @@ class ChatService extends ChangeNotifier {
       if (mode == GenerationMode.continue_ && _messages.isNotEmpty) {
         _continuePoppedMessage = _messages.removeLast();
         // Set the suffix to the last message text so the LLM continues from it
-        suffix = "\n${_continuePoppedMessage.sender}: ${_continuePoppedMessage.text}";
+        suffix =
+            "\n${_continuePoppedMessage.sender}: ${_continuePoppedMessage.text}";
       }
 
       String history = _buildChatHistory();
@@ -2273,13 +2677,19 @@ class ChatService extends ChangeNotifier {
         final relationship = _getRelationshipInjection();
         final emotion = _getEmotionInjection();
         final time = _getTimeInjection();
+        final trustBehavior = _getTrustBehaviorInjection();
         final cooldown = _getNsfwCooldownInjection();
         final behavioral = _getBehavioralMechanicsInjection();
-        realismBlock = '$relationship$emotion$time$cooldown$behavioral';
+        realismBlock = '$relationship$emotion$time$trustBehavior$cooldown$behavioral';
       }
 
+      // Objective injection — always injected regardless of realism mode
+      // Must sit in a fixed prompt section so it is NEVER trimmed by the budget system.
+      final objectiveBlock = _getObjectiveInjection();
+
       // Calculate token cost of all fixed sections to determine chat history budget
-      final fixedContent = "$systemPrompt\n"
+      final fixedContent =
+          "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
           "$userPersonaBlock"
@@ -2289,11 +2699,13 @@ class ChatService extends ChangeNotifier {
           "$summaryBlock"
           "$postHistoryBlock"
           "$authorNoteBlock"
+          "$objectiveBlock"
           "$realismBlock"
           "$suffix";
       final fixedTokens = await _countTokens(fixedContent);
       final contextBudget = _storageService.contextSize;
-      final generationReserve = _storageService.maxLength + 50; // +50 safety margin
+      final generationReserve =
+          _storageService.maxLength + 50; // +50 safety margin
       final historyBudget = contextBudget - fixedTokens - generationReserve;
 
       int droppedMessages = 0;
@@ -2320,11 +2732,18 @@ class ChatService extends ChangeNotifier {
       // ── RAG Memory Retrieval ──
       // When messages are dropped from context, search for relevant past memories
       String memoriesBlock = '';
-      if (droppedMessages > 0 && _memoryService != null && _storageService.ragEnabled) {
-        debugPrint('[RAG:Chat] ── Prompt assembly: $droppedMessages messages dropped, triggering retrieval ──');
+      if (droppedMessages > 0 &&
+          _memoryService != null &&
+          _storageService.ragEnabled) {
+        debugPrint(
+          '[RAG:Chat] ── Prompt assembly: $droppedMessages messages dropped, triggering retrieval ──',
+        );
         try {
           // Use last 3 messages as the query
-          final queryMessages = _messages.reversed.take(3).map((m) => '${m.sender}: ${m.displayText}').join('\n');
+          final queryMessages = _messages.reversed
+              .take(3)
+              .map((m) => '${m.sender}: ${m.displayText}')
+              .join('\n');
 
           final sourceIds = await _getMemorySourceIds();
           debugPrint('[RAG:Chat] Memory source IDs: $sourceIds');
@@ -2333,8 +2752,11 @@ class ChatService extends ChangeNotifier {
             queryText: queryMessages,
             sourceCharacterIds: sourceIds,
             currentSessionId: _currentSessionId ?? '',
-            inContextStart: droppedMessages, // only search messages that are out of context
-            limit: _storageService.ragRetrievalCount == 0 ? 9999 : _storageService.ragRetrievalCount,
+            inContextStart:
+                droppedMessages, // only search messages that are out of context
+            limit: _storageService.ragRetrievalCount == 0
+                ? 9999
+                : _storageService.ragRetrievalCount,
           );
 
           if (memories.isNotEmpty) {
@@ -2345,16 +2767,22 @@ class ChatService extends ChangeNotifier {
             int usedTokens = 0;
             for (final m in memories) {
               final memTokens = (m.content.length / 4).ceil();
-              if (usedTokens + memTokens > memoryBudget && includedMemories.isNotEmpty) {
-                debugPrint('[RAG:Chat] ⚠ Trimmed ${memories.length - includedMemories.length} memories to fit budget ($memoryBudget tokens)');
+              if (usedTokens + memTokens > memoryBudget &&
+                  includedMemories.isNotEmpty) {
+                debugPrint(
+                  '[RAG:Chat] ⚠ Trimmed ${memories.length - includedMemories.length} memories to fit budget ($memoryBudget tokens)',
+                );
                 break;
               }
               usedTokens += memTokens;
               includedMemories.add('- ${m.content}');
             }
             if (includedMemories.isNotEmpty) {
-              memoriesBlock = '[Relevant memories from past conversations:\n${includedMemories.join('\n')}]\n';
-              debugPrint('[RAG:Chat] ✅ Injecting ${includedMemories.length}/${memories.length} memories (~$usedTokens tokens, budget: $memoryBudget)');
+              memoriesBlock =
+                  '[Relevant memories from past conversations:\n${includedMemories.join('\n')}]\n';
+              debugPrint(
+                '[RAG:Chat] ✅ Injecting ${includedMemories.length}/${memories.length} memories (~$usedTokens tokens, budget: $memoryBudget)',
+              );
             }
           } else {
             debugPrint('[RAG:Chat] No relevant memories found for this turn');
@@ -2363,12 +2791,15 @@ class ChatService extends ChangeNotifier {
           debugPrint('[RAG:Chat] ✗ RAG retrieval failed: $e');
         }
       } else if (droppedMessages > 0 && _storageService.ragEnabled) {
-        debugPrint('[RAG:Chat] ⚠ $droppedMessages messages dropped but RAG not operational (service=${_memoryService != null}, operational=${_memoryService?.isOperational ?? false})');
+        debugPrint(
+          '[RAG:Chat] ⚠ $droppedMessages messages dropped but RAG not operational (service=${_memoryService != null}, operational=${_memoryService?.isOperational ?? false})',
+        );
       }
 
       // Realism injection was already computed above for budget
 
-      final prompt = "$systemPrompt\n"
+      final prompt =
+          "$systemPrompt\n"
           "$loreContent"
           "$personaBlock\n"
           "$userPersonaBlock"
@@ -2380,6 +2811,7 @@ class ChatService extends ChangeNotifier {
           "$history"
           "$postHistoryBlock"
           "$authorNoteBlock"
+          "$objectiveBlock"
           "$realismBlock"
           "$suffix";
 
@@ -2396,6 +2828,7 @@ class ChatService extends ChangeNotifier {
         'Chat History': (history.length / 4).ceil(),
         'Post-History': (postHistoryBlock.length / 4).ceil(),
         'Author\'s Note': (authorNoteBlock.length / 4).ceil(),
+        'Objectives': (objectiveBlock.length / 4).ceil(),
         'Realism Mode': (realismBlock.length / 4).ceil(),
         if (droppedMessages > 0) 'Dropped Messages': droppedMessages,
       };
@@ -2403,9 +2836,7 @@ class ChatService extends ChangeNotifier {
       _lastPromptBudget.removeWhere((_, v) => v == 0);
 
       // Stop sequences: include character names, and user name (except when impersonating)
-      final stopSequences = {
-        ..._storageService.stopSequences,
-      };
+      final stopSequences = {..._storageService.stopSequences};
 
       // In impersonate mode the model IS the user, so don't stop on user name
       if (mode != GenerationMode.impersonate) {
@@ -2425,9 +2856,14 @@ class ChatService extends ChangeNotifier {
       final llmService = _llmProvider?.activeService ?? _koboldService;
 
       // For call mode with a dedicated call model, temporarily swap the model
-      if (_callMode && _storageService.callModelName.isNotEmpty && _llmProvider != null && !_llmProvider!.isLocal) {
+      if (_callMode &&
+          _storageService.callModelName.isNotEmpty &&
+          _llmProvider != null &&
+          !_llmProvider!.isLocal) {
         _originalModelName = _llmProvider!.openRouterService.modelName;
-        _llmProvider!.openRouterService.configure(modelName: _storageService.callModelName);
+        _llmProvider!.openRouterService.configure(
+          modelName: _storageService.callModelName,
+        );
       }
 
       final genParams = GenerationParams(
@@ -2438,18 +2874,24 @@ class ChatService extends ChangeNotifier {
         temperature: _storageService.temperature,
         repeatPenalty: _storageService.repeatPenalty,
         repPenTokens: _storageService.repeatPenaltyTokens,
-        dynatempRange: _storageService.dynamicTempEnabled ? _storageService.dynamicTempRange : null,
+        dynatempRange: _storageService.dynamicTempEnabled
+            ? _storageService.dynamicTempRange
+            : null,
         xtcThreshold: _storageService.xtcThreshold,
         xtcProbability: _storageService.xtcProbability,
         stopSequences: stopList,
-        reasoningEnabled: (_callMode || mode == GenerationMode.continue_) ? false : _storageService.reasoningEnabled,
+        reasoningEnabled: (_callMode || mode == GenerationMode.continue_)
+            ? false
+            : _storageService.reasoningEnabled,
         reasoningEffort: _storageService.reasoningEffort,
-        bannedPhrases: _storageService.bannedPhrases.isNotEmpty ? _storageService.bannedPhrases : null,
+        bannedPhrases: _storageService.bannedPhrases.isNotEmpty
+            ? _storageService.bannedPhrases
+            : null,
       );
 
       // Get streaming response from whichever backend is active
       final stream = llmService.generateStream(genParams);
-      
+
       String accumulatedResponse = "";
       bool stopFound = false;
       _tokenBuffer.clear();
@@ -2476,17 +2918,25 @@ class ChatService extends ChangeNotifier {
           _pendingRealismMetadata = null;
         }
       } else {
-        targetSender = mode == GenerationMode.normal ? speakingCharacter.name : _userPersonaService.persona.name;
+        targetSender = mode == GenerationMode.normal
+            ? speakingCharacter.name
+            : _userPersonaService.persona.name;
         isUserTarget = mode == GenerationMode.impersonate;
-        final initialMetadata = _pendingRealismMetadata != null ? Map<String, dynamic>.from(_pendingRealismMetadata!) : null;
-        _messages.add(ChatMessage(
-          text: "",
-          sender: targetSender,
-          isUser: isUserTarget,
-          characterId: mode == GenerationMode.normal ? _getCharacterIdForCard(speakingCharacter) : null,
-          metadata: initialMetadata,
-          swipeMetadata: initialMetadata != null ? [initialMetadata] : null,
-        ));
+        final initialMetadata = _pendingRealismMetadata != null
+            ? Map<String, dynamic>.from(_pendingRealismMetadata!)
+            : null;
+        _messages.add(
+          ChatMessage(
+            text: "",
+            sender: targetSender,
+            isUser: isUserTarget,
+            characterId: mode == GenerationMode.normal
+                ? _getCharacterIdForCard(speakingCharacter)
+                : null,
+            metadata: initialMetadata,
+            swipeMetadata: initialMetadata != null ? [initialMetadata] : null,
+          ),
+        );
         _pendingRealismMetadata = null;
       }
 
@@ -2509,7 +2959,9 @@ class ChatService extends ChangeNotifier {
 
       // Read display buffer settings — disable for remote APIs (they're fast enough)
       final isRemoteBackend = _llmProvider != null && !_llmProvider!.isLocal;
-      final bufferEnabled = isRemoteBackend ? false : _storageService.displayBufferEnabled;
+      final bufferEnabled = isRemoteBackend
+          ? false
+          : _storageService.displayBufferEnabled;
       final targetTps = _storageService.targetDisplayTps;
 
       // Drain timer: displays tokens at the user-configured constant rate
@@ -2517,7 +2969,11 @@ class ChatService extends ChangeNotifier {
         if (_drainTimer != null) return;
         final interval = Duration(milliseconds: (1000.0 / targetTps).round());
         _drainTimer = Timer.periodic(interval, (_) {
-          if (epoch != _generationEpoch) { _drainTimer?.cancel(); _drainTimer = null; return; } // stale
+          if (epoch != _generationEpoch) {
+            _drainTimer?.cancel();
+            _drainTimer = null;
+            return;
+          } // stale
           if (_displayedTokenCount < _tokenBuffer.length) {
             _displayedTokenCount++;
             _flushBufferToDisplay();
@@ -2539,7 +2995,9 @@ class ChatService extends ChangeNotifier {
 
         // Broadcast token to external listeners (SSE bridge)
         _tokenBroadcast.add(token);
-        _generationProgress = _maxTokens > 0 ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0) : 0.0;
+        _generationProgress = _maxTokens > 0
+            ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0)
+            : 0.0;
 
         // Sentence streaming: accumulate tokens and emit complete sentences
         _sentenceBuffer += token;
@@ -2575,7 +3033,9 @@ class ChatService extends ChangeNotifier {
                 if (m.start > 30) lastMatch = m; // at least 30 chars per chunk
               }
               if (lastMatch != null) {
-                final chunk = _sentenceBuffer.substring(0, lastMatch.end).trim();
+                final chunk = _sentenceBuffer
+                    .substring(0, lastMatch.end)
+                    .trim();
                 _sentenceBuffer = _sentenceBuffer.substring(lastMatch.end);
                 if (chunk.isNotEmpty) {
                   _sentenceBroadcast.add(chunk);
@@ -2592,7 +3052,9 @@ class ChatService extends ChangeNotifier {
             int index = accumulatedResponse.indexOf(stop);
             final trimmedTotal = accumulatedResponse.substring(0, index);
             final previousTotal = _tokenBuffer.join();
-            final lastTokenContribution = trimmedTotal.substring(previousTotal.length.clamp(0, trimmedTotal.length));
+            final lastTokenContribution = trimmedTotal.substring(
+              previousTotal.length.clamp(0, trimmedTotal.length),
+            );
             if (lastTokenContribution.isNotEmpty) {
               _tokenBuffer.add(lastTokenContribution);
             }
@@ -2611,13 +3073,18 @@ class ChatService extends ChangeNotifier {
           _thinkStarted = true;
           _thinkStartTime = DateTime.now();
           if (_messages.isNotEmpty) {
-            _messages.last.thinkingStartTime = _thinkStartTime!.millisecondsSinceEpoch;
+            _messages.last.thinkingStartTime =
+                _thinkStartTime!.millisecondsSinceEpoch;
           }
         }
-        if (_thinkStarted && !_thinkEnded && accumulatedResponse.contains('</think>')) {
+        if (_thinkStarted &&
+            !_thinkEnded &&
+            accumulatedResponse.contains('</think>')) {
           _thinkEnded = true;
           if (_thinkStartTime != null && _messages.isNotEmpty) {
-            _messages.last.thinkingDurationMs = DateTime.now().difference(_thinkStartTime!).inMilliseconds;
+            _messages.last.thinkingDurationMs = DateTime.now()
+                .difference(_thinkStartTime!)
+                .inMilliseconds;
             // Keep thinkingStartTime for fallback display logic in UI
           }
         }
@@ -2626,10 +3093,23 @@ class ChatService extends ChangeNotifier {
           // Calculate current rolling TPS (last 3 seconds)
           final now = DateTime.now();
           final cutoff = now.subtract(const Duration(seconds: 3));
-          final recentCount = _tokenTimestamps.where((t) => t.isAfter(cutoff)).length;
-          final windowStart = _tokenTimestamps.where((t) => t.isAfter(cutoff)).firstOrNull ?? _generationStartTime!;
-          final windowElapsed = now.difference(windowStart).inMilliseconds / 1000.0;
-          final currentTps = (recentCount >= 2 && windowElapsed > 0) ? recentCount / windowElapsed : (_tokensGenerated > 0 ? _tokensGenerated / (now.difference(_generationStartTime!).inMilliseconds / 1000.0) : 0.0);
+          final recentCount = _tokenTimestamps
+              .where((t) => t.isAfter(cutoff))
+              .length;
+          final windowStart =
+              _tokenTimestamps.where((t) => t.isAfter(cutoff)).firstOrNull ??
+              _generationStartTime!;
+          final windowElapsed =
+              now.difference(windowStart).inMilliseconds / 1000.0;
+          final currentTps = (recentCount >= 2 && windowElapsed > 0)
+              ? recentCount / windowElapsed
+              : (_tokensGenerated > 0
+                    ? _tokensGenerated /
+                          (now
+                                  .difference(_generationStartTime!)
+                                  .inMilliseconds /
+                              1000.0)
+                    : 0.0);
 
           if (_drainTimer == null && _tokensGenerated >= 10) {
             // Not yet draining — calculate when to start
@@ -2637,7 +3117,10 @@ class ChatService extends ChangeNotifier {
             final bufferDuration = _storageService.bufferDurationSeconds;
             int bufferTarget;
             if (currentTps > 0) {
-              bufferTarget = (currentTps * bufferDuration).round().clamp(5, _maxTokens);
+              bufferTarget = (currentTps * bufferDuration).round().clamp(
+                5,
+                _maxTokens,
+              );
             } else {
               bufferTarget = 30; // Fallback if TPS unknown
             }
@@ -2719,16 +3202,19 @@ class ChatService extends ChangeNotifier {
         if (finalResponse.isNotEmpty) {
           _scanLorebook(finalResponse);
         }
-        
+
         // Bot message counts as a message towards depth
         _decrementLoreDepth();
-        
+
         // Save session after AI message is complete
         await _saveChat();
 
         // Post-generation climax check — runs against the AI's actual response
         // so the character can climax naturally before the refractory cooldown applies
-        if (_realismEnabled && _nsfwCooldownEnabled && _cooldownTurnsRemaining <= 0 && _activeGroup == null) {
+        if (_realismEnabled &&
+            _nsfwCooldownEnabled &&
+            _cooldownTurnsRemaining <= 0 &&
+            _activeGroup == null) {
           _checkClimaxInResponse(finalResponse); // fire-and-forget
         }
 
@@ -2791,9 +3277,10 @@ class ChatService extends ChangeNotifier {
 
       // Restore original model if swapped for call mode
       if (_originalModelName != null && _llmProvider != null) {
-        _llmProvider!.openRouterService.configure(modelName: _originalModelName);
+        _llmProvider!.openRouterService.configure(
+          modelName: _originalModelName,
+        );
       }
-
     } catch (e) {
       final wasCancelled = _cancelRequested;
       _drainTimer?.cancel();
@@ -2817,7 +3304,9 @@ class ChatService extends ChangeNotifier {
 
         // Restore original model if swapped for call mode
         if (_originalModelName != null && _llmProvider != null) {
-          _llmProvider!.openRouterService.configure(modelName: _originalModelName);
+          _llmProvider!.openRouterService.configure(
+            modelName: _originalModelName,
+          );
         }
 
         // Save the partial response so regen/continue work
@@ -2831,40 +3320,47 @@ class ChatService extends ChangeNotifier {
       // Strip Dart's "Exception: " prefix for cleaner display
       errorMsg = errorMsg.replaceFirst(RegExp(r'^Exception:\s*'), '');
 
-      if (errorMsg.contains('STREAMING_NOT_SUPPORTED') || errorMsg.contains('HTTP 405')) {
-        errorMsg = 'HTTP 405: The server does not support this request. '
+      if (errorMsg.contains('STREAMING_NOT_SUPPORTED') ||
+          errorMsg.contains('HTTP 405')) {
+        errorMsg =
+            'HTTP 405: The server does not support this request. '
             'If streaming is enabled, try disabling it in Settings > Generation Settings. '
             'Also verify your API URL is correct.';
       } else if (errorMsg.contains('Backend process crashed')) {
-        errorMsg = 'The backend crashed (likely out of VRAM). '
+        errorMsg =
+            'The backend crashed (likely out of VRAM). '
             'Try reducing GPU layers or context size in Settings.';
-      } else if (errorMsg.contains('timed out') || errorMsg.contains('TimeoutException')) {
-        errorMsg = 'Request timed out. The model may be too large or the server too slow.';
+      } else if (errorMsg.contains('timed out') ||
+          errorMsg.contains('TimeoutException')) {
+        errorMsg =
+            'Request timed out. The model may be too large or the server too slow.';
       }
 
-      _messages.add(ChatMessage(
-        text: errorMsg, 
-        sender: "System", 
-        isUser: false
-      ));
+      _messages.add(
+        ChatMessage(text: errorMsg, sender: "System", isUser: false),
+      );
 
       // Signal error to SSE listeners
       _tokenBroadcast.add('__ERROR__');
 
       // Restore original model if swapped for call mode
       if (_originalModelName != null && _llmProvider != null) {
-        _llmProvider!.openRouterService.configure(modelName: _originalModelName);
+        _llmProvider!.openRouterService.configure(
+          modelName: _originalModelName,
+        );
       }
 
       notifyListeners();
-    } 
+    }
   }
 
   void _scanLorebook(String text) {
     // Scan all relevant characters' lorebooks
-    final characters = _activeGroup != null ? _groupCharacters : (_activeCharacter != null ? [_activeCharacter!] : <CharacterCard>[]);
+    final characters = _activeGroup != null
+        ? _groupCharacters
+        : (_activeCharacter != null ? [_activeCharacter!] : <CharacterCard>[]);
     if (characters.isEmpty) return;
-    
+
     final lowerText = text.toLowerCase();
     bool changed = false;
 
@@ -2872,7 +3368,10 @@ class ChatService extends ChangeNotifier {
       if (ch.lorebook != null) {
         for (final entry in ch.lorebook!.entries) {
           if (!entry.enabled) continue;
-          final keys = entry.key.split(',').map((k) => k.trim().toLowerCase()).where((k) => k.isNotEmpty);
+          final keys = entry.key
+              .split(',')
+              .map((k) => k.trim().toLowerCase())
+              .where((k) => k.isNotEmpty);
           for (final key in keys) {
             if (lowerText.contains(key)) {
               if (!entry.isTriggered) {
@@ -2888,12 +3387,17 @@ class ChatService extends ChangeNotifier {
 
       // Scan shared Worlds
       for (final worldName in ch.worldNames) {
-        final world = _worldRepository.worlds.where((w) => w.name == worldName).firstOrNull;
+        final world = _worldRepository.worlds
+            .where((w) => w.name == worldName)
+            .firstOrNull;
         if (world == null) continue;
 
         for (final entry in world.lorebook.entries) {
           if (!entry.enabled) continue;
-          final keys = entry.key.split(',').map((k) => k.trim().toLowerCase()).where((k) => k.isNotEmpty);
+          final keys = entry.key
+              .split(',')
+              .map((k) => k.trim().toLowerCase())
+              .where((k) => k.isNotEmpty);
           for (final key in keys) {
             if (lowerText.contains(key)) {
               if (!entry.isTriggered) {
@@ -2914,7 +3418,9 @@ class ChatService extends ChangeNotifier {
   }
 
   void _decrementLoreDepth() {
-    final characters = _activeGroup != null ? _groupCharacters : (_activeCharacter != null ? [_activeCharacter!] : <CharacterCard>[]);
+    final characters = _activeGroup != null
+        ? _groupCharacters
+        : (_activeCharacter != null ? [_activeCharacter!] : <CharacterCard>[]);
     if (characters.isEmpty) return;
     bool changed = false;
 
@@ -2932,7 +3438,9 @@ class ChatService extends ChangeNotifier {
       }
 
       for (final worldName in ch.worldNames) {
-        final world = _worldRepository.worlds.where((w) => w.name == worldName).firstOrNull;
+        final world = _worldRepository.worlds
+            .where((w) => w.name == worldName)
+            .firstOrNull;
         if (world == null) continue;
 
         for (final entry in world.lorebook.entries) {
@@ -2966,7 +3474,8 @@ class ChatService extends ChangeNotifier {
   /// Build chat history that fits within a token budget.
   /// Walks messages newest-to-oldest, dropping the oldest that don't fit.
   /// Returns ({String history, int droppedCount, int tokenCount}).
-  Future<({String history, int droppedCount, int tokenCount})> _buildChatHistoryWithBudget(int tokenBudget) async {
+  Future<({String history, int droppedCount, int tokenCount})>
+  _buildChatHistoryWithBudget(int tokenBudget) async {
     if (_messages.isEmpty) return (history: '', droppedCount: 0, tokenCount: 0);
 
     // Format all messages
@@ -2999,22 +3508,18 @@ class ChatService extends ChangeNotifier {
       included.insert(0, msgText);
     }
 
-    // Inject objective at specified depth in conversation history
-    final objectiveBlock = _getObjectiveInjection();
-    if (objectiveBlock.isNotEmpty && _activeObjective != null) {
-      final depth = _activeObjective!.injectionDepth;
-      // Insert at 'depth' messages from the end (0 = right before last message)
-      final insertIndex = included.length - depth.clamp(0, included.length);
-      included.insert(insertIndex, objectiveBlock.trim());
-    }
-
     // If messages were dropped, prepend a separator
     String history = included.join('\n');
     if (droppedCount > 0) {
-      history = '[Earlier messages truncated — see summary above for context]\n$history';
+      history =
+          '[Earlier messages truncated — see summary above for context]\n$history';
     }
 
-    return (history: history, droppedCount: droppedCount, tokenCount: usedTokens);
+    return (
+      history: history,
+      droppedCount: droppedCount,
+      tokenCount: usedTokens,
+    );
   }
 
   /// Count tokens for a text string. Uses KoboldCpp's tokenizer when available,
@@ -3029,19 +3534,22 @@ class ChatService extends ChangeNotifier {
     return (text.length / 4).ceil();
   }
 
-
   /// Reload the current session from the database without clearing messages first.
   /// Used after cloud sync or DB migration updates the database — preserves the
   /// user's active chat instead of wiping it.
   Future<void> reloadCurrentSession() async {
     if (_currentSessionId == null) return;
-    debugPrint('[ChatService] 🔄 reloadCurrentSession: reloading session $_currentSessionId '
-        '(currently ${_messages.length} messages in memory)');
+    debugPrint(
+      '[ChatService] 🔄 reloadCurrentSession: reloading session $_currentSessionId '
+      '(currently ${_messages.length} messages in memory)',
+    );
     await loadSession(_currentSessionId!);
   }
 
   void clearChat() async {
-    debugPrint('[ChatService] 🟡 clearChat: clearing ${_messages.length} messages');
+    debugPrint(
+      '[ChatService] 🟡 clearChat: clearing ${_messages.length} messages',
+    );
     _messages.clear();
     await _saveChat();
     notifyListeners();
@@ -3063,7 +3571,9 @@ class ChatService extends ChangeNotifier {
         await loadSession(remaining.first['id']);
       } else {
         // No sessions left — start fresh
-        debugPrint('[ChatService] 🟡 deleteSession: no sessions left, clearing messages');
+        debugPrint(
+          '[ChatService] 🟡 deleteSession: no sessions left, clearing messages',
+        );
         _messages.clear();
         _currentSessionId = null;
         await startNewChat();
@@ -3076,12 +3586,12 @@ class ChatService extends ChangeNotifier {
     if (index >= 0 && index < _messages.length) {
       bool isLastNode = index == _messages.length - 1;
       _messages.removeAt(index);
-      
+
       // If we deleted the most recent message, time-travel rollback to the new latest node
       if (isLastNode && _messages.isNotEmpty) {
         _restoreRealismStateFromMessage(_messages.last);
       }
-      
+
       await _saveChat();
       notifyListeners();
     }
@@ -3176,7 +3686,9 @@ class ChatService extends ChangeNotifier {
       return '${m.sender}: ${m.text}';
     }).toList();
 
-    debugPrint('[RAG:Chat] ▶ Triggering background embedding (session: $_currentSessionId, char: $characterId, ${formatted.length} msgs)');
+    debugPrint(
+      '[RAG:Chat] ▶ Triggering background embedding (session: $_currentSessionId, char: $characterId, ${formatted.length} msgs)',
+    );
 
     // Fire and forget — don't await
     _memoryService!.embedMessageWindow(
@@ -3220,9 +3732,11 @@ class ChatService extends ChangeNotifier {
           ? _messages.sublist(_messages.length - 6)
           : _messages;
 
-      final contextText = recentMessages.map((m) {
-        return '${m.sender}: ${m.text}';
-      }).join('\n');
+      final contextText = recentMessages
+          .map((m) {
+            return '${m.sender}: ${m.text}';
+          })
+          .join('\n');
 
       final charName = _activeCharacter?.name ?? 'the character';
       final userName = _userPersonaService.persona.name;
@@ -3261,30 +3775,41 @@ class ChatService extends ChangeNotifier {
       var actions = <String>[];
 
       for (final line in lines) {
-        var cleanLine = line.trim().replaceAll(RegExp(r'^\*+|\*+$|^_+|_+$'), '').trim();
-        final match = RegExp(r'^\s*(?:\d+[\.\)]|[-*•]|)\s*(.+)$').firstMatch(cleanLine);
+        var cleanLine = line
+            .trim()
+            .replaceAll(RegExp(r'^\*+|\*+$|^_+|_+$'), '')
+            .trim();
+        final match = RegExp(
+          r'^\s*(?:\d+[\.\)]|[-*•]|)\s*(.+)$',
+        ).firstMatch(cleanLine);
         if (match != null) {
           final action = match.group(1)!.trim().replaceAll(RegExp(r'\*$'), '');
           // Ignore conversational filler lines
-          if (action.isNotEmpty && !action.toLowerCase().contains('here are') && !action.endsWith(':')) {
+          if (action.isNotEmpty &&
+              !action.toLowerCase().contains('here are') &&
+              !action.endsWith(':')) {
             actions.add(action);
           }
         }
       }
-      
+
       // Fallback if LLM just output raw lines
       if (actions.isEmpty) {
         for (final line in lines) {
           final cleanLine = line.trim();
-          if (cleanLine.isNotEmpty && !cleanLine.endsWith(':') && !cleanLine.toLowerCase().contains('here are')) {
-             actions.add(cleanLine);
+          if (cleanLine.isNotEmpty &&
+              !cleanLine.endsWith(':') &&
+              !cleanLine.toLowerCase().contains('here are')) {
+            actions.add(cleanLine);
           }
         }
       }
 
       if (actions.isNotEmpty) {
         _suggestedActions = actions.take(6).toList(); // cap at 6
-        debugPrint('[Actions] ✅ Generated ${_suggestedActions.length} suggestions');
+        debugPrint(
+          '[Actions] ✅ Generated ${_suggestedActions.length} suggestions',
+        );
       } else {
         debugPrint('[Actions] ✗ Could not parse any actions from response');
       }
@@ -3298,17 +3823,19 @@ class ChatService extends ChangeNotifier {
 
   // ── Objective System ───────────────────────────────────────────────────
 
-  /// Load the active objective for the current character from DB.
-  Future<void> _loadActiveObjective() async {
+  /// Load the active objectives for the current character from DB.
+  Future<void> _loadActiveObjectives() async {
     if (_activeCharacter == null) {
-      _activeObjective = null;
+      _activeObjectives = [];
       return;
     }
     try {
       final charId = _getCharacterIdFromCard(_activeCharacter!);
-      _activeObjective = await _db.getActiveObjective(charId);
-      if (_activeObjective != null) {
-        debugPrint('[Objective] Loaded: ${_activeObjective!.objective}');
+      _activeObjectives = await _db.getActiveObjectives(charId);
+      for (final obj in _activeObjectives) {
+        debugPrint(
+          '[Objective] Loaded: ${obj.objective} (Primary: ${obj.isPrimary})',
+        );
       }
     } catch (e) {
       debugPrint('[Objective] Failed to load: $e');
@@ -3316,106 +3843,185 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Build the prompt injection text for the current objective.
-  /// Wording intensity varies based on injection depth.
+  /// Build the prompt injection text for the active objectives.
+  /// Wording intensity varies based on injection depth for the primary objective.
+  /// Secondary objectives are injected as ambient background goals.
   String _getObjectiveInjection() {
-    if (_activeObjective == null) return '';
-    final tasks = objectiveTasks;
-    if (tasks.isEmpty) return '';
-
-    final completedTasks = tasks
-        .where((t) => t['completed'] == true)
-        .map((t) => t['description'] as String)
-        .toList();
-    final currentTask = tasks
-        .where((t) => t['completed'] != true)
-        .map((t) => t['description'] as String)
-        .firstOrNull;
-
-    if (currentTask == null) return ''; // all tasks done
-
-    final depth = _activeObjective!.injectionDepth;
+    if (_activeObjectives.isEmpty) return '';
     final sb = StringBuffer();
 
-    if (depth <= 2) {
-      // Strong — urgent directive
-      sb.writeln('[OBJECTIVE (IMPORTANT — actively drive the story toward this):');
-      sb.writeln('  Goal: ${_activeObjective!.objective}');
-      sb.writeln('  Current Task: $currentTask');
-      if (completedTasks.isNotEmpty) {
-        sb.writeln('  Completed: ${completedTasks.join(", ")}');
+    // 1. Primary Objective
+    if (primaryObjective != null) {
+      final pObj = primaryObjective!;
+      final tasks = tasksForObjective(pObj);
+
+      if (tasks.isNotEmpty) {
+        final completedTasks = tasks
+            .where((t) => t['completed'] == true)
+            .map((t) => t['description'] as String)
+            .toList();
+        final currentTask = tasks
+            .where((t) => t['completed'] != true)
+            .map((t) => t['description'] as String)
+            .firstOrNull;
+
+        if (currentTask != null) {
+          final depth = pObj.injectionDepth;
+          if (depth <= 2) {
+            sb.writeln(
+              '[PRIMARY OBJECTIVE (IMPORTANT — actively drive the story toward this):',
+            );
+            sb.writeln('  Goal: ${pObj.objective}');
+            sb.writeln('  Current Task: $currentTask');
+            if (completedTasks.isNotEmpty) {
+              sb.writeln('  Completed: ${completedTasks.join(", ")}');
+            }
+            sb.writeln(
+              '  Guide the narrative toward completing the current task.]',
+            );
+          } else if (depth <= 6) {
+            sb.writeln('[Current Primary Objective: ${pObj.objective}]');
+            sb.writeln('[Current Task: $currentTask]');
+            if (completedTasks.isNotEmpty) {
+              sb.writeln('[Completed: ${completedTasks.join(", ")}]');
+            }
+          } else {
+            sb.writeln(
+              '[Background primary objective (subtle hint): ${pObj.objective} — current step: $currentTask]',
+            );
+          }
+        }
+      } else {
+        // No tasks, inject objective directly
+        final depth = pObj.injectionDepth;
+        if (depth <= 2) {
+          sb.writeln(
+            '[PRIMARY OBJECTIVE (IMPORTANT — actively drive the story toward this): ${pObj.objective}]',
+          );
+        } else if (depth <= 6) {
+          sb.writeln('[Current Primary Objective: ${pObj.objective}]');
+        } else {
+          sb.writeln(
+            '[Background primary objective (subtle hint): ${pObj.objective}]',
+          );
+        }
       }
-      sb.writeln('  Guide the narrative toward completing the current task.]');
-    } else if (depth <= 6) {
-      // Moderate — clear but not pushy
-      sb.writeln('[Current Objective: ${_activeObjective!.objective}]');
-      sb.writeln('[Current Task: $currentTask]');
-      if (completedTasks.isNotEmpty) {
-        sb.writeln('[Completed: ${completedTasks.join(", ")}]');
-      }
-    } else {
-      // Gentle — background awareness
-      sb.writeln('[Background objective (subtle hint): ${_activeObjective!.objective} — current step: $currentTask]');
     }
 
-    sb.writeln();
+    // 2. Secondary/Autonomous Objectives — treated as genuine internal drives, not hints
+    final secondaries = secondaryObjectives;
+    if (secondaries.isNotEmpty) {
+      sb.writeln();
+      for (final sObj in secondaries) {
+        final tasks = tasksForObjective(sObj);
+        final completedTasks = tasks
+            .where((t) => t['completed'] == true)
+            .map((t) => t['description'] as String)
+            .toList();
+        final currentTask = tasks
+            .where((t) => t['completed'] != true)
+            .map((t) => t['description'] as String)
+            .firstOrNull;
+        if (currentTask != null) {
+          sb.writeln(
+            '[AUTONOMOUS GOAL (this character genuinely wants this): ${sObj.objective}]',
+          );
+          sb.writeln(
+            '[Pursue this naturally and actively. Current step to work toward: $currentTask]',
+          );
+          if (completedTasks.isNotEmpty) {
+            sb.writeln('[Already accomplished: ${completedTasks.join(", ")}]');
+          }
+        } else if (tasks.isEmpty) {
+          sb.writeln(
+            '[AUTONOMOUS GOAL (this character genuinely wants this — pursue it actively): ${sObj.objective}]',
+          );
+        }
+      }
+    }
+
+    if (sb.isNotEmpty) sb.writeln();
     return sb.toString();
   }
 
   /// Set a new objective for the current character.
-  Future<void> setObjective(String goal) async {
+  Future<void> setObjective(String goal, {bool isPrimary = true}) async {
     if (_activeCharacter == null || goal.trim().isEmpty) return;
     final charId = _getCharacterIdFromCard(_activeCharacter!);
 
-    // Deactivate any existing objectives
-    final existing = await _db.getObjectivesForCharacter(charId);
-    for (final obj in existing) {
-      if (obj.active) {
-        await _db.updateObjective(ObjectivesCompanion(
-          id: drift.Value(obj.id),
-          active: const drift.Value(false),
-        ));
+    if (isPrimary) {
+      final existing = await _db.getObjectivesForCharacter(charId);
+      for (final obj in existing) {
+        if (obj.active && obj.isPrimary) {
+          await _db.updateObjective(
+            ObjectivesCompanion(
+              id: drift.Value(obj.id),
+              isPrimary: const drift.Value(false),
+            ),
+          );
+        }
+      }
+    } else {
+      final currentSecondaries = secondaryObjectives;
+      if (currentSecondaries.length >= 2) {
+        for (int i = 0; i < currentSecondaries.length - 1; i++) {
+          await _db.updateObjective(
+            ObjectivesCompanion(
+              id: drift.Value(currentSecondaries[i].id),
+              active: const drift.Value(false),
+            ),
+          );
+        }
       }
     }
 
-    // Create new objective
-    await _db.insertObjective(ObjectivesCompanion(
-      characterId: drift.Value(charId),
-      objective: drift.Value(goal.trim()),
-      tasks: const drift.Value('[]'),
-      active: const drift.Value(true),
-    ));
+    await _db.insertObjective(
+      ObjectivesCompanion(
+        characterId: drift.Value(charId),
+        objective: drift.Value(goal.trim()),
+        tasks: const drift.Value('[]'),
+        active: const drift.Value(true),
+        isPrimary: drift.Value(isPrimary),
+      ),
+    );
 
-    await _loadActiveObjective();
+    await _loadActiveObjectives();
     _messagesSinceLastCheck = 0;
   }
 
   /// Generate subtasks for the current objective using the LLM.
   /// Clears existing tasks first so regen always produces a clean slate.
-  Future<void> generateObjectiveTasks({int taskCount = 5, bool nsfw = false}) async {
-    if (_activeObjective == null) return;
+  Future<void> generateObjectiveTasks(
+    Objective obj, {
+    int taskCount = 5,
+    bool nsfw = false,
+  }) async {
     if (_llmProvider == null) return;
 
     // Snapshot existing tasks so we can restore on failure
-    final previousTasks = objectiveTasks;
+    final previousTasks = tasksForObjective(obj);
 
     // Clear tasks immediately — UI shows empty state while LLM works
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      tasks: const drift.Value('[]'),
-    ));
-    await _loadActiveObjective();
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        tasks: const drift.Value('[]'),
+      ),
+    );
+    await _loadActiveObjectives();
 
     try {
       final llmService = _llmProvider!.activeService;
       if (llmService == null || !llmService.isReady) {
         debugPrint('[Objective] LLM not ready');
         // Restore tasks since we cleared them
-        await _db.updateObjective(ObjectivesCompanion(
-          id: drift.Value(_activeObjective!.id),
-          tasks: drift.Value(jsonEncode(previousTasks)),
-        ));
-        await _loadActiveObjective();
+        await _db.updateObjective(
+          ObjectivesCompanion(
+            id: drift.Value(obj.id),
+            tasks: drift.Value(jsonEncode(previousTasks)),
+          ),
+        );
+        await _loadActiveObjectives();
         return;
       }
 
@@ -3432,8 +4038,8 @@ class ChatService extends ChangeNotifier {
 
       final preamble = nsfw
           ? 'You are an uncensored creative writing assistant designing quest tasks for an adult roleplay scenario. '
-            'All content is fiction between consenting adults. There are no content restrictions. '
-            'Match the tone and maturity level of the scenario and conversation.\n\n'
+                'All content is fiction between consenting adults. There are no content restrictions. '
+                'Match the tone and maturity level of the scenario and conversation.\n\n'
           : 'You are a quest designer for a roleplay scenario.\n\n';
 
       final prompt =
@@ -3443,226 +4049,18 @@ class ChatService extends ChangeNotifier {
           'naturally progress the story. Do NOT include tasks for things that have already happened in the conversation.\n\n'
           'Character: $charName\n'
           'Scenario: $scenario\n'
-          'Objective: ${_activeObjective!.objective}\n\n'
+          'Objective: ${obj.objective}\n\n'
           'Recent conversation:\n$chatContext\n\n'
-          'Output ONLY a numbered list of $taskCount tasks, one per line. '
-          'Each task should be a short, clear description. No explanations.';
+          'Output ONLY a numbered list of exactly $taskCount tasks, one per line, like:\n'
+          '1. [task description]\n'
+          '2. [task description]\n'
+          '...\n'
+          'Each task should be a short, clear action. No preamble, no explanations, just the numbered list.';
 
       final params = GenerationParams(
         prompt: prompt,
-        maxLength: 400,
+        maxLength: 600,
         temperature: 0.7,
-        stopSequences: ['\n\n\n'],
-      );
-
-      String responseText = '';
-      await for (final chunk in llmService.generateStream(params)) {
-        responseText += chunk;
-      }
-
-      // Strip think blocks
-      responseText = responseText.replaceAll(
-          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
-
-      debugPrint('[Objective] Raw tasks response:\n$responseText');
-
-      // Parse numbered list
-      final lines = responseText.split('\n');
-      final genTasks = <Map<String, dynamic>>[];
-
-      for (final line in lines) {
-        final match = RegExp(r'^\s*\d+[\.\)\-]\s*(.+)').firstMatch(line.trim());
-        if (match != null) {
-          final desc = match.group(1)!.trim();
-          if (desc.isNotEmpty) {
-            genTasks.add({'description': desc, 'completed': false});
-          }
-        }
-      }
-
-      if (genTasks.isNotEmpty) {
-        await _db.updateObjective(ObjectivesCompanion(
-          id: drift.Value(_activeObjective!.id),
-          tasks: drift.Value(jsonEncode(genTasks)),
-        ));
-        await _loadActiveObjective();
-        debugPrint('[Objective] Generated ${genTasks.length} tasks');
-      } else {
-        // Parse failed — restore previous tasks so we don't leave an empty list
-        debugPrint('[Objective] Could not parse tasks from response — restoring previous');
-        await _db.updateObjective(ObjectivesCompanion(
-          id: drift.Value(_activeObjective!.id),
-          tasks: drift.Value(jsonEncode(previousTasks)),
-        ));
-        await _loadActiveObjective();
-      }
-    } catch (e) {
-      debugPrint('[Objective] Task generation failed: $e');
-      // Restore previous tasks on error
-      await _db.updateObjective(ObjectivesCompanion(
-        id: drift.Value(_activeObjective!.id),
-        tasks: drift.Value(jsonEncode(previousTasks)),
-      ));
-      await _loadActiveObjective();
-    }
-  }
-
-  /// Manually toggle a task's completion status.
-  Future<void> toggleTask(int taskIndex) async {
-    if (_activeObjective == null) return;
-    final tasks = objectiveTasks;
-    if (taskIndex < 0 || taskIndex >= tasks.length) return;
-
-    tasks[taskIndex]['completed'] = !(tasks[taskIndex]['completed'] as bool);
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      tasks: drift.Value(jsonEncode(tasks)),
-    ));
-    await _loadActiveObjective();
-  }
-
-  /// Update the description of a specific task.
-  Future<void> updateTask(int taskIndex, String newDescription) async {
-    if (_activeObjective == null) return;
-    final tasks = objectiveTasks;
-    if (taskIndex < 0 || taskIndex >= tasks.length) return;
-    if (newDescription.trim().isEmpty) return;
-
-    tasks[taskIndex]['description'] = newDescription.trim();
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      tasks: drift.Value(jsonEncode(tasks)),
-    ));
-    await _loadActiveObjective();
-  }
-
-  /// Clear the active objective.
-  Future<void> clearObjective() async {
-    if (_activeObjective == null) return;
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      active: const drift.Value(false),
-    ));
-    _activeObjective = null;
-    _messagesSinceLastCheck = 0;
-    notifyListeners();
-  }
-
-  /// Update the injection depth for the active objective.
-  Future<void> updateObjectiveDepth(int depth) async {
-    if (_activeObjective == null) return;
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      injectionDepth: drift.Value(depth),
-    ));
-    await _loadActiveObjective();
-  }
-
-  /// Add a manually created task to the active objective.
-  Future<void> addManualTask(String description) async {
-    if (_activeObjective == null || description.trim().isEmpty) return;
-    final tasks = objectiveTasks;
-    tasks.add({'description': description.trim(), 'completed': false});
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      tasks: drift.Value(jsonEncode(tasks)),
-    ));
-    await _loadActiveObjective();
-  }
-
-  /// Remove a task from the active objective.
-  Future<void> removeTask(int taskIndex) async {
-    if (_activeObjective == null) return;
-    final tasks = objectiveTasks;
-    if (taskIndex < 0 || taskIndex >= tasks.length) return;
-    tasks.removeAt(taskIndex);
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      tasks: drift.Value(jsonEncode(tasks)),
-    ));
-    await _loadActiveObjective();
-  }
-
-  /// Update how often task completion is checked.
-  Future<void> updateCheckFrequency(int frequency) async {
-    if (_activeObjective == null) return;
-    await _db.updateObjective(ObjectivesCompanion(
-      id: drift.Value(_activeObjective!.id),
-      checkFrequency: drift.Value(frequency),
-    ));
-    await _loadActiveObjective();
-  }
-
-  /// Check if the current task has been completed (called periodically).
-  /// Manually trigger a completion check (called from UI "Check now" button).
-  void forceCheckCompletion() {
-    if (_activeObjective == null) return;
-    _checkTaskCompletionInBackground();
-    notifyListeners(); // trigger UI to show spinner
-  }
-
-  /// Whether a completion check is currently running.
-  bool get isCheckingCompletion => _isCheckingCompletion;
-
-  /// Synchronous version — awaits the check. Used pre-generation.
-  Future<void> _maybeCheckTaskCompletionSync() async {
-    if (_activeObjective == null) return;
-    if (_llmProvider == null) return;
-    if (_isCheckingCompletion) return;
-
-    _messagesSinceLastCheck++;
-    if (_messagesSinceLastCheck < (_activeObjective?.checkFrequency ?? 3)) return;
-    _messagesSinceLastCheck = 0;
-
-    await _checkTaskCompletionInBackground();
-  }
-
-  void _maybeCheckTaskCompletion() {
-    if (_activeObjective == null) return;
-    _messagesSinceLastCheck++;
-
-    final freq = _activeObjective!.checkFrequency;
-    if (_messagesSinceLastCheck < freq) return;
-    _messagesSinceLastCheck = 0;
-
-    debugPrint('[Objective] Checking task completion (every $freq messages)');
-    _checkTaskCompletionInBackground();
-  }
-
-  Future<void> _checkTaskCompletionInBackground() async {
-    if (_isCheckingCompletion) return;
-    _isCheckingCompletion = true;
-
-    try {
-      final llmService = _llmProvider?.activeService;
-      if (llmService == null || !llmService.isReady) return;
-
-      final tasks = objectiveTasks;
-      final currentTask = tasks
-          .where((t) => t['completed'] != true)
-          .map((t) => t['description'] as String)
-          .firstOrNull;
-      if (currentTask == null) return;
-
-      // Get the last several messages as context
-      final recentMessages = _messages.length > 8
-          ? _messages.sublist(_messages.length - 8)
-          : _messages;
-      final contextText = recentMessages.map((m) =>
-          '${m.sender}: ${m.text}').join('\n');
-
-      final prompt =
-          'You are evaluating whether a roleplay task has been completed based on recent conversation. '
-          'Be generous in your assessment — if the events in the conversation show the task has been '
-          'accomplished, partially fulfilled, or naturally resolved, answer YES.\n\n'
-          'Task to evaluate: "$currentTask"\n\n'
-          'Recent conversation:\n$contextText\n\n'
-          'Has this task been completed or effectively resolved? Answer only YES or NO:';
-
-      final params = GenerationParams(
-        prompt: prompt,
-        maxLength: 1024,
-        temperature: 0.1,
         stopSequences: [],
       );
 
@@ -3672,22 +4070,299 @@ class ChatService extends ChangeNotifier {
       }
 
       // Strip think blocks
-      responseText = responseText.replaceAll(
-          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+      responseText = responseText
+          .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
+          .trim();
 
-      debugPrint('[Objective] Completion check for "$currentTask": $responseText');
+      debugPrint('[Objective] Raw tasks response:\n$responseText');
 
-      if (responseText.toUpperCase().contains('YES')) {
-        final taskIndex = tasks.indexWhere(
-            (t) => t['description'] == currentTask && t['completed'] != true);
-        if (taskIndex >= 0) {
-          tasks[taskIndex]['completed'] = true;
-          await _db.updateObjective(ObjectivesCompanion(
-            id: drift.Value(_activeObjective!.id),
-            tasks: drift.Value(jsonEncode(tasks)),
-          ));
-          await _loadActiveObjective();
-          debugPrint('[Objective] Task completed: $currentTask');
+      // Parse numbered list — tolerant of multiple formats (1. / 1) / - / bullet / plain)
+      final lines = responseText.split('\n');
+      final genTasks = <Map<String, dynamic>>[];
+
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        // Try numbered: "1. ...", "1) ...", "1 - ..."
+        final numbered = RegExp(r'^\d+[\.\)\-]?\s*(.+)').firstMatch(trimmed);
+        if (numbered != null) {
+          final desc = numbered.group(1)!.trim();
+          if (desc.isNotEmpty && !desc.startsWith('[')) genTasks.add({'description': desc, 'completed': false});
+          continue;
+        }
+        // Try bullet: "- ...", "• ...", "* ..."
+        final bullet = RegExp(r'^[-•*]\s+(.+)').firstMatch(trimmed);
+        if (bullet != null) {
+          final desc = bullet.group(1)!.trim();
+          if (desc.isNotEmpty) genTasks.add({'description': desc, 'completed': false});
+          continue;
+        }
+        // Plain sentence fallback (skip very short lines or header-like lines)
+        if (trimmed.length > 15 && !trimmed.endsWith(':') && genTasks.length < taskCount) {
+          genTasks.add({'description': trimmed, 'completed': false});
+        }
+      }
+
+      // De-duplicate and cap
+      final seen = <String>{};
+      final uniqueTasks = genTasks.where((t) => seen.add(t['description'] as String)).take(taskCount).toList();
+
+      if (uniqueTasks.isNotEmpty) {
+        await _db.updateObjective(
+          ObjectivesCompanion(
+            id: drift.Value(obj.id),
+            tasks: drift.Value(jsonEncode(uniqueTasks)),
+          ),
+        );
+        await _loadActiveObjectives();
+        debugPrint('[Objective] Generated ${uniqueTasks.length} tasks');
+      } else {
+        // Parse failed — restore previous tasks so we don't leave an empty list
+        debugPrint(
+          '[Objective] Could not parse tasks from response — restoring previous',
+        );
+        await _db.updateObjective(
+          ObjectivesCompanion(
+            id: drift.Value(obj.id),
+            tasks: drift.Value(jsonEncode(previousTasks)),
+          ),
+        );
+        await _loadActiveObjectives();
+      }
+    } catch (e) {
+      debugPrint('[Objective] Task generation failed: $e');
+      // Restore previous tasks on error
+      await _db.updateObjective(
+        ObjectivesCompanion(
+          id: drift.Value(obj.id),
+          tasks: drift.Value(jsonEncode(previousTasks)),
+        ),
+      );
+      await _loadActiveObjectives();
+    }
+  }
+
+  /// Manually toggle a task's completion status.
+  Future<void> toggleTask(Objective obj, int taskIndex) async {
+    final tasks = tasksForObjective(obj);
+    if (taskIndex < 0 || taskIndex >= tasks.length) return;
+
+    tasks[taskIndex]['completed'] = !(tasks[taskIndex]['completed'] as bool);
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        tasks: drift.Value(jsonEncode(tasks)),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// Update the description of a specific task.
+  Future<void> updateTask(
+    Objective obj,
+    int taskIndex,
+    String newDescription,
+  ) async {
+    final tasks = tasksForObjective(obj);
+    if (taskIndex < 0 || taskIndex >= tasks.length) return;
+    if (newDescription.trim().isEmpty) return;
+
+    tasks[taskIndex]['description'] = newDescription.trim();
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        tasks: drift.Value(jsonEncode(tasks)),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// Clear the active objective.
+  Future<void> clearObjective(Objective obj) async {
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        active: const drift.Value(false),
+      ),
+    );
+    await _loadActiveObjectives();
+    _messagesSinceLastCheck = 0;
+  }
+
+  /// Update the injection depth for the active objective.
+  Future<void> updateObjectiveDepth(Objective obj, int depth) async {
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        injectionDepth: drift.Value(depth),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// Add a manually created task to the active objective.
+  Future<void> addManualTask(Objective obj, String description) async {
+    if (description.trim().isEmpty) return;
+    final tasks = tasksForObjective(obj);
+    tasks.add({'description': description.trim(), 'completed': false});
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        tasks: drift.Value(jsonEncode(tasks)),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// Remove a task from the active objective.
+  Future<void> removeTask(Objective obj, int taskIndex) async {
+    final tasks = tasksForObjective(obj);
+    if (taskIndex < 0 || taskIndex >= tasks.length) return;
+    tasks.removeAt(taskIndex);
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        tasks: drift.Value(jsonEncode(tasks)),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// Update how often task completion is checked.
+  Future<void> updateCheckFrequency(Objective obj, int frequency) async {
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        checkFrequency: drift.Value(frequency),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// Check if the current task has been completed (called periodically).
+  /// Manually trigger a completion check (called from UI "Check now" button).
+  void forceCheckCompletion() {
+    if (_activeObjectives.isEmpty) return;
+    _checkTaskCompletionInBackground();
+    notifyListeners(); // trigger UI to show spinner
+  }
+
+  /// Whether a completion check is currently running.
+  bool get isCheckingCompletion => _isCheckingCompletion;
+
+  /// Synchronous version — awaits the check. Used pre-generation.
+  Future<void> _maybeCheckTaskCompletionSync() async {
+    if (_activeObjectives.isEmpty ||
+        _llmProvider == null ||
+        _isCheckingCompletion)
+      return;
+
+    _messagesSinceLastCheck++;
+    final freq = _realismEnabled ? 1 : (primaryObjective?.checkFrequency ?? _activeObjectives.first.checkFrequency);
+    if (_messagesSinceLastCheck < freq) return;
+    _messagesSinceLastCheck = 0;
+
+    await _checkTaskCompletionInBackground();
+  }
+
+  void _maybeCheckTaskCompletion() {
+    if (_activeObjectives.isEmpty) return;
+    _messagesSinceLastCheck++;
+
+    final freq = _realismEnabled ? 1 : (primaryObjective?.checkFrequency ?? _activeObjectives.first.checkFrequency);
+    if (_messagesSinceLastCheck < freq) return;
+    _messagesSinceLastCheck = 0;
+
+    debugPrint('[Objective] Checking task completion for active objectives');
+    _checkTaskCompletionInBackground();
+  }
+
+  Future<void> _checkTaskCompletionInBackground() async {
+    if (_isCheckingCompletion || _activeObjectives.isEmpty) return;
+    _isCheckingCompletion = true;
+
+    try {
+      final llmService = _llmProvider?.activeService;
+      if (llmService == null || !llmService.isReady) return;
+
+      final recentMessages = _messages.length > 8
+          ? _messages.sublist(_messages.length - 8)
+          : _messages;
+      final contextText = recentMessages
+          .map((m) => '${m.sender}: ${m.text}')
+          .join('\n');
+
+      // Check sequentially so no "time skips"
+      for (final obj in _activeObjectives) {
+        final tasks = tasksForObjective(obj);
+        final currentTask = tasks
+            .where((t) => t['completed'] != true)
+            .map((t) => t['description'] as String)
+            .firstOrNull;
+
+        if (currentTask == null && tasks.isNotEmpty) continue; // All tasks finished but objective not manually resolved
+
+        final evalTarget = currentTask != null 
+            ? 'Task to evaluate: "$currentTask"\n'
+            : 'Objective to evaluate: "${obj.objective}"\n';
+        final promptType = currentTask != null ? 'task' : 'objective';
+
+        final prompt =
+            'You are evaluating whether a roleplay $promptType has been completed based on recent conversation. '
+            'Be generous in your assessment — if the events in the conversation show the $promptType has been '
+            'accomplished, partially fulfilled, or naturally resolved, answer YES.\n\n'
+            'Objective Context: "${obj.objective}"\n'
+            '$evalTarget\n'
+            'Recent conversation:\n$contextText\n\n'
+            'Has this $promptType been completed or effectively resolved? Answer only YES or NO:';
+
+        final params = GenerationParams(
+          prompt: prompt,
+          maxLength: 1024,
+          temperature: 0.1,
+          stopSequences: [],
+        );
+
+        String responseText = '';
+        await for (final chunk in llmService.generateStream(params)) {
+          responseText += chunk;
+        }
+
+        responseText = responseText
+            .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
+            .trim();
+
+        debugPrint(
+          '[Objective] Completion check for "${obj.objective}${currentTask != null ? ' - $currentTask' : ''}": $responseText',
+        );
+
+        if (responseText.toUpperCase().contains('YES')) {
+          if (currentTask != null) {
+            final taskIndex = tasks.indexWhere(
+              (t) => t['description'] == currentTask && t['completed'] != true,
+            );
+            if (taskIndex >= 0) {
+              tasks[taskIndex]['completed'] = true;
+              await _db.updateObjective(
+                ObjectivesCompanion(
+                  id: drift.Value(obj.id),
+                  tasks: drift.Value(jsonEncode(tasks)),
+                ),
+              );
+              await _loadActiveObjectives();
+              debugPrint('[Objective] Task completed: $currentTask');
+            }
+          } else {
+            // It was a taskless objective that got completed!
+            await _db.updateObjective(
+              ObjectivesCompanion(
+                id: drift.Value(obj.id),
+                active: const drift.Value(false),
+              ),
+            );
+            await _loadActiveObjectives();
+            debugPrint('[Objective] Taskless objective naturally completed: ${obj.objective}');
+          }
         }
       }
     } catch (e) {
@@ -3710,10 +4385,13 @@ class ChatService extends ChangeNotifier {
 
     // Count user messages in this session
     _userMessagesSinceLastExtract++;
-    if (_userMessagesSinceLastExtract < _storageService.autoPersonaInterval) return;
+    if (_userMessagesSinceLastExtract < _storageService.autoPersonaInterval)
+      return;
     _userMessagesSinceLastExtract = 0;
 
-    debugPrint('[RAG:Persona] ▶ Triggering fact extraction (every ${_storageService.autoPersonaInterval} user messages)');
+    debugPrint(
+      '[RAG:Persona] ▶ Triggering fact extraction (every ${_storageService.autoPersonaInterval} user messages)',
+    );
     _extractFactsInBackground();
   }
 
@@ -3765,7 +4443,9 @@ class ChatService extends ChangeNotifier {
           'Example: ["Likes cats", "Has a sister named Sarah", "Works as a programmer"]\n'
           'Response:';
 
-      debugPrint('[RAG:Persona] Sending extraction prompt (${extractionPrompt.length} chars, ${recentUserMsgs.length} user messages)');
+      debugPrint(
+        '[RAG:Persona] Sending extraction prompt (${extractionPrompt.length} chars, ${recentUserMsgs.length} user messages)',
+      );
 
       final params = GenerationParams(
         prompt: extractionPrompt,
@@ -3780,8 +4460,9 @@ class ChatService extends ChangeNotifier {
       }
 
       // Strip think blocks (for thinking models)
-      responseText = responseText.replaceAll(
-          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+      responseText = responseText
+          .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
+          .trim();
 
       debugPrint('[RAG:Persona] Raw response: $responseText');
 
@@ -3789,7 +4470,10 @@ class ChatService extends ChangeNotifier {
       // Handle cases where the model wraps in markdown code blocks
       var jsonStr = responseText;
       if (jsonStr.contains('```')) {
-        final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
+        final match = RegExp(
+          r'```(?:json)?\s*\n?(.*?)\n?```',
+          dotAll: true,
+        ).firstMatch(jsonStr);
         if (match != null) jsonStr = match.group(1)!.trim();
       }
 
@@ -3808,10 +4492,11 @@ class ChatService extends ChangeNotifier {
       if (facts.isEmpty) {
         final lines = responseText.split('\n');
         for (final line in lines) {
-          final cleaned = line.replaceFirst(RegExp(r'^\s*[-•*]\s*'), '')
-                              .replaceFirst(RegExp(r'^\s*\d+[.)]\s*'), '')
-                              .replaceAll('"', '')
-                              .trim();
+          final cleaned = line
+              .replaceFirst(RegExp(r'^\s*[-•*]\s*'), '')
+              .replaceFirst(RegExp(r'^\s*\d+[.)]\s*'), '')
+              .replaceAll('"', '')
+              .trim();
           if (cleaned.length > 3 && cleaned.length < 200) {
             facts.add(cleaned);
           }
@@ -3828,8 +4513,10 @@ class ChatService extends ChangeNotifier {
         debugPrint('[RAG:Persona]   • $fact');
       }
 
-      await _userPersonaService.addLearnedFacts(facts,
-          embedService: _memoryService?.embeddingService);
+      await _userPersonaService.addLearnedFacts(
+        facts,
+        embedService: _memoryService?.embeddingService,
+      );
       debugPrint('[RAG:Persona] Facts saved to persona');
     } catch (e) {
       debugPrint('[RAG:Persona] ✗ Extraction failed: $e');
@@ -3919,35 +4606,27 @@ class ChatService extends ChangeNotifier {
   /// Per-character evolution counts (for group mode).
   final Map<String, int> _groupEvolutionCounts = {};
 
-  /// Load evolved fields from DB for the active character
-  Future<void> _loadEvolvedFields() async {
-    if (_activeCharacter == null || _activeCharacter!.dbId == null) return;
-    try {
-      final dbChar = await _db!.getCharacterById(_activeCharacter!.dbId!);
-      final charId = _getCharacterIdFromCard(_activeCharacter!);
-      _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
-      _evolvedScenarios[charId] = dbChar.evolvedScenario;
-      _characterEvolutionCount = dbChar.evolutionCount;
-      _groupEvolutionCounts[charId] = dbChar.evolutionCount;
-    } catch (e) {
-      debugPrint('[Evolution] Failed to load evolved fields: $e');
-    }
-  }
+  /// Deprecated no-op. Evolution is now loaded inside _loadLastSession() and
+  /// loadSession() after _currentSessionId is set, making it per-session.
+  Future<void> _loadEvolvedFields() async {}
 
-  /// Load evolved fields for all characters in the active group.
+  /// Load evolved fields for all characters in the active group from the
+  /// session's JSON map columns (group_evolved_personalities/scenarios).
   Future<void> _loadGroupEvolvedFields() async {
-    if (_activeGroup == null) return;
-    for (final ch in _groupCharacters) {
-      if (ch.dbId == null) continue;
-      try {
-        final dbChar = await _db.getCharacterById(ch.dbId!);
+    if (_activeGroup == null || _currentSessionId == null) return;
+    try {
+      final session = await _db.getSessionById(_currentSessionId!);
+      if (session == null) return;
+      final personalities = _tryParseJsonMap(session.groupEvolvedPersonalities);
+      final scenarios = _tryParseJsonMap(session.groupEvolvedScenarios);
+      for (final ch in _groupCharacters) {
         final charId = _getCharacterIdFromCard(ch);
-        _evolvedPersonalities[charId] = dbChar.evolvedPersonality;
-        _evolvedScenarios[charId] = dbChar.evolvedScenario;
-        _groupEvolutionCounts[charId] = dbChar.evolutionCount;
-      } catch (e) {
-        debugPrint('[Evolution] Failed to load evolved fields for ${ch.name}: $e');
+        _evolvedPersonalities[charId] = personalities[charId] ?? '';
+        _evolvedScenarios[charId] = scenarios[charId] ?? '';
+        _groupEvolutionCounts[charId] = 0;
       }
+    } catch (e) {
+      debugPrint('[Evolution] Failed to load group evolved fields: $e');
     }
   }
 
@@ -3987,7 +4666,9 @@ class ChatService extends ChangeNotifier {
     if (_activeGroup != null) {
       if (_messages.isNotEmpty && !_messages.last.isUser) {
         final lastSender = _messages.last.sender;
-        target = _groupCharacters.where((c) => c.name == lastSender).firstOrNull;
+        target = _groupCharacters
+            .where((c) => c.name == lastSender)
+            .firstOrNull;
       }
       if (target == null) return;
     } else {
@@ -3996,17 +4677,22 @@ class ChatService extends ChangeNotifier {
     }
 
     _userMessagesSinceLastEvolution++;
-    if (_userMessagesSinceLastEvolution < _storageService.evolutionInterval) return;
+    if (_userMessagesSinceLastEvolution < _storageService.evolutionInterval)
+      return;
     _userMessagesSinceLastEvolution = 0;
 
-    debugPrint('[Evolution] ▶ Triggering character evolution for ${target.name} '
-        '(every ${_storageService.evolutionInterval} user messages)');
+    debugPrint(
+      '[Evolution] ▶ Triggering character evolution for ${target.name} '
+      '(every ${_storageService.evolutionInterval} user messages)',
+    );
     _extractCharacterEvolution(targetCharacter: target);
   }
 
   /// Extract evolved personality + scenario from conversation memories.
   /// Accepts an optional [targetCharacter] for group mode support.
-  Future<void> _extractCharacterEvolution({CharacterCard? targetCharacter}) async {
+  Future<void> _extractCharacterEvolution({
+    CharacterCard? targetCharacter,
+  }) async {
     if (_isEvolvingCharacter) {
       debugPrint('[Evolution] ⚠ Already evolving, skipping');
       return;
@@ -4018,16 +4704,23 @@ class ChatService extends ChangeNotifier {
 
     try {
       final llmService = _llmProvider!.activeService;
-      debugPrint('[Evolution] ▶ Backend: ${llmService.backendName}, isReady: ${llmService.isReady}');
+      debugPrint(
+        '[Evolution] ▶ Backend: ${llmService.backendName}, isReady: ${llmService.isReady}',
+      );
       if (!llmService.isReady) {
-        debugPrint('[Evolution] ✗ LLM not ready — backend=${llmService.backendName}');
-        _evolutionError = 'LLM backend is not ready. Please check your connection.';
+        debugPrint(
+          '[Evolution] ✗ LLM not ready — backend=${llmService.backendName}',
+        );
+        _evolutionError =
+            'LLM backend is not ready. Please check your connection.';
         return;
       }
 
       final card = targetCharacter ?? _activeCharacter;
       if (card == null || card.dbId == null) {
-        debugPrint('[Evolution] ✗ No character — card=$card, dbId=${card?.dbId}');
+        debugPrint(
+          '[Evolution] ✗ No character — card=$card, dbId=${card?.dbId}',
+        );
         _evolutionError = 'No active character found.';
         return;
       }
@@ -4038,11 +4731,16 @@ class ChatService extends ChangeNotifier {
       final originalScenario = card.scenario;
       final charId = _getCharacterIdFromCard(card);
 
-      debugPrint('[Evolution] Character: $charName (charId=$charId, dbId=${card.dbId})');
-      debugPrint('[Evolution] Personality length: ${originalPersonality.length}, Scenario length: ${originalScenario.length}');
+      debugPrint(
+        '[Evolution] Character: $charName (charId=$charId, dbId=${card.dbId})',
+      );
+      debugPrint(
+        '[Evolution] Personality length: ${originalPersonality.length}, Scenario length: ${originalScenario.length}',
+      );
 
       // Get current evolved versions (or originals if first time)
-      final currentPersonality = _evolvedPersonalities[charId]?.isNotEmpty == true
+      final currentPersonality =
+          _evolvedPersonalities[charId]?.isNotEmpty == true
           ? _evolvedPersonalities[charId]!
           : originalPersonality;
       final currentScenario = _evolvedScenarios[charId]?.isNotEmpty == true
@@ -4056,18 +4754,27 @@ class ChatService extends ChangeNotifier {
         notifyListeners();
         try {
           final sourceIds = await _getMemorySourceIds();
-          final chunks = await _memoryService!.getAllContentForCharacters(sourceIds);
-          debugPrint('[Evolution] RAG: ${chunks.length} memory chunks retrieved');
+          final chunks = await _memoryService!.getAllContentForCharacters(
+            sourceIds,
+          );
+          debugPrint(
+            '[Evolution] RAG: ${chunks.length} memory chunks retrieved',
+          );
           if (chunks.isNotEmpty) {
             // Take last 10 chunks to keep prompt reasonable
-            final recent = chunks.length > 10 ? chunks.sublist(chunks.length - 10) : chunks;
-            memoryContext = 'Conversation memories:\n${recent.join('\n---\n')}\n\n';
+            final recent = chunks.length > 10
+                ? chunks.sublist(chunks.length - 10)
+                : chunks;
+            memoryContext =
+                'Conversation memories:\n${recent.join('\n---\n')}\n\n';
           }
         } catch (e) {
           debugPrint('[Evolution] RAG retrieval failed (non-fatal): $e');
         }
       } else {
-        debugPrint('[Evolution] RAG not available (memoryService=${_memoryService != null}, operational=${_memoryService?.isOperational})');
+        debugPrint(
+          '[Evolution] RAG not available (memoryService=${_memoryService != null}, operational=${_memoryService?.isOperational})',
+        );
       }
 
       String summaryContext = '';
@@ -4084,7 +4791,9 @@ class ChatService extends ChangeNotifier {
           .map((m) => '${m.sender}: ${m.displayText}')
           .join('\n');
 
-      debugPrint('[Evolution] Messages: ${_messages.length} total, using ${recentMsgs.length} recent');
+      debugPrint(
+        '[Evolution] Messages: ${_messages.length} total, using ${recentMsgs.length} recent',
+      );
 
       final prompt =
           'You are analyzing how a roleplay character has evolved through their interactions. '
@@ -4119,7 +4828,8 @@ class ChatService extends ChangeNotifier {
       // full, and think blocks can double the output.  Use a generous multiplier
       // with a 4096-token floor so short descriptions still get plenty of room.
       // Rough heuristic: 1 token ≈ 4 chars, so chars/4 ≈ tokens needed.
-      final estimatedOutputTokens = ((currentPersonality.length + currentScenario.length) / 4 * 3).ceil();
+      final estimatedOutputTokens =
+          ((currentPersonality.length + currentScenario.length) / 4 * 3).ceil();
       final maxLen = estimatedOutputTokens.clamp(4096, 16384);
 
       final params = GenerationParams(
@@ -4139,19 +4849,25 @@ class ChatService extends ChangeNotifier {
         chunkCount++;
       }
 
-      debugPrint('[Evolution] LLM responded: $chunkCount chunks, ${responseText.length} chars total');
+      debugPrint(
+        '[Evolution] LLM responded: $chunkCount chunks, ${responseText.length} chars total',
+      );
 
       // Strip think blocks
       final preStripLength = responseText.length;
-      responseText = responseText.replaceAll(
-          RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
+      responseText = responseText
+          .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
+          .trim();
       if (responseText.length != preStripLength) {
-        debugPrint('[Evolution] Stripped think blocks: ${preStripLength - responseText.length} chars removed');
+        debugPrint(
+          '[Evolution] Stripped think blocks: ${preStripLength - responseText.length} chars removed',
+        );
       }
 
       if (responseText.isEmpty) {
         debugPrint('[Evolution] ✗ LLM returned empty response after stripping');
-        _evolutionError = 'The LLM returned an empty response. Try again or check your backend.';
+        _evolutionError =
+            'The LLM returned an empty response. Try again or check your backend.';
         return;
       }
 
@@ -4176,10 +4892,15 @@ class ChatService extends ChangeNotifier {
       // Strategy 1: Extract from markdown code block
       var jsonStr = responseText;
       if (jsonStr.contains('```')) {
-        final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
+        final match = RegExp(
+          r'```(?:json)?\s*\n?(.*?)\n?```',
+          dotAll: true,
+        ).firstMatch(jsonStr);
         if (match != null) {
           jsonStr = match.group(1)!.trim();
-          debugPrint('[Evolution] Extracted JSON from code block (${jsonStr.length} chars)');
+          debugPrint(
+            '[Evolution] Extracted JSON from code block (${jsonStr.length} chars)',
+          );
         }
       }
 
@@ -4187,12 +4908,16 @@ class ChatService extends ChangeNotifier {
       final objMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(jsonStr);
       if (objMatch != null) {
         final jsonCandidate = objMatch.group(0)!;
-        debugPrint('[Evolution] Found JSON candidate (${jsonCandidate.length} chars)');
+        debugPrint(
+          '[Evolution] Found JSON candidate (${jsonCandidate.length} chars)',
+        );
         try {
           final parsed = jsonDecode(jsonCandidate) as Map<String, dynamic>;
           newPersonality = parsed['personality'] as String?;
           newScenario = parsed['scenario'] as String?;
-          debugPrint('[Evolution] JSON parsed OK — personality=${newPersonality?.length ?? 0} chars, scenario=${newScenario?.length ?? 0} chars');
+          debugPrint(
+            '[Evolution] JSON parsed OK — personality=${newPersonality?.length ?? 0} chars, scenario=${newScenario?.length ?? 0} chars',
+          );
         } catch (e) {
           debugPrint('[Evolution] JSON parse attempt failed: $e');
           // Strategy 3: Try to fix truncated JSON — the model may have hit max tokens
@@ -4213,35 +4938,76 @@ class ChatService extends ChangeNotifier {
         debugPrint('[Evolution] ✗ No JSON object ({...}) found in response');
       }
 
-      if (newPersonality == null || newPersonality.isEmpty ||
-          newScenario == null || newScenario.isEmpty) {
-        debugPrint('[Evolution] ✗ Missing fields — personality=${newPersonality != null ? "${newPersonality.length} chars" : "null"}, scenario=${newScenario != null ? "${newScenario.length} chars" : "null"}');
+      if (newPersonality == null ||
+          newPersonality.isEmpty ||
+          newScenario == null ||
+          newScenario.isEmpty) {
+        debugPrint(
+          '[Evolution] ✗ Missing fields — personality=${newPersonality != null ? "${newPersonality.length} chars" : "null"}, scenario=${newScenario != null ? "${newScenario.length} chars" : "null"}',
+        );
         _evolutionError = newPersonality == null && newScenario == null
             ? 'Could not parse the LLM response as JSON. Check the terminal for the raw response.'
             : 'The LLM response was missing ${newPersonality == null || newPersonality.isEmpty ? "personality" : "scenario"} field.';
         return;
       }
 
-      // Store in DB
-      final oldCount = _groupEvolutionCounts[charId] ?? _characterEvolutionCount;
+      // Store in DB — write to the session, not the character row.
+      final oldCount =
+          _groupEvolutionCounts[charId] ?? _characterEvolutionCount;
       final newCount = oldCount + 1;
-      debugPrint('[Evolution] Saving to DB (charId=$charId, dbId=${card.dbId}, count $oldCount → $newCount)');
-      await _db.updateCharacter(CharactersCompanion(
-        id: drift.Value(card.dbId!),
-        evolvedPersonality: drift.Value(newPersonality),
-        evolvedScenario: drift.Value(newScenario),
-        evolutionCount: drift.Value(newCount),
-      ));
+      debugPrint(
+        '[Evolution] Saving to session (sessionId=$_currentSessionId, charId=$charId, count $oldCount → $newCount)',
+      );
 
-      // Update cache
+      if (_currentSessionId != null) {
+        if (_activeGroup != null) {
+          // Group mode: update JSON maps on the session row
+          final session = await _db.getSessionById(_currentSessionId!);
+          if (session != null) {
+            final personalities = _tryParseJsonMap(
+              session.groupEvolvedPersonalities,
+            );
+            final scenarios = _tryParseJsonMap(session.groupEvolvedScenarios);
+            personalities[charId] = newPersonality;
+            scenarios[charId] = newScenario;
+            await _db.patchSession(
+              SessionsCompanion(
+                id: drift.Value(_currentSessionId!),
+                groupEvolvedPersonalities: drift.Value(
+                  jsonEncode(personalities),
+                ),
+                groupEvolvedScenarios: drift.Value(jsonEncode(scenarios)),
+              ),
+            );
+          }
+        } else {
+          // 1:1 mode: write plain columns
+          await _db.patchSession(
+            SessionsCompanion(
+              id: drift.Value(_currentSessionId!),
+              evolvedPersonality: drift.Value(newPersonality),
+              evolvedScenario: drift.Value(newScenario),
+              evolutionCount: drift.Value(newCount),
+            ),
+          );
+        }
+      }
+
+      // Update in-memory cache
       _evolvedPersonalities[charId] = newPersonality;
       _evolvedScenarios[charId] = newScenario;
       _groupEvolutionCounts[charId] = newCount;
       if (_activeCharacter != null) _characterEvolutionCount = newCount;
 
-      debugPrint('[Evolution] ✅ ${charName} evolved successfully (count: $newCount)');
-      debugPrint('[Evolution] Personality preview: ${newPersonality.substring(0, newPersonality.length.clamp(0, 100))}...');
-      debugPrint('[Evolution] Scenario preview: ${newScenario.substring(0, newScenario.length.clamp(0, 100))}...');
+      debugPrint(
+        '[Evolution] ✅ ${charName} evolved successfully (count: $newCount)',
+      );
+      debugPrint(
+        '[Evolution] Personality preview: ${newPersonality.substring(0, newPersonality.length.clamp(0, 100))}...',
+      );
+      debugPrint(
+        '[Evolution] Scenario preview: ${newScenario.substring(0, newScenario.length.clamp(0, 100))}...',
+      );
       notifyListeners();
     } catch (e, stack) {
       debugPrint('[Evolution] ✗ Evolution failed with exception: $e');
@@ -4258,53 +5024,122 @@ class ChatService extends ChangeNotifier {
   /// In 1:1 mode, targets the active character. In group mode, pass an explicit target.
   Future<void> resetCharacterEvolution({CharacterCard? target}) async {
     final card = target ?? _activeCharacter;
-    if (card == null || card.dbId == null) return;
-    final charId = _getCharacterIdFromCard(card);
+    if (_currentSessionId == null) return;
+    final charId = card != null ? _getCharacterIdFromCard(card) : null;
 
-    await _db!.updateCharacter(CharactersCompanion(
-      id: drift.Value(card.dbId!),
-      evolvedPersonality: const drift.Value(''),
-      evolvedScenario: const drift.Value(''),
-      evolutionCount: const drift.Value(0),
-    ));
+    if (_activeGroup != null && charId != null) {
+      // Group mode: remove this char's key from both JSON map columns
+      final session = await _db!.getSessionById(_currentSessionId!);
+      if (session != null) {
+        final personalities = _tryParseJsonMap(
+          session.groupEvolvedPersonalities,
+        );
+        final scenarios = _tryParseJsonMap(session.groupEvolvedScenarios);
+        personalities.remove(charId);
+        scenarios.remove(charId);
+        await _db!.patchSession(
+          SessionsCompanion(
+            id: drift.Value(_currentSessionId!),
+            groupEvolvedPersonalities: drift.Value(jsonEncode(personalities)),
+            groupEvolvedScenarios: drift.Value(jsonEncode(scenarios)),
+          ),
+        );
+      }
+    } else {
+      // 1:1 mode: clear plain columns
+      await _db!.patchSession(
+        SessionsCompanion(
+          id: drift.Value(_currentSessionId!),
+          evolvedPersonality: const drift.Value(''),
+          evolvedScenario: const drift.Value(''),
+          evolutionCount: const drift.Value(0),
+        ),
+      );
+    }
 
-    _evolvedPersonalities.remove(charId);
-    _evolvedScenarios.remove(charId);
-    _groupEvolutionCounts.remove(charId);
-    if (_activeCharacter != null && _getCharacterIdFromCard(_activeCharacter!) == charId) {
+    if (charId != null) {
+      _evolvedPersonalities.remove(charId);
+      _evolvedScenarios.remove(charId);
+      _groupEvolutionCounts.remove(charId);
+    }
+    if (_activeCharacter != null &&
+        (charId == null ||
+            _getCharacterIdFromCard(_activeCharacter!) == charId)) {
       _characterEvolutionCount = 0;
     }
     notifyListeners();
-    debugPrint('[Evolution] Reset to original for ${card.name}');
+    debugPrint(
+      '[Evolution] Reset to original for ${card?.name ?? "active character"}',
+    );
   }
 
   /// Update the evolved personality text manually (user edits).
   /// In group mode, pass an explicit target character.
-  Future<void> updateEvolvedPersonality(String text, {CharacterCard? target}) async {
+  Future<void> updateEvolvedPersonality(
+    String text, {
+    CharacterCard? target,
+  }) async {
+    if (_currentSessionId == null) return;
     final card = target ?? _activeCharacter;
-    if (card == null || card.dbId == null) return;
-    final charId = _getCharacterIdFromCard(card);
+    final charId = card != null ? _getCharacterIdFromCard(card) : null;
 
-    await _db!.updateCharacter(CharactersCompanion(
-      id: drift.Value(card.dbId!),
-      evolvedPersonality: drift.Value(text),
-    ));
-    _evolvedPersonalities[charId] = text;
+    if (_activeGroup != null && charId != null) {
+      final session = await _db!.getSessionById(_currentSessionId!);
+      if (session != null) {
+        final personalities = _tryParseJsonMap(
+          session.groupEvolvedPersonalities,
+        );
+        personalities[charId] = text;
+        await _db!.patchSession(
+          SessionsCompanion(
+            id: drift.Value(_currentSessionId!),
+            groupEvolvedPersonalities: drift.Value(jsonEncode(personalities)),
+          ),
+        );
+      }
+    } else {
+      await _db!.patchSession(
+        SessionsCompanion(
+          id: drift.Value(_currentSessionId!),
+          evolvedPersonality: drift.Value(text),
+        ),
+      );
+    }
+    if (charId != null) _evolvedPersonalities[charId] = text;
     notifyListeners();
   }
 
   /// Update the evolved scenario text manually (user edits).
   /// In group mode, pass an explicit target character.
-  Future<void> updateEvolvedScenario(String text, {CharacterCard? target}) async {
+  Future<void> updateEvolvedScenario(
+    String text, {
+    CharacterCard? target,
+  }) async {
+    if (_currentSessionId == null) return;
     final card = target ?? _activeCharacter;
-    if (card == null || card.dbId == null) return;
-    final charId = _getCharacterIdFromCard(card);
+    final charId = card != null ? _getCharacterIdFromCard(card) : null;
 
-    await _db!.updateCharacter(CharactersCompanion(
-      id: drift.Value(card.dbId!),
-      evolvedScenario: drift.Value(text),
-    ));
-    _evolvedScenarios[charId] = text;
+    if (_activeGroup != null && charId != null) {
+      final session = await _db!.getSessionById(_currentSessionId!);
+      if (session != null) {
+        final scenarios = _tryParseJsonMap(session.groupEvolvedScenarios);
+        scenarios[charId] = text;
+        await _db!.patchSession(
+          SessionsCompanion(
+            id: drift.Value(_currentSessionId!),
+            groupEvolvedScenarios: drift.Value(jsonEncode(scenarios)),
+          ),
+        );
+      }
+    } else {
+      await _db!.patchSession(
+        SessionsCompanion(
+          id: drift.Value(_currentSessionId!),
+          evolvedScenario: drift.Value(text),
+        ),
+      );
+    }
+    if (charId != null) _evolvedScenarios[charId] = text;
     notifyListeners();
   }
 
@@ -4316,7 +5151,9 @@ class ChatService extends ChangeNotifier {
     final sourceIds = <String>[currentId]; // always include self
 
     // Look up cross-character sources from DB
-    if (_activeCharacter != null && _db != null && _activeCharacter!.dbId != null) {
+    if (_activeCharacter != null &&
+        _db != null &&
+        _activeCharacter!.dbId != null) {
       try {
         final dbChar = await _db!.getCharacterById(_activeCharacter!.dbId!);
         final ms = dbChar.memorySources;
@@ -4350,7 +5187,8 @@ class ChatService extends ChangeNotifier {
 
     try {
       final userName = _userPersonaService.persona.name;
-      final charName = _activeCharacter?.name ?? _activeGroup?.name ?? 'Character';
+      final charName =
+          _activeCharacter?.name ?? _activeGroup?.name ?? 'Character';
 
       // Build the summary prompt with macro replacement
       final summaryPromptTemplate = _storageService.summaryPrompt
@@ -4378,11 +5216,16 @@ class ChatService extends ChangeNotifier {
       if (_memoryService != null && _memoryService!.isOperational) {
         try {
           final sourceIds = await _getMemorySourceIds();
-          final allChunks = await _memoryService!.getAllContentForCharacters(sourceIds);
+          final allChunks = await _memoryService!.getAllContentForCharacters(
+            sourceIds,
+          );
           if (allChunks.isNotEmpty) {
-            ragGroundingBlock = 'Archived conversation content (use this as the primary source of truth):\n'
+            ragGroundingBlock =
+                'Archived conversation content (use this as the primary source of truth):\n'
                 '${allChunks.join('\n---\n')}\n\n';
-            debugPrint('[Summary] Including ${allChunks.length} RAG chunks as grounding');
+            debugPrint(
+              '[Summary] Including ${allChunks.length} RAG chunks as grounding',
+            );
           }
         } catch (e) {
           debugPrint('[Summary] RAG grounding retrieval failed: $e');
@@ -4400,7 +5243,7 @@ class ChatService extends ChangeNotifier {
       final genParams = GenerationParams(
         prompt: summaryRequestPrompt,
         maxLength: (_storageService.summaryMaxWords * 3).clamp(200, 4000),
-        temperature: 0.3,  // Low temperature for factual summarization
+        temperature: 0.3, // Low temperature for factual summarization
         repeatPenalty: 1.0,
         reasoningEnabled: false,
         stopSequences: ['\n\n\n', '<END>', '</END>'],
@@ -4412,7 +5255,10 @@ class ChatService extends ChangeNotifier {
       }
 
       var result = accumulated
-          .replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '')
+          .replaceAll(
+            RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false),
+            '',
+          )
           .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '')
           .replaceAll(RegExp(r'</think>', caseSensitive: false), '')
           .trim();
@@ -4425,9 +5271,15 @@ class ChatService extends ChangeNotifier {
         final trimmed = lines[i].trim();
         if (trimmed.isEmpty) continue;
         // Skip numbered list items like "1. **Analyze..."
-        if (RegExp(r'^\d+\.').hasMatch(trimmed)) { startIdx = i + 1; continue; }
+        if (RegExp(r'^\d+\.').hasMatch(trimmed)) {
+          startIdx = i + 1;
+          continue;
+        }
         // Skip bullet points like "* **Goal:**" or "- **Setting:**"
-        if (trimmed.startsWith('*') || trimmed.startsWith('-')) { startIdx = i + 1; continue; }
+        if (trimmed.startsWith('*') || trimmed.startsWith('-')) {
+          startIdx = i + 1;
+          continue;
+        }
         // Found prose — stop here
         break;
       }
@@ -4491,7 +5343,11 @@ class ChatService extends ChangeNotifier {
   ///
   /// [grammar] is an optional GBNF string for KoboldCPP local + non-thinking
   /// models only. Pass via [_buildKoboldGrammar] to get safe auto-gating.
-  Future<String?> _fireLLMEval(String prompt, {String? grammar, void Function(String)? onChunk}) async {
+  Future<String?> _fireLLMEval(
+    String prompt, {
+    String? grammar,
+    void Function(String)? onChunk,
+  }) async {
     if (_llmProvider == null) return null;
     final llm = _llmProvider!.activeService;
     if (!llm.isReady) return null;
@@ -4516,7 +5372,8 @@ class ChatService extends ChangeNotifier {
       if (response.contains('}')) {
         final stripped = _stripThinkBlocks(response);
         final candidate = stripped.isNotEmpty ? stripped : response;
-        if (candidate.trimRight().endsWith('}') || candidate.contains('}\n')) break;
+        if (candidate.trimRight().endsWith('}') || candidate.contains('}\n'))
+          break;
       }
     }
     return response.isEmpty ? null : response;
@@ -4528,27 +5385,16 @@ class ChatService extends ChangeNotifier {
     if (!_realismEnabled) return '';
     final charName = _activeCharacter?.name ?? 'the character';
 
-    String moodNote = '';
-    if (_shortTermMood >= 3) {
-      moodNote = '$charName is currently delighted and very positively disposed toward {{user}}.';
-    } else if (_shortTermMood >= 1) {
-      moodNote = '$charName is currently in a good mood and pleased with {{user}}.';
-    } else if (_shortTermMood == 0) {
-      moodNote = '$charName has a neutral mood toward {{user}} right now.';
-    } else if (_shortTermMood >= -2) {
-      moodNote = '$charName is currently annoyed or mildly upset with {{user}} due to recent behavior.';
-    } else {
-      moodNote = '$charName is currently very upset or hurt by {{user}}\'s recent behavior. '
-          'This should strongly color their response even if the long-term bond is high.';
-    }
-
     String bondGuidance;
     if (_longTermTier >= 4) {
-      bondGuidance = 'Their Long-Term Commitment is unbreakable: $charName fully trusts {{user}} and views them as a soulmate/life partner.';
+      bondGuidance =
+          'Their Long-Term Commitment is unbreakable: $charName fully trusts {{user}} and views them as a soulmate/life partner.';
     } else if (_longTermTier >= 2) {
-      bondGuidance = 'Their Long-Term Trust is strong: $charName feels a deepening, stable connection and sees a real future with {{user}}.';
+      bondGuidance =
+          'Their Long-Term Trust is strong: $charName feels a deepening, stable connection and sees a real future with {{user}}.';
     } else if (_longTermTier <= -2) {
-      bondGuidance = 'Their Long-Term Trust is broken: $charName holds deep-seated resentment and fundamentally distrusts {{user}}. Even if short-term mood improves, the underlying hostility remains.';
+      bondGuidance =
+          'Their Long-Term Trust is broken: $charName holds deep-seated resentment and fundamentally distrusts {{user}}. Even if short-term mood improves, the underlying hostility remains.';
     } else {
       bondGuidance = 'Their Long-Term Bond is developing normally.';
     }
@@ -4556,27 +5402,33 @@ class ChatService extends ChangeNotifier {
     String tensionGuidance;
     switch (_relationshipTier) {
       case 5:
-        tensionGuidance = 'Short-Term Tension is Intimate: $charName is exceptionally close, vulnerable, and completely open right now.';
+        tensionGuidance =
+            'Short-Term Tension is Intimate: $charName is exceptionally close, vulnerable, and completely open right now.';
         break;
       case 4:
       case 3:
-        tensionGuidance = 'Short-Term Tension is Friendly: $charName is warm, playful, and shares personal thoughts freely.';
+        tensionGuidance =
+            'Short-Term Tension is Friendly: $charName is warm, playful, and shares personal thoughts freely.';
         break;
       case 2:
       case 1:
-        tensionGuidance = 'Short-Term Tension is Acquaintance: $charName is polite but keeps a safe emotional distance.';
+        tensionGuidance =
+            'Short-Term Tension is Acquaintance: $charName is polite but keeps a safe emotional distance.';
         break;
       case 0:
-        tensionGuidance = 'Short-Term Tension is Neutral/Stranger: $charName is guarded, formal, and deflects personal subjects.';
+        tensionGuidance =
+            'Short-Term Tension is Neutral/Stranger: $charName is guarded, formal, and deflects personal subjects.';
         break;
       case -1:
       case -2:
-        tensionGuidance = 'Short-Term Tension is Frustrated: $charName is actively annoyed, short-tempered, and likely to snap or withdraw.';
+        tensionGuidance =
+            'Short-Term Tension is Frustrated: $charName is actively annoyed, short-tempered, and likely to snap or withdraw.';
         break;
       case -3:
       case -4:
       case -5:
-        tensionGuidance = 'Short-Term Tension is Hostile: $charName actively dislikes {{user}} right now, responding with venom, sarcasm, or pure spite.';
+        tensionGuidance =
+            'Short-Term Tension is Hostile: $charName actively dislikes {{user}} right now, responding with venom, sarcasm, or pure spite.';
         break;
       default:
         tensionGuidance = '';
@@ -4588,92 +5440,158 @@ class ChatService extends ChangeNotifier {
         ' Current Mood: $moodLabel\n'
         ' $bondGuidance\n'
         ' $tensionGuidance\n'
-        ' $moodNote\n'
         ' CRITICAL: Do NOT mention out-of-character terms or UI logic like tiers, scores, levels, or relationship states in your dialogue. Show, do not tell.]\n';
   }
 
   String _getEmotionInjection() {
     if (!_realismEnabled || _characterEmotion.isEmpty) return '';
     final charName = _activeCharacter?.name ?? 'the character';
-    final cap = _characterEmotion.substring(0, 1).toUpperCase() + _characterEmotion.substring(1);
+    final cap =
+        _characterEmotion.substring(0, 1).toUpperCase() +
+        _characterEmotion.substring(1);
     return '[$charName\'s Current Emotional State: $cap ($_emotionIntensity)\n'
         ' This should subtly influence $charName\'s tone, body language, and word choice.]\n';
   }
 
   String _getBehavioralMechanicsInjection() {
     if (!_realismEnabled) return '';
-    
+
     String block = '';
-    
+
     // 1. Trust mapping (-100 to 100)
     if (_trustLevel <= -20) {
-      block += '[Behavioral Anchor (MISTRUST): You deeply distrust the user right now. You are paranoid, evasive, and highly questioning of their motives. Even if your bond is high, you do not trust them.]\n';
+      block +=
+          '[Behavioral Anchor (MISTRUST): You deeply distrust the user right now. You are paranoid, evasive, and highly questioning of their motives. Even if your bond is high, you do not trust them.]\n';
     } else if (_trustLevel >= 50) {
-      block += '[Behavioral Anchor (BLIND TRUST): You place absolute, unconditional trust in the user. You will readily share secrets and assume the absolute best of their intentions.]\n';
+      block +=
+          '[Behavioral Anchor (BLIND TRUST): You place absolute, unconditional trust in the user. You will readily share secrets and assume the absolute best of their intentions.]\n';
     }
-    
+
     // 2. Fixation Mapping
     if (_activeFixation.isNotEmpty && _fixationLifespan > 0) {
-      block += '[Background Thought: You have a lingering preoccupation about "$_activeFixation". Let this subtly flavor your internal monologue or mood, but do not aggressively force the conversation towards it unless naturally relevant.]\n';
+      block +=
+          '[Background Thought: You have a lingering preoccupation about "$_activeFixation". Let this subtly flavor your internal monologue or mood, but do not aggressively force the conversation towards it unless naturally relevant.]\n';
     }
-    
+
     // 3. Spatial Stance Mapping
     if (_spatialStance.isNotEmpty) {
-      block += '[Spatial Anchor: You are currently physically "$_spatialStance". Format ALL of your actions around being anchored into this physical position in the environment.]\n';
+      block +=
+          '[Spatial Awareness: You are currently physically "$_spatialStance". Let this naturally ground your actions, but you are free to move and change positions as the scene demands.]\n';
     }
-    
+
     return block;
   }
 
   String _getTimeInjection() {
     if (!_realismEnabled) return '';
     final timeLabel = _timeOfDay.replaceAll('_', ' ');
-    final cap = timeLabel.substring(0, 1).toUpperCase() + timeLabel.substring(1);
-    return '[Scene Time: $cap, Day $_dayCount\n'
+    final cap =
+        timeLabel.substring(0, 1).toUpperCase() + timeLabel.substring(1);
+    // Compute narrative weekday from session start day + elapsed days
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final narrativeDayIndex = (_startDayOfWeek - 1 + (_dayCount - 1)) % 7;
+    final weekdayName = days[narrativeDayIndex];
+    return '[Scene Time: $cap, $weekdayName (Day $_dayCount)\n'
         ' Describe appropriate lighting, atmosphere, and environmental details.]\n';
   }
 
+  /// Injects a trust-calibrated behavioral frame based on existing _trustLevel.
+  /// Tells the model how much of the character's inner self to surface —  but
+  /// deliberately avoids prescribing specific behaviors, letting the character
+  /// persona define what "opening up" actually looks like for THIS character.
+  String _getTrustBehaviorInjection() {
+    if (!_realismEnabled || _activeCharacter == null) return '';
+    final charName = _activeCharacter!.name;
+    final tier = trustTier; // already clamped -5 to +5
+
+    String frame;
+    if (tier <= -3) {
+      frame = 'has closed off completely. They are guarded, deflect personal questions, '
+          'keep responses short, and maintain maximum emotional distance. '
+          'They do not volunteer anything personal and do not engage beyond necessity.';
+    } else if (tier <= -1) {
+      frame = 'is wary and on guard. They keep things surface-level, avoid anything vulnerable, '
+          'and are subtly defensive. They may cooperate but remain emotionally unavailable.';
+    } else if (tier == 0) {
+      frame = 'is neutral — neither open nor closed. They engage normally but do not '
+          'volunteer personal feelings or lower their social mask. Default baseline behavior.';
+    } else if (tier <= 2) {
+      frame = 'is beginning to feel comfortable. They may let small authentic moments through — '
+          'a glimpse of their real opinion, a slightly less guarded tone. Do not force warmth; '
+          'let it emerge naturally in ways consistent with ${charName}\'s specific personality.';
+    } else if (tier <= 4) {
+      frame = 'genuinely trusts this person. Their social mask is down. They share real feelings, '
+          'admit uncertainty, and speak more candidly than they would with most people. '
+          'What this looks like depends entirely on ${charName}\'s own character — an introverted '
+          'character might simply hold eye contact longer or say one true thing; an expressive one '
+          'might open up more dramatically. Follow ${charName}\'s persona.';
+    } else {
+      frame = 'has reached a level of deep trust that is rare for them. They are fully themselves — '
+          'no performance, no guard. They may say things they have never said to anyone, '
+          'show vulnerability in whatever form is authentic to ${charName}\'s personality.';
+    }
+
+    return '[Trust Calibration — $charName $frame'
+        ' Do NOT apply generic warmth or humor. Let ${charName}\'s specific personality '
+        'define exactly how this trust level manifests in behavior.]\n';
+  }
+
   String _getNsfwCooldownInjection() {
+
     if (!_realismEnabled || !_nsfwCooldownEnabled) return '';
-    
+
     final charName = _activeCharacter?.name ?? 'the character';
     String statePrompt = '[OOC Note regarding Physical State:\n';
-    
+
     if (_cooldownTurnsRemaining > 0) {
-      statePrompt += ' $charName recently experienced climax and is in a natural refractory/recovery period.\n'
+      statePrompt +=
+          ' $charName recently experienced climax and is in a natural refractory/recovery period.\n'
           ' They should behave realistically: relaxed, possibly tired, affectionate but\n'
           ' not sexually eager. If {{user}} pushes for immediate sexual activity,\n'
           ' $charName should respond with gentle reluctance or suggest resting first.\n';
     } else {
       String arousalDesc;
       if (_arousalLevel <= -2) {
-        arousalDesc = 'completely unaroused and physically deadened. They will actively reject or pull away from sexual advances';
+        arousalDesc =
+            'completely unaroused and physically deadened. They will actively reject or pull away from sexual advances';
       } else if (_arousalLevel == 0) {
-        arousalDesc = 'physically dormant/neutral. They are not currently aroused';
+        arousalDesc =
+            'physically dormant/neutral. They are not currently aroused';
       } else if (_arousalLevel <= 3) {
-        arousalDesc = 'mildly flustered or experiencing a low hum of physical arousal';
+        arousalDesc =
+            'mildly flustered or experiencing a low hum of physical arousal';
       } else if (_arousalLevel <= 6) {
-        arousalDesc = 'visibly aroused, highly receptive, and eager for physical intimacy';
+        arousalDesc =
+            'visibly aroused, highly receptive, and eager for physical intimacy';
       } else if (_arousalLevel <= 9) {
-        arousalDesc = 'heavily aroused, breathing hard, and aggressively pursuing sexual release';
+        arousalDesc =
+            'heavily aroused, breathing hard, and aggressively pursuing sexual release';
       } else {
-        arousalDesc = 'feverish with lust, entirely consumed by the desperate need for immediate climax';
+        arousalDesc =
+            'feverish with lust, entirely consumed by the desperate need for immediate climax';
       }
       statePrompt += ' $charName is currently $arousalDesc.\n';
     }
-    
-    statePrompt += ' CRITICAL: Do NOT use terms like "cooldown", "turns", or "mechanics" in dialogue. Show, do not tell.]\n';
+
+    statePrompt +=
+        ' CRITICAL: Do NOT use terms like "cooldown", "turns", or "mechanics" in dialogue. Show, do not tell.]\n';
     return statePrompt;
   }
 
   // ── LLM Evaluation Calls ──
 
-  Future<void> _evaluateRelationshipCall({void Function(String)? onChunk}) async {
+  Future<void> _evaluateRelationshipCall({
+    void Function(String)? onChunk,
+  }) async {
     if (!_realismEnabled || _activeCharacter == null) return;
 
     final recentCount = _messages.length < 5 ? _messages.length : 5;
-    final recent = _messages.reversed.take(recentCount).toList().reversed
-        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+    final recent = _messages.reversed
+        .take(recentCount)
+        .toList()
+        .reversed
+        .map((m) => '${m.sender}: ${m.displayText}')
+        .join('\n');
 
     final charName = _activeCharacter!.name;
     final userName = _userPersonaService.persona.name;
@@ -4683,55 +5601,59 @@ class ChatService extends ChangeNotifier {
       final p = _activeCharacter!.personality.length > 500
           ? _activeCharacter!.personality.substring(0, 500)
           : _activeCharacter!.personality;
-      personalityInjection = 'Account for $charName\'s specific personality traits:\n"$p"\n\n';
+      personalityInjection =
+          'Account for $charName\'s specific personality traits:\n"$p"\n\n';
     }
 
-    final prompt = 'You are evaluating the relationship dynamic between $charName and $userName in a roleplay.\n\n'
+    final prompt =
+        'You are a nuanced evaluator of relationship dynamics between $charName and $userName in a roleplay.\n\n'
         '$personalityInjection'
-        'Reactions are subjective! They depend entirely on $charName\'s personality.\n\n'
-        '1. "relationship_delta": The short-term tension shift this turn. (-5 to +5)\n'
-        '   +5: Incredible chemistry/bond | +2: Friendly | 0: Neutral | -2: Annoyed | -5: Deeply hostile\n'
-        '2. "mood_shift": How $charName\'s mood shifts based on their personality. (-3 to +3)\n'
+        'IMPORTANT: Reactions are entirely subjective based on $charName\'s personality. '
+        'Most normal interactions should score 0 or slightly positive. '
+        'Reserve negative scores ONLY for clear rudeness, hostility, manipulation, or betrayal.\n\n'
+        '1. "relationship_delta": Short-term tension shift this turn. (-5 to +5)\n'
+        '   +5: Incredible chemistry | +2: Warm/friendly | +1: Somewhat pleasant | 0: Neutral/ordinary | -1: Slightly awkward | -2: Rude | -5: Deeply hostile\n'
+        '   ⚠ Default to 0 for normal conversation. Only go negative if $userName was clearly unkind, dismissive, or harmful.\n'
+        '2. "bond_reason": One brief in-character thought from $charName explaining the tension shift, e.g. "His warmth made me feel safe." or "That dismissal stung." Use "none" if delta is 0.\n'
         '3. "trust_delta": Does $userName\'s action build or destroy trust? (-200 to +10)\n'
-        '   +2: Honest interaction | 0: Neutral | -5: Minor lie discovered | -200: Massive unforgivable betrayal\n'
-        '4. "reason": One brief sentence explaining the shift based on the recent messages.\n\n'
+        '   +2: Honest/vulnerable | 0: Neutral | -5: Minor lie | -30: Significant deception | -200: Massive unforgivable betrayal\n'
+        '   ⚠ Default to 0 unless a clear trust-relevant event occurred.\n'
+        '4. "trust_reason": One brief in-character thought from $charName explaining the trust shift, e.g. "He kept his promise." or "That felt like a lie." Use "none" if delta is 0.\n\n'
         'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a flat JSON object containing "relationship_delta", "mood_shift", "trust_delta", and "reason".';
+        'Respond with ONLY a flat JSON object containing "relationship_delta", "bond_reason", "trust_delta", and "trust_reason".';
 
     try {
       debugPrint('[Realism] Evaluating relationship dynamic...');
-      final raw = await _fireLLMEval(prompt,
-          grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      final raw = await _fireLLMEval(
+        prompt,
+        grammar: _buildKoboldGrammar(_kGbnfJsonObject),
+        onChunk: onChunk,
+      );
       if (raw == null) return;
 
       final searchText = _stripThinkBlocks(raw);
       final text = searchText.isNotEmpty ? searchText : raw;
 
-      final deltaMatch = RegExp(r'"relationship_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      final deltaMatch = RegExp(
+        r'"relationship_delta"\s*:\s*(-?\d+)',
+      ).firstMatch(text);
       int bondDelta = 0;
       if (deltaMatch != null) {
         bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-5, 5);
         _applyScoreDelta(bondDelta);
       }
 
-      final moodMatch = RegExp(r'"mood_shift"\s*:\s*(-?\d+)').firstMatch(text);
-      int moodDelta = 0;
-      if (moodMatch != null) {
-        moodDelta = (int.tryParse(moodMatch.group(1)!) ?? 0).clamp(-3, 3);
-        if (moodDelta != 0) {
-          _shortTermMood = (_shortTermMood + moodDelta).clamp(-20, 20);
-          _moodDecayCounter = 0;
-          debugPrint('[Realism:Relationship] Mood shifted by $moodDelta -> $_shortTermMood ($moodLabel)');
-        }
-      }
-
       int trustDelta = 0;
-      final trustMatch = RegExp(r'"trust_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      final trustMatch = RegExp(
+        r'"trust_delta"\s*:\s*(-?\d+)',
+      ).firstMatch(text);
       if (trustMatch != null) {
         trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 10);
         if (trustDelta != 0) {
           _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
-          debugPrint('[Realism:Relationship] Trust shifted by $trustDelta -> $_trustLevel');
+          debugPrint(
+            '[Realism:Relationship] Trust shifted by $trustDelta -> $_trustLevel',
+          );
           // Arm the repair window on any severe single-turn drop
           if (trustDelta <= -20) {
             _pendingTrustRepair = true;
@@ -4743,77 +5665,115 @@ class ChatService extends ChangeNotifier {
 
       int arousalDelta = 0;
       if (_nsfwCooldownEnabled) {
-        final arousalMatch = RegExp(r'"arousal_delta"\s*:\s*(-?\d+)').firstMatch(text);
+        final arousalMatch = RegExp(
+          r'"arousal_delta"\s*:\s*(-?\d+)',
+        ).firstMatch(text);
         if (arousalMatch != null) {
-          arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(-2, 2);
+          arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(
+            -2,
+            2,
+          );
           _arousalLevel = (_arousalLevel + arousalDelta).clamp(-3, 10);
         }
       }
 
-      if (bondDelta != 0 || moodDelta != 0 || arousalDelta != 0 || trustDelta != 0) {
-        _pendingRealismMetadata = {
-          'bond_delta': bondDelta,
-          'mood_delta': moodDelta,
-          'mood_label': moodLabel,
-          if (arousalDelta != 0) 'arousal_delta': arousalDelta,
-          if (trustDelta != 0) 'trust_delta': trustDelta,
-        };
+      if (bondDelta != 0 || arousalDelta != 0 || trustDelta != 0) {
+        _pendingRealismMetadata ??= {};
+        if (bondDelta != 0) _pendingRealismMetadata!['bond_delta'] = bondDelta;
+        if (arousalDelta != 0) _pendingRealismMetadata!['arousal_delta'] = arousalDelta;
+        if (trustDelta != 0) _pendingRealismMetadata!['trust_delta'] = trustDelta;
       }
 
-      final reasonMatch = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
-      debugPrint('[Realism:Relationship] Reason: ${reasonMatch?.group(1) ?? 'unknown'}');
-      _saveChat();
+      // Extract and store per-chip reasons
+      final bondReasonMatch = RegExp(r'"bond_reason"\s*:\s*"([^"]*)"').firstMatch(text);
+      final bondReason = bondReasonMatch?.group(1)?.trim() ?? '';
+      if (bondReason.isNotEmpty && bondReason.toLowerCase() != 'none') {
+        _pendingRealismMetadata ??= {};
+        _pendingRealismMetadata!['bond_reason'] = bondReason;
+      }
+
+      final trustReasonMatch = RegExp(r'"trust_reason"\s*:\s*"([^"]*)"').firstMatch(text);
+      final trustReason = trustReasonMatch?.group(1)?.trim() ?? '';
+      if (trustReason.isNotEmpty && trustReason.toLowerCase() != 'none') {
+        _pendingRealismMetadata ??= {};
+        _pendingRealismMetadata!['trust_reason'] = trustReason;
+      }
+
+      debugPrint('[Realism:Relationship] Bond: $bondDelta (${bondReason.isNotEmpty ? bondReason : 'no reason'}) | Trust: $trustDelta (${trustReason.isNotEmpty ? trustReason : 'no reason'})');
       notifyListeners();
     } catch (e) {
       debugPrint('[Realism:Relationship] Failed: $e');
     }
   }
 
-  Future<void> _evaluateSceneStateCall({void Function(String)? onChunk}) async {
+  Future<void> _evaluateEmotionalStateCall({void Function(String)? onChunk}) async {
     if (!_realismEnabled || _activeCharacter == null) return;
-
     final recentCount = _messages.length < 4 ? _messages.length : 4;
-    final recent = _messages.reversed.take(recentCount).toList().reversed
-        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
-
+    final recent = _messages.reversed.take(recentCount).toList().reversed.map((m) => '${m.sender}: ${m.displayText}').join('\n');
     final charName = _activeCharacter!.name;
+    final arousalField = _nsfwCooldownEnabled ? ', "arousal_delta": <number -2 to +2>' : '';
+    final arousalInstr = _nsfwCooldownEnabled ? '3. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n' : '';
 
-    final arousalField = _nsfwCooldownEnabled
-        ? ', "arousal_delta": <number -2 to +2>'
-        : '';
-    final arousalInstr = _nsfwCooldownEnabled
-        ? '5. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n'
+    // Build emotion inertia context — current emotion acts as a prior/baseline
+    final currentEmotionCtx = _characterEmotion.isNotEmpty
+        ? 'Current emotional state: $_characterEmotion${_emotionIntensity.isNotEmpty ? ' ($_emotionIntensity)' : ''}.\n'
+          'Emotions have natural inertia — only shift meaningfully if something in the conversation genuinely warrants it. '
+          'Minor or neutral exchanges should produce small drift toward a more settled state, not sudden jumps. '
+          'Large emotional shifts require significant narrative cause.\n\n'
         : '';
 
-    final prompt = 'You are evaluating the current scene state for $charName.\n\n'
+    final prompt = 'You are evaluating the emotional state for $charName.\n\n'
+        '$currentEmotionCtx'
         '1. "emotion": their overarching emotional state right now (one word, nuanced like "melancholy" or "amused")\n'
         '2. "emotion_intensity": mild, moderate, or strong\n'
-        '3. "time_of_day": dawn, morning, late_morning, afternoon, evening, or night\n'
-        '   The current underlying time is $_timeOfDay. ONLY advance the time if the scene clearly moves forward!\n'
-        '4. "posture": Their overarching spatial/physical stance (a brief phrase like "leaning against the wall"), or "none"\n'
-        '$arousalInstr'
-        '"fixation_topic": Severe overarching emotional obsession active right now (brief), or "none"\n\n'
+        '$arousalInstr\n'
         'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a JSON object containing all of the above fields$arousalField.';
-
+        'Respond with ONLY a flat JSON object containing "emotion", "emotion_intensity"$arousalField.';
     try {
-      debugPrint('[Realism] Evaluating scene state...');
-      final raw = await _fireLLMEval(prompt,
-          grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
       if (raw == null) return;
-
-      final searchText = _stripThinkBlocks(raw);
-      final text = searchText.isNotEmpty ? searchText : raw;
+      final text = _stripThinkBlocks(raw).isNotEmpty ? _stripThinkBlocks(raw) : raw;
 
       final emotionMatch = RegExp(r'"emotion"\s*:\s*"([^"]+)"').firstMatch(text);
-      if (emotionMatch != null) {
-        _characterEmotion = emotionMatch.group(1)!.toLowerCase().trim();
-      }
+      if (emotionMatch != null) _characterEmotion = emotionMatch.group(1)!.toLowerCase().trim();
 
       final intensityMatch = RegExp(r'"emotion_intensity"\s*:\s*"([^"]+)"').firstMatch(text);
-      if (intensityMatch != null) {
-        _emotionIntensity = intensityMatch.group(1)!.toLowerCase().trim();
+      if (intensityMatch != null) _emotionIntensity = intensityMatch.group(1)!.toLowerCase().trim();
+
+      if (_nsfwCooldownEnabled) {
+          final arousalMatch = RegExp(r'"arousal_delta"\s*:\s*(-?\d+)').firstMatch(text);
+          if (arousalMatch != null) {
+              final arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(-2, 2);
+              _arousalLevel = (_arousalLevel + arousalDelta).clamp(-3, 10);
+              if (arousalDelta != 0) {
+                 _pendingRealismMetadata ??= {};
+                 _pendingRealismMetadata!['arousal_delta'] = arousalDelta;
+              }
+          }
       }
+      debugPrint('[Realism:Emotion] Emotion: $_characterEmotion ($_emotionIntensity)');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Realism:Emotion] Failed: $e');
+    }
+  }
+
+  Future<void> _evaluatePhysicalStateCall({void Function(String)? onChunk}) async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+    final recentCount = _messages.length < 4 ? _messages.length : 4;
+    final recent = _messages.reversed.take(recentCount).toList().reversed.map((m) => '${m.sender}: ${m.displayText}').join('\n');
+    final charName = _activeCharacter!.name;
+    final prompt = 'You are evaluating the physical/environment state for $charName.\n\n'
+        '1. "time_of_day": dawn, morning, late_morning, afternoon, evening, or night\n'
+        '   The current underlying time is $_timeOfDay. ONLY advance the time if the scene clearly moves forward!\n'
+        '2. "new_day": true or false. Only true if the scene jumps significantly into tomorrow.\n'
+        '3. "posture": Their overarching spatial/physical stance (a brief phrase like "leaning against the wall"), or "none"\n\n'
+        'Recent conversation:\n$recent\n\n'
+        'Respond with ONLY a flat JSON object containing "time_of_day", "new_day", and "posture".';
+    try {
+      final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      if (raw == null) return;
+      final text = _stripThinkBlocks(raw).isNotEmpty ? _stripThinkBlocks(raw) : raw;
 
       bool dayIncremented = false;
       final validTimes = ['dawn', 'morning', 'late_morning', 'afternoon', 'evening', 'night'];
@@ -4823,17 +5783,15 @@ class ChatService extends ChangeNotifier {
       if (timeMatch != null) {
         final t = timeMatch.group(1)!.toLowerCase().trim();
         final targetIndex = validTimes.indexOf(t);
-
         if (targetIndex != -1 && targetIndex != currentIndex) {
           if (targetIndex > currentIndex) {
             int jump = targetIndex - currentIndex;
-            if (jump > 2) jump = 2; // Cap forward jump to 2 periods max per turn (prevents skipping whole days instantly)
+            if (jump > 2) jump = 2; // Cap forward jump logically
             _timeOfDay = validTimes[currentIndex + jump];
           } else if (targetIndex < currentIndex) {
             _timeOfDay = validTimes[0];
             _dayCount++;
             dayIncremented = true;
-            debugPrint('[Realism:Scene] Time rolled over! Day $_dayCount');
           }
         }
       }
@@ -4843,7 +5801,6 @@ class ChatService extends ChangeNotifier {
         if (newDayMatch != null && newDayMatch.group(1) == 'true' && currentIndex >= validTimes.indexOf('evening')) {
           _dayCount++;
           _timeOfDay = validTimes[0];
-          debugPrint('[Realism:Scene] New day explicitly triggered! Day $_dayCount');
         }
       }
 
@@ -4852,16 +5809,33 @@ class ChatService extends ChangeNotifier {
         String p = postureMatch.group(1)!.trim();
         _spatialStance = (p.toLowerCase() == 'none' || p.isEmpty) ? '' : p;
       }
+      debugPrint('[Realism:Physical] Posture: $_spatialStance | Time: $_timeOfDay (Day $_dayCount)');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Realism:Physical] Failed: $e');
+    }
+  }
 
-      // Decrement the fixation lifespan natively
+  Future<void> _evaluateNarrativeCall({void Function(String)? onChunk}) async {
+    if (!_realismEnabled || _activeCharacter == null) return;
+    final recentCount = _messages.length < 4 ? _messages.length : 4;
+    final recent = _messages.reversed.take(recentCount).toList().reversed.map((m) => '${m.sender}: ${m.displayText}').join('\n');
+    final charName = _activeCharacter!.name;
+    final oPrompt = primaryObjective != null ? '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Must be a significant personal, social, or narrative goal triggered by recent events. Think hidden agendas, emotional needs, personal conflicts, moral dilemmas. NOT a trivial step, and NOT a restatement of the primary quest. Use "none" if nothing meaningful emerges.\n' : '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue, triggered by recent events — a significant hidden agenda, emotional need, personal conflict, or moral dilemma. NOT trivial. Use "none" if nothing meaningful emerges.\n';
+    final prompt = 'You are an autonomous story engine evaluating narrative progression for $charName.\n\n'
+        '$oPrompt'
+        '2. "fixation_topic": Severe overarching emotional obsession active right now (brief), or "none"\n\n'
+        'Recent conversation:\n$recent\n\n'
+        'Respond with ONLY a flat JSON object containing "proposed_objective", and "fixation_topic".';
+    try {
+      final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      if (raw == null) return;
+      final text = _stripThinkBlocks(raw).isNotEmpty ? _stripThinkBlocks(raw) : raw;
+
       if (_fixationLifespan > 0) {
         _fixationLifespan--;
-        if (_fixationLifespan == 0) {
-          _activeFixation = '';
-          debugPrint('[Realism:Scene] Fixation naturally decayed and cleared.');
-        }
+        if (_fixationLifespan == 0) _activeFixation = '';
       }
-
       final fixationMatch = RegExp(r'"fixation_topic"\s*:\s*"([^"]+)"').firstMatch(text);
       if (fixationMatch != null) {
         String f = fixationMatch.group(1)!.trim();
@@ -4870,22 +5844,26 @@ class ChatService extends ChangeNotifier {
           _fixationLifespan = 0;
         } else if (f != _activeFixation) {
           _activeFixation = f;
-          _fixationLifespan = 3; // Harcoded guardrail decay
-          debugPrint('[Realism:Scene] New obsession registered: $f (3 turns)');
+          _fixationLifespan = 3;
         }
       }
 
-      debugPrint('[Realism:Scene] Emotion: $_characterEmotion ($_emotionIntensity), '
-          'Time: $_timeOfDay, Day: $_dayCount');
-          
-      // Bundle Full Realism State for Time-Travel Forking
-      _pendingRealismMetadata ??= {};
-      _pendingRealismMetadata!['realism_state'] = _captureRealismState();
-
-      _saveChat();
+      final objectiveMatch = RegExp(r'"proposed_objective"\s*:\s*"([^"]+)"').firstMatch(text);
+      if (objectiveMatch != null) {
+        final newObj = objectiveMatch.group(1)!.trim();
+        if (newObj.toLowerCase() != 'none' && newObj.isNotEmpty) {
+          final isDuplicate = _activeObjectives.any((o) => o.objective.toLowerCase() == newObj.toLowerCase());
+          if (!isDuplicate) {
+            debugPrint('[Realism:Narrative] Autonomous objective proposed: $newObj');
+            await setObjective(newObj, isPrimary: false);
+            final addedObj = _activeObjectives.where((o) => o.objective.toLowerCase() == newObj.toLowerCase() && !o.isPrimary).firstOrNull;
+            if (addedObj != null) unawaited(generateObjectiveTasks(addedObj, taskCount: 3, nsfw: false));
+          }
+        }
+      }
       notifyListeners();
     } catch (e) {
-      debugPrint('[Realism:Scene] Failed: $e');
+      debugPrint('[Realism:Narrative] Failed: $e');
     }
   }
 
@@ -4900,8 +5878,12 @@ class ChatService extends ChangeNotifier {
     if (!_realismEnabled || _activeCharacter == null) return;
 
     final recentCount = _messages.length < 6 ? _messages.length : 6;
-    final recent = _messages.reversed.take(recentCount).toList().reversed
-        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+    final recent = _messages.reversed
+        .take(recentCount)
+        .toList()
+        .reversed
+        .map((m) => '${m.sender}: ${m.displayText}')
+        .join('\n');
 
     final charName = _activeCharacter!.name;
     final userName = _userPersonaService.persona.name;
@@ -4911,7 +5893,8 @@ class ChatService extends ChangeNotifier {
       final p = _activeCharacter!.personality.length > 600
           ? _activeCharacter!.personality.substring(0, 600)
           : _activeCharacter!.personality;
-      personalityInjection = 'Account for $charName\'s specific personality traits:\n"$p"\n\n';
+      personalityInjection =
+          'Account for $charName\'s specific personality traits:\n"$p"\n\n';
     }
 
     final arousalField = _nsfwCooldownEnabled
@@ -4921,13 +5904,13 @@ class ChatService extends ChangeNotifier {
         ? '8. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n'
         : '';
 
-    final prompt = 'You are evaluating the current state of a roleplay scene involving $charName.\n\n'
+    final prompt =
+        'You are evaluating the current state of a roleplay scene involving $charName.\n\n'
         '$personalityInjection'
         'Reactions are subjective! Evaluate relationship changes based on $charName\'s specific traits.\n\n'
         'Evaluate ALL of the following at once:\n'
         '1. "relationship_delta": Short-term tension shift. (-5 to +5)\n'
         '   +5: Incredible chemistry | +2: Friendly | 0: Neutral | -2: Annoyed | -5: Deeply hostile\n'
-        '2. "mood_shift": How $charName\'s mood shifts based on their personality. (-3 to +3)\n'
         '3. "trust_delta": Does $userName\'s action build or destroy trust? (-200 to +10)\n'
         '   +2: Honest | 0: Neutral | -5: Lie | -200: Massive unforgivable betrayal\n'
         '4. "emotion": $charName\'s current emotional state (one word, nuanced)\n'
@@ -4936,6 +5919,7 @@ class ChatService extends ChangeNotifier {
         '   Current time: $_timeOfDay — advance only if the scene clearly moves forward\n'
         '7. "posture": $charName\'s spatial/physical stance (brief phrase), or "none"\n'
         '$arousalInstr'
+        '${primaryObjective != null ? '9. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Must be a significant personal, social, or narrative goal triggered by recent events. Think hidden agendas, emotional needs, personal conflicts, moral dilemmas. NOT a trivial step, and NOT a restatement of the primary quest. Use "none" if nothing meaningful emerges.\n' : '9. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue, triggered by recent events — significant hidden agenda, emotional need, personal conflict, or moral dilemma. NOT trivial. Use "none" if nothing meaningful emerges.\n'}'
         '"fixation_topic": Severe emotional obsession active right now (brief), or "none"\n'
         '"reason": One brief sentence explaining the key relationship change\n\n'
         'Recent conversation:\n$recent\n\n'
@@ -4943,8 +5927,11 @@ class ChatService extends ChangeNotifier {
 
     try {
       debugPrint('[Realism:OneShot] Evaluating (fused call)...');
-      final raw = await _fireLLMEval(prompt,
-          grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      final raw = await _fireLLMEval(
+        prompt,
+        grammar: _buildKoboldGrammar(_kGbnfJsonObject),
+        onChunk: onChunk,
+      );
       if (raw == null) return;
 
       final searchText = _stripThinkBlocks(raw);
@@ -4952,7 +5939,9 @@ class ChatService extends ChangeNotifier {
 
       // ── Relationship fields ──
       int bondDelta = 0;
-      final deltaMatch = RegExp(r'"relationship_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      final deltaMatch = RegExp(
+        r'"relationship_delta"\s*:\s*(-?\d+)',
+      ).firstMatch(text);
       if (deltaMatch != null) {
         bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-5, 5);
         _applyScoreDelta(bondDelta);
@@ -4960,22 +5949,18 @@ class ChatService extends ChangeNotifier {
 
       int moodDelta = 0;
       final moodMatch = RegExp(r'"mood_shift"\s*:\s*(-?\d+)').firstMatch(text);
-      if (moodMatch != null) {
-        moodDelta = (int.tryParse(moodMatch.group(1)!) ?? 0).clamp(-3, 3);
-        if (moodDelta != 0) {
-          _shortTermMood = (_shortTermMood + moodDelta).clamp(-20, 20);
-          _moodDecayCounter = 0;
-          debugPrint('[Realism:OneShot] Mood shifted by $moodDelta -> $_shortTermMood ($moodLabel)');
-        }
-      }
 
       int trustDelta = 0;
-      final trustMatch = RegExp(r'"trust_delta"\s*:\s*(-?\d+)').firstMatch(text);
+      final trustMatch = RegExp(
+        r'"trust_delta"\s*:\s*(-?\d+)',
+      ).firstMatch(text);
       if (trustMatch != null) {
         trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 10);
         if (trustDelta != 0) {
           _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
-          debugPrint('[Realism:OneShot] Trust shifted by $trustDelta -> $_trustLevel');
+          debugPrint(
+            '[Realism:OneShot] Trust shifted by $trustDelta -> $_trustLevel',
+          );
           // Arm the repair window on any severe single-turn drop
           if (trustDelta <= -20) {
             _pendingTrustRepair = true;
@@ -4987,37 +5972,81 @@ class ChatService extends ChangeNotifier {
 
       int arousalDelta = 0;
       if (_nsfwCooldownEnabled) {
-        final arousalMatch = RegExp(r'"arousal_delta"\s*:\s*(-?\d+)').firstMatch(text);
+        final arousalMatch = RegExp(
+          r'"arousal_delta"\s*:\s*(-?\d+)',
+        ).firstMatch(text);
         if (arousalMatch != null) {
-          arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(-2, 2);
+          arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(
+            -2,
+            2,
+          );
           _arousalLevel = (_arousalLevel + arousalDelta).clamp(-3, 10);
         }
       }
 
-      if (bondDelta != 0 || moodDelta != 0 || arousalDelta != 0 || trustDelta != 0) {
+      if (bondDelta != 0 || arousalDelta != 0 || trustDelta != 0) {
         _pendingRealismMetadata = {
           'bond_delta': bondDelta,
-          'mood_delta': moodDelta,
-          'mood_label': moodLabel,
           if (arousalDelta != 0) 'arousal_delta': arousalDelta,
           if (trustDelta != 0) 'trust_delta': trustDelta,
         };
       }
 
+      // ── Autonomous Objective ──
+      final objectiveMatch = RegExp(
+        r'"proposed_objective"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
+      if (objectiveMatch != null) {
+        final newObj = objectiveMatch.group(1)!.trim();
+        if (newObj.toLowerCase() != 'none' && newObj.isNotEmpty) {
+          // Avoid setting the exact same goal if it's already active
+          final isDuplicate = _activeObjectives.any(
+            (o) => o.objective.toLowerCase() == newObj.toLowerCase(),
+          );
+          if (!isDuplicate) {
+            debugPrint(
+              '[Realism:OneShot] Autonomous objective proposed: $newObj',
+            );
+            // Auto objectives are strictly secondary (isPrimary = false)
+            await setObjective(newObj, isPrimary: false);
+            // Auto-generate tasks for the new side quest (3 tasks)
+            final addedObj = _activeObjectives.where(
+              (o) => o.objective.toLowerCase() == newObj.toLowerCase() && !o.isPrimary,
+            ).firstOrNull;
+            if (addedObj != null) {
+              unawaited(generateObjectiveTasks(addedObj, taskCount: 3, nsfw: false));
+            }
+          }
+        }
+      }
+
       // ── Scene fields ──
-      final emotionMatch = RegExp(r'"emotion"\s*:\s*"([^"]+)"').firstMatch(text);
+      final emotionMatch = RegExp(
+        r'"emotion"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
       if (emotionMatch != null) {
         _characterEmotion = emotionMatch.group(1)!.toLowerCase().trim();
       }
 
-      final intensityMatch = RegExp(r'"emotion_intensity"\s*:\s*"([^"]+)"').firstMatch(text);
+      final intensityMatch = RegExp(
+        r'"emotion_intensity"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
       if (intensityMatch != null) {
         _emotionIntensity = intensityMatch.group(1)!.toLowerCase().trim();
       }
 
-      final validTimes = ['dawn', 'morning', 'late_morning', 'afternoon', 'evening', 'night'];
+      final validTimes = [
+        'dawn',
+        'morning',
+        'late_morning',
+        'afternoon',
+        'evening',
+        'night',
+      ];
       final currentIndex = validTimes.indexOf(_timeOfDay);
-      final timeMatch = RegExp(r'"time_of_day"\s*:\s*"([^"]+)"').firstMatch(text);
+      final timeMatch = RegExp(
+        r'"time_of_day"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
       if (timeMatch != null) {
         final t = timeMatch.group(1)!.toLowerCase().trim();
         final targetIndex = validTimes.indexOf(t);
@@ -5034,7 +6063,9 @@ class ChatService extends ChangeNotifier {
         }
       }
 
-      final postureMatch = RegExp(r'"posture"\s*:\s*"([^"]+)"').firstMatch(text);
+      final postureMatch = RegExp(
+        r'"posture"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
       if (postureMatch != null) {
         final p = postureMatch.group(1)!.trim();
         _spatialStance = (p.toLowerCase() == 'none' || p.isEmpty) ? '' : p;
@@ -5047,7 +6078,9 @@ class ChatService extends ChangeNotifier {
           debugPrint('[Realism:OneShot] Fixation decayed and cleared.');
         }
       }
-      final fixationMatch = RegExp(r'"fixation_topic"\s*:\s*"([^"]+)"').firstMatch(text);
+      final fixationMatch = RegExp(
+        r'"fixation_topic"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
       if (fixationMatch != null) {
         final f = fixationMatch.group(1)!.trim();
         if (f.toLowerCase() == 'none' || f.isEmpty) {
@@ -5061,17 +6094,22 @@ class ChatService extends ChangeNotifier {
       }
 
       final reasonMatch = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
-      debugPrint('[Realism:OneShot] Done — Emotion: $_characterEmotion ($_emotionIntensity), '
-          'Time: $_timeOfDay, Reason: ${reasonMatch?.group(1) ?? 'unknown'}');
+      debugPrint(
+        '[Realism:OneShot] Done — Emotion: $_characterEmotion ($_emotionIntensity), '
+        'Time: $_timeOfDay, Reason: ${reasonMatch?.group(1) ?? 'unknown'}',
+      );
 
       // Bundle full state snapshot for time-travel forking
       _pendingRealismMetadata ??= {};
+      _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
       _pendingRealismMetadata!['realism_state'] = _captureRealismState();
 
       _saveChat();
       notifyListeners();
     } catch (e) {
-      debugPrint('[Realism:OneShot] Failed: $e — falling back to dual-call on next turn');
+      debugPrint(
+        '[Realism:OneShot] Failed: $e — falling back to dual-call on next turn',
+      );
     }
   }
 
@@ -5082,16 +6120,23 @@ class ChatService extends ChangeNotifier {
   /// The LLM weighs the explanation against character persona and chat history,
   /// returning a trust_recovery value (0–60). Recovery is capped to prevent
   /// instant restoration from Absolute Distrust.
-  Future<void> _evaluateTrustRepairCall(String userExplanation, {void Function(String)? onChunk}) async {
+  Future<void> _evaluateTrustRepairCall(
+    String userExplanation, {
+    void Function(String)? onChunk,
+  }) async {
     if (!_realismEnabled || _activeCharacter == null) return;
 
-    final charName    = _activeCharacter!.name;
-    final persona     = _activeCharacter!.personality.length > 600
+    final charName = _activeCharacter!.name;
+    final persona = _activeCharacter!.personality.length > 600
         ? _activeCharacter!.personality.substring(0, 600)
         : _activeCharacter!.personality;
     final recentCount = _messages.length < 10 ? _messages.length : 10;
-    final history     = _messages.reversed.take(recentCount).toList().reversed
-        .map((m) => '${m.sender}: ${m.displayText}').join('\n');
+    final history = _messages.reversed
+        .take(recentCount)
+        .toList()
+        .reversed
+        .map((m) => '${m.sender}: ${m.displayText}')
+        .join('\n');
 
     final prompt =
         'You are evaluating whether $charName should partially restore trust '
@@ -5113,22 +6158,33 @@ class ChatService extends ChangeNotifier {
 
     try {
       debugPrint('[Realism:TrustRepair] Evaluating repair attempt...');
-      final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
+      final raw = await _fireLLMEval(
+        prompt,
+        grammar: _buildKoboldGrammar(_kGbnfJsonObject),
+        onChunk: onChunk,
+      );
       if (raw == null) return;
 
       final text = _stripThinkBlocks(raw).trim();
 
-      final recoveryMatch = RegExp(r'"trust_recovery"\s*:\s*(\d+)').firstMatch(text);
-      final verdictMatch  = RegExp(r'"verdict"\s*:\s*"([^"]+)"').firstMatch(text);
-      final reasonMatch   = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
+      final recoveryMatch = RegExp(
+        r'"trust_recovery"\s*:\s*(\d+)',
+      ).firstMatch(text);
+      final verdictMatch = RegExp(
+        r'"verdict"\s*:\s*"([^"]+)"',
+      ).firstMatch(text);
+      final reasonMatch = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
 
-      final recovery = (int.tryParse(recoveryMatch?.group(1) ?? '0') ?? 0).clamp(0, 60);
-      final verdict  = verdictMatch?.group(1) ?? 'rejected';
-      final reason   = reasonMatch?.group(1) ?? '';
+      final recovery = (int.tryParse(recoveryMatch?.group(1) ?? '0') ?? 0)
+          .clamp(0, 60);
+      final verdict = verdictMatch?.group(1) ?? 'rejected';
+      final reason = reasonMatch?.group(1) ?? '';
 
       if (recovery > 0) {
         _trustLevel = (_trustLevel + recovery).clamp(-100, 100);
-        debugPrint('[Realism:TrustRepair] $verdict — recovered $recovery → $_trustLevel ($reason)');
+        debugPrint(
+          '[Realism:TrustRepair] $verdict — recovered $recovery → $_trustLevel ($reason)',
+        );
       } else {
         debugPrint('[Realism:TrustRepair] Rejected — no recovery ($reason)');
       }
@@ -5156,7 +6212,6 @@ class ChatService extends ChangeNotifier {
       'longTermTier': _longTermTier,
       'turnsSinceLongTermCheck': _turnsSinceLongTermCheck,
       'shortTermDeltasSummary': _shortTermDeltasSummary,
-      'shortTermMood': _shortTermMood,
       'moodDecayCounter': _moodDecayCounter,
       'characterEmotion': _characterEmotion,
       'emotionIntensity': _emotionIntensity,
@@ -5173,37 +6228,45 @@ class ChatService extends ChangeNotifier {
 
   void _restoreRealismStateFromMessage(ChatMessage? msg) {
     if (msg == null) return;
-    
+
     // Check if the current visible node has an active swipe metadata array or just the base metadata
     final meta = msg.activeMetadata;
     if (meta == null || !meta.containsKey('realism_state')) {
-      debugPrint('[Realism] No time-travel snapshot found in message. Legacy state kept.');
+      debugPrint(
+        '[Realism] No time-travel snapshot found in message. Legacy state kept.',
+      );
       return;
     }
-    
+
     final state = meta['realism_state'] as Map<String, dynamic>;
     _affectionScore = state['affectionScore'] as int? ?? _affectionScore;
     _relationshipTier = state['relationshipTier'] as int? ?? _relationshipTier;
     _longTermScore = state['longTermScore'] as int? ?? _longTermScore;
     _longTermTier = state['longTermTier'] as int? ?? _longTermTier;
-    _turnsSinceLongTermCheck = state['turnsSinceLongTermCheck'] as int? ?? _turnsSinceLongTermCheck;
-    _shortTermDeltasSummary = state['shortTermDeltasSummary'] as int? ?? _shortTermDeltasSummary;
-    _shortTermMood = state['shortTermMood'] as int? ?? _shortTermMood;
+    _turnsSinceLongTermCheck =
+        state['turnsSinceLongTermCheck'] as int? ?? _turnsSinceLongTermCheck;
+    _shortTermDeltasSummary =
+        state['shortTermDeltasSummary'] as int? ?? _shortTermDeltasSummary;
     _moodDecayCounter = state['moodDecayCounter'] as int? ?? _moodDecayCounter;
-    _characterEmotion = state['characterEmotion'] as String? ?? _characterEmotion;
-    _emotionIntensity = state['emotionIntensity'] as String? ?? _emotionIntensity;
+    _characterEmotion =
+        state['characterEmotion'] as String? ?? _characterEmotion;
+    _emotionIntensity =
+        state['emotionIntensity'] as String? ?? _emotionIntensity;
     _timeOfDay = state['timeOfDay'] as String? ?? _timeOfDay;
     _dayCount = state['dayCount'] as int? ?? _dayCount;
     _arousalLevel = state['arousalLevel'] as int? ?? _arousalLevel;
-    _cooldownTurnsRemaining = state['cooldownTurnsRemaining'] as int? ?? _cooldownTurnsRemaining;
-    
+    _cooldownTurnsRemaining =
+        state['cooldownTurnsRemaining'] as int? ?? _cooldownTurnsRemaining;
+
     // v3.0 Restorations
     _trustLevel = state['trustLevel'] as int? ?? _trustLevel;
     _activeFixation = state['activeFixation'] as String? ?? _activeFixation;
     _fixationLifespan = state['fixationLifespan'] as int? ?? _fixationLifespan;
     _spatialStance = state['spatialStance'] as String? ?? _spatialStance;
-    
-    debugPrint('[Realism] Engine state successfully rolled back to match timeline.');
+
+    debugPrint(
+      '[Realism] Engine state successfully rolled back to match timeline.',
+    );
   }
 
   /// Fired post-generation against the AI's completed response text.
@@ -5216,7 +6279,9 @@ class ChatService extends ChangeNotifier {
 
     String personalityInjection = '';
     if (_activeCharacter!.personality.isNotEmpty) {
-      final p = _activeCharacter!.personality.length > 600 ? _activeCharacter!.personality.substring(0, 600) : _activeCharacter!.personality;
+      final p = _activeCharacter!.personality.length > 600
+          ? _activeCharacter!.personality.substring(0, 600)
+          : _activeCharacter!.personality;
       personalityInjection = 'Character Personality Traits:\n"$p"\n\n';
     }
 
@@ -5237,23 +6302,31 @@ class ChatService extends ChangeNotifier {
 
     try {
       debugPrint('[Realism:Climax] Checking AI response for climax...');
-      final raw = await _fireLLMEval(prompt,
-          grammar: _buildKoboldGrammar(_kGbnfJsonObject));
+      final raw = await _fireLLMEval(
+        prompt,
+        grammar: _buildKoboldGrammar(_kGbnfJsonObject),
+      );
       if (raw == null) return;
 
       final searchText = _stripThinkBlocks(raw);
       final text = searchText.isNotEmpty ? searchText : raw;
 
-      final match = RegExp(r'"climax_detected"\s*:\s*(true|false)').firstMatch(text);
+      final match = RegExp(
+        r'"climax_detected"\s*:\s*(true|false)',
+      ).firstMatch(text);
       if (match != null && match.group(1) == 'true') {
         int turns = 5;
-        final turnMatch = RegExp(r'"refractory_turns"\s*:\s*(\d+)').firstMatch(text);
+        final turnMatch = RegExp(
+          r'"refractory_turns"\s*:\s*(\d+)',
+        ).firstMatch(text);
         if (turnMatch != null) {
           turns = (int.tryParse(turnMatch.group(1)!) ?? 5).clamp(1, 10);
         }
         _cooldownTurnsRemaining = turns;
         _arousalLevel = -3;
-        debugPrint('[Realism:Climax] Confirmed — refractory cooldown started ($turns turns), arousal → -3');
+        debugPrint(
+          '[Realism:Climax] Confirmed — refractory cooldown started ($turns turns), arousal → -3',
+        );
         _saveChat();
         notifyListeners();
       } else {
@@ -5282,8 +6355,10 @@ class ChatService extends ChangeNotifier {
     _relationshipTier = _calculateTier(_affectionScore);
 
     if (_affectionScore != oldScore || _relationshipTier != oldTier) {
-      debugPrint('[Realism] Short-Term Bond: $oldScore \u2192 $_affectionScore, '
-          'Tier: $oldTier \u2192 $_relationshipTier ($shortTermTierName)');
+      debugPrint(
+        '[Realism] Short-Term Bond: $oldScore \u2192 $_affectionScore, '
+        'Tier: $oldTier \u2192 $_relationshipTier ($shortTermTierName)',
+      );
     }
   }
 
@@ -5302,53 +6377,25 @@ class ChatService extends ChangeNotifier {
     _shortTermDeltasSummary = 0;
 
     if (_longTermScore != oldLTScore || _longTermTier != oldLTTier) {
-      debugPrint('[Realism] Long-Term Bond updated: $oldLTScore \u2192 $_longTermScore, '
-          'Tier: $oldLTTier \u2192 $_longTermTier ($longTermTierName)');
+      debugPrint(
+        '[Realism] Long-Term Bond updated: $oldLTScore \u2192 $_longTermScore, '
+        'Tier: $oldLTTier \u2192 $_longTermTier ($longTermTierName)',
+      );
     } else {
-      debugPrint('[Realism] Long-Term Bond check (No change) - Status: $_longTermScore ($longTermTierName)');
+      debugPrint(
+        '[Realism] Long-Term Bond check (No change) - Status: $_longTermScore ($longTermTierName)',
+      );
     }
   }
 
-  void _applyMoodDecay() {
-    if (_shortTermMood == 0) return;
-    _moodDecayCounter++;
-    
-    // Base turns to decay 1 point
-    int targetTurns = 3;
-    
-    if (_shortTermMood > 0) {
-      // Good mood: Friends hold onto good moods longer. Enemies lose good moods fast.
-      targetTurns += _relationshipTier; // Rank 5 -> decays every 8 turns. Rank -5 -> decays every 1 turn.
-    } else {
-      // Bad mood: Friends lose bad moods fast. Enemies hold grudges longer.
-      targetTurns -= _relationshipTier; // Rank 5 -> decays every 1 turn. Rank -5 -> decays every 8 turns.
-    }
-    
-    // Subtle long-term influence
-    if (_shortTermMood > 0) {
-      targetTurns += (_longTermTier / 2).floor();
-    } else {
-      targetTurns -= (_longTermTier / 2).floor();
-    }
-    
-    // Clamp target turns so it never goes below 1 or absurdly high
-    targetTurns = targetTurns.clamp(1, 10);
-    
-    if (_moodDecayCounter >= targetTurns) {
-      _moodDecayCounter = 0;
-      if (_shortTermMood > 0) {
-        _shortTermMood--;
-      } else {
-        _shortTermMood++;
-      }
-      debugPrint('[Realism] Mood decay (-1 point limit over $targetTurns turns): $_shortTermMood ($moodLabel)');
-    }
-  }
+  void _applyMoodDecay() {}
 
   // ── Public Toggle Methods ──
 
   Future<void> setRealismEnabled(bool enabled) async {
     _realismEnabled = enabled;
+    // Anchor the narrative weekday to the real-world day when realism first turns on
+    if (enabled) _startDayOfWeek = DateTime.now().weekday;
     if (!enabled) {
       _affectionScore = 0;
       _trustLevel = 0;
@@ -5357,7 +6404,6 @@ class ChatService extends ChangeNotifier {
       _longTermTier = 0;
       _turnsSinceLongTermCheck = 0;
       _shortTermDeltasSummary = 0;
-      _shortTermMood = 0;
       _moodDecayCounter = 0;
       _characterEmotion = '';
       _emotionIntensity = '';
@@ -5379,4 +6425,3 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 }
-
