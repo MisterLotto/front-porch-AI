@@ -11,6 +11,7 @@
 #include <spellcheck.h>
 #include <wrl/client.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,6 +73,12 @@ class SpellCheckPluginImpl {
  private:
   ComPtr<ISpellCheckerFactory> factory_;
 
+  // Cache one ISpellChecker per language tag.
+  // CreateSpellChecker() involves a cross-process RPC to the Windows
+  // spell-check broker (MSSPCheck.exe) and is expensive — calling it on
+  // every keystroke caused the per-character typing lag reported by users.
+  std::map<std::wstring, ComPtr<ISpellChecker>> checker_cache_;
+
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
@@ -100,12 +107,18 @@ class SpellCheckPluginImpl {
         return;
       }
 
-      ComPtr<ISpellChecker> checker;
-      HRESULT hr = factory_->CreateSpellChecker(w_language.c_str(), &checker);
-      if (FAILED(hr) || !checker) {
-        result->Success(flutter::EncodableValue());
-        return;
+      // Look up the cached checker for this language, creating it only once.
+      auto it = checker_cache_.find(w_language);
+      if (it == checker_cache_.end()) {
+        ComPtr<ISpellChecker> new_checker;
+        HRESULT hr = factory_->CreateSpellChecker(w_language.c_str(), &new_checker);
+        if (FAILED(hr) || !new_checker) {
+          result->Success(flutter::EncodableValue());
+          return;
+        }
+        it = checker_cache_.emplace(w_language, std::move(new_checker)).first;
       }
+      const ComPtr<ISpellChecker>& checker = it->second;
 
       ComPtr<IEnumSpellingError> errors;
       hr = checker->Check(w_text.c_str(), &errors);
