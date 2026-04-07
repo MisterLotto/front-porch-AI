@@ -6655,11 +6655,24 @@ class ChatService extends ChangeNotifier {
     final display = event.replaceAll('{{char}}', charName);
     _pendingChanceTimeEvent = display;
     _chaosPressure = 0;
+
+    // Store in metadata so the delta chip appears on the AI's next message
     _pendingRealismMetadata ??= {};
     _pendingRealismMetadata!['chance_time_event'] = display;
+
+    // Inject a narration message so the AI sees what happened in the chat history
+    _messages.add(ChatMessage(
+      text: '[🎰 CHANCE TIME! $display]',
+      sender: 'System',
+      isUser: false,
+      activeMetadata: {'is_chance_time_narration': true},
+    ));
     await _saveChat();
     notifyListeners();
-    debugPrint('[ChanceTime] Applied: $display');
+    debugPrint('[ChanceTime] Applied: $display — generating AI reaction');
+
+    // Immediately generate AI response to the event
+    await _generateResponse(GenerationMode.normal);
   }
 
   /// Per-turn auto-trigger check. Returns true if the wheel should pop this turn.
