@@ -3486,8 +3486,9 @@ class _MessageBubbleState extends State<_MessageBubble> {
     final trustReason = metadata['trust_reason'] as String? ?? '';
     final timeSkipPeriods = metadata['time_skip_periods'] as int? ?? 0;
     final timeSkipNextDay = metadata['time_skip_next_day'] as bool? ?? false;
+    final timeSkipTo = metadata['time_skip_to'] as String? ?? '';
 
-    if (bondDelta == 0 && emotionLabel.isEmpty && arousalDelta == 0 && trustDelta == 0 && timeSkipPeriods == 0 && !timeSkipNextDay) return const SizedBox.shrink();
+    if (bondDelta == 0 && emotionLabel.isEmpty && arousalDelta == 0 && trustDelta == 0 && timeSkipTo.isEmpty) return const SizedBox.shrink();
 
     Widget maybeTooltip(Widget child, String tip) {
       if (tip.isEmpty) return child;
@@ -3558,14 +3559,11 @@ class _MessageBubbleState extends State<_MessageBubble> {
       chips.add(maybeTooltip(chip, trustReason));
     }
 
-    if (timeSkipNextDay || timeSkipPeriods > 0) {
-      final label = timeSkipNextDay
-          ? 'Next day'
-          : '+$timeSkipPeriods period${timeSkipPeriods == 1 ? '' : 's'}';
+    if (timeSkipTo.isNotEmpty) {
       chips.add(Row(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.fast_forward, size: 11, color: Colors.amber),
         const SizedBox(width: 4),
-        Text('Time skip: $label',
+        Text('Time skip: $timeSkipTo',
             style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.amber)),
       ]));
     }

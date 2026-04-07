@@ -6556,7 +6556,7 @@ class ChatService extends ChangeNotifier {
       _timeOfDay = 'dawn';
       _turnsSinceLastTimeAdvance = 0;
       _pendingRealismMetadata ??= {};
-      _pendingRealismMetadata!['time_skip_next_day'] = true;
+      _pendingRealismMetadata!['time_skip_to'] = 'Dawn · Day $_dayCount';
       notifyListeners();
       debugPrint('[Realism:OOC] Next-day transition → Day $_dayCount, dawn');
       return;
@@ -6584,7 +6584,12 @@ class ChatService extends ChangeNotifier {
     _timeOfDay = validTimes[idx];
     _turnsSinceLastTimeAdvance = 0;
     _pendingRealismMetadata ??= {};
-    _pendingRealismMetadata!['time_skip_periods'] = periods;
+    // Capitalise the time label for display (late_morning -> Late Morning)
+    final displayTime = _timeOfDay
+        .split('_')
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join(' ');
+    _pendingRealismMetadata!['time_skip_to'] = displayTime;
     notifyListeners();
     debugPrint('[Realism:OOC] Time-skip: +$periods period(s) → $_timeOfDay (Day $_dayCount)');
   }
