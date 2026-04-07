@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 
+enum _EventCategory { fortune, misfortune, chaos, wildCard }
+
 /// Full-screen Chance Time overlay.
 ///
 /// Show it via:
@@ -23,13 +25,16 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
     with TickerProviderStateMixin {
   late AnimationController _spinController;
   late Animation<double> _spinAnimation;
+  late AnimationController _revealController;
+  late Animation<double> _revealAnimation;
 
-  List<String> _segments = const []; // 8 events for this spin
+  List<String> _segments = const [];
   bool _spinning = false;
   bool _landed = false;
   int _landedIndex = 0;
   double _targetAngle = 0;
   String? _charName;
+  _EventCategory? _category;
 
   // Segment colours (Mario Party palette)
   static const List<Color> _segmentColors = [
@@ -47,6 +52,14 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
   void initState() {
     super.initState();
     _spinController = AnimationController(vsync: this);
+    _revealController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    _revealAnimation = CurvedAnimation(
+      parent: _revealController,
+      curve: Curves.easeOut,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final svc = context.read<ChatService>();
       svc.consumeChanceTimeTrigger();
@@ -60,6 +73,7 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
   @override
   void dispose() {
     _spinController.dispose();
+    _revealController.dispose();
     super.dispose();
   }
 
@@ -93,11 +107,46 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
     _spinController.reset();
     _spinController.duration = const Duration(milliseconds: 3800);
     _spinController.forward().whenComplete(() {
+      final cat = _categorize(_segments[_landedIndex]);
       setState(() {
         _spinning = false;
         _landed = true;
+        _category = cat;
       });
+      _revealController.forward(from: 0);
     });
+  }
+
+  // ── Category detection ─────────────────────────────────────────────────────
+
+  static const _fortuneKeywords = [
+    'won', 'win', 'promotion', 'dream job', 'found', 'surprise',
+    'free', 'bonus', 'inheritance', 'viral', 'lottery', 'refund',
+    'upgraded', 'scholarship', 'award', 'paid off', 'apology',
+    'great test', 'savings', 'review', 'cast', 'featured',
+  ];
+  static const _misfortuneKeywords = [
+    'diarrhea', 'fired', 'totaled', 'poisoning', 'stolen', 'burst',
+    'dead', 'locked out', 'toothache', 'spider', 'auction', 'audit',
+    'rash', 'sting', 'wardrobe', 'jury', 'bug infestation', 'stranded',
+    'burned', 'frozen', 'selling the building', 'parking ticket',
+    'collections notice', 'painful', 'spilled', 'secret they were keeping got leaked',
+  ];
+  static const _chaosKeywords = [
+    'earthquake', 'power went out', 'ufo', 'flash mob', 'celebrity',
+    'tornado', 'reality tv', 'breaking news', 'cell service', 'food truck',
+    'wild animal', 'gas leak', 'helicopter', 'social media went down',
+    'strange', 'evacuated', 'airport', 'weather warning', 'alarm',
+    'bird', 'clown', 'deja vu', 'street performer', 'ground shook',
+    'cryptic', 'broadcast', 'witness', 'fainted', 'fire alarm', 'trending',
+  ];
+
+  _EventCategory _categorize(String event) {
+    final lower = event.toLowerCase();
+    for (final k in _fortuneKeywords) { if (lower.contains(k)) return _EventCategory.fortune; }
+    for (final k in _misfortuneKeywords) { if (lower.contains(k)) return _EventCategory.misfortune; }
+    for (final k in _chaosKeywords) { if (lower.contains(k)) return _EventCategory.chaos; }
+    return _EventCategory.wildCard;
   }
 
   String _displayEvent(String raw) =>
@@ -302,29 +351,94 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
 
   Widget _buildResultCard() {
     final event = _displayEvent(_segments[_landedIndex]);
+    final cat = _category ?? _EventCategory.wildCard;
+
+    final (catEmoji, catLabel, catColor) = switch (cat) {
+      _EventCategory.fortune    => ('🎉', 'Fortune!',   const Color(0xFF06D6A0)),
+      _EventCategory.misfortune => ('💀', 'Misfortune', const Color(0xFFE63946)),
+      _EventCategory.chaos      => ('⚡', 'Chaos!',     const Color(0xFFFFD166)),
+      _EventCategory.wildCard   => ('🔮', 'Wild Card',  const Color(0xFF9B5DE5)),
+    };
+
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _segmentColors[_landedIndex].withOpacity(0.15),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _segmentColors[_landedIndex].withOpacity(0.6),
-            ),
-          ),
-          child: Text(
-            event,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: _segmentColors[_landedIndex],
-              height: 1.4,
-            ),
-          ),
+        // ── Reveal splash ───────────────────────────────────────────────
+        _buildRevealSplash(cat, catColor),
+        const SizedBox(height: 12),
+
+        // ── Category banner ─────────────────────────────────────────────
+        AnimatedBuilder(
+          animation: _revealAnimation,
+          builder: (_, __) {
+            final t = _revealAnimation.value;
+            return Opacity(
+              opacity: t.clamp(0.0, 1.0),
+              child: Transform.scale(
+                scale: 0.7 + 0.3 * t,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(catEmoji, style: const TextStyle(fontSize: 22)),
+                    const SizedBox(width: 6),
+                    Text(
+                      catLabel,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: catColor,
+                        letterSpacing: 1.2,
+                        shadows: [Shadow(color: catColor.withOpacity(0.6), blurRadius: 12)],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+
+        // ── Event text card ─────────────────────────────────────────────
+        AnimatedBuilder(
+          animation: _revealAnimation,
+          builder: (_, __) {
+            final t = (_revealAnimation.value - 0.3).clamp(0.0, 1.0) / 0.7;
+            return Opacity(
+              opacity: t,
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - t)),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: catColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: catColor.withOpacity(0.5), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: catColor.withOpacity(0.18),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    event,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: catColor,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 16),
+
+        // ── Buttons ─────────────────────────────────────────────────────
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -337,8 +451,7 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFFD166),
                 foregroundColor: const Color(0xFF1A1200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(50),
                 ),
@@ -359,6 +472,87 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildRevealSplash(_EventCategory cat, Color catColor) {
+    return AnimatedBuilder(
+      animation: _revealAnimation,
+      builder: (context, _) {
+        final t = _revealAnimation.value;
+        return SizedBox(
+          height: 80,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Category-specific background pulse
+              if (cat == _EventCategory.fortune || cat == _EventCategory.misfortune)
+                Opacity(
+                  opacity: (1 - t).clamp(0.0, 0.6),
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: catColor.withOpacity(0.25),
+                    ),
+                  ),
+                ),
+
+              // Fortune: confetti
+              if (cat == _EventCategory.fortune)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _ConfettiPainter(progress: t),
+                  ),
+                ),
+
+              // Chaos: lightning strobe flash
+              if (cat == _EventCategory.chaos)
+                Opacity(
+                  opacity: (sin(t * pi * 6) * 0.5 + 0.5) * (1 - t),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: const Color(0xFFFFD166).withOpacity(0.35),
+                    ),
+                  ),
+                ),
+
+              // Wild card: purple shimmer sweep
+              if (cat == _EventCategory.wildCard)
+                Positioned(
+                  left: (MediaQuery.of(context).size.width * 1.4 * t) - 60,
+                  child: Container(
+                    width: 60,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          const Color(0xFF9B5DE5).withOpacity(0.5 * (1 - t)),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Big bouncing category emoji
+              Transform.scale(
+                scale: t < 0.4
+                    ? (t / 0.4) * 1.3   // overshoot
+                    : 1.3 - ((t - 0.4) / 0.6) * 0.3, // settle to 1.0
+                child: Text(
+                  cat == _EventCategory.fortune    ? '🎉' :
+                  cat == _EventCategory.misfortune ? '💀' :
+                  cat == _EventCategory.chaos      ? '⚡' : '🔮',
+                  style: const TextStyle(fontSize: 48),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -391,7 +585,63 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
   }
 }
 
-// ── CustomPainters ────────────────────────────────────────────────────────────
+// ── Confetti painter ─────────────────────────────────────────────────────────
+
+class _ConfettiPainter extends CustomPainter {
+  final double progress; // 0→1
+  static final _rng = Random(42);
+
+  _ConfettiPainter({required this.progress});
+
+  static final List<_Confetto> _pieces = List.generate(30, (i) {
+    final rng = Random(i * 13);
+    return _Confetto(
+      x: rng.nextDouble(),
+      startY: -0.2 - rng.nextDouble() * 0.4,
+      color: [
+        const Color(0xFF06D6A0),
+        const Color(0xFFFFD166),
+        const Color(0xFFFF6B9D),
+        const Color(0xFF9B5DE5),
+        const Color(0xFF118AB2),
+      ][i % 5],
+      size: 5 + rng.nextDouble() * 6,
+      speed: 0.6 + rng.nextDouble() * 0.4,
+    );
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    for (final p in _pieces) {
+      final y = p.startY + progress * p.speed * 1.6;
+      if (y < 0 || y > 1.1) continue;
+      paint.color = p.color.withOpacity((1 - progress).clamp(0, 1));
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(p.x * size.width, y * size.height),
+            width: p.size,
+            height: p.size * 0.5,
+          ),
+          const Radius.circular(2),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter old) => old.progress != progress;
+}
+
+class _Confetto {
+  final double x, startY, size, speed;
+  final Color color;
+  const _Confetto({required this.x, required this.startY, required this.color, required this.size, required this.speed});
+}
+
+// ── Wheel & Pointer ───────────────────────────────────────────────────────────
 
 class _WheelPainter extends CustomPainter {
   final List<String> segments;
