@@ -3484,8 +3484,10 @@ class _MessageBubbleState extends State<_MessageBubble> {
     final trustDelta = metadata['trust_delta'] as int? ?? 0;
     final bondReason = metadata['bond_reason'] as String? ?? '';
     final trustReason = metadata['trust_reason'] as String? ?? '';
+    final timeSkipPeriods = metadata['time_skip_periods'] as int? ?? 0;
+    final timeSkipNextDay = metadata['time_skip_next_day'] as bool? ?? false;
 
-    if (bondDelta == 0 && emotionLabel.isEmpty && arousalDelta == 0 && trustDelta == 0) return const SizedBox.shrink();
+    if (bondDelta == 0 && emotionLabel.isEmpty && arousalDelta == 0 && trustDelta == 0 && timeSkipPeriods == 0 && !timeSkipNextDay) return const SizedBox.shrink();
 
     Widget maybeTooltip(Widget child, String tip) {
       if (tip.isEmpty) return child;
@@ -3554,6 +3556,18 @@ class _MessageBubbleState extends State<_MessageBubble> {
         ],
       ]);
       chips.add(maybeTooltip(chip, trustReason));
+    }
+
+    if (timeSkipNextDay || timeSkipPeriods > 0) {
+      final label = timeSkipNextDay
+          ? 'Next day'
+          : '+$timeSkipPeriods period${timeSkipPeriods == 1 ? '' : 's'}';
+      chips.add(Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.fast_forward, size: 11, color: Colors.amber),
+        const SizedBox(width: 4),
+        Text('Time skip: $label',
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.amber)),
+      ]));
     }
 
     return Padding(
@@ -6000,8 +6014,8 @@ class _RealismSectionState extends State<_RealismSection> {
                             ),
                         ],
                       ),
-                      // OOC time-skip toast
-                      if (chat.lastTimeSkipPeriods != 0) ..._buildTimeSkipToast(chat),
+                      // OOC time-skip toast removed — skip info now appears
+                      // in the delta row on the next AI message bubble.
                       const SizedBox(height: 12),
 
                       // ── NSFW Enhancements Submenu ──
@@ -6113,32 +6127,6 @@ class _RealismSectionState extends State<_RealismSection> {
       case 'night': return 'N';
       default: return '';
     }
-  }
-
-  List<Widget> _buildTimeSkipToast(ChatService chat) {
-    // Auto-dismiss after 3.5s
-    Future.delayed(const Duration(milliseconds: 3500), () {
-      if (mounted) chat.clearTimeSkipNotification();
-    });
-    final isNextDay = chat.lastTimeSkipPeriods == -1;
-    final label = isNextDay
-        ? '⏭  Time skip · Next day'
-        : '⏭  Time skip · +${chat.lastTimeSkipPeriods} period${chat.lastTimeSkipPeriods == 1 ? '' : 's'}';
-    return [
-      const SizedBox(height: 6),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.amber.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.amber.withOpacity(0.25)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: Colors.amber, fontWeight: FontWeight.w600, letterSpacing: 0.3),
-        ),
-      ),
-    ];
   }
 }
 

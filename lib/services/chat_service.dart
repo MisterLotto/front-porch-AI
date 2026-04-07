@@ -330,7 +330,6 @@ class ChatService extends ChangeNotifier {
   int _dayCount = 1;
   int _startDayOfWeek = DateTime.now().weekday; // 1=Mon ... 7=Sun, set when session starts
   int _turnsSinceLastTimeAdvance = 0; // deterministic pacing counter
-  int _lastTimeSkipPeriods = 0; // populated by OOC detector, cleared after UI reads it
 
   /// How many AI turns must pass before time is eligible to advance.
   /// 6 turns ≈ a meaningful scene chunk without forcing constant time-skips.
@@ -530,9 +529,6 @@ class ChatService extends ChangeNotifier {
   String get emotionIntensity => _emotionIntensity;
   String get timeOfDay => _timeOfDay;
   int get dayCount => _dayCount;
-  /// Non-zero for one notification cycle after an OOC time-skip is detected.
-  /// UI reads this to show the toast then calls clearTimeSkipNotification().
-  int get lastTimeSkipPeriods => _lastTimeSkipPeriods;
 
   /// The current narrative day of the week (e.g. 'Monday'), computed from
   /// the session's anchor weekday plus elapsed in-story days.
@@ -6528,16 +6524,11 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Clear the OOC skip notification after the UI has shown the toast.
-  void clearTimeSkipNotification() {
-    _lastTimeSkipPeriods = 0;
-    notifyListeners();
-  }
-
   // ── OOC Time-Skip Detector ───────────────────────────────────────────────
 
   /// Scans the user message for OOC/narrative time-skip language and advances
-  /// the clock by the inferred number of periods. Resets the turn counter.
+  /// the clock by the inferred number of periods. Stamps the skip into
+  /// _pendingRealismMetadata so it appears in the next AI message's delta row.
   void _detectOocTimeSkip(String text) {
     final lower = text.toLowerCase();
 
@@ -6555,17 +6546,19 @@ class ChatService extends ChangeNotifier {
 
     // Estimate period count from duration language
     int periods = 1;
+    bool isNextDay = false;
 
     if (RegExp(r'\b(all day|entire day|full day|day passes|the (whole|entire) day)\b').hasMatch(lower)) {
       periods = 4;
     } else if (RegExp(r'\b(next (morning|day)|the following (morning|day)|wake up|woke up|overnight)\b').hasMatch(lower)) {
-      // Jump to dawn of next day
+      isNextDay = true;
       _dayCount++;
       _timeOfDay = 'dawn';
       _turnsSinceLastTimeAdvance = 0;
-      _lastTimeSkipPeriods = -1; // sentinel for "next day" in toast
+      _pendingRealismMetadata ??= {};
+      _pendingRealismMetadata!['time_skip_next_day'] = true;
       notifyListeners();
-      debugPrint('[Realism:OOC] Next-day transition detected → Day $_dayCount, dawn');
+      debugPrint('[Realism:OOC] Next-day transition → Day $_dayCount, dawn');
       return;
     } else if (RegExp(r'\b(several hours|many hours|a long time|hours? pass)\b').hasMatch(lower)) {
       periods = 3;
@@ -6574,7 +6567,6 @@ class ChatService extends ChangeNotifier {
     } else if (RegExp(r'\b(an hour|1 hour|one hour|a while|some time)\b').hasMatch(lower)) {
       periods = 1;
     } else if (hasOocMarker) {
-      // OOC tag present but no duration clue — conservative +1
       periods = 1;
     }
 
@@ -6591,8 +6583,9 @@ class ChatService extends ChangeNotifier {
     }
     _timeOfDay = validTimes[idx];
     _turnsSinceLastTimeAdvance = 0;
-    _lastTimeSkipPeriods = periods;
+    _pendingRealismMetadata ??= {};
+    _pendingRealismMetadata!['time_skip_periods'] = periods;
     notifyListeners();
-    debugPrint('[Realism:OOC] Time-skip detected: +$periods period(s) → $_timeOfDay (Day $_dayCount)');
+    debugPrint('[Realism:OOC] Time-skip: +$periods period(s) → $_timeOfDay (Day $_dayCount)');
   }
 }
