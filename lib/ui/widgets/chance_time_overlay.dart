@@ -198,15 +198,15 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
 
   Widget _buildWheel() {
     return SizedBox(
-      width: 280,
-      height: 280,
+      width: 320,
+      height: 320,
       child: Stack(
         alignment: Alignment.center,
         children: [
           // Outer glow ring
           Container(
-            width: 292,
-            height: 292,
+            width: 334,
+            height: 334,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
@@ -232,7 +232,7 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
               return Transform.rotate(
                 angle: angle,
                 child: CustomPaint(
-                  size: const Size(270, 270),
+                  size: const Size(310, 310),
                   painter: _WheelPainter(
                     segments: _segments,
                     colors: _segmentColors,
@@ -436,36 +436,56 @@ class _WheelPainter extends CustomPainter {
         borderPaint,
       );
 
-      // Label text
-      final labelAngle = startAngle + segmentAngle / 2;
-      final labelRadius = radius * 0.62;
-      final labelX = center.dx + labelRadius * cos(labelAngle);
-      final labelY = center.dy + labelRadius * sin(labelAngle);
+      // ── Label ──────────────────────────────────────────────────────────
+      final midAngle = startAngle + segmentAngle / 2;
 
-      // Shorten label for display
+      // Raw label: replace {{char}} and keep only first 3 words
       final rawLabel = segments[i].replaceAll('{{char}}', charName);
       final words = rawLabel.split(' ');
-      // Take first 4 words max
-      final short = words.take(4).join(' ') + (words.length > 4 ? '…' : '');
+      // Split into two lines of ~3 words each for readability
+      final line1 = words.take(3).join(' ');
+      final line2 = words.length > 3 ? words.skip(3).take(3).join(' ') : '';
+      final labelText = line2.isEmpty ? line1 : '$line1\n$line2';
+
+      // Position: 55% of the way from centre to rim
+      final labelRadius = radius * 0.58;
+      final lx = center.dx + labelRadius * cos(midAngle);
+      final ly = center.dy + labelRadius * sin(midAngle);
+
+      canvas.save();
+      canvas.translate(lx, ly);
+      // Rotate so text reads from centre outward (along the radius)
+      canvas.rotate(midAngle + pi / 2);
 
       final tp = TextPainter(
         text: TextSpan(
-          text: short,
+          text: labelText,
           style: const TextStyle(
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
             color: Colors.white,
-            shadows: [Shadow(color: Colors.black87, blurRadius: 3)],
+            height: 1.25,
           ),
         ),
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
       );
-      tp.layout(maxWidth: 60);
+      tp.layout(maxWidth: 80);
 
-      canvas.save();
-      canvas.translate(labelX, labelY);
-      canvas.rotate(labelAngle + pi / 2);
+      // Dark pill behind the text for contrast
+      final pillRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: tp.width + 8,
+          height: tp.height + 6,
+        ),
+        const Radius.circular(5),
+      );
+      canvas.drawRRect(
+        pillRect,
+        Paint()..color = Colors.black.withOpacity(0.45),
+      );
+
       tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
       canvas.restore();
     }
