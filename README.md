@@ -85,29 +85,44 @@
 
 ---
 
-## 🆕 What's New in V0.9.6.6
+## 🆕 What's New in V0.9.7
 
-This update fixes the biggest immersion-breaker in long conversations: time that doesn't move, or jumps randomly. Plus smart OOC time-skip detection and manual time controls.
+This release adds **Chaos Mode** — a Mario Party-inspired "Chance Time" system that injects unscripted narrative events into your roleplay sessions.
 
-**⏰ Deterministic Time Progression**
-- **Fixed: time never moves / time jumps wildly.** The old system asked the LLM to decide when time advances each turn — wildly inconsistent. Time now advances on a fixed cadence: every 6 AI turns, the clock moves forward exactly one period.
-- **LLM veto only.** The model is asked one binary question: is the scene mid-action right now? Hold or advance. If the eval fails, time advances anyway — no more frozen clocks on network errors.
-- **Single source of truth.** The one-shot eval no longer races against the physical eval, eliminating random jumps.
+**🎰 Chance Time — Chaos Mode**
+- **Spinning wheel overlay** — full animated roulette with emoji-themed segments, smooth easing curves, and a haptic-style bounce on landing.
+- **175+ era-agnostic events** across four categories: 🟢 Fortune, 🔴 Misfortune, 💛 Chaos, 💜 Wild Card — plus 35 slapstick events (stink bombs, glitter bombs, pants falling down, chair collapses).
+- **🌶️ NSFW toggle** — 30 additional spicy events behind an explicit opt-in switch in the sidebar.
+- **Escalating pressure** — 5% base chance per turn, growing +5% each turn without a trigger. Caps at 100%. After ~19 turns, Chance Time is guaranteed.
+- **No escape** — once the overlay fires there is no X button, no back button, no tapping outside. The only exit is **Accept Your Fate 🎲**.
+- **Instant AI reaction** — accepting the spin injects a gold narration banner into chat history and the AI immediately generates a response reacting to the event. No waiting for user input.
+- **Category-specific reveal animations** — confetti burst (Fortune), red skull pulse (Misfortune), lightning strobe (Chaos), purple shimmer (Wild Card).
+- **Manual spin** — SPIN NOW button in the sidebar for on-demand chaos.
 
-**💬 OOC Time-Skip Detection**
-- Writing `(OOC: we drive for several hours)` instantly moves the narrative clock before the AI responds.
-- Contextual mapping: `several hours` = +3 periods, `a few hours` = +2, `next morning/day` = Dawn of next day, `all day` = +4 periods.
-- The next AI response shows `⏩ Time skip: Evening` in the delta row alongside Bond/Trust/Mood chips.
-
-**🕐 Manual Time Nudge**
-- `‹` and `›` chevrons flank the `Mon · Day 1` sidebar label when Realism is enabled. Tap to step time forward or back one period across day boundaries.
-
-**🐛 Bug Fixes**
-- Fixed GUI overflow when the refractory period cooldown badge appeared in the NSFW Enhancements header.
-- Fixed realism baseline never being captured when enabling Realism after loading a character (pending flag + retroactive scan).
+**🎨 Chance Time UI**
+- Gold-themed narration banners in chat history (🎰 centered card, distinct from normal messages).
+- Animated wheel shrinks after landing to reveal the full result card without overflow.
+- Pressure bar and percentage visible in both the sidebar and the overlay.
 
 <details>
 <summary><strong>📦 Previous Releases</strong></summary>
+
+### V0.9.6.6
+
+**⏰ Deterministic Time Progression**
+- **Fixed: time never moves / time jumps wildly.** Time now advances on a fixed cadence: every 6 AI turns, the clock moves forward exactly one period.
+- **LLM veto only.** The model is asked one binary question: is the scene mid-action right now? Hold or advance.
+
+**💬 OOC Time-Skip Detection**
+- Writing `(OOC: we drive for several hours)` instantly moves the narrative clock before the AI responds.
+- The next AI response shows `⏩ Time skip: Evening` in the delta row alongside Bond/Trust/Mood chips.
+
+**🕐 Manual Time Nudge**
+- `‹` and `›` chevrons flank the `Mon · Day 1` sidebar label when Realism is enabled.
+
+**🐛 Bug Fixes**
+- Fixed GUI overflow when the refractory period cooldown badge appeared in the NSFW Enhancements header.
+- Fixed realism baseline never being captured when enabling Realism after loading a character.
 
 ### V0.9.6.5
 
