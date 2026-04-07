@@ -6665,7 +6665,7 @@ class ChatService extends ChangeNotifier {
       text: '[🎰 CHANCE TIME! $display]',
       sender: 'System',
       isUser: false,
-      activeMetadata: {'is_chance_time_narration': true},
+      metadata: {'is_chance_time_narration': true},
     ));
     await _saveChat();
     notifyListeners();
