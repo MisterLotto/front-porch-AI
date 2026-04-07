@@ -156,7 +156,7 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: _segments.isEmpty
           ? const SizedBox.shrink()
           : _buildContent(),
@@ -165,6 +165,9 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
 
   Widget _buildContent() {
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF0D1117).withOpacity(0.97),
         borderRadius: BorderRadius.circular(24),
@@ -180,18 +183,20 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 24),
-          _buildWheel(),
-          const SizedBox(height: 28),
-          if (_landed) _buildResultCard() else _buildSpinButton(),
-          const SizedBox(height: 20),
-          _buildPressureRow(),
-        ],
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 16),
+            _buildWheel(),
+            const SizedBox(height: 16),
+            if (_landed) _buildResultCard() else _buildSpinButton(),
+            const SizedBox(height: 12),
+            _buildPressureRow(),
+          ],
+        ),
       ),
     );
   }
@@ -481,7 +486,7 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
       builder: (context, _) {
         final t = _revealAnimation.value;
         return SizedBox(
-          height: 80,
+          height: 64,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -524,7 +529,7 @@ class _ChanceTimeOverlayState extends State<ChanceTimeOverlay>
                   left: (MediaQuery.of(context).size.width * 1.4 * t) - 60,
                   child: Container(
                     width: 60,
-                    height: 80,
+                    height: 64,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
