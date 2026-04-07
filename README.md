@@ -18,7 +18,52 @@ Have questions, feedback, or just want to hang out? Connect with us:
 - **Discord**: [Join our server](https://discord.gg/e4tET6rpdv)
 - **Matrix**: [matrix.dreamersai.art](https://matrix.dreamersai.art)
 
-## 🚀 Getting Started
+## 🔓 Why Open Source?
+
+Proprietary software lives and dies at the discretion of its creators. When a company moves on, shuts down, or simply loses interest, the tools you depend on become frozen in time — no updates, no fixes, no future.
+
+Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero General Public License v3 (AGPL-3.0)**. With the addition of a full-featured web UI, the app can now be accessed over a network — and the AGPL ensures that anyone who hosts a modified version as a service must share their changes with their users. This keeps the project truly open, even in a world of cloud-hosted forks.
+
+> **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
+
+## 🆕 What's New in V0.9.6.6
+
+This update fixes the single biggest immersion-killer in long conversations: time that doesn't move, or jumps randomly. It also adds smart OOC time-skip detection and manual time controls.
+
+**⏰ Deterministic Time Progression**
+- **Fixed: Time never moves / time jumps wildly.** The previous system asked the LLM to decide when time advances each turn, producing wildly inconsistent results. Time now advances on a fixed turn cadence — every 6 AI turns, the clock ticks forward exactly one period.
+- **LLM veto only.** The model is now asked a single yes/no question: is the scene mid-action right now? If yes, time holds for one more turn. If no (or if the eval fails), time advances automatically — frozen time on network errors is gone.
+- **Single source of truth.** The one-shot eval no longer writes time independently of the physical state eval, eliminating the race condition that caused random jumps.
+
+**💬 OOC Time-Skip Detection**
+- **Automatic.** Writing `(OOC: we drive for several hours)` now instantly moves the narrative clock forward by the correct number of periods before the AI responds. Patterns detected include: `time skip`, `several hours`, `a few hours`, `hours later`, `next morning`, `wake up`, `overnight`, `all day`, and more.
+- **Contextual mapping.** `several hours` = +3 periods, `a few hours` = +2, `next morning/day` = next-day transition to Dawn, `all day` = +4 periods.
+- **Visible in the delta row.** The next AI response will show `⏩ Time skip: Evening` (or whichever period resulted) alongside the usual Bond/Trust/Mood chips.
+
+**🕐 Manual Time Nudge**
+- Subtle `‹` and `›` chevron buttons now flank the `Mon · Day 1` label in the sidebar (only visible when Realism is enabled). Tap to step time forward or back one period — wraps correctly across day boundaries.
+
+**🐛 Bug Fixes**
+- Fixed GUI overflow when the refractory period cooldown badge appeared in the NSFW Enhancements header row — title now wrapped in `Flexible`, badge compacted.
+- Fixed realism baseline never being captured when user enables Realism after loading a character (two-path fix: pending flag + retroactive scan).
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### What's New in V0.9.6.5
+
+**🧠 Realism Engine 2.1 — Behavioral Depth**
+- **Emotion Inertia:** Moods carry over between turns — small moments produce small drift, big moments require genuine narrative cause.
+- **Trust-Based Behavioral Calibration:** Per-turn behavioral injection surfaces more of the character's inner self as trust grows, filtered through their unique persona.
+- **Narrative Day-of-Week Tracking:** Scene time reads `Wednesday Evening (Day 3)`. Anchored to the real-world day Realism was first enabled.
+- **Post-Greeting Baseline Eval:** Engine evaluates emotion and bond from the opening message before the user types anything. Alternate greeting cycles re-trigger it.
+
+**🖥️ Realism Processing Overlay — Redesigned**
+- Animated pulsing orb, spinning halo, eval pill badges, smooth fade-in. Greeting evals use a purple *"Reading the room..."* mode.
+
+**📊 Sidebar**
+- Day-of-week visible (`Sun · Day 1`). Active Fixation promoted above Realism. Smarter section expand defaults.
+
 
 ### 📦 For Regular Users
 
@@ -112,40 +157,6 @@ To create a standalone executable:
 flutter build windows
 ```
 The output will be in `build/windows/runner/Release/`.
-
-## 🔓 Why Open Source?
-
-Proprietary software lives and dies at the discretion of its creators. When a company moves on, shuts down, or simply loses interest, the tools you depend on become frozen in time — no updates, no fixes, no future.
-
-Starting with **v0.9.0**, Front Porch AI is licensed under the **GNU Affero General Public License v3 (AGPL-3.0)**. With the addition of a full-featured web UI, the app can now be accessed over a network — and the AGPL ensures that anyone who hosts a modified version as a service must share their changes with their users. This keeps the project truly open, even in a world of cloud-hosted forks.
-
-> **Note:** Versions **0.8.x and earlier** remain licensed under **GPLv3**. The license change applies only to v0.9.0 and all future releases.
-
-## 🆕 What's New in V0.9.6.5
-
-This update deepens the Realism Engine with genuine emotional continuity, trust-aware behavioral calibration, and real-world time awareness — making characters feel less scripted and more like actual people.
-
-**🧠 Realism Engine 2.1 — Behavioral Depth**
-- **Emotion Inertia:** Characters no longer snap between moods turn-by-turn. The engine now passes the current emotional state as a prior baseline to each evaluation — minor or neutral exchanges produce small natural drift, while large emotional shifts require genuine narrative cause.
-- **Trust-Based Behavioral Calibration:** A new per-turn behavioral injection tells the model how much of the character's inner self to surface, scaled to the current trust tier. Crucially, it avoids prescribing specific behaviors — an INTJ won't suddenly become jokey at trust tier 3; they'll become precise and candid in ways that are *authentic to their persona*.
-- **Narrative Day-of-Week Tracking:** Scene time now reads `Wednesday Evening (Day 3)` instead of a generic day number. The story's weekday is anchored to the real-world day when Realism was first enabled and advances naturally with the story — no database schema change required.
-- **Post-Greeting Baseline Eval:** The engine now evaluates emotion and relationship state immediately after the first message loads, not after the user's first reply. Characters that open with an implied pre-existing relationship (e.g. *"My love, it's been so long..."*) will correctly register a warm baseline bond and emotional state before any interaction begins. Cycling alternate greetings re-triggers the eval automatically.
-
-**🖥️ Realism Engine Processing Overlay — Redesigned**
-- **Animated Pulsing Orb:** The old static spinner is gone. A glowing orb breathes in/out with a spinning ring halo behind it.
-- **Smooth Entry Transition:** The overlay fades in cleanly instead of snapping into view.
-- **Animated Eval Pills:** Labeled chips for each active evaluation pass (Relationship, Emotion, Scene, Trust) pulse in sync with the orb.
-- **Two Distinct Modes:** Regular evals use a **cyan** theme with a live stream readout. The new greeting baseline eval uses a **purple** *"Reading the room..."* mode with a sparkle icon and explanatory text — no raw stream needed since it runs silently in the background.
-
-**📊 Sidebar**
-- **Day-of-Week Visible:** The time-of-day row now shows `Sun · Day 1` format so the narrative weekday is always visible at a glance.
-- **Fixation Card Promoted:** The Active Fixation display is now a standalone always-visible card in the sidebar, above Realism Mode, so it stays visible even when sections are collapsed.
-- **Layout Reordered:** RAG Memory → Active Fixation → Realism Mode → Objectives → Author's Note → Character Evolution (collapsed by default) → Chat Summary → Scenario → Lorebook Triggers.
-- **Smarter Defaults:** Realism Mode, NSFW Enhancements, and Objectives default to expanded on first open.
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
-
 ### What's New in V0.9.6.4
 
 **🖥️ Realism Engine Streaming UI**
@@ -493,6 +504,9 @@ This release significantly expands Front Porch AI's visual capabilities, nativel
 - **User Persona Enhancements**: Improved persona dialog and avatar support
 
 </details>
+
+## 🚀 Getting Started
+
 
 
 ## 🙏 Thank You
