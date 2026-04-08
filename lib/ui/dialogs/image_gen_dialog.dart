@@ -115,6 +115,8 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
   String _currentPrompt = '';
   bool _saving = false;
   late String _selectedStyle;
+  late final TextEditingController _promptController;
+
 
   @override
   void initState() {
@@ -125,9 +127,18 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
     if (widget.mode == ImageGenMode.customPrompt && widget.customPrompt != null) {
       _currentPrompt = widget.customPrompt!;
     }
+    _promptController = TextEditingController(text: _currentPrompt);
     // Don't auto-generate — let user pick style first
   }
 
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+
+  /// Full generate: craft prompt via LLM then generate image.
   Future<void> _generate() async {
     setState(() {
       _craftingPrompt = true;
@@ -160,11 +171,50 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
       if (!mounted) return;
       setState(() {
         _currentPrompt = prompt;
+        _promptController.text = prompt;
         _craftingPrompt = false;
         _generatingImage = true;
       });
 
-      // Phase 2: Generate the image
+      await _runImageGeneration(service, storage, prompt);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _craftingPrompt = false;
+          _generatingImage = false;
+          _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+        });
+      }
+    }
+  }
+
+  /// Regenerate using the current (possibly user-edited) prompt text.
+  Future<void> _regenerate() async {
+    final editedPrompt = _promptController.text.trim();
+    // If user has edited the prompt, skip LLM crafting and use it directly.
+    if (editedPrompt.isNotEmpty) {
+      setState(() {
+        _craftingPrompt = false;
+        _generatingImage = true;
+        _error = '';
+        _imageBytes = null;
+        _currentPrompt = editedPrompt;
+      });
+      final service = Provider.of<ImageGenService>(context, listen: false);
+      final storage = Provider.of<StorageService>(context, listen: false);
+      await _runImageGeneration(service, storage, editedPrompt);
+    } else {
+      // No prompt yet — do a full generate
+      await _generate();
+    }
+  }
+
+  Future<void> _runImageGeneration(
+    ImageGenService service,
+    StorageService storage,
+    String prompt,
+  ) async {
+    try {
       // Use landscape size for backgrounds
       String? size;
       if (widget.mode == ImageGenMode.chatBackground) {
@@ -196,6 +246,7 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
       }
     }
   }
+
 
   Future<void> _save() async {
     if (_imageBytes == null) return;
@@ -296,9 +347,13 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
     return Dialog(
       backgroundColor: const Color(0xFF1F2937),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 560,
-        constraints: const BoxConstraints(maxHeight: 750),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          maxHeight: MediaQuery.of(context).size.height * 0.92,
+        ),
+
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -359,49 +414,9 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
 
                     const SizedBox(height: 16),
 
-                    // Prompt display
-                    if (_currentPrompt.isNotEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black26,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Text('Prompt',
-                                    style: TextStyle(
-                                        color: Colors.white38,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600)),
-                                if (widget.llmService != null)
-                                  const Padding(
-                                    padding: EdgeInsets.only(left: 6),
-                                    child: Icon(Icons.auto_fix_high,
-                                        size: 10, color: Colors.purpleAccent),
-                                  ),
-                                if (widget.llmService != null)
-                                  const Text(' AI-crafted',
-                                      style: TextStyle(
-                                          color: Colors.purpleAccent,
-                                          fontSize: 9)),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _currentPrompt.length > 300
-                                  ? '${_currentPrompt.substring(0, 300)}...'
-                                  : _currentPrompt,
-                              style: const TextStyle(
-                                  color: Colors.white54, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
+                    // Prompt editor
+                    if (_currentPrompt.isNotEmpty || _promptController.text.isNotEmpty)
+                      _buildPromptEditor(),
 
                     const SizedBox(height: 16),
 
@@ -413,6 +428,76 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+
+  Widget _buildPromptEditor() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Prompt',
+                  style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600)),
+              if (widget.llmService != null)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Icon(Icons.auto_fix_high,
+                      size: 10, color: Colors.purpleAccent),
+                ),
+              if (widget.llmService != null)
+                const Text(' AI-crafted',
+                    style: TextStyle(
+                        color: Colors.purpleAccent, fontSize: 9)),
+              const Spacer(),
+              Text('Edit to tweak',
+                  style: TextStyle(
+                      color: Colors.white24,
+                      fontSize: 9,
+                      fontStyle: FontStyle.italic)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _promptController,
+            enabled: !_isBusy,
+            maxLines: null,
+            minLines: 2,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+            decoration: InputDecoration(
+              hintText: 'Edit the prompt, then tap Regenerate...',
+              hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.04),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: Colors.white12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(color: Colors.purpleAccent, width: 1.5),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -564,7 +649,8 @@ class _ImageGenDialogState extends State<ImageGenDialog> {
       children: [
         // Regenerate
         ElevatedButton.icon(
-          onPressed: _isBusy ? null : _generate,
+          onPressed: _isBusy ? null : _regenerate,
+
           icon: const Icon(Icons.refresh, size: 16),
           label: const Text('Regenerate'),
           style: ElevatedButton.styleFrom(

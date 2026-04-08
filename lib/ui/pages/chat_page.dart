@@ -6502,37 +6502,47 @@ class _ChaosModeSection extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   GestureDetector(
-                    onTap: onSpinRequested,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFFD166), Color(0xFFFFC233)],
+                    onTap: chat.hasPendingChaosEvent ? null : onSpinRequested,
+                    child: Opacity(
+                      opacity: chat.hasPendingChaosEvent ? 0.4 : 1.0,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: chat.hasPendingChaosEvent
+                                ? [const Color(0xFF555555), const Color(0xFF444444)]
+                                : [const Color(0xFFFFD166), const Color(0xFFFFC233)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: chat.hasPendingChaosEvent
+                              ? []
+                              : [
+                                  BoxShadow(
+                                    color: const Color(0xFFFFD166).withOpacity(0.3),
+                                    blurRadius: 10,
+                                  ),
+                                ],
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFFD166).withOpacity(0.3),
-                            blurRadius: 10,
-                          ),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('🎰', style: TextStyle(fontSize: 14)),
-                          SizedBox(width: 6),
-                          Text(
-                            'SPIN NOW',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF1A1200),
-                              letterSpacing: 1.5,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(chat.hasPendingChaosEvent ? '⏳' : '🎰',
+                                style: const TextStyle(fontSize: 14)),
+                            const SizedBox(width: 6),
+                            Text(
+                              chat.hasPendingChaosEvent ? 'EVENT PENDING' : 'SPIN NOW',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: chat.hasPendingChaosEvent
+                                    ? Colors.white38
+                                    : const Color(0xFF1A1200),
+                                letterSpacing: 1.5,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

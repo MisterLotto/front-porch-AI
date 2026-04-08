@@ -371,7 +371,14 @@
       <!-- Back button -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
         <button class="btn btn-outlined" id="btn-back-to-dashboard" style="padding:6px 14px;font-size:13px">← All Stories</button>
-        <h2 style="margin:0;font-size:20px;color:var(--text-primary);flex:1">${esc(p.title||'Untitled Story')}</h2>
+        <div style="flex:1;position:relative" id="story-title-wrap">
+          <h2 id="story-title-display"
+            style="margin:0;font-size:20px;color:var(--text-primary);cursor:text;
+                   border-bottom:1px dashed rgba(255,255,255,0.2);display:inline-block;
+                   padding-bottom:2px;transition:border-color 0.2s"
+            title="Click to edit story title"
+          >${esc(p.title||'Untitled Story')}</h2>
+        </div>
         <button class="btn btn-outlined" id="btn-read-story" style="font-size:13px;padding:6px 16px;color:#f59e0b;border-color:#f59e0b">📖 Reader View</button>
       </div>
 
@@ -421,8 +428,50 @@
     // Back
     document.getElementById('btn-back-to-dashboard')?.addEventListener('click', loadDashboard);
 
+    // Inline title edit
+    document.getElementById('story-title-display')?.addEventListener('click', () => {
+      const display = document.getElementById('story-title-display');
+      const wrap = document.getElementById('story-title-wrap');
+      if (!display || !wrap) return;
+      const currentTitle = _currentProject.title || '';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = currentTitle;
+      input.className = 'settings-input';
+      input.style.cssText = 'font-size:18px;font-weight:700;width:100%;max-width:400px';
+      wrap.replaceChild(input, display);
+      input.focus();
+      input.select();
+
+      async function commitTitleEdit() {
+        const newTitle = input.value.trim() || currentTitle;
+        // Restore display
+        display.textContent = newTitle;
+        wrap.replaceChild(display, input);
+        if (newTitle === currentTitle) return;
+        _currentProject.title = newTitle;
+        // Also update dashboard cache
+        const proj = _projects.find(p2 => p2.id === _currentProject.id);
+        if (proj) proj.title = newTitle;
+        // Persist
+        try {
+          await api(`/api/stories/${_currentProject.id}/update`, {
+            method: 'POST',
+            body: JSON.stringify({ title: newTitle }),
+          });
+        } catch(e) { console.error('Title update failed:', e); }
+      }
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); commitTitleEdit(); }
+        if (e.key === 'Escape') { wrap.replaceChild(display, input); }
+      });
+      input.addEventListener('blur', commitTitleEdit);
+    });
+
     // Reader
     document.getElementById('btn-read-story')?.addEventListener('click', () => showReaderView(_currentProject));
+
 
     // Pipeline stage buttons
     $$('.story-run-stage', container).forEach(btn => {

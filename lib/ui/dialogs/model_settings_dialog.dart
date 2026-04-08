@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'package:path/path.dart' as pathLib;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
@@ -463,10 +464,29 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Model Selector
-        if (modelManager.models.isEmpty)
-           const Text('No models found.', style: TextStyle(color: Colors.orange))
-        else
-          Container(
+        Builder(builder: (context) {
+          // Normalize every scanned path and deduplicate — on macOS, /Users is a
+          // symlink to /private/Users so the same file can appear with two different
+          // path strings, bypassing a simple toSet() check if canonical resolution fails.
+          final rawPaths = modelManager.models
+              .map((f) => pathLib.normalize(f.path))
+              .toSet()
+              .toList();
+
+          // If the stored model path is outside the scanned directory (e.g. a
+          // model the user pointed to manually), insert it so the dropdown is valid.
+          final normalizedSelection = _selectedModelPath != null
+              ? pathLib.normalize(_selectedModelPath!)
+              : null;
+          if (normalizedSelection != null && !rawPaths.contains(normalizedSelection)) {
+            rawPaths.insert(0, normalizedSelection);
+          }
+
+          if (rawPaths.isEmpty) {
+            return const Text('No models found.', style: TextStyle(color: Colors.orange));
+          }
+
+          return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: const Color(0xFF374151),
@@ -474,17 +494,17 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _selectedModelPath,
+                value: normalizedSelection,
                 isExpanded: true,
                 dropdownColor: const Color(0xFF374151),
                 style: const TextStyle(color: Colors.white),
                 icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
-                items: modelManager.models.map((file) {
-                  return DropdownMenuItem(
-                    value: file.path,
-                    child: Text(file.path.split(Platform.pathSeparator).last),
-                  );
-                }).toList(),
+                items: rawPaths
+                    .map((p) => DropdownMenuItem(
+                          value: p,
+                          child: Text(p.split(Platform.pathSeparator).last),
+                        ))
+                    .toList(),
                 onChanged: (val) {
                   setState(() { _selectedModelPath = val; });
                   Provider.of<StorageService>(context, listen: false).setLastUsedModelPath(val);
@@ -492,7 +512,8 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                 },
               ),
             ),
-          ),
+          );
+        }),
          
         const SizedBox(height: 16),
          
@@ -569,6 +590,33 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        // Thinking model toggle — must be ON when using QwQ, Deepseek-R1,
+        // Qwen3, Precog, or any model that outputs <think>...</think> blocks.
+        Builder(builder: (ctx) {
+          final storage = Provider.of<StorageService>(ctx);
+          return Row(
+            children: [
+              const Icon(Icons.psychology, size: 16, color: Colors.purpleAccent),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Thinking Model', style: TextStyle(fontSize: 13, color: Colors.white70)),
+              ),
+              Switch(
+                value: storage.koboldThinkingModel,
+                onChanged: (val) => storage.setKoboldThinkingModel(val),
+                activeTrackColor: Colors.purpleAccent,
+              ),
+              const SizedBox(width: 4),
+              const Tooltip(
+                message: 'Enable for QwQ, Deepseek-R1, Qwen3, Precog, or any model that\n'
+                    'outputs <think> blocks. Disables grammar constraints so the\n'
+                    'model can think freely before producing eval JSON.',
+                child: Icon(Icons.info_outline, size: 16, color: Colors.white54),
+              ),
+            ],
+          );
+        }),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

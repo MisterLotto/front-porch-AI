@@ -22,6 +22,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/http.dart' show ClientException;
 import 'package:window_manager/window_manager.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
@@ -54,13 +55,46 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
 
   // LLMService interface
   @override
-  bool get isReady => _isRunning;
+  /// True only when the process is running AND the model is fully loaded.
+  /// Use [isProcessRunning] if you only need to know if the process is alive.
+  bool get isReady => _isRunning && _modelReady;
+
+  /// True if the KoboldCPP process has been started (model may still be loading).
+  bool get isProcessRunning => _isRunning;
   @override
   String get backendName => 'KoboldCPP';
 
   KoboldService(this._storageService) {
     _purgeLogs();
     WidgetsBinding.instance.addObserver(this);
+    // Best-effort fast path: probe on construction so hot restarts pick up
+    // existing KoboldCPP instances before the first eval call.
+    reconnectIfAlive();
+
+  }
+
+  /// Probe the KoboldCPP server. If it responds, mark the service as running
+  /// and model-ready so hot restarts and app reconnections don't silently skip evals.
+  /// Uses /api/extra/version which is always present in KoboldCPP.
+  Future<void> reconnectIfAlive() async {
+    if (_isRunning) return; // Already known-good — skip.
+    final client = http.Client();
+    try {
+      final uri = Uri.parse('$_baseUrl/api/extra/version');
+      final response = await client
+          .get(uri)
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        debugPrint('[KoboldService] Reconnected to existing KoboldCPP instance.');
+        _isRunning = true;
+        _modelReady = true;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Not running — normal on first launch, ignore silently.
+    } finally {
+      client.close();
+    }
   }
 
   @override
@@ -219,6 +253,8 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
     List<String>? stopSequences,
     List<String>? bannedPhrases,
     String? grammar,
+    bool banEosToken = false,
+    bool trimStop = true,
   }) async* {
     final uri = Uri.parse('$_baseUrl/api/extra/generate/stream');
     final Map<String, dynamic> payload = {
@@ -231,8 +267,9 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
       'min_p': minP,
       'rep_pen_range': repPenTokens,
       'singleline': false,
-      'trim_stop': true,
+      'trim_stop': trimStop,
       'stream': true,
+      if (banEosToken) 'ban_eos_token': true,
     };
 
     if (dynatempRange != null && dynatempRange > 0) {
@@ -267,7 +304,11 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
     final client = http.Client();
     _activeClient = client;
     try {
-      final response = await client.send(request).timeout(const Duration(seconds: 60));
+      // Thinking models (especially large ones like 24B+) can take several
+      // minutes during the prefill phase before the first token is generated.
+      // 60 s was too aggressive — raise to 5 minutes so long-context eval
+      // calls don't time out before the model even starts streaming.
+      final response = await client.send(request).timeout(const Duration(minutes: 5));
 
       if (response.statusCode != 200) {
         if (response.statusCode == 405) {
@@ -276,18 +317,39 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
         throw Exception('HTTP ${response.statusCode}');
       }
 
-      await for (final line in response.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())) {
-        if (line.startsWith('data: ')) {
-          final data = line.substring(6);
-          try {
-            final json = jsonDecode(data);
-            yield json['token'] as String? ?? '';
-          } catch (e) {
-            // Skip malformed
+      try {
+        int _sseDataEvents = 0;
+        await for (final line in response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+          if (line.startsWith('data: ')) {
+            _sseDataEvents++;
+            final data = line.substring(6);
+            try {
+              final json = jsonDecode(data);
+              // Check for alternate field names thinking models may use
+              final token = (json['token'] ?? json['text'] ?? json['thinking_token'] ?? '') as String;
+              yield token;
+            } catch (e) {
+              // Skip malformed SSE events (e.g. data: [DONE])
+            }
           }
         }
+        debugPrint('[KoboldCpp:SSE] Stream closed — data_events=$_sseDataEvents');
+
+      } on ClientException catch (e) {
+        // The HTTP client was closed mid-stream. This happens in two cases:
+        //   1. User hit Stop → abortGeneration() called client.close() intentionally.
+        //   2. The KoboldCPP process crashed/restarted and dropped the socket.
+        // In both cases we want a clean exit, not a raw ClientException in chat.
+        // Re-throw only if the client is still alive (i.e. we didn't close it ourselves),
+        // which indicates an unexpected network error rather than a user-initiated abort.
+        if (_activeClient != null) {
+          // Client still set means abortGeneration() hasn't run — genuine error.
+          rethrow;
+        }
+        debugPrint('[KoboldCpp] Stream ended by client close (abort or process exit): $e');
+        // Fall through — generator returns normally.
       }
     } finally {
       _activeClient = null;
@@ -313,6 +375,8 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
       stopSequences: params.stopSequences,
       bannedPhrases: params.bannedPhrases,
       grammar: params.grammar,
+      banEosToken: params.banEosToken,
+      trimStop: params.trimStop,
     );
   }
 
@@ -320,6 +384,38 @@ class KoboldService extends ChangeNotifier with WidgetsBindingObserver implement
   void abortGeneration() {
     _activeClient?.close();
     _activeClient = null;
+    // Fire the server-side abort asynchronously so KoboldCPP stops the
+    // current generation even after the socket is dropped. We don't await
+    // here to keep the call non-blocking for the UI, but the server will
+    // drain to idle before accepting the next request.
+    _postAbort();
+  }
+
+  /// POST /api/extra/abort — KoboldCPP blocks until the active generation
+  /// is fully stopped, then returns HTTP 200. Call this (and await it) before
+  /// starting any new generation to guarantee the server is idle.
+  Future<void> ensureServerIdle() async {
+    if (!_isRunning) return;
+    try {
+      final client = http.Client();
+      try {
+        await client
+            .post(Uri.parse('$_baseUrl/api/extra/abort'),
+                headers: {'Content-Type': 'application/json'})
+            .timeout(const Duration(seconds: 30));
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      // If the abort endpoint isn't available (older KoboldCPP build) or
+      // the server isn't running, swallow the error — the generation request
+      // will simply fail naturally.
+    }
+  }
+
+  /// Fire-and-forget server-side abort (used by abortGeneration).
+  void _postAbort() {
+    ensureServerIdle().catchError((_) {});
   }
 
   Future<String> generate(String prompt, {

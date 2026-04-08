@@ -102,14 +102,26 @@ class ModelManager extends ChangeNotifier {
 
   /// Recursively scans directories for .gguf files, gracefully skipping
   /// any directories that are inaccessible (e.g. System Volume Information).
-  List<FileSystemEntity> _safeRecursiveScan(Directory dir) {
+  /// [_seen] tracks canonical (resolved) paths so that symlinks don't cause
+  /// the same physical file to appear more than once in the list.
+  List<FileSystemEntity> _safeRecursiveScan(Directory dir, [Set<String>? _seen]) {
+    final seen = _seen ?? <String>{};
     final results = <FileSystemEntity>[];
     try {
       for (final entity in dir.listSync(followLinks: true)) {
         if (entity is Directory) {
-          results.addAll(_safeRecursiveScan(entity));
+          results.addAll(_safeRecursiveScan(entity, seen));
         } else if (entity.path.toLowerCase().endsWith('.gguf')) {
-          results.add(entity);
+          // Resolve symlinks so the same physical file is never listed twice.
+          String canonical;
+          try {
+            canonical = File(entity.path).resolveSymbolicLinksSync();
+          } catch (_) {
+            canonical = entity.path;
+          }
+          if (seen.add(canonical)) {
+            results.add(entity);
+          }
         }
       }
     } catch (e) {
@@ -118,6 +130,7 @@ class ModelManager extends ChangeNotifier {
     }
     return results;
   }
+
 
   Future<void> importLocalModel(String filePath) async {
     final sourceFile = File(filePath);

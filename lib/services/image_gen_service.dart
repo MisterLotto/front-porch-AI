@@ -902,10 +902,14 @@ class ImageGenService extends ChangeNotifier {
       'sampler_name': 'Euler a',
       'seed': -1,
       'batch_size': 1,
-      // Pass override_settings for A1111 compatibility (Draw Things may ignore)
-      if (modelCheckpoint.isNotEmpty)
-        'override_settings': {'sd_model_checkpoint': modelCheckpoint},
+      // NOTE: override_settings is intentionally omitted here.
+      // Passing sd_model_checkpoint inside override_settings causes A1111 to
+      // attempt a model reload mid-request, which splits tensors across
+      // cpu and cuda and throws:
+      //   "Expected all tensors to be on the same device"
+      // The model switch is already handled by switchLocalModel() above.
     };
+
 
     final client = http.Client();
     try {

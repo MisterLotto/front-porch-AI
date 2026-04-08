@@ -85,9 +85,39 @@
 
 ---
 
-## 🆕 What's New in V0.9.7
+## 🆕 What's New in V0.9.7.1
 
-This release adds **Chaos Mode** — a Mario Party-inspired "Chance Time" system that injects unscripted narrative events into your roleplay sessions.
+This is a **stability and quality-of-life** release focused on fixing unnatural AI behavior from the Realism Engine, reworking the Chaos Mode timing, and hardening KoboldCpp integration.
+
+**🧠 Realism Engine — Prompt Overhaul**
+- **Personality-aware evaluations:** All eval prompts (emotion, posture, relationship, narrative, one-shot) now receive the character's personality traits, relationship tension, and trust level — eliminating "generic NPC" responses.
+- **Emotion vocabulary guidance:** Steered away from flat labels ("happy", "sad") toward nuanced textures ("wistful", "prickly", "flustered") filtered through the character's personality.
+- **Spatial continuity:** Posture evals now receive the character's current position; prevents "teleportation" where a character sitting on a couch suddenly appears standing in a doorway.
+- **Dramatic event inertia:** Emotions now linger after high-impact narrative events instead of snapping back to neutral the next turn.
+- **Trust system rebalanced:** Positive trust range expanded from +10 to +50, with guidance for extraordinary trustworthiness (selfless sacrifice, proving loyalty at personal cost). Catastrophic betrayals are now balanced by the ability to earn trust through genuinely remarkable actions.
+- **Fixation injection rewritten:** Fixations manifest as subconscious coloring (stray thoughts, loaded pauses) rather than the character awkwardly bringing up the topic.
+- **Relationship delta reframed:** Changed from "tension shift" (negatively primed) to "warmth shift" (neutral framing) to reduce false negatives.
+- **Objective/fixation spam reduced:** 90% of turns should produce "none" for proposed objectives; fixations now require persistent intrusive thoughts, not temporary reactions.
+
+**🎰 Chaos Mode — Timing Rework**
+- **Integrated event flow:** Chance Time now triggers BEFORE the character's response, not after. The character weaves their reaction to both the user's message AND the chaos event into a single cohesive reply — no more jarring separate reaction messages.
+- **Regen persistence:** Chaos events persist through regenerations and swipes; cleared only when the user sends their next message.
+- **Stacking prevention:** SPIN NOW button disables (shows ⏳ EVENT PENDING) while an event is queued. Auto-triggers also skip when an event is pending.
+
+**⚙️ KoboldCpp Stability**
+- **Thinking model support:** Injected `ban_eos_token` and `trim_stop` into generation payloads for stable streaming with reasoning models.
+- **Server idle detection:** Eval pipeline now calls `/api/extra/abort` and waits for server idle before each request, eliminating dropped requests during heavy generation.
+- **One-shot eval fix:** Renumbered eval fields sequentially (1–10) — fixes field-ordering confusion in local models caused by skipped numbers.
+
+**🐛 Bug Fixes**
+- Fixed "Looking up a deactivated widget's ancestor" errors with a 150ms debounce on eval stream rebuilds.
+- Fixed trust being penalized when the CHARACTER (not the user) does something guilt-inducing.
+- Fixed broken one-shot eval field numbering (fields 2 and 6 were skipped, confusing local models).
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### V0.9.7
 
 **🎰 Chance Time — Chaos Mode**
 - **Spinning wheel overlay** — full animated roulette with emoji-themed segments, smooth easing curves, and a haptic-style bounce on landing.
@@ -95,7 +125,6 @@ This release adds **Chaos Mode** — a Mario Party-inspired "Chance Time" system
 - **🌶️ NSFW toggle** — 30 additional spicy events behind an explicit opt-in switch in the sidebar.
 - **Escalating pressure** — 5% base chance per turn, growing +5% each turn without a trigger. Caps at 100%. After ~19 turns, Chance Time is guaranteed.
 - **No escape** — once the overlay fires there is no X button, no back button, no tapping outside. The only exit is **Accept Your Fate 🎲**.
-- **Instant AI reaction** — accepting the spin injects a gold narration banner into chat history and the AI immediately generates a response reacting to the event. No waiting for user input.
 - **Category-specific reveal animations** — confetti burst (Fortune), red skull pulse (Misfortune), lightning strobe (Chaos), purple shimmer (Wild Card).
 - **Manual spin** — SPIN NOW button in the sidebar for on-demand chaos.
 
@@ -103,9 +132,6 @@ This release adds **Chaos Mode** — a Mario Party-inspired "Chance Time" system
 - Gold-themed narration banners in chat history (🎰 centered card, distinct from normal messages).
 - Animated wheel shrinks after landing to reveal the full result card without overflow.
 - Pressure bar and percentage visible in both the sidebar and the overlay.
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
 
 ### V0.9.6.6
 

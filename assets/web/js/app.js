@@ -5399,5 +5399,728 @@
         }
     }
 
+
     init();
 })();
+
+// ═══════════════════════════════════════════════════════════
+// REALISM ENGINE — Panel Logic
+// ═══════════════════════════════════════════════════════════
+
+// Tier name → bar color (mirrors Flutter tier colors exactly)
+const TIER_COLORS = {
+  // Short-term / Long-term bond tiers
+  'Soulmate': '#FF6B9D',       // pink-hot
+  'Devoted': '#EC4899',
+  'Deeply Bonded': '#A78BFA',  // violet
+  'Warm': '#06D6A0',           // teal-green
+  'Friendly': '#10B981',       // green
+  'Neutral': '#64748b',        // gray
+  'Distant': '#94A3B8',
+  'Cold': '#60A5FA',           // blue
+  'Hostile': '#EF4444',        // red
+  'Despised': '#DC2626',
+  // Trust tiers
+  'Absolute Trust': '#06D6A0',
+  'High Trust': '#10B981',
+  'Trusting': '#F59E0B',       // amber
+  'Cautious': '#64748b',
+  'Suspicious': '#F97316',     // orange
+  'Distrustful': '#EF4444',
+  'Absolute Distrust': '#DC2626',
+};
+
+// Emotion → emoji map (mirrors chat_page.dart _emotionEmoji)
+const EMOTION_EMOJI = {
+  happy: '😊', sad: '😢', angry: '😠', fearful: '😨',
+  surprised: '😲', disgusted: '🤢', neutral: '😐',
+  excited: '🤩', embarrassed: '😳', jealous: '😒',
+  confused: '😕', loving: '🥰', anxious: '😰',
+  content: '😌', playful: '😄', melancholic: '🥺',
+  confident: '😎', shy: '🤭', mischievous: '😏',
+  protective: '🛡️', tired: '😴', amused: '😁',
+};
+
+// Time of day → emoji
+const TIME_EMOJI = {
+  dawn: '🌅', morning: '☀️', late_morning: '🌤️',
+  afternoon: '🌞', evening: '🌆', night: '🌙',
+};
+
+let _realismPanelInit = false;
+
+function updateRealismPanel(data) {
+  // Sync the toggle checkbox (without firing the change handler)
+  const toggle = document.getElementById('rp-realism-toggle');
+  if (toggle && toggle.checked !== !!data.realismEnabled) {
+    toggle._syncing = true;
+    toggle.checked = !!data.realismEnabled;
+    toggle._syncing = false;
+  }
+
+  const realismBody = document.getElementById('rp-realism-body');
+  if (!realismBody) return;
+
+  // Show/hide body based on enabled state and collapsed state
+  if (!toggle?.checked) {
+    // Still show body content but greyed — mirror Flutter which shows disabled state
+  }
+
+  // ── Short-Term Bond ──
+  const stBarEl = document.getElementById('rp-short-term-bar');
+  const stNameEl = document.getElementById('rp-short-term-name');
+  const stScoreEl = document.getElementById('rp-short-term-score');
+  const tierName = data.shortTermTierName || 'Neutral';
+  const tierColor = TIER_COLORS[tierName] || '#64748b';
+  const stPct = data.shortTermProgressPercent ?? 0;
+  if (stBarEl) { stBarEl.style.width = `${stPct}%`; stBarEl.style.background = tierColor; }
+  if (stNameEl) stNameEl.textContent = tierName;
+  if (stScoreEl) stScoreEl.textContent = `${data.affectionScore ?? 0}/${data.shortTermProgressTarget ?? 20}`;
+
+  // ── Long-Term Bond ──
+  const ltBarEl = document.getElementById('rp-long-term-bar');
+  const ltNameEl = document.getElementById('rp-long-term-name');
+  const ltScoreEl = document.getElementById('rp-long-term-score');
+  const ltTierName = data.longTermTierName || 'Neutral';
+  const ltColor = TIER_COLORS[ltTierName] || '#64748b';
+  const ltPct = data.longTermProgressPercent ?? 0;
+  if (ltBarEl) { ltBarEl.style.width = `${ltPct}%`; ltBarEl.style.background = ltColor; }
+  if (ltNameEl) ltNameEl.textContent = ltTierName;
+  if (ltScoreEl) ltScoreEl.textContent = `${data.longTermScore ?? 0}/${data.longTermProgressTarget ?? 20}`;
+
+  // ── Trust ──
+  const trBarEl = document.getElementById('rp-trust-bar');
+  const trNameEl = document.getElementById('rp-trust-name');
+  const trScoreEl = document.getElementById('rp-trust-score');
+  const trTierName = data.trustTierName || 'Neutral';
+  const trColor = TIER_COLORS[trTierName] || '#F59E0B';
+  const trPct = data.trustProgressPercent ?? 0;
+  if (trBarEl) { trBarEl.style.width = `${trPct}%`; trBarEl.style.background = trColor; }
+  if (trNameEl) trNameEl.textContent = trTierName;
+  if (trScoreEl) trScoreEl.textContent = `${data.trustLevel ?? 0}/${data.trustProgressTarget ?? 20}`;
+
+  // ── Emotion ──
+  const emotionRow = document.getElementById('rp-emotion-row');
+  const emotionLabel = document.getElementById('rp-emotion-label');
+  const emotionEmoji = document.getElementById('rp-emotion-emoji');
+  const emotion = data.characterEmotion || '';
+  if (emotionRow) emotionRow.style.display = emotion ? '' : 'none';
+  if (emotion) {
+    const emoji = EMOTION_EMOJI[emotion] || '🎭';
+    if (emotionEmoji) emotionEmoji.textContent = emoji;
+    const intensity = data.emotionIntensity || '';
+    if (emotionLabel) emotionLabel.textContent = emotion.charAt(0).toUpperCase() + emotion.slice(1) + (intensity ? ` (${intensity})` : '');
+  }
+
+  // ── Time of Day ──
+  const timeOfDay = data.timeOfDay || 'morning';
+  const timeLabel = document.getElementById('rp-time-label');
+  const timeEmoji = document.getElementById('rp-time-emoji');
+  const weekdayLabel = document.getElementById('rp-weekday-label');
+  if (timeLabel) timeLabel.textContent = timeOfDay.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+  if (timeEmoji) timeEmoji.textContent = TIME_EMOJI[timeOfDay] || '☀️';
+  if (weekdayLabel && data.narrativeWeekday) weekdayLabel.textContent = `${data.narrativeWeekday} · Day ${data.dayCount || 1}`;
+
+  // Time dots
+  const periods = ['dawn','morning','late_morning','afternoon','evening','night'];
+  periods.forEach(p => {
+    const wrap = document.querySelector(`.rp-time-dot-wrap[data-period="${p}"]`);
+    const dot = wrap?.querySelector('.rp-time-dot');
+    if (wrap && dot) {
+      const isActive = p === timeOfDay;
+      dot.classList.toggle('active', isActive);
+      wrap.classList.toggle('active', isActive);
+    }
+  });
+
+  // ── NSFW Toggle + Arousal ──
+  const nsfwToggle = document.getElementById('rp-nsfw-toggle');
+  if (nsfwToggle && nsfwToggle.checked !== !!data.nsfwCooldownEnabled) {
+    nsfwToggle._syncing = true;
+    nsfwToggle.checked = !!data.nsfwCooldownEnabled;
+    nsfwToggle._syncing = false;
+  }
+
+  const arousalSection = document.getElementById('rp-arousal-section');
+  const arousalBar = document.getElementById('rp-arousal-bar');
+  const arousalLabel = document.getElementById('rp-arousal-label');
+  const arousalScore = document.getElementById('rp-arousal-score');
+  const refractoryRow = document.getElementById('rp-refractory-row');
+  const refractoryLabel = document.getElementById('rp-refractory-label');
+  const cooldownBadge = document.getElementById('rp-cooldown-badge');
+
+  const arousal = data.arousalLevel ?? 0;
+  const cooldown = data.cooldownTurnsRemaining ?? 0;
+  const arousalPct = Math.max(0, ((arousal + 3) / 13) * 100); // range -3..10
+
+  if (arousalSection) arousalSection.style.display = data.nsfwCooldownEnabled ? '' : 'none';
+  if (data.nsfwCooldownEnabled) {
+    let arousalName = 'Dormant';
+    if (arousal >= 8) arousalName = 'Burning';
+    else if (arousal >= 5) arousalName = 'Heated';
+    else if (arousal >= 2) arousalName = 'Aroused';
+    else if (arousal >= 0) arousalName = 'Interested';
+    else arousalName = 'Dormant';
+    if (arousalLabel) arousalLabel.textContent = `Lust: ${arousalName}`;
+    if (arousalScore) arousalScore.textContent = `${arousal}/10`;
+    if (arousalBar) arousalBar.style.width = `${arousalPct}%`;
+  }
+
+  const hasCooldown = cooldown > 0;
+  if (refractoryRow) refractoryRow.style.display = hasCooldown ? 'flex' : 'none';
+  if (hasCooldown && refractoryLabel) refractoryLabel.textContent = `Refractory: ${cooldown} turn${cooldown !== 1 ? 's' : ''} remaining`;
+  if (cooldownBadge) {
+    cooldownBadge.style.display = hasCooldown ? '' : 'none';
+    cooldownBadge.textContent = `⏳ ${cooldown}`;
+  }
+}
+
+function updateChaosPanel(data) {
+  const chaosToggle = document.getElementById('rp-chaos-toggle');
+  if (chaosToggle && chaosToggle.checked !== !!data.chaosModeEnabled) {
+    chaosToggle._syncing = true;
+    chaosToggle.checked = !!data.chaosModeEnabled;
+    chaosToggle._syncing = false;
+  }
+
+  const chaosNsfwToggle = document.getElementById('rp-chaos-nsfw-toggle');
+  if (chaosNsfwToggle && chaosNsfwToggle.checked !== !!data.chaosNsfwEnabled) {
+    chaosNsfwToggle._syncing = true;
+    chaosNsfwToggle.checked = !!data.chaosNsfwEnabled;
+    chaosNsfwToggle._syncing = false;
+  }
+
+  const pressure = data.chaosPressure ?? 0;
+  const pressureBar = document.getElementById('rp-pressure-bar');
+  const pressureLabel = document.getElementById('rp-pressure-label');
+  const pressureIcon = document.getElementById('rp-pressure-icon');
+
+  // Lerp color from teal (#2EC4B6) to red (#E63946)
+  const t = pressure / 100;
+  const r = Math.round(0x2E + (0xE6 - 0x2E) * t);
+  const g = Math.round(0xC4 + (0x39 - 0xC4) * t);
+  const b = Math.round(0xB6 + (0x46 - 0xB6) * t);
+  const pressureColor = `rgb(${r},${g},${b})`;
+
+  if (pressureBar) { pressureBar.style.width = `${pressure}%`; pressureBar.style.background = pressureColor; }
+  if (pressureLabel) { pressureLabel.textContent = `Pressure: ${pressure}%`; pressureLabel.style.color = pressureColor; }
+  if (pressureIcon) pressureIcon.style.color = pressureColor;
+
+  // Chaos container border glow when enabled
+  const chaosContainer = document.getElementById('rp-chaos-container');
+  if (chaosContainer) chaosContainer.classList.toggle('active', !!data.chaosModeEnabled);
+
+  // Animate the slot machine emoji header
+  const slotEmoji = document.getElementById('rp-chaos-slot-emoji');
+  if (slotEmoji && data.chaosModeEnabled && pressure > 50 && !slotEmoji._pulsing) {
+    slotEmoji._pulsing = true;
+    slotEmoji.style.animation = 'none';
+    setTimeout(() => {
+      slotEmoji.style.animation = '';
+      slotEmoji._pulsing = false;
+    }, 300);
+  }
+}
+
+// ─── Wire toggles after DOM ready ────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  initRealismBindings();
+  initChanceTimeOverlay();
+});
+
+async function initRealismBindings() {
+  function collapseSection(bodyId, arrowId) {
+    const body = document.getElementById(bodyId);
+    const arrow = document.getElementById(arrowId);
+    if (body && arrow) {
+      body.classList.toggle('collapsed');
+      arrow.classList.toggle('collapsed');
+    }
+  }
+
+  // Realism header click → collapse
+  document.getElementById('rp-realism-header')?.addEventListener('click', () => {
+    collapseSection('rp-realism-body', 'rp-realism-arrow');
+  });
+
+  // NSFW header click → collapse
+  document.getElementById('rp-nsfw-header')?.addEventListener('click', () => {
+    collapseSection('rp-nsfw-body', 'rp-nsfw-arrow');
+  });
+
+  // Chaos header click → collapse
+  document.getElementById('rp-chaos-header')?.addEventListener('click', () => {
+    collapseSection('rp-chaos-body', 'rp-chaos-arrow');
+  });
+
+  // Realism toggle
+  document.getElementById('rp-realism-toggle')?.addEventListener('change', async (e) => {
+    if (e.target._syncing) return;
+    try {
+      await fetch('/api/chat/realism', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('fp_token')}` },
+        body: JSON.stringify({ enabled: e.target.checked }),
+      });
+    } catch(err) { console.error('Realism toggle failed:', err); }
+  });
+
+  // NSFW cooldown toggle
+  document.getElementById('rp-nsfw-toggle')?.addEventListener('change', async (e) => {
+    if (e.target._syncing) return;
+    try {
+      await fetch('/api/chat/nsfw-cooldown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('fp_token')}` },
+        body: JSON.stringify({ enabled: e.target.checked }),
+      });
+    } catch(err) { console.error('NSFW cooldown toggle failed:', err); }
+  });
+
+  // Chaos mode toggle
+  document.getElementById('rp-chaos-toggle')?.addEventListener('change', async (e) => {
+    if (e.target._syncing) return;
+    try {
+      await fetch('/api/chat/chaos-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('fp_token')}` },
+        body: JSON.stringify({ enabled: e.target.checked }),
+      });
+    } catch(err) { console.error('Chaos mode toggle failed:', err); }
+  });
+
+  // Chaos NSFW toggle
+  document.getElementById('rp-chaos-nsfw-toggle')?.addEventListener('change', async (e) => {
+    if (e.target._syncing) return;
+    try {
+      await fetch('/api/chat/chaos-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('fp_token')}` },
+        body: JSON.stringify({ nsfwEnabled: e.target.checked }),
+      });
+    } catch(err) { console.error('Chaos NSFW toggle failed:', err); }
+  });
+
+  // Time nudge buttons
+  document.getElementById('btn-time-back')?.addEventListener('click', () => _nudgeTime(-1));
+  document.getElementById('btn-time-forward')?.addEventListener('click', () => _nudgeTime(1));
+
+  // SPIN NOW button
+  document.getElementById('btn-chaos-spin')?.addEventListener('click', () => _spinChaosWheel());
+}
+
+async function _nudgeTime(direction) {
+  try {
+    const token = sessionStorage.getItem('fp_token');
+    const res = await fetch('/api/chat/time-nudge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ direction }),
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      // Update will come via next poll — force immediate poll
+      const chatState = window._chatState || {};
+      chatState.timeOfDay = data.timeOfDay;
+      chatState.dayCount = data.dayCount;
+      chatState.narrativeWeekday = data.narrativeWeekday;
+      updateRealismPanel(chatState);
+    }
+  } catch(err) { console.error('Time nudge failed:', err); }
+}
+
+async function _spinChaosWheel() {
+  try {
+    const token = sessionStorage.getItem('fp_token');
+    const res = await fetch('/api/chat/chaos-spin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      openChanceTimeOverlay({ chaosPressure: data.chaosPressure, charName: data.charName }, data.events);
+    }
+  } catch(err) { console.error('Chaos spin failed:', err); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHANCE TIME — Canvas Wheel (exact port of Flutter CustomPainter)
+// ═══════════════════════════════════════════════════════════
+
+let chanceTimeOverlayOpen = false;
+let _ctSpinning = false;
+let _ctLanded = false;
+let _ctEvents = [];
+let _ctCharName = 'Character';
+let _ctLandedIndex = 0;
+let _ctCurrentAngle = 0;
+let _ctAnimFrame = null;
+
+// Segment colours — exact Mario Party palette from Flutter
+const CT_SEGMENT_COLORS = [
+  [0xE6, 0x39, 0x46], // red
+  [0xFF, 0x9F, 0x1C], // orange
+  [0x2E, 0xC4, 0xB6], // teal
+  [0x9B, 0x5D, 0xE5], // purple
+  [0x06, 0xD6, 0xA0], // green
+  [0xFF, 0x6B, 0x9D], // pink
+  [0xFF, 0xD1, 0x66], // amber
+  [0x11, 0x8A, 0xB2], // blue
+];
+
+const CT_SLOT_EMOJIS = ['🎲','⚡','🎯','🔮','🎪','💎','🌈','🎭'];
+
+// Fortune / Misfortune / Chaos / WildCard keyword sets (condensed)
+const CT_FORTUNE_KW = ['found something valuable','mistaken for someone important','crowd of admirers','turned up in the most unexpected','unexpected compliment','hidden stash','pulled off something impressive','stranger just paid','arrived somewhere late','won something','beautiful view','accidentally said the perfect','best hair','turned completely around','shortcut or trick','best seat','weather turned','ran into someone','animal has taken','made a guess','overheard something','arrived to help','offered more than they asked','kindness','well-rested','best portion','accomplished something','charming today','rooting for them','unexpected credit'];
+const CT_MISFORTUNE_KW = ['urgently needs to use the restroom','stepped in something extremely unpleasant','sneezed violently','sat in something wet','hiccups','bit their tongue','something in their teeth','ripped in an extremely inconvenient','knocked something over','tripped','involuntary sound','extremely itchy somewhere','spilled something on themselves','stomach is making alarming sounds','said goodbye to someone and then walked','confidently greeted someone who has no idea','waved back at someone who was not','laughed at something completely inappropriate','walked into something','piece of hair or debris','mark on their face','squeaking piece','yawned enormously','sent a message and immediately regretted','pretend they remember','hands are completely full','dropped something and it rolled','something in their eye','nodding along','pronouncing something wrong','sneezing fit','direct and sustained eye contact','reached for something','fell asleep briefly','confident prediction','forgot where it was going','uncooperative hair','involuntary noise while trying to lift','regretted the food choice','footwear issue','mispronounced repeatedly','backwards or inside-out'];
+const CT_CHAOS_KW = ['bird flew directly','loud and disruptive noise','fell over on its own','unexpected center of a very enthusiastic','animal has decided','unusual outfit','make noise','gust of wind','extremely large insect','lighting wherever','crowd has formed','very loud and very one-sided story','enthusiastic child','cooking or burning nearby','broken in a way that is more funny','uninvited guest or creature','spontaneously rearranged','recruit','loud and personal argument','small and ridiculous has escalated','animal is doing exactly what it should not','accidentally started a trend','performing something unsolicited','synchronized into something inexplicably musical','delivery or package','definitely fixed has become unfixed','squeak, rattle, or wobble','very long and intricate process','every seat, surface','counting on to work fine'];
+
+function _categorizeEvent(event) {
+  const lower = event.toLowerCase();
+  for (const k of CT_FORTUNE_KW) if (lower.includes(k)) return 'fortune';
+  for (const k of CT_MISFORTUNE_KW) if (lower.includes(k)) return 'misfortune';
+  for (const k of CT_CHAOS_KW) if (lower.includes(k)) return 'chaos';
+  return 'wildcard';
+}
+
+const CT_CATEGORY_INFO = {
+  fortune:    { emoji: '🎉', label: 'Fortune!',   color: '#06D6A0' },
+  misfortune: { emoji: '💀', label: 'Misfortune', color: '#E63946' },
+  chaos:      { emoji: '⚡', label: 'Chaos!',     color: '#FFD166' },
+  wildcard:   { emoji: '🔮', label: 'Wild Card',  color: '#9B5DE5' },
+};
+
+function drawWheel(canvas, angle) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const radius = Math.min(cx, cy) - 4;
+  const n = 8;
+  const segAngle = (2 * Math.PI) / n;
+
+  ctx.clearRect(0, 0, w, h);
+
+  for (let i = 0; i < n; i++) {
+    const startAngle = angle + i * segAngle - Math.PI / 2;
+    const [r, g, b] = CT_SEGMENT_COLORS[i % CT_SEGMENT_COLORS.length];
+
+    // Segment fill
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, startAngle, startAngle + segAngle);
+    ctx.closePath();
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fill();
+
+    // Segment border
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Emoji at 60% radius, centred in segment — drawn horizontal (no rotation)
+    const midAngle = startAngle + segAngle / 2;
+    const emojiRadius = radius * 0.60;
+    const ex = cx + emojiRadius * Math.cos(midAngle);
+    const ey = cy + emojiRadius * Math.sin(midAngle);
+    ctx.save();
+    ctx.font = `${Math.round(radius * 0.18)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(CT_SLOT_EMOJIS[i % CT_SLOT_EMOJIS.length], ex, ey);
+    ctx.restore();
+  }
+
+  // Gold outer rim
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius - 2, 0, 2 * Math.PI);
+  ctx.strokeStyle = '#FFD166';
+  ctx.lineWidth = 6;
+  ctx.stroke();
+}
+
+function initChanceTimeOverlay() {
+  const overlay = document.getElementById('chance-time-overlay');
+  if (!overlay) return;
+
+  const canvas = document.getElementById('ct-wheel-canvas');
+  drawWheel(canvas, 0); // Draw static initial wheel
+
+  document.getElementById('btn-ct-spin')?.addEventListener('click', _ctDoSpin);
+  document.getElementById('btn-ct-accept')?.addEventListener('click', _ctAccept);
+}
+
+function openChanceTimeOverlay(chatState, events) {
+  if (chanceTimeOverlayOpen) return;
+  chanceTimeOverlayOpen = true;
+
+  const overlay = document.getElementById('chance-time-overlay');
+  if (!overlay) return;
+
+  // Load events (passed in directly for manual spin, or fetch for auto-trigger)
+  if (events && events.length > 0) {
+    _ctEvents = events;
+    _ctCharName = chatState.charName || chatState.character?.name || 'Character';
+  } else {
+    // Auto-trigger: fetch from server
+    fetch('/api/chat/chaos-spin', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sessionStorage.getItem('fp_token')}` },
+    }).then(r => r.json()).then(data => {
+      _ctEvents = data.events || [];
+      _ctCharName = data.charName || 'Character';
+      // Update pressure row
+      const pressureText = document.getElementById('ct-pressure-text');
+      if (pressureText) pressureText.textContent = `Chaos pressure: ${data.chaosPressure ?? 0}%`;
+    });
+  }
+
+  // Reset state
+  _ctSpinning = false;
+  _ctLanded = false;
+  _ctCurrentAngle = 0;
+
+  // Reset UI
+  const spinBtn = document.getElementById('btn-ct-spin');
+  const resultEl = document.getElementById('ct-result');
+  const wheelWrap = document.getElementById('ct-wheel-wrap');
+  const canvas = document.getElementById('ct-wheel-canvas');
+
+  if (spinBtn) { spinBtn.style.display = ''; spinBtn.disabled = false; }
+  if (resultEl) { resultEl.classList.add('hidden'); }
+  if (wheelWrap) { wheelWrap.classList.remove('landed'); canvas.width = 290; canvas.height = 290; }
+
+  // Update pressure display
+  const pressureText = document.getElementById('ct-pressure-text');
+  if (pressureText && chatState.chaosPressure != null) {
+    const p = chatState.chaosPressure;
+    const t = p / 100;
+    const r = Math.round(0x2E + (0xE6 - 0x2E) * t);
+    const g2 = Math.round(0xC4 + (0x39 - 0xC4) * t);
+    const b = Math.round(0xB6 + (0x46 - 0xB6) * t);
+    pressureText.style.color = `rgb(${r},${g2},${b})`;
+    pressureText.textContent = `Chaos pressure: ${p}%`;
+    const icon = document.getElementById('ct-pressure-icon');
+    if (icon) icon.style.color = pressureText.style.color;
+  }
+
+  drawWheel(canvas, 0);
+  overlay.classList.remove('hidden');
+}
+
+function closeChanceTimeOverlay() {
+  const overlay = document.getElementById('chance-time-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  if (_ctAnimFrame) { cancelAnimationFrame(_ctAnimFrame); _ctAnimFrame = null; }
+  chanceTimeOverlayOpen = false;
+  _ctSpinning = false;
+  _ctLanded = false;
+}
+
+function _ctDoSpin() {
+  if (_ctSpinning || _ctLanded) return;
+  _ctSpinning = true;
+
+  const canvas = document.getElementById('ct-wheel-canvas');
+  const spinBtn = document.getElementById('btn-ct-spin');
+  if (spinBtn) spinBtn.disabled = true;
+
+  // Pick random landing segment
+  _ctLandedIndex = Math.floor(Math.random() * 8);
+
+  // Extra rotations (5–8) + landing angle — exact Flutter formula
+  const extraRotations = (Math.floor(Math.random() * 4) + 5) * 2 * Math.PI;
+  const segmentAngle = (2 * Math.PI) / 8;
+  const landingAngleInWheel = (_ctLandedIndex + 0.5) * segmentAngle;
+  const targetAngle = extraRotations + (2 * Math.PI - landingAngleInWheel);
+
+  const duration = 3800; // ms — matches Flutter 3800ms
+  const startTime = performance.now();
+  const startAngle = _ctCurrentAngle % (2 * Math.PI);
+
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function animate(now) {
+    const elapsed = now - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    const easedT = easeOutCubic(t);
+    _ctCurrentAngle = startAngle + targetAngle * easedT;
+
+    drawWheel(canvas, _ctCurrentAngle);
+
+    if (t < 1) {
+      _ctAnimFrame = requestAnimationFrame(animate);
+    } else {
+      // Done spinning
+      _ctSpinning = false;
+      _ctLanded = true;
+      _ctCurrentAngle = startAngle + targetAngle;
+      drawWheel(canvas, _ctCurrentAngle);
+      _ctShowResult();
+    }
+  }
+
+  _ctAnimFrame = requestAnimationFrame(animate);
+}
+
+function _ctShowResult() {
+  // Shrink wheel
+  const wheelWrap = document.getElementById('ct-wheel-wrap');
+  const canvas = document.getElementById('ct-wheel-canvas');
+  if (wheelWrap) wheelWrap.classList.add('landed');
+  setTimeout(() => { if (canvas) drawWheel(canvas, _ctCurrentAngle); }, 620);
+
+  // Hide spin button
+  const spinBtn = document.getElementById('btn-ct-spin');
+  if (spinBtn) spinBtn.style.display = 'none';
+
+  // Show result
+  const resultEl = document.getElementById('ct-result');
+  if (resultEl) resultEl.classList.remove('hidden');
+
+  const event = _ctEvents[_ctLandedIndex] || 'Something unexpected happens!';
+  const displayEvent = event.replace(/\{\{char\}\}/g, _ctCharName);
+  const category = _categorizeEvent(event);
+  const catInfo = CT_CATEGORY_INFO[category];
+
+  // Splash emoji animation
+  const splashEmoji = document.getElementById('ct-splash-emoji');
+  if (splashEmoji) {
+    splashEmoji.textContent = catInfo.emoji;
+    splashEmoji.style.transform = 'scale(0)';
+    splashEmoji.style.opacity = '0';
+    setTimeout(() => {
+      splashEmoji.style.transition = 'transform 0.8s cubic-bezier(0.34,1.56,0.64,1), opacity 0.4s';
+      splashEmoji.style.transform = 'scale(1.2)';
+      splashEmoji.style.opacity = '1';
+    }, 50);
+    // Splash background for Fortune/Misfortune
+    const splash = document.getElementById('ct-splash');
+    if (splash && (category === 'fortune' || category === 'misfortune')) {
+      splash.style.background = `${catInfo.color}22`;
+      setTimeout(() => { splash.style.background = ''; }, 1800);
+    }
+    // Confetti for Fortune
+    if (category === 'fortune') _ctRunConfetti();
+    // Strobe for Chaos
+    if (category === 'chaos') _ctRunStrobe(splash);
+    // Shimmer for WildCard
+    if (category === 'wildcard') _ctRunShimmer(splash);
+  }
+
+  // Category banner (delayed)
+  setTimeout(() => {
+    const banner = document.getElementById('ct-cat-banner');
+    const catEmoji = document.getElementById('ct-cat-emoji');
+    const catLabel = document.getElementById('ct-cat-label');
+    if (banner && catEmoji && catLabel) {
+      catEmoji.textContent = catInfo.emoji;
+      catLabel.textContent = catInfo.label;
+      catLabel.style.color = catInfo.color;
+      catLabel.style.textShadow = `0 0 12px ${catInfo.color}99`;
+      banner.classList.add('visible');
+    }
+  }, 300);
+
+  // Event card (delayed)
+  setTimeout(() => {
+    const card = document.getElementById('ct-event-card');
+    const textEl = document.getElementById('ct-event-text');
+    if (card && textEl) {
+      textEl.textContent = displayEvent;
+      textEl.style.color = catInfo.color;
+      card.style.background = `${catInfo.color}1E`;
+      card.style.border = `1.5px solid ${catInfo.color}80`;
+      card.style.boxShadow = `0 0 20px ${catInfo.color}2E`;
+      card.classList.add('visible');
+    }
+  }, 600);
+
+  // Accept button (delayed)
+  setTimeout(() => {
+    const btn = document.getElementById('btn-ct-accept');
+    if (btn) btn.classList.add('visible');
+  }, 900);
+}
+
+function _ctRunConfetti() {
+  const canvas = document.getElementById('ct-confetti-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const confettiColors = ['#06D6A0','#FFD166','#FF6B9D','#9B5DE5','#118AB2'];
+  const pieces = Array.from({ length: 30 }, (_, i) => ({
+    x: Math.random(),
+    startY: -0.2 - Math.random() * 0.4,
+    color: confettiColors[i % 5],
+    size: 5 + Math.random() * 6,
+    speed: 0.6 + Math.random() * 0.4,
+  }));
+
+  let progress = 0;
+  const start = performance.now();
+
+  function draw(now) {
+    progress = Math.min((now - start) / 1800, 1);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pieces.forEach(p => {
+      const y = p.startY + progress * p.speed * 1.6;
+      if (y < 0 || y > 1.1) return;
+      ctx.fillStyle = p.color + Math.round((1 - progress) * 0xFF).toString(16).padStart(2, '0');
+      ctx.beginPath();
+      ctx.roundRect(
+        p.x * canvas.width - p.size / 2,
+        y * canvas.height - p.size * 0.25,
+        p.size, p.size * 0.5, 2
+      );
+      ctx.fill();
+    });
+    if (progress < 1) requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+}
+
+function _ctRunStrobe(container) {
+  if (!container) return;
+  let count = 0;
+  const max = 12;
+  const id = setInterval(() => {
+    count++;
+    container.style.background = count % 2 === 0 ? 'rgba(255,209,102,0.35)' : 'transparent';
+    if (count >= max) { clearInterval(id); container.style.background = ''; }
+  }, 120);
+}
+
+function _ctRunShimmer(container) {
+  if (!container) return;
+  const shimmer = document.createElement('div');
+  shimmer.style.cssText = 'position:absolute;top:0;height:100%;width:60px;background:linear-gradient(90deg,transparent,rgba(155,93,229,0.5),transparent);pointer-events:none;';
+  container.appendChild(shimmer);
+  let pos = -60;
+  const totalWidth = container.offsetWidth + 60;
+  const start = performance.now();
+  const dur = 800;
+  function anim(now) {
+    pos = ((now - start) / dur) * (totalWidth + 60) - 60;
+    shimmer.style.left = `${pos}px`;
+    if (pos < totalWidth) requestAnimationFrame(anim);
+    else shimmer.remove();
+  }
+  requestAnimationFrame(anim);
+}
+
+async function _ctAccept() {
+  const event = _ctEvents[_ctLandedIndex] || '';
+  const displayEvent = event.replace(/\{\{char\}\}/g, _ctCharName);
+
+  closeChanceTimeOverlay();
+
+  try {
+    await fetch('/api/chat/chaos-consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionStorage.getItem('fp_token')}` },
+      body: JSON.stringify({ event: displayEvent, charName: _ctCharName }),
+    });
+  } catch(err) { console.error('Accept fate failed:', err); }
+}

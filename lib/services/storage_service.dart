@@ -97,9 +97,11 @@ class StorageService extends ChangeNotifier {
   String _remoteApiUrl = 'https://openrouter.ai/api/v1';
   String _remoteModelName = '';
 
-  // Reasoning settings
+  // Reasoning settings (remote API)
   bool _reasoningEnabled = false;
   String _reasoningEffort = 'medium'; // 'low', 'medium', 'high'
+  // Local KoboldCPP thinking model flag (separate from remote reasoning toggle)
+  bool _koboldThinkingModel = false;
 
   // TTS settings
   bool _ttsEnabled = false;
@@ -230,6 +232,7 @@ class StorageService extends ChangeNotifier {
   String get remoteModelName => _remoteModelName;
   bool get reasoningEnabled => _reasoningEnabled;
   String get reasoningEffort => _reasoningEffort;
+  bool get koboldThinkingModel => _koboldThinkingModel;
   bool get ttsEnabled => _ttsEnabled;
   String get ttsEngine => _ttsEngine;
   String get ttsVoiceModel => _ttsVoiceModel;
@@ -360,6 +363,7 @@ class StorageService extends ChangeNotifier {
     _remoteModelName = _prefs?.getString('remote_model_name') ?? '';
     _reasoningEnabled = _prefs?.getBool('reasoning_enabled') ?? false;
     _reasoningEffort = _prefs?.getString('reasoning_effort') ?? 'medium';
+    _koboldThinkingModel = _prefs?.getBool('kobold_thinking_model') ?? false;
 
     // TTS settings
     _ttsEnabled = _prefs?.getBool('tts_enabled') ?? false;
@@ -787,6 +791,12 @@ class StorageService extends ChangeNotifier {
   Future<void> setReasoningEffort(String value) async {
     _reasoningEffort = value;
     await _prefs?.setString('reasoning_effort', value);
+    notifyListeners();
+  }
+
+  Future<void> setKoboldThinkingModel(bool value) async {
+    _koboldThinkingModel = value;
+    await _prefs?.setBool('kobold_thinking_model', value);
     notifyListeners();
   }
 

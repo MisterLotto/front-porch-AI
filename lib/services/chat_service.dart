@@ -307,6 +307,11 @@ class ChatService extends ChangeNotifier {
   bool _isProcessingGreeting = false; // true while post-greeting baseline eval runs
   bool _greetingEvalPending = false; // greeting placed but baseline eval not yet run
   String _realismEvalStreamText = '';
+  // Debounce timer — batches rapid per-chunk notifyListeners() calls during
+  // eval streaming into a single rebuild every 150 ms. Without this, a
+  // 40-token JSON response fires 40+ notifyListeners() calls and widgets that
+  // are mid-deactivation throw "Looking up a deactivated widget's ancestor".
+  Timer? _evalChunkTimer;
 
   // Relationship (Short-Term / Tension)
   int _affectionScore = 0;
@@ -346,6 +351,9 @@ class ChatService extends ChangeNotifier {
   int _chaosPressure = 0; // 0–100; grows each turn without a trigger
   String? _pendingChanceTimeEvent; // set when wheel lands; cleared after UI reads it
   bool _chanceTimePendingTrigger = false; // true for one cycle to pop the overlay
+  String? _pendingChaosInjection; // event text to inject into the next response prompt
+  bool _chaosEventDelivered = false; // true after the event has been used in at least one generation
+  Completer<void>? _chanceTimeCompleter; // pauses sendMessage while wheel is active
 
   /// Base chance % per turn. Grows by [_chaosGrowthPerTurn] each turn.
   static const int _chaosBaseChance = 5;
@@ -565,6 +573,8 @@ class ChatService extends ChangeNotifier {
   String? get pendingChanceTimeEvent => _pendingChanceTimeEvent;
   /// True when auto-trigger fires. UI reads then calls consumeChanceTimeTrigger().
   bool get chanceTimePendingTrigger => _chanceTimePendingTrigger;
+  /// True when a chaos event is queued for the next response (blocks manual spin + auto-trigger).
+  bool get hasPendingChaosEvent => _pendingChaosInjection != null;
 
   /// Called by the overlay once it has opened. Clears the auto-trigger flag.
   void consumeChanceTimeTrigger() => _chanceTimePendingTrigger = false;
@@ -1909,10 +1919,11 @@ class ChatService extends ChangeNotifier {
     _isProcessingGreeting = true;
     notifyListeners();
     try {
-      await Future.wait([
-        _evaluateEmotionalStateCall(),
-        _evaluateRelationshipCall(),
-      ]);
+      // KoboldCPP is single-threaded — run evals sequentially to avoid concurrent
+      // HTTP requests being dropped before headers are received.
+      await _evaluateEmotionalStateCall();
+      await _evaluateRelationshipCall();
+
       // Store initial emotion in metadata on the greeting message itself
       if (_messages.isNotEmpty) {
         _messages.first.activeMetadata ??= {};
@@ -1944,12 +1955,13 @@ class ChatService extends ChangeNotifier {
       if (_storageService.realismOneShotEval) {
         await _evaluateOneShotCall();
       } else {
-        await Future.wait([
-          _evaluateRelationshipCall(),
-          _evaluateEmotionalStateCall(),
-          _evaluatePhysicalStateCall(),
-          _evaluateNarrativeCall(),
-        ]);
+        // KoboldCPP is single-threaded — run evals sequentially to avoid concurrent
+        // HTTP requests being dropped before headers are received.
+        await _evaluateRelationshipCall();
+        await _evaluateEmotionalStateCall();
+        await _evaluatePhysicalStateCall();
+        await _evaluateNarrativeCall();
+
       }
 
       // Stamp the baseline on the most recent message so it persists
@@ -2025,16 +2037,29 @@ class ChatService extends ChangeNotifier {
     // Scan user input for lore keywords
     _scanLorebook(text);
 
+    // ── Clear consumed chaos event from the previous turn ───────────────
+    // Only clear if the event was already delivered in a response.
+    // This preserves manual-spin events that haven't been used yet.
+    if (_chaosEventDelivered) {
+      _pendingChaosInjection = null;
+      _chaosEventDelivered = false;
+    }
+
     // ── OOC Time-Skip Detection ───────────────────────────────────────────
     if (_realismEnabled && _activeGroup == null) {
       _detectOocTimeSkip(text);
     }
 
-    // ── Chaos Mode: escalating pressure check ─────────────────────────────
-    if (_chaosModeEnabled && _activeGroup == null) {
+    // ── Chaos Mode: check + pause for wheel if triggered ─────────────────
+    if (_chaosModeEnabled && _activeGroup == null && _pendingChaosInjection == null) {
       if (checkAndTickChaosPressure()) {
+        // Create a completer so sendMessage pauses here until the wheel resolves
+        _chanceTimeCompleter = Completer<void>();
         _chanceTimePendingTrigger = true;
         notifyListeners(); // UI observes this to show the wheel
+        // Wait for the user to spin + accept fate (completes in applyChanceTimeResult)
+        await _chanceTimeCompleter!.future;
+        _chanceTimeCompleter = null;
       }
     }
 
@@ -2057,7 +2082,9 @@ class ChatService extends ChangeNotifier {
 
       void handleChunk(String chunk) {
         _realismEvalStreamText += chunk;
-        notifyListeners();
+        // Debounce: coalesce rapid token arrivals into one rebuild per 150 ms
+        _evalChunkTimer?.cancel();
+        _evalChunkTimer = Timer(const Duration(milliseconds: 150), notifyListeners);
       }
 
       // ── Trust repair intercept ───────────────────────────────────────
@@ -2069,12 +2096,13 @@ class ChatService extends ChangeNotifier {
       } else if (_storageService.realismOneShotEval) {
         await _evaluateOneShotCall(onChunk: handleChunk);
       } else {
-        await Future.wait([
-          _evaluateRelationshipCall(onChunk: handleChunk),
-          _evaluateEmotionalStateCall(onChunk: handleChunk),
-          _evaluatePhysicalStateCall(onChunk: handleChunk),
-          _evaluateNarrativeCall(onChunk: handleChunk),
-        ]);
+        // KoboldCPP is single-threaded — run evals sequentially to avoid concurrent
+        // HTTP requests being dropped before headers are received.
+        await _evaluateRelationshipCall(onChunk: handleChunk);
+        await _evaluateEmotionalStateCall(onChunk: handleChunk);
+        await _evaluatePhysicalStateCall(onChunk: handleChunk);
+        await _evaluateNarrativeCall(onChunk: handleChunk);
+
 
         // Synthesize metadata safely post-parallel
         _pendingRealismMetadata ??= {};
@@ -2083,6 +2111,10 @@ class ChatService extends ChangeNotifier {
         _saveChat();
       }
 
+      // Cancel any pending debounce notify before closing the overlay
+      _evalChunkTimer?.cancel();
+      _evalChunkTimer = null;
+      await Future.delayed(const Duration(milliseconds: 500));
       _isEvaluatingRealism = false;
       notifyListeners();
     }
@@ -2193,24 +2225,31 @@ class ChatService extends ChangeNotifier {
 
         void handleChunk(String chunk) {
           _realismEvalStreamText += chunk;
-          notifyListeners();
+          // Debounce: coalesce rapid token arrivals into one rebuild per 150 ms
+          _evalChunkTimer?.cancel();
+          _evalChunkTimer = Timer(const Duration(milliseconds: 150), notifyListeners);
         }
 
         if (_storageService.realismOneShotEval) {
           await _evaluateOneShotCall(onChunk: handleChunk);
         } else {
-          await Future.wait([
-            _evaluateRelationshipCall(onChunk: handleChunk),
-            _evaluateEmotionalStateCall(onChunk: handleChunk),
-            _evaluatePhysicalStateCall(onChunk: handleChunk),
-            _evaluateNarrativeCall(onChunk: handleChunk),
-          ]);
+          // KoboldCPP is single-threaded — run evals sequentially to avoid concurrent
+          // HTTP requests being dropped before headers are received.
+          await _evaluateRelationshipCall(onChunk: handleChunk);
+          await _evaluateEmotionalStateCall(onChunk: handleChunk);
+          await _evaluatePhysicalStateCall(onChunk: handleChunk);
+          await _evaluateNarrativeCall(onChunk: handleChunk);
+
           _pendingRealismMetadata ??= {};
           _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
           _pendingRealismMetadata!['realism_state'] = _captureRealismState();
           _saveChat();
         }
 
+      // Cancel any pending debounce notify before closing the overlay
+      _evalChunkTimer?.cancel();
+      _evalChunkTimer = null;
+      await Future.delayed(const Duration(milliseconds: 500));
         _isEvaluatingRealism = false;
         notifyListeners();
       }
@@ -2776,6 +2815,9 @@ class ChatService extends ChangeNotifier {
         realismBlock = '$relationship$emotion$time$trustBehavior$cooldown$behavioral';
       }
 
+      // Chance Time injection — independent of realism mode
+      final chanceTimeBlock = _getChanceTimeInjection();
+
       // Objective injection — always injected regardless of realism mode
       // Must sit in a fixed prompt section so it is NEVER trimmed by the budget system.
       final objectiveBlock = _getObjectiveInjection();
@@ -2794,7 +2836,8 @@ class ChatService extends ChangeNotifier {
           "$authorNoteBlock"
           "$objectiveBlock"
           "$realismBlock"
-          "$suffix";
+          "$suffix"
+          "$chanceTimeBlock";
       final fixedTokens = await _countTokens(fixedContent);
       final contextBudget = _storageService.contextSize;
       final generationReserve =
@@ -2906,7 +2949,8 @@ class ChatService extends ChangeNotifier {
           "$authorNoteBlock"
           "$objectiveBlock"
           "$realismBlock"
-          "$suffix";
+          "$suffix"
+          "$chanceTimeBlock";
 
       // Track prompt budget for context viewer
       _lastAssembledPrompt = prompt;
@@ -3385,8 +3429,19 @@ class ChatService extends ChangeNotifier {
       _isBuffering = false;
       _generationStartTime = null;
 
-      // User-initiated cancel — keep the partial response, no error message
-      if (wasCancelled) {
+      // "Connection closed before full header was received" is thrown by the http package
+      // when the HTTP client is closed mid-stream (either by abortGeneration() or a process
+      // crash/restart). Treat it the same as a user cancel — keep the partial response.
+      final errStr = e.toString();
+      final isConnectionClosed = errStr.contains('Connection closed before full header') ||
+          errStr.contains('Connection refused') ||
+          errStr.contains('errno = 61') ||   // macOS ECONNREFUSED
+          errStr.contains('SocketException') ||
+          (errStr.contains('ClientException') && errStr.contains('closed'));
+      final treatAsCancel = wasCancelled || isConnectionClosed;
+
+      // User-initiated cancel (or forced client close) — keep the partial response, no error message
+      if (treatAsCancel) {
         // Signal clean completion to SSE listeners
         _tokenBroadcast.add('__DONE__');
         if (_sentenceBuffer.trim().isNotEmpty) {
@@ -3427,6 +3482,12 @@ class ChatService extends ChangeNotifier {
           errorMsg.contains('TimeoutException')) {
         errorMsg =
             'Request timed out. The model may be too large or the server too slow.';
+      } else if (errorMsg.contains('Connection closed before full header') ||
+          (errorMsg.contains('ClientException') && errorMsg.contains('closed'))) {
+        errorMsg =
+            'The connection to the backend was closed unexpectedly. '
+            'The model may still be loading — wait for the green ready indicator and try again. '
+            'If this persists, the backend may have run out of VRAM.';
       }
 
       _messages.add(
@@ -5421,8 +5482,10 @@ class ChatService extends ChangeNotifier {
     if (_llmProvider == null) return null;
     // Only apply grammar to the local KoboldCPP backend
     if (_llmProvider!.isLocal == false) return null;
-    // If reasoning is enabled the user has a thinking model loaded locally —
-    // grammar would prevent <think> from generating, so skip it.
+    // If the user has flagged a local thinking model, skip grammar entirely —
+    // grammar would block <think> tokens and produce zero output.
+    if (_storageService.koboldThinkingModel) return null;
+    // Legacy: also skip if the remote reasoning flag is on (belt-and-suspenders)
     if (_storageService.reasoningEnabled) return null;
     return grammar;
   }
@@ -5443,33 +5506,115 @@ class ChatService extends ChangeNotifier {
   }) async {
     if (_llmProvider == null) return null;
     final llm = _llmProvider!.activeService;
-    if (!llm.isReady) return null;
+    // For remote backends, require full readiness (API key + model configured).
+    // For local KoboldCPP: if state says not-running, do a live probe first —
+    // the constructor probe is a best-effort fast path but can lose the race
+    // against session load on hot restart. This on-demand probe is definitive.
+    if (_llmProvider!.isLocal) {
+      final kobold = _llmProvider!.koboldService;
+      if (!kobold.isProcessRunning) {
+        // Probe takes ~2–5 ms if KoboldCPP is up, times out after 5 s if not.
+        await kobold.reconnectIfAlive();
+      }
+      // After probe, if still not running the server genuinely isn't up.
+      if (!kobold.isProcessRunning) return null;
+      // Ensure any previous generation is fully stopped server-side before
+      // starting a new one. KoboldCPP returns {"token":"","finish_reason":"stop"}
+      // immediately when busy — this await blocks until it is actually idle.
+      // Critical for thinking models that keep generating long after the socket drops.
+      debugPrint('[Realism:Eval] Waiting for KoboldCPP to become idle...');
+      await kobold.ensureServerIdle();
+      debugPrint('[Realism:Eval] KoboldCPP idle, starting eval request.');
+    } else {
+      if (!llm.isReady) return null;
+    }
 
+
+    // Thinking models (e.g. QwQ, Deepseek-R1 via KoboldCPP) output a
+    // <think>…</think> block before the JSON answer. That block contains
+    // countless '}' characters, so we must NOT use '}' as a stop sequence
+    // for thinking models — KoboldCPP would terminate the stream on the very
+    // first '}' inside the think block, returning an empty/truncated response
+    // before the JSON is ever produced. For thinking models we rely on the
+    // model's own EOS token + the max_length safety ceiling instead.
+    // Determine whether a thinking model is in use, per-backend:
+    //   • Local KoboldCPP → use the dedicated koboldThinkingModel flag
+    //     (the remote reasoningEnabled flag is irrelevant for local models)
+    //   • Remote API → use reasoningEnabled as before
+    // Getting this wrong causes two problems:
+    //   - Grammar sent to thinking model → model outputs 0 tokens (blocked)
+    //   - Stop sequences sent → stream terminates inside <think> block
+    final isThinkingModel = _llmProvider!.isLocal
+        ? _storageService.koboldThinkingModel
+        : _storageService.reasoningEnabled;
     final params = GenerationParams(
       prompt: prompt,
       maxLength: 8000,
       temperature: 0.1,
+      // Prevent repetition loops at low temperature.
+      // Without this, non-grammar-constrained models (e.g. thinking models
+      // where grammar is disabled) can get stuck generating the same JSON
+      // key forever: "trust_reason": "...", "trust_reason": "...",  ...
+      repeatPenalty: 1.15,
       reasoningEnabled: false,
-      // Stop the moment the JSON object closes — works for all model types.
-      // The 8000 token ceiling stays as a safety net for long think chains.
-      stopSequences: ['}\n', '}'],
+      // Non-thinking models: stop the moment the JSON object closes.
+      // Thinking models: no '}' stops — the think block is full of them.
+      stopSequences: isThinkingModel ? [] : ['}\n', '}'],
       grammar: grammar,
+      // Thinking model KoboldCPP fixes:
+      //  banEosToken: prevents KoboldCPP from treating the chat template's
+      //    built-in stop tokens (<|im_end|> etc.) as EOS mid-generation —
+      //    without this, the very first SSE event is {"token":"","finish_reason":"stop"}
+      //  trimStop: false prevents KoboldCPP from silently trimming/swallowing
+      //    the first visible tokens when they happen to match a template stop
+      banEosToken: isThinkingModel && _llmProvider!.isLocal,
+      trimStop: !(isThinkingModel && _llmProvider!.isLocal),
+
     );
 
     String response = '';
-    await for (final chunk in llm.generateStream(params)) {
-      response += chunk;
-      onChunk?.call(chunk);
-      // Also bail out eagerly the moment we see the JSON closing brace,
-      // in case the stop sequence trims it and the stream continues briefly.
-      if (response.contains('}')) {
-        final stripped = _stripThinkBlocks(response);
-        final candidate = stripped.isNotEmpty ? stripped : response;
-        if (candidate.trimRight().endsWith('}') || candidate.contains('}\n'))
-          break;
+    // Retry loop: thinking models can cause KoboldCPP to drop the connection
+    // briefly (OOM during dense thinking sessions). One retry after a short
+    // pause is enough to recover without user-visible impact.
+    for (int attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) {
+        debugPrint('[Realism:Eval] Retrying after connection drop (attempt ${attempt + 1})...');
+        await Future.delayed(const Duration(seconds: 3));
+        if (_llmProvider!.isLocal) {
+          await _llmProvider!.koboldService.ensureServerIdle();
+        }
+        response = ''; // reset for clean retry
+      }
+      try {
+        await for (final chunk in llm.generateStream(params)) {
+          response += chunk;
+          onChunk?.call(chunk);
+          if (response.contains('}')) {
+            final stripped = _stripThinkBlocks(response);
+            if (stripped.isNotEmpty &&
+                (stripped.trimRight().endsWith('}') || stripped.contains('}\n'))) {
+              break;
+            }
+          }
+        }
+        break; // stream completed cleanly — exit retry loop
+      } catch (e) {
+        debugPrint('[Realism:Eval] Stream error on attempt ${attempt + 1}: $e');
+        if (attempt >= 1) {
+          // Second failure — give up silently; don't surface to UI
+          return null;
+        }
+        // else: fall through to retry
       }
     }
+
+    // Log raw eval response for diagnostics
+    if (_llmProvider?.isLocal == true) {
+      final preview = response.length > 300 ? response.substring(0, 300) : response;
+      debugPrint('[Realism:RawEval] len=${response.length} | ${preview.replaceAll('\n', '↵')}');
+    }
     return response.isEmpty ? null : response;
+
   }
 
   // ── Prompt Injection Builders ──
@@ -5562,8 +5707,12 @@ class ChatService extends ChangeNotifier {
 
     // 2. Fixation Mapping
     if (_activeFixation.isNotEmpty && _fixationLifespan > 0) {
+      final charName = _activeCharacter?.name ?? 'the character';
       block +=
-          '[Background Thought: You have a lingering preoccupation about "$_activeFixation". Let this subtly flavor your internal monologue or mood, but do not aggressively force the conversation towards it unless naturally relevant.]\n';
+          '[Background Thought: $charName has a lingering preoccupation about "$_activeFixation". '
+          'This should manifest as subconscious coloring — a stray thought, a loaded pause, '
+          'a flicker of expression — NOT as $charName suddenly bringing it up in conversation. '
+          'Only surface it overtly if the conversation naturally touches the topic.]\n';
     }
 
     // 3. Spatial Stance Mapping
@@ -5671,6 +5820,26 @@ class ChatService extends ChangeNotifier {
     return statePrompt;
   }
 
+  /// Injects a Chance Time event into the character's response prompt.
+  /// Placed AFTER the character name suffix for maximum recency weight.
+  /// Consumed after one use (cleared after response generation).
+  String _getChanceTimeInjection() {
+    if (_pendingChaosInjection == null || _pendingChaosInjection!.isEmpty) return '';
+    final charName = _activeCharacter?.name ?? 'the character';
+    final event = _pendingChaosInjection!;
+    // Mark as delivered so it can be cleared on the NEXT sendMessage.
+    // Persists through regens/swipes until the user sends a new message.
+    _chaosEventDelivered = true;
+    return '\n[OOC — URGENT NARRATIVE INTERRUPT:\n'
+        'THE FOLLOWING EVENT JUST HAPPENED RIGHT NOW, THIS VERY MOMENT, during the scene:\n'
+        '>>> $event <<<\n\n'
+        'MANDATORY: $charName MUST acknowledge and react to this event IN THEIR VERY FIRST PARAGRAPH.\n'
+        'This is NOT optional. This is NOT background flavor. This event is happening RIGHT NOW and $charName witnesses/experiences it directly.\n'
+        'Write $charName\'s immediate, visceral reaction to this event FIRST, then continue responding to the conversation naturally.\n'
+        'Do NOT ignore this event. Do NOT save it for later. React NOW.\n'
+        'Do NOT mention game mechanics, "Chance Time", or systems.]\n';
+  }
+
   // ── LLM Evaluation Calls ──
 
   Future<void> _evaluateRelationshipCall({
@@ -5678,7 +5847,7 @@ class ChatService extends ChangeNotifier {
   }) async {
     if (!_realismEnabled || _activeCharacter == null) return;
 
-    final recentCount = _messages.length < 5 ? _messages.length : 5;
+    final recentCount = _messages.length < 3 ? _messages.length : 3;
     final recent = _messages.reversed
         .take(recentCount)
         .toList()
@@ -5691,8 +5860,8 @@ class ChatService extends ChangeNotifier {
 
     String personalityInjection = '';
     if (_activeCharacter!.personality.isNotEmpty) {
-      final p = _activeCharacter!.personality.length > 500
-          ? _activeCharacter!.personality.substring(0, 500)
+      final p = _activeCharacter!.personality.length > 200
+          ? _activeCharacter!.personality.substring(0, 200)
           : _activeCharacter!.personality;
       personalityInjection =
           'Account for $charName\'s specific personality traits:\n"$p"\n\n';
@@ -5704,13 +5873,18 @@ class ChatService extends ChangeNotifier {
         'IMPORTANT: Reactions are entirely subjective based on $charName\'s personality. '
         'Most normal interactions should score 0 or slightly positive. '
         'Reserve negative scores ONLY for clear rudeness, hostility, manipulation, or betrayal.\n\n'
-        '1. "relationship_delta": Short-term tension shift this turn. (-5 to +5)\n'
-        '   +5: Incredible chemistry | +2: Warm/friendly | +1: Somewhat pleasant | 0: Neutral/ordinary | -1: Slightly awkward | -2: Rude | -5: Deeply hostile\n'
+        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? (-5 to +5)\n'
+        '   +5: Deeply moved | +2: Warmed up | +1: Mildly pleasant | 0: No change | -1: Slightly put off | -2: Annoyed | -5: Deeply wounded\n'
         '   ⚠ Default to 0 for normal conversation. Only go negative if $userName was clearly unkind, dismissive, or harmful.\n'
         '2. "bond_reason": One brief in-character thought from $charName explaining the tension shift, e.g. "His warmth made me feel safe." or "That dismissal stung." Use "none" if delta is 0.\n'
-        '3. "trust_delta": Does $userName\'s action build or destroy trust? (-200 to +10)\n'
-        '   +2: Honest/vulnerable | 0: Neutral | -5: Minor lie | -30: Significant deception | -200: Massive unforgivable betrayal\n'
-        '   ⚠ Default to 0 unless a clear trust-relevant event occurred.\n'
+        '3. "trust_delta": Did $userName — NOT $charName — do something that builds or destroys $charName\'s trust in $userName? (-200 to +50)\n'
+        '   Trust is SUBJECTIVE to $charName\'s personality and what she values. Examples:\n'
+        '   +30 to +50: $userName did something EXTRAORDINARILY trustworthy — a selfless sacrifice, returning something precious, protecting $charName at real cost to themselves, or proving loyalty in a way that CANNOT be faked\n'
+        '   +10 to +20: $userName did something meaningfully trustworthy — kept a difficult promise, showed vulnerability, stood firm under pressure in a way $charName deeply respects\n'
+        '   +5: $userName did exactly what $charName craves or values most | +2: acted authentically in a way $charName respects | 0: Neutral\n'
+        '   -5: $userName did something $charName finds personally untrustworthy given her personality | -30: deliberate deception or betrayal | -200: Unforgivable betrayal\n'
+        '   ⚠ Default to 0. Consider her personality — what one character finds threatening another may find attractive or trust-building.\n'
+        '   ⚠ If $charName is the one acting (e.g. $charName lied, felt guilty, made a mistake): always 0. Only $userName\'s behavior moves this.\n'
         '4. "trust_reason": One brief in-character thought from $charName explaining the trust shift, e.g. "He kept his promise." or "That felt like a lie." Use "none" if delta is 0.\n\n'
         'Recent conversation:\n$recent\n\n'
         'Respond with ONLY a flat JSON object containing "relationship_delta", "bond_reason", "trust_delta", and "trust_reason".';
@@ -5741,7 +5915,7 @@ class ChatService extends ChangeNotifier {
         r'"trust_delta"\s*:\s*(-?\d+)',
       ).firstMatch(text);
       if (trustMatch != null) {
-        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 10);
+        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 50);
         if (trustDelta != 0) {
           _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
           debugPrint(
@@ -5804,24 +5978,53 @@ class ChatService extends ChangeNotifier {
     final recentCount = _messages.length < 4 ? _messages.length : 4;
     final recent = _messages.reversed.take(recentCount).toList().reversed.map((m) => '${m.sender}: ${m.displayText}').join('\n');
     final charName = _activeCharacter!.name;
-    final arousalField = _nsfwCooldownEnabled ? ', "arousal_delta": <number -2 to +2>' : '';
-    final arousalInstr = _nsfwCooldownEnabled ? '3. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n' : '';
 
-    // Build emotion inertia context — current emotion acts as a prior/baseline
+    // ── Personality injection (same as relationship eval) ──
+    String personalityInjection = '';
+    if (_activeCharacter!.personality.isNotEmpty) {
+      final p = _activeCharacter!.personality.length > 200
+          ? _activeCharacter!.personality.substring(0, 200)
+          : _activeCharacter!.personality;
+      personalityInjection =
+          '$charName\'s personality traits (evaluate emotion THROUGH these):\n"$p"\n\n';
+    }
+
+    // ── Relationship & trust context ──
+    final relationshipCtx =
+        'Current relationship tension: $shortTermTierName | Trust level: $_trustLevel\n';
+
+    // ── Arousal instruction (enriched with current level + diminishing returns) ──
+    final arousalField = _nsfwCooldownEnabled ? ', "arousal_delta": <number -2 to +2>' : '';
+    final arousalInstr = _nsfwCooldownEnabled
+        ? '3. "arousal_delta": Physical arousal shift this turn. (-2 to +2)\n'
+          '   Current arousal: $_arousalLevel/10. '
+          'High arousal naturally limits further increase — at 8+ only the most intense stimuli warrant +1.\n'
+        : '';
+
+    // ── Emotion inertia context ──
     final currentEmotionCtx = _characterEmotion.isNotEmpty
         ? 'Current emotional state: $_characterEmotion${_emotionIntensity.isNotEmpty ? ' ($_emotionIntensity)' : ''}.\n'
           'Emotions have natural inertia — only shift meaningfully if something in the conversation genuinely warrants it. '
-          'Minor or neutral exchanges should produce small drift toward a more settled state, not sudden jumps. '
-          'Large emotional shifts require significant narrative cause.\n\n'
+          'Minor or neutral exchanges should produce small drift, not sudden jumps.\n'
+          'BUT: after intense events (fights, confessions, betrayals, intimate moments), '
+          'emotions naturally LINGER for several turns — do NOT rush back to baseline. '
+          'Only drift toward settled during truly mundane exchanges.\n\n'
         : '';
 
     final prompt = 'You are evaluating the emotional state for $charName.\n\n'
+        '$personalityInjection'
+        '$relationshipCtx'
         '$currentEmotionCtx'
-        '1. "emotion": their overarching emotional state right now (one word, nuanced like "melancholy" or "amused")\n'
+        '1. "emotion": $charName\'s overarching emotional state right now (one nuanced word).\n'
+        '   NOT a generic label like "happy" or "sad" — find the *specific texture*:\n'
+        '   wistful not sad, flustered not happy, prickly not angry, smoldering not aroused.\n'
+        '   Filter through $charName\'s personality — a stoic character feeling deep pain\n'
+        '   might show "guarded" or "controlled" rather than "devastated".\n'
         '2. "emotion_intensity": mild, moderate, or strong\n'
         '$arousalInstr\n'
         'Recent conversation:\n$recent\n\n'
         'Respond with ONLY a flat JSON object containing "emotion", "emotion_intensity"$arousalField.';
+
     try {
       final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
       if (raw == null) return;
@@ -5866,11 +6069,17 @@ class ChatService extends ChangeNotifier {
     final bool timeEligible = _turnsSinceLastTimeAdvance >= _turnsPerTimePeriod;
 
     if (timeEligible) {
+      final currentPostureCtx = _spatialStance.isNotEmpty
+          ? '$charName is currently: "$_spatialStance".\n'
+            'Maintain spatial continuity — only change position if the conversation describes them moving. '
+            'Do NOT teleport them to a new location or stance without narrative cause.\n\n'
+          : '';
       final holdPrompt = 'You are evaluating physical state for $charName.\n\n'
+          '$currentPostureCtx'
           'Enough turns have passed that time should advance from "$_timeOfDay" to the next period.\n'
           '1. "hold_time": true ONLY if the scene is visibly mid-action (e.g. mid-fight, actively doing something). false otherwise — let time advance normally.\n'
           '2. "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, scene break). Only valid when current time is "night".\n'
-          '3. "posture": $charName\'s current physical stance (brief phrase), or "none"\n\n'
+          '3. "posture": $charName\'s current physical position and location (brief phrase). Evolve naturally from their previous stance — only change if the scene describes movement. Use "none" if unknown.\n\n'
           'Recent conversation:\n$recent\n\n'
           'Respond with ONLY a flat JSON object containing "hold_time", "new_day", and "posture".';
       try {
@@ -5924,7 +6133,20 @@ class ChatService extends ChangeNotifier {
       }
     } else {
       // Not yet eligible — grab posture only
-      final posturePrompt = 'In one brief phrase, what is $charName\'s current physical stance based on:\n$recent\n\nRespond with ONLY: {"posture": "<phrase or none>"}';
+      final emotionCtx = _characterEmotion.isNotEmpty
+          ? '$charName is currently feeling $_characterEmotion ($_emotionIntensity). '
+          : '';
+      final currentPostureCtx = _spatialStance.isNotEmpty
+          ? 'Current position: "$_spatialStance". '
+          : '';
+      final posturePrompt = '${emotionCtx}${currentPostureCtx}Relationship tension: $shortTermTierName.\n\n'
+          'Based on the emotional context and recent exchange, what is $charName\'s '
+          'current physical position and stance? Maintain spatial continuity — only '
+          'change if the conversation describes them moving. Do NOT teleport them to a '
+          'new location without narrative cause.\n\n'
+          'Recent conversation:\n$recent\n\n'
+          'Respond with ONLY: {"posture": "<phrase or none>"}';
+
       try {
         final raw = await _fireLLMEval(posturePrompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
         if (raw != null) {
@@ -5946,12 +6168,17 @@ class ChatService extends ChangeNotifier {
     final recentCount = _messages.length < 4 ? _messages.length : 4;
     final recent = _messages.reversed.take(recentCount).toList().reversed.map((m) => '${m.sender}: ${m.displayText}').join('\n');
     final charName = _activeCharacter!.name;
-    final oPrompt = primaryObjective != null ? '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Must be a significant personal, social, or narrative goal triggered by recent events. Think hidden agendas, emotional needs, personal conflicts, moral dilemmas. NOT a trivial step, and NOT a restatement of the primary quest. Use "none" if nothing meaningful emerges.\n' : '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue, triggered by recent events — a significant hidden agenda, emotional need, personal conflict, or moral dilemma. NOT trivial. Use "none" if nothing meaningful emerges.\n';
+    final oPrompt = primaryObjective != null
+        ? '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Must be a significant personal, social, or narrative goal triggered by a STRONG, specific event THIS turn. NOT a trivial step, and NOT a restatement of the primary quest.\n'
+          '   ⚠ Default to "none". 90% of turns should produce "none". Only propose one if $charName would literally lose sleep over it.\n'
+        : '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue, triggered by a strong specific event THIS turn — a significant hidden agenda, emotional need, personal conflict, or moral dilemma.\n'
+          '   ⚠ Default to "none". 90% of turns should produce "none". Only propose one if $charName would literally lose sleep over it.\n';
     final prompt = 'You are an autonomous story engine evaluating narrative progression for $charName.\n\n'
         '$oPrompt'
-        '2. "fixation_topic": Severe overarching emotional obsession active right now (brief), or "none"\n\n'
+        '2. "fixation_topic": An *intrusive* thought $charName cannot stop returning to — something that haunts them across multiple scenes, not a temporary reaction to this turn. Must be significant enough to color their behavior unprompted. Default: "none".\n\n'
         'Recent conversation:\n$recent\n\n'
         'Respond with ONLY a flat JSON object containing "proposed_objective", and "fixation_topic".';
+
     try {
       final raw = await _fireLLMEval(prompt, grammar: _buildKoboldGrammar(_kGbnfJsonObject), onChunk: onChunk);
       if (raw == null) return;
@@ -6002,7 +6229,9 @@ class ChatService extends ChangeNotifier {
   Future<void> _evaluateOneShotCall({void Function(String)? onChunk}) async {
     if (!_realismEnabled || _activeCharacter == null) return;
 
-    final recentCount = _messages.length < 6 ? _messages.length : 6;
+    // Keep the eval prompt lean for local models — use fewer messages and a
+    // shorter personality snippet to reduce prefill time on large models.
+    final recentCount = _messages.length < 4 ? _messages.length : 4;
     final recent = _messages.reversed
         .take(recentCount)
         .toList()
@@ -6015,38 +6244,63 @@ class ChatService extends ChangeNotifier {
 
     String personalityInjection = '';
     if (_activeCharacter!.personality.isNotEmpty) {
-      final p = _activeCharacter!.personality.length > 600
-          ? _activeCharacter!.personality.substring(0, 600)
+      final p = _activeCharacter!.personality.length > 300
+          ? _activeCharacter!.personality.substring(0, 300)
           : _activeCharacter!.personality;
       personalityInjection =
           'Account for $charName\'s specific personality traits:\n"$p"\n\n';
     }
 
+    // ── Relationship & trust context ──
+    final emotionCtx = _characterEmotion.isNotEmpty
+        ? 'Current emotional state: $_characterEmotion ($_emotionIntensity). '
+        : '';
+    final relationshipCtx =
+        '${emotionCtx}Current relationship tension: $shortTermTierName | Trust level: $_trustLevel\n\n';
+
     final arousalField = _nsfwCooldownEnabled
         ? ', "arousal_delta": <number -2 to +2>'
         : '';
+    // Arousal is field 7 (after posture), objective is 8, fixation 9, reason 10
     final arousalInstr = _nsfwCooldownEnabled
-        ? '8. "arousal_delta": Physical arousal shift based on personality. (-2 to +2)\n'
+        ? '7. "arousal_delta": Physical arousal shift this turn. (-2 to +2)\n'
+          '   Current arousal: $_arousalLevel/10. High arousal limits further increase — at 8+ only the most intense stimuli warrant +1.\n'
         : '';
+
+    // Determine the next field number after arousal (or after posture if arousal disabled)
+    final objNum = _nsfwCooldownEnabled ? 8 : 7;
+    final fixNum = objNum + 1;
+    final reasonNum = fixNum + 1;
 
     final prompt =
         'You are evaluating the current state of a roleplay scene involving $charName.\n\n'
         '$personalityInjection'
-        'Reactions are subjective! Evaluate relationship changes based on $charName\'s specific traits.\n\n'
+        '$relationshipCtx'
+        'Reactions are subjective! Evaluate ALL changes through $charName\'s specific personality.\n\n'
         'Evaluate ALL of the following at once:\n'
-        '1. "relationship_delta": Short-term tension shift. (-5 to +5)\n'
-        '   +5: Incredible chemistry | +2: Friendly | 0: Neutral | -2: Annoyed | -5: Deeply hostile\n'
-        '3. "trust_delta": Does $userName\'s action build or destroy trust? (-200 to +10)\n'
-        '   +2: Honest | 0: Neutral | -5: Lie | -200: Massive unforgivable betrayal\n'
-        '4. "emotion": $charName\'s current emotional state (one word, nuanced)\n'
-        '5. "emotion_intensity": mild, moderate, or strong\n'
-        '7. "posture": $charName\'s spatial/physical stance (brief phrase), or "none"\n'
+        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? (-5 to +5)\n'
+        '   +5: Deeply moved | +2: Warmed up | +1: Mildly pleasant | 0: No change | -1: Slightly put off | -2: Annoyed | -5: Deeply wounded\n'
+        '   ⚠ Default to 0 for normal conversation.\n'
+        '2. "trust_delta": Did $userName — NOT $charName — do something that builds or destroys $charName\'s trust in $userName? (-200 to +50)\n'
+        '   Trust is SUBJECTIVE to $charName\'s personality. What builds trust for one character may break it for another.\n'
+        '   +30 to +50: EXTRAORDINARY trust — selfless sacrifice, proving loyalty beyond doubt, protecting $charName at real personal cost\n'
+        '   +10 to +20: Meaningfully trustworthy — kept a hard promise, showed real vulnerability, stood firm under pressure\n'
+        '   +5: Did what $charName craves or values | +2: acted respectably | 0: Neutral\n'
+        '   -5: acted in a way $charName finds personally untrustworthy | -30: deliberate betrayal | -200: unforgivable\n'
+        '   ⚠ Default to 0. If $charName is the one acting (e.g. $charName lied, felt guilty): always 0.\n'
+        '3. "emotion": $charName\'s overarching emotional state (one nuanced word).\n'
+        '   NOT generic ("happy"/"sad") — find the specific texture: wistful not sad, flustered not happy, prickly not angry.\n'
+        '   Filter through $charName\'s personality — a stoic character in deep pain shows "guarded", not "devastated".\n'
+        '4. "emotion_intensity": mild, moderate, or strong\n'
+        '5. "bond_reason": One brief in-character thought from $charName explaining the relationship shift, or "none" if delta is 0.\n'
+        '6. "posture": $charName\'s spatial/physical stance (brief grounded phrase), or "none"\n'
         '$arousalInstr'
-        '${primaryObjective != null ? '9. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Must be a significant personal, social, or narrative goal triggered by recent events. Think hidden agendas, emotional needs, personal conflicts, moral dilemmas. NOT a trivial step, and NOT a restatement of the primary quest. Use "none" if nothing meaningful emerges.\n' : '9. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue, triggered by recent events — significant hidden agenda, emotional need, personal conflict, or moral dilemma. NOT trivial. Use "none" if nothing meaningful emerges.\n'}'
-        '"fixation_topic": Severe emotional obsession active right now (brief), or "none"\n'
-        '"reason": One brief sentence explaining the key relationship change\n\n'
+        '${primaryObjective != null ? '$objNum. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Triggered by a STRONG event THIS turn.\n   ⚠ Default to "none". 90% of turns should produce "none".\n' : '$objNum. "proposed_objective": A meaningful, emotionally-driven goal triggered by a strong event THIS turn. Default: "none". 90% of turns should produce "none".\n'}'
+        '$fixNum. "fixation_topic": An *intrusive* thought $charName cannot stop returning to — haunts them across scenes, not a temporary reaction. Default: "none".\n'
+        '$reasonNum. "reason": One brief sentence explaining the key relationship change, or "none"\n\n'
         'Recent conversation:\n$recent\n\n'
         'Respond with ONLY a JSON object containing all fields above$arousalField.';
+
 
     try {
       debugPrint('[Realism:OneShot] Evaluating (fused call)...');
@@ -6078,7 +6332,7 @@ class ChatService extends ChangeNotifier {
         r'"trust_delta"\s*:\s*(-?\d+)',
       ).firstMatch(text);
       if (trustMatch != null) {
-        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 10);
+        trustDelta = (int.tryParse(trustMatch.group(1)!) ?? 0).clamp(-200, 50);
         if (trustDelta != 0) {
           _trustLevel = (_trustLevel + trustDelta).clamp(-100, 100);
           debugPrint(
@@ -6661,6 +6915,8 @@ class ChatService extends ChangeNotifier {
   }
 
   /// Called by the wheel overlay once the animation lands on an event.
+  /// Stores the event as a prompt injection for the next response and
+  /// resumes the paused sendMessage flow.
   Future<void> applyChanceTimeResult(String event, String charName) async {
     final display = event.replaceAll('{{char}}', charName);
     _pendingChanceTimeEvent = display;
@@ -6670,19 +6926,17 @@ class ChatService extends ChangeNotifier {
     _pendingRealismMetadata ??= {};
     _pendingRealismMetadata!['chance_time_event'] = display;
 
-    // Inject a narration message so the AI sees what happened in the chat history
-    _messages.add(ChatMessage(
-      text: '[🎰 CHANCE TIME! $display]',
-      sender: 'System',
-      isUser: false,
-      metadata: {'is_chance_time_narration': true},
-    ));
+    // Store as a prompt injection — the character will weave this into their
+    // natural response to the user's message instead of getting a separate
+    // dedicated reaction message.
+    _pendingChaosInjection = display;
+
     await _saveChat();
     notifyListeners();
-    debugPrint('[ChanceTime] Applied: $display — generating AI reaction');
+    debugPrint('[ChanceTime] Applied: $display — injecting into next response');
 
-    // Immediately generate AI response to the event
-    await _generateResponse(GenerationMode.normal);
+    // Resume the paused sendMessage flow
+    _chanceTimeCompleter?.complete();
   }
 
   /// Per-turn auto-trigger check. Returns true if the wheel should pop this turn.
