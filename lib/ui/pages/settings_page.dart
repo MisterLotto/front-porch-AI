@@ -471,10 +471,12 @@ class _SettingsPageState extends State<SettingsPage> {
           elevation: 0,
           iconTheme: theme.iconTheme,
           bottom: TabBar(
-            labelColor: theme.primaryColor,
-            unselectedLabelColor: theme.textTheme.bodyMedium?.color,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
             isScrollable: true,
             tabAlignment: TabAlignment.start,
+            overlayColor: WidgetStateProperty.all(Colors.transparent),
+            splashFactory: NoSplash.splashFactory,
             tabs: const [
               Tab(text: 'General'),
               Tab(text: 'Voice & Media'),
