@@ -121,6 +121,7 @@ class ByafService {
           if (imgFile != null) {
             // Save to temp
             final tempDir = await getTemporaryDirectory();
+            if (!await tempDir.exists()) await tempDir.create(recursive: true);
             final ext = path.extension(imgRelPath).isNotEmpty ? path.extension(imgRelPath) : '.png';
             final tempPath = '${tempDir.path}/byaf_import_${DateTime.now().millisecondsSinceEpoch}$ext';
             await File(tempPath).writeAsBytes(imgFile.content as List<int>);
