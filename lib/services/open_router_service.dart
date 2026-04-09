@@ -277,6 +277,11 @@ class OpenRouterService extends LLMService {
     _activeClient = client;
     bool hasYieldedReasoningStart = false;
     bool hasYieldedReasoningEnd = false;
+    // Only wrap reasoning in <think> tags when the app explicitly requested it.
+    // Some models (e.g. Qwen on LM Studio) send the entire response as
+    // reasoning_content even when reasoning wasn't requested — wrapping those
+    // in <think> tags would hide the response entirely.
+    final wrapThinking = params.reasoningEnabled;
 
     try {
       final response = await client.send(request).timeout(const Duration(seconds: 120));
@@ -303,16 +308,17 @@ class OpenRouterService extends LLMService {
           buffer = buffer.substring(idx + 1);
 
           if (line.isEmpty) continue;
-          if (line == 'data: [DONE]') {
+          if (line == 'data: [DONE]' || line == 'data:[DONE]') {
             // Close reasoning block if still open
-            if (hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
+            if (wrapThinking && hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
               yield '</think>\n';
             }
             return;
           }
-          if (!line.startsWith('data: ')) continue;
+          if (!line.startsWith('data:')) continue;
 
-          final data = line.substring(6);
+          // Handle both 'data: {...}' and 'data:{...}' (LM Studio omits the space)
+          final data = line.startsWith('data: ') ? line.substring(6) : line.substring(5);
           try {
             final json = jsonDecode(data);
             final choice = json['choices']?[0];
@@ -320,20 +326,26 @@ class OpenRouterService extends LLMService {
             if (delta == null) continue;
 
             // Handle reasoning content (thinking tokens)
-            final reasoning = delta['reasoning'];
+            // OpenRouter uses 'reasoning', LM Studio/OpenAI uses 'reasoning_content'
+            final reasoning = delta['reasoning'] ?? delta['reasoning_content'];
             if (reasoning != null && reasoning is String && reasoning.isNotEmpty) {
-              if (!hasYieldedReasoningStart) {
-                yield '<think>';
-                hasYieldedReasoningStart = true;
+              if (wrapThinking) {
+                if (!hasYieldedReasoningStart) {
+                  yield '<think>';
+                  hasYieldedReasoningStart = true;
+                }
+                yield reasoning;
+              } else {
+                // Reasoning wasn't requested — yield as regular content
+                yield reasoning;
               }
-              yield reasoning;
               continue;
             }
 
             // Handle regular content — close reasoning block first if needed
             final content = delta['content'];
             if (content != null && content is String && content.isNotEmpty) {
-              if (hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
+              if (wrapThinking && hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
                 yield '</think>\n';
                 hasYieldedReasoningEnd = true;
               }
@@ -345,8 +357,31 @@ class OpenRouterService extends LLMService {
         }
       }
 
+      // Process any remaining data in the buffer (last chunk may lack trailing newline)
+      final remaining = buffer.trim();
+      if (remaining.isNotEmpty && remaining.startsWith('data:')) {
+        final data = remaining.startsWith('data: ') ? remaining.substring(6) : remaining.substring(5);
+        if (data != '[DONE]') {
+          try {
+            final json = jsonDecode(data);
+            final choice = json['choices']?[0];
+            final delta = choice?['delta'];
+            if (delta != null) {
+              final reasoning = delta['reasoning'] ?? delta['reasoning_content'];
+              if (reasoning != null && reasoning is String && reasoning.isNotEmpty) {
+                yield reasoning;
+              }
+              final content = delta['content'];
+              if (content != null && content is String && content.isNotEmpty) {
+                yield content;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
       // Close reasoning block if stream ended without [DONE]
-      if (hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
+      if (wrapThinking && hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
         yield '</think>\n';
       }
     } finally {
