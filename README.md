@@ -267,6 +267,7 @@ Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)
 
 ### Prerequisites
 - [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- [Rust toolchain](https://rustup.rs/) (for the RAG embedding server)
 - Git
 - Windows, Linux, or macOS
 
@@ -298,10 +299,17 @@ flutter pub get
 flutter run
 ```
 
-**Release build:**
+**macOS release build** (includes RAG embedding server):
 ```bash
-flutter build linux    # or windows / macos
+./scripts/build-macos.sh
 ```
+
+**Linux / Windows release build:**
+```bash
+cargo build --release --manifest-path tools/embed_server/Cargo.toml
+flutter build linux    # or windows
+```
+> On Linux/Windows, copy `tools/embed_server/target/release/embed_server` next to the built executable under `embed_server/embed_server`.
 
 ---
 

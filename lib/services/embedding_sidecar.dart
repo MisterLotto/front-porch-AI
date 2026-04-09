@@ -79,7 +79,7 @@ class EmbeddingSidecar extends ChangeNotifier {
   String? get _devBinaryPath {
     final execDir = File(Platform.resolvedExecutable).parent.path;
     var dir = Directory(execDir);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 10; i++) {
       final candidate = File(p.join(dir.path, 'tools', 'embed_server', 'target', 'release', 'embed_server'));
       if (candidate.existsSync()) return candidate.path;
       final parent = dir.parent;
