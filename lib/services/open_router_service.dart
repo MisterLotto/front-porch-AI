@@ -232,9 +232,13 @@ class OpenRouterService extends LLMService {
 
     final uri = Uri.parse('$_apiUrl/chat/completions');
 
-    // Wrap the raw prompt as a single user message.
-    // This preserves the existing prompt engineering from ChatService
-    // while being compatible with OpenAI chat format.
+    // Build messages array with proper role separation for chat APIs.
+    final messages = <Map<String, String>>[];
+    if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
+      messages.add({'role': 'system', 'content': params.systemPrompt!});
+    }
+    messages.add({'role': 'user', 'content': params.prompt});
+
     final payload = <String, dynamic>{
       'model': _modelName,
       'stream': true,
@@ -244,12 +248,7 @@ class OpenRouterService extends LLMService {
       'frequency_penalty': params.repeatPenalty > 1.0
           ? (params.repeatPenalty - 1.0).clamp(0.0, 2.0)
           : 0.0,
-      'messages': [
-        {
-          'role': 'user',
-          'content': params.prompt,
-        }
-      ],
+      'messages': messages,
     };
 
     // Add reasoning params when enabled

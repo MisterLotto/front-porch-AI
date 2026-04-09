@@ -35,6 +35,10 @@ class GenerationParams {
   final bool reasoningEnabled;
   final String reasoningEffort;
   final List<String>? bannedPhrases;
+  /// Optional system prompt for chat APIs. When provided, OpenRouter/LM Studio
+  /// will send this as a proper 'system' role message instead of lumping
+  /// everything into a single 'user' message. KoboldCPP ignores this field.
+  final String? systemPrompt;
   /// Optional GBNF grammar string for constrained JSON output (KoboldCPP local only).
   /// Never set this when reasoning/thinking mode is active — the <think> block
   /// tokens would be illegal under the grammar and break generation.
@@ -63,6 +67,7 @@ class GenerationParams {
     this.reasoningEnabled = false,
     this.reasoningEffort = 'medium',
     this.bannedPhrases,
+    this.systemPrompt,
     this.grammar,
     this.banEosToken = false,
     this.trimStop = true,

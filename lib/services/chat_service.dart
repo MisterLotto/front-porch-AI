@@ -2985,26 +2985,46 @@ class ChatService extends ChangeNotifier {
 
       // Realism injection was already computed above for budget
 
-      final prompt =
-          "$systemPrompt\n"
-          "$loreContent"
-          "$personaBlock\n"
-          "$userPersonaBlock"
-          "Scenario: $scenario\n"
-          "$mesExampleBlock"
-          "<START>\n"
-          "$summaryBlock"
-          "$memoriesBlock"
-          "$history"
-          "$postHistoryBlock"
-          "$authorNoteBlock"
-          "$objectiveBlock"
-          "$realismBlock"
-          "$suffix"
-          "$chanceTimeBlock";
+      // For chat APIs (OpenRouter, LM Studio), separate the system prompt
+      // so it can be sent as a proper 'system' role message.
+      final isRemoteApi = _llmProvider != null && !_llmProvider!.isLocal;
+      final chatSystemPrompt = isRemoteApi
+          ? "$systemPrompt\n$loreContent$personaBlock\n$userPersonaBlock"
+              "Scenario: $scenario\n$mesExampleBlock"
+          : null;
 
-      // Track prompt budget for context viewer
-      _lastAssembledPrompt = prompt;
+      final prompt = isRemoteApi
+          ? "<START>\n"
+              "$summaryBlock"
+              "$memoriesBlock"
+              "$history"
+              "$postHistoryBlock"
+              "$authorNoteBlock"
+              "$objectiveBlock"
+              "$realismBlock"
+              "$suffix"
+              "$chanceTimeBlock"
+          : "$systemPrompt\n"
+              "$loreContent"
+              "$personaBlock\n"
+              "$userPersonaBlock"
+              "Scenario: $scenario\n"
+              "$mesExampleBlock"
+              "<START>\n"
+              "$summaryBlock"
+              "$memoriesBlock"
+              "$history"
+              "$postHistoryBlock"
+              "$authorNoteBlock"
+              "$objectiveBlock"
+              "$realismBlock"
+              "$suffix"
+              "$chanceTimeBlock";
+
+      // Track prompt budget for context viewer (always show full prompt)
+      _lastAssembledPrompt = chatSystemPrompt != null
+          ? '$chatSystemPrompt\n$prompt'
+          : prompt;
       _lastPromptBudget = {
         'System Prompt': (systemPrompt.length / 4).ceil(),
         'Lorebook': (loreContent.length / 4).ceil(),
@@ -3056,6 +3076,7 @@ class ChatService extends ChangeNotifier {
 
       final genParams = GenerationParams(
         prompt: prompt,
+        systemPrompt: chatSystemPrompt,
         maxLength: _storageService.maxLength,
         minLength: _storageService.minLength,
         minP: _storageService.minP,
