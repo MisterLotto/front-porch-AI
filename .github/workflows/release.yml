@@ -401,6 +401,10 @@ jobs:
           Summary:        Front Porch AI Frontend
           License:        MIT
           URL:            https://github.com/linux4life1/front-porch-AI
+          AutoReqProv:    no
+          Requires:       gtk3
+          Requires:       glib2
+          Requires:       libsecret
           
           %description
           A chilled out frontend for KoboldCPP.

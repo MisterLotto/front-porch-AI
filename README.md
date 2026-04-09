@@ -1,42 +1,145 @@
+# Front Porch AI
 
-## 🆕 What's New in V0.9.7.1
+![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)
+![Flutter](https://img.shields.io/badge/Made%20with-Flutter-02569B?logo=flutter)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
+![Stable](https://img.shields.io/badge/Status-Stable-brightgreen)
 
-This is a **stability and quality-of-life** release focused on fixing unnatural AI behavior from the Realism Engine, reworking the Chaos Mode timing, and hardening KoboldCpp integration.
+**A privacy-first, fully offline AI companion for Windows, Linux, and macOS.** Chat with AI characters using local LLMs, manage your character library, and keep everything running on your own hardware — no subscriptions, no cloud, no one pulling the rug out from under you.
+
+💬 **[Join the Discord](https://discord.gg/e4tET6rpdv)** — questions, feedback, and hanging out welcome. Also on **[Matrix](https://matrix.dreamersai.art)**.
+
+<p align="center">
+  <img src="docs/screenshots/home_new.png" width="800" alt="Front Porch AI — Character Library">
+</p>
+
+---
+
+## ✨ Features
+
+### 💬 Chat
+- **Immersive roleplay** with V2-spec character cards — full SillyTavern / Backyard AI compatibility
+- **Smooth output buffer** — text drips at your reading pace, not your GPU's pace
+- **Rich text styling** — dialogue highlighted in amber, actions in grey
+- **Regenerate, Continue, Impersonate, Edit** — full message control
+- **Persistent sessions** — chat history auto-saved and restored per character
+- **Inline image rendering** — `![alt](url)` markdown renders in-chat
+- **Chat branching** — fork from any message to explore alternate storylines
+
+### 🧠 Realism Engine
+- **Emotion tracking** — character mood evolves naturally across the conversation, carrying inertia between turns
+- **Relationship & Trust system** — earn a character's trust over time; it shifts how open and vulnerable they allow themselves to be
+- **Autonomous time progression** — scene time advances deterministically every 6 turns; OOC time-skips (`(OOC: we drive for several hours)`) are auto-detected and applied
+- **Manual time nudge** — step time forward or back with sidebar chevrons
+- **Character Objectives** — autonomous goals the character pursues independently based on story events
+- **Fixation Engine** — active emotional obsessions that subtly color every response
+- **Character Evolution** — characters organically develop new traits as your story progresses
+- **RAG Memory** — local semantic memory powered by a lightweight ONNX embedding engine; the AI recalls past conversations without any cloud
+
+### 🎭 Character Management
+- **V2 spec support** — fully compatible with the V2 character card specification (PNG & JSON)
+- **One-click import** from `aicharactercards.com` and `chub.ai` via a built-in browser
+- **Backyard AI (.byaf) importer** — rescue your characters from the archive format Backyard AI left behind when they killed their desktop app
+- **Folder organization**, global search, tag editor, bulk PNG import
+- **One-click duplication** — clone any character card for risk-free experiments
+
+### 🧙 AI Character Creator
+- **Quick Create** — type a name and concept, the AI builds a complete V2 card from scratch
+- **World Lore (RAG-Lite)** — paste a Fandom wiki URL or attach a local `.txt`/`.pdf` and the generator embeds that lore into the character
+- **Editor passes** — Anti-Puppet, Consistency Check, Quality Polish, Truncation Completion
+- **Alternate greetings** — generate up to 5 unique first messages with configurable tone
+- **Lorebook auto-generation** — world-building entries generated alongside the character
+
+### 👥 Group Chat & Director Mode
+- **Multi-character conversations** — 2+ characters interacting with each other and with you
+- **Director Mode** — manually choose who speaks next
+- **Fork any 1:1 chat** into a group, preserving full message history
+
+### 🗣️ Text-to-Speech
+- **Four engines**: Kokoro (local, 50+ voices, 9 languages), ElevenLabs (cloud, expressive), OpenAI (cloud, premium), Piper (lightweight fallback)
+- **Parallel generation** — sentences generated concurrently for fast audio output
+- **Narration filters** — dialogue-only or skip action blocks (SillyTavern-style)
+- **Per-character voices** in group chats
+
+### 🖼️ Local Image Generation
+- Natively connects to **A1111, Forge, SDNext, and Draw Things**
+- Live model switching, LoRA injection, dedicated unload controls
+- **Natural Language or Danbooru Tags** prompt mode depending on your model
+
+### 📖 Porch Stories — Novel Generator
+- Distill character chats into a coherent storyline timeline
+- 5-stage autonomous pipeline: concept → outline → draft → edit → publish
+- Skeuomorphic page-flip reader with audiobook TTS read-along
+
+### ☁️ Cloud Sync
+- Sync your entire database and character PNGs via **Google Drive** or **Nextcloud/WebDAV**
+- Row-level merge engine with UUID primary keys — no ID collisions across devices
+- Automatic backups before every sync, one-click restore
+- **Privacy-first**: syncs only to accounts you own, no data touches our servers
+
+### ⚙️ KoboldCpp Integration
+- Automated download and update of the KoboldCpp backend
+- Hardware detection — Vulkan on PC, Metal on Apple Silicon, Intel ARC support
+- Model Hub: search and download GGUF models directly from HuggingFace
+- Start/Stop KoboldCpp from inside the Character Creator
+
+---
+
+## 🆕 What's New in V0.9.7.2
+
+This release brings **community-contributed fixes and features** alongside Realism Engine tuning — primarily focused on API compatibility, macOS packaging, and UI polish.
+
+**🤝 Community Contributions** — thanks to [@willie](https://github.com/willie)
+- **System prompt role fix** ([#12](https://github.com/linux4life1/front-porch-AI/pull/12)): The system prompt is now sent with the proper `"system"` role when using chat-completion APIs (OpenRouter, LM Studio, OpenAI-compatible backends). Previously it was incorrectly sent as a `"user"` turn, which caused some models to behave unexpectedly.
+- **LM Studio streaming fix** ([#11](https://github.com/linux4life1/front-porch-AI/pull/11)): Fixed SSE streaming compatibility with LM Studio and added support for the `reasoning_content` field returned by reasoning-capable models.
+- **macOS RAG embedding server bundling** ([#10](https://github.com/linux4life1/front-porch-AI/pull/10)): The RAG embedding server (`embed_server`) was not being copied into the macOS app bundle during CI builds. RAG Memory now works out of the box on macOS without requiring a manual source build.
+- **Settings tab bar styling** ([#13](https://github.com/linux4life1/front-porch-AI/pull/13)): Fixed a dark overlay appearing behind the settings tab bar and corrected low-contrast text on the selected tab label.
+- **BYAF importer cache directory** ([#7](https://github.com/linux4life1/front-porch-AI/pull/7)): Fixed a crash when importing `.byaf` character archives if the image cache directory did not yet exist on first launch.
+- **pubspec.yaml version format** ([#8](https://github.com/linux4life1/front-porch-AI/pull/8)): Corrected an invalid semver string in `pubspec.yaml` that caused `flutter pub get` to warn on strict tooling setups.
+
+**🧠 Realism Engine — Evaluation Tuning**
+- Expanded the short-term bond and arousal delta ranges so the engine can reflect larger emotional shifts in a single turn when the narrative warrants it.
+- Strengthened the justification guidance in evaluation prompts, requiring the model to ground large deltas in concrete story evidence rather than general sentiment.
+
+**⚙️ Stability**
+- Hardened the realism evaluation pipeline against race conditions during hot restarts and rapid message sequences.
+- Improved KoboldCpp process lifecycle management to prevent orphaned processes on app restart.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### V0.9.7.1
 
 **🧠 Realism Engine — Prompt Overhaul**
-- **Personality-aware evaluations:** All eval prompts (emotion, posture, relationship, narrative, one-shot) now receive the character's personality traits, relationship tension, and trust level — eliminating "generic NPC" responses.
-- **Emotion vocabulary guidance:** Steered away from flat labels ("happy", "sad") toward nuanced textures ("wistful", "prickly", "flustered") filtered through the character's personality.
-- **Spatial continuity:** Posture evals now receive the character's current position; prevents "teleportation" where a character sitting on a couch suddenly appears standing in a doorway.
-- **Dramatic event inertia:** Emotions now linger after high-impact narrative events instead of snapping back to neutral the next turn.
-- **Trust system rebalanced:** Positive trust range expanded from +10 to +50, with guidance for extraordinary trustworthiness (selfless sacrifice, proving loyalty at personal cost). Catastrophic betrayals are now balanced by the ability to earn trust through genuinely remarkable actions.
-- **Fixation injection rewritten:** Fixations manifest as subconscious coloring (stray thoughts, loaded pauses) rather than the character awkwardly bringing up the topic.
+- **Personality-aware evaluations:** All eval prompts now receive the character's personality traits, relationship tension, and trust level — eliminating "generic NPC" responses.
+- **Emotion vocabulary guidance:** Steered away from flat labels toward nuanced textures filtered through the character's personality.
+- **Spatial continuity:** Posture evals now receive the character's current position, preventing teleportation between turns.
+- **Dramatic event inertia:** Emotions now linger after high-impact narrative events instead of snapping back to neutral.
+- **Trust system rebalanced:** Positive trust range expanded from +10 to +50, with guidance for extraordinary trustworthiness. Catastrophic betrayals are now balanced by the ability to earn trust through genuinely remarkable actions.
+- **Fixation injection rewritten:** Fixations manifest as subconscious coloring (stray thoughts, loaded pauses) rather than the character awkwardly raising the topic.
 - **Relationship delta reframed:** Changed from "tension shift" (negatively primed) to "warmth shift" (neutral framing) to reduce false negatives.
 - **Objective/fixation spam reduced:** 90% of turns should produce "none" for proposed objectives; fixations now require persistent intrusive thoughts, not temporary reactions.
 
 **🎰 Chaos Mode — Timing Rework**
-- **Integrated event flow:** Chance Time now triggers BEFORE the character's response, not after. The character weaves their reaction to both the user's message AND the chaos event into a single cohesive reply — no more jarring separate reaction messages.
+- **Integrated event flow:** Chance Time now triggers before the character's response so they react to both the user's message and the chaos event in a single cohesive reply.
 - **Regen persistence:** Chaos events persist through regenerations and swipes; cleared only when the user sends their next message.
-- **Stacking prevention:** SPIN NOW button disables (shows ⏳ EVENT PENDING) while an event is queued. Auto-triggers also skip when an event is pending.
+- **Stacking prevention:** SPIN NOW button disables (shows ⏳ EVENT PENDING) while an event is queued.
 
 **⚙️ KoboldCpp Stability**
 - **Thinking model support:** Injected `ban_eos_token` and `trim_stop` into generation payloads for stable streaming with reasoning models.
 - **Server idle detection:** Eval pipeline now calls `/api/extra/abort` and waits for server idle before each request, eliminating dropped requests during heavy generation.
-- **One-shot eval fix:** Renumbered eval fields sequentially (1–10) — fixes field-ordering confusion in local models caused by skipped numbers.
+- **One-shot eval fix:** Renumbered eval fields sequentially (1–10) to fix field-ordering confusion in local models.
 
 **🐛 Bug Fixes**
 - Fixed "Looking up a deactivated widget's ancestor" errors with a 150ms debounce on eval stream rebuilds.
-- Fixed trust being penalized when the CHARACTER (not the user) does something guilt-inducing.
-- Fixed broken one-shot eval field numbering (fields 2 and 6 were skipped, confusing local models).
-
-<details>
-<summary><strong>📦 Previous Releases</strong></summary>
+- Fixed trust being penalized when the character (not the user) does something guilt-inducing.
+- Fixed broken one-shot eval field numbering (fields 2 and 6 were skipped).
 
 ### V0.9.7
 
 **🎰 Chance Time — Chaos Mode**
 - **Spinning wheel overlay** — full animated roulette with emoji-themed segments, smooth easing curves, and a haptic-style bounce on landing.
-- **175+ era-agnostic events** across four categories: 🟢 Fortune, 🔴 Misfortune, 💛 Chaos, 💜 Wild Card — plus 35 slapstick events (stink bombs, glitter bombs, pants falling down, chair collapses).
-- **🌶️ NSFW toggle** — 30 additional spicy events behind an explicit opt-in switch in the sidebar.
+- **175+ era-agnostic events** across four categories: 🟢 Fortune, 🔴 Misfortune, 💛 Chaos, 💜 Wild Card — plus 35 slapstick events.
 - **Escalating pressure** — 5% base chance per turn, growing +5% each turn without a trigger. Caps at 100%. After ~19 turns, Chance Time is guaranteed.
 - **No escape** — once the overlay fires there is no X button, no back button, no tapping outside. The only exit is **Accept Your Fate 🎲**.
 - **Category-specific reveal animations** — confetti burst (Fortune), red skull pulse (Misfortune), lightning strobe (Chaos), purple shimmer (Wild Card).
@@ -61,7 +164,7 @@ This is a **stability and quality-of-life** release focused on fixing unnatural 
 - `‹` and `›` chevrons flank the `Mon · Day 1` sidebar label when Realism is enabled.
 
 **🐛 Bug Fixes**
-- Fixed GUI overflow when the refractory period cooldown badge appeared in the NSFW Enhancements header.
+- Fixed GUI overflow when a cooldown badge appeared in the Enhancements header.
 - Fixed realism baseline never being captured when enabling Realism after loading a character.
 
 ### V0.9.6.5
@@ -116,7 +219,7 @@ This is a **stability and quality-of-life** release focused on fixing unnatural 
 
 ### V0.9.2
 
-- **RAG Memory** — local semantic memory, Data Bank UI, RAG-grounded summaries. Character Evolution. User Persona Awareness. Objectives/Goals. NSFW content toggle. Lorebook world-building focus.
+- **RAG Memory** — local semantic memory, Data Bank UI, RAG-grounded summaries. Character Evolution. User Persona Awareness. Objectives/Goals. Content toggle. Lorebook world-building focus.
 
 ### V0.9.1
 
