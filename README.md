@@ -85,7 +85,35 @@
 
 ---
 
-## 🆕 What's New in V0.9.7.2
+## 🆕 What's New in V0.9.7.3
+
+This release overhauls the **Learned Facts** system, adds full **Web UI parity** for the character creator, and delivers phased **Realism Engine** improvements for more natural character behavior.
+
+**🧠 Learned Facts — Quality Overhaul**
+- **RP-aware extraction prompt:** The system now distinguishes between roleplay actions and real user information — no more "walked to the door" or "kissed the character" polluting your fact list.
+- **Quality gate filter:** Every extracted fact passes through a multi-pattern validation gate that rejects action verbs, vague generics, narrator voice, JSON artifacts, and encoding garbage before saving.
+- **50-fact cap with smart consolidation:** When your fact list grows beyond 50 entries, the LLM merges related facts into denser statements (e.g., "Has a cat" + "Cat's name is Luna" → "Has a cat named Luna") while preserving all specific details.
+- **Semantic dedup tightened:** Near-duplicate detection threshold lowered from 0.85 → 0.75, catching more "same fact, different words" entries.
+- **Startup garbage cleanup:** Existing fact lists are automatically filtered on every app launch, removing historically accumulated junk entries.
+- **GBNF grammar constraint:** Local KoboldCpp models now output guaranteed-valid JSON arrays, eliminating most parse failures.
+
+**🧠 Realism Engine — Phased Recovery**
+- **Dynamic recovery phases:** The post-climax recovery prompt now phases through three stages — immediate, settling, and late recovery — based on the ratio of remaining to total recovery turns. Characters with short recovery windows move through phases quickly; characters with longer windows linger naturally.
+- **Per-character pacing:** Recovery duration varies from 1–8 turns based on personality traits, and the prompt now reflects exactly where in that window the character is.
+
+**🔄 Unified Periodic Evaluations**
+- **Synchronized cadence:** Learned Facts extraction and Character Evolution now fire on the same timer (every 10 user messages), running sequentially instead of on separate, overlapping intervals.
+- **Reduced LLM contention:** Both evaluations share one window, preventing back-to-back queued requests on local backends.
+
+**🖥️ Web UI — Character Creator Parity**
+- **Manual Creator Wizard:** The web UI's manual character creator is now a full 6-step wizard matching the desktop app — Identity → Personality → Dialogue → Lorebook → Realism Engine → Review & Save.
+- **AI Creator Realism Step:** The AI character creator now includes a dedicated Realism Engine configuration step with bond/trust sliders, time-of-day selector, and feature toggles.
+- **V2.5 character card extensions:** Both creators embed Realism Engine configuration in exported character cards.
+
+<details>
+<summary><strong>📦 Previous Releases</strong></summary>
+
+### V0.9.7.2
 
 This release brings **community-contributed fixes and features** alongside Realism Engine tuning — primarily focused on API compatibility, macOS packaging, and UI polish.
 
@@ -106,7 +134,7 @@ This release brings **community-contributed fixes and features** alongside Reali
 - Improved KoboldCpp process lifecycle management to prevent orphaned processes on app restart.
 
 <details>
-<summary><strong>📦 Previous Releases</strong></summary>
+<summary><strong>📦 Older Releases</strong></summary>
 
 ### V0.9.7.1
 
@@ -236,6 +264,8 @@ This release brings **community-contributed fixes and features** alongside Reali
 ### V0.7.x and earlier
 
 - Group chat, TTS multi-engine support (Kokoro/OpenAI/Piper), grid scale slider, bulk PNG import, chat branching, per-character system prompts, Author's Note, context/token budget viewer, external API support (OpenRouter, Nano-GPT).
+
+</details>
 
 </details>
 

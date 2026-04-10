@@ -110,7 +110,12 @@
     isExpandingNarrative: false,
     // Step 3 (Generating)
     isGenerating: false, genStatus: '', genPreview: '',
-    // Step 4 (Review)
+    // Step 4 (Realism Engine)
+    realismEnabled: false, realismTimeOfDay: 'morning', realismDayCount: 1,
+    realismShortTermBond: 0, realismLongTermBond: 0, realismTrustLevel: 0,
+    realismEmotion: '', realismEmotionIntensity: 'mild',
+    realismNsfwCooldown: false, realismChaosMode: false,
+    // Step 5 (Review)
     generatedCard: null, avatarBase64: '', imagePrompt: '', lorebookEnabled: {},
     // UI state
     _open: {},
@@ -1480,9 +1485,178 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // STEP 3: Review
+  // STEP 4: Realism Engine
   // ═══════════════════════════════════════════════════════════
-  function renderStep4() {
+
+  const REALISM_TIME_OPTIONS = ['dawn','morning','late_morning','afternoon','evening','night'];
+  const REALISM_INTENSITY_OPTIONS = ['mild','moderate','strong'];
+
+  function _formatTimeLabel(v) { return v.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '); }
+  function _shortTermTierName(s) { if(s>=80) return 'Devoted'; if(s>=50) return 'Affectionate'; if(s>=20) return 'Warm'; if(s>=5) return 'Friendly'; if(s>=-4) return 'Neutral'; if(s>=-19) return 'Cool'; if(s>=-49) return 'Distant'; if(s>=-79) return 'Hostile'; return 'Despised'; }
+  function _longTermTierName(s) { if(s>=80) return 'Soulbound'; if(s>=50) return 'Deep Bond'; if(s>=20) return 'Close'; if(s>=5) return 'Familiar'; if(s>=-4) return 'Acquaintance'; if(s>=-19) return 'Uneasy'; if(s>=-49) return 'Estranged'; if(s>=-79) return 'Broken'; return 'Nemesis'; }
+  function _trustLevelName(l) { if(l>=80) return 'Absolute Trust'; if(l>=50) return 'Deep Trust'; if(l>=20) return 'Trusting'; if(l>=5) return 'Cautious Trust'; if(l>=-4) return 'Neutral'; if(l>=-19) return 'Wary'; if(l>=-49) return 'Suspicious'; if(l>=-79) return 'Paranoid'; return 'Absolute Distrust'; }
+  function _bondColor(s) { if(s>=20) return '#4ade80'; if(s>=0) return '#60a5fa'; if(s>=-19) return '#fb923c'; return '#f87171'; }
+  function _trustColor(l) { if(l>=20) return '#2dd4bf'; if(l>=0) return '#60a5fa'; if(l>=-19) return '#fb923c'; return '#f87171'; }
+
+  function _buildRealismSlider(label, value, min, max, tierName, color, onChange) {
+    const wrap = el('div', {style:'margin-bottom:16px'});
+    const row = el('div', {style:'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px'});
+    row.appendChild(el('span', {style:'color:rgba(255,255,255,0.7);font-size:12px;font-weight:500'}, label));
+    const badge = el('span', {style:`padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${color}26;color:${color}`}, `${tierName} (${value})`);
+    row.appendChild(badge);
+    wrap.appendChild(row);
+    const slider = el('input', {type:'range', min:String(min), max:String(max), step:'1', style:`width:100%;accent-color:${color}`});
+    slider.value = value;
+    slider.addEventListener('input', () => onChange(parseInt(slider.value)));
+    wrap.appendChild(slider);
+    return wrap;
+  }
+
+  function renderStep4_Realism() {
+    const c = $('#cw-content');
+    c.innerHTML = '';
+
+    if (!state.generatedCard) {
+      // Error state
+      const errWrap = el('div', {style:'text-align:center;padding:64px 24px'});
+      errWrap.appendChild(el('div', {style:'font-size:64px;margin-bottom:16px'}, '❌'));
+      errWrap.appendChild(el('div', {style:'color:rgba(255,255,255,0.7);font-size:16px;margin-bottom:24px'}, 'Generation failed. The LLM did not produce valid output.'));
+      const retryBtn = el('button', {className:'cw-btn cw-btn-primary'}, '← Try Again');
+      retryBtn.addEventListener('click', () => { state.step = 2; state.genPreview = ''; saveState(); render(); });
+      errWrap.appendChild(retryBtn);
+      c.appendChild(errWrap);
+      return;
+    }
+
+    const wrap = el('div', {style:'max-width:700px;margin:0 auto;padding:0 16px'});
+    wrap.appendChild(el('div', {style:'font-size:28px;font-weight:700;color:#fff;margin-bottom:8px'}, 'Realism Engine'));
+    wrap.appendChild(el('div', {style:'font-size:14px;color:rgba(255,255,255,0.5);line-height:1.5;margin-bottom:32px'}, 'Set the initial state for the Realism Engine when a new conversation starts. These values will seed the relationship, emotion, and time-of-day systems.'));
+
+    // ── Master Toggle ──
+    const toggleCard = el('div', {style:`padding:16px;border-radius:16px;background:#1e293b;border:1px solid ${state.realismEnabled ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.08)'};margin-bottom:20px`});
+    const toggleRow = el('div', {style:'display:flex;align-items:center;gap:12px'});
+    const iconBox = el('div', {style:`width:44px;height:44px;border-radius:12px;background:${state.realismEnabled ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.05)'};display:flex;align-items:center;justify-content:center;font-size:24px`}, '🧠');
+    toggleRow.appendChild(iconBox);
+    const toggleInfo = el('div', {style:'flex:1'});
+    toggleInfo.appendChild(el('div', {style:'color:#fff;font-size:16px;font-weight:600'}, 'Enable Realism Engine'));
+    toggleInfo.appendChild(el('div', {style:`color:${state.realismEnabled ? '#60a5fa' : 'rgba(255,255,255,0.38)'};font-size:12px`}, state.realismEnabled ? 'Character will start with pre-configured state' : 'Realism Engine will use default values'));
+    toggleRow.appendChild(toggleInfo);
+    const toggle = el('label', {className:'toggle-switch'});
+    const toggleInput = el('input', {type:'checkbox'});
+    toggleInput.checked = state.realismEnabled;
+    toggleInput.addEventListener('change', () => { state.realismEnabled = toggleInput.checked; saveState(); renderStep4_Realism(); });
+    toggle.appendChild(toggleInput);
+    toggle.appendChild(el('span', {className:'toggle-slider'}));
+    toggleRow.appendChild(toggle);
+    toggleCard.appendChild(toggleRow);
+    wrap.appendChild(toggleCard);
+
+    if (state.realismEnabled) {
+      // ── Time & Day ──
+      const timeSec = el('div', {style:'margin-bottom:20px'});
+      const timeHeader = el('div', {style:'display:flex;align-items:center;gap:8px;margin-bottom:12px'});
+      timeHeader.appendChild(el('span', {style:'color:#fbbf24;font-size:18px'}, '⏰'));
+      timeHeader.appendChild(el('span', {style:'color:#fbbf24;font-size:15px;font-weight:600'}, 'Time & Day'));
+      timeSec.appendChild(timeHeader);
+      const timeCard = el('div', {style:'padding:16px;background:#1e293b;border-radius:14px;border:1px solid rgba(255,255,255,0.08)'});
+      const timeRow = el('div', {style:'display:flex;gap:16px'});
+      // Time dropdown
+      const timeCol = el('div', {style:'flex:2'});
+      timeCol.appendChild(el('div', {style:'color:rgba(255,255,255,0.7);font-size:12px;font-weight:500;margin-bottom:8px'}, 'Time of Day'));
+      const timeSel = el('select', {style:'width:100%;padding:8px 12px;background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#fff;font-size:14px'});
+      REALISM_TIME_OPTIONS.forEach(t => {
+        const opt = el('option', {value:t}, _formatTimeLabel(t));
+        if (t === state.realismTimeOfDay) opt.selected = true;
+        timeSel.appendChild(opt);
+      });
+      timeSel.addEventListener('change', () => { state.realismTimeOfDay = timeSel.value; saveState(); });
+      timeCol.appendChild(timeSel);
+      timeRow.appendChild(timeCol);
+      // Day number
+      const dayCol = el('div', {style:'flex:1'});
+      dayCol.appendChild(el('div', {style:'color:rgba(255,255,255,0.7);font-size:12px;font-weight:500;margin-bottom:8px'}, 'Day Number'));
+      const dayInp = el('input', {type:'number', min:'1', style:'width:100%;padding:8px 12px;background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#fff;font-size:14px'});
+      dayInp.value = state.realismDayCount;
+      dayInp.addEventListener('input', () => { const n = parseInt(dayInp.value); if (n >= 1) { state.realismDayCount = n; saveState(); } });
+      dayCol.appendChild(dayInp);
+      timeRow.appendChild(dayCol);
+      timeCard.appendChild(timeRow);
+      timeSec.appendChild(timeCard);
+      wrap.appendChild(timeSec);
+
+      // ── Relationship ──
+      const relSec = el('div', {style:'margin-bottom:20px'});
+      const relHeader = el('div', {style:'display:flex;align-items:center;gap:8px;margin-bottom:12px'});
+      relHeader.appendChild(el('span', {style:'color:#ec4899;font-size:18px'}, '❤️'));
+      relHeader.appendChild(el('span', {style:'color:#ec4899;font-size:15px;font-weight:600'}, 'Relationship'));
+      relSec.appendChild(relHeader);
+      const relCard = el('div', {style:'padding:16px;background:#1e293b;border-radius:14px;border:1px solid rgba(255,255,255,0.08)'});
+      relCard.appendChild(_buildRealismSlider('Short-Term Bond', state.realismShortTermBond, -150, 150, _shortTermTierName(state.realismShortTermBond), _bondColor(state.realismShortTermBond), v => { state.realismShortTermBond = v; saveState(); renderStep4_Realism(); }));
+      relCard.appendChild(_buildRealismSlider('Long-Term Bond', state.realismLongTermBond, -150, 150, _longTermTierName(state.realismLongTermBond), _bondColor(state.realismLongTermBond), v => { state.realismLongTermBond = v; saveState(); renderStep4_Realism(); }));
+      relCard.appendChild(_buildRealismSlider('Trust Level', state.realismTrustLevel, -100, 100, _trustLevelName(state.realismTrustLevel), _trustColor(state.realismTrustLevel), v => { state.realismTrustLevel = v; saveState(); renderStep4_Realism(); }));
+      relSec.appendChild(relCard);
+      wrap.appendChild(relSec);
+
+      // ── Emotion ──
+      const emoSec = el('div', {style:'margin-bottom:20px'});
+      const emoHeader = el('div', {style:'display:flex;align-items:center;gap:8px;margin-bottom:12px'});
+      emoHeader.appendChild(el('span', {style:'color:#a855f7;font-size:18px'}, '😊'));
+      emoHeader.appendChild(el('span', {style:'color:#a855f7;font-size:15px;font-weight:600'}, 'Starting Emotion'));
+      emoSec.appendChild(emoHeader);
+      const emoCard = el('div', {style:'padding:16px;background:#1e293b;border-radius:14px;border:1px solid rgba(255,255,255,0.08)'});
+      const emoRow = el('div', {style:'display:flex;gap:16px'});
+      const emoCol = el('div', {style:'flex:2'});
+      emoCol.appendChild(el('div', {style:'color:rgba(255,255,255,0.7);font-size:12px;font-weight:500;margin-bottom:8px'}, 'Emotion'));
+      const emoInp = el('input', {type:'text', placeholder:'e.g. curious, guarded, amused', style:'width:100%;padding:8px 12px;background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#fff;font-size:14px'});
+      emoInp.value = state.realismEmotion;
+      emoInp.addEventListener('input', () => { state.realismEmotion = emoInp.value; saveState(); });
+      emoCol.appendChild(emoInp);
+      emoRow.appendChild(emoCol);
+      const intCol = el('div', {style:'flex:1'});
+      intCol.appendChild(el('div', {style:'color:rgba(255,255,255,0.7);font-size:12px;font-weight:500;margin-bottom:8px'}, 'Intensity'));
+      const intSel = el('select', {style:'width:100%;padding:8px 12px;background:#0f172a;border:1px solid rgba(255,255,255,0.08);border-radius:10px;color:#fff;font-size:14px'});
+      REALISM_INTENSITY_OPTIONS.forEach(i => {
+        const opt = el('option', {value:i}, i[0].toUpperCase() + i.slice(1));
+        if (i === state.realismEmotionIntensity) opt.selected = true;
+        intSel.appendChild(opt);
+      });
+      intSel.addEventListener('change', () => { state.realismEmotionIntensity = intSel.value; saveState(); });
+      intCol.appendChild(intSel);
+      emoRow.appendChild(intCol);
+      emoCard.appendChild(emoRow);
+      emoSec.appendChild(emoCard);
+      wrap.appendChild(emoSec);
+
+      // ── Optional Toggles ──
+      const optSec = el('div', {style:'margin-bottom:20px'});
+      const optHeader = el('div', {style:'display:flex;align-items:center;gap:8px;margin-bottom:12px'});
+      optHeader.appendChild(el('span', {style:'color:#2dd4bf;font-size:18px'}, '🎛️'));
+      optHeader.appendChild(el('span', {style:'color:#2dd4bf;font-size:15px;font-weight:600'}, 'Optional Features'));
+      optSec.appendChild(optHeader);
+      const optCard = el('div', {style:'padding:16px;background:#1e293b;border-radius:14px;border:1px solid rgba(255,255,255,0.08)'});
+      optCard.appendChild(buildToggleRow('🌡️ NSFW Cooldown System', state.realismNsfwCooldown, v => { state.realismNsfwCooldown = v; saveState(); }, 'Realistic arousal/refractory mechanics'));
+      optCard.appendChild(el('hr', {style:'border-color:rgba(255,255,255,0.06);margin:12px 0'}));
+      optCard.appendChild(buildToggleRow('🎲 Chaos Mode (Chance Time)', state.realismChaosMode, v => { state.realismChaosMode = v; saveState(); }, 'Random narrative events during roleplay'));
+      optSec.appendChild(optCard);
+      wrap.appendChild(optSec);
+    }
+
+    // Navigation
+    const nav = el('div', {style:'display:flex;justify-content:center;gap:16px;margin-top:32px;padding-bottom:32px'});
+    const backBtn = el('button', {className:'cw-btn cw-btn-secondary', style:'height:52px;padding:0 24px'}, '← Back');
+    backBtn.addEventListener('click', () => { state.step = 3; saveState(); render(); });
+    nav.appendChild(backBtn);
+    const nextBtn = el('button', {className:'cw-btn cw-btn-primary', style:'height:52px;min-width:280px'}, 'Next: Review & Save →');
+    nextBtn.addEventListener('click', () => { state.step = 5; saveState(); render(); });
+    nav.appendChild(nextBtn);
+    wrap.appendChild(nav);
+    c.appendChild(wrap);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // STEP 5: Review
+  // ═══════════════════════════════════════════════════════════
+  function renderStep5() {
     const c = $('#cw-content');
     c.innerHTML = '';
     const card = state.generatedCard;
@@ -1552,7 +1726,7 @@
         const card2 = el('div', {className:'cw-lore-entry' + (enabled?'':' disabled')});
         const cb = el('input', {type:'checkbox'});
         cb.checked = enabled;
-        cb.addEventListener('change', () => { state.lorebookEnabled[i] = cb.checked; saveState(); renderStep4(); });
+        cb.addEventListener('change', () => { state.lorebookEnabled[i] = cb.checked; saveState(); renderStep5(); });
         card2.appendChild(cb);
         const info = el('div', {style:'flex:1;min-width:0'});
         info.appendChild(el('div', {className:'cw-lore-name'}, entry.name || 'Untitled'));
@@ -1575,7 +1749,7 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ prompt: state.imagePrompt }),
     });
-    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep4(); }
+    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep5(); }
     else {
       // Show friendly inline message instead of ugly alert
       const avatarBox = document.querySelector('#cw-avatar-box');
@@ -1598,7 +1772,7 @@
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ prompt: state.imagePrompt }),
     });
-    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep4(); }
+    if (res && res.image) { state.avatarBase64 = res.image; saveState(); renderStep5(); }
     // On failure: silently do nothing — user can see the prompt and generate manually
   }
 
@@ -1629,6 +1803,21 @@
         extensions: {},
       },
     };
+    // Add V2.5 Front Porch extensions
+    if (state.realismEnabled) {
+      v2Card.data.extensions.front_porch = {
+        realism_enabled: state.realismEnabled,
+        short_term_bond: state.realismShortTermBond,
+        long_term_bond: state.realismLongTermBond,
+        trust_level: state.realismTrustLevel,
+        day_count: state.realismDayCount,
+        time_of_day: state.realismTimeOfDay,
+        character_emotion: state.realismEmotion,
+        emotion_intensity: state.realismEmotionIntensity,
+        nsfw_cooldown_enabled: state.realismNsfwCooldown,
+        chaos_mode_enabled: state.realismChaosMode,
+      };
+    }
     // Add lorebook if present
     if (card.lorebook && card.lorebook.length) {
       v2Card.data.character_book = {
@@ -1765,6 +1954,23 @@
       avatar: state.avatarBase64 || '',
       lorebook: card.lorebook ? card.lorebook.map((e,i) => ({...e, enabled: state.lorebookEnabled[i] !== false})) : [],
     };
+    // Add V2.5 Front Porch extensions if realism is configured
+    if (state.realismEnabled) {
+      body.extensions = {
+        front_porch: {
+          realism_enabled: state.realismEnabled,
+          short_term_bond: state.realismShortTermBond,
+          long_term_bond: state.realismLongTermBond,
+          trust_level: state.realismTrustLevel,
+          day_count: state.realismDayCount,
+          time_of_day: state.realismTimeOfDay,
+          character_emotion: state.realismEmotion,
+          emotion_intensity: state.realismEmotionIntensity,
+          nsfw_cooldown_enabled: state.realismNsfwCooldown,
+          chaos_mode_enabled: state.realismChaosMode,
+        },
+      };
+    }
     const btn = document.querySelector('#cw-content .cw-btn-success');
     if (btn) { btn.textContent = '⏳ Saving...'; btn.disabled = true; }
     const res = await apiJson('/api/chargen/save', {
@@ -1807,6 +2013,10 @@
       guidedNsfwKinks:'', guidedNsfwClothing:'', guidedNsfwPersonality:'',
       isExpandingNarrative:false,
       isGenerating:false, genStatus:'', genPreview:'',
+      realismEnabled:false, realismTimeOfDay:'morning', realismDayCount:1,
+      realismShortTermBond:0, realismLongTermBond:0, realismTrustLevel:0,
+      realismEmotion:'', realismEmotionIntensity:'mild',
+      realismNsfwCooldown:false, realismChaosMode:false,
       generatedCard:null, avatarBase64:'', imagePrompt:'', lorebookEnabled:{},
       _open:{},
     };
@@ -2001,7 +2211,7 @@
   }
 
   // ── Main ──
-  function render() { updateStepIndicators(); switch(state.step) { case 0: renderStep0(); break; case 1: renderStep1_ModeSelect(); break; case 2: state.creatorMode === 'guided' ? renderStep2_Guided() : renderStep2_Automated(); break; case 3: renderStep3(); break; case 4: renderStep4(); break; } }
+  function render() { updateStepIndicators(); switch(state.step) { case 0: renderStep0(); break; case 1: renderStep1_ModeSelect(); break; case 2: state.creatorMode === 'guided' ? renderStep2_Guided() : renderStep2_Automated(); break; case 3: renderStep3(); break; case 4: renderStep4_Realism(); break; case 5: renderStep5(); break; } }
   function init() { loadState(); render(); }
   window.ChargenModule = { init, resetState };
 })();

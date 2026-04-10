@@ -60,6 +60,14 @@ boolean ::= "true" | "false"
 ws      ::= [ \t\n\r]*
 ''';
 
+/// GBNF grammar for a JSON array of strings (e.g. ["fact1", "fact2"]).
+/// Used by the fact extraction eval to constrain LLM output.
+const String _kGbnfJsonStringArray = r'''
+root    ::= ws "[" ws (string (ws "," ws string)*)? ws "]" ws
+string  ::= "\"" ([^"\\] | "\\" .)* "\""
+ws      ::= [ \t\n\r]*
+''';
+
 enum GenerationMode { normal, continue_, impersonate }
 
 class ChatMessage {
@@ -347,6 +355,7 @@ class ChatService extends ChangeNotifier {
   // NSFW cooldown & lust
   bool _nsfwCooldownEnabled = false;
   int _cooldownTurnsRemaining = 0;
+  int _cooldownTurnsTotal = 0; // original refractory duration (for phased prompt)
   int _arousalLevel = 0; // -10 to +10 scale
 
   // ── Chaos Mode / Chance Time ──
@@ -976,6 +985,28 @@ class ChatService extends ChangeNotifier {
 
       // If no session loaded, start fresh
       if (_messages.isEmpty) {
+        // Seed Realism Engine state from V2.5 card extensions (new conversations only)
+        if (_activeCharacter!.frontPorchExtensions != null) {
+          final ext = _activeCharacter!.frontPorchExtensions!;
+          _realismEnabled = ext.realismEnabled;
+          _affectionScore = ext.shortTermBond.clamp(-150, 150);
+          _longTermScore = ext.longTermBond.clamp(-150, 150);
+          _trustLevel = ext.trustLevel.clamp(-100, 100);
+          _dayCount = ext.dayCount.clamp(1, 9999);
+          _timeOfDay = ext.timeOfDay;
+          _characterEmotion = ext.characterEmotion;
+          _emotionIntensity = ext.emotionIntensity;
+          _nsfwCooldownEnabled = ext.nsfwCooldownEnabled;
+          _chaosModeEnabled = ext.chaosModeEnabled;
+          // Recalculate tiers from seeded scores
+          _relationshipTier = _calculateTier(_affectionScore);
+          _longTermTier = _calculateTier(_longTermScore);
+          debugPrint(
+            '[ChatService] V2.5 extensions seeded: realism=$_realismEnabled, '
+            'bond=$_affectionScore, trust=$_trustLevel, day=$_dayCount, time=$_timeOfDay',
+          );
+        }
+
         if (_activeCharacter!.firstMessage.isNotEmpty) {
           _messages.add(
             ChatMessage(
@@ -1475,8 +1506,27 @@ class ChatService extends ChangeNotifier {
     _nsfwCooldownEnabled = lastSession.nsfwCooldownEnabled;
     _arousalLevel = lastSession.arousalLevel;
     _cooldownTurnsRemaining = lastSession.cooldownTurnsRemaining;
+    _trustLevel = lastSession.trustLevel;
+    _activeFixation = lastSession.activeFixation;
+    _fixationLifespan = lastSession.fixationLifespan;
+    _spatialStance = lastSession.spatialStance;
+    _pendingTrustRepair = lastSession.trustRepairPending;
     _chaosModeEnabled = lastSession.chaosModeEnabled;
     _chaosPressure = lastSession.chaosPressure;
+
+    // Realism Engine 2.0 Compatibility Migration
+    // Old scale was 0-15. New scale is 0-150.
+    if (_affectionScore > 0 &&
+        _affectionScore <= 15 &&
+        _relationshipTier >= 3) {
+      _affectionScore = _affectionScore * 10;
+      if (_longTermScore == 0) {
+        _longTermScore = _affectionScore;
+        _longTermTier = _calculateTier(_longTermScore);
+      }
+      _relationshipTier = _calculateTier(_affectionScore);
+      debugPrint('[Realism] Legacy session migrated to REv2 scales (loadLast).');
+    }
 
     // Load per-session evolution (1:1 mode only — group is handled by _loadGroupEvolvedFields)
     if (_activeCharacter != null) {
@@ -3474,13 +3524,9 @@ class ChatService extends ChangeNotifier {
         // Embed messages for RAG memory (fire-and-forget)
         _maybeEmbedMessages();
 
-        // Extract persona facts from user messages (fire-and-forget)
-        // Note: action suggestions are NOT auto-triggered here.
-        // The user must explicitly request them via the UI button.
-        _maybeExtractFacts();
-
-        // Evolve character personality/scenario (fire-and-forget)
-        _maybeEvolveCharacter();
+        // Periodic evaluations: extract user facts + evolve character personality
+        // Both run on the same cadence (every N user messages), sequentially.
+        _maybeRunPeriodicEvals();
 
         // (Task completion check now runs pre-generation in sendMessage)
 
@@ -4658,26 +4704,79 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  int _userMessagesSinceLastExtract = 0;
+  int _userMessagesSinceLastPeriodicEval = 0;
   bool _isExtractingFacts = false;
 
-  /// Extract personal facts from recent user messages using the LLM.
-  /// Fires async (non-blocking) every N user messages when auto-persona is enabled.
-  void _maybeExtractFacts() {
-    if (!_storageService.autoPersonaEnabled) return;
+  /// Unified periodic evaluation: runs fact extraction + character evolution
+  /// sequentially on the same cadence (every N user messages).
+  void _maybeRunPeriodicEvals() {
+    final autoPersona = _storageService.autoPersonaEnabled;
+    final autoEvolution = _storageService.characterEvolutionEnabled;
+    if (!autoPersona && !autoEvolution) return;
     if (_llmProvider == null) return;
-    if (_isExtractingFacts) return;
+    if (_isExtractingFacts || _isEvolvingCharacter) return;
 
-    // Count user messages in this session
-    _userMessagesSinceLastExtract++;
-    if (_userMessagesSinceLastExtract < _storageService.autoPersonaInterval)
+    _userMessagesSinceLastPeriodicEval++;
+    if (_userMessagesSinceLastPeriodicEval < _storageService.autoPersonaInterval)
       return;
-    _userMessagesSinceLastExtract = 0;
+    _userMessagesSinceLastPeriodicEval = 0;
 
     debugPrint(
-      '[RAG:Persona] ▶ Triggering fact extraction (every ${_storageService.autoPersonaInterval} user messages)',
+      '[Periodic] ▶ Triggering periodic evals (every ${_storageService.autoPersonaInterval} user messages)',
     );
-    _extractFactsInBackground();
+    _runPeriodicEvalsInSequence();
+  }
+
+  /// Run fact extraction first, then character evolution, sequentially.
+  Future<void> _runPeriodicEvalsInSequence() async {
+    // Step 1: Extract user facts
+    if (_storageService.autoPersonaEnabled) {
+      debugPrint('[Periodic] Step 1/2: Extracting user facts...');
+      await _extractFactsInBackground();
+    }
+    // Step 2: Evolve character
+    if (_storageService.characterEvolutionEnabled) {
+      debugPrint('[Periodic] Step 2/2: Evolving character...');
+      _triggerCharacterEvolution();
+    }
+  }
+
+  /// Regex patterns for the post-extraction quality gate.
+  /// Facts matching any of these are rejected as garbage.
+  static final List<RegExp> _factGarbagePatterns = [
+    // RP action text (contains asterisks or action-style phrasing)
+    RegExp(r'\*'),
+    // Starts with action verbs that indicate RP narration
+    RegExp(r'^(walks|runs|looks|says|said|goes|went|came|sat|stood|turned|moved|grabbed|took|pulled|pushed|kissed|hugged|touched|smiled|laughed|nodded|sighed|whispered|moaned|gasped)\b', caseSensitive: false),
+    // LLM meta-commentary / non-facts
+    RegExp(r'^(no new facts|none|n/a|nothing|unknown|unclear|not sure|i don.?t know)', caseSensitive: false),
+    // Too generic / vague to be useful
+    RegExp(r'^(is nice|is good|is bad|likes things|does stuff|is a person|is human|exists)', caseSensitive: false),
+    // JSON artifacts or structural garbage
+    RegExp(r'[\[\]{}]'),
+    // Repeated punctuation or encoding garbage
+    RegExp(r'[.!?]{3,}|\\[nrt]|&#|%[0-9a-f]{2}', caseSensitive: false),
+    // Third-person narrator voice ("The user did X", "They went Y")
+    RegExp(r'^(the user|the player|they|he|she)\s+(is|was|had|has|did|does|went|walked|said|looked|seemed|appeared)\b', caseSensitive: false),
+  ];
+
+  /// Minimum/maximum character length for a valid fact.
+  static const int _minFactLength = 8;
+  static const int _maxFactLength = 200;
+
+  /// Maximum number of learned facts to keep per persona.
+  static const int _maxLearnedFacts = 50;
+
+  /// Returns true if a fact passes the quality gate.
+  bool _isValidFact(String fact) {
+    if (fact.length < _minFactLength || fact.length > _maxFactLength) return false;
+    for (final pattern in _factGarbagePatterns) {
+      if (pattern.hasMatch(fact)) {
+        debugPrint('[RAG:Persona] ✗ Rejected by quality gate: "$fact"');
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _extractFactsInBackground() async {
@@ -4707,47 +4806,70 @@ class ChatService extends ChangeNotifier {
           : userMessages;
 
       final existingFacts = _userPersonaService.persona.learnedFacts;
+      final userName = _userPersonaService.persona.name;
 
-      // Build extraction prompt
+      // Build user message text (strip RP asterisk actions for cleaner context)
       final userMsgText = recentUserMsgs
-          .map((m) => '${m.sender}: ${m.displayText}')
+          .map((m) => '$userName: ${m.displayText}')
           .join('\n');
 
       final existingFactsText = existingFacts.isNotEmpty
-          ? 'Existing known facts (do NOT repeat these):\n${existingFacts.map((f) => '- $f').join('\n')}\n\n'
+          ? 'Already known (do NOT repeat or rephrase these):\n${existingFacts.map((f) => '- $f').join('\n')}\n\n'
           : '';
 
+      // ── Strict RP-Aware Extraction Prompt ──
       final extractionPrompt =
-          'You are a fact extraction assistant. Read the following messages from a user named "${_userPersonaService.persona.name}" '
-          'and extract any NEW personal facts about them. Focus on: preferences, relationships, background, personality traits, '
-          'habits, likes/dislikes, physical descriptions, and life details.\n\n'
-          '${existingFactsText}'
-          'Recent messages from ${_userPersonaService.persona.name}:\n$userMsgText\n\n'
-          'Return ONLY a valid JSON array of short factual statements about the user. '
-          'Each fact should be a single concise sentence. If no new facts are found, return an empty array [].\n'
-          'Example: ["Likes cats", "Has a sister named Sarah", "Works as a programmer"]\n'
+          'You are extracting REAL personal facts about a user named "$userName" from their chat messages.\n\n'
+          'CRITICAL RULES:\n'
+          '- ONLY extract facts that $userName explicitly states about THEMSELVES as a real person\n'
+          '- IGNORE all roleplay actions (text between *asterisks*), character dialogue, and narrative descriptions\n'
+          '- IGNORE anything said IN CHARACTER or about fictional scenarios, quests, or fantasy settings\n'
+          '- Each fact must be something you would put on a real person\'s About Me page or dating profile\n'
+          '- Extract ONLY concrete, specific details — not vague observations\n'
+          '- If you are not confident a fact is about the REAL person behind the screen, do NOT extract it\n\n'
+          'GOOD facts: "Has a dog named Max", "Works as a nurse", "Favorite color is blue", "Lives in Texas"\n'
+          'BAD (do NOT extract): "Walked to the door", "Kissed the character", "Is a warrior princess", "Said hello", "Seems happy"\n\n'
+          '$existingFactsText'
+          'Recent messages from $userName:\n$userMsgText\n\n'
+          'Return ONLY a valid JSON array of short factual sentences. If no qualifying facts exist, return [].\n'
           'Response:';
 
       debugPrint(
         '[RAG:Persona] Sending extraction prompt (${extractionPrompt.length} chars, ${recentUserMsgs.length} user messages)',
       );
 
+      // Use GBNF grammar for local models to ensure valid JSON array output.
+      // For thinking models, grammar is auto-gated off by _buildKoboldGrammar.
+      final isThinkingModel = _llmProvider!.isLocal
+          ? _storageService.koboldThinkingModel
+          : _storageService.reasoningEnabled;
+
       final params = GenerationParams(
         prompt: extractionPrompt,
         maxLength: 1024,
-        temperature: 0.3,
-        stopSequences: [],
+        temperature: 0.2,
+        repeatPenalty: 1.15,
+        stopSequences: isThinkingModel ? [] : [']\n', ']'],
+        grammar: _buildKoboldGrammar(_kGbnfJsonStringArray),
+        banEosToken: isThinkingModel && _llmProvider!.isLocal,
+        trimStop: !(isThinkingModel && _llmProvider!.isLocal),
       );
 
       String responseText = '';
       await for (final chunk in llmService.generateStream(params)) {
         responseText += chunk;
+        // Early termination: if we see the closing bracket, stop
+        final stripped = _stripThinkBlocks(responseText);
+        if (stripped.isNotEmpty && stripped.trimRight().endsWith(']')) {
+          break;
+        }
       }
 
       // Strip think blocks (for thinking models)
-      responseText = responseText
-          .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
-          .trim();
+      responseText = _stripThinkBlocks(responseText).isNotEmpty
+          ? _stripThinkBlocks(responseText)
+          : responseText;
+      responseText = responseText.trim();
 
       debugPrint('[RAG:Persona] Raw response: $responseText');
 
@@ -4762,29 +4884,15 @@ class ChatService extends ChangeNotifier {
         if (match != null) jsonStr = match.group(1)!.trim();
       }
 
-      // Try to find a JSON array in the response
+      // Extract the JSON array — no fallback line parser (fail silently if not JSON)
       List<String> facts = [];
       final arrayMatch = RegExp(r'\[.*\]', dotAll: true).firstMatch(jsonStr);
       if (arrayMatch != null) {
         try {
           facts = List<String>.from(jsonDecode(arrayMatch.group(0)!) as List);
         } catch (_) {
-          debugPrint('[RAG:Persona] JSON parse failed, trying line parser');
-        }
-      }
-
-      // Fallback: parse numbered/bulleted list lines (e.g. "- Likes cats" or "1. Has a dog")
-      if (facts.isEmpty) {
-        final lines = responseText.split('\n');
-        for (final line in lines) {
-          final cleaned = line
-              .replaceFirst(RegExp(r'^\s*[-•*]\s*'), '')
-              .replaceFirst(RegExp(r'^\s*\d+[.)]\s*'), '')
-              .replaceAll('"', '')
-              .trim();
-          if (cleaned.length > 3 && cleaned.length < 200) {
-            facts.add(cleaned);
-          }
+          debugPrint('[RAG:Persona] ✗ JSON parse failed — aborting extraction');
+          return;
         }
       }
 
@@ -4793,15 +4901,35 @@ class ChatService extends ChangeNotifier {
         return;
       }
 
-      debugPrint('[RAG:Persona] ✅ Extracted ${facts.length} new fact(s):');
-      for (final fact in facts) {
+      // ── Quality Gate: filter garbage facts ──
+      final cleanFacts = facts.where(_isValidFact).toList();
+      final rejected = facts.length - cleanFacts.length;
+      if (rejected > 0) {
+        debugPrint('[RAG:Persona] Quality gate: rejected $rejected/${facts.length} facts');
+      }
+
+      if (cleanFacts.isEmpty) {
+        debugPrint('[RAG:Persona] ✗ All extracted facts rejected by quality gate');
+        return;
+      }
+
+      debugPrint('[RAG:Persona] ✅ Accepted ${cleanFacts.length} fact(s):');
+      for (final fact in cleanFacts) {
         debugPrint('[RAG:Persona]   • $fact');
       }
 
       await _userPersonaService.addLearnedFacts(
-        facts,
+        cleanFacts,
         embedService: _memoryService?.embeddingService,
       );
+
+      // ── Fact Cap: consolidate if over limit ──
+      final currentCount = _userPersonaService.persona.learnedFacts.length;
+      if (currentCount > _maxLearnedFacts) {
+        debugPrint('[RAG:Persona] Fact count ($currentCount) exceeds cap ($_maxLearnedFacts), consolidating...');
+        await _consolidateLearnedFacts();
+      }
+
       debugPrint('[RAG:Persona] Facts saved to persona');
     } catch (e) {
       debugPrint('[RAG:Persona] ✗ Extraction failed: $e');
@@ -4810,9 +4938,81 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  /// Consolidate learned facts when they exceed the cap.
+  /// Uses the LLM to merge related facts into denser statements,
+  /// reducing the total count while preserving all meaningful details.
+  Future<void> _consolidateLearnedFacts() async {
+    try {
+      final facts = List<String>.from(_userPersonaService.persona.learnedFacts);
+      if (facts.length <= _maxLearnedFacts) return;
+
+      final userName = _userPersonaService.persona.name;
+      final overCount = facts.length - _maxLearnedFacts;
+
+      // Ask the LLM to consolidate the facts
+      final consolidationPrompt =
+          'You are a fact consolidation assistant. The following is a list of facts about a person named "$userName".\n'
+          'There are ${facts.length} facts but the maximum allowed is $_maxLearnedFacts.\n\n'
+          'TASK: Merge related facts together into single, dense sentences that preserve ALL specific details.\n'
+          'For example: "Has a cat" + "Cat\'s name is Luna" + "Luna is a calico" → "Has a calico cat named Luna"\n'
+          'Remove any truly redundant entries. Prioritize keeping specific, unique details (names, numbers, locations).\n'
+          'Drop vague or low-value entries first (e.g. "Seems nice" or "Likes things").\n\n'
+          'Current facts:\n${facts.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')}\n\n'
+          'Return ONLY a JSON array of consolidated facts. Target: around $_maxLearnedFacts entries or fewer.\n'
+          'Response:';
+
+      final raw = await _fireLLMEval(
+        consolidationPrompt,
+        grammar: _buildKoboldGrammar(_kGbnfJsonStringArray),
+      );
+      if (raw == null) {
+        // LLM failed — fall back to simple truncation (keep first N facts)
+        debugPrint('[RAG:Persona] Consolidation LLM call failed, truncating to $_maxLearnedFacts');
+        final trimmed = facts.sublist(0, _maxLearnedFacts);
+        await _userPersonaService.updatePersona(
+          _userPersonaService.persona.copyWith(learnedFacts: trimmed),
+        );
+        return;
+      }
+
+      final text = _stripThinkBlocks(raw).isNotEmpty ? _stripThinkBlocks(raw) : raw;
+      var jsonStr = text.trim();
+      if (jsonStr.contains('```')) {
+        final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
+        if (match != null) jsonStr = match.group(1)!.trim();
+      }
+      final arrayMatch = RegExp(r'\[.*\]', dotAll: true).firstMatch(jsonStr);
+      if (arrayMatch == null) {
+        debugPrint('[RAG:Persona] Consolidation response not parseable, truncating');
+        final trimmed = facts.sublist(0, _maxLearnedFacts);
+        await _userPersonaService.updatePersona(
+          _userPersonaService.persona.copyWith(learnedFacts: trimmed),
+        );
+        return;
+      }
+
+      try {
+        final consolidated = List<String>.from(jsonDecode(arrayMatch.group(0)!) as List);
+        final cleaned = consolidated.where(_isValidFact).toList();
+        debugPrint('[RAG:Persona] Consolidated ${facts.length} → ${cleaned.length} facts');
+        await _userPersonaService.updatePersona(
+          _userPersonaService.persona.copyWith(learnedFacts: cleaned),
+        );
+      } catch (_) {
+        debugPrint('[RAG:Persona] Consolidation JSON parse failed, truncating');
+        final trimmed = facts.sublist(0, _maxLearnedFacts);
+        await _userPersonaService.updatePersona(
+          _userPersonaService.persona.copyWith(learnedFacts: trimmed),
+        );
+      }
+    } catch (e) {
+      debugPrint('[RAG:Persona] Consolidation error: $e');
+    }
+  }
+
   // ── Character Evolution ─────────────────────────────────────────────────
 
-  int _userMessagesSinceLastEvolution = 0;
+  // (Evolution counter removed — now unified with fact extraction in _userMessagesSinceLastPeriodicEval)
   bool _isEvolvingCharacter = false;
   String _evolutionStatus = '';
   String _evolutionError = '';
@@ -4941,9 +5141,8 @@ class ChatService extends ChangeNotifier {
   }
 
   /// Trigger evolution check after each generation.
-  void _maybeEvolveCharacter() {
-    if (!_storageService.characterEvolutionEnabled) return;
-    if (_llmProvider == null) return;
+  /// Trigger character evolution directly (called from unified periodic eval).
+  void _triggerCharacterEvolution() {
     if (_isEvolvingCharacter) return;
 
     // In group mode, evolve the character who just spoke
@@ -4961,14 +5160,8 @@ class ChatService extends ChangeNotifier {
       if (target == null) return;
     }
 
-    _userMessagesSinceLastEvolution++;
-    if (_userMessagesSinceLastEvolution < _storageService.evolutionInterval)
-      return;
-    _userMessagesSinceLastEvolution = 0;
-
     debugPrint(
-      '[Evolution] ▶ Triggering character evolution for ${target.name} '
-      '(every ${_storageService.evolutionInterval} user messages)',
+      '[Evolution] ▶ Triggering character evolution for ${target.name}',
     );
     _extractCharacterEvolution(targetCharacter: target);
   }
@@ -5927,7 +6120,10 @@ class ChatService extends ChangeNotifier {
         'define exactly how this trust level manifests in behavior.]\n';
   }
 
-  /// Returns a prompt fragment that enforces the refractory period and adds personality‑aware tone and reflection.
+  /// Returns a prompt fragment that enforces the refractory period, phased by
+  /// how far into recovery the character is. The total refractory duration varies
+  /// per character (1-8 turns based on personality), so the prompt uses the
+  /// ratio of remaining/total to determine the phase.
   String _getNsfwCooldownInjection() {
     if (!_realismEnabled || !_nsfwCooldownEnabled) return '';
 
@@ -5935,11 +6131,42 @@ class ChatService extends ChangeNotifier {
     String statePrompt = '[OOC Note regarding Physical State:\n';
 
     if (_cooldownTurnsRemaining > 0) {
+      final total = _cooldownTurnsTotal > 0 ? _cooldownTurnsTotal : _cooldownTurnsRemaining;
+      final ratio = _cooldownTurnsRemaining / total;
+
+      if (ratio > 0.66) {
+        // ── Phase 1: Immediate post-orgasm (just happened) ──
+        statePrompt +=
+            ' $charName just came — hard. Their body is still trembling with the last'
+            ' waves of it, skin flushed and damp, pulse hammering, breath ragged. Everything'
+            ' is oversensitive — even a light touch makes them flinch or gasp. The world'
+            ' feels soft and liquid around the edges. They\'re physically spent and blissfully'
+            ' wrecked. If {{user}} tries to start something sexual again, $charName\'s body will'
+            ' not respond — they may laugh it off, gently push {{user}}\'s hand away, or pull'
+            ' them close for contact that isn\'t sexual. They need a moment to come back to earth.\n';
+      } else if (ratio > 0.33) {
+        // ── Phase 2: Warm afterglow (settling in) ──
+        statePrompt +=
+            ' $charName is deep in the afterglow — that warm, heavy-limbed contentment where'
+            ' everything feels good but nothing feels urgent. Their heartbeat has settled, skin'
+            ' still tingling pleasantly. They feel closer to {{user}} than usual, more emotionally'
+            ' open — the kind of mood where secrets slip out, where they want to be held, to murmur'
+            ' into someone\'s neck, to trace lazy shapes on bare skin. The physical hunger has been'
+            ' thoroughly satisfied. If {{user}} pushes for more, $charName would rather savor this'
+            ' than rush back — a gentle deflection, a "not yet," a kiss on the forehead instead.\n';
+      } else {
+        // ── Phase 3: Late recovery (body starting to wake back up) ──
+        statePrompt +=
+            ' $charName is coming out of the afterglow — body starting to feel like theirs again'
+            ' rather than something boneless and floating. The deep satisfaction is still there, a'
+            ' pleasant hum under the skin, but the total sensitivity has faded. They could be'
+            ' tempted again if {{user}} plays it right, but they\'re not seeking it out — more'
+            ' content to let things build naturally than to chase it. A suggestive touch might get'
+            ' a raised eyebrow and a half-smile rather than an immediate response.\n';
+      }
+
       statePrompt +=
-          ' $charName recently experienced climax and is in a natural refractory/recovery period.\n'
-          ' They should behave realistically: relaxed, possibly tired, affectionate but\n'
-          ' not sexually eager. If {{user}} pushes for immediate sexual activity,\n'
-          ' $charName should respond with gentle reluctance or suggest resting first.\n';
+          ' ($charName\'s refractory recovery: $_cooldownTurnsRemaining of $total turns remaining.)\n';
     } else {
       String arousalDesc;
       if (_arousalLevel <= -2) {
@@ -5960,8 +6187,14 @@ class ChatService extends ChangeNotifier {
       } else {
         arousalDesc =
             'feverish with lust, entirely consumed by the desperate need for immediate climax';
+        // At 10/10, explicitly authorize the AI to write the climax
+        statePrompt += ' $charName is currently $arousalDesc.\n'
+            ' $charName has reached maximum arousal and SHOULD reach climax/orgasm in this response '
+            'if the scene allows it. Do not keep delaying — the buildup has peaked and resolution is natural.\n';
       }
-      statePrompt += ' $charName is currently $arousalDesc.\n';
+      if (_arousalLevel < 10) {
+        statePrompt += ' $charName is currently $arousalDesc.\n';
+      }
     }
 
     statePrompt +=
@@ -6023,8 +6256,18 @@ class ChatService extends ChangeNotifier {
         'IMPORTANT: Reactions are entirely subjective based on $charName\'s personality. '
         'Most normal interactions should score 0 or slightly positive. '
         'Reserve negative scores ONLY for clear rudeness, hostility, manipulation, or betrayal.\n\n'
-        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? (-5 to +5)\n'
-        '   +5: Deeply moved | +2: Warmed up | +1: Mildly pleasant | 0: No change | -1: Slightly put off | -2: Annoyed | -5: Deeply wounded\n'
+        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? (-50 to +50)\n'
+        '   +50: Life-changing — a moment that fundamentally redefines the relationship\n'
+        '   +30: Profoundly moving — raw vulnerability, sacrifice, or devotion that leaves $charName shaken\n'
+        '   +20: Deeply touched — a significant emotional breakthrough or act of genuine care\n'
+        '   +10: Meaningfully warmed — a moment that clearly strengthens the connection\n'
+        '   +5: Moved — a sweet, kind, or thoughtful exchange | +2: Warmed up | +1: Mildly pleasant\n'
+        '   0: No change (DEFAULT for normal conversation)\n'
+        '   -1: Slightly put off | -2: Annoyed | -5: Hurt — a clearly unkind or dismissive moment\n'
+        '   -10: Wounded — a significant emotional injury\n'
+        '   -20: Deeply hurt — a cruel or callous act that damages the bond\n'
+        '   -30: Devastated — a severe betrayal of emotional trust\n'
+        '   -50: Devastating betrayal — a relationship-destroying act\n'
         '   ⚠ Default to 0 for normal conversation. Only go negative if $userName was clearly unkind, dismissive, or harmful.\n'
         '2. "bond_reason": One brief in-character thought from $charName explaining the tension shift, e.g. "His warmth made me feel safe." or "That dismissal stung." Use "none" if delta is 0.\n'
         '3. "trust_delta": Did $userName — NOT $charName — do something that builds or destroys $charName\'s trust in $userName? (-200 to +50)\n'
@@ -6056,7 +6299,7 @@ class ChatService extends ChangeNotifier {
       ).firstMatch(text);
       int bondDelta = 0;
       if (deltaMatch != null) {
-        bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-5, 5);
+        bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-50, 50);
         _applyScoreDelta(bondDelta);
       }
 
@@ -6541,8 +6784,14 @@ class ChatService extends ChangeNotifier {
         '$relationshipCtx'
         'Reactions are subjective! Evaluate ALL changes through $charName\'s specific personality.\n\n'
         'Evaluate ALL of the following at once:\n'
-        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? (-5 to +5)\n'
-        '   +5: Deeply moved | +2: Warmed up | +1: Mildly pleasant | 0: No change | -1: Slightly put off | -2: Annoyed | -5: Deeply wounded\n'
+        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? (-50 to +50)\n'
+        '   +50: Life-changing — fundamentally redefines the relationship\n'
+        '   +30: Profoundly moving — raw vulnerability, sacrifice, or devotion\n'
+        '   +20: Deeply touched — significant emotional breakthrough\n'
+        '   +10: Meaningfully warmed — clearly strengthens the connection\n'
+        '   +5: Moved | +2: Warmed up | +1: Mildly pleasant | 0: No change\n'
+        '   -1: Slightly put off | -2: Annoyed | -5: Hurt\n'
+        '   -10: Wounded | -20: Deeply hurt | -30: Devastated | -50: Devastating betrayal\n'
         '   ⚠ Default to 0 for normal conversation.\n'
         '2. "trust_delta": Did $userName — NOT $charName — do something that builds or destroys $charName\'s trust in $userName? (-200 to +50)\n'
         '   Trust is SUBJECTIVE to $charName\'s personality. What builds trust for one character may break it for another.\n'
@@ -6582,7 +6831,7 @@ class ChatService extends ChangeNotifier {
         r'"relationship_delta"\s*:\s*(-?\d+)',
       ).firstMatch(text);
       if (deltaMatch != null) {
-        bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-5, 5);
+        bondDelta = (int.tryParse(deltaMatch.group(1)!) ?? 0).clamp(-50, 50);
         _applyScoreDelta(bondDelta);
       }
 
@@ -6836,6 +7085,7 @@ class ChatService extends ChangeNotifier {
       'dayCount': _dayCount,
       'arousalLevel': _arousalLevel,
       'cooldownTurnsRemaining': _cooldownTurnsRemaining,
+      'cooldownTurnsTotal': _cooldownTurnsTotal,
       'trustLevel': _trustLevel,
       'activeFixation': _activeFixation,
       'fixationLifespan': _fixationLifespan,
@@ -6874,6 +7124,8 @@ class ChatService extends ChangeNotifier {
     _arousalLevel = state['arousalLevel'] as int? ?? _arousalLevel;
     _cooldownTurnsRemaining =
         state['cooldownTurnsRemaining'] as int? ?? _cooldownTurnsRemaining;
+    _cooldownTurnsTotal =
+        state['cooldownTurnsTotal'] as int? ?? _cooldownTurnsRemaining;
 
     // v3.0 Restorations
     _trustLevel = state['trustLevel'] as int? ?? _trustLevel;
@@ -6939,6 +7191,7 @@ class ChatService extends ChangeNotifier {
         if (turnMatch != null) {
           turns = (int.tryParse(turnMatch.group(1)!) ?? 5).clamp(1, 10);
         }
+        _cooldownTurnsTotal = turns;
         _cooldownTurnsRemaining = turns;
         _arousalLevel = -3;
         debugPrint(
@@ -7050,6 +7303,7 @@ class ChatService extends ChangeNotifier {
       _timeOfDay = 'morning';
       _dayCount = 1;
       _cooldownTurnsRemaining = 0;
+      _cooldownTurnsTotal = 0;
     }
     await _saveChat();
     notifyListeners();
@@ -7059,6 +7313,7 @@ class ChatService extends ChangeNotifier {
     _nsfwCooldownEnabled = enabled;
     if (!enabled) {
       _cooldownTurnsRemaining = 0;
+      _cooldownTurnsTotal = 0;
       _arousalLevel = 0;
     }
     await _saveChat();

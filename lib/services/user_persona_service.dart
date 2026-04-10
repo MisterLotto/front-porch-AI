@@ -100,7 +100,8 @@ class UserPersonaService extends ChangeNotifier {
   final Map<String, List<double>> _factEmbeddings = {};
 
   /// Similarity threshold for considering two facts as duplicates.
-  static const double _dedupThreshold = 0.85;
+  /// Lowered from 0.85 to catch more near-duplicates with slightly different wording.
+  static const double _dedupThreshold = 0.75;
 
   List<UserPersona> get personas => List.unmodifiable(_personas);
   
@@ -152,6 +153,12 @@ class UserPersonaService extends ChangeNotifier {
 
       _factEmbeddings.clear(); // Invalidate cache on reload
       notifyListeners();
+
+      // One-time garbage cleanup: filter historically polluted facts
+      final removed = await cleanupGarbageFacts();
+      if (removed > 0) {
+        debugPrint('[RAG:Persona] Startup cleanup: removed $removed garbage fact(s)');
+      }
     } catch (e) {
       debugPrint('Error loading personas from DB: $e');
     }
@@ -472,5 +479,48 @@ class UserPersonaService extends ChangeNotifier {
       _factEmbeddings.remove(removed); // Clean up cache
       await updatePersona(current.copyWith(learnedFacts: facts));
     }
+  }
+
+  /// One-time garbage cleanup: run quality filters against all existing facts.
+  /// Call on app launch to clean up historically polluted fact lists.
+  /// Returns the number of facts removed.
+  Future<int> cleanupGarbageFacts() async {
+    final current = persona;
+    final facts = List<String>.from(current.learnedFacts);
+    if (facts.isEmpty) return 0;
+
+    final originalCount = facts.length;
+    facts.removeWhere((fact) => _isGarbageFact(fact));
+    final removed = originalCount - facts.length;
+
+    if (removed > 0) {
+      debugPrint('[RAG:Persona] Garbage cleanup: removed $removed/$originalCount facts');
+      _factEmbeddings.clear(); // Invalidate cache since facts changed
+      await updatePersona(current.copyWith(learnedFacts: facts));
+    }
+    return removed;
+  }
+
+  /// Check if a fact matches garbage patterns.
+  /// Mirrors the quality gate in chat_service.dart.
+  static bool _isGarbageFact(String fact) {
+    final f = fact.trim();
+    // Too short or too long
+    if (f.length < 8 || f.length > 200) return true;
+    // Contains RP asterisks
+    if (f.contains('*')) return true;
+    // Starts with action verbs
+    if (RegExp(r'^(walks|runs|looks|says|said|goes|went|came|sat|stood|turned|moved|grabbed|took|pulled|pushed|kissed|hugged|touched|smiled|laughed|nodded|sighed|whispered|moaned|gasped)\b', caseSensitive: false).hasMatch(f)) return true;
+    // Meta-commentary
+    if (RegExp(r'^(no new facts|none|n/a|nothing|unknown|unclear|not sure|i don.?t know)', caseSensitive: false).hasMatch(f)) return true;
+    // Too generic
+    if (RegExp(r'^(is nice|is good|is bad|likes things|does stuff|is a person|is human|exists)', caseSensitive: false).hasMatch(f)) return true;
+    // JSON artifacts
+    if (RegExp(r'[\[\]{}]').hasMatch(f)) return true;
+    // Repeated punctuation / encoding garbage
+    if (RegExp(r'[.!?]{3,}|\\[nrt]|&#|%[0-9a-f]{2}', caseSensitive: false).hasMatch(f)) return true;
+    // Third-person narrator voice
+    if (RegExp(r'^(the user|the player|they|he|she)\s+(is|was|had|has|did|does|went|walked|said|looked|seemed|appeared)\b', caseSensitive: false).hasMatch(f)) return true;
+    return false;
   }
 }

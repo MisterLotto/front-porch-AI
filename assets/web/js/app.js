@@ -349,6 +349,7 @@
         if (pageName === 'worlds') loadWorlds();
         if (pageName === 'sync') loadSyncStatus();
         if (pageName === 'creator' && window.ChargenModule) window.ChargenModule.init();
+        if (pageName === 'create' && window.ManualCreatorModule) window.ManualCreatorModule.init();
         if (pageName === 'stories' && window.StoriesModule) window.StoriesModule.init();
     }
 
@@ -4552,34 +4553,7 @@
         $('#btn-create-world')?.addEventListener('click', () => showWorldModal(null, '', '', { entries: [] }));
 
         // Create character button
-        $('#btn-create-character')?.addEventListener('click', async () => {
-            const name = $('#cc-name')?.value.trim();
-            if (!name) { showInfoModal('Error', 'Character name is required.'); return; }
-
-            const payload = {
-                name,
-                description: $('#cc-desc')?.value.trim() || '',
-                personality: $('#cc-personality')?.value.trim() || '',
-                scenario: $('#cc-scenario')?.value.trim() || '',
-                firstMessage: $('#cc-first-msg')?.value.trim() || '',
-                tags: ($('#cc-tags')?.value || '').split(',').map(t => t.trim()).filter(Boolean),
-            };
-
-            const res = await api('/api/characters/create', {
-                method: 'POST',
-                body: JSON.stringify(payload),
-            });
-            if (res && res.ok) {
-                showInfoModal('Created', `Character "${name}" created successfully!`);
-                // Clear form
-                ['#cc-name', '#cc-desc', '#cc-personality', '#cc-scenario', '#cc-first-msg', '#cc-tags'].forEach(id => {
-                    const el = $(id);
-                    if (el) el.value = '';
-                });
-                // Refresh home page
-                loadCharacters();
-            }
-        });
+        // Manual character creator is now handled by ManualCreatorModule (manual_creator.js)
     }
 
     // ═══════════════════════════════════════════════════════════

@@ -193,7 +193,7 @@ class StorageService extends ChangeNotifier {
 
   // Character evolution settings
   bool _characterEvolutionEnabled = false;
-  int _evolutionInterval = 20; // evolve every N user messages
+  int _evolutionInterval = 10; // unified with fact extraction (every N user messages)
 
   // Realism Engine performance settings
   bool _realismOneShotEval = false; // fuse relationship + scene eval into one LLM call
@@ -456,7 +456,7 @@ class StorageService extends ChangeNotifier {
 
     // Character evolution settings
     _characterEvolutionEnabled = _prefs?.getBool('character_evolution_enabled') ?? false;
-    _evolutionInterval = _prefs?.getInt('evolution_interval') ?? 20;
+    _evolutionInterval = _prefs?.getInt('evolution_interval') ?? 10;
 
     // Realism Engine performance settings
     _realismOneShotEval = _prefs?.getBool('realism_one_shot_eval') ?? false;

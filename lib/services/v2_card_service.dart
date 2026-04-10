@@ -90,6 +90,19 @@ class V2CardService {
       // V2 cards nest data under 'data', V1 cards have it at top level
       final data = jsonMap.containsKey('data') ? jsonMap['data'] : jsonMap;
 
+      // Parse V2.5 extensions (front_porch namespace + raw third-party keys)
+      FrontPorchExtensions? fpExtensions;
+      Map<String, dynamic>? rawExtensions;
+      final extensionsMap = data['extensions'] ?? jsonMap['extensions'];
+      if (extensionsMap is Map<String, dynamic>) {
+        if (extensionsMap.containsKey('front_porch') && extensionsMap['front_porch'] is Map<String, dynamic>) {
+          fpExtensions = FrontPorchExtensions.fromJson(extensionsMap['front_porch']);
+        }
+        // Preserve all non-front_porch keys for round-trip safety
+        final otherKeys = Map<String, dynamic>.from(extensionsMap)..remove('front_porch');
+        if (otherKeys.isNotEmpty) rawExtensions = otherKeys;
+      }
+
       return CharacterCard(
         name: data['name'] ?? jsonMap['name'] ?? '',
         description: data['description'] ?? jsonMap['description'] ?? '',
@@ -113,6 +126,8 @@ class V2CardService {
           : const [],
         ttsVoice: data['tts_voice'] ?? jsonMap['tts_voice'],
         imagePath: path,
+        frontPorchExtensions: fpExtensions,
+        rawExtensions: rawExtensions,
       );
     } catch (e) {
       print('Error parsing card data: $e');

@@ -17,17 +17,28 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/providers/app_state.dart';
+import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
+import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 
+/// Manual character creator — 6-step wizard.
+///
+/// Step 0: Identity (avatar, name, tags)
+/// Step 1: Personality (description, personality, scenario, advanced prompts)
+/// Step 2: Dialogue (first message, alt greetings, example dialogues)
+/// Step 3: Lorebook (CRUD)
+/// Step 4: Realism Engine (initial state)
+/// Step 5: Review & Save
 class CreateCharacterPage extends StatefulWidget {
   const CreateCharacterPage({super.key});
 
@@ -36,231 +47,435 @@ class CreateCharacterPage extends StatefulWidget {
 }
 
 class _CreateCharacterPageState extends State<CreateCharacterPage> {
-  final _formKey = GlobalKey<FormState>();
+  int _currentStep = 0;
+
+  // ── Identity (Step 0) ──
   final _nameController = TextEditingController();
+  Uint8List? _avatarBytes;
+  final List<String> _tags = [];
+  final _tagController = TextEditingController();
+
+  // ── Personality (Step 1) ──
   final _descriptionController = TextEditingController();
   final _personalityController = TextEditingController();
   final _scenarioController = TextEditingController();
-  final _firstMessageController = TextEditingController();
-  final _mesExampleController = TextEditingController();
   final _systemPromptController = TextEditingController();
   final _postHistoryController = TextEditingController();
-  final List<TextEditingController> _altGreetingControllers = [];
-  String? _imagePath;
 
-  int _estimatedTokens = 0;
+  // ── Dialogue (Step 2) ──
+  final _firstMessageController = TextEditingController();
+  final _exampleDialogueController = TextEditingController();
+  final List<TextEditingController> _altGreetingControllers = [];
+
+  // ── Lorebook (Step 3) ──
+  final List<LorebookEntry> _lorebookEntries = [];
+
+  // ── Realism Engine (Step 4) ──
+  bool _realismEnabled = false;
+  String _realismTimeOfDay = 'morning';
+  int _realismDayCount = 1;
+  int _realismShortTermBond = 0;
+  int _realismLongTermBond = 0;
+  int _realismTrustLevel = 0;
+  String _realismEmotion = '';
+  String _realismEmotionIntensity = 'mild';
+  bool _realismNsfwCooldown = false;
+  bool _realismChaosMode = false;
+
+  // ── Token counter ──
+  int _totalTokenEstimate = 0;
 
   @override
   void initState() {
     super.initState();
-    // Listen to all controllers for token count updates
-    for (final c in [
-      _nameController,
-      _descriptionController,
-      _personalityController,
-      _scenarioController,
-      _firstMessageController,
-      _mesExampleController,
-      _systemPromptController,
-      _postHistoryController,
-    ]) {
-      c.addListener(_updateTokenCount);
+    // Listen to all text controllers for token counting
+    for (final c in _allControllers) {
+      c.addListener(_updateTokenEstimate);
     }
   }
 
-  void _updateTokenCount() {
-    int totalChars = _nameController.text.length +
-        _descriptionController.text.length +
-        _personalityController.text.length +
-        _scenarioController.text.length +
-        _firstMessageController.text.length +
-        _mesExampleController.text.length +
-        _systemPromptController.text.length +
-        _postHistoryController.text.length;
+  List<TextEditingController> get _allControllers => [
+    _nameController,
+    _descriptionController,
+    _personalityController,
+    _scenarioController,
+    _systemPromptController,
+    _postHistoryController,
+    _firstMessageController,
+    _exampleDialogueController,
+    ..._altGreetingControllers,
+  ];
+
+  void _updateTokenEstimate() {
+    int total = 0;
+    for (final c in _allControllers) {
+      // Rough estimate: ~4 chars per token
+      total += (c.text.length / 4).ceil();
+    }
+    // Add lorebook entries
+    for (final entry in _lorebookEntries) {
+      total += ((entry.name.length + entry.key.length + entry.content.length) / 4).ceil();
+    }
+    if (mounted && total != _totalTokenEstimate) {
+      setState(() => _totalTokenEstimate = total);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _tagController.dispose();
+    _descriptionController.dispose();
+    _personalityController.dispose();
+    _scenarioController.dispose();
+    _systemPromptController.dispose();
+    _postHistoryController.dispose();
+    _firstMessageController.dispose();
+    _exampleDialogueController.dispose();
     for (final c in _altGreetingControllers) {
-      totalChars += c.text.length;
+      c.dispose();
     }
-    setState(() {
-      _estimatedTokens = (totalChars / 4).ceil();
-    });
+    super.dispose();
   }
 
-  Color _tokenCountColor() {
-    if (_estimatedTokens >= 2000) return Colors.redAccent;
-    if (_estimatedTokens >= 1500) return Colors.amber;
-    return Colors.white54;
-  }
+  // ═══════════════════════════════════════════════════════════════
+  //  BUILD
+  // ═══════════════════════════════════════════════════════════════
 
-  Future<void> _pickImage() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-
-      if (result != null && result.files.single.path != null) {
-        final pickedPath = result.files.single.path!;
-        final imageBytes = await File(pickedPath).readAsBytes();
-
-        if (!mounted) return;
-
-        // Show the crop dialog
-        final croppedBytes = await ImageCropDialog.show(
-          context,
-          imageBytes: imageBytes,
-        );
-
-        if (croppedBytes != null && mounted) {
-          // Save cropped bytes to a temp file
-          final storage = Provider.of<StorageService>(context, listen: false);
-          final charDir = storage.charactersDir;
-          await charDir.create(recursive: true);
-          final timestamp = DateTime.now().millisecondsSinceEpoch;
-          final tempPath = '${charDir.path}/cropped_avatar_$timestamp.png';
-          await File(tempPath).writeAsBytes(croppedBytes);
-
-          setState(() {
-            _imagePath = tempPath;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('File picker error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not open file picker: $e'),
-            backgroundColor: Colors.red.shade700,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1E293B),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.person_add, color: Colors.blueAccent, size: 22),
+            const SizedBox(width: 8),
+            const Text('Create Character'),
+            const Spacer(),
+            _buildStepIndicator(),
+          ],
+        ),
+      ),
+      body: Stack(
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _currentStep == 0
+                ? _buildIdentityStep()
+                : _currentStep == 1
+                    ? _buildPersonalityStep()
+                    : _currentStep == 2
+                        ? _buildDialogueStep()
+                        : _currentStep == 3
+                            ? _buildLorebookStep()
+                            : _currentStep == 4
+                                ? _buildRealismStep()
+                                : _buildReviewStep(),
           ),
-        );
-      }
-    }
+          // Floating token counter
+          Positioned(
+            right: 24,
+            bottom: 24,
+            child: _buildTokenBadge(),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _saveCharacter() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        final storageService = Provider.of<StorageService>(context, listen: false);
-        final charDir = storageService.charactersDir;
-        if (!await charDir.exists()) {
-          await charDir.create(recursive: true);
-        }
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP INDICATOR
+  // ═══════════════════════════════════════════════════════════════
 
-        String filename = '${_nameController.text.replaceAll(RegExp(r'[<>:"/\\|?*]'), '')}.png';
-        String outputPath = '${charDir.path}/$filename';
-
-        // Check if file exists to avoid overwrite (simple check)
-        int counter = 1;
-        while (await File(outputPath).exists()) {
-           outputPath = '${charDir.path}/${filename.substring(0, filename.length - 4)}_$counter.png';
-           counter++;
-        }
-
-        final card = CharacterCard(
-          name: _nameController.text,
-          description: _descriptionController.text,
-          personality: _personalityController.text,
-          scenario: _scenarioController.text,
-          firstMessage: _firstMessageController.text,
-          mesExample: _mesExampleController.text,
-          systemPrompt: _systemPromptController.text,
-          postHistoryInstructions: _postHistoryController.text,
-          alternateGreetings: _altGreetingControllers
-              .map((c) => c.text)
-              .where((t) => t.isNotEmpty)
-              .toList(),
-        );
-
-        final service = V2CardService();
-        await service.saveCardAsPng(card, outputPath, _imagePath);
-
-        if (mounted) {
-          // Import the saved PNG into the SQL database
-          final charRepo = Provider.of<CharacterRepository>(context, listen: false);
-          await charRepo.importCharacter(File(outputPath));
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Character "${card.name}" created!')),
-          );
-          // Go to home
-          Provider.of<AppState>(context, listen: false).setIndex(0);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error saving character: $e')),
-          );
-        }
-      }
-    }
+  Widget _buildStepIndicator() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _stepDot(0, 'Identity'),
+        _stepLine(),
+        _stepDot(1, 'Personality'),
+        _stepLine(),
+        _stepDot(2, 'Dialogue'),
+        _stepLine(),
+        _stepDot(3, 'Lorebook'),
+        _stepLine(),
+        _stepDot(4, 'Realism'),
+        _stepLine(),
+        _stepDot(5, 'Review'),
+      ],
+    );
   }
 
-  void _openExpandedEditor(String title, TextEditingController controller) {
-    final expandedController = TextEditingController(text: controller.text);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        backgroundColor: const Color(0xFF1a1a2e),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SizedBox(
-          width: double.infinity,
-          height: double.infinity,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.edit_note, color: Colors.white70, size: 22),
-                    const SizedBox(width: 8),
-                    Text(title, style: const TextStyle(
-                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    TextButton.icon(
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Done'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.greenAccent),
-                      onPressed: () {
-                        controller.text = expandedController.text;
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: Colors.white12),
-              Expanded(
-                  child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: AppTextField(
-                    controller: expandedController,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
-                    decoration: InputDecoration(
-                      hintText: title == 'Example Dialogues'
-                          ? '(Examples of chat dialog. Begin each example with <START> on a new line.)'
-                          : 'The character\'s opening line...',
-                      hintStyle: const TextStyle(color: Colors.white24),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ),
+  Widget _stepDot(int step, String label) {
+    final isActive = _currentStep >= step;
+    final isCurrent = _currentStep == step;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isActive ? Colors.blueAccent : Colors.white12,
+            border: isCurrent ? Border.all(color: Colors.white, width: 2) : null,
+          ),
+          child: Center(
+            child: isActive && !isCurrent
+                ? const Icon(Icons.check, size: 14, color: Colors.white)
+                : Text('${step + 1}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isActive ? Colors.white : Colors.white38,
+                    )),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isActive ? Colors.white70 : Colors.white30,
+            )),
+      ],
+    );
+  }
+
+  Widget _stepLine() {
+    return Container(
+      width: 24,
+      height: 2,
+      margin: const EdgeInsets.only(bottom: 14),
+      color: Colors.white12,
+    );
+  }
+
+  Widget _buildTokenBadge() {
+    final color = _totalTokenEstimate > 4000
+        ? Colors.redAccent
+        : _totalTokenEstimate > 2000
+            ? Colors.orangeAccent
+            : Colors.blueAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.token, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            '~$_totalTokenEstimate tokens',
+            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  NAVIGATION BUTTONS
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildNavButtons({
+    required int currentStep,
+    String? nextLabel,
+    VoidCallback? onNext,
+    bool showBack = true,
+  }) {
+    final labels = ['Personality', 'Dialogue', 'Lorebook', 'Realism Engine', 'Review & Save'];
+    final nextText = nextLabel ?? (currentStep < labels.length ? 'Next: ${labels[currentStep]}' : 'Save');
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 32),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showBack && currentStep > 0)
+              SizedBox(
+                height: 52,
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _currentStep = currentStep - 1),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Back', style: TextStyle(fontSize: 14)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white54,
+                    side: const BorderSide(color: Colors.white24),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
+            if (showBack && currentStep > 0) const SizedBox(width: 16),
+            SizedBox(
+              width: 280,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: onNext ?? () {
+                  // Validate on step 0 (name required)
+                  if (currentStep == 0) {
+                    if (_nameController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Character name is required'),
+                          backgroundColor: Colors.redAccent,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+                  }
+                  setState(() => _currentStep = currentStep + 1);
+                },
+                icon: Icon(currentStep >= 4 ? Icons.check : Icons.arrow_forward, size: 20),
+                label: Text(nextText, style: const TextStyle(fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 0: IDENTITY
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildIdentityStep() {
+    return Center(
+      key: const ValueKey('identity'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Character Identity',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Set your character\'s name, avatar, and tags.',
+                style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+
+              // Avatar
+              Center(
+                child: GestureDetector(
+                  onTap: _pickAvatar,
+                  child: Container(
+                    width: 260,
+                    height: 260,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: const Color(0xFF1E293B),
+                      border: Border.all(color: Colors.white12),
+                      image: _avatarBytes != null
+                          ? DecorationImage(
+                              image: MemoryImage(_avatarBytes!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: _avatarBytes == null
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo, size: 48, color: Colors.white.withValues(alpha: 0.2)),
+                              const SizedBox(height: 8),
+                              const Text('Click to add avatar',
+                                  style: TextStyle(color: Colors.white38, fontSize: 13)),
+                            ],
+                          )
+                        : Align(
+                            alignment: Alignment.bottomRight,
+                            child: Container(
+                              margin: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.camera_alt, size: 18, color: Colors.white70),
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Name field
+              _inputLabel('Character Name', required: true),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _nameController,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                decoration: _inputDecoration('Enter character name'),
+              ),
+              const SizedBox(height: 24),
+
+              // Tags
+              _inputLabel('Tags', required: false),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ..._tags.map((tag) => Chip(
+                    label: Text(tag, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    backgroundColor: const Color(0xFF374151),
+                    side: BorderSide.none,
+                    deleteIcon: const Icon(Icons.close, size: 14, color: Colors.white38),
+                    onDeleted: () => setState(() => _tags.remove(tag)),
+                    visualDensity: VisualDensity.compact,
+                  )),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tagController,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: _inputDecoration('Add a tag...'),
+                      onSubmitted: _addTag,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => _addTag(_tagController.text),
+                    icon: const Icon(Icons.add_circle, color: Colors.blueAccent),
+                    tooltip: 'Add tag',
+                  ),
+                ],
+              ),
+
+              _buildNavButtons(currentStep: 0),
             ],
           ),
         ),
@@ -268,256 +483,737 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
     );
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _personalityController.dispose();
-    _scenarioController.dispose();
-    _firstMessageController.dispose();
-    _mesExampleController.dispose();
-    for (var c in _altGreetingControllers) c.dispose();
-    super.dispose();
+  void _addTag(String value) {
+    final tag = value.trim();
+    if (tag.isNotEmpty && !_tags.contains(tag)) {
+      setState(() => _tags.add(tag));
+      _tagController.clear();
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('Create New Character'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+  Future<void> _pickAvatar() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result == null || result.files.isEmpty) return;
+
+    final bytes = await File(result.files.single.path!).readAsBytes();
+    if (!mounted) return;
+
+    final cropped = await ImageCropDialog.show(context, imageBytes: bytes);
+    if (cropped != null && mounted) {
+      setState(() {
+        _avatarBytes = cropped;
+      });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 1: PERSONALITY
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildPersonalityStep() {
+    return Center(
+      key: const ValueKey('personality'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Personality & World',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Define who your character is and the world they inhabit.',
+                style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+
+              _expandableField('Description', _descriptionController,
+                  hint: 'Physical appearance, backstory, key traits...', maxLines: 4),
+              const SizedBox(height: 20),
+
+              _expandableField('Personality', _personalityController,
+                  hint: 'How they act, speak, think...', maxLines: 3),
+              const SizedBox(height: 20),
+
+              _expandableField('Scenario', _scenarioController,
+                  hint: 'The setting, situation, or context...', maxLines: 3),
+              const SizedBox(height: 24),
+
+              // Advanced Prompts (collapsed)
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Row(
+                    children: [
+                      Icon(Icons.settings_suggest, size: 18, color: Colors.white38),
+                      SizedBox(width: 8),
+                      Text('Advanced Prompts (optional)',
+                          style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    ],
+                  ),
+                  children: [
+                    const SizedBox(height: 8),
+                    _expandableField('System Prompt', _systemPromptController,
+                        hint: 'Instructions for the AI about how to play this character...', maxLines: 4),
+                    const SizedBox(height: 16),
+                    _expandableField('Post-History Instructions', _postHistoryController,
+                        hint: 'Injected after chat history, before AI response...', maxLines: 3),
+                  ],
+                ),
+              ),
+
+              _buildNavButtons(currentStep: 1),
+            ],
+          ),
+        ),
       ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 80),
-            child: Form(
-              key: _formKey,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 2: DIALOGUE
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildDialogueStep() {
+    return Center(
+      key: const ValueKey('dialogue'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Dialogue & Greetings',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Configure the character\'s opening message and example dialogue.',
+                style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+
+              _expandableField('First Message', _firstMessageController,
+                  hint: 'The character\'s opening message when a conversation starts...', maxLines: 6),
+              const SizedBox(height: 24),
+
+              // Alternate Greetings
+              Row(
                 children: [
-                  // Left Column: Image Picker
-                  SizedBox(
-                    width: 300,
+                  _inputLabel('Alternate Greetings', required: false),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        final ctrl = TextEditingController();
+                        ctrl.addListener(_updateTokenEstimate);
+                        _altGreetingControllers.add(ctrl);
+                      });
+                    },
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Greeting'),
+                    style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ..._altGreetingControllers.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final ctrl = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _expandableField('Greeting ${idx + 1}', ctrl,
+                            hint: 'Alternative opening message...', maxLines: 4),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () {
+                          setState(() {
+                            _altGreetingControllers[idx].dispose();
+                            _altGreetingControllers.removeAt(idx);
+                          });
+                        },
+                        icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                        tooltip: 'Remove greeting',
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 20),
+
+              _expandableField('Example Dialogue', _exampleDialogueController,
+                  hint: '<START>\n{{user}}: Hello!\n{{char}}: *smiles warmly*', maxLines: 6),
+
+              _buildNavButtons(currentStep: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 3: LOREBOOK
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildLorebookStep() {
+    return Center(
+      key: const ValueKey('lorebook'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        GestureDetector(
-                          onTap: _pickImage,
-                          child: Container(
-                            width: 300,
-                            height: 450,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white24),
-                              image: _imagePath != null
-                                  ? DecorationImage(
-                                      image: FileImage(File(_imagePath!)),
-                                      fit: BoxFit.cover,
-                                      alignment: Alignment.topCenter,
-                                    )
-                                  : null,
-                            ),
-                            child: _imagePath == null
-                                ? const Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.add_photo_alternate_outlined,
-                                          size: 48, color: Colors.white54),
-                                      SizedBox(height: 16),
-                                      Text(
-                                        'Click to upload avatar',
-                                        style: TextStyle(color: Colors.white54),
-                                      ),
-                                    ],
-                                  )
-                                : null,
-                          ),
+                        Text(
+                          'Lorebook',
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _saveCharacter,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('Save Character'),
-                          ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Add world lore entries that inject context into conversations when keywords are detected.',
+                          style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 32),
-                  // Right Column: Form Fields
-                  Expanded(
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _addLorebookEntry,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Entry'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              if (_lorebookEntries.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(40),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: Center(
                     child: Column(
                       children: [
-                        _buildTextField(
-                          controller: _nameController,
-                          label: 'Name',
-                          hint: 'e.g. Seraphina',
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter a name';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          controller: _descriptionController,
-                          label: 'Description',
-                          hint: 'Physical description and traits...',
-                          maxLines: 3,
-                          expandable: true,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          controller: _personalityController,
-                          label: 'Personality',
-                          hint: 'Mind, traits, and behavior...',
-                          maxLines: 3,
-                          expandable: true,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          controller: _scenarioController,
-                          label: 'Scenario',
-                          hint: 'Current situation and context...',
-                          maxLines: 3,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          controller: _firstMessageController,
-                          label: 'First Message',
-                          hint: 'The character\'s opening line...',
-                          maxLines: 5,
-                          expandable: true,
-                        ),
-                        const SizedBox(height: 24),
-                        // Alternate greetings section
-                        Row(
-                          children: [
-                            const Text('Alternate Greetings', 
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white70)),
-                            const Spacer(),
-                            TextButton.icon(
-                              icon: const Icon(Icons.add, size: 16, color: Colors.white70),
-                              label: const Text('Add', style: TextStyle(color: Colors.white70)),
-                              onPressed: () {
-                                setState(() {
-                                  final c = TextEditingController();
-                                  c.addListener(_updateTokenCount);
-                                  _altGreetingControllers.add(c);
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                        ..._altGreetingControllers.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final controller = entry.value;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: _buildTextField(
-                                    controller: controller,
-                                    label: 'Greeting ${idx + 2}',
-                                    hint: 'Another opening line...',
-                                    maxLines: 4,
-                                    expandable: true,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 24),
-                                  tooltip: 'Remove this greeting',
-                                  padding: const EdgeInsets.only(top: 32),
-                                  onPressed: () {
-                                    setState(() {
-                                      _altGreetingControllers[idx].dispose();
-                                      _altGreetingControllers.removeAt(idx);
-                                      _updateTokenCount();
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                        const SizedBox(height: 24),
-                        // Example Dialogues section
-                        _buildTextField(
-                          controller: _mesExampleController,
-                          label: 'Example Dialogues',
-                          hint: '(Examples of chat dialog. Begin each example with <START> on a new line.)',
-                          maxLines: 6,
-                          expandable: true,
-                        ),
-                        const SizedBox(height: 24),
-                        // System Prompt section
-                        _buildTextField(
-                          controller: _systemPromptController,
-                          label: 'System Prompt (optional)',
-                          hint: 'Custom system prompt for this character. If blank, the global system prompt is used.',
-                          maxLines: 4,
-                          expandable: true,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          controller: _postHistoryController,
-                          label: 'Post-History Instructions (optional)',
-                          hint: 'Instructions injected after chat history (jailbreak/reminder).',
-                          maxLines: 3,
-                          expandable: true,
-                        ),
+                        Icon(Icons.menu_book_outlined, size: 48, color: Colors.white.withValues(alpha: 0.15)),
+                        const SizedBox(height: 12),
+                        const Text('No lorebook entries yet',
+                            style: TextStyle(color: Colors.white38, fontSize: 15)),
+                        const SizedBox(height: 4),
+                        const Text('Add entries to inject context-aware world lore into conversations.',
+                            style: TextStyle(color: Colors.white24, fontSize: 12)),
                       ],
                     ),
+                  ),
+                )
+              else
+                ..._lorebookEntries.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final lore = entry.value;
+                  return _buildLorebookEntryCard(idx, lore);
+                }),
+
+              _buildNavButtons(currentStep: 3),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLorebookEntryCard(int index, LorebookEntry entry) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: entry.constant
+              ? Colors.amberAccent.withValues(alpha: 0.3)
+              : Colors.blueAccent.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Icon(Icons.menu_book, size: 16,
+                  color: entry.constant ? Colors.amberAccent : Colors.blueAccent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  entry.displayName,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ),
+              if (entry.constant)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text('Always Active',
+                      style: TextStyle(color: Colors.amberAccent, fontSize: 10, fontWeight: FontWeight.w600)),
+                ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => _editLorebookEntry(index),
+                icon: const Icon(Icons.edit, size: 16, color: Colors.white38),
+                tooltip: 'Edit entry',
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                onPressed: () => _deleteLorebookEntry(index),
+                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                tooltip: 'Delete entry',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          if (!entry.constant && entry.key.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Keys: ${entry.key}',
+                style: const TextStyle(color: Colors.blueAccent, fontSize: 11)),
+          ],
+          if (entry.content.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              entry.content.length > 120 ? '${entry.content.substring(0, 120)}...' : entry.content,
+              style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _addLorebookEntry() {
+    _showLorebookEntryDialog(null);
+  }
+
+  void _editLorebookEntry(int index) {
+    _showLorebookEntryDialog(index);
+  }
+
+  void _deleteLorebookEntry(int index) {
+    setState(() {
+      _lorebookEntries.removeAt(index);
+      _updateTokenEstimate();
+    });
+  }
+
+  void _showLorebookEntryDialog(int? editIndex) {
+    final isEditing = editIndex != null;
+    final entry = isEditing ? _lorebookEntries[editIndex] : LorebookEntry(key: '', content: '');
+
+    final nameCtrl = TextEditingController(text: entry.name);
+    final keyCtrl = TextEditingController(text: entry.key);
+    final contentCtrl = TextEditingController(text: entry.content);
+    bool constant = entry.constant;
+    int stickyDepth = entry.stickyDepth;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(isEditing ? 'Edit Lorebook Entry' : 'Add Lorebook Entry',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: nameCtrl,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: _inputDecoration('Entry name (display label)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: keyCtrl,
+                    enabled: !constant,
+                    style: TextStyle(color: constant ? Colors.white38 : Colors.white, fontSize: 14),
+                    decoration: _inputDecoration('Keywords (comma-separated)'),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: TextField(
+                      controller: contentCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      decoration: _inputDecoration('Lore content...'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: constant,
+                        activeColor: Colors.amberAccent,
+                        onChanged: (v) => setDialogState(() => constant = v ?? false),
+                      ),
+                      const Text('Always Active', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      const Spacer(),
+                      if (!constant) ...[
+                        const Text('Depth: ', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                        SizedBox(
+                          width: 50,
+                          child: TextField(
+                            controller: TextEditingController(text: stickyDepth.toString()),
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onChanged: (v) {
+                              final n = int.tryParse(v);
+                              if (n != null && n >= 1) stickyDepth = n;
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          final newEntry = LorebookEntry(
+                            name: nameCtrl.text.trim(),
+                            key: keyCtrl.text.trim(),
+                            content: contentCtrl.text.trim(),
+                            constant: constant,
+                            stickyDepth: stickyDepth,
+                          );
+                          setState(() {
+                            if (isEditing) {
+                              _lorebookEntries[editIndex] = newEntry;
+                            } else {
+                              _lorebookEntries.add(newEntry);
+                            }
+                            _updateTokenEstimate();
+                          });
+                          Navigator.pop(ctx);
+                        },
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                        child: Text(isEditing ? 'Save' : 'Add'),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-          // Token counter - bottom right
-          Positioned(
-            right: 24,
-            bottom: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1a1a2e).withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: _tokenCountColor().withValues(alpha: 0.4),
-                  width: 1,
-                ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 4: REALISM ENGINE
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildRealismStep() {
+    return Center(
+      key: const ValueKey('realism'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Realism Engine',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.token_outlined, size: 16, color: _tokenCountColor()),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$_estimatedTokens tokens',
-                    style: TextStyle(
-                      color: _tokenCountColor(),
-                      fontSize: 13,
-                      fontWeight: _estimatedTokens >= 1500 ? FontWeight.w600 : FontWeight.normal,
+              const SizedBox(height: 8),
+              const Text(
+                'Set the initial state for the Realism Engine when a new conversation starts. '
+                'These values will seed the relationship, emotion, and time-of-day systems.',
+                style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+
+              RealismFormSection(
+                enabled: _realismEnabled,
+                onEnabledChanged: (v) => setState(() => _realismEnabled = v),
+                timeOfDay: _realismTimeOfDay,
+                onTimeOfDayChanged: (v) => setState(() => _realismTimeOfDay = v),
+                dayCount: _realismDayCount,
+                onDayCountChanged: (v) => setState(() => _realismDayCount = v),
+                shortTermBond: _realismShortTermBond,
+                onShortTermBondChanged: (v) => setState(() => _realismShortTermBond = v),
+                longTermBond: _realismLongTermBond,
+                onLongTermBondChanged: (v) => setState(() => _realismLongTermBond = v),
+                trustLevel: _realismTrustLevel,
+                onTrustLevelChanged: (v) => setState(() => _realismTrustLevel = v),
+                emotion: _realismEmotion,
+                onEmotionChanged: (v) => setState(() => _realismEmotion = v),
+                emotionIntensity: _realismEmotionIntensity,
+                onEmotionIntensityChanged: (v) => setState(() => _realismEmotionIntensity = v),
+                nsfwCooldownEnabled: _realismNsfwCooldown,
+                onNsfwCooldownChanged: (v) => setState(() => _realismNsfwCooldown = v),
+                chaosModeEnabled: _realismChaosMode,
+                onChaosModeChanged: (v) => setState(() => _realismChaosMode = v),
+              ),
+
+              _buildNavButtons(currentStep: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 5: REVIEW & SAVE
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildReviewStep() {
+    return SingleChildScrollView(
+      key: const ValueKey('review'),
+      padding: const EdgeInsets.all(32),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left column — Avatar + quick info
+          SizedBox(
+            width: 280,
+            child: Column(
+              children: [
+                // Avatar
+                Container(
+                  width: 260,
+                  height: 260,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF1E293B),
+                    border: Border.all(color: Colors.white12),
+                    image: _avatarBytes != null
+                        ? DecorationImage(
+                            image: MemoryImage(_avatarBytes!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: _avatarBytes == null
+                      ? Center(
+                          child: Icon(Icons.person, size: 64, color: Colors.white.withValues(alpha: 0.15)),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                // Name
+                Text(
+                  _nameController.text.isEmpty ? 'Unnamed' : _nameController.text,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                // Tags
+                if (_tags.isNotEmpty)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.center,
+                    children: _tags.map((tag) => Chip(
+                      label: Text(tag, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                      backgroundColor: const Color(0xFF374151),
+                      side: BorderSide.none,
+                      visualDensity: VisualDensity.compact,
+                    )).toList(),
+                  ),
+                const SizedBox(height: 16),
+                // Realism Engine summary
+                if (_realismEnabled)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.psychology, size: 14, color: Colors.blueAccent),
+                            SizedBox(width: 6),
+                            Text('Realism Engine', style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text('Day $_realismDayCount · ${_realismTimeOfDay.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ')}',
+                            style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        if (_realismEmotion.isNotEmpty)
+                          Text('Emotion: $_realismEmotion ($_realismEmotionIntensity)',
+                              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        Text('Bond: $_realismShortTermBond / $_realismLongTermBond · Trust: $_realismTrustLevel',
+                            style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      ],
                     ),
                   ),
+                const SizedBox(height: 24),
+                // Save button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _saveCharacter,
+                    icon: const Icon(Icons.save),
+                    label: const Text('Save Character'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() => _currentStep = 0),
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('Back to Edit'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white54,
+                      side: const BorderSide(color: Colors.white24),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 32),
+
+          // Right column — editable fields review
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Review & Edit',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Review your character card. All fields are still editable before saving.',
+                  style: TextStyle(color: Colors.white38, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                _reviewField('Description', _descriptionController, maxLines: 4),
+                _reviewField('Personality', _personalityController, maxLines: 3),
+                _reviewField('Scenario', _scenarioController, maxLines: 3),
+                _reviewField('First Message', _firstMessageController, maxLines: 5),
+                if (_exampleDialogueController.text.isNotEmpty)
+                  _reviewField('Example Dialogue', _exampleDialogueController, maxLines: 4),
+                if (_systemPromptController.text.isNotEmpty)
+                  _reviewField('System Prompt', _systemPromptController, maxLines: 3),
+                if (_postHistoryController.text.isNotEmpty)
+                  _reviewField('Post-History Instructions', _postHistoryController, maxLines: 3),
+
+                // Alt greetings
+                ..._altGreetingControllers.asMap().entries.map((entry) {
+                  return _reviewField('Alt Greeting ${entry.key + 1}', entry.value, maxLines: 3);
+                }),
+
+                // Lorebook
+                if (_lorebookEntries.isNotEmpty) ...[
+                  const Divider(color: Colors.white12, height: 32),
+                  Row(
+                    children: [
+                      const Icon(Icons.menu_book, color: Colors.blueAccent, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Lorebook Entries',
+                          style: TextStyle(color: Colors.blueAccent, fontSize: 15, fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      Text('${_lorebookEntries.length} entries',
+                          style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ..._lorebookEntries.map((entry) => Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.displayName,
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        if (entry.key.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text('Keys: ${entry.key}',
+                              style: const TextStyle(color: Colors.blueAccent, fontSize: 11)),
+                        ],
+                        if (entry.content.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(entry.content,
+                              style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4)),
+                        ],
+                      ],
+                    ),
+                  )),
                 ],
-              ),
+              ],
             ),
           ),
         ],
@@ -525,69 +1221,276 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    int maxLines = 1,
-    String? Function(String?)? validator,
-    bool expandable = false,
-  }) {
+  Widget _reviewField(String label, TextEditingController controller, {int maxLines = 3}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.blueAccent, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          AppTextField(
+            controller: controller,
+            maxLines: maxLines,
+            style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.5),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF1E293B),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.white12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Colors.blueAccent),
+              ),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SAVE
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<void> _saveCharacter() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Character name is required'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+
+    try {
+      // Build extensions
+      FrontPorchExtensions? fpExt;
+      if (_realismEnabled) {
+        fpExt = FrontPorchExtensions(
+          realismEnabled: _realismEnabled,
+          shortTermBond: _realismShortTermBond,
+          longTermBond: _realismLongTermBond,
+          trustLevel: _realismTrustLevel,
+          dayCount: _realismDayCount,
+          timeOfDay: _realismTimeOfDay,
+          characterEmotion: _realismEmotion,
+          emotionIntensity: _realismEmotionIntensity,
+          nsfwCooldownEnabled: _realismNsfwCooldown,
+          chaosModeEnabled: _realismChaosMode,
+        );
+      }
+
+      final card = CharacterCard(
+        name: name,
+        description: _descriptionController.text,
+        personality: _personalityController.text,
+        scenario: _scenarioController.text,
+        firstMessage: _firstMessageController.text,
+        mesExample: _exampleDialogueController.text,
+        systemPrompt: _systemPromptController.text,
+        postHistoryInstructions: _postHistoryController.text,
+        alternateGreetings: _altGreetingControllers
+            .map((c) => c.text)
+            .where((t) => t.trim().isNotEmpty)
+            .toList(),
+        tags: List.from(_tags),
+        lorebook: _lorebookEntries.isNotEmpty
+            ? Lorebook(entries: List.from(_lorebookEntries))
+            : null,
+        frontPorchExtensions: fpExt,
+      );
+
+      // Save avatar
+      if (_avatarBytes != null) {
+        final charDir = storage.charactersDir;
+        if (!charDir.existsSync()) charDir.createSync(recursive: true);
+
+        final epoch = DateTime.now().millisecondsSinceEpoch;
+        final safeName = name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+        final imagePath = p.join(charDir.path, '${safeName}_$epoch.png');
+
+        await File(imagePath).writeAsBytes(_avatarBytes!);
+        card.imagePath = imagePath;
+
+        // Embed V2 card data into the PNG
+        final v2Service = V2CardService();
+        await v2Service.saveCardAsPng(card, imagePath, imagePath);
+      }
+
+      // Add to repository
+      await repo.addCharacter(card);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
+                const SizedBox(width: 8),
+                Text('${card.name} created successfully!'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2A2A2A),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save character: $e'),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SHARED HELPERS
+  // ═══════════════════════════════════════════════════════════════
+
+  Widget _inputLabel(String text, {bool required = false}) {
+    return Row(
+      children: [
+        Text(text, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+        if (required) const Text(' *', style: TextStyle(color: Colors.redAccent)),
+      ],
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 14),
+      filled: true,
+      fillColor: const Color(0xFF1E293B),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.white12),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.white12),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.blueAccent),
+      ),
+      contentPadding: const EdgeInsets.all(14),
+    );
+  }
+
+  Widget _expandableField(String label, TextEditingController controller,
+      {String hint = '', int maxLines = 3}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: Colors.white70,
-              ),
+            _inputLabel(label),
+            const Spacer(),
+            IconButton(
+              onPressed: () => _openExpandedEditor(label, controller),
+              icon: const Icon(Icons.open_in_full, size: 16, color: Colors.white38),
+              tooltip: 'Expand editor',
+              visualDensity: VisualDensity.compact,
             ),
-            if (expandable) ...[
-              const SizedBox(width: 8),
-              InkWell(
-                onTap: () => _openExpandedEditor(label, controller),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Icon(Icons.open_in_full, size: 16, color: Colors.white38),
-                ),
-              ),
-            ],
           ],
         ),
-        const SizedBox(height: 8),
-        // TextFormField is used here to retain the `validator` integration with
-        // the enclosing Form widget. Spell check is applied explicitly since
-        // AppTextField wraps TextField (not TextFormField).
-        TextFormField(
+        const SizedBox(height: 6),
+        AppTextField(
           controller: controller,
           maxLines: maxLines,
-          validator: validator,
+          style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
           spellCheckConfiguration: AppTextField.platformSpellCheck(),
-          contextMenuBuilder: AppTextField.spellCheckContextMenuBuilder,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: const TextStyle(color: Colors.white24),
-            filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.05),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
+          decoration: _inputDecoration(hint),
         ),
       ],
     );
+  }
+
+  Future<void> _openExpandedEditor(String label, TextEditingController controller) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final editController = TextEditingController(text: controller.text);
+        return Dialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 700,
+            height: 500,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, color: Colors.white38),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: AppTextField(
+                    controller: editController,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    spellCheckConfiguration: AppTextField.platformSpellCheck(),
+                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6),
+                    decoration: _inputDecoration(''),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, editController.text),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result != null) {
+      controller.text = result;
+    }
   }
 }

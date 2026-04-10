@@ -37,6 +37,7 @@ import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 
 /// Creator mode selection.
@@ -480,6 +481,18 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   bool _isGeneratingAvatar = false;
   Map<int, bool> _lorebookEntryEnabled = {};
   bool _imagePromptExpanded = false;
+
+  // Step 4 — Realism Engine initial state
+  bool _realismStepEnabled = false;
+  String _realismTimeOfDay = 'morning';
+  int _realismDayCount = 1;
+  int _realismShortTermBond = 0;
+  int _realismLongTermBond = 0;
+  int _realismTrustLevel = 0;
+  String _realismEmotion = '';
+  String _realismEmotionIntensity = 'mild';
+  bool _realismNsfwCooldown = false;
+  bool _realismChaosMode = false;
 
   // Model selector state
   List<RemoteModelInfo> _availableModels = [];
@@ -969,7 +982,9 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                             : _buildConfigStep())
                     : _currentStep == 3
                         ? _buildGeneratingStep()
-                        : _buildReviewStep(),
+                        : _currentStep == 4
+                            ? _buildRealismStep()
+                            : _buildReviewStep(),
       ),
     );
   }
@@ -986,7 +1001,9 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
         _stepLine(),
         _stepDot(3, 'Generate'),
         _stepLine(),
-        _stepDot(4, 'Review'),
+        _stepDot(4, 'Realism'),
+        _stepLine(),
+        _stepDot(5, 'Review'),
       ],
     );
   }
@@ -2164,7 +2181,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
 
     setState(() {
       _generatedCard = card;
-      _currentStep = 4;
+      _currentStep = 4; // Realism Engine step (was Review)
       _isGenerating = false;
       _progress = 1.0;
     });
@@ -4387,8 +4404,132 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  STEP 3: Review & Edit
+  //  STEP 4: Realism Engine
   // ═══════════════════════════════════════════════════════════════
+
+  Widget _buildRealismStep() {
+    // If we got here due to a generation error, show the error state
+    if (_generatedCard == null) {
+      return Center(
+        key: const ValueKey('realism-error'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            const Text(
+              'Generation failed. The LLM did not produce valid output.',
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => setState(() {
+                _currentStep = 2;
+                _generationPreview = '';
+              }),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Center(
+      key: const ValueKey('realism'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Realism Engine',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Set the initial state for the Realism Engine when a new conversation starts. '
+                'These values will seed the relationship, emotion, and time-of-day systems.',
+                style: TextStyle(fontSize: 14, color: Colors.white54, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+
+              RealismFormSection(
+                enabled: _realismStepEnabled,
+                onEnabledChanged: (v) => setState(() => _realismStepEnabled = v),
+                timeOfDay: _realismTimeOfDay,
+                onTimeOfDayChanged: (v) => setState(() => _realismTimeOfDay = v),
+                dayCount: _realismDayCount,
+                onDayCountChanged: (v) => setState(() => _realismDayCount = v),
+                shortTermBond: _realismShortTermBond,
+                onShortTermBondChanged: (v) => setState(() => _realismShortTermBond = v),
+                longTermBond: _realismLongTermBond,
+                onLongTermBondChanged: (v) => setState(() => _realismLongTermBond = v),
+                trustLevel: _realismTrustLevel,
+                onTrustLevelChanged: (v) => setState(() => _realismTrustLevel = v),
+                emotion: _realismEmotion,
+                onEmotionChanged: (v) => setState(() => _realismEmotion = v),
+                emotionIntensity: _realismEmotionIntensity,
+                onEmotionIntensityChanged: (v) => setState(() => _realismEmotionIntensity = v),
+                nsfwCooldownEnabled: _realismNsfwCooldown,
+                onNsfwCooldownChanged: (v) => setState(() => _realismNsfwCooldown = v),
+                chaosModeEnabled: _realismChaosMode,
+                onChaosModeChanged: (v) => setState(() => _realismChaosMode = v),
+              ),
+
+              // Navigation
+              Padding(
+                padding: const EdgeInsets.only(top: 32),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 52,
+                        child: OutlinedButton.icon(
+                          onPressed: () => setState(() => _currentStep = 3),
+                          icon: const Icon(Icons.arrow_back, size: 18),
+                          label: const Text('Back', style: TextStyle(fontSize: 14)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white54,
+                            side: const BorderSide(color: Colors.white24),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      SizedBox(
+                        width: 280,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: () => setState(() => _currentStep = 5),
+                          icon: const Icon(Icons.arrow_forward, size: 20),
+                          label: const Text('Next: Review & Save', style: TextStyle(fontSize: 16)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP 5: Review & Edit
+  // ═══════════════════════════════════════════════════════════════
+
 
   Widget _buildReviewStep() {
     if (_generatedCard == null) {
@@ -5079,13 +5220,13 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       _exampleDialogueController.text = card.mesExample;
       _systemPromptController.text = card.systemPrompt;
 
-      setState(() { _currentStep = 4; _isGenerating = false; _progress = 1.0; });
+      setState(() { _currentStep = 4; _isGenerating = false; _progress = 1.0; }); // → Realism step
 
       if (llmProvider.activeBackend != BackendType.kobold) {
         _generateAvatar();
       }
     } else {
-      setState(() { _currentStep = 4; _isGenerating = false; _generatedCard = null; });
+      setState(() { _currentStep = 4; _isGenerating = false; _generatedCard = null; }); // → Realism step (error)
     }
   }
 
@@ -5567,7 +5708,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       _systemPromptController.text = card.systemPrompt;
 
       setState(() {
-        _currentStep = 4;
+        _currentStep = 4; // → Realism Engine step
         _isGenerating = false;
         _progress = 1.0;
       });
@@ -5578,7 +5719,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       }
     } else {
       setState(() {
-        _currentStep = 4; // Show the error state
+        _currentStep = 4; // → Realism step (error state)
         _isGenerating = false;
         _generatedCard = null;
       });
@@ -5673,6 +5814,22 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       card.firstMessage = _firstMessageController.text;
       card.mesExample = _exampleDialogueController.text;
       card.systemPrompt = _systemPromptController.text;
+
+      // Build V2.5 extensions from Realism Engine step
+      if (_realismStepEnabled) {
+        card.frontPorchExtensions = FrontPorchExtensions(
+          realismEnabled: _realismStepEnabled,
+          shortTermBond: _realismShortTermBond,
+          longTermBond: _realismLongTermBond,
+          trustLevel: _realismTrustLevel,
+          dayCount: _realismDayCount,
+          timeOfDay: _realismTimeOfDay,
+          characterEmotion: _realismEmotion,
+          emotionIntensity: _realismEmotionIntensity,
+          nsfwCooldownEnabled: _realismNsfwCooldown,
+          chaosModeEnabled: _realismChaosMode,
+        );
+      }
 
       // Filter lorebook entries — remove unchecked ones
       if (card.lorebook != null && _lorebookEntryEnabled.isNotEmpty) {

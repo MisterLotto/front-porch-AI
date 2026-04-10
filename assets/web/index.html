@@ -294,41 +294,26 @@
               <input type="file" id="import-file" accept=".png" style="display:none">
             </div>
           </div>
+
+          <!-- Manual Creator Wizard -->
           <div class="settings-section">
             <div class="section-title">Create New Character</div>
-            <div style="display:flex;flex-direction:column;gap:14px;margin-top:8px">
-              <div>
-                <label class="slider-label" style="display:block;margin-bottom:4px">Name *</label>
-                <input type="text" id="cc-name" class="settings-text-input" placeholder="Character name">
-              </div>
-              <div>
-                <label class="slider-label" style="display:block;margin-bottom:4px">Description</label>
-                <textarea id="cc-desc" class="settings-textarea" rows="3"
-                  placeholder="A brief description of the character..."></textarea>
-              </div>
-              <div>
-                <label class="slider-label" style="display:block;margin-bottom:4px">Personality</label>
-                <textarea id="cc-personality" class="settings-textarea" rows="3"
-                  placeholder="Character personality traits..."></textarea>
-              </div>
-              <div>
-                <label class="slider-label" style="display:block;margin-bottom:4px">Scenario</label>
-                <textarea id="cc-scenario" class="settings-textarea" rows="2"
-                  placeholder="The scenario or setting..."></textarea>
-              </div>
-              <div>
-                <label class="slider-label" style="display:block;margin-bottom:4px">First Message</label>
-                <textarea id="cc-first-msg" class="settings-textarea" rows="3"
-                  placeholder="The character's opening message..."></textarea>
-              </div>
-              <div>
-                <label class="slider-label" style="display:block;margin-bottom:4px">Tags (comma-separated)</label>
-                <input type="text" id="cc-tags" class="settings-text-input" placeholder="e.g. fantasy, adventure, rpg">
-              </div>
-              <div class="btn-row" style="margin-top:8px">
-                <button class="btn btn-primary" id="btn-create-character">Create Character</button>
-              </div>
+            <!-- Step Indicators -->
+            <div class="cw-steps" id="mc-steps" style="margin-bottom:16px">
+              <div class="cw-step active" data-step="0"><span class="cw-step-num">1</span><span class="cw-step-label">Identity</span></div>
+              <div class="cw-step-line"></div>
+              <div class="cw-step" data-step="1"><span class="cw-step-num">2</span><span class="cw-step-label">Personality</span></div>
+              <div class="cw-step-line"></div>
+              <div class="cw-step" data-step="2"><span class="cw-step-num">3</span><span class="cw-step-label">Dialogue</span></div>
+              <div class="cw-step-line"></div>
+              <div class="cw-step" data-step="3"><span class="cw-step-num">4</span><span class="cw-step-label">Lorebook</span></div>
+              <div class="cw-step-line"></div>
+              <div class="cw-step" data-step="4"><span class="cw-step-num">5</span><span class="cw-step-label">Realism</span></div>
+              <div class="cw-step-line"></div>
+              <div class="cw-step" data-step="5"><span class="cw-step-num">6</span><span class="cw-step-label">Review</span></div>
             </div>
+            <!-- Step Content Container (populated by JS) -->
+            <div id="mc-content" class="cw-content"></div>
           </div>
         </div>
       </div>
@@ -354,7 +339,9 @@
             <div class="cw-step-line"></div>
             <div class="cw-step" data-step="3"><span class="cw-step-num">4</span><span class="cw-step-label">Generate</span></div>
             <div class="cw-step-line"></div>
-            <div class="cw-step" data-step="4"><span class="cw-step-num">5</span><span class="cw-step-label">Review</span></div>
+            <div class="cw-step" data-step="4"><span class="cw-step-num">5</span><span class="cw-step-label">Realism</span></div>
+            <div class="cw-step-line"></div>
+            <div class="cw-step" data-step="5"><span class="cw-step-num">6</span><span class="cw-step-label">Review</span></div>
           </div>
 
           <!-- Step Content Container (populated by JS) -->
@@ -1183,6 +1170,7 @@
   </div>
 
   <script src="/js/chargen.js"></script>
+  <script src="/js/manual_creator.js"></script>
   <script src="/js/stories.js"></script>
   <script src="/js/app.js"></script>
 </body>
