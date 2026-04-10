@@ -45,6 +45,7 @@ import 'package:front_porch_ai/services/web_server_service.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
+import 'package:front_porch_ai/services/llm_provider.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -462,7 +463,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -479,6 +480,7 @@ class _SettingsPageState extends State<SettingsPage> {
             splashFactory: NoSplash.splashFactory,
             tabs: const [
               Tab(text: 'General'),
+              Tab(text: 'Generation'),
               Tab(text: 'Voice & Media'),
               Tab(text: 'Backend'),
               Tab(text: 'Advanced'),
@@ -488,6 +490,7 @@ class _SettingsPageState extends State<SettingsPage> {
         body: TabBarView(
           children: [
             _buildGeneralTab(context),
+            _buildGenerationTab(context),
             _buildVoiceMediaTab(context),
             _buildBackendTab(context),
             _buildAdvancedTab(context),
@@ -3084,6 +3087,258 @@ class _SettingsPageState extends State<SettingsPage> {
           if (mounted) setState(() => _isFetchingModels = false);
         }
       },
+    );
+  }
+
+  // ── Generation Settings Tab ─────────────────────────────────────────────
+  Widget _buildGenerationTab(BuildContext context) {
+    final storage = Provider.of<StorageService>(context);
+    final llmProvider = Provider.of<LLMProvider>(context);
+    final isRemote = !llmProvider.isLocal;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Reasoning (remote-only) ────────────────────────────────────
+          if (isRemote) ...[
+            _buildSectionHeader('Reasoning', context),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('Request Reasoning', style: TextStyle(color: Colors.white)),
+                const Spacer(),
+                Switch(
+                  value: storage.reasoningEnabled,
+                  onChanged: (val) => storage.setReasoningEnabled(val),
+                  activeTrackColor: Colors.blueAccent,
+                ),
+              ],
+            ),
+            if (storage.reasoningEnabled)
+              Row(
+                children: [
+                  const Text('Effort Level', style: TextStyle(color: Colors.white70)),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: storage.reasoningEffort,
+                        dropdownColor: Theme.of(context).cardColor,
+                        style: const TextStyle(color: Colors.white),
+                        items: const [
+                          DropdownMenuItem(value: 'low', child: Text('Low')),
+                          DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                          DropdownMenuItem(value: 'high', child: Text('High')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) storage.setReasoningEffort(val);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 24),
+          ],
+
+          // ── Generation Parameters ──────────────────────────────────────
+          _buildSectionHeader('Generation Parameters', context),
+          const SizedBox(height: 8),
+          _buildSlider('Temperature', storage.temperature, 0.0, 2.0,
+              (val) => storage.setTemperature(val), context,
+              divisions: 20),
+          _buildSlider('Min-P', storage.minP, 0.0, 1.0,
+              (val) => storage.setMinP(val), context,
+              divisions: 100),
+          _buildSlider('Repeat Penalty', storage.repeatPenalty, 1.0, 3.0,
+              (val) => storage.setRepeatPenalty(val), context,
+              divisions: 200),
+          _buildSlider('Repeat Penalty Tokens', storage.repeatPenaltyTokens.toDouble(), 0, 512,
+              (val) => storage.setRepeatPenaltyTokens(val.toInt()), context,
+              divisions: 512),
+          _buildSlider('XTC Threshold', storage.xtcThreshold, 0.0, 0.5,
+              (val) => storage.setXtcThreshold(val), context,
+              divisions: 50),
+          _buildSlider('XTC Probability', storage.xtcProbability, 0.0, 1.0,
+              (val) => storage.setXtcProbability(val), context,
+              divisions: 20),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Dynamic Temperature', style: TextStyle(color: Colors.white70)),
+              const Spacer(),
+              Switch(
+                value: storage.dynamicTempEnabled,
+                onChanged: (val) => storage.setDynamicTempEnabled(val),
+                activeTrackColor: Colors.blueAccent,
+              ),
+            ],
+          ),
+          if (storage.dynamicTempEnabled)
+            _buildSlider('Dynatemp Range', storage.dynamicTempRange, 0.0, 2.0,
+                (val) => storage.setDynamicTempRange(val), context,
+                divisions: 20),
+          const SizedBox(height: 24),
+
+          // ── Output Limits ──────────────────────────────────────────────
+          _buildSectionHeader('Output Limits', context),
+          const SizedBox(height: 8),
+          _buildSlider('Max Output Tokens', storage.maxLength.toDouble(), 16, 16384,
+              (val) => storage.setMaxLength(val.toInt()), context),
+          _buildSlider('Min Output Tokens', storage.minLength.toDouble(), 0, 512,
+              (val) => storage.setMinLength(val.toInt()), context,
+              divisions: 512),
+          // Context size — wider range for remote backends
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Context Size', style: TextStyle(color: Colors.white70)),
+                  Text(storage.contextSize.toString(),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                ],
+              ),
+              Slider(
+                value: storage.contextSize.toDouble().clamp(512, isRemote ? 500000.0 : 15000.0),
+                min: 512,
+                max: isRemote ? 500000.0 : 15000.0,
+                divisions: isRemote ? null : ((15000 - 512) ~/ 512),
+                onChanged: (val) => storage.setContextSize(val.toInt()),
+                activeColor: Colors.blueAccent,
+                inactiveColor: Colors.white24,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // ── Display Output ─────────────────────────────────────────────
+          _buildSectionHeader('Display Output', context),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Smooth Output Buffer', style: TextStyle(color: Colors.white70)),
+              const Spacer(),
+              Switch(
+                value: storage.displayBufferEnabled,
+                onChanged: (val) => storage.setDisplayBufferEnabled(val),
+                activeTrackColor: Colors.blueAccent,
+              ),
+            ],
+          ),
+          if (storage.displayBufferEnabled) ...[
+            _buildSlider('Target Display Speed (t/s)', storage.targetDisplayTps, 5.0, 60.0,
+                (val) => storage.setTargetDisplayTps(val), context,
+                divisions: 55),
+            _buildSlider('Buffer Duration (seconds)', storage.bufferDurationSeconds, 1.0, 10.0,
+                (val) => storage.setBufferDurationSeconds(val), context,
+                divisions: 9),
+          ],
+          const SizedBox(height: 24),
+
+          // ── Stop Sequences ─────────────────────────────────────────────
+          _buildSectionHeader('Stop Sequences', context),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            hintText: 'Add stop sequence...',
+                            hintStyle: TextStyle(color: Colors.white38),
+                            border: InputBorder.none,
+                          ),
+                          onSubmitted: (val) {
+                            if (val.isNotEmpty) storage.addStopSequence(val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: Colors.white10),
+                ...storage.stopSequences.map((seq) => ListTile(
+                  title: Text(seq.replaceAll('\n', '\\n'),
+                      style: const TextStyle(color: Colors.white)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.remove_circle_outline,
+                        color: Colors.redAccent, size: 20),
+                    onPressed: () => storage.removeStopSequence(seq),
+                  ),
+                  dense: true,
+                )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Banned Phrases (KoboldCpp only) ────────────────────────────
+          if (!isRemote) ...[
+            _buildSectionHeader('Banned Phrases', context),
+            const SizedBox(height: 4),
+            Text(
+              'One phrase per line. If any appear during generation the model backtracks and retries.',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: TextField(
+                controller: _bannedPhrasesController,
+                maxLines: 6,
+                minLines: 2,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: const InputDecoration(
+                  hintText: 'shivers down\na cold shiver\nher eyes sparkled',
+                  hintStyle: TextStyle(color: Colors.white24, fontSize: 13),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+                onChanged: (val) {
+                  final phrases = val
+                      .split('\n')
+                      .where((s) => s.trim().isNotEmpty)
+                      .map((s) => s.trim())
+                      .toList();
+                  storage.setBannedPhrases(phrases);
+                },
+              ),
+            ),
+            if (storage.bannedPhrases.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${storage.bannedPhrases.length} phrase${storage.bannedPhrases.length == 1 ? '' : 's'} banned',
+                  style: TextStyle(color: Colors.amber.shade300, fontSize: 11),
+                ),
+              ),
+          ],
+
+          const SizedBox(height: 32),
+        ],
+      ),
     );
   }
 
