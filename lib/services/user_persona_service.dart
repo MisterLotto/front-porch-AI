@@ -282,6 +282,241 @@ class UserPersonaService extends ChangeNotifier {
     }
   }
 
+  /// Import persona(s) from a JSON file.
+  ///
+  /// Supports multiple formats with auto-detection:
+  /// - **SillyTavern export**: `{ personas: {filename: name}, persona_descriptions: {filename: {description, title, ...}} }`
+  /// - **Front Porch native**: `{ personas: [...] }` — array of persona objects
+  /// - **TavernAI V2 / Backyard AI**: character card JSON with `name`, `description`,
+  ///   `personality`, `user_persona`, etc.
+  /// - **Generic**: any JSON with at least `name` + `description`
+  ///
+  /// [avatarSaveDir] is the directory where decoded base64 avatars will be saved.
+  /// If null, base64 avatars are discarded.
+  ///
+  /// Returns the first imported [UserPersona], or null on failure.
+  Future<UserPersona?> importFromJsonFile(String filePath, {String? avatarSaveDir}) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        debugPrint('[Persona:Import] File not found: $filePath');
+        return null;
+      }
+      final content = await file.readAsString();
+      final data = jsonDecode(content);
+
+      if (data is! Map<String, dynamic>) {
+        debugPrint('[Persona:Import] Unexpected JSON root type: ${data.runtimeType}');
+        return null;
+      }
+      final json = data;
+
+      // ── SillyTavern export format ──
+      // { personas: {filename: name}, persona_descriptions: {filename: {description, ...}} }
+      if (json.containsKey('personas') && json['personas'] is Map &&
+          json.containsKey('persona_descriptions') && json['persona_descriptions'] is Map) {
+        debugPrint('[Persona:Import] Detected SillyTavern export format');
+        final personasMap = json['personas'] as Map<String, dynamic>;
+        final descriptionsMap = json['persona_descriptions'] as Map<String, dynamic>;
+
+        UserPersona? firstImported;
+        for (final entry in personasMap.entries) {
+          final avatarKey = entry.key;   // e.g. "1766044822296-Linus.png"
+          final name = entry.value as String? ?? 'Imported Persona';
+
+          // Look up the description entry for this avatar key
+          final descEntry = descriptionsMap[avatarKey] as Map<String, dynamic>?;
+          final description = descEntry?['description'] as String? ?? '';
+          final title = descEntry?['title'] as String? ?? '';
+
+          final newPersona = UserPersona(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: title,
+            name: name,
+            description: description,
+            persona: description, // ST uses description as the persona text
+            learnedFacts: const <String>[],
+            avatarPath: null,
+          );
+
+          await _addImportedPersona(newPersona);
+          firstImported ??= newPersona;
+
+          // Small delay to ensure unique IDs
+          await Future.delayed(const Duration(milliseconds: 2));
+        }
+
+        if (firstImported != null) {
+          debugPrint('[Persona:Import] Imported ${personasMap.length} persona(s) from SillyTavern');
+        }
+        return firstImported;
+      }
+
+      // ── Front Porch native batch format (personas is a List) ──
+      if (json.containsKey('personas') && json['personas'] is List) {
+        final list = (json['personas'] as List)
+            .map((e) => UserPersona.fromJson(e as Map<String, dynamic>))
+            .toList();
+        if (list.isNotEmpty) {
+          for (final p in list) {
+            await _addImportedPersona(p);
+          }
+          debugPrint('[Persona:Import] Imported ${list.length} persona(s) from Front Porch native format');
+          return list.first;
+        }
+        return null;
+      }
+
+      // ── Single object formats ──
+
+      String name = '';
+      String title = '';
+      String description = '';
+      String persona = '';
+      String? avatarPath;
+
+      // TavernAI V2 / Backyard AI character card
+      if (json.containsKey('first_mes') || json.containsKey('mes_example') ||
+          json.containsKey('personality') || json.containsKey('scenario')) {
+        name = json['name'] as String? ?? '';
+        description = json['personality'] as String? ?? json['description'] as String? ?? '';
+        persona = json['user_persona'] as String? ?? json['description'] as String? ?? '';
+        title = json['creator_notes'] as String? ?? '';
+        debugPrint('[Persona:Import] Detected TavernAI V2 / Backyard AI format');
+      }
+      // Simple object with name + description
+      else if (json.containsKey('name') && json.containsKey('description')) {
+        name = json['name'] as String? ?? '';
+        description = json['description'] as String? ?? '';
+        persona = json['persona'] as String? ?? description;
+        title = json['title'] as String? ?? '';
+
+        // Handle base64 avatar
+        final avatarData = json['avatar'] as String?;
+        if (avatarData != null && avatarData.length > 200 && avatarSaveDir != null) {
+          avatarPath = await _decodeBase64Avatar(avatarData, name, avatarSaveDir);
+        } else if (avatarData != null && avatarData.length <= 200) {
+          avatarPath = avatarData;
+        }
+        debugPrint('[Persona:Import] Detected generic name+description format');
+      }
+      // Minimal fallback
+      else if (json.containsKey('name')) {
+        name = json['name'] as String? ?? 'Imported Persona';
+        description = json['description'] as String? ?? json['bio'] as String? ?? '';
+        persona = json['persona'] as String? ?? '';
+        debugPrint('[Persona:Import] Detected minimal format');
+      } else {
+        debugPrint('[Persona:Import] Unrecognized format — no parseable keys found');
+        return null;
+      }
+
+      if (name.isEmpty) name = 'Imported Persona';
+
+      final learnedFacts = (json['learned_facts'] as List?)?.cast<String>() ?? const <String>[];
+
+      final newPersona = UserPersona(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: title,
+        name: name,
+        description: description,
+        persona: persona,
+        learnedFacts: learnedFacts,
+        avatarPath: avatarPath,
+      );
+
+      await _addImportedPersona(newPersona);
+      return newPersona;
+    } catch (e) {
+      debugPrint('[Persona:Import] Error importing persona JSON: $e');
+      return null;
+    }
+  }
+
+  /// Internal helper — persist an imported persona to DB and memory.
+  Future<void> _addImportedPersona(UserPersona p) async {
+    // Prevent duplicate IDs
+    final existingIds = _personas.map((e) => e.id).toSet();
+    UserPersona toInsert = p;
+    if (existingIds.contains(p.id)) {
+      toInsert = p.copyWith(
+        title: p.title,
+        name: p.name,
+        description: p.description,
+        persona: p.persona,
+      );
+      // Generate new ID since copyWith preserves original
+      toInsert = UserPersona(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: p.title,
+        name: p.name,
+        description: p.description,
+        persona: p.persona,
+        learnedFacts: p.learnedFacts,
+        avatarPath: p.avatarPath,
+      );
+    }
+
+    await _db.insertPersona(PersonasCompanion.insert(
+      id: toInsert.id,
+      title: Value(toInsert.title),
+      name: Value(toInsert.name),
+      description: Value(toInsert.description),
+      persona: Value(toInsert.persona),
+      learnedFacts: Value(jsonEncode(toInsert.learnedFacts)),
+      avatarPath: Value(toInsert.avatarPath),
+      isActive: const Value(true),
+    ));
+
+    // Set as active
+    await _db.setActivePersona(toInsert.id);
+    _personas.add(toInsert);
+    _activePersonaId = toInsert.id;
+    _factEmbeddings.clear();
+    notifyListeners();
+  }
+
+  /// Decode a base64-encoded avatar string and save it to disk.
+  /// Returns the saved file path, or null on failure.
+  Future<String?> _decodeBase64Avatar(String base64Data, String personaName, String saveDir) async {
+    try {
+      // Strip data URI prefix if present (e.g. "data:image/png;base64,...")
+      String raw = base64Data;
+      String ext = '.png';
+      if (raw.startsWith('data:')) {
+        final comma = raw.indexOf(',');
+        if (comma != -1) {
+          final header = raw.substring(0, comma);
+          raw = raw.substring(comma + 1);
+          if (header.contains('jpeg') || header.contains('jpg')) ext = '.jpg';
+          if (header.contains('webp')) ext = '.webp';
+        }
+      }
+
+      final bytes = base64Decode(raw);
+      final safeName = personaName.replaceAll(RegExp(r'[^\w]'), '_');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'persona_${safeName}_$timestamp$ext';
+      final dir = Directory(saveDir);
+      await dir.create(recursive: true);
+      final filePath = '${dir.path}/$fileName';
+      await File(filePath).writeAsBytes(bytes);
+      debugPrint('[Persona:Import] Saved avatar to $filePath');
+      return filePath;
+    } catch (e) {
+      debugPrint('[Persona:Import] Failed to decode base64 avatar: $e');
+      return null;
+    }
+  }
+
+  /// Export a single persona to a JSON file.
+  Future<void> exportPersonaToJson(String personaId, String filePath) async {
+    final p = _personas.firstWhere((e) => e.id == personaId, orElse: () => persona);
+    final file = File(filePath);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(p.toJson()));
+  }
+
   /// Reload personas from DB (e.g. after cloud sync import).
   Future<void> reload() async {
     await _loadPersonas();
