@@ -75,15 +75,20 @@ enum GenerationMode { normal, continue_, impersonate }
 enum GenerationPhase {
   /// Not generating.
   idle,
+
   /// Building the prompt context (lorebook, memories, history, etc.).
   preparing,
+
   /// HTTP request sent, waiting for response + prompt processing.
   /// For KoboldCPP this is the prefill/eval phase which can be long.
   prefilling,
+
   /// Tokens arriving but inside <think>...</think> tags (reasoning model).
   thinking,
+
   /// Display buffer is accumulating tokens before smooth playback begins.
   buffering,
+
   /// Tokens are actively being generated and displayed to the user.
   generating,
 }
@@ -284,7 +289,8 @@ class ChatService extends ChangeNotifier {
   bool _isBuffering = false;
   GenerationPhase _generationPhase = GenerationPhase.idle;
   DateTime? _prefillStartTime; // When we entered prefill (for elapsed timer)
-  int _prefillPromptTokens = 0; // Estimated prompt token count for progress display
+  int _prefillPromptTokens =
+      0; // Estimated prompt token count for progress display
   Map<String, dynamic>? _lastPerfData; // Cached KoboldCPP perf data
   final List<String> _tokenBuffer = [];
   Timer? _drainTimer;
@@ -377,7 +383,8 @@ class ChatService extends ChangeNotifier {
   // NSFW cooldown & lust
   bool _nsfwCooldownEnabled = false;
   int _cooldownTurnsRemaining = 0;
-  int _cooldownTurnsTotal = 0; // original refractory duration (for phased prompt)
+  int _cooldownTurnsTotal =
+      0; // original refractory duration (for phased prompt)
   int _arousalLevel = 0; // -10 to +10 scale
 
   // ── Chaos Mode / Chance Time ──
@@ -519,12 +526,15 @@ class ChatService extends ChangeNotifier {
   int get maxTokens => _maxTokens;
   bool get isBuffering => _isBuffering;
   GenerationPhase get generationPhase => _generationPhase;
+
   /// Seconds elapsed since entering the prefill phase. Returns 0 if not prefilling.
   double get prefillElapsedSeconds => _prefillStartTime != null
       ? DateTime.now().difference(_prefillStartTime!).inMilliseconds / 1000.0
       : 0.0;
+
   /// Cached KoboldCPP performance data from last /api/extra/perf poll.
   Map<String, dynamic>? get lastPerfData => _lastPerfData;
+
   /// Estimated prompt token count for the current generation (for progress display).
   int get prefillPromptTokens => _prefillPromptTokens;
   bool get isGroupMode => _activeGroup != null;
@@ -580,7 +590,8 @@ class ChatService extends ChangeNotifier {
   int get authorNoteStrength => _authorNoteStrength;
   Map<String, int> get lastPromptBudget => _lastPromptBudget;
   String get lastAssembledPrompt => _lastAssembledPrompt;
-  int get contextSize => _sessionGenSettings.resolveContextSize(_storageService);
+  int get contextSize =>
+      _sessionGenSettings.resolveContextSize(_storageService);
 
   /// Per-session generation parameter overrides. The dialog reads/writes this.
   ChatGenerationSettings get sessionGenSettings => _sessionGenSettings;
@@ -589,6 +600,7 @@ class ChatService extends ChangeNotifier {
     _saveChat();
     notifyListeners();
   }
+
   String? get parentSessionId => _parentSessionId;
   int? get forkIndex => _forkIndex;
   String? get sessionName => _sessionName;
@@ -1042,7 +1054,9 @@ class ChatService extends ChangeNotifier {
             // Defer so the session ID is ready before the DB write
             Future.microtask(() async {
               await setObjective(ext.currentTask, isPrimary: true);
-              debugPrint('[ChatService] V2.5 seeded initial task: ${ext.currentTask}');
+              debugPrint(
+                '[ChatService] V2.5 seeded initial task: ${ext.currentTask}',
+              );
             });
           }
         }
@@ -1565,7 +1579,9 @@ class ChatService extends ChangeNotifier {
         _longTermTier = _calculateTier(_longTermScore);
       }
       _relationshipTier = _calculateTier(_affectionScore);
-      debugPrint('[Realism] Legacy session migrated to REv2 scales (loadLast).');
+      debugPrint(
+        '[Realism] Legacy session migrated to REv2 scales (loadLast).',
+      );
     }
 
     // Load per-session evolution (1:1 mode only — group is handled by _loadGroupEvolvedFields)
@@ -1815,10 +1831,12 @@ class ChatService extends ChangeNotifier {
       // Per-session generation parameter overrides (v22) — loaded via raw SQL
       // so this works even before build_runner regenerates database.g.dart.
       try {
-        final genRows = await _db.customSelect(
-          'SELECT generation_settings FROM sessions WHERE id = ?',
-          variables: [drift.Variable(sessionId)],
-        ).get();
+        final genRows = await _db
+            .customSelect(
+              'SELECT generation_settings FROM sessions WHERE id = ?',
+              variables: [drift.Variable(sessionId)],
+            )
+            .get();
         final genJson = genRows.isNotEmpty
             ? genRows.first.read<String?>('generation_settings')
             : null;
@@ -1921,7 +1939,8 @@ class ChatService extends ChangeNotifier {
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _parentSessionId = oldSessionId;
     _forkIndex = messageIndex;
-    _sessionGenSettings = _sessionGenSettings.copy(); // inherit parent's overrides
+    _sessionGenSettings = _sessionGenSettings
+        .copy(); // inherit parent's overrides
     _summary = '';
     _summaryLastIndex = 0;
 
@@ -1996,14 +2015,38 @@ class ChatService extends ChangeNotifier {
     _summary = '';
     _summaryLastIndex = 0;
 
-    _affectionScore = 0;
-    _trustLevel = 0;
-    _pendingTrustRepair = false;
-    _relationshipTier = 0;
-    _longTermScore = 0;
-    _longTermTier = 0;
-    _turnsSinceLongTermCheck = 0;
-    _shortTermDeltasSummary = 0;
+    // Seed Realism Engine state from V2.5 card extensions for 1:1 mode only,
+    // ensuring realism settings persist across chat sessions (group mode handled elsewhere)
+    if (_activeCharacter != null && _activeGroup == null) {
+      final extSeed =
+          _activeCharacter!.frontPorchExtensions ?? FrontPorchExtensions();
+
+      _realismEnabled = extSeed.realismEnabled;
+      _affectionScore = extSeed.shortTermBond.clamp(-150, 150);
+      _longTermScore = extSeed.longTermBond.clamp(-150, 150);
+      _trustLevel = extSeed.trustLevel.clamp(-100, 100);
+
+      // Recalculate tiers from seeded scores (only needed for realism-enabled chars)
+      if (_realismEnabled) {
+        _relationshipTier = _calculateTier(_affectionScore);
+        _longTermTier = _calculateTier(_longTermScore);
+      }
+    } else {
+      // Group mode or no active character: reset to defaults but preserve existing extensions-based values
+      _pendingTrustRepair = false;
+
+      if (_activeGroup == null && _messages.isNotEmpty) {
+        // Will be populated later with greeting in non-group modes
+        // Preserve realism state for proper post-greeting eval (don't reset here)
+      } else {
+        _affectionScore = 0;
+        _trustLevel = 0;
+        _relationshipTier = 0;
+        _longTermScore = 0;
+        _longTermTier = 0;
+        // Don't touch dayCount, timeOfDay etc. as they get seeded from extensions or loaded session
+      }
+    }
 
     // Clear the in-memory evolution cache so the new session starts with
     // the original (unevolved) personality/scenario. The previous session's
@@ -2284,7 +2327,9 @@ class ChatService extends ChangeNotifier {
         _pendingRealismMetadata ??= {};
         _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
         _pendingRealismMetadata!['realism_state'] = _captureRealismState();
-        debugPrint('[Realism:Metadata] Synthesized metadata before generation: bond_delta=${_pendingRealismMetadata?['bond_delta']}, trust_delta=${_pendingRealismMetadata?['trust_delta']}, keys=${_pendingRealismMetadata?.keys.toList()}');
+        debugPrint(
+          '[Realism:Metadata] Synthesized metadata before generation: bond_delta=${_pendingRealismMetadata?['bond_delta']}, trust_delta=${_pendingRealismMetadata?['trust_delta']}, keys=${_pendingRealismMetadata?.keys.toList()}',
+        );
         _saveChat();
       }
 
@@ -2394,9 +2439,11 @@ class ChatService extends ChangeNotifier {
 
           // Revert climax state if this response triggered refractory cooldown.
           // The climax checker stores the pre-climax arousal so we can restore it.
-          final climaxTriggered = lastMsg.activeMetadata!['climax_triggered'] as bool? ?? false;
+          final climaxTriggered =
+              lastMsg.activeMetadata!['climax_triggered'] as bool? ?? false;
           if (climaxTriggered && _nsfwCooldownEnabled) {
-            final preClimaxArousal = lastMsg.activeMetadata!['pre_climax_arousal'] as int? ?? 0;
+            final preClimaxArousal =
+                lastMsg.activeMetadata!['pre_climax_arousal'] as int? ?? 0;
             _arousalLevel = preClimaxArousal;
             _cooldownTurnsRemaining = 0;
             _cooldownTurnsTotal = 0;
@@ -2682,8 +2729,11 @@ class ChatService extends ChangeNotifier {
           "$impersonateInstruction"
           "$suffix";
       final fixedTokens = await _countTokens(fixedContent);
-      final contextBudget = _sessionGenSettings.resolveContextSize(_storageService);
-      final generationReserve = _sessionGenSettings.resolveMaxLength(_storageService) + 50;
+      final contextBudget = _sessionGenSettings.resolveContextSize(
+        _storageService,
+      );
+      final generationReserve =
+          _sessionGenSettings.resolveMaxLength(_storageService) + 50;
       final historyBudget = contextBudget - fixedTokens - generationReserve;
 
       if (historyBudget > 0) {
@@ -2712,7 +2762,9 @@ class ChatService extends ChangeNotifier {
 
       // Stop sequences: character names only (not user — we ARE the user)
       final g = _sessionGenSettings;
-      final stopSequences = {...g.resolveStopSequences(_storageService).toSet()};
+      final stopSequences = {
+        ...g.resolveStopSequences(_storageService).toSet(),
+      };
       if (_activeGroup != null) {
         for (final ch in _groupCharacters) {
           stopSequences.add('\n${ch.name}:');
@@ -3037,9 +3089,12 @@ class ChatService extends ChangeNotifier {
           "$suffix"
           "$chanceTimeBlock";
       final fixedTokens = await _countTokens(fixedContent);
-      final contextBudget = _sessionGenSettings.resolveContextSize(_storageService);
+      final contextBudget = _sessionGenSettings.resolveContextSize(
+        _storageService,
+      );
       final generationReserve =
-          _sessionGenSettings.resolveMaxLength(_storageService) + 50; // +50 safety margin
+          _sessionGenSettings.resolveMaxLength(_storageService) +
+          50; // +50 safety margin
       final historyBudget = contextBudget - fixedTokens - generationReserve;
 
       int droppedMessages = 0;
@@ -3137,36 +3192,36 @@ class ChatService extends ChangeNotifier {
       final isRemoteApi = _llmProvider != null && !_llmProvider!.isLocal;
       final chatSystemPrompt = isRemoteApi
           ? "$systemPrompt\n$loreContent$personaBlock\n$userPersonaBlock"
-              "Scenario: $scenario\n$mesExampleBlock"
+                "Scenario: $scenario\n$mesExampleBlock"
           : null;
 
       final prompt = isRemoteApi
           ? "<START>\n"
-              "$summaryBlock"
-              "$memoriesBlock"
-              "$history"
-              "$postHistoryBlock"
-              "$authorNoteBlock"
-              "$objectiveBlock"
-              "$realismBlock"
-              "$suffix"
-              "$chanceTimeBlock"
+                "$summaryBlock"
+                "$memoriesBlock"
+                "$history"
+                "$postHistoryBlock"
+                "$authorNoteBlock"
+                "$objectiveBlock"
+                "$realismBlock"
+                "$suffix"
+                "$chanceTimeBlock"
           : "$systemPrompt\n"
-              "$loreContent"
-              "$personaBlock\n"
-              "$userPersonaBlock"
-              "Scenario: $scenario\n"
-              "$mesExampleBlock"
-              "<START>\n"
-              "$summaryBlock"
-              "$memoriesBlock"
-              "$history"
-              "$postHistoryBlock"
-              "$authorNoteBlock"
-              "$objectiveBlock"
-              "$realismBlock"
-              "$suffix"
-              "$chanceTimeBlock";
+                "$loreContent"
+                "$personaBlock\n"
+                "$userPersonaBlock"
+                "Scenario: $scenario\n"
+                "$mesExampleBlock"
+                "<START>\n"
+                "$summaryBlock"
+                "$memoriesBlock"
+                "$history"
+                "$postHistoryBlock"
+                "$authorNoteBlock"
+                "$objectiveBlock"
+                "$realismBlock"
+                "$suffix"
+                "$chanceTimeBlock";
 
       // Track prompt budget for context viewer (always show full prompt)
       _lastAssembledPrompt = chatSystemPrompt != null
@@ -3192,7 +3247,9 @@ class ChatService extends ChangeNotifier {
 
       // Stop sequences: include character names, and user name (except when impersonating)
       final g2 = _sessionGenSettings;
-      final stopSequences = {...g2.resolveStopSequences(_storageService).toSet()};
+      final stopSequences = {
+        ...g2.resolveStopSequences(_storageService).toSet(),
+      };
 
       // In impersonate mode the model IS the user, so don't stop on user name
       if (mode != GenerationMode.impersonate) {
@@ -3267,7 +3324,9 @@ class ChatService extends ChangeNotifier {
         _koboldService.countTokens(prompt).then((realCount) {
           if (_generationPhase == GenerationPhase.prefilling && realCount > 0) {
             _prefillPromptTokens = realCount;
-            debugPrint('[Prefill] Actual token count from tokenizer: $realCount (was ~${(prompt.length / 4).ceil()} est)');
+            debugPrint(
+              '[Prefill] Actual token count from tokenizer: $realCount (was ~${(prompt.length / 4).ceil()} est)',
+            );
             notifyListeners();
           }
         });
@@ -3319,7 +3378,9 @@ class ChatService extends ChangeNotifier {
         final initialMetadata = _pendingRealismMetadata != null
             ? Map<String, dynamic>.from(_pendingRealismMetadata!)
             : null;
-        debugPrint('[Realism:Metadata] Attaching to new message: bond_delta=${initialMetadata?['bond_delta']}, keys=${initialMetadata?.keys.toList()}');
+        debugPrint(
+          '[Realism:Metadata] Attaching to new message: bond_delta=${initialMetadata?['bond_delta']}, keys=${initialMetadata?.keys.toList()}',
+        );
         _messages.add(
           ChatMessage(
             text: "",
@@ -4856,7 +4917,8 @@ class ChatService extends ChangeNotifier {
     if (_isExtractingFacts || _isEvolvingCharacter) return;
 
     _userMessagesSinceLastPeriodicEval++;
-    if (_userMessagesSinceLastPeriodicEval < _storageService.autoPersonaInterval)
+    if (_userMessagesSinceLastPeriodicEval <
+        _storageService.autoPersonaInterval)
       return;
     _userMessagesSinceLastPeriodicEval = 0;
 
@@ -4886,25 +4948,49 @@ class ChatService extends ChangeNotifier {
     // RP action text (contains asterisks or action-style phrasing)
     RegExp(r'\*'),
     // Starts with action verbs that indicate RP narration (present or past tense)
-    RegExp(r'^(walks|walked|runs|ran|looks|looked|says|said|goes|went|came|sat|stood|turned|moved|grabbed|took|pulled|pushed|kissed|hugged|touched|smiled|laughed|nodded|sighed|whispered|moaned|gasped|fought|visited|traveled|explored|entered|left|arrived|met|told|asked|agreed|decided|confessed|promised|attacked|defended|defeated|escaped|rescued|seduced|flirted|dated|married|proposed)\b', caseSensitive: false),
+    RegExp(
+      r'^(walks|walked|runs|ran|looks|looked|says|said|goes|went|came|sat|stood|turned|moved|grabbed|took|pulled|pushed|kissed|hugged|touched|smiled|laughed|nodded|sighed|whispered|moaned|gasped|fought|visited|traveled|explored|entered|left|arrived|met|told|asked|agreed|decided|confessed|promised|attacked|defended|defeated|escaped|rescued|seduced|flirted|dated|married|proposed)\b',
+      caseSensitive: false,
+    ),
     // LLM meta-commentary / non-facts
-    RegExp(r'^(no new facts|none|n/a|nothing|unknown|unclear|not sure|i don.?t know)', caseSensitive: false),
+    RegExp(
+      r'^(no new facts|none|n/a|nothing|unknown|unclear|not sure|i don.?t know)',
+      caseSensitive: false,
+    ),
     // Too generic / vague to be useful
-    RegExp(r'^(is nice|is good|is bad|likes things|does stuff|is a person|is human|exists)', caseSensitive: false),
+    RegExp(
+      r'^(is nice|is good|is bad|likes things|does stuff|is a person|is human|exists)',
+      caseSensitive: false,
+    ),
     // JSON artifacts or structural garbage
     RegExp(r'[\[\]{}]'),
     // Repeated punctuation or encoding garbage
     RegExp(r'[.!?]{3,}|\\[nrt]|&#|%[0-9a-f]{2}', caseSensitive: false),
     // Third-person narrator voice ("The user did X", "They went Y")
-    RegExp(r'^(the user|the player|they|he|she)\s+(is|was|had|has|did|does|went|walked|said|looked|seemed|appeared)\b', caseSensitive: false),
+    RegExp(
+      r'^(the user|the player|they|he|she)\s+(is|was|had|has|did|does|went|walked|said|looked|seemed|appeared)\b',
+      caseSensitive: false,
+    ),
     // Character-specific relationship events ("kissed X", "went on a date with X", "told X")
-    RegExp(r'(kissed|hugged|dated|married|proposed to|confessed to|fell in love with|slept with|fought with|traveled with|met with|went .+ with|had .+ with|told .+ about|asked .+ to|promised .+ to)\s+[A-Z]', caseSensitive: false),
+    RegExp(
+      r'(kissed|hugged|dated|married|proposed to|confessed to|fell in love with|slept with|fought with|traveled with|met with|went .+ with|had .+ with|told .+ about|asked .+ to|promised .+ to)\s+[A-Z]',
+      caseSensitive: false,
+    ),
     // References to specific RP interactions ("during the", "at the", "in the [location]")
-    RegExp(r'(during the|at the|in the|after the|before the)\s+(quest|battle|fight|mission|date|party|ritual|ceremony|adventure|journey|dungeon|castle|tavern|camp)', caseSensitive: false),
+    RegExp(
+      r'(during the|at the|in the|after the|before the)\s+(quest|battle|fight|mission|date|party|ritual|ceremony|adventure|journey|dungeon|castle|tavern|camp)',
+      caseSensitive: false,
+    ),
     // Emotional events tied to scenes ("felt X when", "was X during")
-    RegExp(r'(felt|was|became|got)\s+\w+\s+(when|during|after|while|because)\b', caseSensitive: false),
+    RegExp(
+      r'(felt|was|became|got)\s+\w+\s+(when|during|after|while|because)\b',
+      caseSensitive: false,
+    ),
     // Relationship status with fictional characters ("is dating X", "is friends with X", "loves X")
-    RegExp(r'(is|are|was|were)\s+(dating|married to|in love with|friends with|enemies with|attracted to|bonded with|loyal to|allied with)\b', caseSensitive: false),
+    RegExp(
+      r'(is|are|was|were)\s+(dating|married to|in love with|friends with|enemies with|attracted to|bonded with|loyal to|allied with)\b',
+      caseSensitive: false,
+    ),
   ];
 
   /// Minimum/maximum character length for a valid fact.
@@ -4917,7 +5003,8 @@ class ChatService extends ChangeNotifier {
   /// Returns true if a fact passes the quality gate.
   /// Rejects RP actions, character-specific events, and scene-bound facts.
   bool _isValidFact(String fact) {
-    if (fact.length < _minFactLength || fact.length > _maxFactLength) return false;
+    if (fact.length < _minFactLength || fact.length > _maxFactLength)
+      return false;
     for (final pattern in _factGarbagePatterns) {
       if (pattern.hasMatch(fact)) {
         debugPrint('[RAG:Persona] ✗ Rejected by quality gate: "$fact"');
@@ -4928,14 +5015,18 @@ class ChatService extends ChangeNotifier {
     if (_activeCharacter != null) {
       final charName = _activeCharacter!.name.toLowerCase();
       if (fact.toLowerCase().contains(charName)) {
-        debugPrint('[RAG:Persona] ✗ Rejected (references character "${_activeCharacter!.name}"): "$fact"');
+        debugPrint(
+          '[RAG:Persona] ✗ Rejected (references character "${_activeCharacter!.name}"): "$fact"',
+        );
         return false;
       }
     }
     // Reject facts referencing any group chat character
     for (final gc in _groupCharacters) {
       if (fact.toLowerCase().contains(gc.name.toLowerCase())) {
-        debugPrint('[RAG:Persona] ✗ Rejected (references group character "${gc.name}"): "$fact"');
+        debugPrint(
+          '[RAG:Persona] ✗ Rejected (references group character "${gc.name}"): "$fact"',
+        );
         return false;
       }
     }
@@ -5083,11 +5174,15 @@ class ChatService extends ChangeNotifier {
       final cleanFacts = facts.where(_isValidFact).toList();
       final rejected = facts.length - cleanFacts.length;
       if (rejected > 0) {
-        debugPrint('[RAG:Persona] Quality gate: rejected $rejected/${facts.length} facts');
+        debugPrint(
+          '[RAG:Persona] Quality gate: rejected $rejected/${facts.length} facts',
+        );
       }
 
       if (cleanFacts.isEmpty) {
-        debugPrint('[RAG:Persona] ✗ All extracted facts rejected by quality gate');
+        debugPrint(
+          '[RAG:Persona] ✗ All extracted facts rejected by quality gate',
+        );
         return;
       }
 
@@ -5104,7 +5199,9 @@ class ChatService extends ChangeNotifier {
       // ── Fact Cap: consolidate if over limit ──
       final currentCount = _userPersonaService.persona.learnedFacts.length;
       if (currentCount > _maxLearnedFacts) {
-        debugPrint('[RAG:Persona] Fact count ($currentCount) exceeds cap ($_maxLearnedFacts), consolidating...');
+        debugPrint(
+          '[RAG:Persona] Fact count ($currentCount) exceeds cap ($_maxLearnedFacts), consolidating...',
+        );
         await _consolidateLearnedFacts();
       }
 
@@ -5145,7 +5242,9 @@ class ChatService extends ChangeNotifier {
       );
       if (raw == null) {
         // LLM failed — fall back to simple truncation (keep first N facts)
-        debugPrint('[RAG:Persona] Consolidation LLM call failed, truncating to $_maxLearnedFacts');
+        debugPrint(
+          '[RAG:Persona] Consolidation LLM call failed, truncating to $_maxLearnedFacts',
+        );
         final trimmed = facts.sublist(0, _maxLearnedFacts);
         await _userPersonaService.updatePersona(
           _userPersonaService.persona.copyWith(learnedFacts: trimmed),
@@ -5153,15 +5252,22 @@ class ChatService extends ChangeNotifier {
         return;
       }
 
-      final text = _stripThinkBlocks(raw).isNotEmpty ? _stripThinkBlocks(raw) : raw;
+      final text = _stripThinkBlocks(raw).isNotEmpty
+          ? _stripThinkBlocks(raw)
+          : raw;
       var jsonStr = text.trim();
       if (jsonStr.contains('```')) {
-        final match = RegExp(r'```(?:json)?\s*\n?(.*?)\n?```', dotAll: true).firstMatch(jsonStr);
+        final match = RegExp(
+          r'```(?:json)?\s*\n?(.*?)\n?```',
+          dotAll: true,
+        ).firstMatch(jsonStr);
         if (match != null) jsonStr = match.group(1)!.trim();
       }
       final arrayMatch = RegExp(r'\[.*\]', dotAll: true).firstMatch(jsonStr);
       if (arrayMatch == null) {
-        debugPrint('[RAG:Persona] Consolidation response not parseable, truncating');
+        debugPrint(
+          '[RAG:Persona] Consolidation response not parseable, truncating',
+        );
         final trimmed = facts.sublist(0, _maxLearnedFacts);
         await _userPersonaService.updatePersona(
           _userPersonaService.persona.copyWith(learnedFacts: trimmed),
@@ -5170,9 +5276,13 @@ class ChatService extends ChangeNotifier {
       }
 
       try {
-        final consolidated = List<String>.from(jsonDecode(arrayMatch.group(0)!) as List);
+        final consolidated = List<String>.from(
+          jsonDecode(arrayMatch.group(0)!) as List,
+        );
         final cleaned = consolidated.where(_isValidFact).toList();
-        debugPrint('[RAG:Persona] Consolidated ${facts.length} → ${cleaned.length} facts');
+        debugPrint(
+          '[RAG:Persona] Consolidated ${facts.length} → ${cleaned.length} facts',
+        );
         await _userPersonaService.updatePersona(
           _userPersonaService.persona.copyWith(learnedFacts: cleaned),
         );
@@ -6309,7 +6419,9 @@ class ChatService extends ChangeNotifier {
     String statePrompt = '[OOC Note regarding Physical State:\n';
 
     if (_cooldownTurnsRemaining > 0) {
-      final total = _cooldownTurnsTotal > 0 ? _cooldownTurnsTotal : _cooldownTurnsRemaining;
+      final total = _cooldownTurnsTotal > 0
+          ? _cooldownTurnsTotal
+          : _cooldownTurnsRemaining;
       final ratio = _cooldownTurnsRemaining / total;
 
       if (ratio > 0.66) {
@@ -6382,7 +6494,8 @@ class ChatService extends ChangeNotifier {
         // NOTE: We do NOT instruct climax here. The arousal number describes the
         // character's state of DESIRE, not progress toward orgasm. Climax happens
         // organically in the scene — _checkClimaxInResponse evaluates afterward.
-        statePrompt += ' $charName is currently $arousalDesc.\n'
+        statePrompt +=
+            ' $charName is currently $arousalDesc.\n'
             ' IMPORTANT: Arousal at maximum means $charName is overwhelmed with desire — '
             'it does NOT mean they are climaxing or have climaxed. Do NOT write orgasm or '
             'post-orgasm behavior unless the physical activity in the scene has naturally '
@@ -6565,7 +6678,9 @@ class ChatService extends ChangeNotifier {
       debugPrint(
         '[Realism:Relationship] Bond: $bondDelta (${bondReason.isNotEmpty ? bondReason : 'no reason'}) | Trust: $trustDelta (${trustReason.isNotEmpty ? trustReason : 'no reason'})',
       );
-      debugPrint('[Realism:Metadata] _pendingRealismMetadata after relationship eval: $_pendingRealismMetadata');
+      debugPrint(
+        '[Realism:Metadata] _pendingRealismMetadata after relationship eval: $_pendingRealismMetadata',
+      );
       notifyListeners();
     } catch (e) {
       debugPrint('[Realism:Relationship] Failed: $e');
