@@ -2388,11 +2388,24 @@ class ChatService extends ChangeNotifier {
           if (moodDelta != 0) {
             _moodDecayCounter = 0;
           }
-          if (arousalDelta != 0 && _nsfwCooldownEnabled) {
-            _arousalLevel = (_arousalLevel - arousalDelta).clamp(-3, 10);
-          }
           if (trustDelta != 0) {
             _trustLevel = (_trustLevel - trustDelta).clamp(-100, 100);
+          }
+
+          // Revert climax state if this response triggered refractory cooldown.
+          // The climax checker stores the pre-climax arousal so we can restore it.
+          final climaxTriggered = lastMsg.activeMetadata!['climax_triggered'] as bool? ?? false;
+          if (climaxTriggered && _nsfwCooldownEnabled) {
+            final preClimaxArousal = lastMsg.activeMetadata!['pre_climax_arousal'] as int? ?? 0;
+            _arousalLevel = preClimaxArousal;
+            _cooldownTurnsRemaining = 0;
+            _cooldownTurnsTotal = 0;
+            debugPrint(
+              '[Realism:Regen] Reverted climax state: arousal restored to $preClimaxArousal, cooldown cleared',
+            );
+          } else if (arousalDelta != 0 && _nsfwCooldownEnabled) {
+            // Normal arousal delta revert (no climax involved)
+            _arousalLevel = (_arousalLevel - arousalDelta).clamp(-3, 10);
           }
         }
         // Set UI streaming state
@@ -6336,26 +6349,45 @@ class ChatService extends ChangeNotifier {
       String arousalDesc;
       if (_arousalLevel <= -2) {
         arousalDesc =
-            'completely unaroused and physically deadened. They will actively reject or pull away from sexual advances';
+            'completely unaroused and physically repulsed. They will actively reject, recoil from, or shut down any sexual advance';
       } else if (_arousalLevel == 0) {
         arousalDesc =
-            'physically dormant/neutral. They are not currently aroused';
+            'physically neutral — sex is the furthest thing from their mind. Any sexual advance feels out of place';
       } else if (_arousalLevel <= 3) {
         arousalDesc =
-            'mildly flustered or experiencing a low hum of physical arousal';
+            'mildly flustered — a low hum of warmth, maybe a lingering glance or quickened pulse, but easily suppressed. '
+            'They might entertain flirty banter but aren\'t actively seeking physical escalation';
       } else if (_arousalLevel <= 6) {
         arousalDesc =
-            'visibly aroused, highly receptive, and eager for physical intimacy';
-      } else if (_arousalLevel <= 9) {
+            'noticeably aroused — flushed skin, shallow breathing, heightened sensitivity to touch. '
+            'They are receptive and encouraging but still in control of themselves. '
+            'If not in active sexual contact, this manifests as charged tension, loaded silences, and deliberate proximity';
+      } else if (_arousalLevel <= 8) {
         arousalDesc =
-            'heavily aroused, breathing hard, and aggressively pursuing sexual release';
+            'heavily aroused — pulse racing, body aching for contact, struggling to focus on anything else. '
+            'If in active sexual contact, they are vocal, aggressive, and chasing release. '
+            'If NOT in active sexual contact, they are visibly distracted, restless, making excuses to touch or be near, '
+            'and fighting the urge to escalate — the tension is unbearable but they haven\'t acted on it yet';
+      } else if (_arousalLevel == 9) {
+        arousalDesc =
+            'overwhelmed with desire — trembling, desperate, barely holding composure. '
+            'If in active sexual contact, they are on the edge and could climax with continued stimulation. '
+            'If NOT in active sexual contact, they are a raw nerve — every sensation is electric, '
+            'they cannot hide their state, and their body is screaming for relief they haven\'t gotten yet';
       } else {
         arousalDesc =
-            'feverish with lust, entirely consumed by the desperate need for immediate climax';
-        // At 10/10, explicitly authorize the AI to write the climax
+            'at the absolute peak of physical arousal — consumed by need, unable to think straight. '
+            'Every nerve is on fire, breathing ragged, body trembling and hypersensitive to the slightest contact. '
+            'They are desperate, vocal, and completely unable to hide how badly they want {{user}}';
+        // NOTE: We do NOT instruct climax here. The arousal number describes the
+        // character's state of DESIRE, not progress toward orgasm. Climax happens
+        // organically in the scene — _checkClimaxInResponse evaluates afterward.
         statePrompt += ' $charName is currently $arousalDesc.\n'
-            ' $charName has reached maximum arousal and SHOULD reach climax/orgasm in this response '
-            'if the scene allows it. Do not keep delaying — the buildup has peaked and resolution is natural.\n';
+            ' IMPORTANT: Arousal at maximum means $charName is overwhelmed with desire — '
+            'it does NOT mean they are climaxing or have climaxed. Do NOT write orgasm or '
+            'post-orgasm behavior unless the physical activity in the scene has naturally '
+            "built to that point through {{user}}'s direct actions. $charName is desperate "
+            'and aching but still in the moment, not past it.\n';
       }
       if (_arousalLevel < 10) {
         statePrompt += ' $charName is currently $arousalDesc.\n';
@@ -6574,7 +6606,12 @@ class ChatService extends ChangeNotifier {
     final arousalInstr = _nsfwCooldownEnabled
         ? '3. "arousal_delta": Physical arousal shift this turn. (-10 to +10)\n'
               '   Current arousal: $_arousalLevel/10. '
-              'Scale to the intensity — a mild flirt might be +1, while explicit contact could be +5 or more. Mood-killers can be large negatives.\n'
+              'Arousal measures DESIRE and PHYSICAL RESPONSE, not progress toward orgasm.\n'
+              '   It can spike suddenly (+7 from an unexpected intimate moment) or crash (-8 from embarrassment/disgust).\n'
+              '   High arousal = the character is intensely turned on, NOT that they are about to climax '
+              '— climax only happens during active sexual contact at high arousal.\n'
+              '   Examples: a whispered compliment = +1, unexpected passionate kiss = +4, '
+              'explicit sexual contact = +5 to +8, humiliating comment = -5 to -9.\n'
         : '';
 
     // ── Emotion inertia context ──
@@ -6936,7 +6973,10 @@ class ChatService extends ChangeNotifier {
     // Arousal is field 7 (after posture), objective is 8, fixation 9, reason 10
     final arousalInstr = _nsfwCooldownEnabled
         ? '7. "arousal_delta": Physical arousal shift this turn. (-10 to +10)\n'
-              '   Current arousal: $_arousalLevel/10. Scale to the intensity — a mild flirt might be +1, explicit contact +5 or more. Mood-killers can be large negatives.\n'
+              '   Current arousal: $_arousalLevel/10. '
+              'Arousal = DESIRE and PHYSICAL RESPONSE, not progress toward orgasm.\n'
+              '   Can spike suddenly (unexpected intimacy) or crash (embarrassment/disgust).\n'
+              '   High arousal = intensely turned on, NOT about to climax — climax only during active sexual contact at peak arousal.\n'
         : '';
 
     // Determine the next field number after arousal (or after posture if arousal disabled)
@@ -7357,11 +7397,23 @@ class ChatService extends ChangeNotifier {
         if (turnMatch != null) {
           turns = (int.tryParse(turnMatch.group(1)!) ?? 5).clamp(1, 10);
         }
+
+        // Save pre-climax state on the message so regen can restore it
+        final preClimaxArousal = _arousalLevel;
+        if (_messages.isNotEmpty && !_messages.last.isUser) {
+          final msg = _messages.last;
+          final meta = Map<String, dynamic>.from(msg.activeMetadata ?? {});
+          meta['climax_triggered'] = true;
+          meta['pre_climax_arousal'] = preClimaxArousal;
+          msg.swipeMetadata[msg.swipeIndex] = meta;
+        }
+
         _cooldownTurnsTotal = turns;
         _cooldownTurnsRemaining = turns;
         _arousalLevel = -3;
         debugPrint(
-          '[Realism:Climax] Confirmed — refractory cooldown started ($turns turns), arousal → -3',
+          '[Realism:Climax] Confirmed — refractory cooldown started ($turns turns), '
+          'arousal $preClimaxArousal → -3 (pre-climax saved for regen)',
         );
         _saveChat();
         notifyListeners();

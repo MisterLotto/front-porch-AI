@@ -152,7 +152,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         backgroundColor: const Color(0xFF1E293B),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Provider.of<AppState>(context, listen: false).setIndex(0),
         ),
         title: Row(
           children: [
