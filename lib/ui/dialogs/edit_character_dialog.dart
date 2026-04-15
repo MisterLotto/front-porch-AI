@@ -255,11 +255,19 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     // Update avatar if changed
     if (_newAvatarPath != null) {
       widget.character.imagePath = _newAvatarPath!;
+    }
 
-      // Embed V2 card data into the new avatar PNG using the live character
-      // (not a throwaway copy) to preserve all extensions and metadata
+    // Always embed V2 card data into the PNG to preserve extensions
+    final storage = Provider.of<StorageService>(context, listen: false);
+    String? targetPngPath = _newAvatarPath;
+    if (targetPngPath == null && widget.character.imagePath != null && widget.character.imagePath!.isNotEmpty) {
+      final img = widget.character.imagePath!;
+      targetPngPath = p.isAbsolute(img) ? img : p.join(storage.charactersDir.path, img);
+    }
+
+    if (targetPngPath != null) {
       try {
-        await V2CardService().saveCardAsPng(widget.character, _newAvatarPath!, _newAvatarPath!);
+        await V2CardService().saveCardAsPng(widget.character, targetPngPath, targetPngPath);
       } catch (e) {
         debugPrint('Failed to embed V2 card data: $e');
       }

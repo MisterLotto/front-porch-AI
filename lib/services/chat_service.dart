@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
+import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/character_card.dart';
@@ -992,6 +993,27 @@ class ChatService extends ChangeNotifier {
     _turnIndex = 0;
 
     _activeCharacter = character;
+
+    // If extensions are missing (e.g., app was restarted after DB load that
+    // didn't carry over PNG extensions), reload the PNG to get V2.5 card data.
+    if (_activeCharacter != null &&
+        _activeCharacter!.frontPorchExtensions == null &&
+        _activeCharacter!.imagePath != null) {
+      try {
+        final v2Service = V2CardService();
+        final reloaded = await v2Service.readCard(_activeCharacter!.imagePath!);
+        if (reloaded != null && reloaded.frontPorchExtensions != null) {
+          _activeCharacter!.frontPorchExtensions =
+              reloaded.frontPorchExtensions;
+          _activeCharacter!.rawExtensions = reloaded.rawExtensions;
+          debugPrint(
+            '[ChatService] Reloaded frontPorchExtensions from PNG for ${_activeCharacter!.name}',
+          );
+        }
+      } catch (e) {
+        debugPrint('[ChatService] Failed to reload PNG extensions: $e');
+      }
+    }
 
     // Load active objectives for this character
     _loadActiveObjectives();
@@ -2018,10 +2040,12 @@ class ChatService extends ChangeNotifier {
     // Refresh _activeCharacter from the repository so we pick up any edits
     // made in the character editor (personality, description, etc.)
     if (_activeCharacter != null && _characterRepository != null) {
-      final freshChar = _characterRepository!.characters.cast<CharacterCard?>().firstWhere(
-        (c) => c!.dbId == _activeCharacter!.dbId,
-        orElse: () => null,
-      );
+      final freshChar = _characterRepository!.characters
+          .cast<CharacterCard?>()
+          .firstWhere(
+            (c) => c!.dbId == _activeCharacter!.dbId,
+            orElse: () => null,
+          );
       if (freshChar != null) {
         _activeCharacter = freshChar;
       }
@@ -2045,6 +2069,12 @@ class ChatService extends ChangeNotifier {
       _affectionScore = extSeed.shortTermBond.clamp(-150, 150);
       _longTermScore = extSeed.longTermBond.clamp(-150, 150);
       _trustLevel = extSeed.trustLevel.clamp(-100, 100);
+      _dayCount = extSeed.dayCount.clamp(1, 9999);
+      _timeOfDay = extSeed.timeOfDay;
+      _characterEmotion = extSeed.characterEmotion;
+      _emotionIntensity = extSeed.emotionIntensity;
+      _nsfwCooldownEnabled = extSeed.nsfwCooldownEnabled;
+      _chaosModeEnabled = extSeed.chaosModeEnabled;
 
       // Recalculate tiers from seeded scores (only needed for realism-enabled chars)
       if (_realismEnabled) {
@@ -2113,9 +2143,11 @@ class ChatService extends ChangeNotifier {
     // Always mark that a greeting was placed — even if Realism is currently off.
     // If Realism is already on, fire immediately. Otherwise the flag will be
     // consumed the moment the user enables Realism.
+    // Skip if character already has pre-seeded V2.5 extensions — those baseline
+    // values are intentional and should not be overwritten by auto-eval.
     if (_activeGroup == null && _messages.isNotEmpty) {
       _greetingEvalPending = true;
-      if (_realismEnabled) {
+      if (_realismEnabled && _activeCharacter!.frontPorchExtensions == null) {
         _runPostGreetingEval();
       }
     }
@@ -2303,10 +2335,13 @@ class ChatService extends ChangeNotifier {
         _realismEvalStreamText += chunk;
         // Debounce: coalesce rapid token arrivals into one rebuild per 150 ms
         _evalChunkTimer?.cancel();
-        _evalChunkTimer = Timer(
-          const Duration(milliseconds: 150),
-          notifyListeners,
-        );
+        _evalChunkTimer = Timer(const Duration(milliseconds: 150), () {
+          try {
+            notifyListeners();
+          } catch (_) {
+            // Widget was deactivated — timer fired after navigation
+          }
+        });
       }
 
       // ── Trust repair intercept ───────────────────────────────────────
@@ -2484,10 +2519,13 @@ class ChatService extends ChangeNotifier {
           _realismEvalStreamText += chunk;
           // Debounce: coalesce rapid token arrivals into one rebuild per 150 ms
           _evalChunkTimer?.cancel();
-          _evalChunkTimer = Timer(
-            const Duration(milliseconds: 150),
-            notifyListeners,
-          );
+          _evalChunkTimer = Timer(const Duration(milliseconds: 150), () {
+            try {
+              notifyListeners();
+            } catch (_) {
+              // Widget was deactivated — timer fired after navigation
+            }
+          });
         }
 
         if (_storageService.realismOneShotEval) {
@@ -6190,7 +6228,11 @@ class ChatService extends ChangeNotifier {
       reasoningEnabled: false,
       // Non-thinking models: stop the moment the JSON object closes.
       // Thinking models: no '}' stops — the think block is full of them.
-      stopSequences: isThinkingModel ? [] : ['}\n', '}'],
+      // For API/remote models, never use stop sequences — models like QwQ
+      // do internal reasoning even with reasoningEnabled=false, so JSON arrives late.
+      stopSequences: _llmProvider!.isLocal
+          ? (isThinkingModel ? [] : ['}\n', '}'])
+          : [],
       grammar: grammar,
       // Thinking model KoboldCPP fixes:
       //  banEosToken: prevents KoboldCPP from treating the chat template's
@@ -6221,14 +6263,6 @@ class ChatService extends ChangeNotifier {
         await for (final chunk in llm.generateStream(params)) {
           response += chunk;
           onChunk?.call(chunk);
-          if (response.contains('}')) {
-            final stripped = _stripThinkBlocks(response);
-            if (stripped.isNotEmpty &&
-                (stripped.trimRight().endsWith('}') ||
-                    stripped.contains('}\n'))) {
-              break;
-            }
-          }
         }
         break; // stream completed cleanly — exit retry loop
       } catch (e) {
@@ -6242,14 +6276,12 @@ class ChatService extends ChangeNotifier {
     }
 
     // Log raw eval response for diagnostics
-    if (_llmProvider?.isLocal == true) {
-      final preview = response.length > 300
-          ? response.substring(0, 300)
-          : response;
-      debugPrint(
-        '[Realism:RawEval] len=${response.length} | ${preview.replaceAll('\n', '↵')}',
-      );
-    }
+    final preview = response.length > 300
+        ? response.substring(0, 300)
+        : response;
+    debugPrint(
+      '[Realism:RawEval] len=${response.length} | ${preview.replaceAll('\n', '↵')}',
+    );
     return response.isEmpty ? null : response;
   }
 
@@ -6917,6 +6949,9 @@ class ChatService extends ChangeNotifier {
           final postureMatch = RegExp(
             r'"posture"\s*:\s*"([^"]+)"',
           ).firstMatch(text);
+          debugPrint(
+            '[Realism:Physical] Posture match: ${postureMatch?.group(0)}',
+          );
           if (postureMatch != null) {
             final p = postureMatch.group(1)!.trim();
             _spatialStance = (p.toLowerCase() == 'none' || p.isEmpty) ? '' : p;
@@ -6950,7 +6985,7 @@ class ChatService extends ChangeNotifier {
           'change if the conversation describes them moving. Do NOT teleport them to a '
           'new location without narrative cause.\n\n'
           'Recent conversation:\n$recent\n\n'
-          'Respond with ONLY: {"posture": "<phrase or none>"}';
+          'Respond with ONLY valid JSON like: {"posture": "standing by the window"} or {"posture": "none"}';
 
       try {
         final raw = await _fireLLMEval(
@@ -6965,6 +7000,9 @@ class ChatService extends ChangeNotifier {
           final postureMatch = RegExp(
             r'"posture"\s*:\s*"([^"]+)"',
           ).firstMatch(text);
+          debugPrint(
+            '[Realism:Physical] ELSE branch posture match: ${postureMatch?.group(0)}',
+          );
           if (postureMatch != null) {
             final p = postureMatch.group(1)!.trim();
             _spatialStance = (p.toLowerCase() == 'none' || p.isEmpty) ? '' : p;

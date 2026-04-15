@@ -72,6 +72,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
 
   // ── Realism Engine state ──
   bool _realismEnabled = false;
+  bool _realismSettingsModified = false;
   String _realismTimeOfDay = 'morning';
   int _realismDayCount = 1;
   int _realismShortTermBond = 0;
@@ -87,19 +88,27 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.character.name);
-    _descriptionController =
-        TextEditingController(text: widget.character.description);
-    _personalityController =
-        TextEditingController(text: widget.character.personality);
-    _scenarioController = TextEditingController(text: widget.character.scenario);
-    _firstMessageController =
-        TextEditingController(text: widget.character.firstMessage);
-    _mesExampleController =
-        TextEditingController(text: widget.character.mesExample);
-    _systemPromptController =
-        TextEditingController(text: widget.character.systemPrompt);
-    _postHistoryController =
-        TextEditingController(text: widget.character.postHistoryInstructions);
+    _descriptionController = TextEditingController(
+      text: widget.character.description,
+    );
+    _personalityController = TextEditingController(
+      text: widget.character.personality,
+    );
+    _scenarioController = TextEditingController(
+      text: widget.character.scenario,
+    );
+    _firstMessageController = TextEditingController(
+      text: widget.character.firstMessage,
+    );
+    _mesExampleController = TextEditingController(
+      text: widget.character.mesExample,
+    );
+    _systemPromptController = TextEditingController(
+      text: widget.character.systemPrompt,
+    );
+    _postHistoryController = TextEditingController(
+      text: widget.character.postHistoryInstructions,
+    );
 
     if (widget.character.lorebook != null) {
       _loreEntries = List.from(widget.character.lorebook!.entries);
@@ -176,7 +185,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   // ═══════════════════════════════════════════════════════════════
 
   void _updateTokenCount() {
-    int totalChars = _nameController.text.length +
+    int totalChars =
+        _nameController.text.length +
         _descriptionController.text.length +
         _personalityController.text.length +
         _scenarioController.text.length +
@@ -234,9 +244,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     await charDir.create(recursive: true);
 
     final safeName = _nameController.text.trim().isNotEmpty
-        ? _nameController.text.trim()
-            .replaceAll(RegExp(r'[^\w\s-]'), '')
-            .replaceAll(RegExp(r'\s+'), '_')
+        ? _nameController.text
+              .trim()
+              .replaceAll(RegExp(r'[^\w\s-]'), '')
+              .replaceAll(RegExp(r'\s+'), '_')
         : 'avatar';
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final destFilename = '${safeName}_$timestamp.png';
@@ -276,15 +287,27 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.edit_note, color: Colors.white70, size: 22),
+                    const Icon(
+                      Icons.edit_note,
+                      color: Colors.white70,
+                      size: 22,
+                    ),
                     const SizedBox(width: 8),
-                    Text(title, style: const TextStyle(
-                      color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const Spacer(),
                     TextButton.icon(
                       icon: const Icon(Icons.close, size: 16),
                       label: const Text('Cancel'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.white38),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white38,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 8),
@@ -294,8 +317,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueAccent,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                       ),
                       onPressed: () {
                         controller.text = expandedController.text;
@@ -314,7 +342,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     maxLines: null,
                     expands: true,
                     textAlignVertical: TextAlignVertical.top,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.6),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      height: 1.6,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Enter $title...',
                       hintStyle: const TextStyle(color: Colors.white24),
@@ -366,7 +398,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     widget.character.worldNames = _selectedWorldNames;
 
     // Update Realism Engine extensions
-    if (_realismEnabled || widget.character.frontPorchExtensions != null) {
+    if (_realismEnabled ||
+        _realismSettingsModified ||
+        widget.character.frontPorchExtensions != null) {
+      debugPrint(
+        '[_saveCharacter] Saving realism: enabled=$_realismEnabled, modified=$_realismSettingsModified',
+      );
       widget.character.frontPorchExtensions = FrontPorchExtensions(
         realismEnabled: _realismEnabled,
         shortTermBond: _realismShortTermBond,
@@ -385,24 +422,51 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     // Update avatar if changed
     if (_newAvatarPath != null) {
       widget.character.imagePath = p.basename(_newAvatarPath!);
+    }
 
+    // Always embed V2 card data into the PNG to preserve extensions
+    final storage = Provider.of<StorageService>(context, listen: false);
+    String? targetPngPath = _newAvatarPath;
+    if (targetPngPath == null &&
+        widget.character.imagePath != null &&
+        widget.character.imagePath!.isNotEmpty) {
+      final img = widget.character.imagePath!;
+      targetPngPath = p.isAbsolute(img)
+          ? img
+          : p.join(storage.charactersDir.path, img);
+    }
+
+    if (targetPngPath != null) {
       try {
-        await V2CardService().saveCardAsPng(widget.character, _newAvatarPath!, _newAvatarPath!);
+        await V2CardService().saveCardAsPng(
+          widget.character,
+          targetPngPath,
+          targetPngPath,
+        );
+        debugPrint(
+          '[_saveCharacter] PNG saved successfully for ${widget.character.name}',
+        );
       } catch (e) {
         debugPrint('Failed to embed V2 card data: $e');
       }
+    } else {
+      debugPrint(
+        '[_saveCharacter] WARNING: targetPngPath is null, skipping PNG save!',
+      );
     }
-    
+
     // Update Lorebook
     if (widget.character.lorebook == null) {
-       widget.character.lorebook = Lorebook(entries: _loreEntries);
+      widget.character.lorebook = Lorebook(entries: _loreEntries);
     } else {
-       widget.character.lorebook!.entries = _loreEntries;
+      widget.character.lorebook!.entries = _loreEntries;
     }
 
     try {
-      await Provider.of<CharacterRepository>(context, listen: false)
-          .updateCharacter(widget.character);
+      await Provider.of<CharacterRepository>(
+        context,
+        listen: false,
+      ).updateCharacter(widget.character);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -415,7 +479,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             ),
             backgroundColor: const Color(0xFF1E293B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
         Navigator.pop(context);
@@ -448,129 +514,160 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       _loreEntries.removeAt(index);
     });
   }
-  
-  void _editLoreEntry(int index) {
-     final entry = _loreEntries[index];
-     final keyController = TextEditingController(text: entry.key);
-     final contentController = TextEditingController(text: entry.content);
-     bool isConstant = entry.constant;
-     int stickyDepth = entry.stickyDepth;
 
-     showDialog(
-       context: context,
-       builder: (context) => StatefulBuilder(
-         builder: (context, setStateDialog) {
-           return AlertDialog(
-             backgroundColor: _bgDeep,
-             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-             title: Row(
-               children: [
-                 const Icon(Icons.menu_book, color: Colors.blueAccent, size: 20),
-                 const SizedBox(width: 8),
-                 const Text('Edit Lorebook Entry', style: TextStyle(color: Colors.white)),
-               ],
-             ),
-             content: SingleChildScrollView(
-               child: Column(
-                 mainAxisSize: MainAxisSize.min,
-                 children: [
-                   // Always Active toggle
-                   Container(
-                     padding: const EdgeInsets.all(12),
-                     decoration: BoxDecoration(
-                       color: _bgSurface,
-                       borderRadius: BorderRadius.circular(10),
-                       border: Border.all(color: isConstant
-                           ? Colors.amberAccent.withValues(alpha: 0.3)
-                           : _borderSubtle),
-                     ),
-                     child: Row(
-                       children: [
-                         Icon(Icons.push_pin, size: 16,
-                             color: isConstant ? Colors.amberAccent : Colors.white38),
-                         const SizedBox(width: 8),
-                         const Text('Always Active',
-                             style: TextStyle(color: Colors.white70, fontSize: 13)),
-                         const Spacer(),
-                         Switch(
-                           value: isConstant,
-                           onChanged: (val) => setStateDialog(() => isConstant = val),
-                           activeTrackColor: Colors.amberAccent.withValues(alpha: 0.5),
-                           activeThumbColor: Colors.amberAccent,
-                         ),
-                       ],
-                     ),
-                   ),
-                   if (!isConstant) ...[
-                     const SizedBox(height: 12),
-                     Row(
-                       children: [
-                         const Icon(Icons.layers, size: 14, color: Colors.white38),
-                         const SizedBox(width: 6),
-                         Text('Trigger Depth: $stickyDepth ${stickyDepth == 1 ? "message" : "messages"}',
-                             style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                       ],
-                     ),
-                     SliderTheme(
-                       data: SliderThemeData(
-                         activeTrackColor: Colors.blueAccent,
-                         inactiveTrackColor: Colors.white12,
-                         thumbColor: Colors.blueAccent,
-                         trackHeight: 3,
-                       ),
-                       child: Slider(
-                         value: stickyDepth.toDouble(),
-                         min: 1,
-                         max: 100,
-                         divisions: 99,
-                         label: stickyDepth.toString(),
-                         onChanged: (val) => setStateDialog(() => stickyDepth = val.toInt()),
-                       ),
-                     ),
-                   ],
-                   const SizedBox(height: 12),
-                   _styledField(
-                     controller: keyController,
-                     label: isConstant ? 'Keywords (Disabled — Always Active)' : 'Keywords (comma separated)',
-                     enabled: !isConstant,
-                   ),
-                   const SizedBox(height: 12),
-                   _styledField(
-                     controller: contentController,
-                     label: 'Content',
-                     maxLines: 5,
-                   ),
-                 ],
-               ),
-             ),
-             actions: [
-               TextButton(
-                 onPressed: () => Navigator.pop(context),
-                 style: TextButton.styleFrom(foregroundColor: Colors.white38),
-                 child: const Text('Cancel'),
-               ),
-               ElevatedButton(
-                 onPressed: () {
-                   setState(() {
-                     entry.key = keyController.text;
-                     entry.content = contentController.text;
-                     entry.constant = isConstant;
-                     entry.stickyDepth = stickyDepth;
-                   });
-                   Navigator.pop(context);
-                 },
-                 style: ElevatedButton.styleFrom(
-                   backgroundColor: Colors.blueAccent,
-                   foregroundColor: Colors.white,
-                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                 ),
-                 child: const Text('Save'),
-               ),
-             ],
-           );
-         }
-       ),
-     );
+  void _editLoreEntry(int index) {
+    final entry = _loreEntries[index];
+    final keyController = TextEditingController(text: entry.key);
+    final contentController = TextEditingController(text: entry.content);
+    bool isConstant = entry.constant;
+    int stickyDepth = entry.stickyDepth;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            backgroundColor: _bgDeep,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                const Icon(Icons.menu_book, color: Colors.blueAccent, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Edit Lorebook Entry',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Always Active toggle
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _bgSurface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isConstant
+                            ? Colors.amberAccent.withValues(alpha: 0.3)
+                            : _borderSubtle,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.push_pin,
+                          size: 16,
+                          color: isConstant
+                              ? Colors.amberAccent
+                              : Colors.white38,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Always Active',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                        const Spacer(),
+                        Switch(
+                          value: isConstant,
+                          onChanged: (val) =>
+                              setStateDialog(() => isConstant = val),
+                          activeTrackColor: Colors.amberAccent.withValues(
+                            alpha: 0.5,
+                          ),
+                          activeThumbColor: Colors.amberAccent,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isConstant) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.layers,
+                          size: 14,
+                          color: Colors.white38,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Trigger Depth: $stickyDepth ${stickyDepth == 1 ? "message" : "messages"}',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: Colors.blueAccent,
+                        inactiveTrackColor: Colors.white12,
+                        thumbColor: Colors.blueAccent,
+                        trackHeight: 3,
+                      ),
+                      child: Slider(
+                        value: stickyDepth.toDouble(),
+                        min: 1,
+                        max: 100,
+                        divisions: 99,
+                        label: stickyDepth.toString(),
+                        onChanged: (val) =>
+                            setStateDialog(() => stickyDepth = val.toInt()),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _styledField(
+                    controller: keyController,
+                    label: isConstant
+                        ? 'Keywords (Disabled — Always Active)'
+                        : 'Keywords (comma separated)',
+                    enabled: !isConstant,
+                  ),
+                  const SizedBox(height: 12),
+                  _styledField(
+                    controller: contentController,
+                    label: 'Content',
+                    maxLines: 5,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                style: TextButton.styleFrom(foregroundColor: Colors.white38),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    entry.key = keyController.text;
+                    entry.content = contentController.text;
+                    entry.constant = isConstant;
+                    entry.stickyDepth = stickyDepth;
+                  });
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -595,7 +692,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             Flexible(
               child: Text(
                 'Edit ${widget.character.name}',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -611,8 +712,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blueAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
               ),
             ),
           ),
@@ -625,8 +731,14 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           indicatorWeight: 3,
           tabs: const [
             Tab(icon: Icon(Icons.person_outline, size: 18), text: 'Details'),
-            Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'Dialogue'),
-            Tab(icon: Icon(Icons.menu_book_outlined, size: 18), text: 'Lorebook'),
+            Tab(
+              icon: Icon(Icons.chat_bubble_outline, size: 18),
+              text: 'Dialogue',
+            ),
+            Tab(
+              icon: Icon(Icons.menu_book_outlined, size: 18),
+              text: 'Lorebook',
+            ),
             Tab(icon: Icon(Icons.public, size: 18), text: 'Worlds'),
           ],
         ),
@@ -643,11 +755,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             ],
           ),
           // Floating token counter
-          Positioned(
-            right: 24,
-            bottom: 24,
-            child: _buildTokenBadge(),
-          ),
+          Positioned(right: 24, bottom: 24, child: _buildTokenBadge()),
         ],
       ),
     );
@@ -676,7 +784,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           const SizedBox(width: 6),
           Text(
             '~$_estimatedTokens tokens',
-            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -711,20 +823,35 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             borderRadius: BorderRadius.circular(20),
                             color: _bgSurface,
                             border: Border.all(color: _borderSubtle),
-                            image: _avatarFile != null && _avatarFile!.existsSync()
+                            image:
+                                _avatarFile != null && _avatarFile!.existsSync()
                                 ? DecorationImage(
                                     image: FileImage(_avatarFile!),
                                     fit: BoxFit.cover,
                                   )
                                 : null,
                           ),
-                          child: (_avatarFile == null || !_avatarFile!.existsSync())
+                          child:
+                              (_avatarFile == null ||
+                                  !_avatarFile!.existsSync())
                               ? Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.person, size: 56, color: Colors.white.withValues(alpha: 0.15)),
+                                    Icon(
+                                      Icons.person,
+                                      size: 56,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                    ),
                                     const SizedBox(height: 4),
-                                    const Text('No avatar', style: TextStyle(color: Colors.white24, fontSize: 11)),
+                                    const Text(
+                                      'No avatar',
+                                      style: TextStyle(
+                                        color: Colors.white24,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                                   ],
                                 )
                               : null,
@@ -739,7 +866,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(color: _bgDeep, width: 2),
                             ),
-                            child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ],
@@ -751,7 +882,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               Center(
                 child: Text(
                   'Tap to change avatar',
-                  style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.3)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
                 ),
               ),
               const SizedBox(height: 28),
@@ -771,15 +905,32 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _tags.map((tag) => Chip(
-                        label: Text(tag, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        backgroundColor: const Color(0xFF374151),
-                        side: BorderSide.none,
-                        deleteIcon: const Icon(Icons.close, size: 14, color: Colors.white38),
-                        onDeleted: () => setState(() => _tags.remove(tag)),
-                        visualDensity: VisualDensity.compact,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      )).toList(),
+                      children: _tags
+                          .map(
+                            (tag) => Chip(
+                              label: Text(
+                                tag,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              backgroundColor: const Color(0xFF374151),
+                              side: BorderSide.none,
+                              deleteIcon: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white38,
+                              ),
+                              onDeleted: () =>
+                                  setState(() => _tags.remove(tag)),
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
                   if (_tags.isNotEmpty) const SizedBox(height: 8),
                   Row(
@@ -787,11 +938,15 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       Expanded(
                         child: TextField(
                           controller: _tagController,
-                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                           decoration: _inputDecoration('Add a tag...'),
                           onSubmitted: (value) {
                             final trimmed = value.trim().toLowerCase();
-                            if (trimmed.isNotEmpty && !_tags.contains(trimmed)) {
+                            if (trimmed.isNotEmpty &&
+                                !_tags.contains(trimmed)) {
                               setState(() {
                                 _tags.add(trimmed);
                                 _tagController.clear();
@@ -802,10 +957,15 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        icon: const Icon(Icons.add_circle, color: Colors.blueAccent),
+                        icon: const Icon(
+                          Icons.add_circle,
+                          color: Colors.blueAccent,
+                        ),
                         tooltip: 'Add tag',
                         onPressed: () {
-                          final trimmed = _tagController.text.trim().toLowerCase();
+                          final trimmed = _tagController.text
+                              .trim()
+                              .toLowerCase();
                           if (trimmed.isNotEmpty && !_tags.contains(trimmed)) {
                             setState(() {
                               _tags.add(trimmed);
@@ -913,7 +1073,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     label: 'Opening Message',
                     maxLines: 6,
                     expandable: true,
-                    hint: 'The character\'s opening line when a conversation starts...',
+                    hint:
+                        'The character\'s opening line when a conversation starts...',
                   ),
                 ],
               ),
@@ -934,7 +1095,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   },
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.blueAccent,
+                  ),
                 ),
                 children: [
                   if (_altGreetingControllers.isEmpty)
@@ -943,7 +1106,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       child: Center(
                         child: Text(
                           'No alternate greetings yet',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.25), fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     )
@@ -952,7 +1118,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       final idx = entry.key;
                       final ctrl = entry.value;
                       return Padding(
-                        padding: EdgeInsets.only(bottom: idx < _altGreetingControllers.length - 1 ? 12 : 0),
+                        padding: EdgeInsets.only(
+                          bottom: idx < _altGreetingControllers.length - 1
+                              ? 12
+                              : 0,
+                        ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -974,7 +1144,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                                     _altGreetingControllers.removeAt(idx);
                                   });
                                 },
-                                icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                                icon: const Icon(
+                                  Icons.remove_circle_outline,
+                                  color: Colors.redAccent,
+                                  size: 20,
+                                ),
                                 tooltip: 'Remove greeting',
                               ),
                             ),
@@ -997,7 +1171,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     label: 'Example Conversations',
                     maxLines: 6,
                     expandable: true,
-                    hint: '<START>\n{{user}}: Hello!\n{{char}}: *smiles warmly*',
+                    hint:
+                        '<START>\n{{user}}: Hello!\n{{char}}: *smiles warmly*',
                   ),
                 ],
               ),
@@ -1032,7 +1207,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       children: [
                         Text(
                           'Lorebook',
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
@@ -1050,7 +1229,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ],
@@ -1068,13 +1249,21 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.menu_book_outlined, size: 48, color: Colors.white.withValues(alpha: 0.12)),
+                        Icon(
+                          Icons.menu_book_outlined,
+                          size: 48,
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
                         const SizedBox(height: 12),
-                        const Text('No lorebook entries yet',
-                            style: TextStyle(color: Colors.white38, fontSize: 15)),
+                        const Text(
+                          'No lorebook entries yet',
+                          style: TextStyle(color: Colors.white38, fontSize: 15),
+                        ),
                         const SizedBox(height: 4),
-                        const Text('Add entries to inject context-aware world lore.',
-                            style: TextStyle(color: Colors.white24, fontSize: 12)),
+                        const Text(
+                          'Add entries to inject context-aware world lore.',
+                          style: TextStyle(color: Colors.white24, fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -1112,8 +1301,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         children: [
           Row(
             children: [
-              Icon(Icons.menu_book, size: 16,
-                  color: entry.constant ? Colors.amberAccent : Colors.blueAccent),
+              Icon(
+                Icons.menu_book,
+                size: 16,
+                color: entry.constant ? Colors.amberAccent : Colors.blueAccent,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1127,34 +1319,60 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               if (entry.constant)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.amberAccent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text('Always Active',
-                      style: TextStyle(color: Colors.amberAccent, fontSize: 10, fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Always Active',
+                    style: TextStyle(
+                      color: Colors.amberAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               if (!entry.constant)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.blueAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text('Depth ${entry.stickyDepth}',
-                      style: const TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Depth ${entry.stickyDepth}',
+                    style: const TextStyle(
+                      color: Colors.blueAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               const SizedBox(width: 8),
               IconButton(
                 onPressed: () => _editLoreEntry(index),
-                icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.white38),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 16,
+                  color: Colors.white38,
+                ),
                 tooltip: 'Edit entry',
                 visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 onPressed: () => _removeLoreEntry(index),
-                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: Colors.redAccent,
+                ),
                 tooltip: 'Delete entry',
                 visualDensity: VisualDensity.compact,
               ),
@@ -1165,14 +1383,28 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             Wrap(
               spacing: 6,
               runSpacing: 4,
-              children: entry.key.split(',').map((k) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(k.trim(), style: const TextStyle(color: Colors.white54, fontSize: 11)),
-              )).toList(),
+              children: entry.key
+                  .split(',')
+                  .map(
+                    (k) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        k.trim(),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ],
           const SizedBox(height: 8),
@@ -1180,7 +1412,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             entry.content,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white38, fontSize: 12, height: 1.4),
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 12,
+              height: 1.4,
+            ),
           ),
         ],
       ),
@@ -1204,7 +1440,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 children: [
                   const Text(
                     'Linked Worlds',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   const Text(
@@ -1224,13 +1464,27 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       child: Center(
                         child: Column(
                           children: [
-                            Icon(Icons.public, size: 48, color: Colors.white.withValues(alpha: 0.12)),
+                            Icon(
+                              Icons.public,
+                              size: 48,
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
                             const SizedBox(height: 12),
-                            const Text('No worlds found',
-                                style: TextStyle(color: Colors.white38, fontSize: 15)),
+                            const Text(
+                              'No worlds found',
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 15,
+                              ),
+                            ),
                             const SizedBox(height: 4),
-                            const Text('Create worlds in the Worlds section.',
-                                style: TextStyle(color: Colors.white24, fontSize: 12)),
+                            const Text(
+                              'Create worlds in the Worlds section.',
+                              style: TextStyle(
+                                color: Colors.white24,
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1259,21 +1513,33 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                                   : Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(Icons.public, size: 20,
-                                color: isLinked ? Colors.blueAccent : Colors.white38),
+                            child: Icon(
+                              Icons.public,
+                              size: 20,
+                              color: isLinked
+                                  ? Colors.blueAccent
+                                  : Colors.white38,
+                            ),
                           ),
-                          title: Text(world.name,
-                              style: TextStyle(
-                                color: isLinked ? Colors.white : Colors.white70,
-                                fontWeight: isLinked ? FontWeight.w600 : FontWeight.normal,
-                              )),
+                          title: Text(
+                            world.name,
+                            style: TextStyle(
+                              color: isLinked ? Colors.white : Colors.white70,
+                              fontWeight: isLinked
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
                           subtitle: Text(
                             world.description.isNotEmpty
                                 ? world.description
                                 : '${world.lorebook.entries.length} entries',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white38, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 12,
+                            ),
                           ),
                           trailing: Switch(
                             value: isLinked,
@@ -1286,7 +1552,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                                 }
                               });
                             },
-                            activeTrackColor: Colors.blueAccent.withValues(alpha: 0.5),
+                            activeTrackColor: Colors.blueAccent.withValues(
+                              alpha: 0.5,
+                            ),
                             activeThumbColor: Colors.blueAccent,
                           ),
                         ),
@@ -1343,27 +1611,60 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         // Full editable Realism Engine form
         RealismFormSection(
           enabled: _realismEnabled,
-          onEnabledChanged: (v) => setState(() => _realismEnabled = v),
+          onEnabledChanged: (v) => setState(() {
+            _realismEnabled = v;
+            _realismSettingsModified = true;
+          }),
           timeOfDay: _realismTimeOfDay,
-          onTimeOfDayChanged: (v) => setState(() => _realismTimeOfDay = v),
+          onTimeOfDayChanged: (v) => setState(() {
+            _realismTimeOfDay = v;
+            _realismSettingsModified = true;
+          }),
           dayCount: _realismDayCount,
-          onDayCountChanged: (v) => setState(() => _realismDayCount = v),
+          onDayCountChanged: (v) => setState(() {
+            _realismDayCount = v;
+            _realismSettingsModified = true;
+          }),
           shortTermBond: _realismShortTermBond,
-          onShortTermBondChanged: (v) => setState(() => _realismShortTermBond = v),
+          onShortTermBondChanged: (v) => setState(() {
+            _realismShortTermBond = v;
+            _realismSettingsModified = true;
+          }),
           longTermBond: _realismLongTermBond,
-          onLongTermBondChanged: (v) => setState(() => _realismLongTermBond = v),
+          onLongTermBondChanged: (v) => setState(() {
+            _realismLongTermBond = v;
+            _realismSettingsModified = true;
+          }),
           trustLevel: _realismTrustLevel,
-          onTrustLevelChanged: (v) => setState(() => _realismTrustLevel = v),
+          onTrustLevelChanged: (v) => setState(() {
+            _realismTrustLevel = v;
+            _realismSettingsModified = true;
+          }),
           emotion: _realismEmotion,
-          onEmotionChanged: (v) => setState(() => _realismEmotion = v),
+          onEmotionChanged: (v) => setState(() {
+            _realismEmotion = v;
+            _realismSettingsModified = true;
+          }),
           emotionIntensity: _realismEmotionIntensity,
-          onEmotionIntensityChanged: (v) => setState(() => _realismEmotionIntensity = v),
+          onEmotionIntensityChanged: (v) => setState(() {
+            _realismEmotionIntensity = v;
+            _realismSettingsModified = true;
+          }),
           nsfwCooldownEnabled: _realismNsfwCooldown,
-          onNsfwCooldownChanged: (v) => setState(() => _realismNsfwCooldown = v),
+          onNsfwCooldownChanged: (v) => setState(() {
+            _realismNsfwCooldown = v;
+            _realismSettingsModified = true;
+          }),
           chaosModeEnabled: _realismChaosMode,
-          onChaosModeChanged: (v) => setState(() => _realismChaosMode = v),
+          onChaosModeChanged: (v) => setState(() {
+            _realismChaosMode = v;
+            _realismSettingsModified = true;
+          }),
           currentTask: _realismCurrentTask,
-          onCurrentTaskChanged: (v) => setState(() => _realismCurrentTask = v),
+          onCurrentTaskChanged: (v) => setState(() {
+            _realismCurrentTask = v;
+            _realismSettingsModified = true;
+          }),
         ),
       ],
     );
@@ -1394,11 +1695,14 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           child: Icon(icon, color: color, size: 18),
         ),
         const SizedBox(width: 10),
-        Text(title, style: TextStyle(
-          color: color,
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-        )),
+        Text(
+          title,
+          style: TextStyle(
+            color: color,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         if (trailing != null) ...[const Spacer(), trailing],
       ],
     );
@@ -1413,7 +1717,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            tilePadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 4,
+            ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             leading: Container(
               width: 32,
@@ -1424,11 +1731,14 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               child: Icon(icon, color: color, size: 18),
             ),
-            title: Text(title, style: TextStyle(
-              color: color,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            )),
+            title: Text(
+              title,
+              style: TextStyle(
+                color: color,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             iconColor: Colors.white38,
             collapsedIconColor: Colors.white24,
             children: children,
@@ -1446,11 +1756,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          header,
-          const SizedBox(height: 16),
-          ...children,
-        ],
+        children: [header, const SizedBox(height: 16), ...children],
       ),
     );
   }
@@ -1479,7 +1785,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   padding: const EdgeInsets.all(2),
                   child: Tooltip(
                     message: 'Open fullscreen editor',
-                    child: Icon(Icons.open_in_full, size: 14, color: Colors.white.withValues(alpha: 0.25)),
+                    child: Icon(
+                      Icons.open_in_full,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.25),
+                    ),
                   ),
                 ),
               ),
