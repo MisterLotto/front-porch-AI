@@ -2536,6 +2536,26 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
       // Revert realism state from the rejected swipe and re-evaluate
       if (_realismEnabled) {
+        // CRITICAL FIX: Find the baseline realism state from the previous accepted message.
+        // We want to use the final state of the LAST ACCEPTED character message as our baseline,
+        // not just blindly revert deltas and re-evaluate from scratch.
+        Map<String, dynamic>? previousMessageState;
+        if (_messages.length >= 2) {
+          // Look back through messages to find the last bot message before the one we're regenerating
+          for (int i = _messages.length - 1; i >= 0; i--) {
+            if (!_messages[i].isUser && _messages[i].sender != 'System') {
+              final meta = _messages[i].activeMetadata;
+              if (meta != null && meta.containsKey('realism_state')) {
+                previousMessageState = meta['realism_state'] as Map<String, dynamic>;
+                debugPrint(
+                  '[Realism:Regen] Found previous accepted message baseline state at message index $i',
+                );
+                break;
+              }
+            }
+          }
+        }
+
         if (lastMsg.activeMetadata != null) {
           final bondDelta = lastMsg.activeMetadata!['bond_delta'] as int? ?? 0;
           final moodDelta = lastMsg.activeMetadata!['mood_delta'] as int? ?? 0;
@@ -2581,6 +2601,57 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
             // Normal arousal delta revert (no climax involved)
             _arousalLevel = (_arousalLevel - arousalDelta).clamp(-3, 10);
           }
+        }
+
+        // CRITICAL FIX: Restore the baseline state from the previous accepted message.
+        // This ensures the new regenerated message is evaluated against the correct baseline,
+        // not from scratch which would produce wildly different realism values.
+        if (previousMessageState != null) {
+          _affectionScore =
+              previousMessageState['affectionScore'] as int? ?? _affectionScore;
+          _relationshipTier =
+              previousMessageState['relationshipTier'] as int? ?? _relationshipTier;
+          _longTermScore =
+              previousMessageState['longTermScore'] as int? ?? _longTermScore;
+          _longTermTier =
+              previousMessageState['longTermTier'] as int? ?? _longTermTier;
+          _turnsSinceLongTermCheck = previousMessageState[
+                  'turnsSinceLongTermCheck'] as int? ??
+              _turnsSinceLongTermCheck;
+          _shortTermDeltasSummary = previousMessageState[
+                  'shortTermDeltasSummary'] as int? ??
+              _shortTermDeltasSummary;
+          _moodDecayCounter =
+              previousMessageState['moodDecayCounter'] as int? ?? _moodDecayCounter;
+          _characterEmotion = previousMessageState['characterEmotion'] as String? ??
+              _characterEmotion;
+          _emotionIntensity = previousMessageState['emotionIntensity'] as String? ??
+              _emotionIntensity;
+          _timeOfDay = previousMessageState['timeOfDay'] as String? ?? _timeOfDay;
+          _dayCount = previousMessageState['dayCount'] as int? ?? _dayCount;
+          _arousalLevel =
+              previousMessageState['arousalLevel'] as int? ?? _arousalLevel;
+          _cooldownTurnsRemaining = previousMessageState[
+                  'cooldownTurnsRemaining'] as int? ??
+              _cooldownTurnsRemaining;
+          _cooldownTurnsTotal = previousMessageState['cooldownTurnsTotal'] as int? ??
+              _cooldownTurnsRemaining;
+          _trustLevel =
+              previousMessageState['trustLevel'] as int? ?? _trustLevel;
+          _activeFixation =
+              previousMessageState['activeFixation'] as String? ?? _activeFixation;
+          _fixationLifespan =
+              previousMessageState['fixationLifespan'] as int? ?? _fixationLifespan;
+          _spatialStance =
+              previousMessageState['spatialStance'] as String? ?? _spatialStance;
+
+          debugPrint(
+            '[Realism:Regen] ✓ Restored baseline from previous accepted message: bond=$_affectionScore, emotion=$_characterEmotion, trust=$_trustLevel, arousal=$_arousalLevel',
+          );
+        } else {
+          debugPrint(
+            '[Realism:Regen] ⚠ No previous message baseline found, continuing with current reverted state',
+          );
         }
         // Set UI streaming state
         _isEvaluatingRealism = true;
