@@ -77,17 +77,6 @@ class CharacterRepository extends ChangeNotifier {
     try {
       final dbChars = await _db.getAllCharacters();
 
-      // Preserve existing in-memory frontPorchExtensions so they survive
-      // the DB reload (DB doesn't store V2.5 extensions — only PNG does).
-      final existingExtensions = <String, FrontPorchExtensions?>{};
-      final existingRawExtensions = <String, Map<String, dynamic>?>{};
-      for (final c in _characters) {
-        if (c.imagePath != null) {
-          existingExtensions[c.imagePath!] = c.frontPorchExtensions;
-          existingRawExtensions[c.imagePath!] = c.rawExtensions;
-        }
-      }
-
       _characters.clear();
 
       for (final c in dbChars) {
@@ -106,34 +95,30 @@ class CharacterRepository extends ChangeNotifier {
           // Always resolve to local full path for runtime use
           card.imagePath = _resolveImagePath(basename);
 
-          // Restore extensions from in-memory cache if available,
-          // otherwise load from PNG (V2.5 extensions are only in PNG, not DB).
-          if (existingExtensions.containsKey(card.imagePath) &&
-              existingExtensions[card.imagePath] != null) {
-            card.frontPorchExtensions = existingExtensions[card.imagePath];
-            card.rawExtensions = existingRawExtensions[card.imagePath];
-          } else {
-            // No cached extensions — load from PNG to get V2.5 card data.
-            try {
-              final v2Service = V2CardService();
-              final reloaded = await v2Service.readCard(card.imagePath!);
-              if (reloaded != null) {
-                card.frontPorchExtensions = reloaded.frontPorchExtensions;
-                card.rawExtensions = reloaded.rawExtensions;
-                debugPrint(
-                  '[CharacterRepository] Loaded PNG extensions for ${card.name}: '
-                  'realismEnabled=${reloaded.frontPorchExtensions?.realismEnabled}',
-                );
-              } else {
-                debugPrint(
-                  '[CharacterRepository] No card data found in PNG for ${card.name}',
-                );
-              }
-            } catch (e) {
+          // Always read extensions fresh from PNG.
+          // V2.5 extensions live only in the PNG tEXt chunk (not in DB).
+          // We intentionally do NOT cache previous in-memory values here:
+          // the old cache caused edits to be silently overwritten by stale
+          // pre-edit values whenever loadCharacters() ran after an edit.
+          try {
+            final v2Service = V2CardService();
+            final reloaded = await v2Service.readCard(card.imagePath!);
+            if (reloaded != null) {
+              card.frontPorchExtensions = reloaded.frontPorchExtensions;
+              card.rawExtensions = reloaded.rawExtensions;
               debugPrint(
-                '[CharacterRepository] Failed to load PNG for ${card.name}: $e',
+                '[CharacterRepository] Loaded PNG extensions for ${card.name}: '
+                'realismEnabled=${reloaded.frontPorchExtensions?.realismEnabled}',
+              );
+            } else {
+              debugPrint(
+                '[CharacterRepository] No card data found in PNG for ${card.name}',
               );
             }
+          } catch (e) {
+            debugPrint(
+              '[CharacterRepository] Failed to load PNG for ${card.name}: $e',
+            );
           }
         }
 

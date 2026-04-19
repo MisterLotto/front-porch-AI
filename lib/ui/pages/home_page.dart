@@ -3519,9 +3519,10 @@ class _HomePageState extends State<HomePage> {
         builder: (context) => EditCharacterPage(character: character),
       ),
     );
-    if (context.mounted) {
-      Provider.of<CharacterRepository>(context, listen: false).loadCharacters();
-    }
+    // No loadCharacters() needed here — updateCharacter() already updates the
+    // in-memory list and calls notifyListeners(). Calling loadCharacters() was
+    // re-reading outdated in-memory extensions from the cache and overwriting
+    // the freshly-saved values.
   }
 
   Future<void> _duplicateCharacter(
