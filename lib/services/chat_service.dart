@@ -1082,7 +1082,10 @@ class ChatService extends ChangeNotifier {
           _characterEmotion = ext.characterEmotion;
           _emotionIntensity = ext.emotionIntensity;
           _nsfwCooldownEnabled = ext.nsfwCooldownEnabled;
-          _passageOfTimeEnabled = ext.passageOfTimeEnabled;
+          // Global setting is a hard ceiling: if the user disabled passage-of-time
+          // globally, it stays off regardless of what the character card says.
+          _passageOfTimeEnabled =
+              ext.passageOfTimeEnabled && _storageService.passageOfTimeDefault;
           _chaosModeEnabled = ext.chaosModeEnabled;
           // Recalculate tiers from seeded scores
           _relationshipTier = _calculateTier(_affectionScore);
@@ -1608,7 +1611,8 @@ class ChatService extends ChangeNotifier {
      _emotionIntensity = lastSession.emotionIntensity;
      _timeOfDay = lastSession.timeOfDay;
      _dayCount = lastSession.dayCount;
-     _passageOfTimeEnabled = lastSession.passageOfTimeEnabled;
+     _passageOfTimeEnabled =
+         lastSession.passageOfTimeEnabled && _storageService.passageOfTimeDefault;
      _nsfwCooldownEnabled = lastSession.nsfwCooldownEnabled;
     _arousalLevel = lastSession.arousalLevel;
     _cooldownTurnsRemaining = lastSession.cooldownTurnsRemaining;
@@ -1865,7 +1869,8 @@ class ChatService extends ChangeNotifier {
       _emotionIntensity = session.emotionIntensity;
       _timeOfDay = session.timeOfDay;
       _dayCount = session.dayCount;
-      _passageOfTimeEnabled = session.passageOfTimeEnabled;
+      _passageOfTimeEnabled =
+          session.passageOfTimeEnabled && _storageService.passageOfTimeDefault;
       _nsfwCooldownEnabled = session.nsfwCooldownEnabled;
       _arousalLevel = session.arousalLevel;
       _cooldownTurnsRemaining = session.cooldownTurnsRemaining;
@@ -2108,7 +2113,10 @@ class ChatService extends ChangeNotifier {
       _characterEmotion = extSeed.characterEmotion;
       _emotionIntensity = extSeed.emotionIntensity;
       _nsfwCooldownEnabled = extSeed.nsfwCooldownEnabled;
-      _passageOfTimeEnabled = extSeed.passageOfTimeEnabled;
+      // Global setting is a hard ceiling: if the user disabled passage-of-time
+      // globally, it stays off regardless of what the character card says.
+      _passageOfTimeEnabled =
+          extSeed.passageOfTimeEnabled && _storageService.passageOfTimeDefault;
       _chaosModeEnabled = extSeed.chaosModeEnabled;
       
       // Reset arousal/fixation to defaults for fresh chat (not seeded from extensions)
