@@ -585,7 +585,7 @@ class ImageGenService extends ChangeNotifier {
       String accumulated = '';
       await for (final token in llmService.generateStream(GenerationParams(
         prompt: llmPrompt,
-        maxLength: 200,
+        maxLength: 500,  // Increased from 200 to allow room for thinking + prompt
         temperature: 0.2,
         repeatPenalty: 1.0,
         reasoningEnabled: false,
@@ -597,16 +597,15 @@ class ImageGenService extends ChangeNotifier {
       // ── Clean LLM output ──
       String smartPrompt = accumulated;
 
-      // Strip thinking tokens and blocks (before extracting the prompt)
-      // Matches <think>...</think>, <thinking>...</thinking>, and their variants
+      // Strip thinking blocks that may appear in the response
+      // Models sometimes output their reasoning even when reasoningEnabled=false
       smartPrompt = smartPrompt
           .replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '')
           .replaceAll(RegExp(r'<thinking>[\s\S]*?</thinking>', caseSensitive: false), '')
           .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '')
           .replaceAll(RegExp(r'<reasoning>[\s\S]*?</reasoning>', caseSensitive: false), '');
 
-      // Extract only what follows "Image prompt:" marker
-      // This ensures we don't include any preamble or thinking that happens before the marker
+      // If there's an "Image prompt:" marker, take only what follows
       final markerMatch = RegExp(r'[Ii]mage\s*prompt\s*:\s*').firstMatch(smartPrompt);
       if (markerMatch != null) {
         smartPrompt = smartPrompt.substring(markerMatch.end);
@@ -622,13 +621,25 @@ class ImageGenService extends ChangeNotifier {
           .replaceAll(RegExp(r'\s{2,}'), ' ')
           .trim();
 
+      // Detect if model output thinking/analysis instead of the actual prompt
+      // Red flags: very long output with reasoning phrases, doesn't start with visual description
+      final thinkingPhrases = [
+        'the user wants', 'they\'ve provided', 'looking at', 'i need to',
+        'the key elements', 'based on', 'in this', 'the setting',
+        'the context', 'including', 'distinctive', 'the relevant'
+      ];
+      final startsWithThinking = thinkingPhrases.any((phrase) => 
+        smartPrompt.toLowerCase().startsWith(phrase));
+      
       // Detect echoed instructions — if the output contains our instruction text, the model failed
       final echoMarkers = ['concise visual description', 'image generator', 'physical descriptions instead of names',
                            'Output ONLY', 'Do NOT', 'VISUALLY happening'];
       final isEcho = echoMarkers.any((marker) => smartPrompt.toLowerCase().contains(marker.toLowerCase()));
 
-      if (smartPrompt.isEmpty || isEcho) {
-        debugPrint('ImageGen: LLM echoed instructions or empty, falling back to static prompt');
+      // Fall back if: empty, echoed instructions, or appears to be thinking/analysis (long + starts with thinking phrase)
+      if (smartPrompt.isEmpty || isEcho || (startsWithThinking && smartPrompt.length > 300)) {
+        debugPrint('ImageGen: LLM output appears to be thinking/analysis, falling back to static prompt');
+        debugPrint('ImageGen: length=${smartPrompt.length}, startsWithThinking=$startsWithThinking');
         final fallback = buildPrompt(
           mode: mode,
           customPrompt: customPrompt,
