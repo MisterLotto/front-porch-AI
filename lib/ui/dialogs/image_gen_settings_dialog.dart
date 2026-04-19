@@ -1003,18 +1003,10 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
               const Icon(Icons.check_circle, size: 14, color: Colors.green),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(m.displayName,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 13)),
-                    if (m.pricingInfo != null)
-                      Text(m.pricingInfo!,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                  ],
+                child: Text(
+                  m.pricingInfo != null ? '${m.displayName} — ${m.pricingInfo}' : m.displayName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
               Text('Free', style: TextStyle(color: Colors.green.shade300, fontSize: 10)),
@@ -1043,18 +1035,10 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
               const Icon(Icons.attach_money, size: 14, color: Colors.amber),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(m.displayName,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 13)),
-                    if (m.pricingInfo != null)
-                      Text(m.pricingInfo!,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                  ],
+                child: Text(
+                  m.pricingInfo != null ? '${m.displayName} — ${m.pricingInfo}' : m.displayName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
               Text('Paid', style: TextStyle(color: Colors.amber.shade300, fontSize: 10)),
