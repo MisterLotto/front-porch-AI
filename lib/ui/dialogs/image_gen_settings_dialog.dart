@@ -1029,7 +1029,7 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
       items.add(DropdownMenuItem<String>(
         enabled: false,
         value: '__header_paid__',
-        child: Text('── Pay Per Prompt ──',
+        child: Text('── Pay Per Prompt (Check OpenRouter for Credit Requirements) ──',
             style: TextStyle(
                 color: Colors.amber.shade300,
                 fontSize: 11,

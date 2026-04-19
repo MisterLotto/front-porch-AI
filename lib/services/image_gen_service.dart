@@ -380,17 +380,16 @@ class ImageGenService extends ChangeNotifier {
 
           // Extract pricing info if available (display as-is from OpenRouter)
           final pricing = m['pricing'] as Map<String, dynamic>?;
-          bool isPaid = true;
           String? pricingInfo;
+          
+          // NOTE: OpenRouter returns $0/$0 for free-tier-only models or unclear pricing
+          // We do NOT mark these as "free" since they may have restrictions or credits only
+          // Instead, we show the pricing as-is and let user check OpenRouter's site for details
+          bool isPaid = true; // Conservative: assume paid unless clearly free ($0 everywhere)
 
           if (pricing != null) {
             final prompt = pricing['prompt'];
             final completion = pricing['completion'];
-            
-            // Determine if paid
-            final promptCost = double.tryParse(prompt?.toString() ?? '0') ?? 0;
-            final completionCost = double.tryParse(completion?.toString() ?? '0') ?? 0;
-            isPaid = promptCost > 0 || completionCost > 0;
 
             // Format pricing for display (show as-is from API)
             if (prompt != null || completion != null) {
@@ -598,12 +597,16 @@ class ImageGenService extends ChangeNotifier {
       // ── Clean LLM output ──
       String smartPrompt = accumulated;
 
-      // Strip <think> blocks
+      // Strip thinking tokens and blocks (before extracting the prompt)
+      // Matches <think>...</think>, <thinking>...</thinking>, and their variants
       smartPrompt = smartPrompt
           .replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '')
-          .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '');
+          .replaceAll(RegExp(r'<thinking>[\s\S]*?</thinking>', caseSensitive: false), '')
+          .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'<reasoning>[\s\S]*?</reasoning>', caseSensitive: false), '');
 
-      // If there's an "Image prompt:" marker, take only what follows
+      // Extract only what follows "Image prompt:" marker
+      // This ensures we don't include any preamble or thinking that happens before the marker
       final markerMatch = RegExp(r'[Ii]mage\s*prompt\s*:\s*').firstMatch(smartPrompt);
       if (markerMatch != null) {
         smartPrompt = smartPrompt.substring(markerMatch.end);
