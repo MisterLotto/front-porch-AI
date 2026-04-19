@@ -573,12 +573,13 @@ class ImageGenService extends ChangeNotifier {
 
     final llmPrompt =
         'You are writing an image generation prompt for an AI image model.\n'
+        'Respond with ONLY a JSON object, no other text.\n'
+        'Format: {"prompt": "your image prompt here"}\n\n'
         '$formatInstruction\n'
         '$modeInstruction\n'
         'Keep it under 100 words. Do not include any character names. '
         'End with the art style description.${styleSuffix.isNotEmpty ? " Art style: $styleSuffix" : ""}\n\n'
-        'Context:\n$rawContext\n\n'
-        'Image prompt:';
+        'Context:\n$rawContext';
 
     try {
       debugPrint('ImageGen: Crafting smart prompt via LLM...');
@@ -594,52 +595,32 @@ class ImageGenService extends ChangeNotifier {
         accumulated += token;
       }
 
-      // ── Clean LLM output ──
-      String smartPrompt = accumulated;
+      // ── Parse JSON response ──
+      String smartPrompt = accumulated.trim();
+      debugPrint('ImageGen: Raw output length: ${smartPrompt.length}');
 
-      // Strip thinking blocks that may appear in the response
-      // Models sometimes output their reasoning even when reasoningEnabled=false
-      smartPrompt = smartPrompt
-          .replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '')
-          .replaceAll(RegExp(r'<thinking>[\s\S]*?</thinking>', caseSensitive: false), '')
-          .replaceAll(RegExp(r'<think>[\s\S]*$', caseSensitive: false), '')
-          .replaceAll(RegExp(r'<reasoning>[\s\S]*?</reasoning>', caseSensitive: false), '');
-
-      // If there's an "Image prompt:" marker, take only what follows
-      final markerMatch = RegExp(r'[Ii]mage\s*prompt\s*:\s*').firstMatch(smartPrompt);
-      if (markerMatch != null) {
-        smartPrompt = smartPrompt.substring(markerMatch.end);
-      }
-
-      // Strip markdown: **bold**, headers, lists
-      smartPrompt = smartPrompt
-          .replaceAll(RegExp(r'#{1,6}\s*'), '')
-          .replaceAllMapped(RegExp(r'\*{1,3}([^*]+)\*{1,3}'), (m) => m.group(1) ?? '')
-          .replaceAll(RegExp(r'^\s*\d+\.\s+', multiLine: true), '')
-          .replaceAll(RegExp(r'^\s*[-•*]\s+', multiLine: true), '')
-          .replaceAll(RegExp(r'\n+'), ' ')
-          .replaceAll(RegExp(r'\s{2,}'), ' ')
-          .trim();
-
-      // Detect if model output thinking/analysis instead of the actual prompt
-      // Red flags: very long output with reasoning phrases, doesn't start with visual description
-      final thinkingPhrases = [
-        'the user wants', 'they\'ve provided', 'looking at', 'i need to',
-        'the key elements', 'based on', 'in this', 'the setting',
-        'the context', 'including', 'distinctive', 'the relevant'
-      ];
-      final startsWithThinking = thinkingPhrases.any((phrase) => 
-        smartPrompt.toLowerCase().startsWith(phrase));
-      
-      // Detect echoed instructions — if the output contains our instruction text, the model failed
-      final echoMarkers = ['concise visual description', 'image generator', 'physical descriptions instead of names',
-                           'Output ONLY', 'Do NOT', 'VISUALLY happening'];
-      final isEcho = echoMarkers.any((marker) => smartPrompt.toLowerCase().contains(marker.toLowerCase()));
-
-      // Fall back if: empty, echoed instructions, or appears to be thinking/analysis (long + starts with thinking phrase)
-      if (smartPrompt.isEmpty || isEcho || (startsWithThinking && smartPrompt.length > 300)) {
-        debugPrint('ImageGen: LLM output appears to be thinking/analysis, falling back to static prompt');
-        debugPrint('ImageGen: length=${smartPrompt.length}, startsWithThinking=$startsWithThinking');
+      try {
+        // Try to extract JSON from the response (may be wrapped in thinking or extra text)
+        // Look for JSON object pattern: {...}
+        final jsonMatch = RegExp(r'\{[^{}]*"prompt"[^{}]*\}', dotAll: true).firstMatch(smartPrompt);
+        
+        if (jsonMatch != null) {
+          final jsonStr = jsonMatch.group(0)!;
+          final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+          final prompt = parsed['prompt']?.toString() ?? '';
+          
+          if (prompt.isNotEmpty) {
+            smartPrompt = prompt;
+            debugPrint('ImageGen: Successfully parsed JSON prompt (${smartPrompt.length} chars)');
+          } else {
+            throw Exception('JSON prompt field was empty');
+          }
+        } else {
+          // No JSON found - fall back to static generation
+          throw Exception('No JSON object found in response');
+        }
+      } catch (e) {
+        debugPrint('ImageGen: Failed to parse JSON ($e), falling back to static prompt');
         final fallback = buildPrompt(
           mode: mode,
           customPrompt: customPrompt,
@@ -655,6 +636,12 @@ class ImageGenService extends ChangeNotifier {
         );
         return _truncate('$fallback. $styleSuffix', _maxPromptLength);
       }
+
+      // Clean up the extracted prompt
+      smartPrompt = smartPrompt
+          .replaceAll(RegExp(r'\n+'), ' ')
+          .replaceAll(RegExp(r'\s{2,}'), ' ')
+          .trim();
 
       // Ensure style is present
       if (styleSuffix.isNotEmpty && !smartPrompt.toLowerCase().contains(styleSuffix.toLowerCase().substring(0, 5))) {
