@@ -7886,7 +7886,16 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
   /// Scans the user message for OOC/narrative time-skip language and advances
   /// the clock by the inferred number of periods. Stamps the skip into
   /// _pendingRealismMetadata so it appears in the next AI message's delta row.
+  /// 
+  /// NOTE: Respects the global passageOfTimeEnabled setting. If disabled,
+  /// this function does nothing even if OOC markers are present.
   void _detectOocTimeSkip(String text) {
+    // Respect global passage of time setting
+    if (!_passageOfTimeEnabled) {
+      debugPrint('[Realism:OOC] Time-skip requested but passageOfTimeEnabled=false, ignoring');
+      return;
+    }
+
     final lower = text.toLowerCase();
 
     // Only fire on OOC-style markers or explicit timeskip language
