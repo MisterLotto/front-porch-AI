@@ -81,6 +81,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   String _realismEmotion = '';
   String _realismEmotionIntensity = 'mild';
   bool _realismNsfwCooldown = false;
+  bool _realismPassageOfTime = true;
   bool _realismChaosMode = false;
   String _realismCurrentTask = '';
 
@@ -137,6 +138,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       _realismEmotion = ext.characterEmotion;
       _realismEmotionIntensity = ext.emotionIntensity;
       _realismNsfwCooldown = ext.nsfwCooldownEnabled;
+      _realismPassageOfTime = ext.passageOfTimeEnabled;
       _realismChaosMode = ext.chaosModeEnabled;
       _realismCurrentTask = ext.currentTask;
     }
@@ -397,7 +399,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     widget.character.tags = List.from(_tags);
     widget.character.worldNames = _selectedWorldNames;
 
-    // Update Realism Engine extensions
+    // Always persist extensions — even when realism is disabled — so that
+    // configured-but-disabled values survive the PNG round-trip.
     if (_realismEnabled ||
         _realismSettingsModified ||
         widget.character.frontPorchExtensions != null) {
@@ -414,6 +417,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         characterEmotion: _realismEmotion,
         emotionIntensity: _realismEmotionIntensity,
         nsfwCooldownEnabled: _realismNsfwCooldown,
+        passageOfTimeEnabled: _realismPassageOfTime,
         chaosModeEnabled: _realismChaosMode,
         currentTask: _realismCurrentTask,
       );

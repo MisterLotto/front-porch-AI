@@ -1281,23 +1281,24 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
     final storage = Provider.of<StorageService>(context, listen: false);
 
     try {
-      // Build extensions
-      FrontPorchExtensions? fpExt;
-      if (_realismEnabled) {
-        fpExt = FrontPorchExtensions(
-          realismEnabled: _realismEnabled,
-          shortTermBond: _realismShortTermBond,
-          longTermBond: _realismLongTermBond,
-          trustLevel: _realismTrustLevel,
-          dayCount: _realismDayCount,
-          timeOfDay: _realismTimeOfDay,
-          characterEmotion: _realismEmotion,
-          emotionIntensity: _realismEmotionIntensity,
-          nsfwCooldownEnabled: _realismNsfwCooldown,
-          chaosModeEnabled: _realismChaosMode,
-          currentTask: _realismCurrentTask,
-        );
-      }
+      // Always build extensions — even when realism is disabled — so that
+      // any configured values survive a round-trip through PNG save/load.
+      // The realismEnabled flag controls whether the engine *uses* them at
+      // runtime, not whether they are persisted.
+      final fpExt = FrontPorchExtensions(
+        realismEnabled: _realismEnabled,
+        shortTermBond: _realismShortTermBond,
+        longTermBond: _realismLongTermBond,
+        trustLevel: _realismTrustLevel,
+        dayCount: _realismDayCount,
+        timeOfDay: _realismTimeOfDay,
+        characterEmotion: _realismEmotion,
+        emotionIntensity: _realismEmotionIntensity,
+        nsfwCooldownEnabled: _realismNsfwCooldown,
+        passageOfTimeEnabled: true, // default on; user can toggle later
+        chaosModeEnabled: _realismChaosMode,
+        currentTask: _realismCurrentTask,
+      );
 
       final card = CharacterCard(
         name: name,
@@ -1319,22 +1320,27 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         frontPorchExtensions: fpExt,
       );
 
-      // Save avatar
+      // Determine PNG path — always write a PNG so card data (including
+      // Realism Engine extensions) can be embedded and survive app restarts.
+      final charDir = storage.charactersDir;
+      if (!charDir.existsSync()) charDir.createSync(recursive: true);
+      final epoch = DateTime.now().millisecondsSinceEpoch;
+      final safeName = name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+      final imagePath = p.join(charDir.path, '${safeName}_$epoch.png');
+
       if (_avatarBytes != null) {
-        final charDir = storage.charactersDir;
-        if (!charDir.existsSync()) charDir.createSync(recursive: true);
-
-        final epoch = DateTime.now().millisecondsSinceEpoch;
-        final safeName = name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
-        final imagePath = p.join(charDir.path, '${safeName}_$epoch.png');
-
+        // Write user-chosen avatar then overwrite tEXt chunk with card data
         await File(imagePath).writeAsBytes(_avatarBytes!);
-        card.imagePath = imagePath;
-
-        // Embed V2 card data into the PNG
-        final v2Service = V2CardService();
-        await v2Service.saveCardAsPng(card, imagePath, imagePath);
       }
+      // Always embed V2 card data (creates placeholder image if no avatar)
+      card.imagePath = imagePath;
+      final v2Service = V2CardService();
+      await v2Service.saveCardAsPng(card, imagePath, _avatarBytes != null ? imagePath : null);
+      debugPrint(
+        '[CreateCharacter] Saved PNG with extensions: '
+        'realism=${fpExt.realismEnabled}, bond=${fpExt.shortTermBond}, '
+        'trust=${fpExt.trustLevel}, emotion=${fpExt.characterEmotion}',
+      );
 
       // Add to repository
       await repo.addCharacter(card);

@@ -1082,6 +1082,7 @@ class ChatService extends ChangeNotifier {
           _characterEmotion = ext.characterEmotion;
           _emotionIntensity = ext.emotionIntensity;
           _nsfwCooldownEnabled = ext.nsfwCooldownEnabled;
+          _passageOfTimeEnabled = ext.passageOfTimeEnabled;
           _chaosModeEnabled = ext.chaosModeEnabled;
           // Recalculate tiers from seeded scores
           _relationshipTier = _calculateTier(_affectionScore);
@@ -2107,6 +2108,7 @@ class ChatService extends ChangeNotifier {
       _characterEmotion = extSeed.characterEmotion;
       _emotionIntensity = extSeed.emotionIntensity;
       _nsfwCooldownEnabled = extSeed.nsfwCooldownEnabled;
+      _passageOfTimeEnabled = extSeed.passageOfTimeEnabled;
       _chaosModeEnabled = extSeed.chaosModeEnabled;
       
       // Reset arousal/fixation to defaults for fresh chat (not seeded from extensions)
