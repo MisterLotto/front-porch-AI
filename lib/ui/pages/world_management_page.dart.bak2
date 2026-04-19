@@ -1,0 +1,1088 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/utils/world_colors.dart';
+
+/// Custom card widget with hover effects and animation support.
+///
+/// Used for world cards in the management page to provide smooth,
+/// responsive interactions with visual feedback on hover and selection.
+class _HoverableCard extends StatefulWidget {
+  final bool isActive;
+  final Color accentColor;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _HoverableCard({
+    required this.isActive,
+    required this.accentColor,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  State<_HoverableCard> createState() => _HoverableCardState();
+}
+
+class _HoverableCardState extends State<_HoverableCard>
+    with SingleTickerProviderStateMixin {
+  bool _isHovered = false;
+  late AnimationController _borderAnimController;
+  late Animation<double> _borderAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _borderAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+    _borderAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _borderAnimController, curve: Curves.linear),
+    );
+    if (widget.isActive) _borderAnimController.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HoverableCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !_borderAnimController.isAnimating) {
+      _borderAnimController.repeat();
+    } else if (!widget.isActive && _borderAnimController.isAnimating) {
+      _borderAnimController.stop();
+      _borderAnimController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _borderAnimController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _isHovered ? 1.025 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: AnimatedBuilder(
+            animation: _borderAnimation,
+            builder: (context, child) {
+              return Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: _isHovered
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFF1E293B).withValues(alpha: 0.7),
+                  border: Border.all(
+                    color: widget.isActive
+                        ? widget.accentColor.withValues(
+                            alpha: 0.35 + _borderAnimation.value * 0.15,
+                          )
+                        : _isHovered
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.white.withValues(alpha: 0.06),
+                    width: widget.isActive ? 1.5 : 1,
+                  ),
+                  boxShadow: [
+                    if (_isHovered || widget.isActive)
+                      BoxShadow(
+                        color: widget.isActive
+                            ? widget.accentColor.withValues(alpha: 0.08)
+                            : Colors.white.withValues(alpha: 0.02),
+                        blurRadius: 16,
+                        spreadRadius: -4,
+                      ),
+                  ],
+                ),
+                child: child,
+              );
+            },
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class WorldManagementPage extends StatelessWidget {
+  const WorldManagementPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<WorldRepository>(
+      builder: (context, repo, child) {
+        if (repo.isLoading) {
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: const Text(
+                'World Management',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+            ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: const Text(
+              'World Management',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+          ),
+          body: repo.worlds.isEmpty
+              ? _buildEmptyState(repo)
+              : CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeroHeader(repo)),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(28, 24, 28, 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 3,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00E676),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'All Worlds (${repo.worlds.length})',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white70,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final world = repo.worlds[index];
+                          return _buildWorldCard(world, repo);
+                        }, childCount: repo.worlds.length),
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+
+  /// Builds the empty state UI when no worlds exist.
+  ///
+  /// Features:
+  /// - Large globe icon container with indigo color scheme
+  /// - Clear call-to-action buttons (New World, Import JSON)
+  /// - Consistent indigo color palette matching hero header
+  Widget _buildEmptyState(WorldRepository repo) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Icon container with indigo theme
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF00E676).withValues(alpha: 0.08),
+              border: Border.all(
+                color: const Color(0xFF00E676).withValues(alpha: 0.15),
+              ),
+            ),
+            child: const Icon(Icons.public, size: 44, color: Color(0xFF00E676)),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'No worlds yet',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white70,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Create a new world or import one from JSON.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.white38, height: 1.5),
+          ),
+          const SizedBox(height: 28),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _showWorldDialog(null, repo),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New World'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00E676),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () => _importWorld(null, repo),
+                icon: const Icon(
+                  Icons.download,
+                  size: 18,
+                  color: Colors.cyanAccent,
+                ),
+                label: const Text(
+                  'Import JSON',
+                  style: TextStyle(color: Colors.cyanAccent),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                    color: Colors.cyanAccent.withValues(alpha: 0.3),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds the hero header section at the top of the page.
+  ///
+  /// Features:
+  /// - Gradient background with indigo color (#6366F1)
+  /// - Globe icon in circular container (88x88px)
+  /// - Title and subtitle with proper typography
+  /// - Total worlds count displayed in subtitle
+  ///
+  /// Note: We use a simple color gradient instead of ImageProvider to avoid
+  /// external dependencies and ensure consistent rendering.
+  Widget _buildHeroHeader(WorldRepository repo) {
+    final totalEntries = repo.worlds.fold<int>(
+      0,
+      (sum, world) => sum + world.lorebook.entries.length,
+    );
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        // Indigo gradient background
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF00E676),
+            Color(0xFF00BFA5),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Avatar circle with globe icon
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.15),
+            ),
+            child: const Icon(
+              Icons.public,
+              size: 40,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 24),
+          // Text content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'World Management',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Manage lorebooks and world info • '
+                  '${repo.worlds.length} world${repo.worlds.length == 1 ? '' : 's'}, '
+                  '$totalEntries entr${totalEntries == 1 ? 'y' : 'ies'}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withValues(alpha: 0.8),
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Action buttons
+          Row(
+            children: [
+              Tooltip(
+                message: 'Import World JSON',
+                child: IconButton(
+                  icon: const Icon(Icons.download, color: Colors.white),
+                  onPressed: () => _importWorld(null, repo),
+                ),
+              ),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New World'),
+                onPressed: () => _showWorldDialog(null, repo),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF00E676),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds an individual world card.
+  ///
+  /// Features:
+  /// - Character avatar if linkedCharacterName is set and avatarPath exists
+  /// - Otherwise uses PersonaColors with globe icon (consistent with character cards)
+  /// - World/entry count display
+  /// - Edit, export, delete actions via popup menu
+  ///
+  /// Color scheme: Uses WorldColors for deterministic coloring based on world name
+  Widget _buildWorldCard(World world, WorldRepository repo) {
+    // Get consistent color for this world
+    final accentColor = WorldColors.getColorForWorld(world.name);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _HoverableCard(
+        isActive: false,
+        accentColor: accentColor,
+        onTap: () => _editWorld(null, world, repo),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: avatar + title + actions
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar display - use character avatar if linked
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: WorldColors.buildWorldAvatar(
+                      avatarPath: world.avatarPath,
+                      worldId: world.name,
+                      radius: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Title and metadata
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          world.name.replaceAll('Lorebook', 'World Lore'),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // Entry count badge
+                        Row(
+                          children: [
+                            Icon(Icons.menu_book, size: 12, color: Colors.white38),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${world.lorebook.entries.length} entr${world.lorebook.entries.length == 1 ? 'y' : 'ies'}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Action menu
+                  PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.more_vert,
+                      size: 18,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                    color: const Color(0xFF1E293B),
+                    onSelected: (action) {
+                      switch (action) {
+                        case 'edit':
+                          _editWorld(null, world, repo);
+                          break;
+                        case 'export':
+                          _exportWorld(null, world, repo);
+                          break;
+                        case 'delete':
+                          _confirmDelete(null, world, repo);
+                          break;
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 16, color: Colors.white70),
+                            SizedBox(width: 8),
+                            Text('Edit', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'export',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.upload,
+                              size: 16,
+                              color: Colors.cyanAccent,
+                            ),
+                            SizedBox(width: 8),
+                            Text('Export JSON', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete,
+                              size: 16,
+                              color: Colors.redAccent,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Description (if not empty)
+              if (world.description.isNotEmpty) ...[
+                Text(
+                  world.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shows a snackbar with success message.
+  ///
+  /// Uses green accent color for positive operations to provide clear feedback
+  /// and maintain consistency with the rest of the app.
+  void _showSuccessSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: const Color(0xFF2A2A2A),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Shows a snackbar with error message.
+  void _showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: const Color(0xFF2A2A2A),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _importWorld(BuildContext? context, WorldRepository repo) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (result != null && result.files.single.path != null) {
+      try {
+        await repo.importWorld(File(result.files.single.path!));
+        if (context != null && context.mounted) {
+          _showSuccessSnackBar(context, 'World imported successfully');
+        }
+      } catch (e) {
+        if (context != null && context.mounted) {
+          _showErrorSnackBar(context, 'Import failed: $e');
+        }
+      }
+    }
+  }
+
+  void _showWorldDialog(
+    BuildContext? context,
+    WorldRepository repo, [
+    World? world,
+  ]) {
+    final nameController = TextEditingController(text: world?.name ?? '');
+    final descController = TextEditingController(
+      text: world?.description ?? '',
+    );
+
+    showDialog(
+      context: context!,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(world == null ? 'Create World' : 'Edit World'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: descController,
+              decoration: const InputDecoration(labelText: 'Description'),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newWorld =
+                  world ??
+                  World(
+                    name: '',
+                    lorebook: Lorebook(entries: []),
+                  );
+              newWorld.name = nameController.text;
+              newWorld.description = descController.text;
+              repo.saveWorld(newWorld);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportWorld(
+    BuildContext? context,
+    World world,
+    WorldRepository repo,
+  ) async {
+    String? outputFile = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export World JSON',
+      fileName: '${world.name}.json',
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (outputFile != null) {
+      if (!outputFile.endsWith('.json')) outputFile += '.json';
+      try {
+        await repo.exportWorld(world, outputFile);
+        if (context != null && context.mounted) {
+          _showSuccessSnackBar(context, 'Exported to $outputFile');
+        }
+      } catch (e) {
+        if (context != null && context.mounted) {
+          _showErrorSnackBar(context, 'Export failed: $e');
+        }
+      }
+    }
+  }
+
+  void _editWorld(BuildContext? context, World world, WorldRepository repo) {
+    final nameController = TextEditingController(text: world.name);
+    final descController = TextEditingController(text: world.description);
+
+    showDialog(
+      context: context!,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: 600,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Edit World: ${world.name}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Name & Description
+                TextField(
+                  controller: nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'World Name',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blueAccent),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descController,
+                  style: const TextStyle(color: Colors.white),
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    labelStyle: TextStyle(color: Colors.white54),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white24),
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blueAccent),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Lorebook entries header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'World Lore Entries (${world.lorebook.entries.length})',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: Colors.blueAccent,
+                      ),
+                      tooltip: 'Add Entry',
+                      onPressed: () {
+                        setDialogState(() {
+                          world.lorebook.entries.add(
+                            LorebookEntry(key: '', content: ''),
+                          );
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white10),
+
+                // Entries list
+                Flexible(
+                  child: world.lorebook.entries.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: Text(
+                              'No entries. Tap + to add one.',
+                              style: TextStyle(color: Colors.white38),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: world.lorebook.entries.length,
+                          itemBuilder: (_, i) {
+                            final entry = world.lorebook.entries[i];
+                            return _buildEntryEditor(
+                              world,
+                              entry,
+                              i,
+                              setDialogState,
+                            );
+                          },
+                        ),
+                ),
+                const SizedBox(height: 16),
+
+                // Save / Cancel
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.save, size: 18),
+                      label: const Text('Save'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                      ),
+                      onPressed: () {
+                        world.name = nameController.text;
+                        world.description = descController.text;
+                        repo.saveWorld(world);
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEntryEditor(
+    World world,
+    LorebookEntry entry,
+    int index,
+    void Function(void Function()) setDialogState,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF374151),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: entry.enabled
+              ? Colors.white10
+              : Colors.redAccent.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: name/key display + controls
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  entry.displayName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: entry.enabled ? Colors.white : Colors.white38,
+                  ),
+                ),
+              ),
+              // Constant toggle
+              Tooltip(
+                message: 'Always active (no keyword trigger needed)',
+                child: FilterChip(
+                  label: const Text('Constant', style: TextStyle(fontSize: 10)),
+                  selected: entry.constant,
+                  onSelected: (val) =>
+                      setDialogState(() => entry.constant = val),
+                  selectedColor: Colors.amber.withValues(alpha: 0.3),
+                  labelStyle: TextStyle(
+                    color: entry.constant ? Colors.amber : Colors.white54,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              // Enabled toggle
+              Switch(
+                value: entry.enabled,
+                onChanged: (val) => setDialogState(() => entry.enabled = val),
+                activeTrackColor: Colors.blueAccent,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              // Delete
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                  size: 20,
+                ),
+                onPressed: () => setDialogState(() {
+                  final currentWorld = world;
+                  currentWorld.lorebook.entries.removeAt(index);
+                }),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Name field
+          TextField(
+            controller: TextEditingController(text: entry.name),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              labelStyle: TextStyle(color: Colors.white38, fontSize: 12),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.blueAccent),
+              ),
+            ),
+            onChanged: (val) => entry.name = val,
+          ),
+          const SizedBox(height: 6),
+
+          // Key field
+          TextField(
+            controller: TextEditingController(text: entry.key),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: 'Keywords (comma-separated)',
+              labelStyle: TextStyle(color: Colors.white38, fontSize: 12),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.blueAccent),
+              ),
+            ),
+            onChanged: (val) => entry.key = val,
+          ),
+          const SizedBox(height: 6),
+
+          // Content field
+          TextField(
+            controller: TextEditingController(text: entry.content),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            maxLines: 3,
+            minLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Content',
+              labelStyle: TextStyle(color: Colors.white38, fontSize: 12),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.white12),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.blueAccent),
+              ),
+            ),
+            onChanged: (val) => entry.content = val,
+          ),
+          const SizedBox(height: 8),
+
+          // Sticky depth
+          Row(
+            children: [
+              const Text(
+                'Sticky Depth: ',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              SizedBox(
+                width: 50,
+                child: TextField(
+                  controller: TextEditingController(
+                    text: entry.stickyDepth.toString(),
+                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 6,
+                    ),
+                    enabledBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.white12),
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.blueAccent),
+                    ),
+                  ),
+                  onChanged: (val) =>
+                      entry.stickyDepth = int.tryParse(val) ?? 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message:
+                    'How many messages this entry stays active after triggering',
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.white24,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(
+    BuildContext? context,
+    World world,
+    WorldRepository repo,
+  ) {
+    showDialog(
+      context: context!,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete World?'),
+        content: Text('Are you sure you want to delete "${world.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              repo.deleteWorld(world);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Extension to safely get the first element of a list or null if empty.
+extension NullableListExtensions<T> on List<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}

@@ -376,6 +376,7 @@ class ChatService extends ChangeNotifier {
   int _startDayOfWeek =
       DateTime.now().weekday; // 1=Mon ... 7=Sun, set when session starts
   int _turnsSinceLastTimeAdvance = 0; // deterministic pacing counter
+  bool _passageOfTimeEnabled = true; // toggle for automatic time advancement
 
   /// How many AI turns must pass before time is eligible to advance.
   /// 6 turns ≈ a meaningful scene chunk without forcing constant time-skips.
@@ -622,6 +623,7 @@ class ChatService extends ChangeNotifier {
   String get emotionIntensity => _emotionIntensity;
   String get timeOfDay => _timeOfDay;
   int get dayCount => _dayCount;
+  bool get passageOfTimeEnabled => _passageOfTimeEnabled;
 
   /// The current narrative day of the week (e.g. 'Monday'), computed from
   /// the session's anchor weekday plus elapsed in-story days.
@@ -1050,9 +1052,15 @@ class ChatService extends ChangeNotifier {
        }
 
        // Reset realism state to prevent bleeding from previous character
+       final prevArousal = _arousalLevel;
+       final prevFixation = _activeFixation;
+       final prevFixationLife = _fixationLifespan;
        _arousalLevel = 0;
        _fixationLifespan = 0;
        _activeFixation = '';
+       debugPrint(
+         '[ChatService] setActiveCharacter: Reset realism state (was: arousal=$prevArousal, fixation=$prevFixation/$prevFixationLife)',
+       );
 
        // Try to load last session
        await _loadLastSession();
@@ -1497,6 +1505,7 @@ class ChatService extends ChangeNotifier {
         emotionIntensity: drift.Value(_emotionIntensity),
         timeOfDay: drift.Value(_timeOfDay),
         dayCount: drift.Value(_dayCount),
+        passageOfTimeEnabled: drift.Value(_passageOfTimeEnabled),
         nsfwCooldownEnabled: drift.Value(_nsfwCooldownEnabled),
         arousalLevel: drift.Value(_arousalLevel),
         cooldownTurnsRemaining: drift.Value(_cooldownTurnsRemaining),
@@ -1567,7 +1576,10 @@ class ChatService extends ChangeNotifier {
       return;
     }
 
-    if (sessions.isEmpty) return;
+    if (sessions.isEmpty) {
+      debugPrint('[ChatService] _loadLastSession: No previous sessions found');
+      return;
+    }
 
     // Sessions are already sorted descending by createdAt
     final lastSession = sessions.first;
@@ -1588,16 +1600,20 @@ class ChatService extends ChangeNotifier {
     _shortTermDeltasSummary = lastSession.shortTermDeltasSummary;
     _realismEnabled = lastSession.realismEnabled;
     _moodDecayCounter = lastSession.moodDecayCounter;
-    _characterEmotion = lastSession.characterEmotion;
-    _emotionIntensity = lastSession.emotionIntensity;
-    _timeOfDay = lastSession.timeOfDay;
-    _dayCount = lastSession.dayCount;
-    _nsfwCooldownEnabled = lastSession.nsfwCooldownEnabled;
+     _characterEmotion = lastSession.characterEmotion;
+     _emotionIntensity = lastSession.emotionIntensity;
+     _timeOfDay = lastSession.timeOfDay;
+     _dayCount = lastSession.dayCount;
+     _passageOfTimeEnabled = lastSession.passageOfTimeEnabled;
+     _nsfwCooldownEnabled = lastSession.nsfwCooldownEnabled;
     _arousalLevel = lastSession.arousalLevel;
     _cooldownTurnsRemaining = lastSession.cooldownTurnsRemaining;
     _trustLevel = lastSession.trustLevel;
     _activeFixation = lastSession.activeFixation;
     _fixationLifespan = lastSession.fixationLifespan;
+    debugPrint(
+      '[ChatService] _loadLastSession: Loaded session with arousal=$_arousalLevel, fixation=$_activeFixation/$_fixationLifespan',
+    );
     _spatialStance = lastSession.spatialStance;
     _pendingTrustRepair = lastSession.trustRepairPending;
     _chaosModeEnabled = lastSession.chaosModeEnabled;
@@ -1845,6 +1861,7 @@ class ChatService extends ChangeNotifier {
       _emotionIntensity = session.emotionIntensity;
       _timeOfDay = session.timeOfDay;
       _dayCount = session.dayCount;
+      _passageOfTimeEnabled = session.passageOfTimeEnabled;
       _nsfwCooldownEnabled = session.nsfwCooldownEnabled;
       _arousalLevel = session.arousalLevel;
       _cooldownTurnsRemaining = session.cooldownTurnsRemaining;
@@ -2084,6 +2101,12 @@ class ChatService extends ChangeNotifier {
       _emotionIntensity = extSeed.emotionIntensity;
       _nsfwCooldownEnabled = extSeed.nsfwCooldownEnabled;
       _chaosModeEnabled = extSeed.chaosModeEnabled;
+      
+      // Reset arousal/fixation to defaults for fresh chat (not seeded from extensions)
+      _arousalLevel = 0;
+      _fixationLifespan = 0;
+      _activeFixation = '';
+      _cooldownTurnsRemaining = 0;
 
       // Recalculate tiers from seeded scores (only needed for realism-enabled chars)
       if (_realismEnabled) {
@@ -7727,6 +7750,12 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
       _cooldownTurnsTotal = 0;
       _arousalLevel = 0;
     }
+    await _saveChat();
+    notifyListeners();
+  }
+
+  Future<void> setPassageOfTimeEnabled(bool enabled) async {
+    _passageOfTimeEnabled = enabled;
     await _saveChat();
     notifyListeners();
   }
