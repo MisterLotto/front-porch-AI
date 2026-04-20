@@ -1351,8 +1351,7 @@ class _HomePageState extends State<HomePage> {
                 context,
                 listen: false,
               );
-              final charId =
-                  character.dbId ?? _getCharacterIdFromCard(character);
+              final charId = _getCharacterIdFromCard(character);
               final sessions = await chatService.getSessionsForId(charId);
 
               if (!context.mounted) return;
@@ -2006,6 +2005,7 @@ class _HomePageState extends State<HomePage> {
                     final dateStr =
                         '${date.year}-${date.month.toString().padLeft(2, "0")}-${date.day.toString().padLeft(2, "0")} ${date.hour}:${date.minute.toString().padLeft(2, "0")}';
                     final messageCount = s['message_count'] ?? 0;
+                    final userMessageCount = s['user_message_count'] ?? 0;
                     final isBranch = s['parent_session'] != null;
                     final description = s['session_description'] as String?;
 
@@ -2039,26 +2039,16 @@ class _HomePageState extends State<HomePage> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  dateStr,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.white54,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '$messageCount msgs',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.white38,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 4),
+                            Text(
+                              dateStr,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white54,
+                              ),
                             ),
-                            if (description != null && description.isNotEmpty)
+                            if (description != null && description.isNotEmpty) ...[
+                              const SizedBox(height: 4),
                               Text(
                                 description,
                                 style: const TextStyle(
@@ -2069,7 +2059,54 @@ class _HomePageState extends State<HomePage> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            if (isBranch)
+                            ],
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blueAccent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3), width: 0.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.forum, size: 10, color: Colors.blueAccent.shade100),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$messageCount total',
+                                        style: TextStyle(fontSize: 10, color: Colors.blueAccent.shade100, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (userMessageCount > 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.greenAccent.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3), width: 0.5),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.person, size: 10, color: Colors.greenAccent.shade100),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '$userMessageCount user',
+                                          style: TextStyle(fontSize: 10, color: Colors.greenAccent.shade100, fontWeight: FontWeight.w500),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            if (isBranch) ...[
+                              const SizedBox(height: 4),
                               Text(
                                 '↳ Branched at message #${(s['fork_index'] ?? 0) + 1}',
                                 style: const TextStyle(
@@ -2077,6 +2114,7 @@ class _HomePageState extends State<HomePage> {
                                   color: Colors.blueAccent,
                                 ),
                               ),
+                            ],
                           ],
                         ),
                         onTap: () => Navigator.of(ctx).pop(s['id']),

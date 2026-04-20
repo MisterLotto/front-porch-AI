@@ -1756,6 +1756,7 @@ class ChatService extends ChangeNotifier {
         'date': date,
         'preview': preview,
         'message_count': msgs.length,
+        'user_message_count': msgs.where((m) => m.isUser).length,
         if (s.name != null) 'session_name': s.name,
         if (s.description != null) 'session_description': s.description,
         if (s.parentSession != null) 'parent_session': s.parentSession,
@@ -2082,7 +2083,47 @@ class ChatService extends ChangeNotifier {
             orElse: () => null,
           );
       if (freshChar != null) {
+        // Preserve any runtime-loaded extensions if the repository instance lacks them
+        final existingExt = _activeCharacter!.frontPorchExtensions;
+        final existingRaw = _activeCharacter!.rawExtensions;
+
         _activeCharacter = freshChar;
+
+        if (existingExt != null && _activeCharacter!.frontPorchExtensions == null) {
+          _activeCharacter!.frontPorchExtensions = existingExt;
+          _activeCharacter!.rawExtensions = existingRaw;
+          debugPrint('[startNewChat] Preserved existing extensions during character refresh');
+        } else if (existingExt == null && _activeCharacter!.frontPorchExtensions == null) {
+          debugPrint('[startNewChat] DEBUG: existingExt was null AND freshChar had null extensions.');
+        }
+      } else {
+        debugPrint('[startNewChat] DEBUG: freshChar was null (repository lookup failed).');
+      }
+    }
+
+    // Fallback: If extensions are STILL missing, forcefully reload from PNG.
+    // This catches edge cases where repository/memory loses sync with the file.
+    if (_activeCharacter != null && _activeCharacter!.frontPorchExtensions == null) {
+      debugPrint('[startNewChat] DEBUG: Extensions are missing. Attempting PNG fallback.');
+      if (_activeCharacter!.imagePath != null) {
+        debugPrint('[startNewChat] DEBUG: Image path exists: ${_activeCharacter!.imagePath}');
+        try {
+          final v2Service = V2CardService();
+          final reloaded = await v2Service.readCard(_activeCharacter!.imagePath!);
+          if (reloaded == null) {
+             debugPrint('[startNewChat] DEBUG: readCard returned null. Failed to parse PNG.');
+          } else if (reloaded.frontPorchExtensions != null) {
+            _activeCharacter!.frontPorchExtensions = reloaded.frontPorchExtensions;
+            _activeCharacter!.rawExtensions = reloaded.rawExtensions;
+            debugPrint('[startNewChat] Force-reloaded frontPorchExtensions from PNG');
+          } else {
+             debugPrint('[startNewChat] DEBUG: readCard succeeded, BUT reloaded.frontPorchExtensions was NULL! Meaning the PNG file does NOT contain the front_porch extension data.');
+          }
+        } catch (e) {
+          debugPrint('[startNewChat] Force-reload failed with exception: $e');
+        }
+      } else {
+        debugPrint('[startNewChat] DEBUG: Cannot fallback. imagePath is null.');
       }
     }
 
@@ -2118,18 +2159,25 @@ class ChatService extends ChangeNotifier {
       _passageOfTimeEnabled =
           extSeed.passageOfTimeEnabled && _storageService.passageOfTimeDefault;
       _chaosModeEnabled = extSeed.chaosModeEnabled;
-      
-      // Reset arousal/fixation to defaults for fresh chat (not seeded from extensions)
-      debugPrint(
-        '[startNewChat] Resetting arousal/fixation (was: arousal=$_arousalLevel, fixation=$_activeFixation/$_fixationLifespan)',
-      );
-      _arousalLevel = 0;
-      _fixationLifespan = 0;
-      _activeFixation = '';
-      _cooldownTurnsRemaining = 0;
-      debugPrint(
-        '[startNewChat] After reset: arousal=$_arousalLevel, fixation=$_activeFixation/$_fixationLifespan',
-      );
+      if (_activeCharacter!.hasFrontPorchExtensions) {
+        // Character has baseline extensions, indicating an ongoing managed relationship where
+        // emotional continuity is expected across sessions. Do NOT reset arousal/fixation.
+        debugPrint(
+          '[startNewChat] Preserving arousal/fixation due to extensions: arousal=$_arousalLevel, fixation=$_activeFixation/$_fixationLifespan',
+        );
+      } else {
+        // Reset arousal/fixation to defaults for fresh chat (not seeded from extensions)
+        debugPrint(
+          '[startNewChat] Resetting arousal/fixation (was: arousal=$_arousalLevel, fixation=$_activeFixation/$_fixationLifespan)',
+        );
+        _arousalLevel = 0;
+        _fixationLifespan = 0;
+        _activeFixation = '';
+        _cooldownTurnsRemaining = 0;
+        debugPrint(
+          '[startNewChat] After reset: arousal=$_arousalLevel, fixation=$_activeFixation/$_fixationLifespan',
+        );
+      }
 
       // Recalculate tiers from seeded scores (only needed for realism-enabled chars)
       if (_realismEnabled) {
