@@ -85,6 +85,45 @@
 
 ---
 
+## 📥 Install
+
+### Linux — Package Manager
+
+**Debian / Ubuntu / Mint / Pop!_OS**
+```bash
+curl -fsSL https://apt.dreamersai.art/install.sh | bash
+sudo apt install front-porch-ai
+```
+Or manually:
+```bash
+curl -fsSL https://apt.dreamersai.art/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
+echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.dreamersai.art stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
+sudo apt update && sudo apt install front-porch-ai
+```
+
+**Fedora / RHEL / openSUSE**
+```bash
+sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
+sudo dnf install front-porch-ai
+```
+
+**Arch Linux (AUR)**
+```bash
+yay -S front-porch-ai-bin        # Stable
+yay -S front-porch-ai-beta-bin   # Beta / Pre-release
+```
+
+Future updates arrive through your normal system updates (`apt upgrade`, `dnf upgrade`, `yay -Syu`).
+
+### All Platforms — Manual Download
+
+Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page:
+
+- **Stable**: `.exe` installer (Windows), `.dmg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux)
+- **Beta**: Standalone `.zip` (Windows/macOS), `.AppImage` / `.tar.gz` (Linux) — no installer, just extract and run
+
+---
+
 ## 🆕 What's New in V0.9.7.5
 
 This release delivers a **complete character editor redesign**, brings **editable Realism Engine settings** to the card editor, and fixes several stability and data integrity bugs.
@@ -113,8 +152,170 @@ This release delivers a **complete character editor redesign**, brings **editabl
 - Converted `release.yml` from CRLF to LF line endings.
 - Added defensive carriage-return stripping to AUR package generation to prevent future regressions.
 
+---
+
+## ⚙️ Configuration
+
+1. **Backend** — go to **Settings → Download Backend** to fetch KoboldCpp, or point it at an existing binary.
+2. **Model** — go to **Manage Models → HuggingFace Search**, find a GGUF model (recommended: `Q4_K_M` or `Q5_K_M`), download.
+3. **Optimize** — hit **Auto-Configure** to let the app pick the best GPU layer split and thread count for your hardware.
+
+---
+
+## 🔓 Why Does This Exist?
+
+Backyard AI built a genuinely good local LLM companion app. Then they killed it — no warning, pivoted to a cloud subscription, and left users with characters stuck in a proprietary `.byaf` archive format with nowhere to go.
+
+Front Porch AI was built directly in response to that. The goal: an open-source, local-first alternative that **cannot** be yanked out from under you by a pivot to SaaS. We even support importing directly from `.byaf` files so your characters can escape.
+
+Starting with **v0.9.0**, this project is licensed under **AGPL-3.0** — meaning anyone who hosts a modified version as a service must open-source their changes too. It stays open, even in a world of cloud-hosted forks.
+
+> **Note:** v0.8.x and earlier are licensed under GPLv3.
+
+> 🎩 Hat tip to the Backyard AI team for at least open-sourcing the `.byaf` format on their way out.
+
+---
+
+## 💬 Community
+
+- **Discord**: [Join our server](https://discord.gg/e4tET6rpdv)
+- **Matrix**: [matrix.dreamersai.art](https://matrix.dreamersai.art)
+
+---
+
+## 🤝 Contributing
+
+Pull requests are welcome! If you're a dev reading this far down, here's what you need to know:
+
+- **Branch workflow:** All PRs target the **`dev`** branch — never `main`. The `main` branch is for stable releases only.
+- **Commit conventions:** Follow the guidelines in [AGENTS.md](AGENTS.md) for commit message format, code style, and naming conventions.
+- **Full guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, testing requirements, and the PR template.
+- **Before you PR:** Run `flutter analyze` and `flutter test` locally. CI will check these too, but saving a round-trip is nicer for everyone.
+
+---
+
+## 📝 Note from the Dev
+
+To everyone who has shown up with kind words, bug reports, feature ideas, and genuine enthusiasm — thank you. You've turned what started as a "screw it, I'll build my own" into something worth building every day.
+
+— **SosukeAizen** on Discord
+
+---
+
+## 🙏 Credits
+
+Front Porch AI stands on the shoulders of these incredible open-source projects:
+
+| Project | What It Does | Link |
+|---|---|---|
+| **KoboldCpp** | The local LLM backend. Single-file, GGUF-native, GPU-accelerated. | [GitHub](https://github.com/LostRuins/koboldcpp) |
+| **Faster Whisper** | Speech-to-text for push-to-talk and voice call mode. | [GitHub](https://github.com/SYSTRAN/faster-whisper) |
+| **Kokoro** | Default TTS engine. Beautiful offline voices via ONNX. | [GitHub](https://github.com/hexgrad/kokoro) |
+| **Piper** | Fallback TTS engine. Fast, lightweight, privacy-respecting. | [GitHub](https://github.com/rhasspy/piper) |
+
+If Front Porch AI is useful to you, please consider starring these projects too — they're the foundation everything is built on.
+
+### 🌟 Contributors
+
+| Contributor | Role |
+|---|---|
+| **Hakko504** | Bug Testing, UI/Feature Suggestions |
+| **PacmanIncarnate** | Bug Testing, UI/Feature Suggestions |
+| **SunTzucious** | Beta Testing |
+
+---
+
+## 🔒 Privacy
+
+Front Porch AI does not collect, store, or transmit any personal data. Full details: [Privacy Policy](https://app.dreamersai.art/privacy.html)
+
+## 📄 License
+
+**v0.9.0+** — [AGPL-3.0](LICENSE)  
+**v0.8.x and earlier** — GPL-3.0
+
+---
+
+## 🛠️ Build from Source
+
+### Prerequisites
+- [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- [Rust toolchain](https://rustup.rs/) (for the RAG embedding server)
+- Git
+- Windows, Linux, or macOS
+
+### Linux Extra Dependencies
+
+**Ubuntu/Debian**
+```bash
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libwpewebkit-1.0-dev
+```
+
+**Arch Linux**
+```bash
+sudo pacman -S clang cmake ninja pkgconf gtk3 xz wpewebkit
+```
+
+**Fedora**
+```bash
+sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel wpewebkit-devel
+```
+
+> `wpewebkit` is required for the built-in browser (Chub.ai / aicharactercards.com import). Pre-built AppImages bundle it automatically.
+
+### Build & Run
+
+```bash
+git clone https://github.com/linux4life1/front-porch-ai.git
+cd front-porch-ai
+flutter pub get
+flutter run
+```
+
+**macOS release build** (includes RAG embedding server):
+```bash
+./scripts/build-macos.sh
+```
+
+**Linux / Windows release build:**
+```bash
+cargo build --release --manifest-path tools/embed_server/Cargo.toml
+flutter build linux    # or windows
+```
+> On Linux/Windows, copy `tools/embed_server/target/release/embed_server` next to the built executable under `embed_server/embed_server`.
+
+---
+
 <details>
-<summary><strong>📦 Previous Releases</strong></summary>
+<summary><strong>📦 Old Release Notes</strong></summary>
+
+### V0.9.7.5
+
+This release delivers a **complete character editor redesign**, brings **editable Realism Engine settings** to the card editor, and fixes several stability and data integrity bugs.
+
+**🎨 Character Editor — Full Redesign**
+- **New 4-tab layout:** Details, Dialogue, Lorebook, and Worlds — dialogue fields (first message, alternate greetings, example conversations) are no longer crammed into the Details tab.
+- **Glassmorphic section cards** with icon headers for visual grouping (Identity, Personality & World, Advanced Prompts).
+- **160px avatar display** with rounded corners and camera overlay — tap to change.
+- **Collapsible Advanced Prompts** — system prompt and post-history instructions hidden by default to reduce visual clutter.
+- **Restyled lorebook cards** showing keyword chips, trigger depth badges, and always-active indicators.
+- **Restyled worlds tab** with toggle-based linking, visual feedback, and entry count badges.
+- **Consistent input styling** and token counter matching the manual character creator.
+
+**🧠 Realism Engine — Editable in Character Editor**
+- Characters can now have their Realism Engine settings **configured directly in the character editor** — no longer limited to the character creator.
+- Characters without V2.5 extensions can have them **created from scratch** via the editor.
+- Full access to all Realism Engine parameters: bond scores, trust level, time of day, starting emotion, recovery mechanics, and Chaos Mode toggle.
+- Includes a friendly note reminding users that changes only affect new conversations — existing chats keep their live state.
+
+**🐛 Bug Fixes**
+- **Fixed character creator crash on Linux:** The back button was calling `Navigator.pop()` on a tab-embedded page, popping the root navigator and leaving a black screen. Now correctly returns to the Home tab.
+- **Fixed V2.5 metadata loss on avatar change:** When editing a character and changing the avatar, the save flow was creating a redundant card copy that omitted Realism Engine extensions. The throwaway card has been eliminated — the editor now passes the live character object directly.
+- **Fixed Realism Engine level 10 prompt:** Refined the peak desire state prompt to describe emotional intensity without dictating deterministic narrative outcomes or causing behavioral leakage into subsequent turns.
+
+**⚙️ CI/CD**
+- Converted `release.yml` from CRLF to LF line endings.
+- Added defensive carriage-return stripping to AUR package generation to prevent future regressions.
 
 ### V0.9.7.4
 
@@ -145,9 +346,6 @@ This release overhauls the **Learned Facts** system, adds full **Web UI parity**
 - **AI Creator Realism Step:** The AI character creator now includes a dedicated Realism Engine configuration step with bond/trust sliders, time-of-day selector, and feature toggles.
 - **V2.5 character card extensions:** Both creators embed Realism Engine configuration in exported character cards.
 
-<details>
-<summary><strong>📦 Older Releases</strong></summary>
-
 ### V0.9.7.2
 
 This release brings **community-contributed fixes and features** alongside Realism Engine tuning — primarily focused on API compatibility, macOS packaging, and UI polish.
@@ -167,9 +365,6 @@ This release brings **community-contributed fixes and features** alongside Reali
 **⚙️ Stability**
 - Hardened the realism evaluation pipeline against race conditions during hot restarts and rapid message sequences.
 - Improved KoboldCpp process lifecycle management to prevent orphaned processes on app restart.
-
-<details>
-<summary><strong>📦 Older Releases</strong></summary>
 
 ### V0.9.7.1
 
@@ -301,179 +496,6 @@ This release brings **community-contributed fixes and features** alongside Reali
 - Group chat, TTS multi-engine support (Kokoro/OpenAI/Piper), grid scale slider, bulk PNG import, chat branching, per-character system prompts, Author's Note, context/token budget viewer, external API support (OpenRouter, Nano-GPT).
 
 </details>
-
-</details>
-
----
-
-## 📥 Install
-
-### Linux — Package Manager
-
-**Debian / Ubuntu / Mint / Pop!_OS**
-```bash
-curl -fsSL https://apt.dreamersai.art/install.sh | bash
-sudo apt install front-porch-ai
-```
-Or manually:
-```bash
-curl -fsSL https://apt.dreamersai.art/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
-echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.dreamersai.art stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
-sudo apt update && sudo apt install front-porch-ai
-```
-
-**Fedora / RHEL / openSUSE**
-```bash
-sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
-sudo dnf install front-porch-ai
-```
-
-**Arch Linux (AUR)**
-```bash
-yay -S front-porch-ai-bin        # Stable
-yay -S front-porch-ai-beta-bin   # Beta / Pre-release
-```
-
-Future updates arrive through your normal system updates (`apt upgrade`, `dnf upgrade`, `yay -Syu`).
-
-### All Platforms — Manual Download
-
-Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page:
-
-- **Stable**: `.exe` installer (Windows), `.dmg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux)
-- **Beta**: Standalone `.zip` (Windows/macOS), `.AppImage` / `.tar.gz` (Linux) — no installer, just extract and run
-
----
-
-## 🛠️ Build from Source
-
-### Prerequisites
-- [Flutter SDK](https://docs.flutter.dev/get-started/install)
-- [Rust toolchain](https://rustup.rs/) (for the RAG embedding server)
-- Git
-- Windows, Linux, or macOS
-
-### Linux Extra Dependencies
-
-**Ubuntu/Debian**
-```bash
-sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libwpewebkit-1.0-dev
-```
-
-**Arch Linux**
-```bash
-sudo pacman -S clang cmake ninja pkgconf gtk3 xz wpewebkit
-```
-
-**Fedora**
-```bash
-sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel wpewebkit-devel
-```
-
-> `wpewebkit` is required for the built-in browser (Chub.ai / aicharactercards.com import). Pre-built AppImages bundle it automatically.
-
-### Build & Run
-
-```bash
-git clone https://github.com/linux4life1/front-porch-ai.git
-cd front-porch-ai
-flutter pub get
-flutter run
-```
-
-**macOS release build** (includes RAG embedding server):
-```bash
-./scripts/build-macos.sh
-```
-
-**Linux / Windows release build:**
-```bash
-cargo build --release --manifest-path tools/embed_server/Cargo.toml
-flutter build linux    # or windows
-```
-> On Linux/Windows, copy `tools/embed_server/target/release/embed_server` next to the built executable under `embed_server/embed_server`.
-
----
-
-## ⚙️ Configuration
-
-1. **Backend** — go to **Settings → Download Backend** to fetch KoboldCpp, or point it at an existing binary.
-2. **Model** — go to **Manage Models → HuggingFace Search**, find a GGUF model (recommended: `Q4_K_M` or `Q5_K_M`), download.
-3. **Optimize** — hit **Auto-Configure** to let the app pick the best GPU layer split and thread count for your hardware.
-
----
-
-## 🔓 Why Does This Exist?
-
-Backyard AI built a genuinely good local LLM companion app. Then they killed it — no warning, pivoted to a cloud subscription, and left users with characters stuck in a proprietary `.byaf` archive format with nowhere to go.
-
-Front Porch AI was built directly in response to that. The goal: an open-source, local-first alternative that **cannot** be yanked out from under you by a pivot to SaaS. We even support importing directly from `.byaf` files so your characters can escape.
-
-Starting with **v0.9.0**, this project is licensed under **AGPL-3.0** — meaning anyone who hosts a modified version as a service must open-source their changes too. It stays open, even in a world of cloud-hosted forks.
-
-> **Note:** v0.8.x and earlier are licensed under GPLv3.
-
-> 🎩 Hat tip to the Backyard AI team for at least open-sourcing the `.byaf` format on their way out.
-
----
-
-## 💬 Community
-
-- **Discord**: [Join our server](https://discord.gg/e4tET6rpdv)
-- **Matrix**: [matrix.dreamersai.art](https://matrix.dreamersai.art)
-
----
-
-## 📝 Note from the Dev
-
-To everyone who has shown up with kind words, bug reports, feature ideas, and genuine enthusiasm — thank you. You've turned what started as a "screw it, I'll build my own" into something worth building every day.
-
-— **SosukeAizen** on Discord
-
----
-
-## 🙏 Credits
-
-Front Porch AI stands on the shoulders of these incredible open-source projects:
-
-| Project | What It Does | Link |
-|---|---|---|
-| **KoboldCpp** | The local LLM backend. Single-file, GGUF-native, GPU-accelerated. | [GitHub](https://github.com/LostRuins/koboldcpp) |
-| **Faster Whisper** | Speech-to-text for push-to-talk and voice call mode. | [GitHub](https://github.com/SYSTRAN/faster-whisper) |
-| **Kokoro** | Default TTS engine. Beautiful offline voices via ONNX. | [GitHub](https://github.com/hexgrad/kokoro) |
-| **Piper** | Fallback TTS engine. Fast, lightweight, privacy-respecting. | [GitHub](https://github.com/rhasspy/piper) |
-
-If Front Porch AI is useful to you, please consider starring these projects too — they're the foundation everything is built on.
-
-### 🌟 Contributors
-
-| Contributor | Role |
-|---|---|
-| **Hakko504** | Bug Testing, UI/Feature Suggestions |
-| **PacmanIncarnate** | Bug Testing, UI/Feature Suggestions |
-| **SunTzucious** | Beta Testing |
-
----
-
-## 🤝 Contributing
-
-Pull requests are welcome.
-
-1. Fork the project
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes (`git commit -m 'Add my feature'`)
-4. Push and open a PR
-
----
-
-## 🔒 Privacy
-
-Front Porch AI does not collect, store, or transmit any personal data. Full details: [Privacy Policy](https://app.dreamersai.art/privacy.html)
-
-## 📄 License
-
-**v0.9.0+** — [AGPL-3.0](LICENSE)  
-**v0.8.x and earlier** — GPL-3.0
 
 ---
 
