@@ -904,13 +904,38 @@
           <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
             <div style="display:flex;align-items:center;gap:8px">
               <button class="mobile-back-btn" data-back="home">←</button>
-              <h1>User Persona</h1>
+              <h1>User Personas</h1>
             </div>
-            <button class="btn btn-primary" id="btn-create-persona" style="font-size:13px;padding:8px 16px">+ New
-              Persona</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-outlined" id="btn-import-persona" style="font-size:13px;padding:8px 12px;color:var(--accent-cyan);border-color:rgba(100,200,220,0.3)" title="Import Persona (JSON)">📥 Import</button>
+              <button class="btn btn-primary" id="btn-create-persona" style="font-size:13px;padding:8px 16px;background:linear-gradient(135deg,#6366F1,#818CF8)">+ New Persona</button>
+            </div>
           </div>
-          <div id="persona-list" class="persona-list">
-            <p style="text-align:center;color:var(--text-muted);padding:40px 0">Loading personas...</p>
+          <div id="persona-container">
+            <div id="persona-hero" style="display:none"></div>
+            <div id="persona-facts-section" style="display:none"></div>
+            <div id="persona-grid-section" style="display:none">
+              <div class="persona-grid-label">
+                <div class="persona-grid-label-bar"></div>
+                <span class="persona-grid-label-text">All Personas</span>
+              </div>
+              <div id="persona-grid" class="persona-grid"></div>
+            </div>
+            <div id="persona-empty" style="display:none">
+              <div class="persona-empty-state">
+                <div class="persona-empty-icon">👤</div>
+                <div class="persona-empty-title">No personas yet</div>
+                <div class="persona-empty-desc">Create a persona to personalize your AI conversations, or import one from SillyTavern / Backyard AI.</div>
+                <div class="persona-empty-actions">
+                  <button class="persona-create-btn" id="persona-create-first">
+                    <span>➕</span> Create Persona
+                  </button>
+                  <button class="persona-import-btn" id="persona-import-first">
+                    <span>📥</span> Import JSON
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -918,17 +943,70 @@
       <!-- WORLDS PAGE -->
       <div id="page-worlds" class="page">
         <div class="page-scroll">
-          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
-            <div style="display:flex;align-items:center;gap:8px;flex:1">
-              <button class="mobile-back-btn" data-back="home">←</button>
-              <div>
-                <h1>Worlds</h1>
-                <p class="page-subtitle">Global lorebook & world definitions that can be attached to any character</p>
+          <!-- Hero Header -->
+          <div class="worlds-hero" id="worlds-hero">
+            <div class="worlds-hero-glow"></div>
+            <div class="worlds-hero-inner">
+              <div class="worlds-hero-icon">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="rgba(255,255,255,0.9)">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+              </div>
+              <div class="worlds-hero-info">
+                <h1>World Management</h1>
+                <div class="worlds-hero-chips">
+                  <span class="worlds-chip" id="hero-chip-worlds">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="rgba(255,255,255,0.4)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                    <span id="hero-worlds-count">0 worlds</span>
+                  </span>
+                  <span class="worlds-chip" id="hero-chip-lore">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="rgba(255,255,255,0.4)"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+                    <span id="hero-lore-count">0 lore entries</span>
+                  </span>
+                </div>
+              </div>
+              <div class="worlds-hero-actions">
+                <button id="btn-import-world" class="icon-btn" title="Import World JSON">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--accent-cyan)"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                </button>
+                <button class="btn btn-primary" id="btn-new-world" style="background:var(--accent-purple)">+ New World</button>
               </div>
             </div>
-            <button class="btn btn-primary" id="btn-create-world">+ New World</button>
           </div>
-          <div id="world-list" class="settings-section" style="display:flex;flex-direction:column;gap:12px"></div>
+
+          <!-- Stats Section -->
+          <div class="worlds-stats" id="worlds-stats">
+            <div class="worlds-stat-card">
+              <div class="worlds-stat-icon" style="background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.2);color:var(--accent-purple)">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+              </div>
+              <div class="worlds-stat-value" id="stat-worlds">0</div>
+              <div class="worlds-stat-label">Worlds</div>
+            </div>
+            <div class="worlds-stat-card">
+              <div class="worlds-stat-icon" style="background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.2);color:var(--accent-green)">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+              </div>
+              <div class="worlds-stat-value" id="stat-lore">0</div>
+              <div class="worlds-stat-label">Lore Entries</div>
+            </div>
+            <div class="worlds-stat-card">
+              <div class="worlds-stat-icon" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.2);color:var(--accent-amber)">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+              </div>
+              <div class="worlds-stat-value" id="stat-linked">0</div>
+              <div class="worlds-stat-label">Linked Worlds</div>
+            </div>
+          </div>
+
+          <!-- Section Label -->
+          <div class="worlds-section-label">
+            <div class="worlds-section-bar"></div>
+            <span>All Worlds (<span id="worlds-count-label">0</span>)</span>
+          </div>
+
+          <!-- World Grid -->
+          <div class="worlds-grid" id="world-grid"></div>
         </div>
       </div>
 

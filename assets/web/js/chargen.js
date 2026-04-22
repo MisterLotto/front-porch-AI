@@ -80,7 +80,7 @@
     modelId: '',
     modelsLoaded: false, availableModels: [],
     // Step 1 (Mode Selection)
-    creatorMode: 'automated', // 'automated' or 'guided'
+    creatorMode: 'automated', // 'automated', 'guided', or 'quick'
     // Step 2 (Configure — Automated) — order matches Flutter exactly
     nsfwEnabled: false,
     selectedArchetype: '',
@@ -108,6 +108,9 @@
     guidedNsfwBody: '', guidedNsfwExp: '', guidedNsfwDom: '',
     guidedNsfwKinks: '', guidedNsfwClothing: '', guidedNsfwPersonality: '',
     isExpandingNarrative: false,
+    // Step 2 (Configure — Quick)
+    quickNsfwEnabled: false, quickSelectedTones: ['Neutral'], quickGreetingCount: 2,
+    quickConcept: '', quickScenario: '', quickLoreUrls: '', quickLoreFiles: [],
     // Step 3 (Generating)
     isGenerating: false, genStatus: '', genPreview: '',
     // Step 4 (Realism Engine)
@@ -353,13 +356,13 @@
   }
 
   async function renderStep0() {
-    // Fetch current backend state first
-    await fetchBackendState();
-
     const c = $('#cw-content');
     c.innerHTML = '';
     c.appendChild(el('div', {className:'cw-page-header'}, 'Backend & Model Setup'));
     c.appendChild(el('div', {className:'cw-hint', style:'margin-bottom:24px'}, 'Choose your AI backend and model before configuring your character.'));
+
+    // Fetch current backend state (non-blocking)
+    try { await fetchBackendState(); } catch(_){}
 
     // ── Backend Toggle ──
     const backendSec = el('div', {className:'cw-section'});
@@ -618,8 +621,15 @@
 
     function modeCard(mode, icon, iconColor, title, subtitle, desc, features) {
       const sel = state.creatorMode === mode;
-      const borderColor = sel ? (mode === 'guided' ? '#5eead4' : '#fbbf24') : 'rgba(255,255,255,0.08)';
-      const bgColor = sel ? (mode === 'guided' ? 'rgba(94,234,212,0.06)' : 'rgba(251,191,36,0.06)') : 'var(--bg-secondary, #1e293b)';
+      let borderColor, bgColor;
+      if (sel) {
+        if (mode === 'guided') { borderColor = '#5eead4'; bgColor = 'rgba(94,234,212,0.06)'; }
+        else if (mode === 'quick') { borderColor = '#4ade80'; bgColor = 'rgba(74,222,128,0.06)'; }
+        else { borderColor = '#fbbf24'; bgColor = 'rgba(251,191,36,0.06)'; }
+      } else {
+        borderColor = 'rgba(255,255,255,0.08)';
+        bgColor = '#1e293b';
+      }
       const card = el('div', {
         className: 'cw-mode-card' + (sel ? ' selected' : ''),
         style: `display:flex;gap:16px;padding:20px;border-radius:16px;border:${sel?2:1}px solid ${borderColor};background:${bgColor};cursor:pointer;margin-bottom:16px;transition:all 0.2s`,
@@ -661,18 +671,233 @@
       'Best when you already have a character in mind but need help getting it on paper. Describe your idea in your own words — guided prompts and suggestions help you express your vision.',
       ['Free-form text with guided prompts', 'Suggestion chips for inspiration', '"Help me expand this" AI assist']
     ));
+    wrap.appendChild(modeCard('quick', '⚡', '#4ade80', 'Quick Create',
+      'Name it, describe it, done — AI does the rest',
+      'Fastest path to a finished character. Just give a name and a one-liner. The full AI pipeline (interview, lorebook, greetings) runs automatically.',
+      ['Name + concept only', 'NSFW toggle', 'Full pipeline in ~2 min']
+    ));
 
     // Navigation
     const nav = el('div', {style:'display:flex;justify-content:center;gap:16px;margin-top:32px'});
     const backBtn = el('button', {className:'cw-btn cw-btn-secondary', style:'height:52px;padding:0 24px'}, '← Back');
     backBtn.addEventListener('click', () => { state.step = 0; saveState(); render(); });
     nav.appendChild(backBtn);
-    const nextBtn = el('button', {className:'cw-btn cw-btn-primary', style:`height:52px;min-width:280px;background:${state.creatorMode==='guided'?'#0d7377':'#3b82f6'}`});
-    nextBtn.textContent = 'Next: ' + (state.creatorMode === 'guided' ? 'Guided' : 'Automated') + ' Setup →';
+    let nextLabel, nextBg;
+    if (state.creatorMode === 'guided') { nextLabel = 'Next: Guided Setup →'; nextBg = '#0d7377'; }
+    else if (state.creatorMode === 'quick') { nextLabel = 'Next: Quick Setup →'; nextBg = '#16a34a'; }
+    else { nextLabel = 'Next: Automated Setup →'; nextBg = '#3b82f6'; }
+    const nextBtn = el('button', {className:'cw-btn cw-btn-primary', style:`height:52px;min-width:280px;background:${nextBg}`});
+    nextBtn.textContent = nextLabel;
     nextBtn.addEventListener('click', () => { state.step = 2; saveState(); render(); });
     nav.appendChild(nextBtn);
     wrap.appendChild(nav);
     c.appendChild(wrap);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // STEP 2 (Quick): Quick Character Configuration
+  // ═══════════════════════════════════════════════════════════
+
+  function renderStep2_Quick() {
+    const c = $('#cw-content');
+    c.innerHTML = '';
+    const wrap = el('div', {style:'max-width:600px;margin:0 auto'});
+
+    // Header
+    const header = el('div', {style:'display:flex;align-items:center;gap:14px;margin-bottom:8px'});
+    header.appendChild(el('div', {style:'width:42px;height:42px;border-radius:12px;background:rgba(74,222,128,0.12);display:flex;align-items:center;justify-content:center;font-size:22px'}, '⚡'));
+    const headerInfo = el('div');
+    headerInfo.appendChild(el('div', {style:'font-size:24px;font-weight:700;color:#fff'}, 'Quick Create'));
+    headerInfo.appendChild(el('div', {style:'font-size:13px;color:rgba(255,255,255,0.5)'}, 'Name it, describe it, generate.'));
+    header.appendChild(headerInfo);
+    wrap.appendChild(header);
+    wrap.appendChild(el('div', {style:'font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:24px'}, 'Fastest path to a finished character.'));
+
+    // Name field
+    const nameSec = el('div', {style:'margin-bottom:24px'});
+    nameSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:8px'}, 'Character Name'));
+    const nameInp = el('input', {className:'cw-quick-input', type:'text', placeholder:'e.g. Morgana, Kaito, Vex...'});
+    nameInp.value = state.name || '';
+    nameInp.addEventListener('input', () => { state.name = nameInp.value; saveState(); });
+    nameInp.addEventListener('focus', () => { nameInp.style.borderColor = '#4ade80'; });
+    nameInp.addEventListener('blur', () => { nameInp.style.borderColor = 'rgba(255,255,255,0.12)'; });
+    nameSec.appendChild(nameInp);
+    wrap.appendChild(nameSec);
+
+    // Concept field
+    const conceptSec = el('div', {style:'margin-bottom:24px'});
+    conceptSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:4px'}, 'Describe them (optional)'));
+    conceptSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.24);font-size:11px;margin-bottom:8px'}, 'A sentence or two is plenty. Leave it blank and the AI will invent someone.'));
+    const conceptTa = el('textarea', {className:'cw-quick-textarea', rows:'4', placeholder:'A gruff dwarven blacksmith who secretly writes poetry...'});
+    conceptTa.value = state.quickConcept || '';
+    conceptTa.addEventListener('input', () => { state.quickConcept = conceptTa.value; saveState(); });
+    conceptTa.addEventListener('focus', () => { conceptTa.style.borderColor = '#4ade80'; });
+    conceptTa.addEventListener('blur', () => { conceptTa.style.borderColor = 'rgba(255,255,255,0.12)'; });
+    conceptSec.appendChild(conceptTa);
+    wrap.appendChild(conceptSec);
+
+    // Scenario field
+    const scenarioSec = el('div', {style:'margin-bottom:24px'});
+    scenarioSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:4px'}, 'Scenario / Setting (optional)'));
+    scenarioSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.24);font-size:11px;margin-bottom:8px'}, 'Where does the story take place? What\'s the situation? The AI will build on this.'));
+    const scenarioTa = el('textarea', {className:'cw-quick-textarea', rows:'3', placeholder:'A modern coffee shop where they work as a barista, a fantasy guild hall, a space station...'});
+    scenarioTa.value = state.quickScenario || '';
+    scenarioTa.addEventListener('input', () => { state.quickScenario = scenarioTa.value; saveState(); });
+    scenarioTa.addEventListener('focus', () => { scenarioTa.style.borderColor = '#4ade80'; });
+    scenarioTa.addEventListener('blur', () => { scenarioTa.style.borderColor = 'rgba(255,255,255,0.12)'; });
+    scenarioSec.appendChild(scenarioTa);
+    wrap.appendChild(scenarioSec);
+
+    // Art style
+    const artSec = el('div', {style:'margin-bottom:24px'});
+    artSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:8px'}, 'Avatar Art Style'));
+    artSec.appendChild(buildChips('chips-quick-art', ART_STYLES, state.artStyle, makeSimpleToggle('artStyle')));
+    wrap.appendChild(artSec);
+
+    // Greeting tones
+    const toneSec = el('div', {style:'margin-bottom:24px'});
+    const maxTones = state.quickGreetingCount + 1;
+    toneSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:4px'}, 'Greeting Tone'));
+    toneSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.24);font-size:11px;margin-bottom:8px'},
+      state.quickGreetingCount === 0 ? 'Tone for the first message.' : 'Select up to ' + maxTones + ' — one per greeting.'));
+    const toneToggle = (opt, wrapEl, options, opts) => {
+      const arr = state.quickSelectedTones;
+      const idx = arr.indexOf(opt);
+      if (idx >= 0) {
+        if (arr.length > 1) arr.splice(idx, 1);
+      } else {
+        if (arr.length >= maxTones) arr.splice(arr.length - 1, 1);
+        arr.push(opt);
+      }
+      saveState();
+      _renderChipsInto(wrapEl, options, arr, toneToggle, opts);
+    };
+    toneSec.appendChild(buildChips('chips-quick-tones', GREETING_TONES, state.quickSelectedTones, toneToggle, {multi:true, nsfwFilter:true}));
+    wrap.appendChild(toneSec);
+
+    // Number of greetings
+    const greetSec = el('div', {style:'margin-bottom:24px'});
+    greetSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:4px'}, 'Number of Greetings'));
+    greetSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.24);font-size:11px;margin-bottom:8px'}, 'How many first messages to generate (1 main + alternates).'));
+    const greetRow = el('div', {style:'display:flex;align-items:center;gap:12px'});
+    const greetSlider = el('input', {type:'range', min:'0', max:'5', step:'1', style:'flex:1;accent-color:#4ade80'});
+    greetSlider.value = state.quickGreetingCount;
+    const greetVal = el('span', {style:'color:rgba(255,255,255,0.7);font-size:13px;min-width:80px;text-align:right'});
+    function updateGreetLabel() {
+      const count = parseInt(greetSlider.value);
+      state.quickGreetingCount = count;
+      const limit = count + 1;
+      while (state.quickSelectedTones.length > limit) state.quickSelectedTones.pop();
+      greetVal.textContent = count === 0 ? '1 greeting' : '1 + ' + count;
+      saveState();
+      _renderChipsInto(document.getElementById('chips-quick-tones'), GREETING_TONES, state.quickSelectedTones, toneToggle, {multi:true, nsfwFilter:true});
+    }
+    greetSlider.addEventListener('input', updateGreetLabel);
+    greetRow.appendChild(greetSlider);
+    greetRow.appendChild(greetVal);
+    greetSec.appendChild(greetRow);
+    wrap.appendChild(greetSec);
+
+    // Lore input
+    const loreSec = el('div', {style:'margin-bottom:24px'});
+    loreSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.5);font-size:12px;font-weight:500;margin-bottom:8px'}, 'World Lore / Wiki URLs (optional)'));
+    const loreTa = el('textarea', {className:'cw-quick-textarea', rows:'3', placeholder:'https://wiki.example.com/character, https://lore.example.com/world...'});
+    loreTa.value = state.quickLoreUrls || '';
+    loreTa.addEventListener('input', () => { state.quickLoreUrls = loreTa.value; saveState(); });
+    loreSec.appendChild(loreTa);
+    loreSec.appendChild(el('div', {style:'color:rgba(255,255,255,0.24);font-size:11px;margin-top:4px'}, 'Comma-separated URLs or paste lore text directly.'));
+    wrap.appendChild(loreSec);
+
+    // NSFW toggle
+    const nsfwSec = el('div', {className:'cw-quick-nsfw' + (state.quickNsfwEnabled ? ' active' : '')});
+    nsfwSec.appendChild(el('span', {style:`font-size:20px;color:${state.quickNsfwEnabled?'#f472b6':'rgba(255,255,255,0.24)'}`}));
+    const nsfwInfo = el('div', {style:'flex:1'});
+    nsfwInfo.appendChild(el('div', {style:`color:${state.quickNsfwEnabled?'#f9a8d4':'rgba(255,255,255,0.7)'};font-size:14px;font-weight:600`}, 'NSFW Content'));
+    nsfwInfo.appendChild(el('div', {style:`color:${state.quickNsfwEnabled?'rgba(244,114,182,0.6)':'rgba(255,255,255,0.24)'};font-size:11px`}, 'Enables adult themes in personality, lorebook, and greetings'));
+    nsfwSec.appendChild(nsfwInfo);
+    const nsfwToggle = el('label', {className:'toggle-switch', style:'margin:0'});
+    const nsfwCb = el('input', {type:'checkbox'});
+    nsfwCb.checked = state.quickNsfwEnabled;
+    nsfwCb.addEventListener('change', () => {
+      state.quickNsfwEnabled = nsfwCb.checked;
+      saveState();
+      renderStep2_Quick();
+    });
+    nsfwToggle.appendChild(nsfwCb);
+    nsfwToggle.appendChild(el('span', {className:'toggle-slider'}));
+    nsfwSec.appendChild(nsfwToggle);
+    nsfwSec.addEventListener('click', (e) => {
+      if (e.target === nsfwSec || e.target === nsfwInfo || e.target.tagName === 'SPAN' && e.target.parentElement === nsfwInfo) {
+        state.quickNsfwEnabled = !state.quickNsfwEnabled;
+        saveState();
+        renderStep2_Quick();
+      }
+    });
+    wrap.appendChild(nsfwSec);
+
+    // Navigation
+    const nav = el('div', {style:'display:flex;justify-content:space-between;align-items:center;margin-top:32px'});
+    const backBtn = el('button', {className:'cw-btn cw-btn-secondary', style:'height:52px;padding:0 24px'});
+    backBtn.textContent = '← Back';
+    backBtn.addEventListener('click', () => { state.step = 1; saveState(); render(); });
+    nav.appendChild(backBtn);
+    const createBtn = el('button', {className:'cw-btn cw-btn-primary', style:'height:52px;flex:1;max-width:300px;margin-left:16px;background:#16a34a'});
+    const nameEmpty = !state.name.trim();
+    createBtn.textContent = nameEmpty ? 'Enter a name to continue' : 'Create Character ⚡';
+    if (!nameEmpty) {
+      createBtn.addEventListener('click', startQuickGeneration);
+    } else {
+      createBtn.style.opacity = '0.4';
+      createBtn.style.cursor = 'not-allowed';
+    }
+    nav.appendChild(createBtn);
+    wrap.appendChild(nav);
+    c.appendChild(wrap);
+  }
+
+  async function startQuickGeneration() {
+    if (!state.name.trim()) return;
+    const concept = (state.quickConcept || '').trim() || 'Create an interesting, unique character for roleplay.';
+    const scenario = (state.quickScenario || '').trim();
+
+    state.isGenerating = true;
+    state.genStatus = 'Starting Quick Create...';
+    state.genPreview = '';
+    state.step = 3;
+    saveState();
+    connectChargenSSE();
+    startGenStatusPoller();
+
+    const body = {
+      name: state.name.trim(),
+      concept: concept,
+      scenario: scenario,
+      artStyle: state.artStyle,
+      greetingTones: state.quickSelectedTones,
+      altGreetingCount: state.quickGreetingCount,
+      greetingLength: 'Medium (2-4 paragraphs)',
+      generateLorebook: true,
+      loreCategories: [],
+      loreDepth: 'Standard',
+      nsfwEnabled: state.quickNsfwEnabled,
+      generationDetail: 'Standard',
+      personaId: state.personaId,
+      modelId: state.modelId,
+    };
+
+    const res = await apiJson('/api/chargen/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+
+    if (!res || res.error) {
+      state.genStatus = 'Error: ' + (res?.error || 'Failed to start generation');
+      state.isGenerating = false;
+      saveState();
+      updateGenUI();
+      stopGenStatusPoller();
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -2012,6 +2237,8 @@
       guidedNsfwBody:'', guidedNsfwExp:'', guidedNsfwDom:'',
       guidedNsfwKinks:'', guidedNsfwClothing:'', guidedNsfwPersonality:'',
       isExpandingNarrative:false,
+      quickNsfwEnabled:false, quickSelectedTones:['Neutral'], quickGreetingCount:2,
+      quickConcept:'', quickScenario:'', quickLoreUrls:'', quickLoreFiles:[],
       isGenerating:false, genStatus:'', genPreview:'',
       realismEnabled:false, realismTimeOfDay:'morning', realismDayCount:1,
       realismShortTermBond:0, realismLongTermBond:0, realismTrustLevel:0,
@@ -2058,9 +2285,10 @@
     state.isDescribing = false; saveState(); renderStep2_Automated();
   }
 
-  /** Re-render the current config step (works for both automated and guided modes). */
+  /** Re-render the current config step (works for automated, guided, and quick modes). */
   function rerenderConfigStep() {
     if (state.creatorMode === 'guided') renderStep2_Guided();
+    else if (state.creatorMode === 'quick') renderStep2_Quick();
     else renderStep2_Automated();
   }
 
@@ -2211,7 +2439,21 @@
   }
 
   // ── Main ──
-  function render() { updateStepIndicators(); switch(state.step) { case 0: renderStep0(); break; case 1: renderStep1_ModeSelect(); break; case 2: state.creatorMode === 'guided' ? renderStep2_Guided() : renderStep2_Automated(); break; case 3: renderStep3(); break; case 4: renderStep4_Realism(); break; case 5: renderStep5(); break; } }
+  function render() {
+    updateStepIndicators();
+    switch(state.step) {
+      case 0: renderStep0(); break;
+      case 1: renderStep1_ModeSelect(); break;
+      case 2:
+        if (state.creatorMode === 'guided') renderStep2_Guided();
+        else if (state.creatorMode === 'quick') renderStep2_Quick();
+        else renderStep2_Automated();
+        break;
+      case 3: renderStep3(); break;
+      case 4: renderStep4_Realism(); break;
+      case 5: renderStep5(); break;
+    }
+  }
   function init() { loadState(); render(); }
   window.ChargenModule = { init, resetState };
 })();

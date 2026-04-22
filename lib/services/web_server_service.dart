@@ -1973,7 +1973,7 @@ class WebServerService extends ChangeNotifier {
         title: Value(body['title']?.toString() ?? existing.title),
         name: Value(body['name']?.toString() ?? existing.name),
         description: Value(body['description']?.toString() ?? existing.description),
-        persona: Value(existing.persona),
+        persona: Value(body['persona']?.toString() ?? existing.persona),
         avatarPath: Value(existing.avatarPath),
         isActive: Value(existing.isActive),
         learnedFacts: Value(learnedFactsJson),
@@ -2009,6 +2009,7 @@ class WebServerService extends ChangeNotifier {
           'name': w.name,
           'description': w.description,
           'lorebook': lorebook,
+          'linkedCharacterName': w.linkedCharacterName,
         };
       }).toList();
 

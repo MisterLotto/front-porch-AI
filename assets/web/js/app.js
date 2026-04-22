@@ -3026,6 +3026,25 @@
     // USER PERSONA (right panel)
     // ═══════════════════════════════════════════════════════════
 
+    // Persona color palette (matches Flutter PersonaColors)
+    const PERSONA_PALETTE = [
+        '#3B82F6', '#64748B', '#0EA5E9', '#EF4444', '#F59E0B', '#10B981',
+        '#06B6D4', '#2563EB', '#F97316', '#84CC16', '#14B8A6', '#059669',
+    ];
+
+    function personaColor(id) {
+        let hash = 0;
+        for (let i = 0; i < (id || '').length; i++) {
+            hash = ((hash << 5) - hash) + (id || '').charCodeAt(i);
+            hash |= 0;
+        }
+        return PERSONA_PALETTE[Math.abs(hash) % PERSONA_PALETTE.length];
+    }
+
+    function displayLabel(p) {
+        return p.title || p.name || 'Unnamed';
+    }
+
     async function _showPersonaModal() {
         let personas = [];
         try {
@@ -3037,99 +3056,226 @@
         overlay.className = 'modal-overlay';
         overlay.style.display = 'flex';
 
-        function renderList() {
-            const active = personas.find(p => p.isActive) || personas[0];
-            const activeFacts = active?.learnedFacts || [];
+        let factsExpanded = false;
+        let activePopupId = null;
 
-            let personaItems = personas.map((p, i) => {
-                const isActive = active && p.id === active.id;
-                return `<div style="margin-bottom:8px;padding:10px 12px;background:${isActive ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.05)'};border-radius:8px;${isActive ? 'border:1px solid #3B82F6' : 'border:1px solid transparent'};display:flex;align-items:center;gap:10px;cursor:pointer" data-persona-id="${p.id}" class="persona-item">
-                    <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;color:rgba(255,255,255,0.7);flex-shrink:0">👤</div>
-                    <div style="flex:1;min-width:0">
-                        <div style="font-weight:600;color:white;font-size:14px">${esc(p.title || p.name || 'Unnamed')}</div>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title ? p.name : (p.description || ''))}</div>
-                    </div>
-                    <div style="display:flex;gap:4px;flex-shrink:0">
-                        ${!isActive ? `<button class="btn btn-outlined persona-select-btn" data-idx="${i}" style="font-size:10px;padding:2px 8px">Select</button>` : ''}
-                        <button class="btn btn-outlined persona-edit-btn" data-idx="${i}" style="font-size:10px;padding:2px 6px">✏️</button>
-                        ${personas.length > 1 ? `<button class="btn btn-outlined persona-delete-btn" data-idx="${i}" style="font-size:10px;padding:2px 6px;color:#f87171;border-color:rgba(248,113,113,0.3)">🗑</button>` : ''}
+        function closePopup() {
+            document.querySelectorAll('.persona-popup.open').forEach(p => p.remove());
+            activePopupId = null;
+        }
+
+        async function refreshPersonas() {
+            try {
+                const res = await fetch('/api/personas', { headers: {'Authorization': `Bearer ${token}`} });
+                if (res.ok) personas = await res.json();
+            } catch (_) {}
+        }
+
+        function renderView() {
+            const active = personas.find(p => p.isActive) || personas[0];
+            const activeColor = active ? personaColor(active.id) : '#6366F1';
+            const activeFacts = active?.learnedFacts || [];
+            const hasPersonas = personas.length > 0;
+
+            if (!hasPersonas) {
+                overlay.innerHTML = `
+                    <div class="modal" style="width:640px;display:flex;flex-direction:column">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                            <h2 style="margin:0;color:white;font-size:22px">User Personas</h2>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <button class="persona-import-header-btn" id="persona-import-btn" title="Import Persona (JSON)">📥</button>
+                                <button class="btn btn-outlined" id="persona-close" style="padding:4px 8px;font-size:14px">✕</button>
+                            </div>
+                        </div>
+                        <div style="flex:1;overflow-y:auto">
+                            <div class="persona-empty-state">
+                                <div class="persona-empty-icon">👤</div>
+                                <div class="persona-empty-title">No personas yet</div>
+                                <div class="persona-empty-desc">Create a persona to personalize your AI conversations, or import one from SillyTavern / Backyard AI.</div>
+                                <div class="persona-empty-actions">
+                                    <button class="persona-create-btn" id="persona-create-first">
+                                        <span>➕</span> Create Persona
+                                    </button>
+                                    <button class="persona-import-btn" id="persona-import-first">
+                                        <span>📥</span> Import JSON
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                overlay.querySelector('#persona-close').onclick = () => overlay.remove();
+                overlay.querySelector('#persona-create-first').onclick = () => renderEditForm(null);
+                overlay.querySelector('#persona-import-first').onclick = () => _importPersonaFile();
+                overlay.querySelector('#persona-import-btn').onclick = () => _importPersonaFile();
+                return;
+            }
+
+            // Build hero header for active persona
+            const heroName = active.title ? active.name : active.title || displayLabel(active);
+            const heroSubtitle = active.title ? active.name : '';
+            const heroDesc = active.description || '';
+            const factsExpandedClass = factsExpanded ? 'open' : '';
+            const chevronClass = factsExpanded ? 'expanded' : '';
+
+            let heroHtml = `
+                <div class="persona-hero-card" style="border-color:${activeColor}22;background:linear-gradient(135deg, ${activeColor}15, var(--bg-card) 40%, var(--bg-card))">
+                    <div class="persona-hero-inner">
+                        <div class="persona-hero-avatar" style="background:${activeColor};box-shadow:0 0 20px ${activeColor}40">
+                            👤
+                        </div>
+                        <div class="persona-hero-info">
+                            <div class="persona-hero-title-row">
+                                <span class="persona-hero-name">${esc(active.title || active.name || 'Unnamed')}</span>
+                                <span class="persona-active-badge" style="color:${activeColor};background:${activeColor}18;border:1px solid ${activeColor}28">Active</span>
+                            </div>
+                            ${heroSubtitle ? `<div class="persona-hero-subtitle" style="color:${activeColor}CC">${esc(heroSubtitle)}</div>` : ''}
+                            ${heroDesc ? `<div class="persona-hero-desc">${esc(heroDesc)}</div>` : ''}
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                                <span class="persona-stat-chip">
+                                    <span class="stat-icon">👥</span>
+                                    ${personas.length} persona${personas.length !== 1 ? 's' : ''}
+                                </span>
+                                ${activeFacts.length > 0 ? `
+                                <span class="persona-stat-chip">
+                                    <span class="stat-icon">✨</span>
+                                    ${activeFacts.length} fact${activeFacts.length !== 1 ? 's' : ''}
+                                </span>` : ''}
+                            </div>
+                        </div>
+                        <div class="persona-hero-actions">
+                            <button class="persona-hero-edit-btn" data-id="${active.id}" title="Edit active persona">✏️</button>
+                        </div>
                     </div>
                 </div>`;
-            }).join('');
 
+            // Build learned facts section
             let factsHtml = '';
             if (activeFacts.length > 0) {
-                const chips = activeFacts.map((f, i) =>
-                    `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:#374151;border-radius:12px;font-size:11px;color:rgba(255,255,255,0.7);margin:2px">
+                const factChips = activeFacts.map((f, i) =>
+                    `<span class="persona-fact-chip">
                         ${esc(f)}
-                        <button class="fact-delete-btn" data-idx="${i}" style="background:none;border:none;color:rgba(255,255,255,0.38);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">✕</button>
+                        <button class="persona-fact-chip-remove" data-fact-idx="${i}" data-persona-id="${active.id}">✕</button>
                     </span>`
                 ).join('');
 
                 factsHtml = `
-                    <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:12px;padding-top:12px">
-                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                            <span style="font-size:14px">✨</span>
-                            <span style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.7)">Learned Facts (${activeFacts.length})</span>
-                            ${activeFacts.length > 10 ? `<button class="btn btn-outlined" id="btn-clear-facts" style="margin-left:auto;font-size:10px;padding:2px 8px;color:#f87171;border-color:rgba(248,113,113,0.3)">🗑 Clear All</button>` : ''}
+                    <div class="persona-facts-section">
+                        <div class="persona-facts-header" id="facts-toggle">
+                            <span class="persona-facts-header-icon">✨</span>
+                            <span class="persona-facts-header-text">Learned Facts (${activeFacts.length})</span>
+                            <span class="persona-facts-header-sub">Auto-extracted from conversations</span>
+                            <div class="persona-facts-header-actions">
+                                ${activeFacts.length > 5 ? `<button class="persona-facts-clear-btn" id="facts-clear-all">🗑 Clear All</button>` : ''}
+                                <span class="persona-facts-chevron ${chevronClass}" id="facts-chevron">▾</span>
+                            </div>
                         </div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-bottom:6px">Auto-extracted from your conversations:</div>
-                        <div style="max-height:120px;overflow-y:auto">${chips}</div>
+                        <div class="persona-facts-body ${factsExpandedClass}" id="facts-body">
+                            <div class="persona-facts-body-subtitle">Auto-extracted from your conversations:</div>
+                            <div class="persona-fact-chips">${factChips}</div>
+                        </div>
                     </div>`;
             }
 
+            // Build persona grid
+            const gridCards = personas.map((p) => {
+                const isActive = active && p.id === active.id;
+                const cardColor = personaColor(p.id);
+                const label = displayLabel(p);
+                const subtitle = p.title ? p.name : '';
+                const desc = p.description || p.persona || 'No description';
+
+                return `
+                    <div class="persona-grid-card ${isActive ? 'active' : ''}" data-persona-id="${p.id}" style="${isActive ? `border-color:${cardColor}55;background:linear-gradient(135deg, ${cardColor}08, var(--bg-card))` : ''}">
+                        <div class="persona-grid-card-header">
+                            <div class="persona-grid-card-avatar" style="background:${cardColor}">
+                                👤
+                            </div>
+                            <div class="persona-grid-card-info">
+                                <div class="persona-grid-card-title">${esc(label)}</div>
+                                ${subtitle ? `<div class="persona-grid-card-subtitle" style="color:${cardColor}BB">${esc(subtitle)}</div>` : ''}
+                            </div>
+                            <button class="persona-grid-card-menu" data-popup-target="${p.id}" title="More actions">⋮</button>
+                        </div>
+                        <div class="persona-grid-card-body">
+                            <div class="persona-grid-card-desc">${esc(desc)}</div>
+                        </div>
+                        <div class="persona-grid-card-footer">
+                            ${p.learnedFacts && p.learnedFacts.length > 0 ? `
+                                <span class="persona-fact-count">
+                                    <span class="fact-icon">✨</span>
+                                    ${p.learnedFacts.length} facts
+                                </span>
+                                <span style="flex:1"></span>
+                            ` : '<span style="flex:1"></span>'}
+                            ${isActive ? `
+                                <span class="persona-active-badge" style="color:${cardColor};background:${cardColor}18;border:1px solid ${cardColor}28;font-size:9px;padding:1px 6px">Active</span>
+                            ` : `
+                                <button class="persona-select-btn-grid" data-select-id="${p.id}" style="color:${cardColor};border-color:${cardColor}33">Select</button>
+                            `}
+                        </div>
+                    </div>`;
+            }).join('');
+
             overlay.innerHTML = `
-                <div class="modal" style="width:600px;max-height:500px;display:flex;flex-direction:column">
+                <div class="modal" style="width:720px;max-height:85vh;display:flex;flex-direction:column">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                        <h2 style="margin:0;color:white;font-size:24px">User Personas</h2>
-                        <button class="btn btn-outlined" id="persona-close" style="padding:4px 8px;font-size:14px">✕</button>
+                        <h2 style="margin:0;color:white;font-size:22px">User Personas</h2>
+                        <div class="persona-header-actions">
+                            <button class="persona-import-header-btn" id="persona-import-btn" title="Import Persona (JSON)">📥</button>
+                            <button class="persona-create-btn" id="persona-add-btn" style="padding:6px 14px;font-size:12px">
+                                <span>➕</span> New Persona
+                            </button>
+                            <button class="btn btn-outlined" id="persona-close" style="padding:4px 8px;font-size:14px">✕</button>
+                        </div>
                     </div>
-                    <div style="flex:1;overflow-y:auto;margin-bottom:12px">${personaItems}</div>
-                    ${factsHtml}
-                    <button class="btn" id="btn-add-persona" style="width:100%;margin-top:12px;background:#3B82F6;padding:10px">➕ Add New Persona</button>
+                    <div style="flex:1;overflow-y:auto">
+                        ${heroHtml}
+                        ${factsHtml}
+                        <div class="persona-grid-label">
+                            <div class="persona-grid-label-bar"></div>
+                            <span class="persona-grid-label-text">All Personas (${personas.length})</span>
+                        </div>
+                        <div class="persona-grid">
+                            ${gridCards}
+                        </div>
+                    </div>
                 </div>`;
 
-            // Bind events
-            overlay.querySelector('#persona-close').onclick = () => overlay.remove();
-            overlay.querySelector('#btn-add-persona').onclick = () => renderEditForm(null);
+            // ── Bind Events ──
 
-            overlay.querySelectorAll('.persona-select-btn').forEach(btn => {
-                btn.onclick = async () => {
-                    const idx = parseInt(btn.dataset.idx);
-                    await apiJson('/api/personas/active', { method: 'POST', body: JSON.stringify({ id: personas[idx].id }) });
-                    personas.forEach(p => p.isActive = false);
-                    personas[idx].isActive = true;
-                    renderList();
+            // Close
+            overlay.querySelector('#persona-close').onclick = () => { closePopup(); overlay.remove(); };
+
+            // Add new persona
+            overlay.querySelector('#persona-add-btn').onclick = () => renderEditForm(null);
+
+            // Import
+            overlay.querySelector('#persona-import-btn').onclick = () => _importPersonaFile();
+
+            // Hero edit button
+            overlay.querySelector('[data-id]')?.addEventListener('click', (e) => {
+                const id = e.target.closest('[data-id]').dataset.id;
+                const persona = personas.find(p => p.id === id);
+                if (persona) renderEditForm(persona);
+            });
+
+            // Facts toggle
+            const factsToggle = overlay.querySelector('#facts-toggle');
+            const factsBody = overlay.querySelector('#facts-body');
+            const factsChevron = overlay.querySelector('#facts-chevron');
+            if (factsToggle && factsBody) {
+                factsToggle.onclick = () => {
+                    factsExpanded = !factsExpanded;
+                    factsBody.classList.toggle('open', factsExpanded);
+                    if (factsChevron) factsChevron.classList.toggle('expanded', factsExpanded);
                 };
-            });
-            overlay.querySelectorAll('.persona-edit-btn').forEach(btn => {
-                btn.onclick = () => renderEditForm(personas[parseInt(btn.dataset.idx)]);
-            });
-            overlay.querySelectorAll('.persona-delete-btn').forEach(btn => {
-                btn.onclick = async () => {
-                    const idx = parseInt(btn.dataset.idx);
-                    if (!confirm(`Delete "${personas[idx].name}"?`)) return;
-                    await apiJson('/api/personas/delete', { method: 'POST', body: JSON.stringify({ id: personas[idx].id }) });
-                    personas.splice(idx, 1);
-                    renderList();
-                };
-            });
-            overlay.querySelectorAll('.fact-delete-btn').forEach(btn => {
-                btn.onclick = async () => {
-                    const factIdx = parseInt(btn.dataset.idx);
-                    const active = personas.find(p => p.isActive) || personas[0];
-                    if (!active) return;
-                    active.learnedFacts.splice(factIdx, 1);
-                    await apiJson('/api/personas/update', {
-                        method: 'POST',
-                        body: JSON.stringify({ id: active.id, learnedFacts: active.learnedFacts }),
-                    });
-                    renderList();
-                };
-            });
-            const clearBtn = overlay.querySelector('#btn-clear-facts');
-            if (clearBtn) {
-                clearBtn.onclick = async () => {
+            }
+
+            // Clear all facts
+            const clearAllBtn = overlay.querySelector('#facts-clear-all');
+            if (clearAllBtn) {
+                clearAllBtn.onclick = async () => {
                     if (!confirm('Remove all learned facts? This cannot be undone.')) return;
                     const active = personas.find(p => p.isActive) || personas[0];
                     if (!active) return;
@@ -3138,79 +3284,293 @@
                         method: 'POST',
                         body: JSON.stringify({ id: active.id, learnedFacts: [] }),
                     });
-                    renderList();
+                    await refreshPersonas();
+                    renderView();
                 };
             }
-            overlay.querySelectorAll('.persona-item').forEach(item => {
-                item.onclick = async (e) => {
-                    if (e.target.closest('button')) return;
-                    const id = item.dataset.personaId;
+
+            // Delete individual fact
+            overlay.querySelectorAll('.persona-fact-chip-remove').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const factIdx = parseInt(btn.dataset.factIdx);
+                    const active = personas.find(p => p.isActive) || personas[0];
+                    if (!active) return;
+                    active.learnedFacts.splice(factIdx, 1);
+                    await apiJson('/api/personas/update', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: active.id, learnedFacts: active.learnedFacts }),
+                    });
+                    await refreshPersonas();
+                    renderView();
+                };
+            });
+
+            // Select persona (grid cards)
+            overlay.querySelectorAll('[data-select-id]').forEach(btn => {
+                btn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const id = btn.dataset.selectId;
                     await apiJson('/api/personas/active', { method: 'POST', body: JSON.stringify({ id }) });
                     personas.forEach(p => p.isActive = (p.id === id));
-                    renderList();
+                    renderView();
+                };
+            });
+
+            // Click grid card to select
+            overlay.querySelectorAll('.persona-grid-card').forEach(card => {
+                card.onclick = async (e) => {
+                    if (e.target.closest('button') || e.target.closest('.persona-popup')) return;
+                    const id = card.dataset.personaId;
+                    const active = personas.find(p => p.isActive);
+                    if (active && active.id === id) return;
+                    await apiJson('/api/personas/active', { method: 'POST', body: JSON.stringify({ id }) });
+                    personas.forEach(p => p.isActive = (p.id === id));
+                    renderView();
+                };
+            });
+
+            // Popup menus on grid cards
+            overlay.querySelectorAll('.persona-grid-card-menu').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const targetId = btn.dataset.popupTarget;
+                    closePopup();
+                    if (activePopupId === targetId) return;
+
+                    const popup = document.createElement('div');
+                    popup.className = 'persona-popup open';
+                    const persona = personas.find(p => p.id === targetId);
+                    const isActive = persona && persona.isActive;
+
+                    popup.innerHTML = `
+                        <button class="persona-popup-item" data-action="edit" data-id="${targetId}">
+                            <span class="popup-icon">✏️</span> Edit
+                        </button>
+                        <button class="persona-popup-item" data-action="export" data-id="${targetId}">
+                            <span class="popup-icon">📤</span> Export JSON
+                        </button>
+                        ${personas.length > 1 ? `
+                        <button class="persona-popup-item danger" data-action="delete" data-id="${targetId}">
+                            <span class="popup-icon">🗑</span> Delete
+                        </button>` : ''}`;
+
+                    btn.parentElement.style.position = 'relative';
+                    btn.parentElement.appendChild(popup);
+                    activePopupId = targetId;
+
+                    // Close popup on outside click
+                    setTimeout(() => {
+                        document.addEventListener('click', function handler(ev) {
+                            if (!popup.contains(ev.target) && ev.target !== btn) {
+                                closePopup();
+                                document.removeEventListener('click', handler);
+                            }
+                        });
+                    }, 10);
+                };
+            });
+
+            // Handle popup actions
+            overlay.querySelectorAll('.persona-popup-item').forEach(item => {
+                item.onclick = async (e) => {
+                    e.stopPropagation();
+                    const action = item.dataset.action;
+                    const id = item.dataset.id;
+                    closePopup();
+
+                    if (action === 'edit') {
+                        const persona = personas.find(p => p.id === id);
+                        if (persona) renderEditForm(persona);
+                    } else if (action === 'delete') {
+                        const persona = personas.find(p => p.id === id);
+                        if (!persona) return;
+                        if (!confirm(`Delete "${persona.name}"?`)) return;
+                        await apiJson('/api/personas/delete', { method: 'POST', body: JSON.stringify({ id }) });
+                        personas = personas.filter(p => p.id !== id);
+                        await refreshPersonas();
+                        renderView();
+                    } else if (action === 'export') {
+                        await _exportPersonaSingle(id);
+                    }
                 };
             });
         }
 
         function renderEditForm(persona) {
+            const isEdit = !!persona;
             overlay.innerHTML = `
-                <div class="modal" style="width:600px;max-height:500px;display:flex;flex-direction:column">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-                        <h2 style="margin:0;color:white;font-size:24px">${persona ? 'Edit Persona' : 'Create Persona'}</h2>
+                <div class="modal" style="width:640px;max-height:85vh;display:flex;flex-direction:column">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                        <h2 style="margin:0;color:white;font-size:22px">${isEdit ? 'Edit Persona' : 'Create Persona'}</h2>
                         <button class="btn btn-outlined" id="persona-edit-cancel" style="padding:4px 8px;font-size:14px">✕</button>
                     </div>
-                    <div style="display:flex;flex-direction:column;gap:16px;flex:1">
-                        <div>
-                            <label class="slider-label" style="display:block;margin-bottom:4px">Title (optional)</label>
-                            <input type="text" id="pe-title" class="settings-text-input" value="${esc(persona?.title || '')}" placeholder="Label to distinguish this persona">
-                        </div>
-                        <div>
-                            <label class="slider-label" style="display:block;margin-bottom:4px">Name *</label>
-                            <input type="text" id="pe-name" class="settings-text-input" value="${esc(persona?.name || '')}" placeholder="Name sent to the AI">
-                        </div>
-                        <div>
-                            <label class="slider-label" style="display:block;margin-bottom:4px">Description *</label>
-                            <textarea id="pe-desc" class="settings-textarea" rows="3" placeholder="Describe this persona">${esc(persona?.description || '')}</textarea>
+                    <div class="persona-edit-layout" style="flex:1;overflow:hidden">
+                        <div class="persona-edit-fields">
+                            <div class="persona-edit-field">
+                                <label>Title <span style="color:rgba(255,255,255,0.3);font-weight:400">(optional)</span></label>
+                                <input type="text" id="pe-title" class="settings-text-input" value="${esc(persona?.title || '')}" placeholder="Label to distinguish this persona">
+                            </div>
+                            <div class="persona-edit-field">
+                                <label>Name *</label>
+                                <input type="text" id="pe-name" class="settings-text-input" value="${esc(persona?.name || '')}" placeholder="Name sent to the AI">
+                                <div class="field-helper">This name is shown in chat messages</div>
+                            </div>
+                            <div class="persona-edit-field">
+                                <label>Description *</label>
+                                <textarea id="pe-desc" class="settings-textarea" rows="3" placeholder="Brief description — shown in persona cards">${esc(persona?.description || '')}</textarea>
+                            </div>
+                            <div class="persona-edit-field">
+                                <label>Persona Text</label>
+                                <textarea id="pe-persona" class="settings-textarea" rows="5" placeholder="Detailed persona info the AI will know about you — appearance, traits, background, preferences...">${esc(persona?.persona || '')}</textarea>
+                                <div class="field-helper">This text is sent to the AI in every conversation. Import from SillyTavern or Backyard AI auto-populates this.</div>
+                            </div>
                         </div>
                     </div>
-                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                    <div class="persona-edit-actions">
                         <button class="btn btn-outlined" id="pe-cancel">Cancel</button>
-                        <button class="btn" id="pe-save" style="background:#3B82F6">Save</button>
+                        <button class="persona-save-btn" id="pe-save">
+                            <span>💾</span> Save Persona
+                        </button>
                     </div>
                 </div>`;
 
-            overlay.querySelector('#persona-edit-cancel').onclick = () => renderList();
-            overlay.querySelector('#pe-cancel').onclick = () => renderList();
+            overlay.querySelector('#persona-edit-cancel').onclick = () => renderView();
+            overlay.querySelector('#pe-cancel').onclick = () => renderView();
             overlay.querySelector('#pe-save').onclick = async () => {
+                const title = document.getElementById('pe-title').value.trim();
                 const name = document.getElementById('pe-name').value.trim();
                 const desc = document.getElementById('pe-desc').value.trim();
+                const personaText = document.getElementById('pe-persona').value.trim();
+
                 if (!name) { alert('Name is required'); return; }
                 if (!desc) { alert('Description is required'); return; }
-                const title = document.getElementById('pe-title').value.trim();
 
-                if (persona) {
+                if (isEdit && persona) {
                     await apiJson('/api/personas/update', {
                         method: 'POST',
-                        body: JSON.stringify({ id: persona.id, title, name, description: desc }),
+                        body: JSON.stringify({ id: persona.id, title, name, description: desc, persona: personaText }),
                     });
-                    Object.assign(persona, { title, name, description: desc });
+                    Object.assign(persona, { title, name, description: desc, persona: personaText });
                 } else {
                     const result = await apiJson('/api/personas', {
                         method: 'POST',
-                        body: JSON.stringify({ title, name, description: desc, persona: '' }),
+                        body: JSON.stringify({ title, name, description: desc, persona: personaText }),
                     });
-                    // Reload personas to get the new one
-                    try {
-                        const res = await fetch('/api/personas', { headers: {'Authorization': `Bearer ${token}`} });
-                        if (res.ok) personas = await res.json();
-                    } catch (_) {}
+                    await refreshPersonas();
                 }
-                renderList();
+                renderView();
             };
         }
 
         document.body.appendChild(overlay);
-        renderList();
+        renderView();
+    }
+
+    async function _exportPersonaSingle(personaId) {
+        try {
+            const res = await fetch('/api/personas', { headers: {'Authorization': `Bearer ${token}`} });
+            if (!res.ok) return;
+            const personas = await res.json();
+            const persona = personas.find(p => p.id === personaId);
+            if (!persona) return;
+
+            const exportData = {
+                format: 'front_porch_ai_persona',
+                id: persona.id,
+                title: persona.title,
+                name: persona.name,
+                description: persona.description,
+                persona: persona.persona || '',
+                learnedFacts: persona.learnedFacts || [],
+                exportedAt: new Date().toISOString(),
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${(persona.name || 'persona').replace(/[^a-zA-Z0-9]/g, '_')}_persona.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) { console.error('Export error:', e); }
+    }
+
+    async function _importPersonaFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                // Detect format and normalize
+                let normalized = null;
+
+                // SillyTavern format
+                if (data.order !== undefined && data.personality !== undefined) {
+                    normalized = {
+                        name: data.name || data.title || 'User',
+                        description: data.description || '',
+                        persona: (data.personality || '') + '\n' + (data.scenario || ''),
+                        title: data.title || '',
+                    };
+                }
+                // TavernAI V2 format
+                else if (data.creator_comment !== undefined || data.description !== undefined) {
+                    normalized = {
+                        name: data.first_mes || data.name || 'User',
+                        description: data.description || '',
+                        persona: (data.message || '') + '\n' + (data.personality || ''),
+                        title: data.title || '',
+                    };
+                }
+                // Backyard AI format
+                else if (data.character !== undefined) {
+                    const char = data.character;
+                    normalized = {
+                        name: char.name2 || char.name || 'User',
+                        description: char.description || '',
+                        persona: (char.personality || '') + '\n' + (char.dialogue_examples || ''),
+                        title: data.title || '',
+                    };
+                }
+                // Generic / Front Porch AI export format
+                else if (data.name !== undefined) {
+                    normalized = {
+                        name: data.name,
+                        description: data.description || '',
+                        persona: data.persona || '',
+                        title: data.title || '',
+                    };
+                }
+
+                if (!normalized) {
+                    alert('Unrecognized persona format. Supported: SillyTavern, TavernAI V2, Backyard AI, Front Porch AI export.');
+                    return;
+                }
+
+                await apiJson('/api/personas', {
+                    method: 'POST',
+                    body: JSON.stringify(normalized),
+                });
+
+                try {
+                    const res = await fetch('/api/personas', { headers: {'Authorization': `Bearer ${token}`} });
+                    if (res.ok) { /* refresh happens via renderView */ }
+                } catch (_) {}
+
+                _showPersonaModal();
+            } catch (err) {
+                alert('Failed to import persona: ' + err.message);
+            }
+        };
+        input.click();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -3707,37 +4067,184 @@
 
     async function loadPersonas() {
         const data = await apiJson('/api/personas');
-        const list = $('#persona-list');
-        if (!list) return;
-
         const personas = Array.isArray(data) ? data : [];
 
+        const heroEl = $('#persona-hero');
+        const factsEl = $('#persona-facts-section');
+        const gridSectionEl = $('#persona-grid-section');
+        const gridEl = $('#persona-grid');
+        const emptyEl = $('#persona-empty');
+
+        if (!heroEl || !factsEl || !gridSectionEl || !gridEl || !emptyEl) return;
+
+        // Reset visibility
+        heroEl.style.display = 'none';
+        factsEl.style.display = 'none';
+        gridSectionEl.style.display = 'none';
+        emptyEl.style.display = 'none';
+
         if (!personas.length) {
-            list.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:40px 0">No personas yet. Click "+ New Persona" to create one.</p>';
+            emptyEl.style.display = 'block';
             return;
         }
 
-        list.innerHTML = personas.map(p => `
-            <div class="persona-card${p.isActive ? ' active' : ''}" data-persona-id="${p.id}">
-                <div class="persona-card-header">
-                    <div class="persona-card-name">${esc(p.name || p.title || 'Untitled')}</div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        ${p.isActive ? '<span class="persona-card-badge">Active</span>' : ''}
-                        <button class="btn-icon btn-edit-persona" data-id="${p.id}" data-title="${esc(p.title || '')}" data-name="${esc(p.name || '')}" data-desc="${esc(p.description || '')}" title="Edit">✏️</button>
-                        <button class="btn-icon btn-delete-persona" data-id="${p.id}" title="Delete">🗑️</button>
+        const active = personas.find(p => p.isActive) || personas[0];
+        const activeColor = personaColor(active.id);
+        const activeFacts = active?.learnedFacts || [];
+
+        // ── Hero Card ──
+        heroEl.style.display = 'block';
+        heroEl.innerHTML = `
+            <div class="persona-hero-card" style="border-color:${activeColor}22;background:linear-gradient(135deg, ${activeColor}18, var(--bg-card) 40%, var(--bg-card))">
+                <div class="persona-hero-inner">
+                    <div class="persona-hero-avatar" style="background:${activeColor};box-shadow:0 0 20px ${activeColor}40">
+                        ${active.avatarPath ? `<img src="${active.avatarPath}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : '👤'}
+                    </div>
+                    <div class="persona-hero-info">
+                        <div class="persona-hero-title-row">
+                            <span class="persona-hero-name">${esc(active.title || active.name || 'Unnamed')}</span>
+                            <span class="persona-active-badge" style="color:${activeColor};background:${activeColor}18;border:1px solid ${activeColor}28">Active</span>
+                        </div>
+                        ${active.title ? `<div class="persona-hero-subtitle" style="color:${activeColor}CC">${esc(active.name)}</div>` : ''}
+                        ${active.description ? `<div class="persona-hero-desc">${esc(active.description)}</div>` : ''}
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                            <span class="persona-stat-chip">
+                                <span class="stat-icon">👥</span>
+                                ${personas.length} persona${personas.length !== 1 ? 's' : ''}
+                            </span>
+                            ${activeFacts.length > 0 ? `
+                            <span class="persona-stat-chip">
+                                <span class="stat-icon">✨</span>
+                                ${activeFacts.length} fact${activeFacts.length !== 1 ? 's' : ''}
+                            </span>` : ''}
+                        </div>
+                    </div>
+                    <div class="persona-hero-actions">
+                        <button class="persona-hero-edit-btn" data-id="${active.id}" title="Edit active persona">✏️</button>
                     </div>
                 </div>
-                <div class="persona-card-desc">
-                    ${esc(p.description || p.persona || 'No description')}
-                </div>
-            </div>
-        `).join('');
+            </div>`;
 
-        // Click card body to set active (not on icon buttons)
-        list.querySelectorAll('.persona-card').forEach(card => {
+        // ── Learned Facts Section ──
+        if (activeFacts.length > 0) {
+            factsEl.style.display = 'block';
+            const factChips = activeFacts.map((f, i) =>
+                `<span class="persona-fact-chip">
+                    ${esc(f)}
+                    <button class="persona-fact-chip-remove" data-fact-idx="${i}" data-persona-id="${active.id}">✕</button>
+                </span>`
+            ).join('');
+
+            factsEl.innerHTML = `
+                <div class="persona-facts-section">
+                    <div class="persona-facts-header" data-facts-toggle>
+                        <span class="persona-facts-header-icon">✨</span>
+                        <span class="persona-facts-header-text">Learned Facts (${activeFacts.length})</span>
+                        <span class="persona-facts-header-sub">Auto-extracted from conversations</span>
+                        <div class="persona-facts-header-actions">
+                            ${activeFacts.length > 5 ? `<button class="persona-facts-clear-btn" data-clear-facts>🗑 Clear All</button>` : ''}
+                            <span class="persona-facts-chevron" data-facts-chevron>▾</span>
+                        </div>
+                    </div>
+                    <div class="persona-facts-body" data-facts-body>
+                        <div class="persona-facts-body-subtitle">Auto-extracted from your conversations:</div>
+                        <div class="persona-fact-chips">${factChips}</div>
+                    </div>
+                </div>`;
+
+            // Facts toggle
+            const factsToggle = factsEl.querySelector('[data-facts-toggle]');
+            const factsBody = factsEl.querySelector('[data-facts-body]');
+            const factsChevron = factsEl.querySelector('[data-facts-chevron]');
+            if (factsToggle && factsBody) {
+                factsToggle.addEventListener('click', () => {
+                    const isOpen = factsBody.classList.toggle('open');
+                    if (factsChevron) factsChevron.classList.toggle('expanded', isOpen);
+                });
+            }
+
+            // Clear all facts
+            const clearAllBtn = factsEl.querySelector('[data-clear-facts]');
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (!confirm('Remove all learned facts? This cannot be undone.')) return;
+                    await api('/api/personas/update', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: active.id, learnedFacts: [] }),
+                    });
+                    loadPersonas();
+                });
+            }
+
+            // Delete individual fact
+            factsEl.querySelectorAll('.persona-fact-chip-remove').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const factIdx = parseInt(btn.dataset.factIdx);
+                    const updated = [...activeFacts];
+                    updated.splice(factIdx, 1);
+                    await api('/api/personas/update', {
+                        method: 'POST',
+                        body: JSON.stringify({ id: active.id, learnedFacts: updated }),
+                    });
+                    loadPersonas();
+                });
+            });
+        }
+
+        // ── Persona Grid ──
+        gridSectionEl.style.display = 'block';
+        const gridCards = personas.map(p => {
+            const isActive = active.id === p.id;
+            const cardColor = personaColor(p.id);
+            const label = p.title || p.name || 'Unnamed';
+            const subtitle = p.title ? p.name : '';
+            const desc = p.description || p.persona || 'No description';
+
+            return `
+                <div class="persona-grid-card ${isActive ? 'active' : ''}" data-persona-id="${p.id}" style="${isActive ? `border-color:${cardColor}55;background:linear-gradient(135deg, ${cardColor}08, var(--bg-card))` : ''}">
+                    <div class="persona-grid-card-header">
+                        <div class="persona-grid-card-avatar" style="background:${cardColor}">
+                            ${p.avatarPath ? `<img src="${p.avatarPath}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : '👤'}
+                        </div>
+                        <div class="persona-grid-card-info">
+                            <div class="persona-grid-card-title">${esc(label)}</div>
+                            ${subtitle ? `<div class="persona-grid-card-subtitle" style="color:${cardColor}BB">${esc(subtitle)}</div>` : ''}
+                        </div>
+                        <button class="persona-grid-card-menu" data-popup-target="${p.id}" title="More actions">⋮</button>
+                    </div>
+                    <div class="persona-grid-card-body">
+                        <div class="persona-grid-card-desc">${esc(desc)}</div>
+                    </div>
+                    <div class="persona-grid-card-footer">
+                        ${p.learnedFacts && p.learnedFacts.length > 0 ? `
+                            <span class="persona-fact-count">
+                                <span class="fact-icon">✨</span>
+                                ${p.learnedFacts.length} facts
+                            </span>
+                            <span style="flex:1"></span>
+                        ` : '<span style="flex:1"></span>'}
+                        ${isActive ? `
+                            <span class="persona-active-badge" style="color:${cardColor};background:${cardColor}18;border:1px solid ${cardColor}28;font-size:9px;padding:1px 6px">Active</span>
+                        ` : `
+                            <button class="persona-select-btn-grid" data-select-id="${p.id}" style="color:${cardColor};border-color:${cardColor}33">Select</button>
+                        `}
+                    </div>
+                </div>`;
+        }).join('');
+
+        gridEl.innerHTML = gridCards;
+
+        // ── Bind Grid Card Events ──
+
+        // Click card to select
+        gridEl.querySelectorAll('.persona-grid-card').forEach(card => {
             card.addEventListener('click', async (e) => {
-                if (e.target.closest('.btn-icon')) return;
+                if (e.target.closest('button') || e.target.closest('.persona-popup')) return;
                 const id = card.dataset.personaId;
+                const currentActive = personas.find(p => p.isActive);
+                if (currentActive && currentActive.id === id) return;
                 await api('/api/personas/active', {
                     method: 'POST',
                     body: JSON.stringify({ id }),
@@ -3746,72 +4253,164 @@
             });
         });
 
-        // Delete buttons
-        list.querySelectorAll('.btn-delete-persona').forEach(btn => {
+        // Select button
+        gridEl.querySelectorAll('[data-select-id]').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                e.preventDefault();
-                const id = btn.dataset.id;
-                showConfirmModal('Delete Persona', 'Are you sure you want to delete this persona?', async () => {
-                    await api('/api/personas/delete', {
-                        method: 'POST',
-                        body: JSON.stringify({ id }),
-                    });
-                    loadPersonas();
+                const id = btn.dataset.selectId;
+                await api('/api/personas/active', {
+                    method: 'POST',
+                    body: JSON.stringify({ id }),
                 });
+                loadPersonas();
             });
         });
 
-        // Edit buttons
-        list.querySelectorAll('.btn-edit-persona').forEach(btn => {
+        // Popup menus
+        gridEl.querySelectorAll('.persona-grid-card-menu').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                showEditPersonaModal(btn.dataset.id, btn.dataset.title, btn.dataset.name, btn.dataset.desc);
+                const targetId = btn.dataset.popupTarget;
+                document.querySelectorAll('.persona-popup.open').forEach(p => p.remove());
+
+                const popup = document.createElement('div');
+                popup.className = 'persona-popup open';
+                const persona = personas.find(p => p.id === targetId);
+                const isActive = persona && persona.isActive;
+
+                popup.innerHTML = `
+                    <button class="persona-popup-item" data-action="edit" data-id="${targetId}">
+                        <span class="popup-icon">✏️</span> Edit
+                    </button>
+                    <button class="persona-popup-item" data-action="export" data-id="${targetId}">
+                        <span class="popup-icon">📤</span> Export JSON
+                    </button>
+                    ${personas.length > 1 ? `
+                    <button class="persona-popup-item danger" data-action="delete" data-id="${targetId}">
+                        <span class="popup-icon">🗑</span> Delete
+                    </button>` : ''}`;
+
+                btn.parentElement.style.position = 'relative';
+                btn.parentElement.appendChild(popup);
+
+                setTimeout(() => {
+                    document.addEventListener('click', function handler(ev) {
+                        if (!popup.contains(ev.target) && ev.target !== btn) {
+                            popup.remove();
+                            document.removeEventListener('click', handler);
+                        }
+                    });
+                }, 10);
             });
         });
+
+        // Popup actions
+        gridEl.querySelectorAll('.persona-popup-item').forEach(item => {
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const action = item.dataset.action;
+                const id = item.dataset.id;
+                document.querySelectorAll('.persona-popup.open').forEach(p => p.remove());
+
+                if (action === 'edit') {
+                    const persona = personas.find(p => p.id === id);
+                    if (persona) showEditPersonaPage(id, persona.title, persona.name, persona.description, persona.persona);
+                } else if (action === 'delete') {
+                    const persona = personas.find(p => p.id === id);
+                    if (!persona) return;
+                    showConfirmModal('Delete Persona', `Are you sure you want to delete "${persona.name}"?`, async () => {
+                        await api('/api/personas/delete', {
+                            method: 'POST',
+                            body: JSON.stringify({ id }),
+                        });
+                        loadPersonas();
+                    });
+                } else if (action === 'export') {
+                    exportPersonaSingle(id);
+                }
+            });
+        });
+
+        // Hero edit button
+        const heroEditBtn = heroEl.querySelector('[data-id]');
+        if (heroEditBtn) {
+            heroEditBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = heroEditBtn.dataset.id;
+                const persona = personas.find(p => p.id === id);
+                if (persona) showEditPersonaPage(id, persona.title, persona.name, persona.description, persona.persona);
+            });
+        }
     }
 
-    function showEditPersonaModal(id, title, name, desc) {
+    function showEditPersonaModal(id, title, name, desc, personaText) {
         let overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.innerHTML = `
-            <div class="modal" style="min-width:min(460px,95vw);">
-                <div class="modal-title">Edit Persona</div>
-                <div style="display:flex;flex-direction:column;gap:12px;">
-                    <label style="color:var(--text-secondary);font-size:13px;">Title
-                        <input id="ep-title" type="text" value="${esc(title)}"
-                               style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
-                    </label>
-                    <label style="color:var(--text-secondary);font-size:13px;">Name
-                        <input id="ep-name" type="text" value="${esc(name)}"
-                               style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
-                    </label>
-                    <label style="color:var(--text-secondary);font-size:13px;">Description
-                        <textarea id="ep-desc" rows="3"
-                                  style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;">${esc(desc)}</textarea>
-                    </label>
+            <div class="modal" style="min-width:min(520px,95vw);max-height:85vh;display:flex;flex-direction:column;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <div class="modal-title" style="margin:0">Edit Persona</div>
+                    <button class="btn btn-outlined" id="btn-ep-cancel" style="padding:4px 8px;font-size:14px">✕</button>
                 </div>
-                <div class="modal-actions">
-                    <button class="btn btn-outlined" id="btn-ep-cancel">Cancel</button>
-                    <button class="btn btn-primary" id="btn-ep-save">Save</button>
+                <div style="display:flex;flex-direction:column;gap:14px;flex:1;overflow-y:auto;">
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Title <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+                        <input id="ep-title" type="text" value="${esc(title)}"
+                               placeholder="Label to distinguish this persona"
+                               style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
+                    </div>
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Name *</label>
+                        <input id="ep-name" type="text" value="${esc(name)}"
+                               placeholder="Name sent to the AI"
+                               style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">This name is shown in chat messages</div>
+                    </div>
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Description *</label>
+                        <textarea id="ep-desc" rows="3"
+                                  placeholder="Brief description — shown in persona cards"
+                                  style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;">${esc(desc)}</textarea>
+                    </div>
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Persona Text</label>
+                        <textarea id="ep-persona" rows="5"
+                                  placeholder="Detailed persona info the AI will know about you — appearance, traits, background, preferences..."
+                                  style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;">${esc(personaText || '')}</textarea>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">This text is sent to the AI in every conversation. Import from SillyTavern or Backyard AI auto-populates this.</div>
+                    </div>
+                </div>
+                <div class="modal-actions" style="margin-top:16px">
+                    <button class="btn btn-outlined" id="btn-ep-cancel2">Cancel</button>
+                    <button class="btn btn-primary" id="btn-ep-save">💾 Save Persona</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
 
         overlay.querySelector('#btn-ep-cancel').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('#btn-ep-cancel2').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
         overlay.querySelector('#btn-ep-save').addEventListener('click', async () => {
+            const name = overlay.querySelector('#ep-name').value.trim();
+            const desc = overlay.querySelector('#ep-desc').value.trim();
+            if (!name) { showInfoModal('Error', 'Name is required.'); return; }
+            if (!desc) { showInfoModal('Error', 'Description is required.'); return; }
             const res = await api('/api/personas/update', {
                 method: 'POST',
                 body: JSON.stringify({
                     id,
                     title: overlay.querySelector('#ep-title').value.trim(),
-                    name: overlay.querySelector('#ep-name').value.trim(),
-                    description: overlay.querySelector('#ep-desc').value.trim(),
+                    name,
+                    description: desc,
+                    persona: overlay.querySelector('#ep-persona').value.trim(),
                 }),
             });
             if (res && res.ok) { overlay.remove(); loadPersonas(); }
         });
+    }
+
+    function showEditPersonaPage(id, title, name, desc, personaText) {
+        showEditPersonaModal(id, title, name, desc, personaText);
     }
 
     function showCreatePersonaModal() {
@@ -3824,34 +4423,44 @@
         }
 
         overlay.innerHTML = `
-            <div class="modal" style="min-width:min(460px,95vw);">
-                <div class="modal-title">Create Persona</div>
-                <div style="display:flex;flex-direction:column;gap:12px;">
-                    <label style="color:var(--text-secondary);font-size:13px;">Title
-                        <input id="cp-title" type="text" placeholder="e.g. Adventure Writer"
-                               style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
-                    </label>
-                    <label style="color:var(--text-secondary);font-size:13px;">Display Name
-                        <input id="cp-name" type="text" value="User" placeholder="Your name in chat"
-                               style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
-                    </label>
-                    <label style="color:var(--text-secondary);font-size:13px;">Description
-                        <textarea id="cp-desc" rows="2" placeholder="Short description..."
-                                  style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;"></textarea>
-                    </label>
-                    <label style="color:var(--text-secondary);font-size:13px;">Persona Text
-                        <textarea id="cp-persona" rows="4" placeholder="Describe your persona in detail..."
-                                  style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;"></textarea>
-                    </label>
+            <div class="modal" style="min-width:min(520px,95vw);max-height:85vh;display:flex;flex-direction:column;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                    <div class="modal-title" style="margin:0">Create Persona</div>
+                    <button class="btn btn-outlined" id="btn-cp-close" style="padding:4px 8px;font-size:14px">✕</button>
                 </div>
-                <div class="modal-actions">
+                <div style="display:flex;flex-direction:column;gap:14px;flex:1;overflow-y:auto;">
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Title <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+                        <input id="cp-title" type="text" placeholder="e.g. Adventure Writer"
+                               style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
+                    </div>
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Name *</label>
+                        <input id="cp-name" type="text" value="User" placeholder="Your name in chat"
+                               style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;">
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">This name is shown in chat messages</div>
+                    </div>
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Description *</label>
+                        <textarea id="cp-desc" rows="3" placeholder="Brief description — shown in persona cards"
+                                  style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;"></textarea>
+                    </div>
+                    <div>
+                        <label style="color:var(--text-secondary);font-size:12px;font-weight:600;display:block;margin-bottom:4px">Persona Text</label>
+                        <textarea id="cp-persona" rows="5" placeholder="Detailed persona info the AI will know about you — appearance, traits, background, preferences..."
+                                  style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:inherit;font-size:14px;outline:none;resize:vertical;"></textarea>
+                        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">This text is sent to the AI in every conversation. Import from SillyTavern or Backyard AI auto-populates this.</div>
+                    </div>
+                </div>
+                <div class="modal-actions" style="margin-top:16px">
                     <button class="btn btn-outlined" id="btn-cp-cancel">Cancel</button>
-                    <button class="btn btn-primary" id="btn-cp-save">Create</button>
+                    <button class="btn btn-primary" id="btn-cp-save">💾 Create Persona</button>
                 </div>
             </div>
         `;
         overlay.classList.add('active');
 
+        overlay.querySelector('#btn-cp-close').addEventListener('click', () => overlay.classList.remove('active'));
         overlay.querySelector('#btn-cp-cancel').addEventListener('click', () => overlay.classList.remove('active'));
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('active'); });
 
@@ -3861,7 +4470,8 @@
             const desc = overlay.querySelector('#cp-desc').value.trim();
             const persona = overlay.querySelector('#cp-persona').value.trim();
 
-            if (!title) { showInfoModal('Error', 'Title is required.'); return; }
+            if (!name) { showInfoModal('Error', 'Name is required.'); return; }
+            if (!desc) { showInfoModal('Error', 'Description is required.'); return; }
 
             const res = await api('/api/personas', {
                 method: 'POST',
@@ -3874,135 +4484,611 @@
         });
     }
 
+    async function exportPersonaSingle(personaId) {
+        try {
+            const data = await apiJson('/api/personas');
+            const persona = (Array.isArray(data) ? data : []).find(p => p.id === personaId);
+            if (!persona) return;
+
+            const exportData = {
+                format: 'front_porch_ai_persona',
+                id: persona.id,
+                title: persona.title,
+                name: persona.name,
+                description: persona.description,
+                persona: persona.persona || '',
+                learnedFacts: persona.learnedFacts || [],
+                exportedAt: new Date().toISOString(),
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${(persona.name || 'persona').replace(/[^a-zA-Z0-9]/g, '_')}_persona.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) { console.error('Export error:', e); }
+    }
+
+    async function importPersonaFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                let normalized = null;
+
+                // SillyTavern format
+                if (data.order !== undefined && data.personality !== undefined) {
+                    normalized = {
+                        name: data.name || data.title || 'User',
+                        description: data.description || '',
+                        persona: (data.personality || '') + '\n' + (data.scenario || ''),
+                        title: data.title || '',
+                    };
+                }
+                // TavernAI V2 format
+                else if (data.creator_comment !== undefined || (data.description !== undefined && data.first_mes !== undefined)) {
+                    normalized = {
+                        name: data.first_mes || data.name || 'User',
+                        description: data.description || '',
+                        persona: (data.message || '') + '\n' + (data.personality || ''),
+                        title: data.title || '',
+                    };
+                }
+                // Backyard AI format
+                else if (data.character !== undefined) {
+                    const char = data.character;
+                    normalized = {
+                        name: char.name2 || char.name || 'User',
+                        description: char.description || '',
+                        persona: (char.personality || '') + '\n' + (char.dialogue_examples || ''),
+                        title: data.title || '',
+                    };
+                }
+                // Generic / Front Porch AI export format
+                else if (data.name !== undefined) {
+                    normalized = {
+                        name: data.name,
+                        description: data.description || '',
+                        persona: data.persona || '',
+                        title: data.title || '',
+                    };
+                }
+
+                if (!normalized) {
+                    showInfoModal('Import Failed', 'Unrecognized persona format. Supported: SillyTavern, TavernAI V2, Backyard AI, Front Porch AI export.');
+                    return;
+                }
+
+                const res = await api('/api/personas', {
+                    method: 'POST',
+                    body: JSON.stringify(normalized),
+                });
+                if (res && res.ok) {
+                    loadPersonas();
+                } else {
+                    showInfoModal('Import Failed', 'Failed to import persona.');
+                }
+            } catch (err) {
+                showInfoModal('Import Failed', 'Failed to parse persona file: ' + err.message);
+            }
+        };
+        input.click();
+    }
+
     // ═══════════════════════════════════════════════════════════
-    // WORLD MANAGEMENT
+    // WORLD MANAGEMENT — Flutter Parity
     // ═══════════════════════════════════════════════════════════
+
+    // PersonaColors palette (matches Flutter's PersonaColors)
+    const WORLDS_PALETTE = [
+        '#3B82F6', '#64748B', '#0EA5E9', '#EF4444', '#F59E0B', '#10B981',
+        '#06B6D4', '#2563EB', '#F97316', '#84CC16', '#14B8A6', '#059669',
+    ];
+
+    function getWorldColor(worldName) {
+        const hash = worldName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+        return WORLDS_PALETTE[hash % WORLDS_PALETTE.length];
+    }
+
+    function getWorldAvatarUrl(world, characterMap) {
+        if (world.linkedCharacterName && characterMap[world.linkedCharacterName]) {
+            const char = characterMap[world.linkedCharacterName];
+            if (char.hasAvatar) {
+                return `/api/characters/${char.id}/avatar?token=${encodeURIComponent(token)}`;
+            }
+        }
+        return null;
+    }
+
+    async function buildCharacterMap() {
+        const chars = await apiJson('/api/characters');
+        const map = {};
+        if (Array.isArray(chars)) {
+            chars.forEach(c => { map[c.name] = c; });
+        }
+        return map;
+    }
 
     async function loadWorlds() {
         const data = await apiJson('/api/worlds');
-        const list = document.querySelector('#world-list');
-        if (!list) return;
+        const grid = document.querySelector('#world-grid');
+        if (!grid) return;
 
         const worlds = Array.isArray(data) ? data : [];
+        const characterMap = await buildCharacterMap();
+
+        // Calculate stats
+        const totalLore = worlds.reduce((sum, w) => {
+            return sum + ((w.lorebook && w.lorebook.entries) ? w.lorebook.entries.length : 0);
+        }, 0);
+        const linkedCount = worlds.filter(w => w.linkedCharacterName).length;
+
+        // Update hero chips
+        const heroWorldsEl = document.getElementById('hero-worlds-count');
+        const heroLoreEl = document.getElementById('hero-lore-count');
+        if (heroWorldsEl) heroWorldsEl.textContent = `${worlds.length} world${worlds.length !== 1 ? 's' : ''}`;
+        if (heroLoreEl) heroLoreEl.textContent = `${totalLore} lore entry${totalLore !== 1 ? 's' : ''}`;
+
+        // Update stats section
+        const statWorldsEl = document.getElementById('stat-worlds');
+        const statLoreEl = document.getElementById('stat-lore');
+        const statLinkedEl = document.getElementById('stat-linked');
+        const countLabelEl = document.getElementById('worlds-count-label');
+        const statsContainer = document.getElementById('worlds-stats');
+        if (statWorldsEl) statWorldsEl.textContent = worlds.length;
+        if (statLoreEl) statLoreEl.textContent = totalLore;
+        if (statLinkedEl) statLinkedEl.textContent = linkedCount;
+        if (countLabelEl) countLabelEl.textContent = worlds.length;
+        if (statsContainer) {
+            statsContainer.style.display = worlds.length > 0 ? '' : 'none';
+        }
+
         if (!worlds.length) {
-            list.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:40px 0">No worlds yet. Click "+ New World" to create one.</p>';
+            grid.innerHTML = '<div class="worlds-empty"><p>No worlds yet. Click "+ New World" to create one.</p></div>';
             return;
         }
 
-        list.innerHTML = worlds.map(w => {
+        const globeSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
+        const linkSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>`;
+        const moreSvg = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>`;
+
+        // Cache all worlds for fresh data fetch on edit
+        const worldsCache = new Map();
+        worlds.forEach(w => worldsCache.set(w.id, w));
+
+        grid.innerHTML = worlds.map(w => {
             const entryCount = w.lorebook && w.lorebook.entries ? w.lorebook.entries.length : 0;
-            return `<div class="persona-card" style="margin:0">
-                <div class="persona-card-header">
-                    <div class="persona-card-name">${esc(w.name)}</div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <span style="color:var(--text-muted);font-size:12px">${entryCount} entries</span>
-                        <button class="btn-icon btn-edit-world" data-id="${w.id}" data-name="${esc(w.name)}" data-desc="${esc(w.description || '')}" data-lore='${esc(JSON.stringify(w.lorebook || { entries: [] }))}' title="Edit">✏️</button>
-                        <button class="btn-icon btn-delete-world" data-id="${w.id}" title="Delete">🗑️</button>
+            const worldColor = getWorldColor(w.name);
+            const linkedName = w.linkedCharacterName || '';
+            const desc = w.description || '';
+
+            return `<div class="world-card" data-id="${esc(w.id)}" data-name="${esc(w.name)}" data-desc="${esc(desc)}" data-linked="${esc(linkedName)}">
+                <div class="world-card-top">
+                    <div class="world-card-avatar-placeholder" style="background:${worldColor}" data-world-id="${esc(w.id)}">
+                        <img class="world-card-avatar-img" src="" alt="${esc(w.name)}" style="display:none;width:100%;height:100%;border-radius:50%;object-fit:cover" loading="lazy">
+                        <span class="world-card-avatar-letter">${(w.name.charAt(0) || '?').toUpperCase()}</span>
+                    </div>
+                    <div class="world-card-info">
+                        <div class="world-card-name" title="${esc(w.name)}">${esc(w.name)}</div>
+                        ${linkedName ? `<div class="world-card-link-badge" style="background:${worldColor}22;color:${worldColor};border:1px solid ${worldColor}66">${linkSvg}${esc(linkedName)}</div>` : ''}
+                    </div>
+                    <div class="world-card-menu">
+                        <button class="world-card-menu-btn" title="More options">${moreSvg}</button>
+                        <div class="world-card-menu-dropdown">
+                            <button class="world-card-menu-item wm-edit" data-id="${w.id}">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="rgba(255,255,255,0.7)"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                                Edit
+                            </button>
+                            <button class="world-card-menu-item wm-export" data-id="${w.id}" data-name="${esc(w.name)}">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="var(--accent-cyan)"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                                Export JSON
+                            </button>
+                            <button class="world-card-menu-item danger wm-delete" data-id="${w.id}" data-name="${esc(w.name)}">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="var(--accent-red)"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                Delete
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="persona-card-desc">${esc(w.description || 'No description')}</div>
+                <div class="world-card-desc">${desc ? esc(desc) : '<span style="opacity:0.3">No description</span>'}</div>
+                <div class="world-card-entries" style="background:${worldColor}11;color:${worldColor};border:1px solid ${worldColor}33">${entryCount} entry${entryCount !== 1 ? 's' : ''}</div>
             </div>`;
         }).join('');
 
-        list.querySelectorAll('.btn-edit-world').forEach(btn => {
-            btn.addEventListener('click', () => {
-                let lore;
-                try { lore = JSON.parse(btn.dataset.lore); } catch (_) { lore = { entries: [] }; }
-                showWorldModal(btn.dataset.id, btn.dataset.name, btn.dataset.desc, lore);
+        // Resolve and load character avatars for linked worlds
+        const linkedWorlds = worlds.filter(w => w.linkedCharacterName);
+        console.log('[Worlds] Total worlds:', worlds.length);
+        console.log('[Worlds] Linked worlds:', linkedWorlds.length);
+        console.log('[Worlds] Character map size:', Object.keys(characterMap).length);
+        
+        linkedWorlds.forEach(w => {
+            const linkedName = w.linkedCharacterName;
+            const char = characterMap[linkedName];
+            
+            console.log(`[Worlds] World: "${w.name}"`);
+            console.log(`[Worlds]   linkedCharacterName: "${linkedName}"`);
+            console.log(`[Worlds]   char in map: ${!!char}`);
+            if (char) {
+                console.log(`[Worlds]   char.id: ${char.id}`);
+                console.log(`[Worlds]   char.hasAvatar: ${char.hasAvatar}`);
+                console.log(`[Worlds]   char.name: "${char.name}"`);
+            }
+            
+            if (!char) {
+                // Try case-insensitive match
+                const matched = Object.keys(characterMap).find(name => name.toLowerCase() === linkedName.toLowerCase());
+                if (matched) {
+                    console.log(`[Worlds]   Case-insensitive match found: "${matched}"`);
+                    const char2 = characterMap[matched];
+                    console.log(`[Worlds]   char2.hasAvatar: ${char2.hasAvatar}`);
+                    if (char2.hasAvatar) {
+                        _loadAvatar(w.id, char2.id, linkedName);
+                        return;
+                    }
+                }
+                console.log(`[Worlds]   No match found. Available names starting with "${linkedName.charAt(0)}":`, Object.keys(characterMap).filter(n => n[0] === linkedName[0]).slice(0, 5));
+                return;
+            }
+            
+            if (!char.hasAvatar) {
+                console.log(`[Worlds]   Character has no avatar`);
+                return;
+            }
+            
+            _loadAvatar(w.id, char.id, linkedName);
+        });
+
+        function _loadAvatar(worldId, charId, charName) {
+            const avatarPlaceholder = document.querySelector(`.world-card-avatar-placeholder[data-world-id="${worldId}"]`);
+            console.log(`[Worlds]   Placeholder found: ${!!avatarPlaceholder}`);
+            
+            if (!avatarPlaceholder) {
+                // Try to find by iterating all placeholders
+                const allPlaceholders = document.querySelectorAll('.world-card-avatar-placeholder');
+                console.log(`[Worlds]   Found ${allPlaceholders.length} placeholders total`);
+                allPlaceholders.forEach(p => {
+                    console.log(`[Worlds]     Placeholder data-world-id: "${p.dataset.worldId}"`);
+                });
+                return;
+            }
+            
+            const img = avatarPlaceholder.querySelector('.world-card-avatar-img');
+            const letter = avatarPlaceholder.querySelector('.world-card-avatar-letter');
+            console.log(`[Worlds]   img element: ${!!img}, letter element: ${!!letter}`);
+            
+            if (img && letter) {
+                const avatarUrl = `/api/characters/${charId}/avatar?token=${encodeURIComponent(token)}`;
+                console.log(`[Worlds]   Loading avatar URL: ${avatarUrl}`);
+                console.log(`[Worlds]   Token exists: ${!!token}`);
+                img.src = avatarUrl;
+                img.onload = () => {
+                    console.log(`[Worlds]   Avatar loaded successfully for ${charName}`);
+                    img.style.display = '';
+                    letter.style.display = 'none';
+                    avatarPlaceholder.style.background = 'transparent';
+                };
+                img.onerror = (e) => {
+                    console.error(`[Worlds]   Avatar failed for ${charName}:`, e);
+                    img.style.display = 'none';
+                    letter.style.display = '';
+                };
+            }
+        }
+
+        // Menu button handlers
+        grid.querySelectorAll('.world-card-menu-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const dropdown = btn.nextElementSibling;
+                // Close all other dropdowns
+                grid.querySelectorAll('.world-card-menu-dropdown.show').forEach(d => {
+                    if (d !== dropdown) d.classList.remove('show');
+                });
+                dropdown.classList.toggle('show');
             });
         });
 
-        list.querySelectorAll('.btn-delete-world').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if (!confirm('Delete this world?')) return;
-                await api('/api/worlds/delete', { method: 'POST', body: JSON.stringify({ id: btn.dataset.id }) });
+        // Close dropdowns on outside click
+        document.addEventListener('click', () => {
+            grid.querySelectorAll('.world-card-menu-dropdown.show').forEach(d => d.classList.remove('show'));
+        });
+
+        // Edit handlers — fetch fresh data to avoid JSON escaping issues
+        grid.querySelectorAll('.wm-edit').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const worldId = btn.dataset.id;
+                const cached = worldsCache.get(worldId);
+                if (cached) {
+                    let lore;
+                    try { lore = cached.lorebook || { entries: [] }; } catch (_) { lore = { entries: [] }; }
+                    showWorldModal(cached.id, cached.name, cached.description || '', lore, cached.linkedCharacterName || '');
+                } else {
+                    const allWorlds = await apiJson('/api/worlds');
+                    const world = Array.isArray(allWorlds) ? allWorlds.find(w => w.id === worldId) : null;
+                    if (world) {
+                        let lore;
+                        try { lore = world.lorebook || { entries: [] }; } catch (_) { lore = { entries: [] }; }
+                        showWorldModal(world.id, world.name, world.description || '', lore, world.linkedCharacterName || '');
+                    }
+                }
+            });
+        });
+
+        // Export handlers — fetch fresh data
+        grid.querySelectorAll('.wm-export').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const worldId = btn.dataset.id;
+                const cached = worldsCache.get(worldId);
+                let lore = cached ? (cached.lorebook || { entries: [] }) : { entries: [] };
+                try {
+                    if (!cached) {
+                        const allWorlds = await apiJson('/api/worlds');
+                        const world = Array.isArray(allWorlds) ? allWorlds.find(w => w.id === worldId) : null;
+                        if (world) lore = world.lorebook || { entries: [] };
+                    }
+                } catch (_) {}
+                const name = btn.dataset.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+                const blob = new Blob([JSON.stringify(lore, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `${name}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            });
+        });
+
+        // Delete handlers
+        grid.querySelectorAll('.wm-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const name = btn.dataset.name;
+                if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+                api('/api/worlds/delete', { method: 'POST', body: JSON.stringify({ id: btn.dataset.id }) });
                 loadWorlds();
             });
         });
     }
 
-    function showWorldModal(editId, name, desc, lorebook) {
+    function showWorldModal(editId, name, desc, lorebook, linkedName) {
         const isEdit = !!editId;
         let lore = lorebook || { entries: [] };
 
-        let overlay = document.createElement('div');
-        overlay.className = 'modal-overlay active';
+        const overlay = document.createElement('div');
+        overlay.className = 'worlds-modal-overlay';
 
-        function renderModal() {
-            let entriesHtml = lore.entries.map((e, i) => `
-                <div style="display:flex;gap:8px;align-items:center;padding:8px;background:var(--bg-input);border-radius:var(--radius-sm);">
-                    <div style="flex:1">
-                        <div style="color:var(--text-primary);font-size:13px;font-weight:600">${esc(e.key || '(no key)')}</div>
-                        <div style="color:var(--text-secondary);font-size:11px;max-height:30px;overflow:hidden">${esc(e.content || '')}</div>
-                    </div>
-                    <button class="btn-icon wm-edit-entry" data-idx="${i}" title="Edit">✏️</button>
-                    <button class="btn-icon wm-del-entry" data-idx="${i}" title="Delete">🗑️</button>
-                </div>
-            `).join('');
-
-            overlay.innerHTML = `
-                <div class="modal" style="min-width:min(520px,95vw);max-height:80vh;display:flex;flex-direction:column;">
-                    <div class="modal-title">${isEdit ? 'Edit' : 'Create'} World</div>
-                    <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;padding:4px">
-                        <div><label class="slider-label" style="display:block;margin-bottom:4px">Name</label>
-                            <input type="text" id="wm-name" class="settings-text-input" value="${esc(name || '')}"></div>
-                        <div><label class="slider-label" style="display:block;margin-bottom:4px">Description</label>
-                            <textarea id="wm-desc" class="settings-textarea" rows="2">${esc(desc || '')}</textarea></div>
-                        <div>
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                                <label class="slider-label">Lorebook Entries</label>
-                                <button class="btn btn-outlined" id="btn-wm-add-entry" style="font-size:12px;padding:4px 10px">+ Add</button>
-                            </div>
-                            <div style="display:flex;flex-direction:column;gap:6px">${entriesHtml || '<p style="color:var(--text-muted);font-size:12px">No entries yet.</p>'}</div>
+        function renderEntries() {
+            if (lore.entries.length === 0) {
+                return `<div class="lore-entries-empty">
+                    <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+                    <p>No lorebook entries yet</p>
+                    <small>Add entries to define world lore that will be injected into conversations</small>
+                </div>`;
+            }
+            return lore.entries.map((e, i) => `
+                <div class="lore-entry-card ${e.enabled ? 'enabled' : ''}" data-idx="${i}">
+                    <div class="lore-entry-header">
+                        <input type="text" class="lore-entry-name" placeholder="Entry name" value="${esc(e.name || '')}" data-idx="${i}">
+                        <div class="lore-entry-actions">
+                            <button class="lore-entry-toggle" data-idx="${i}" title="${e.enabled ? 'Disable entry' : 'Enable entry'}">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="${e.enabled ? '#10B981' : 'rgba(255,255,255,0.38)'}">
+                                    <path d="${e.enabled
+                                        ? 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'
+                                        : 'M11.83 9L15 12.16V12c0-1.66-1.34-3-3-3h-.17zm-5.84.7c.25-.44.55-.85.89-1.21L12 15.11c-3.17-.31-5.64-2.18-6.01-4.4zm11.75 2.63c-.25.44-.55.85-.89 1.21L12 8.89c3.17.31 5.64 2.18 6.01 4.4zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z'
+                                    }"/>
+                                </svg>
+                            </button>
+                            <button class="lore-entry-delete" data-idx="${i}" title="Delete entry">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="var(--accent-red)"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            </button>
                         </div>
                     </div>
-                    <div class="modal-actions">
-                        <button class="btn btn-outlined" id="btn-wm-cancel">Cancel</button>
-                        <button class="btn btn-primary" id="btn-wm-save">${isEdit ? 'Save' : 'Create'}</button>
+                    <input type="text" class="lore-entry-key-field" placeholder="Keywords (comma-separated)" value="${esc(e.key || '')}" data-idx="${i}">
+                    <textarea class="lore-entry-content-field" placeholder="The actual lore text that will be injected..." data-idx="${i}" rows="3">${esc(e.content || '')}</textarea>
+                    <div class="lore-entry-advanced">
+                        <label class="lore-entry-checkbox">
+                            <input type="checkbox" ${e.constant ? 'checked' : ''} data-idx="${i}"> Always Active
+                        </label>
+                        ${!e.constant ? `
+                        <div class="lore-entry-sticky">
+                            Sticky Depth:
+                            <input type="number" min="1" max="10" value="${e.stickyDepth || 1}" data-idx="${i}">
+                        </div>` : ''}
                     </div>
-                </div>`;
+                </div>
+            `).join('');
+        }
 
-            overlay.querySelector('#btn-wm-cancel').addEventListener('click', () => overlay.remove());
-            overlay.querySelector('#btn-wm-add-entry')?.addEventListener('click', () => {
-                lore.entries.push({ key: 'New Key', content: '', enabled: true, constant: false, stickyDepth: 4 });
-                renderModal();
-            });
-            overlay.querySelectorAll('.wm-del-entry').forEach(btn => {
-                btn.addEventListener('click', () => { lore.entries.splice(parseInt(btn.dataset.idx), 1); renderModal(); });
-            });
-            overlay.querySelectorAll('.wm-edit-entry').forEach(btn => {
+        overlay.innerHTML = `
+            <div class="worlds-modal">
+                <div class="worlds-modal-header">
+                    <div class="worlds-modal-header-left">
+                        <div class="worlds-modal-header-icon">
+                            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                        </div>
+                        <div class="worlds-modal-title">${isEdit ? 'Edit World' : 'Create World'}</div>
+                    </div>
+                    <button class="worlds-modal-close" title="Close">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </button>
+                </div>
+                <div class="worlds-modal-body">
+                    <div class="worlds-modal-section">
+                        <div class="worlds-modal-section-title" style="color:var(--accent-purple)">
+                            <svg viewBox="0 0 24 24"><path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 9h2V7h-2v2z"/></svg>
+                            <span>Basic Information</span>
+                        </div>
+                        <div class="worlds-modal-field">
+                            <label class="worlds-modal-label">World Name</label>
+                            <input type="text" class="worlds-modal-input" id="wm-name" placeholder="Enter a name for this world" value="${esc(name || '')}">
+                        </div>
+                        <div class="worlds-modal-field">
+                            <label class="worlds-modal-label">Description</label>
+                            <textarea class="worlds-modal-textarea" id="wm-desc" rows="3" placeholder="Brief description of this world">${esc(desc || '')}</textarea>
+                        </div>
+                    </div>
+                    <div class="worlds-modal-section">
+                        <div class="worlds-modal-section-title" style="color:var(--accent-green)">
+                            <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+                            <span>Lorebook Entries (<span id="lore-entry-count">${lore.entries.length}</span>)</span>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+                            <button class="btn btn-outlined" id="btn-wm-add-entry" style="font-size:12px;padding:6px 14px;color:var(--accent-green);border-color:rgba(16,185,129,0.3)">
+                                <span style="margin-right:4px">+</span> Add Entry
+                            </button>
+                        </div>
+                        <div id="lore-entries-container">${renderEntries()}</div>
+                    </div>
+                </div>
+                <div class="worlds-modal-actions">
+                    <button class="worlds-modal-cancel" id="btn-wm-cancel">Cancel</button>
+                    <button class="worlds-modal-save" id="btn-wm-save">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        ${isEdit ? 'Save Changes' : 'Create World'}
+                    </button>
+                </div>
+            </div>
+        `;
+
+        overlay.querySelector('#btn-wm-cancel').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('.worlds-modal-close').addEventListener('click', () => overlay.remove());
+
+        overlay.querySelector('#btn-wm-add-entry')?.addEventListener('click', () => {
+            lore.entries.push({ name: '', key: '', content: '', enabled: true, constant: false, stickyDepth: 1 });
+            const countEl = overlay.querySelector('#lore-entry-count');
+            if (countEl) countEl.textContent = lore.entries.length;
+            overlay.querySelector('#lore-entries-container').innerHTML = renderEntries();
+            _bindLoreEntryEvents();
+        });
+
+        function _bindLoreEntryEvents() {
+            // Delete entry
+            overlay.querySelectorAll('.lore-entry-delete').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const idx = parseInt(btn.dataset.idx);
-                    const entry = lore.entries[idx];
-                    const key = prompt('Keywords (comma separated):', entry.key || '');
-                    if (key === null) return;
-                    const content = prompt('Content:', entry.content || '');
-                    if (content === null) return;
-                    entry.key = key;
-                    entry.content = content;
-                    renderModal();
+                    lore.entries.splice(parseInt(btn.dataset.idx), 1);
+                    const countEl = overlay.querySelector('#lore-entry-count');
+                    if (countEl) countEl.textContent = lore.entries.length;
+                    overlay.querySelector('#lore-entries-container').innerHTML = renderEntries();
+                    _bindLoreEntryEvents();
                 });
             });
 
-            overlay.querySelector('#btn-wm-save').addEventListener('click', async () => {
-                const newName = overlay.querySelector('#wm-name').value.trim();
-                if (!newName) { showInfoModal('Error', 'Name is required.'); return; }
-                const payload = {
-                    name: newName,
-                    description: overlay.querySelector('#wm-desc').value.trim(),
-                    lorebook: lore,
-                };
-                if (isEdit) payload.id = editId;
+            // Toggle enabled
+            overlay.querySelectorAll('.lore-entry-toggle').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    lore.entries[idx].enabled = !lore.entries[idx].enabled;
+                    overlay.querySelector('#lore-entries-container').innerHTML = renderEntries();
+                    _bindLoreEntryEvents();
+                });
+            });
 
-                const endpoint = isEdit ? '/api/worlds/update' : '/api/worlds';
-                const res = await api(endpoint, { method: 'POST', body: JSON.stringify(payload) });
-                if (res && res.ok) { overlay.remove(); loadWorlds(); }
-                else { showInfoModal('Error', 'Failed to save world.'); }
+            // Update entry data on input
+            overlay.querySelectorAll('.lore-entry-name').forEach(input => {
+                input.addEventListener('input', () => {
+                    lore.entries[parseInt(input.dataset.idx)].name = input.value;
+                });
+            });
+            overlay.querySelectorAll('.lore-entry-key-field').forEach(input => {
+                input.addEventListener('input', () => {
+                    lore.entries[parseInt(input.dataset.idx)].key = input.value;
+                });
+            });
+            overlay.querySelectorAll('.lore-entry-content-field').forEach(input => {
+                input.addEventListener('input', () => {
+                    lore.entries[parseInt(input.dataset.idx)].content = input.value;
+                });
+            });
+
+            // Constant checkbox
+            overlay.querySelectorAll('.lore-entry-checkbox input').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const idx = parseInt(cb.dataset.idx);
+                    lore.entries[idx].constant = cb.checked;
+                    overlay.querySelector('#lore-entries-container').innerHTML = renderEntries();
+                    _bindLoreEntryEvents();
+                });
+            });
+
+            // Sticky depth
+            overlay.querySelectorAll('.lore-entry-sticky input').forEach(input => {
+                input.addEventListener('input', () => {
+                    lore.entries[parseInt(input.dataset.idx)].stickyDepth = parseInt(input.value) || 1;
+                });
             });
         }
 
+        _bindLoreEntryEvents();
+
+        overlay.querySelector('#btn-wm-save').addEventListener('click', async () => {
+            const newName = overlay.querySelector('#wm-name').value.trim();
+            if (!newName) {
+                overlay.querySelector('#wm-name').style.borderColor = 'var(--accent-red)';
+                return;
+            }
+            const payload = {
+                id: editId,
+                name: newName,
+                description: overlay.querySelector('#wm-desc').value.trim(),
+                lorebook: lore,
+            };
+            const endpoint = isEdit ? '/api/worlds/update' : '/api/worlds';
+            const res = await api(endpoint, { method: 'POST', body: JSON.stringify(payload) });
+            if (res && res.ok) {
+                overlay.remove();
+                loadWorlds();
+            } else {
+                const err = await res?.json().catch(() => ({}));
+                showInfoModal('Error', err.message || 'Failed to save world.');
+            }
+        });
+
         document.body.appendChild(overlay);
-        renderModal();
+    }
+
+    async function importWorldFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                // The import should contain a lorebook with entries
+                // We need to create a world with this lorebook
+                const name = prompt('Enter world name:', data.name || 'Imported World');
+                if (!name) return;
+                const desc = prompt('Enter description (optional):', data.description || '') || '';
+                const res = await api('/api/worlds', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name: name,
+                        description: desc,
+                        lorebook: data,
+                    }),
+                });
+                if (res && res.ok) {
+                    loadWorlds();
+                } else {
+                    showInfoModal('Error', 'Failed to import world.');
+                }
+            } catch (err) {
+                showInfoModal('Import Failed', 'Failed to parse world file: ' + err.message);
+            }
+        });
+        input.click();
     }
 
     function initTabSwitching() {
@@ -4549,8 +5635,17 @@
         // Create persona button
         $('#btn-create-persona')?.addEventListener('click', showCreatePersonaModal);
 
-        // Create world button
-        $('#btn-create-world')?.addEventListener('click', () => showWorldModal(null, '', '', { entries: [] }));
+        // Import persona button
+        $('#btn-import-persona')?.addEventListener('click', importPersonaFile);
+
+        // Empty state buttons
+        $('#persona-create-first')?.addEventListener('click', showCreatePersonaModal);
+        $('#persona-import-first')?.addEventListener('click', importPersonaFile);
+
+        // New world button
+        $('#btn-new-world')?.addEventListener('click', () => showWorldModal(null, '', '', { entries: [] }, ''));
+        // Import world button
+        $('#btn-import-world')?.addEventListener('click', importWorldFile);
 
         // Create character button
         // Manual character creator is now handled by ManualCreatorModule (manual_creator.js)
