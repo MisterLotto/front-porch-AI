@@ -144,6 +144,9 @@ jobs:
             --workpath ./build_tmp/kokoro \
             --specpath ./build_tmp/kokoro \
             --clean \
+            --exclude-module torch \
+            --exclude-module torchvision \
+            --exclude-module torchaudio \
             --noconfirm
           echo "Kokoro built at: $DEST/kokoro_tts/"
 
@@ -161,6 +164,9 @@ jobs:
             --workpath ./build_tmp/piper \
             --specpath ./build_tmp/piper \
             --clean \
+            --exclude-module torch \
+            --exclude-module torchvision \
+            --exclude-module torchaudio \
             --noconfirm
           echo "Piper built at: $DEST/piper/"
 
@@ -179,6 +185,9 @@ jobs:
             --workpath ./build_tmp/whisper \
             --specpath ./build_tmp/whisper \
             --clean \
+            --exclude-module torch \
+            --exclude-module torchvision \
+            --exclude-module torchaudio \
             --noconfirm
           echo "Whisper STT built at: $STT_DEST/whisper_stt/"
 
@@ -211,6 +220,9 @@ jobs:
             --workpath ./build_tmp/sentiment \
             --specpath ./build_tmp/sentiment \
             --clean \
+            --exclude-module torch \
+            --exclude-module torchvision \
+            --exclude-module torchaudio \
             --noconfirm
           echo "Sentiment classifier built at: $STT_DEST/sentiment_classifier/"
 

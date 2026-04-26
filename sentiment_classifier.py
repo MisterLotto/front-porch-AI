@@ -186,10 +186,10 @@ def _err(msg: str):
 def classify(text: str) -> dict:
     model, tokenizer = _load_model()
 
-    inputs = tokenizer(text, return_tensors='pt', truncation=True, max_length=512, padding=True)
+    inputs = tokenizer(text, return_tensors='np', truncation=True, max_length=512, padding=True)
     outputs = model(**inputs)
 
-    logits = outputs.logits[0].detach().numpy()
+    logits = outputs.logits[0]
     scores = _softmax(logits)
     max_idx = scores.index(max(scores))
 
