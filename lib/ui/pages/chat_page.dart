@@ -34,6 +34,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
+import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
@@ -48,6 +49,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
+import 'package:front_porch_ai/utils/emotion_labels.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
@@ -56,6 +58,8 @@ import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
 import 'package:front_porch_ai/services/embedding_sidecar.dart';
 import 'package:front_porch_ai/ui/widgets/call_overlay.dart';
 import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
+import 'package:front_porch_ai/ui/widgets/onnx_download_overlay.dart';
+import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:file_picker/file_picker.dart';
 
 class _StyledTextController extends TextEditingController {
@@ -335,6 +339,63 @@ class _ChatPageState extends State<ChatPage> {
                                         fit: BoxFit.cover,
                                       ),
                                     ),
+                                  ],
+                                  // Expression background sprite
+                                  Consumer<ChatService>(
+                                    builder: (context, chat, _) {
+                                      final storage = Provider.of<StorageService>(
+                                        context,
+                                        listen: false,
+                                      );
+                                      final displayMode =
+                                          storage.expressionDisplayMode;
+                                      final isEnabled = storage.expressionEnabled;
+                                      if (!isEnabled ||
+                                           displayMode == 'sidebar' ||
+                                           chat.isEvaluatingRealism) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        final char = character;
+                                        if (char == null ||
+                                            char.avatarImages == null ||
+                                            char.avatarImages!.isEmpty) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        final avatar = chat.resolveExpressionAvatar(
+                                        char,
+                                        rerollIfSame: storage.expressionRerollSame,
+                                      );
+                                      if (avatar == null) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      final avatarDir = storage.characterAvatarDir(
+                                        char.name,
+                                      );
+                                      final avatarFile = File(
+                                        '${avatarDir.path}/${avatar.filename}',
+                                      );
+                                      return Positioned.fill(
+                                        child: AnimatedSwitcher(
+                                          duration: const Duration(
+                                            milliseconds: 500,
+                                          ),
+                                          child: Container(
+                                            key: ValueKey(
+                                              'expr_bg_${avatar.id}',
+                                            ),
+                                            decoration: BoxDecoration(
+                                              image: DecorationImage(
+                                                image: FileImage(avatarFile),
+                                                fit: BoxFit.cover,
+                                                opacity: 0.15,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  if (bgPath != null)
                                     Positioned.fill(
                                       child: Container(
                                         color: Colors.black.withValues(
@@ -342,7 +403,6 @@ class _ChatPageState extends State<ChatPage> {
                                         ),
                                       ),
                                     ),
-                                  ],
                                   ListView.builder(
                                     controller: _scrollController,
                                     reverse: true,
@@ -601,6 +661,15 @@ class _ChatPageState extends State<ChatPage> {
                 !chatService.isEvaluatingRealism &&
                 !chatService.isProcessingGreeting)
               _ObjectiveCheckOverlay(chatService: chatService),
+            // ONNX model download progress overlay
+            Positioned.fill(
+              child: Consumer<ExpressionClassifierService>(
+                builder: (context, classifier, _) {
+                  if (!classifier.isDownloading) return const SizedBox.shrink();
+                  return OnnxDownloadOverlay(classifierService: classifier);
+                },
+              ),
+            ),
           ],
         );
       },
@@ -2460,14 +2529,147 @@ class _ChatPageState extends State<ChatPage> {
       ),
       child: Column(
         children: [
-          if (character.imagePath != null)
-            Image.file(
-              _resolveCharImage(character.imagePath!),
-              height: _sidebarWidth,
-              width: _sidebarWidth,
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-            ),
+          // Expression image or default character portrait
+          Consumer<ChatService>(
+            builder: (context, chat, _) {
+              final storage = Provider.of<StorageService>(
+                context,
+                listen: false,
+              );
+              final isExpressionEnabled = storage.expressionEnabled;
+              final hasAvatars = character.avatarImages != null &&
+                  character.avatarImages!.isNotEmpty;
+
+              File? expressionFile;
+              String? expressionKey;
+              String? expressionEmoji;
+
+              if (isExpressionEnabled && hasAvatars && !chat.isEvaluatingRealism) {
+                final avatar = chat.resolveExpressionAvatar(
+                  character,
+                  rerollIfSame: storage.expressionRerollSame,
+                );
+                if (avatar != null) {
+                  final avatarDir = storage.characterAvatarDir(
+                    character.name,
+                  );
+                  expressionFile = File('${avatarDir.path}/${avatar.filename}');
+                  expressionKey = avatar.id;
+                  final label = chat.currentExpressionLabel;
+                  expressionEmoji = label != null
+                      ? EmotionLabels.emoji[label]
+                      : null;
+                }
+              }
+
+              File? displayFile;
+              Widget? fallbackWidget;
+
+              if (expressionFile != null) {
+                displayFile = expressionFile;
+              } else if (isExpressionEnabled) {
+                // Apply fallback behavior
+                final fallback = storage.expressionFallback;
+                if (fallback == 'none') {
+                  return const SizedBox.shrink();
+                } else if (fallback == 'emoji') {
+                  final label = chat.currentExpressionLabel ?? 'neutral';
+                  final emoji = EmotionLabels.emoji[label] ?? '🎭';
+                  fallbackWidget = Center(
+                    child: Text(
+                      emoji,
+                      style: TextStyle(
+                        fontSize: _sidebarWidth * 0.5,
+                      ),
+                    ),
+                  );
+                } else if (fallback == 'prime' && hasAvatars) {
+                  // Show prime avatar
+                  final primeAvatar = character.avatarImages!.where(
+                    (a) => a.displayOrder + 1 == character.primeAvatarIndex,
+                  ).isEmpty
+                      ? character.avatarImages!.first
+                      : character.avatarImages!.firstWhere(
+                          (a) => a.displayOrder + 1 == character.primeAvatarIndex,
+                        );
+                  final avatarDir = storage.characterAvatarDir(character.name);
+                  displayFile = File('${avatarDir.path}/${primeAvatar.filename}');
+                  expressionKey = primeAvatar.id;
+                } else {
+                  // 'neutral' or default: show neutral avatar if available, else character image
+                  if (hasAvatars) {
+                    final neutralAvatar = character.avatarImages!.where(
+                      (a) => a.label?.toLowerCase() == 'neutral',
+                    ).toList();
+                    if (neutralAvatar.isNotEmpty) {
+                      final avatarDir = storage.characterAvatarDir(character.name);
+                      displayFile =
+                          File('${avatarDir.path}/${neutralAvatar.first.filename}');
+                      expressionKey = neutralAvatar.first.id;
+                      expressionEmoji = EmotionLabels.emoji['neutral'];
+                    }
+                  }
+                  if (displayFile == null && character.imagePath != null) {
+                    displayFile = _resolveCharImage(character.imagePath!);
+                  }
+                }
+              } else {
+                // Expressions disabled, show character image
+                if (character.imagePath != null) {
+                  displayFile = _resolveCharImage(character.imagePath!);
+                }
+              }
+
+              if (fallbackWidget != null) return fallbackWidget;
+              if (displayFile == null) return const SizedBox.shrink();
+
+              return SizedBox(
+                height: _sidebarWidth,
+                width: _sidebarWidth,
+                child: Stack(
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      switchInCurve: Curves.easeInOut,
+                      switchOutCurve: Curves.easeInOut,
+                      child: Image.file(
+                        displayFile,
+                        key: ValueKey(expressionKey ?? 'default'),
+                        width: _sidebarWidth,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                      ),
+                    ),
+                    // Emotion label badge
+                    if (expressionEmoji != null)
+                      Positioned(
+                        bottom: 4,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                expressionEmoji,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
 
           // Action Buttons
           Container(
@@ -2493,6 +2695,37 @@ class _ChatPageState extends State<ChatPage> {
                     },
                     icon: const Icon(Icons.edit, size: 16),
                     label: const Text('Edit Character'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final storage = Provider.of<StorageService>(
+                        context,
+                        listen: false,
+                      );
+                      final repo = Provider.of<CharacterRepository>(
+                        context,
+                        listen: false,
+                      );
+                      final result = await CharacterAvatarsDialog.show(
+                        context: context,
+                        character: character,
+                        repository: repo,
+                        storage: storage,
+                      );
+                      if (result == true) {
+                        setState(() {});
+                      }
+                    },
+                    icon: const Icon(Icons.mood, size: 16),
+                    label: const Text('Expression Images'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white70,
                       side: const BorderSide(color: Colors.white24),

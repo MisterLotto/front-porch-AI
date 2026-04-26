@@ -127,7 +127,7 @@ jobs:
 
           # Install TTS dependencies + PyInstaller
           pip install --upgrade pip
-          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper
+          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy "optimum[onnxruntime]" transformers
 
           # Build Kokoro TTS as a standalone directory bundle
           echo "Building Kokoro TTS binary..."
@@ -200,6 +200,25 @@ jobs:
           cp "$EMBED_BINARY" "$STT_DEST/embed_server/"
           echo "Embedding server built at: $STT_DEST/embed_server/"
 
+          # Build Sentiment Classifier (expression images ONNX)
+          echo "Building Sentiment Classifier binary..."
+          pyinstaller sentiment_classifier.py \
+            --onedir \
+            --name sentiment_classifier \
+            --collect-all optimum \
+            --collect-all transformers \
+            --collect-all numpy \
+            --hidden-import optimum.onnxruntime \
+            --hidden-import transformers \
+            --hidden-import numpy \
+            --hidden-import onnxruntime \
+            --distpath "$STT_DEST" \
+            --workpath ./build_tmp/sentiment \
+            --specpath ./build_tmp/sentiment \
+            --clean \
+            --noconfirm
+          echo "Sentiment classifier built at: $STT_DEST/sentiment_classifier/"
+
           # For macOS, copy into the app bundle Resources
           if [ "${{ matrix.platform }}" = "macos" ]; then
             APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app 2>/dev/null | head -1)
@@ -220,6 +239,11 @@ jobs:
               mkdir -p "$EMBED_RESOURCES"
               cp -R "$STT_DEST/embed_server/"* "$EMBED_RESOURCES/"
               chmod +x "$EMBED_RESOURCES/embed_server"
+
+              SENTIMENT_RESOURCES="$APP_NAME/Contents/Resources/sentiment_classifier"
+              mkdir -p "$SENTIMENT_RESOURCES"
+              cp -R "$STT_DEST/sentiment_classifier/"* "$SENTIMENT_RESOURCES/"
+              chmod +x "$SENTIMENT_RESOURCES/sentiment_classifier"
             fi
           fi
 

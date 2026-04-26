@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:path/path.dart' as p;
@@ -911,7 +912,41 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   ),
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 12),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final storage = Provider.of<StorageService>(
+                      context,
+                      listen: false,
+                    );
+                    final repo = Provider.of<CharacterRepository>(
+                      context,
+                      listen: false,
+                    );
+                    final result = await CharacterAvatarsDialog.show(
+                      context: context,
+                      character: widget.character,
+                      repository: repo,
+                      storage: storage,
+                    );
+                    if (result == true) {
+                      setState(() {});
+                    }
+                  },
+                  icon: const Icon(Icons.mood, size: 18),
+                  label: const Text('Expression Images'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
 
               // ── Identity Section ──
               _sectionCard(

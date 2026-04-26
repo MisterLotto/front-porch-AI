@@ -272,6 +272,18 @@ class $CharactersTable extends Characters
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _primeAvatarIndexMeta = const VerificationMeta(
+    'primeAvatarIndex',
+  );
+  @override
+  late final GeneratedColumn<int> primeAvatarIndex = GeneratedColumn<int>(
+    'prime_avatar_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -297,6 +309,7 @@ class $CharactersTable extends Characters
     createdAt,
     updatedAt,
     deletedAt,
+    primeAvatarIndex,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -479,6 +492,15 @@ class $CharactersTable extends Characters
         deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
       );
     }
+    if (data.containsKey('prime_avatar_index')) {
+      context.handle(
+        _primeAvatarIndexMeta,
+        primeAvatarIndex.isAcceptableOrUnknown(
+          data['prime_avatar_index']!,
+          _primeAvatarIndexMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -580,6 +602,10 @@ class $CharactersTable extends Characters
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_at'],
       ),
+      primeAvatarIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}prime_avatar_index'],
+      )!,
     );
   }
 
@@ -613,6 +639,7 @@ class Character extends DataClass implements Insertable<Character> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
+  final int primeAvatarIndex;
   const Character({
     required this.id,
     required this.name,
@@ -637,6 +664,7 @@ class Character extends DataClass implements Insertable<Character> {
     required this.createdAt,
     required this.updatedAt,
     this.deletedAt,
+    required this.primeAvatarIndex,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -676,6 +704,7 @@ class Character extends DataClass implements Insertable<Character> {
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
     }
+    map['prime_avatar_index'] = Variable<int>(primeAvatarIndex);
     return map;
   }
 
@@ -714,6 +743,7 @@ class Character extends DataClass implements Insertable<Character> {
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedAt),
+      primeAvatarIndex: Value(primeAvatarIndex),
     );
   }
 
@@ -752,6 +782,7 @@ class Character extends DataClass implements Insertable<Character> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      primeAvatarIndex: serializer.fromJson<int>(json['primeAvatarIndex']),
     );
   }
   @override
@@ -783,6 +814,7 @@ class Character extends DataClass implements Insertable<Character> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'primeAvatarIndex': serializer.toJson<int>(primeAvatarIndex),
     };
   }
 
@@ -810,6 +842,7 @@ class Character extends DataClass implements Insertable<Character> {
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
+    int? primeAvatarIndex,
   }) => Character(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -835,6 +868,7 @@ class Character extends DataClass implements Insertable<Character> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+    primeAvatarIndex: primeAvatarIndex ?? this.primeAvatarIndex,
   );
   Character copyWithCompanion(CharactersCompanion data) {
     return Character(
@@ -885,6 +919,9 @@ class Character extends DataClass implements Insertable<Character> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      primeAvatarIndex: data.primeAvatarIndex.present
+          ? data.primeAvatarIndex.value
+          : this.primeAvatarIndex,
     );
   }
 
@@ -913,7 +950,8 @@ class Character extends DataClass implements Insertable<Character> {
           ..write('evolutionCount: $evolutionCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('deletedAt: $deletedAt')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('primeAvatarIndex: $primeAvatarIndex')
           ..write(')'))
         .toString();
   }
@@ -943,6 +981,7 @@ class Character extends DataClass implements Insertable<Character> {
     createdAt,
     updatedAt,
     deletedAt,
+    primeAvatarIndex,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -970,7 +1009,8 @@ class Character extends DataClass implements Insertable<Character> {
           other.evolutionCount == this.evolutionCount &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.deletedAt == this.deletedAt);
+          other.deletedAt == this.deletedAt &&
+          other.primeAvatarIndex == this.primeAvatarIndex);
 }
 
 class CharactersCompanion extends UpdateCompanion<Character> {
@@ -997,6 +1037,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
+  final Value<int> primeAvatarIndex;
   final Value<int> rowid;
   const CharactersCompanion({
     this.id = const Value.absent(),
@@ -1022,6 +1063,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.primeAvatarIndex = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CharactersCompanion.insert({
@@ -1048,6 +1090,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
+    this.primeAvatarIndex = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name);
@@ -1075,6 +1118,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
+    Expression<int>? primeAvatarIndex,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1102,6 +1146,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
+      if (primeAvatarIndex != null) 'prime_avatar_index': primeAvatarIndex,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1130,6 +1175,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
+    Value<int>? primeAvatarIndex,
     Value<int>? rowid,
   }) {
     return CharactersCompanion(
@@ -1157,6 +1203,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      primeAvatarIndex: primeAvatarIndex ?? this.primeAvatarIndex,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1235,6 +1282,9 @@ class CharactersCompanion extends UpdateCompanion<Character> {
     if (deletedAt.present) {
       map['deleted_at'] = Variable<DateTime>(deletedAt.value);
     }
+    if (primeAvatarIndex.present) {
+      map['prime_avatar_index'] = Variable<int>(primeAvatarIndex.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1267,6 +1317,7 @@ class CharactersCompanion extends UpdateCompanion<Character> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
+          ..write('primeAvatarIndex: $primeAvatarIndex, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8820,6 +8871,421 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
   }
 }
 
+class $AvatarImagesTable extends AvatarImages
+    with TableInfo<$AvatarImagesTable, AvatarImage> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AvatarImagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _filenameMeta = const VerificationMeta(
+    'filename',
+  );
+  @override
+  late final GeneratedColumn<String> filename = GeneratedColumn<String>(
+    'filename',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _displayOrderMeta = const VerificationMeta(
+    'displayOrder',
+  );
+  @override
+  late final GeneratedColumn<int> displayOrder = GeneratedColumn<int>(
+    'display_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    characterId,
+    filename,
+    label,
+    displayOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'avatar_images';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AvatarImage> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('filename')) {
+      context.handle(
+        _filenameMeta,
+        filename.isAcceptableOrUnknown(data['filename']!, _filenameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filenameMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('display_order')) {
+      context.handle(
+        _displayOrderMeta,
+        displayOrder.isAcceptableOrUnknown(
+          data['display_order']!,
+          _displayOrderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AvatarImage map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AvatarImage(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      filename: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filename'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      displayOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}display_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AvatarImagesTable createAlias(String alias) {
+    return $AvatarImagesTable(attachedDatabase, alias);
+  }
+}
+
+class AvatarImage extends DataClass implements Insertable<AvatarImage> {
+  final String id;
+  final String characterId;
+  final String filename;
+  final String? label;
+  final int displayOrder;
+  final DateTime createdAt;
+  const AvatarImage({
+    required this.id,
+    required this.characterId,
+    required this.filename,
+    this.label,
+    required this.displayOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['character_id'] = Variable<String>(characterId);
+    map['filename'] = Variable<String>(filename);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    map['display_order'] = Variable<int>(displayOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AvatarImagesCompanion toCompanion(bool nullToAbsent) {
+    return AvatarImagesCompanion(
+      id: Value(id),
+      characterId: Value(characterId),
+      filename: Value(filename),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      displayOrder: Value(displayOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AvatarImage.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AvatarImage(
+      id: serializer.fromJson<String>(json['id']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      filename: serializer.fromJson<String>(json['filename']),
+      label: serializer.fromJson<String?>(json['label']),
+      displayOrder: serializer.fromJson<int>(json['displayOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'characterId': serializer.toJson<String>(characterId),
+      'filename': serializer.toJson<String>(filename),
+      'label': serializer.toJson<String?>(label),
+      'displayOrder': serializer.toJson<int>(displayOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AvatarImage copyWith({
+    String? id,
+    String? characterId,
+    String? filename,
+    Value<String?> label = const Value.absent(),
+    int? displayOrder,
+    DateTime? createdAt,
+  }) => AvatarImage(
+    id: id ?? this.id,
+    characterId: characterId ?? this.characterId,
+    filename: filename ?? this.filename,
+    label: label.present ? label.value : this.label,
+    displayOrder: displayOrder ?? this.displayOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  AvatarImage copyWithCompanion(AvatarImagesCompanion data) {
+    return AvatarImage(
+      id: data.id.present ? data.id.value : this.id,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      filename: data.filename.present ? data.filename.value : this.filename,
+      label: data.label.present ? data.label.value : this.label,
+      displayOrder: data.displayOrder.present
+          ? data.displayOrder.value
+          : this.displayOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AvatarImage(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('filename: $filename, ')
+          ..write('label: $label, ')
+          ..write('displayOrder: $displayOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, characterId, filename, label, displayOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AvatarImage &&
+          other.id == this.id &&
+          other.characterId == this.characterId &&
+          other.filename == this.filename &&
+          other.label == this.label &&
+          other.displayOrder == this.displayOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class AvatarImagesCompanion extends UpdateCompanion<AvatarImage> {
+  final Value<String> id;
+  final Value<String> characterId;
+  final Value<String> filename;
+  final Value<String?> label;
+  final Value<int> displayOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const AvatarImagesCompanion({
+    this.id = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.filename = const Value.absent(),
+    this.label = const Value.absent(),
+    this.displayOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AvatarImagesCompanion.insert({
+    required String id,
+    required String characterId,
+    required String filename,
+    this.label = const Value.absent(),
+    this.displayOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       characterId = Value(characterId),
+       filename = Value(filename);
+  static Insertable<AvatarImage> custom({
+    Expression<String>? id,
+    Expression<String>? characterId,
+    Expression<String>? filename,
+    Expression<String>? label,
+    Expression<int>? displayOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (characterId != null) 'character_id': characterId,
+      if (filename != null) 'filename': filename,
+      if (label != null) 'label': label,
+      if (displayOrder != null) 'display_order': displayOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AvatarImagesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? characterId,
+    Value<String>? filename,
+    Value<String?>? label,
+    Value<int>? displayOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return AvatarImagesCompanion(
+      id: id ?? this.id,
+      characterId: characterId ?? this.characterId,
+      filename: filename ?? this.filename,
+      label: label ?? this.label,
+      displayOrder: displayOrder ?? this.displayOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (filename.present) {
+      map['filename'] = Variable<String>(filename.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (displayOrder.present) {
+      map['display_order'] = Variable<int>(displayOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AvatarImagesCompanion(')
+          ..write('id: $id, ')
+          ..write('characterId: $characterId, ')
+          ..write('filename: $filename, ')
+          ..write('label: $label, ')
+          ..write('displayOrder: $displayOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8838,6 +9304,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ObjectivesTable objectives = $ObjectivesTable(this);
   late final $StoryProjectsTable storyProjects = $StoryProjectsTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
+  late final $AvatarImagesTable avatarImages = $AvatarImagesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8855,6 +9322,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     objectives,
     storyProjects,
     syncMeta,
+    avatarImages,
   ];
 }
 
@@ -8883,6 +9351,7 @@ typedef $$CharactersTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
+      Value<int> primeAvatarIndex,
       Value<int> rowid,
     });
 typedef $$CharactersTableUpdateCompanionBuilder =
@@ -8910,6 +9379,7 @@ typedef $$CharactersTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
+      Value<int> primeAvatarIndex,
       Value<int> rowid,
     });
 
@@ -9034,6 +9504,11 @@ class $$CharactersTableFilterComposer
 
   ColumnFilters<DateTime> get deletedAt => $composableBuilder(
     column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get primeAvatarIndex => $composableBuilder(
+    column: $table.primeAvatarIndex,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9161,6 +9636,11 @@ class $$CharactersTableOrderingComposer
     column: $table.deletedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get primeAvatarIndex => $composableBuilder(
+    column: $table.primeAvatarIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CharactersTableAnnotationComposer
@@ -9264,6 +9744,11 @@ class $$CharactersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get deletedAt =>
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get primeAvatarIndex => $composableBuilder(
+    column: $table.primeAvatarIndex,
+    builder: (column) => column,
+  );
 }
 
 class $$CharactersTableTableManager
@@ -9320,6 +9805,7 @@ class $$CharactersTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> primeAvatarIndex = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CharactersCompanion(
                 id: id,
@@ -9345,6 +9831,7 @@ class $$CharactersTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
+                primeAvatarIndex: primeAvatarIndex,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -9372,6 +9859,7 @@ class $$CharactersTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> primeAvatarIndex = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CharactersCompanion.insert(
                 id: id,
@@ -9397,6 +9885,7 @@ class $$CharactersTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
+                primeAvatarIndex: primeAvatarIndex,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -13018,6 +13507,229 @@ typedef $$SyncMetaTableProcessedTableManager =
       SyncMetaData,
       PrefetchHooks Function()
     >;
+typedef $$AvatarImagesTableCreateCompanionBuilder =
+    AvatarImagesCompanion Function({
+      required String id,
+      required String characterId,
+      required String filename,
+      Value<String?> label,
+      Value<int> displayOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+typedef $$AvatarImagesTableUpdateCompanionBuilder =
+    AvatarImagesCompanion Function({
+      Value<String> id,
+      Value<String> characterId,
+      Value<String> filename,
+      Value<String?> label,
+      Value<int> displayOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$AvatarImagesTableFilterComposer
+    extends Composer<_$AppDatabase, $AvatarImagesTable> {
+  $$AvatarImagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filename => $composableBuilder(
+    column: $table.filename,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AvatarImagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $AvatarImagesTable> {
+  $$AvatarImagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filename => $composableBuilder(
+    column: $table.filename,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AvatarImagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AvatarImagesTable> {
+  $$AvatarImagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get filename =>
+      $composableBuilder(column: $table.filename, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$AvatarImagesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AvatarImagesTable,
+          AvatarImage,
+          $$AvatarImagesTableFilterComposer,
+          $$AvatarImagesTableOrderingComposer,
+          $$AvatarImagesTableAnnotationComposer,
+          $$AvatarImagesTableCreateCompanionBuilder,
+          $$AvatarImagesTableUpdateCompanionBuilder,
+          (
+            AvatarImage,
+            BaseReferences<_$AppDatabase, $AvatarImagesTable, AvatarImage>,
+          ),
+          AvatarImage,
+          PrefetchHooks Function()
+        > {
+  $$AvatarImagesTableTableManager(_$AppDatabase db, $AvatarImagesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AvatarImagesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AvatarImagesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AvatarImagesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String> filename = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<int> displayOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AvatarImagesCompanion(
+                id: id,
+                characterId: characterId,
+                filename: filename,
+                label: label,
+                displayOrder: displayOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String characterId,
+                required String filename,
+                Value<String?> label = const Value.absent(),
+                Value<int> displayOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AvatarImagesCompanion.insert(
+                id: id,
+                characterId: characterId,
+                filename: filename,
+                label: label,
+                displayOrder: displayOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AvatarImagesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AvatarImagesTable,
+      AvatarImage,
+      $$AvatarImagesTableFilterComposer,
+      $$AvatarImagesTableOrderingComposer,
+      $$AvatarImagesTableAnnotationComposer,
+      $$AvatarImagesTableCreateCompanionBuilder,
+      $$AvatarImagesTableUpdateCompanionBuilder,
+      (
+        AvatarImage,
+        BaseReferences<_$AppDatabase, $AvatarImagesTable, AvatarImage>,
+      ),
+      AvatarImage,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13046,4 +13758,6 @@ class $AppDatabaseManager {
       $$StoryProjectsTableTableManager(_db, _db.storyProjects);
   $$SyncMetaTableTableManager get syncMeta =>
       $$SyncMetaTableTableManager(_db, _db.syncMeta);
+  $$AvatarImagesTableTableManager get avatarImages =>
+      $$AvatarImagesTableTableManager(_db, _db.avatarImages);
 }

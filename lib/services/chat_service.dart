@@ -37,6 +37,8 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:drift/drift.dart' as drift;
 
 // ── Realism Engine GBNF Grammars ─────────────────────────────────────────────
@@ -370,6 +372,19 @@ class ChatService extends ChangeNotifier {
   String _characterEmotion = '';
   String _emotionIntensity = ''; // mild/moderate/strong
 
+  // Expression images
+  String? _lastExpressionAvatarId;
+  String? _manualExpressionLabel;
+  final Random _expressionRandom = Random();
+  String? _cachedExpressionLabel;
+  String? _cachedForEmotion;
+
+  // ONNX expression classification
+  ExpressionClassifierService? _expressionClassifierService;
+  String? _onnxExpressionLabel;
+  String? _onnxCachedForEmotion;
+  bool _onnxClassifying = false;
+
   // Passage of time
   String _timeOfDay = 'morning';
   int _dayCount = 1;
@@ -620,7 +635,16 @@ class ChatService extends ChangeNotifier {
   bool get isProcessingGreeting => _isProcessingGreeting;
   String get realismEvalStreamText => _realismEvalStreamText;
   String get characterEmotion => _characterEmotion;
+  
+  String getCurrentEmotion() => _characterEmotion;
+  
+  Future<String> reclassifyEmotion(String unknownEmotion) async {
+    _reclassifyEmotionAsync(unknownEmotion);
+    // Return a default value for now - the actual classification happens via the classifier service
+    return 'neutral';
+  }
   String get emotionIntensity => _emotionIntensity;
+  String? get manualExpressionLabel => _manualExpressionLabel;
   String get timeOfDay => _timeOfDay;
   int get dayCount => _dayCount;
   bool get passageOfTimeEnabled => _passageOfTimeEnabled;
@@ -863,6 +887,284 @@ class ChatService extends ChangeNotifier {
     return '$capEmotion$intensity';
   }
 
+  /// Returns the standard expression label for the current emotion.
+  ///
+  /// If a manual expression is set via [setManualExpression], returns that.
+  /// When classification mode is 'onnx', uses the ONNX classifier result.
+  /// Otherwise maps the nuanced [_characterEmotion] to a standard label
+  /// using [EmotionLabels.nuancedToStandard].
+  String? get currentExpressionLabel {
+    // Manual override takes priority
+    if (_manualExpressionLabel != null && _manualExpressionLabel!.isNotEmpty) {
+      return _manualExpressionLabel!.toLowerCase();
+    }
+    if (_characterEmotion.isEmpty) return 'neutral';
+    final lower = _characterEmotion.toLowerCase();
+
+    // ONNX mode: return cached ONNX result
+    if (_storageService.expressionClassificationMode == 'onnx') {
+      if (_onnxCachedForEmotion == lower && _onnxExpressionLabel != null) {
+        return _onnxExpressionLabel;
+      }
+      // Trigger async ONNX classification if emotion changed
+      if (_onnxCachedForEmotion != lower && !_onnxClassifying) {
+        _classifyWithOnnxAsync(lower);
+      }
+      return _onnxExpressionLabel ?? 'neutral';
+    }
+
+    // Return cached label if emotion hasn't changed
+    if (_cachedForEmotion == lower && _cachedExpressionLabel != null) {
+      return _cachedExpressionLabel;
+    }
+
+    // Direct match
+    if (EmotionLabels.all.contains(lower)) {
+      debugPrint('[Expression] emotion=$lower -> label=$lower (direct match)');
+      _cachedForEmotion = lower;
+      _cachedExpressionLabel = lower;
+      return lower;
+    }
+
+    // Nuanced mapping
+    final mapped = EmotionLabels.nuancedToStandard[lower];
+    if (mapped != null) {
+      debugPrint('[Expression] emotion=$lower -> label=$mapped (nuanced mapping)');
+      _cachedForEmotion = lower;
+      _cachedExpressionLabel = mapped;
+      return mapped;
+    }
+
+    // Unmapped — trigger LLM re-classification
+    debugPrint('[Expression] emotion=$lower -> UNMAPPED, triggering LLM re-classification');
+    _reclassifyEmotionAsync(lower);
+    _cachedForEmotion = lower;
+    _cachedExpressionLabel = 'neutral';
+    return 'neutral';
+  }
+
+  /// Fire-and-forget: ask the LLM to map an unknown emotion word to a standard label.
+  /// Uses JSON output so thinking models can reason first then return the label.
+  Future<void> _reclassifyEmotionAsync(String unknownEmotion) async {
+    if (_isEvaluatingRealism) {
+      debugPrint('[Expression] reclassify: skipped — realism engine is evaluating');
+      return;
+    }
+    final llmService = _llmProvider?.activeService ?? _koboldService;
+    if (llmService == null || !llmService.isReady) {
+      debugPrint('[Expression] reclassify: LLM not ready, skipping');
+      return;
+    }
+
+    try {
+      final labels = EmotionLabels.all.join('", "');
+      final prompt =
+          'Classify the emotion "$unknownEmotion" into exactly ONE of these labels: $labels".\n'
+          'Return ONLY a JSON object with one key "label" containing your choice.\n'
+          'Example: {"label": "surprise"}\n'
+          'Response:';
+      debugPrint('[Expression] reclassify prompt: $prompt');
+
+      // Determine if thinking model is in use (same logic as realism engine)
+      final isThinkingModel = _llmProvider != null && _llmProvider!.isLocal
+          ? _storageService.koboldThinkingModel
+          : (_llmProvider != null ? _storageService.reasoningEnabled : false);
+
+      final params = GenerationParams(
+        prompt: prompt,
+        maxLength: isThinkingModel ? 2048 : 32,
+        temperature: 0.1,
+        topP: 0.5,
+        repeatPenalty: 1.15,
+        reasoningEnabled: false,
+        stopSequences: isThinkingModel ? [] : ['}\n', '}'],
+        banEosToken: isThinkingModel && (_llmProvider?.isLocal ?? false),
+        trimStop: !(isThinkingModel && (_llmProvider?.isLocal ?? false)),
+      );
+
+      final StringBuffer sb = StringBuffer();
+      await for (final chunk in llmService.generateStream(params)) {
+        sb.write(chunk);
+      }
+      String response = sb.toString().trim();
+      debugPrint('[Expression] reclassify raw response: "$response"');
+
+      // Extract JSON from response (handles thinking model output with <think> blocks)
+      if (response.contains('```')) {
+        final match = RegExp(
+          r'```(?:json)?\s*\n?(.*?)\n?```',
+          dotAll: true,
+        ).firstMatch(response);
+        if (match != null) {
+          response = match.group(1)!.trim();
+        }
+      }
+
+      // Find JSON object in response
+      String jsonStr = response;
+      if (!response.startsWith('{')) {
+        final objMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(response);
+        if (objMatch != null) {
+          jsonStr = objMatch.group(0)!;
+        }
+      }
+
+      String? extractedLabel;
+      try {
+        final parsed = jsonDecode(jsonStr) as Map<String, dynamic>;
+        extractedLabel = (parsed['label'] as String?)?.trim().toLowerCase();
+      } catch (e) {
+        debugPrint('[Expression] reclassify JSON parse failed: $e');
+      }
+
+      if (extractedLabel != null && EmotionLabels.all.contains(extractedLabel)) {
+        debugPrint('[Expression] reclassify: mapped "$unknownEmotion" -> "$extractedLabel"');
+        _cachedExpressionLabel = extractedLabel;
+        notifyListeners();
+      } else {
+        debugPrint(
+          '[Expression] reclassify: label "$extractedLabel" not valid, using neutral',
+        );
+      }
+    } catch (e) {
+      debugPrint('[Expression] reclassify error: $e');
+    }
+  }
+
+  /// Initialize the ONNX expression classifier service.
+  void initExpressionClassifier() {
+    if (_expressionClassifierService == null) {
+      _expressionClassifierService = ExpressionClassifierService(_storageService);
+    }
+  }
+
+  /// Fire-and-forget: classify emotion using ONNX model.
+  /// Uses the last AI message text as classification input.
+  Future<void> _classifyWithOnnxAsync(String emotion) async {
+    if (_expressionClassifierService == null) {
+      initExpressionClassifier();
+    }
+    if (_expressionClassifierService == null) return;
+
+    _onnxClassifying = true;
+    try {
+      // Initialize classifier with current mode
+      await _expressionClassifierService!.ensureInitialized(
+        getCurrentEmotion: () => _characterEmotion,
+        reclassify: (unknown) async {
+          return 'neutral';
+        },
+      );
+
+      // Use last AI message text for classification
+      String text = '';
+      for (int i = _messages.length - 1; i >= 0; i--) {
+        if (!_messages[i].isUser && _messages[i].text.isNotEmpty) {
+          text = _messages[i].text;
+          break;
+        }
+      }
+      if (text.isEmpty) text = emotion;
+
+      final result = await _expressionClassifierService!.classify(text);
+      if (result != null) {
+        final label = result.emotion.toLowerCase();
+        if (EmotionLabels.all.contains(label)) {
+          debugPrint('[Expression:ONNX] emotion=$emotion -> label=$label (confidence: ${result.confidence})');
+          _onnxExpressionLabel = label;
+          _onnxCachedForEmotion = emotion;
+          notifyListeners();
+          return;
+        }
+      }
+      // Fallback
+      _onnxExpressionLabel = 'neutral';
+      _onnxCachedForEmotion = emotion;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[Expression:ONNX] classification error: $e');
+      _onnxExpressionLabel = 'neutral';
+      _onnxCachedForEmotion = emotion;
+      notifyListeners();
+    } finally {
+      _onnxClassifying = false;
+    }
+  }
+
+  /// Resolves the best matching expression avatar for the given character.
+  ///
+  /// Returns the [AvatarImage] to display, or null if no expression images
+  /// are available. Uses [currentExpressionLabel] for matching.
+  ///
+  /// If [rerollIfSame] is true and multiple avatars share the same label,
+  /// a random one is picked (avoiding the previously shown avatar).
+  AvatarImage? resolveExpressionAvatar(
+    CharacterCard character, {
+    bool rerollIfSame = false,
+  }) {
+    final avatars = character.avatarImages;
+    if (avatars == null || avatars.isEmpty) {
+      return null;
+    }
+
+    final label = currentExpressionLabel;
+    if (label == null) {
+      return avatars.where((a) => a.displayOrder + 1 == character.primeAvatarIndex).isEmpty
+          ? avatars.first
+          : avatars.firstWhere((a) => a.displayOrder + 1 == character.primeAvatarIndex);
+    }
+
+    // Find all avatars matching the current emotion label
+    final matches = avatars
+        .where((a) => a.label?.toLowerCase() == label)
+        .toList();
+
+    if (matches.isEmpty) {
+      // Fallback: try neutral, then prime avatar
+      final neutral = avatars.where(
+        (a) => a.label?.toLowerCase() == 'neutral',
+      ).toList();
+      if (neutral.isNotEmpty) {
+        return neutral.first;
+      }
+      return avatars.where(
+        (a) => a.displayOrder + 1 == character.primeAvatarIndex,
+      ).isEmpty
+          ? avatars.first
+          : avatars.firstWhere(
+              (a) => a.displayOrder + 1 == character.primeAvatarIndex,
+            );
+    }
+
+    if (matches.length == 1) {
+      return matches.first;
+    }
+
+    // Multiple matches — pick randomly, optionally avoiding the last one shown
+    if (rerollIfSame && _lastExpressionAvatarId != null) {
+      final different = matches.where(
+        (a) => a.id != _lastExpressionAvatarId,
+      ).toList();
+      if (different.isNotEmpty) {
+        final picked = different[_expressionRandom.nextInt(different.length)];
+        _lastExpressionAvatarId = picked.id;
+        return picked;
+      }
+    }
+
+    final picked = matches[_expressionRandom.nextInt(matches.length)];
+    _lastExpressionAvatarId = picked.id;
+    return picked;
+  }
+
+  /// Manually set an expression label (e.g., from /expression-set command).
+  /// Pass null to clear the manual override and resume auto-detection.
+  void setManualExpression(String? label) {
+    _manualExpressionLabel = label;
+    _lastExpressionAvatarId = null;
+    notifyListeners();
+  }
+
   void setAuthorNote(String note, {int? strength}) {
     _authorNote = note;
     if (strength != null) _authorNoteStrength = strength;
@@ -952,6 +1254,11 @@ class ChatService extends ChangeNotifier {
   /// Set the MemoryService after construction (for RAG memory retrieval).
   void setMemoryService(MemoryService service) {
     _memoryService = service;
+  }
+
+  /// Set the ExpressionClassifierService after construction (for ONNX emotion classification).
+  void setExpressionClassifierService(ExpressionClassifierService service) {
+    _expressionClassifierService = service;
   }
 
   /// Wait for TTS to finish speaking, then apply the configured delay before auto-play.
@@ -2391,6 +2698,34 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         text.trim().isEmpty)
       return;
     clearSuggestions();
+
+    // ── Slash Command Handling ──────────────────────────────────────────
+    final trimmed = text.trim();
+    if (trimmed.startsWith('/')) {
+      final parts = trimmed.substring(1).split(RegExp(r'\s+'));
+      final command = parts.first.toLowerCase();
+      final args = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
+      switch (command) {
+        case 'expression-set':
+        case 'expression':
+          if (args.isNotEmpty) {
+            final label = args.toLowerCase();
+            setManualExpression(label);
+          } else {
+            setManualExpression(null);
+          }
+          return;
+
+        case 'expression-clear':
+          setManualExpression(null);
+          return;
+
+        default:
+          // Unknown command — proceed as normal message
+          break;
+      }
+    }
 
     // In observer mode, route to sendDirectorNote instead
     if (_observerMode && _activeGroup != null) {
@@ -6929,7 +7264,6 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
       debugPrint(
         '[Realism:Metadata] _pendingRealismMetadata after relationship eval: $_pendingRealismMetadata',
       );
-      notifyListeners();
     } catch (e) {
       debugPrint('[Realism:Relationship] Failed: $e');
     }
@@ -6997,6 +7331,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         '   wistful not sad, flustered not happy, prickly not angry, smoldering not aroused.\n'
         '   Filter through $charName\'s personality — a stoic character feeling deep pain\n'
         '   might show "guarded" or "controlled" rather than "devastated".\n'
+        '${_storageService.expressionEnabled ? '   ⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.\n' : ''}'
         '2. "emotion_intensity": mild, moderate, or strong\n'
         '$arousalInstr\n'
         'Recent conversation:\n$recent\n\n'
@@ -7042,7 +7377,6 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
       debugPrint(
         '[Realism:Emotion] Emotion: $_characterEmotion ($_emotionIntensity)',
       );
-      notifyListeners();
     } catch (e) {
       debugPrint('[Realism:Emotion] Failed: $e');
     }
@@ -7209,7 +7543,6 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     debugPrint(
       '[Realism:Physical] Posture: $_spatialStance | Time: $_timeOfDay (Day $_dayCount) | TurnsToNext: ${_turnsPerTimePeriod - _turnsSinceLastTimeAdvance}',
     );
-    notifyListeners();
   }
 
   Future<void> _evaluateNarrativeCall({void Function(String)? onChunk}) async {
@@ -7291,7 +7624,6 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
           }
         }
       }
-      notifyListeners();
     } catch (e) {
       debugPrint('[Realism:Narrative] Failed: $e');
     }
@@ -7378,6 +7710,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         '3. "emotion": $charName\'s overarching emotional state (one nuanced word).\n'
         '   NOT generic ("happy"/"sad") — find the specific texture: wistful not sad, flustered not happy, prickly not angry.\n'
         '   Filter through $charName\'s personality — a stoic character in deep pain shows "guarded", not "devastated".\n'
+        '${_storageService.expressionEnabled ? '   ⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.\n' : ''}'
         '4. "emotion_intensity": mild, moderate, or strong\n'
         '5. "bond_reason": One brief in-character thought from $charName explaining the relationship shift, or "none" if delta is 0.\n'
         '6. "posture": $charName\'s spatial/physical stance (brief grounded phrase), or "none"\n'

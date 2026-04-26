@@ -69,6 +69,21 @@ class Characters extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
+  IntColumn get primeAvatarIndex => integer().withDefault(const Constant(1))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Avatar images for characters.
+/// Each character can have up to 10 avatars stored in their subdirectory.
+class AvatarImages extends Table {
+  TextColumn get id => text()();
+  TextColumn get characterId => text()();
+  TextColumn get filename => text()();
+  TextColumn get label => text().nullable()();
+  IntColumn get displayOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -351,6 +366,7 @@ class StoryProjects extends Table {
     Objectives,
     StoryProjects,
     SyncMeta,
+    AvatarImages,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -368,9 +384,15 @@ class AppDatabase extends _$AppDatabase {
   static Future<AppDatabase> instance() async {
     if (_instance != null) return _instance!;
     final prefs = await SharedPreferences.getInstance();
-    final rootPath = prefs.getString('root_path');
-    final basePath =
-        rootPath ?? (await getApplicationDocumentsDirectory()).path;
+    // Mirror StorageService: use a separate prefs key for beta builds so the
+    // beta DB path never overwrites the stable user's custom root path.
+    final rootPathKey = isPreRelease ? 'root_path_beta' : 'root_path';
+    final rootPath = prefs.getString(rootPathKey);
+    final defaultRootName = isPreRelease ? 'FrontPorchAI-Beta' : 'FrontPorchAI';
+    final basePath = rootPath ?? p.join(
+      (await getApplicationDocumentsDirectory()).path,
+      defaultRootName,
+    );
     final dbDir = p.join(basePath, 'KoboldManager');
     _dbDir = dbDir;
 
@@ -477,7 +499,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -859,12 +881,30 @@ class AppDatabase extends _$AppDatabase {
         } catch (_) {}
       }
       if (from < 23) {
-        // v22→v23: add passage_of_time_enabled sub-toggle for realism mode
+        // v22->v23: add passage_of_time_enabled sub-toggle for realism mode
         try {
           await customStatement(
             'ALTER TABLE sessions ADD COLUMN passage_of_time_enabled INTEGER NOT NULL DEFAULT 1',
           );
         } catch (_) {}
+      }
+      if (from < 24) {
+        // v23->v24: add primeAvatarIndex to characters and avatar_images table
+        try {
+          await customStatement(
+            "ALTER TABLE characters ADD COLUMN prime_avatar_index INTEGER NOT NULL DEFAULT 1",
+          );
+        } catch (_) {}
+        await customStatement(
+          'CREATE TABLE IF NOT EXISTS avatar_images ('
+          'id TEXT NOT NULL, '
+          'character_id TEXT NOT NULL, '
+          'filename TEXT NOT NULL, '
+          'label TEXT, '
+          'display_order INTEGER NOT NULL DEFAULT 0, '
+          'created_at INTEGER NOT NULL DEFAULT 0, '
+          'PRIMARY KEY (id))',
+        );
       }
     },
   );
@@ -1203,6 +1243,60 @@ class AppDatabase extends _$AppDatabase {
     )..where((c) => c.id.equals(id))).go();
     await bumpSyncVersion();
     return count;
+  }
+
+  // ── Avatar Queries ──────────────────────────────────────────────────
+
+  /// Get all avatar images for a character.
+  Future<List<AvatarImage>> getAvatarImagesByCharacterId(
+    String characterId,
+  ) async {
+    return (select(avatarImages)
+          ..where((a) => a.characterId.equals(characterId))
+          ..orderBy([(a) => OrderingTerm.asc(a.displayOrder)]))
+        .get();
+  }
+
+  /// Get a single avatar by ID.
+  Future<AvatarImage?> getAvatarById(String id) async {
+    return (select(avatarImages)..where((a) => a.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Count avatars for a character (to determine next display order).
+  Future<int> countAvatarsForCharacter(String characterId) async {
+    final result = await (select(avatarImages)
+          ..where((a) => a.characterId.equals(characterId)))
+        .get();
+    return result.length;
+  }
+
+  /// Insert an avatar image record.
+  Future<void> insertAvatar(AvatarImagesCompanion avatar) async {
+    await into(avatarImages).insert(avatar);
+    await bumpSyncVersion();
+  }
+
+  /// Delete an avatar image record.
+  Future<int> deleteAvatar(String id) async {
+    final count = await (delete(avatarImages)..where((a) => a.id.equals(id))).go();
+    await bumpSyncVersion();
+    return count;
+  }
+
+  /// Update the prime avatar index for a character.
+  Future<void> updatePrimeAvatarIndex(String characterId, int primeIndex) async {
+    await (update(characters)..where((c) => c.id.equals(characterId))).write(
+      CharactersCompanion(primeAvatarIndex: Value(primeIndex)),
+    );
+    await bumpSyncVersion();
+  }
+
+  /// Update the label for an avatar image.
+  Future<void> updateAvatarLabel(String avatarId, String label) async {
+    await (update(avatarImages)..where((a) => a.id.equals(avatarId))).write(
+      AvatarImagesCompanion(label: Value(label)),
+    );
+    await bumpSyncVersion();
   }
 
   // ── Session Queries ─────────────────────────────────────────────────

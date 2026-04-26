@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -45,6 +46,7 @@ import 'package:front_porch_ai/services/web_server_service.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
+import 'package:front_porch_ai/services/expression_classifier.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -54,19 +56,18 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _gpuLayersController = TextEditingController(text: '0');
-  final _contextSizeController = TextEditingController(text: '8192');
-  double _contextSizeValue = 8192;
-  final _apiController = TextEditingController();
-  final _remoteApiUrlController = TextEditingController();
-  final _remoteApiKeyController = TextEditingController();
-  bool _useVulkan = false;
-  bool _useCublas = false;
-  bool _useMetal = false;
-  bool _useRocm = false;
-  String? _selectedModelPath;
-  late final TextEditingController _systemPromptController;
-  late final TextEditingController _bannedPhrasesController;
+   final _gpuLayersController = TextEditingController(text: '0');
+   final _contextSizeController = TextEditingController(text: '8192');
+   final _apiController = TextEditingController();
+   final _remoteApiUrlController = TextEditingController();
+   final _remoteApiKeyController = TextEditingController();
+   bool _useVulkan = false;
+   bool _useCublas = false;
+   bool _useMetal = false;
+   bool _useRocm = false;
+   String? _selectedModelPath;
+   late final TextEditingController _systemPromptController;
+   late final TextEditingController _bannedPhrasesController;
 
   // Remote API state
   List<RemoteModelInfo> _availableModels = [];
@@ -559,39 +560,278 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return DefaultTabController(
-      length: 5,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: Text('Settings', style: theme.textTheme.titleLarge),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          iconTheme: theme.iconTheme,
-          bottom: TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            overlayColor: WidgetStateProperty.all(Colors.transparent),
-            splashFactory: NoSplash.splashFactory,
-            tabs: const [
-              Tab(text: 'General'),
-              Tab(text: 'Generation'),
-              Tab(text: 'Voice & Media'),
-              Tab(text: 'Backend'),
-              Tab(text: 'Advanced'),
-            ],
+    return Stack(
+      children: [
+        DefaultTabController(
+          length: 5,
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: Text('Settings', style: theme.textTheme.titleLarge),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              iconTheme: theme.iconTheme,
+              bottom: TabBar(
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white60,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                overlayColor: WidgetStateProperty.all(Colors.transparent),
+                splashFactory: NoSplash.splashFactory,
+                tabs: const [
+                  Tab(text: 'General'),
+                  Tab(text: 'Generation'),
+                  Tab(text: 'Voice & Media'),
+                  Tab(text: 'Backend'),
+                  Tab(text: 'Advanced'),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              children: [
+                _buildGeneralTab(context),
+                _buildGenerationTab(context),
+                _buildVoiceMediaTab(context),
+                _buildBackendTab(context),
+                _buildAdvancedTab(context),
+              ],
+            ),
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildGeneralTab(context),
-            _buildGenerationTab(context),
-            _buildVoiceMediaTab(context),
-            _buildBackendTab(context),
-            _buildAdvancedTab(context),
-          ],
+        // Glassmorphic download overlay — shown only while ONNX model is downloading
+        Consumer<ExpressionClassifierService>(
+          builder: (context, expressionService, _) {
+            if (!expressionService.isDownloading) return const SizedBox.shrink();
+            return _buildDownloadOverlay(expressionService);
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Full-screen glassmorphic overlay shown during ONNX model download.
+  Widget _buildDownloadOverlay(ExpressionClassifierService service) {
+    final progress = service.downloadProgress;
+    final fraction = progress?.fraction ?? 0.0;
+    final fileName = progress?.file ?? 'Preparing…';
+    final pct = (fraction * 100).toStringAsFixed(0);
+
+    const teal = Color(0xFF00D4AA);
+    const tealDark = Color(0xFF00876A);
+
+    return Positioned.fill(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.55),
+          child: Center(
+            child: Container(
+              width: 380,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F2027).withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: teal.withValues(alpha: 0.35),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: teal.withValues(alpha: 0.18),
+                    blurRadius: 40,
+                    spreadRadius: 4,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Animated icon
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [teal, tealDark],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: teal.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.download_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Downloading Expression Model',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'distilbert-go-emotions-onnx',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Stack(
+                      children: [
+                        // Track
+                        Container(
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        // Fill
+                        FractionallySizedBox(
+                          widthFactor: fraction.clamp(0.0, 1.0),
+                          child: Container(
+                            height: 8,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [teal, Color(0xFF00FFC6)],
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: teal.withValues(alpha: 0.5),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          fileName,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontSize: 11,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          maxLines: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        fraction > 0 ? '$pct%' : '…',
+                        style: const TextStyle(
+                          color: teal,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'This only happens once. Files are saved\nto your Front Porch AI data folder.',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.35),
+                      fontSize: 11,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Download button shown in the Expression Images settings row.
+  Widget _buildOnnxDownloadButton(ExpressionClassifierService service) {
+    if (service.modelReady || service.isModelCached) {
+      // Model already downloaded — show a ready indicator
+      return Tooltip(
+        message: 'Expression model downloaded and ready',
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF00D4AA).withValues(alpha: 0.15),
+            border: Border.all(
+              color: const Color(0xFF00D4AA).withValues(alpha: 0.5),
+            ),
+          ),
+          child: const Icon(
+            Icons.check_rounded,
+            size: 18,
+            color: Color(0xFF00D4AA),
+          ),
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: 'Download ONNX model for local expression classification',
+      child: IconButton(
+        icon: service.isDownloading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF00D4AA),
+                ),
+              )
+            : const Icon(Icons.download_rounded, size: 20),
+        onPressed: service.isDownloading
+            ? null
+            : () async {
+                final ok = await service.triggerOnnxDownload();
+                if (!ok && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Could not start download. Make sure python3 is installed.',
+                      ),
+                    ),
+                  );
+                }
+              },
+        style: IconButton.styleFrom(
+          backgroundColor: service.isDownloading
+              ? Colors.grey.withValues(alpha: 0.3)
+              : const Color(0xFF00D4AA).withValues(alpha: 0.2),
+          foregroundColor: const Color(0xFF00D4AA),
         ),
       ),
     );
@@ -1544,6 +1784,252 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                           ),
                         ),
+                      ),
+                    ],
+                  ],
+                  ),
+                );
+              },
+            ),
+
+          const SizedBox(height: 24),
+          _buildSectionHeader('Expression Images', context),
+          const SizedBox(height: 8),
+          Consumer<StorageService>(
+            builder: (context, storage, _) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          storage.expressionEnabled
+                              ? Icons.mood
+                              : Icons.mood_outlined,
+                          color: storage.expressionEnabled
+                              ? Colors.purpleAccent
+                              : Colors.white38,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Expression Images',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                storage.expressionEnabled
+                                    ? 'Enabled — ${_expressionModeLabel(storage.expressionClassificationMode)}, ${_expressionDisplayLabel(storage.expressionDisplayMode)}'
+                                    : 'Disabled',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: storage.expressionEnabled,
+                          onChanged: (val) =>
+                              storage.setExpressionEnabled(val),
+                          activeTrackColor: Colors.purpleAccent,
+                        ),
+                      ],
+                    ),
+                    if (storage.expressionEnabled) ...[
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 8),
+                       // Classification mode dropdown and download button
+                       Row(
+                         children: [
+                           const Icon(
+                             Icons.psychology,
+                             size: 16,
+                             color: Colors.white54,
+                           ),
+                           const SizedBox(width: 8),
+                           const Text(
+                             'Classification:',
+                             style: TextStyle(
+                               fontSize: 12,
+                               color: Colors.white70,
+                             ),
+                           ),
+                           const SizedBox(width: 12),
+                           Expanded(
+                             child: DropdownButton<String>(
+                               value: storage.expressionClassificationMode,
+                               isDense: true,
+                               underline: const SizedBox(),
+                               style: const TextStyle(
+                                 fontSize: 12,
+                                 color: Colors.white,
+                               ),
+                               items: const [
+                                 DropdownMenuItem(
+                                   value: 'llm',
+                                   child: Text('LLM (Realism Engine)'),
+                                 ),
+                                 DropdownMenuItem(
+                                   value: 'onnx',
+                                   child: Text('Local ONNX Model'),
+                                 ),
+                                 DropdownMenuItem(
+                                   value: 'manual',
+                                   child: Text('Manual Only'),
+                                 ),
+                               ],
+                               onChanged: (val) {
+                                 if (val != null)
+                                   storage.setExpressionClassificationMode(val);
+                               },
+                             ),
+                           ),
+                           // Download / ready indicator for the ONNX model
+                           Consumer<ExpressionClassifierService>(
+                             builder: (context, expressionService, _) =>
+                                 _buildOnnxDownloadButton(expressionService),
+                           ),
+                         ],
+                       ),
+                      const SizedBox(height: 8),
+                      // Display mode dropdown
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.view_sidebar,
+                            size: 16,
+                            color: Colors.white54,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Display:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButton<String>(
+                              value: storage.expressionDisplayMode,
+                              isDense: true,
+                              underline: const SizedBox(),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'sidebar',
+                                  child: Text('Sidebar Only'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'background',
+                                  child: Text('Background Only'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'both',
+                                  child: Text('Both'),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                if (val != null)
+                                  storage.setExpressionDisplayMode(val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Reroll toggle
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.casino,
+                            size: 16,
+                            color: Colors.white54,
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Re-roll if same sprite repeats',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: storage.expressionRerollSame,
+                            onChanged: (val) =>
+                                storage.setExpressionRerollSame(val),
+                            activeTrackColor: Colors.purpleAccent,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Fallback dropdown
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.backup,
+                            size: 16,
+                            color: Colors.white54,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Fallback:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButton<String>(
+                              value: storage.expressionFallback,
+                              isDense: true,
+                              underline: const SizedBox(),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'neutral',
+                                  child: Text('Neutral Sprite'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'prime',
+                                  child: Text('Prime Avatar'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'none',
+                                  child: Text('Hide'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'emoji',
+                                  child: Text('Emoji Icon'),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                if (val != null)
+                                  storage.setExpressionFallback(val);
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],
@@ -3191,11 +3677,362 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 24),
+
+          // \u2500\u2500 Advanced Launch Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+          _buildAdvancedLaunchOptions(context, storageService),
+          const SizedBox(height: 24),
         ],
       ),
     );
   }
 
+  bool _advancedLaunchExpanded = false;
+
+  Widget _buildAdvancedLaunchOptions(
+    BuildContext context,
+    StorageService storage,
+  ) {
+    const accent = Color(0xFF00D4AA); // teal-green consistent with beta accent
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(
+        children: [
+          // Header — tap to expand/collapse
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _advancedLaunchExpanded = !_advancedLaunchExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  const Icon(Icons.tune, color: accent, size: 18),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Advanced Launch Options',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'Affects next restart',
+                    style: TextStyle(fontSize: 11, color: Colors.white38),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _advancedLaunchExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.keyboard_arrow_down, color: Colors.white54, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Collapsible body
+          AnimatedCrossFade(
+            firstChild: const SizedBox(height: 0),
+            secondChild: _buildAdvancedLaunchBody(context, storage, accent),
+            crossFadeState: _advancedLaunchExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 220),
+            sizeCurve: Curves.easeInOut,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedLaunchBody(
+    BuildContext context,
+    StorageService storage,
+    Color accent,
+  ) {
+    Widget _toggle({
+      required String label,
+      required String tooltip,
+      required bool value,
+      required ValueChanged<bool> onChanged,
+      bool recommended = false,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(label, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                      if (recommended) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text('RECOMMENDED', style: TextStyle(fontSize: 9, color: accent, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(tooltip, style: const TextStyle(fontSize: 11, color: Colors.white38)),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeTrackColor: accent,
+              activeThumbColor: Colors.white,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 12),
+
+          // Flash Attention
+          _toggle(
+            label: 'Flash Attention',
+            tooltip: 'Faster attention math. ~20\u201340% speed boost on RTX/Apple Silicon. Disabled automatically for ROCm.',
+            value: storage.flashAttentionEnabled,
+            recommended: true,
+            onChanged: (v) => storage.setFlashAttentionEnabled(v),
+          ),
+
+          // Context Shift
+          _toggle(
+            label: 'Context Shift',
+            tooltip: 'Graceful KV-cache eviction when context overflows. Prevents hard cutoff of old conversation.',
+            value: storage.contextShiftEnabled,
+            recommended: true,
+            onChanged: (v) => storage.setContextShiftEnabled(v),
+          ),
+
+          // mlock
+          _toggle(
+            label: 'Lock Weights in RAM (mlock)',
+            tooltip: Platform.isLinux
+                ? 'Prevents paging to disk. Requires root or ulimit \u2011l unlimited on Linux \u2014 off by default.'
+                : 'Prevents OS from paging model weights to disk. Avoids catastrophic slowdown under memory pressure.',
+            value: storage.mlockEnabled,
+            recommended: !Platform.isLinux,
+            onChanged: (v) => storage.setMlockEnabled(v),
+          ),
+
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 12),
+
+          // GPU ID selector
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('GPU ID', style: TextStyle(fontSize: 13, color: Colors.white)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Which GPU to use for CUDA. Set to 1+ on systems with both a discrete and an integrated GPU.',
+                      style: TextStyle(fontSize: 11, color: Colors.white38),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 0 / 1 / 2 / 3 quick-pick chips
+              Wrap(
+                spacing: 6,
+                children: [0, 1, 2, 3].map((id) {
+                  final isSelected = storage.gpuId == id;
+                  return GestureDetector(
+                    onTap: () => storage.setGpuId(id),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? accent : Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? accent : Colors.white12,
+                        ),
+                      ),
+                      child: Text(
+                        '$id',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isSelected ? Colors.black : Colors.white54,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // BLAS Batch Size
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Prefill Batch Size', style: TextStyle(fontSize: 13, color: Colors.white)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Tokens processed in parallel during prompt evaluation. Higher = faster context loading, more VRAM.',
+                      style: TextStyle(fontSize: 11, color: Colors.white38),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Wrap(
+                spacing: 6,
+                children: [256, 512, 1024, 2048].map((bs) {
+                  final isSelected = storage.blasBatchSize == bs;
+                  return GestureDetector(
+                    onTap: () => storage.setBlasBatchSize(bs),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? accent : Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? accent : Colors.white12,
+                        ),
+                      ),
+                      child: Text(
+                        bs >= 1024 ? '${bs ~/ 1024}K' : '$bs',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: isSelected ? Colors.black : Colors.white54,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+          // Restart button — applies all Advanced Launch changes immediately
+          Builder(builder: (ctx) {
+            final koboldService = Provider.of<KoboldService>(ctx, listen: true);
+            final backendManager = Provider.of<BackendManager>(ctx, listen: false);
+            final storage = Provider.of<StorageService>(ctx, listen: false);
+            final canRestart = backendManager.backendPath != null &&
+                storage.lastUsedModelPath != null &&
+                File(storage.lastUsedModelPath!).existsSync();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!canRestart)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.07),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.amber, size: 14),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'No model loaded yet. Select a model on the Backend tab first.',
+                            style: TextStyle(fontSize: 11, color: Colors.amber),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (canRestart)
+                  ElevatedButton.icon(
+                    onPressed: koboldService.isRunning
+                        ? () async {
+                            await koboldService.stopKobold();
+                            await Future.delayed(const Duration(seconds: 1));
+                            if (!ctx.mounted) return;
+                            koboldService.startKobold(
+                              backendManager.backendPath!,
+                              storage.lastUsedModelPath!,
+                              gpuLayers: storage.gpuLayers,
+                              contextSize: storage.contextSize,
+                              useVulkan: storage.useVulkan ?? false,
+                              useCublas: storage.useCublas ?? false,
+                              useMetal: storage.useMetal ?? false,
+                              useRocm: storage.useRocm ?? false,
+                            );
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('Restarting backend with new settings…')),
+                            );
+                          }
+                        : () {
+                            koboldService.startKobold(
+                              backendManager.backendPath!,
+                              storage.lastUsedModelPath!,
+                              gpuLayers: storage.gpuLayers,
+                              contextSize: storage.contextSize,
+                              useVulkan: storage.useVulkan ?? false,
+                              useCublas: storage.useCublas ?? false,
+                              useMetal: storage.useMetal ?? false,
+                              useRocm: storage.useRocm ?? false,
+                            );
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('Starting backend…')),
+                            );
+                          },
+                    icon: Icon(
+                      koboldService.isRunning ? Icons.restart_alt : Icons.play_arrow,
+                      size: 18,
+                    ),
+                    label: Text(
+                      koboldService.isRunning ? 'Restart Backend' : 'Start Backend',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00D4AA),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ── Realism Mode Section ─────────────────────────────────────────────────
   Widget _buildRealismModeSection(
     BuildContext context,
     StorageService storageService,
@@ -4310,5 +5147,31 @@ String _engineDisplayName(String engineId) {
       return 'Piper TTS';
     default:
       return 'TTS';
+  }
+}
+
+String _expressionModeLabel(String mode) {
+  switch (mode) {
+    case 'llm':
+      return 'LLM';
+    case 'onnx':
+      return 'ONNX';
+    case 'manual':
+      return 'Manual';
+    default:
+      return mode;
+  }
+}
+
+String _expressionDisplayLabel(String mode) {
+  switch (mode) {
+    case 'sidebar':
+      return 'Sidebar';
+    case 'background':
+      return 'Background';
+    case 'both':
+      return 'Both';
+    default:
+      return mode;
   }
 }

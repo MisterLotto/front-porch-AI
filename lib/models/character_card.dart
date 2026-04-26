@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/database/database.dart' show AvatarImage;
 import 'package:front_porch_ai/models/lorebook.dart';
 
 /// Front Porch AI V2.5 extensions — stored inside V2 `extensions.front_porch`.
@@ -141,7 +142,9 @@ class CharacterCard {
   String? dbId; // UUID primary key (runtime only, not serialized)
   FrontPorchExtensions? frontPorchExtensions; // V2.5 Realism Engine defaults
   Map<String, dynamic>?
-  rawExtensions; // Preserve unknown third-party extension keys
+      rawExtensions; // Preserve unknown third-party extension keys
+  List<AvatarImage>? avatarImages; // Multiple avatar images for the character
+  int primeAvatarIndex = 1; // 1-based index of the prime (default) avatar
 
   CharacterCard({
     required this.name,
@@ -161,7 +164,9 @@ class CharacterCard {
     this.ttsVoice,
     this.frontPorchExtensions,
     this.rawExtensions,
-  });
+    this.avatarImages,
+    int? primeAvatarIndex,
+  }) : primeAvatarIndex = primeAvatarIndex ?? 1;
 
   /// All greetings: primary first message + alternates
   List<String> get allGreetings {

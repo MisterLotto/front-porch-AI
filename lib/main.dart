@@ -65,6 +65,7 @@ import 'package:front_porch_ai/ui/widgets/remote_lock_overlay.dart';
 import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
 import 'package:front_porch_ai/services/web_server_service.dart';
 import 'package:front_porch_ai/services/web_chat_bridge.dart';
+import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:front_porch_ai/app_version.dart';
 
 void main(List<String> args) async {
@@ -246,14 +247,12 @@ void main(List<String> args) async {
           },
           update: (context, kobold, persona, storage, worldRepo, previous) {
             if (previous != null) {
-              // Re-wire dependencies on every update to stay in sync
               previous.setLLMProvider(
                 Provider.of<LLMProvider>(context, listen: false),
               );
               previous.setCharacterRepository(
                 Provider.of<CharacterRepository>(context, listen: false),
               );
-              // Wire TtsService if available (it's registered later in the tree)
               try {
                 previous.setTtsService(
                   Provider.of<TtsService>(context, listen: false),
@@ -276,6 +275,12 @@ void main(List<String> args) async {
             );
             return chatService;
           },
+        ),
+        ChangeNotifierProxyProvider<StorageService, ExpressionClassifierService>(
+          create: (context) =>
+              ExpressionClassifierService(Provider.of<StorageService>(context, listen: false)),
+          update: (context, storage, previous) =>
+              previous ?? ExpressionClassifierService(storage),
         ),
         ChangeNotifierProxyProvider<StorageService, GroupChatRepository>(
           create: (context) => GroupChatRepository(
@@ -672,6 +677,18 @@ class _MyAppState extends State<MyApp> with WindowListener {
                     );
                     final tts = Provider.of<TtsService>(context, listen: false);
                     chatService.setTtsService(tts);
+                  } catch (_) {}
+                  // Wire ExpressionClassifierService into ChatService
+                  try {
+                    final chatService = Provider.of<ChatService>(
+                      context,
+                      listen: false,
+                    );
+                    final classifier = Provider.of<ExpressionClassifierService>(
+                      context,
+                      listen: false,
+                    );
+                    chatService.setExpressionClassifierService(classifier);
                   } catch (_) {}
                   // Wire UpdateService shutdown callback so child processes
                   // (KoboldCPP, web server, embedding sidecar) are stopped

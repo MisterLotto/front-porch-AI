@@ -23,6 +23,10 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/app_version.dart';
 
+// Note: app_version.dart was already imported — UpdateService already used
+// appVersion for _currentVersion. The isPreRelease getter now also guards
+// the update channel so stable builds can never be offered a beta update.
+
 /// Cross-platform self-update service.
 /// Checks GitHub Releases for new versions and downloads/runs the update.
 /// Supports Windows (Inno Setup), Linux (AppImage), and macOS (DMG).
@@ -136,6 +140,26 @@ class UpdateService extends ChangeNotifier {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final tagName = (data['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^[vV]'), '');
       final assets = data['assets'] as List<dynamic>? ?? [];
+
+      // Guard: stable builds must never be offered a pre-release update.
+      // GitHub's /releases/latest API already skips prereleases when the release
+      // is marked prerelease:true in CI — this is a second line of defence for
+      // edge cases (e.g. a release accidentally published without the flag).
+      final tagLower = tagName.toLowerCase();
+      final releaseIsBeta = tagLower.contains('beta') ||
+          tagLower.contains('alpha') ||
+          tagLower.contains('-rc') ||
+          tagLower.contains('-dev');
+      if (!isPreRelease && releaseIsBeta) {
+        debugPrint('[Update] Stable build — ignoring pre-release $tagName');
+        return false;
+      }
+      // Beta builds only update within the beta stream, not from beta→stable
+      // (stable will be offered via the stable build on its own schedule).
+      if (isPreRelease && !releaseIsBeta) {
+        debugPrint('[Update] Beta build — ignoring stable release $tagName');
+        return false;
+      }
 
       // Find the platform-specific update asset
       final targetAsset = _platformAsset;

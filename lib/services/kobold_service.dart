@@ -233,24 +233,73 @@ class KoboldService extends ChangeNotifier
       gpuLayers.toString(),
     ];
 
+    // \u2500\u2500 GPU backend flags \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
     if (useVulkan) args.add('--usevulkan');
-    if (useCublas) args.add('--usecublas');
+
+    if (useCublas) {
+      // Always pass an explicit GPU ID with --usecublas to prevent KoboldCPP
+      // from defaulting to GPU 0 which may be an iGPU on multi-GPU systems.
+      // Bug fix: on a system with both an iGPU (GPU 0) and a discrete RTX (GPU 1)
+      // the old code silently ran everything on the iGPU at ~0.5 t/s.
+      args.addAll(['--usecublas', _storageService.gpuId.toString()]);
+    }
+
     if (useRocm) {
       args.add('--usehipblas');
-      args.add(
-        '--noflashattention',
-      ); // Flash attention kernel crashes on many AMD GPUs
+      // Flash attention kernel crashes on many AMD GPUs — always disable for ROCm.
+      args.add('--noflashattention');
     }
-    // Note: Metal is used automatically on macOS Apple Silicon, no flag needed
+    // Note: Metal is used automatically on macOS Apple Silicon, no flag needed.
 
-    // Add KV Cache Quantization if enabled
+    // \u2500\u2500 FlashAttention \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Bug fix: previously only added when KV quantization was also enabled,
+    // meaning CUDA/Metal users without KV quant never got the ~30% speed boost.
+    // Now enabled independently for CUDA and Metal. ROCm is excluded above.
+    final wantsFlashAttn = _storageService.flashAttentionEnabled;
+    final canUseFlashAttn = (useCublas || useMetal) && !useRocm;
+    if (wantsFlashAttn && canUseFlashAttn) {
+      args.add('--flashattention');
+    }
+
+    // \u2500\u2500 KV Cache Quantization \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Flash attention is a prerequisite for V-cache quantization. Since we
+    // may have already added it above, only add the flag if it wasn\u2019t added.
     if (_storageService.kvQuantizationLevel > 0) {
       args.add('--quantkv');
       args.add(_storageService.kvQuantizationLevel.toString());
-      if (!useRocm) {
-        // Flash attention is strictly required to quantize V-cache. ROCm falls back to K-cache quantization implicitly.
+      // Ensure flash attention is present for quantised V-cache even if the
+      // user disabled it in Advanced settings (quantkv requires it).
+      if (!args.contains('--flashattention') && !useRocm) {
         args.add('--flashattention');
       }
+    }
+
+    // \u2500\u2500 ContextShift \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Bug fix: KoboldCPP\u2019s own Quick Launch enables this by default (graceful
+    // KV eviction when context overflows instead of hard truncation). We now
+    // match that behaviour. Users can disable it in Advanced Launch Options.
+    if (_storageService.contextShiftEnabled) {
+      args.add('--contextshift');
+    }
+
+    // \u2500\u2500 mlock \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Prevents the OS from paging model weights to disk under memory pressure.
+    // Without this, a system at the edge of RAM capacity can drop from 20 t/s
+    // to 0.5 t/s mid-session. Default ON for Win/Mac, OFF for Linux (requires
+    // root or ulimit -l unlimited which most users haven\u2019t set).
+    if (_storageService.mlockEnabled) {
+      args.add('--usemlock');
+    }
+
+    // \u2500\u2500 BLAS batch size \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // Controls how many tokens are processed in parallel during prefill (prompt
+    // evaluation). Higher = faster context loading, more VRAM. Default 512.
+    // Large-VRAM users (24 GB+) benefit from 1024\u20132048.
+    if (_storageService.blasBatchSize != 512) {
+      // Only pass the flag when non-default so KoboldCPP\u2019s built-in default
+      // applies for users who haven\u2019t changed this setting.
+      args.addAll(['--blasbatchsize', _storageService.blasBatchSize.toString()]);
     }
 
     try {
