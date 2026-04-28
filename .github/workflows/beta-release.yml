@@ -217,6 +217,7 @@ jobs:
             --collect-all huggingface_hub \
             --collect-all transformers \
             --collect-all numpy \
+            --collect-all onnxruntime \
             --hidden-import huggingface_hub \
             --hidden-import transformers \
             --hidden-import numpy \

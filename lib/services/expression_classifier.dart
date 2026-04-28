@@ -152,6 +152,12 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
   /// Directory where model files are cached — always inside the user's data root.
   String get _modelCacheDir => '${storage.rootPath}/models/emotion_classifier';
 
+  /// Path to the ONNX classifier debug log file.
+  String get _debugLogPath => '${storage.rootPath}/logs/onnx_classifier_debug.txt';
+
+  /// The python command for the current platform.
+  String get _pythonCmd => Platform.isWindows ? 'python' : 'python3';
+
   /// Resolves the executable and arguments for the sentiment classifier.
   ///
   /// Resolution order:
@@ -182,17 +188,32 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
     // 3. User's storage root (manual placement / advanced users)
     final userScript = File('${storage.rootPath}/sentiment_classifier.py');
     if (userScript.existsSync()) {
-      return ('python3', [userScript.path, ...extraArgs]);
+      return (_pythonCmd, [userScript.path, ...extraArgs]);
     }
 
     // 4. Dev mode: project root via Directory.current (flutter run sets CWD to project root)
     final devScript = File('${Directory.current.path}/sentiment_classifier.py');
     if (devScript.existsSync()) {
-      return ('python3', [devScript.path, ...extraArgs]);
+      return (_pythonCmd, [devScript.path, ...extraArgs]);
     }
 
     // Final fallback — relies on PATH
-    return ('python3', ['sentiment_classifier.py', ...extraArgs]);
+    return (_pythonCmd, ['sentiment_classifier.py', ...extraArgs]);
+  }
+
+  /// Appends a timestamped line to the ONNX debug log file.
+  void _logDebug(String message) async {
+    try {
+      final logFile = File(_debugLogPath);
+      final logDir = logFile.parent;
+      if (!logDir.existsSync()) {
+        await logDir.create(recursive: true);
+      }
+      final timestamp = DateTime.now().toIso8601String();
+      await logFile.writeAsString('[$timestamp] $message\n', mode: FileMode.append);
+    } catch (_) {
+      // Log write failures should not crash classification
+    }
   }
 
   /// Streams stderr lines from [process], firing progress/ready callbacks.
@@ -203,6 +224,7 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
           final line = rawLine.trim();
           if (line.isEmpty) continue;
           debugPrint('[SentimentClassifier] $line');
+          _logDebug('[STDERR] $line');
           try {
             final parsed = jsonDecode(line) as Map<String, dynamic>;
             final status = parsed['status'] as String?;
@@ -221,7 +243,11 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
           }
         }
       },
-      onError: (e) => debugPrint('[SentimentClassifier] stderr error: $e'),
+      onError: (e) {
+        final msg = '[SentimentClassifier] stderr error: $e';
+        debugPrint(msg);
+        _logDebug(msg);
+      },
     );
   }
 
@@ -234,6 +260,7 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
     final (exe, args) = _resolveCommand(['--download-only', '--cache-dir', cacheDir]);
 
     debugPrint('[ONNXExpressionClassifier] Starting download: $exe ${args.join(' ')}');
+    _logDebug('Starting download: $exe ${args.join(' ')}');
 
     try {
       final process = await Process.start(exe, args);
@@ -243,6 +270,7 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
 
       final exitCode = await process.exitCode;
       debugPrint('[ONNXExpressionClassifier] Download process exited: $exitCode');
+      _logDebug('Download process exited: $exitCode');
 
       if (exitCode == 0 && !_modelReady) {
         // Model was already cached — script exited 0 before emitting model_ready
@@ -250,7 +278,9 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
         onModelReady?.call();
       }
     } catch (e) {
-      debugPrint('[ONNXExpressionClassifier] downloadModel error: $e');
+      final msg = '[ONNXExpressionClassifier] downloadModel error: $e';
+      debugPrint(msg);
+      _logDebug(msg);
     }
   }
 
@@ -259,20 +289,25 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
     final cacheDir = _modelCacheDir;
     final (exe, args) = _resolveCommand(['--cache-dir', cacheDir]);
 
-    // In python3 mode, verify the script exists before spawning
-    if (exe == 'python3' && args.isNotEmpty && args[0].endsWith('.py')) {
+    // In python mode, verify the script exists before spawning
+    if (exe == _pythonCmd && args.isNotEmpty && args[0].endsWith('.py')) {
       if (!File(args[0]).existsSync()) {
-        debugPrint('[ExpressionClassifier] Script not found: ${args[0]}');
+        final msg = '[ExpressionClassifier] Script not found: ${args[0]}';
+        debugPrint(msg);
+        _logDebug(msg);
         return const EmotionResult(emotion: 'neutral', confidence: 0.0);
       }
     }
+
+    _logDebug('classify() called: exe=$exe args=${args.join(' ')}');
 
     try {
       final process = await Process.start(exe, args);
       _listenStderr(process);
 
       final request = jsonEncode({'text': text});
-      process.stdin.writeln(request);
+      final lineEnding = Platform.isWindows ? '\r\n' : '\n';
+      process.stdin.write('$request$lineEnding');
       await process.stdin.close();
 
       final output = await process.stdout
@@ -281,21 +316,33 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
           .then((s) => s.trim());
       final exitCode = await process.exitCode;
 
+      _logDebug('Process exited: code=$exitCode stdout_length=${output.length}');
+      if (output.isNotEmpty && output.length < 500) {
+        _logDebug('stdout: $output');
+      }
+
       if (exitCode != 0 || output.isEmpty) {
-        debugPrint('[ExpressionClassifier] ONNX classifier failed (exit: $exitCode)');
+        final msg = '[ExpressionClassifier] ONNX classifier failed (exit: $exitCode)';
+        debugPrint(msg);
+        _logDebug(msg);
         return const EmotionResult(emotion: 'neutral', confidence: 0.0);
       }
 
       final json = jsonDecode(output) as Map<String, dynamic>;
       if (json.containsKey('error')) {
-        debugPrint('[ExpressionClassifier] ${json['error']}');
+        final msg = '[ExpressionClassifier] ${json['error']}';
+        debugPrint(msg);
+        _logDebug(msg);
         return const EmotionResult(emotion: 'neutral', confidence: 0.0);
       }
 
       _modelReady = true;
+      _logDebug('Classification success: ${json['emotion']}');
       return EmotionResult.fromJson(json);
     } catch (e) {
-      debugPrint('[ExpressionClassifier] Exception: $e');
+      final msg = '[ExpressionClassifier] Exception: $e';
+      debugPrint(msg);
+      _logDebug(msg);
       return const EmotionResult(emotion: 'neutral', confidence: 0.0);
     }
   }
@@ -306,17 +353,17 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
 
     final (exe, args) = _resolveCommand([]);
 
-    if (exe != 'python3') {
+    if (exe != _pythonCmd) {
       // Bundled binary — just check it exists
       return File(exe).existsSync();
     }
 
-    // python3 path: verify both script and python3 binary exist
+    // python path: verify both script and python binary exist
     if (args.isNotEmpty && args[0].endsWith('.py') && !File(args[0]).existsSync()) {
       return false;
     }
     try {
-      final result = await Process.run('python3', ['--version']);
+      final result = await Process.run(_pythonCmd, ['--version']);
       return result.exitCode == 0;
     } catch (_) {
       return false;
