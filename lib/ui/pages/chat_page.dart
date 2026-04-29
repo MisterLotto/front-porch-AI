@@ -131,6 +131,7 @@ class _ChatPageState extends State<ChatPage> {
   bool _autoScroll = true;
   double _sidebarWidth = 300;
   int _inputMinLines = 1;
+  double _dragAccumulator = 0;
   bool _isCallActive = false;
   bool? _externalImagesAllowed;
   bool _imageConsentChecked = false;
@@ -252,13 +253,16 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _handleInputResize(double deltaPixels) {
-    // ~24px per line (character height + padding)
-    final deltaLines = (deltaPixels / -24).round();
-    if (deltaLines == 0) return;
-    final newLines = _inputMinLines + deltaLines;
-    if (newLines >= 1 && newLines <= 8 && newLines != _inputMinLines) {
-      setState(() => _inputMinLines = newLines);
-      _saveInputMinLines(newLines);
+    _dragAccumulator -= deltaPixels;
+    final pixelsPerLine = 8.0;
+    final deltaLines = (_dragAccumulator / pixelsPerLine).floor();
+    if (deltaLines != 0) {
+      _dragAccumulator -= deltaLines * pixelsPerLine;
+      final newLines = _inputMinLines + deltaLines;
+      if (newLines >= 1 && newLines <= 8) {
+        setState(() => _inputMinLines = newLines);
+        _saveInputMinLines(newLines);
+      }
     }
   }
 
@@ -357,14 +361,16 @@ class _ChatPageState extends State<ChatPage> {
 
                               return Stack(
                                 children: [
-                                  if (bgPath != null) ...[
-                                    Positioned.fill(
-                                      child: Image.asset(
-                                        bgPath,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ],
+                                   if (bgPath != null) ...[
+                                     Positioned.fill(
+                                       child: IgnorePointer(
+                                         child: Image.asset(
+                                           bgPath,
+                                           fit: BoxFit.cover,
+                                         ),
+                                       ),
+                                     ),
+                                   ],
                                   // Expression background sprite
                                   Consumer<ChatService>(
                                     builder: (context, chat, _) {
@@ -399,35 +405,39 @@ class _ChatPageState extends State<ChatPage> {
                                       final avatarFile = File(
                                         '${avatarDir.path}/${avatar.filename}',
                                       );
-                                      return Positioned.fill(
-                                        child: AnimatedSwitcher(
-                                          duration: const Duration(
-                                            milliseconds: 500,
-                                          ),
-                                          child: Container(
-                                            key: ValueKey(
-                                              'expr_bg_${avatar.id}',
-                                            ),
-                                            decoration: BoxDecoration(
-                                              image: DecorationImage(
-                                                image: FileImage(avatarFile),
-                                                fit: BoxFit.cover,
-                                                opacity: 0.15,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      );
+                                       return Positioned.fill(
+                                         child: IgnorePointer(
+                                           child: AnimatedSwitcher(
+                                             duration: const Duration(
+                                               milliseconds: 500,
+                                             ),
+                                             child: Container(
+                                               key: ValueKey(
+                                                 'expr_bg_${avatar.id}',
+                                               ),
+                                               decoration: BoxDecoration(
+                                                 image: DecorationImage(
+                                                   image: FileImage(avatarFile),
+                                                   fit: BoxFit.cover,
+                                                   opacity: 0.15,
+                                                 ),
+                                               ),
+                                             ),
+                                           ),
+                                         ),
+                                       );
                                     },
                                   ),
-                                  if (bgPath != null)
-                                    Positioned.fill(
-                                      child: Container(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.45,
-                                        ),
-                                      ),
-                                    ),
+                                   if (bgPath != null)
+                                     Positioned.fill(
+                                       child: IgnorePointer(
+                                         child: Container(
+                                           color: Colors.black.withValues(
+                                             alpha: 0.45,
+                                           ),
+                                         ),
+                                       ),
+                                     ),
                                   ListView.builder(
                                     controller: _scrollController,
                                     reverse: true,
@@ -1986,22 +1996,21 @@ class _ChatPageState extends State<ChatPage> {
             MouseRegion(
               cursor: SystemMouseCursors.resizeRow,
               child: GestureDetector(
+                onVerticalDragStart: (_) => _dragAccumulator = 0,
                 onVerticalDragUpdate: (details) => _handleInputResize(details.delta.dy),
+                onVerticalDragEnd: (_) => _dragAccumulator = 0,
                 behavior: HitTestBehavior.opaque,
                 child: Container(
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 40),
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  color: Colors.transparent,
                   child: Center(
                     child: Container(
-                      height: 2,
-                      width: 40,
+                      height: 3,
+                      width: 50,
                       decoration: BoxDecoration(
                         color: Colors.white38,
-                        borderRadius: BorderRadius.circular(1),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
