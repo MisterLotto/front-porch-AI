@@ -126,7 +126,7 @@ jobs:
           mkdir -p "$DEST"
 
           # Install TTS dependencies + PyInstaller
-          pip install --break-system-packages pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy onnxruntime transformers huggingface_hub
+          pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy onnxruntime transformers huggingface_hub
 
           # Build Kokoro TTS as a standalone directory bundle
           echo "Building Kokoro TTS binary..."
