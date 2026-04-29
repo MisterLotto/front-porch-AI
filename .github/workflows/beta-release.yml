@@ -120,13 +120,13 @@ jobs:
         run: flutter build ${{ matrix.platform }} --release
 
       - name: Bundle ML Engines (Kokoro TTS, Piper TTS, Whisper STT, ONNX Embeddings)
-        if: matrix.platform != 'linux'
         shell: bash
         run: |
           DEST="${{ matrix.build_path }}/piper"
           mkdir -p "$DEST"
 
           # Install TTS dependencies + PyInstaller
+          pip install --upgrade pip
           pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy onnxruntime transformers huggingface_hub
 
           # Build Kokoro TTS as a standalone directory bundle

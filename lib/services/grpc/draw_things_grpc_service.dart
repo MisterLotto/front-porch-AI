@@ -204,7 +204,7 @@ class DrawThingsGrpcService {
   }) async* {
     connect();
 
-    // Map sampler name to FlatBuffer enum
+    // Map sampler name to FlatBuffer enum — matching Python client defaults
     SamplerType samplerType = SamplerType.EulerA;
     if (samplerName.toLowerCase().contains('dpm++ 2m karras')) {
       samplerType = SamplerType.DPMPP2MKarras;
@@ -214,6 +214,10 @@ class DrawThingsGrpcService {
       samplerType = SamplerType.LCM;
     } else if (samplerName.toLowerCase().contains('tcd')) {
       samplerType = SamplerType.TCD;
+    } else if (samplerName.toLowerCase().contains('ddim')) {
+      samplerType = SamplerType.DDIM;
+    } else if (samplerName.toLowerCase().contains('euler')) {
+      samplerType = SamplerType.EulerA;
     }
 
     // Build FlatBuffer config — matching Python client's full config
@@ -230,11 +234,11 @@ class DrawThingsGrpcService {
       ..addStrength(1.0)
       ..addBatchCount(1)
       ..addBatchSize(1)
-      ..addSeedMode(SeedMode.Legacy)
-      ..addRefinerStart(0.7)
+      ..addSeedMode(SeedMode.ScaleAlike)
+      ..addRefinerStart(0.1)
       ..addPreserveOriginalAfterInpaint(true)
       ..addResolutionDependentShift(false)
-      ..addMaskBlur(0.0)
+      ..addMaskBlur(1.5)
       ..addSharpness(0.0)
       ..addSampler(samplerType);
 
