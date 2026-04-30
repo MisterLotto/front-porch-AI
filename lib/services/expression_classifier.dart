@@ -197,11 +197,13 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
 
     // 4. Dev mode: project root via Directory.current (flutter run sets CWD to project root)
     final devScript = File('${Directory.current.path}/sentiment_classifier.py');
+    debugPrint('[ExpressionClassifier] Checking dev script: ${devScript.path}');
     if (devScript.existsSync()) {
       return (_pythonCmd, [devScript.path, ...extraArgs]);
     }
 
     // Final fallback — relies on PATH
+    debugPrint('[ExpressionClassifier] No script found at known paths, falling back to PATH search for: sentiment_classifier.py');
     return (_pythonCmd, ['sentiment_classifier.py', ...extraArgs]);
   }
 
