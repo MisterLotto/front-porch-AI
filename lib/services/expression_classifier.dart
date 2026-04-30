@@ -182,6 +182,7 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
     final ext = Platform.isWindows ? '.exe' : '';
     final bundledBin = File('$exeDir/sentiment_classifier/sentiment_classifier$ext');
     if (bundledBin.existsSync()) {
+      debugPrint('[ExpressionClassifier] Using bundled binary: ${bundledBin.path}');
       return (bundledBin.path, extraArgs);
     }
 
@@ -210,9 +211,11 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
         await logDir.create(recursive: true);
       }
       final timestamp = DateTime.now().toIso8601String();
-      await logFile.writeAsString('[$timestamp] $message\n', mode: FileMode.append);
-    } catch (_) {
-      // Log write failures should not crash classification
+      final formatted = '[$timestamp] $message';
+      debugPrint('[ONNX:Log] $message'); // Mirror to console for easier troubleshooting
+      await logFile.writeAsString('$formatted\n', mode: FileMode.append);
+    } catch (e) {
+      debugPrint('[ONNX:Log] Failed to write to log file: $e');
     }
   }
 
@@ -299,7 +302,8 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
       }
     }
 
-    _logDebug('classify() called: exe=$exe args=${args.join(' ')}');
+    _logDebug('classify() called for text: "${text.length > 50 ? '${text.substring(0, 50)}...' : text}"');
+    _logDebug('Executing: $exe ${args.join(' ')}');
 
     try {
       final process = await Process.start(exe, args);
