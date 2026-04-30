@@ -247,6 +247,7 @@ finally:
       } catch (_) {}
 
       return bytes;
+    }
   }
 
   Future<File> _writePythonScript(String content) async {
