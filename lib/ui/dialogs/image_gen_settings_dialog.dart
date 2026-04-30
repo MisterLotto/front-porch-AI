@@ -187,13 +187,21 @@ class _ImageGenSettingsDialogState extends State<ImageGenSettingsDialog> {
     if (url.isEmpty || model.isEmpty) return;
     setState(() { _switchingModel = true; _modelActionStatus = 'Unloading current model…'; });
     final service = Provider.of<ImageGenService>(context, listen: false);
-    // switchLocalModel() already calls unload then options internally
-    final ok = await service.switchLocalModel(url, model);
+    final isDrawThings = storage.imageGenBackend == 'drawthings';
+    late bool ok;
+    if (isDrawThings) {
+      // Draw Things gRPC loads model during generation via FlatBuffer config.
+      // No separate switch call needed — just succeed immediately.
+      ok = true;
+    } else {
+      // switchLocalModel() already calls unload then options internally
+      ok = await service.switchLocalModel(url, model);
+    }
     if (mounted) {
       setState(() {
         _switchingModel = false;
         _modelActionStatus = ok
-            ? '✓ Switched to: $model'
+            ? (isDrawThings ? '✓ Model will be loaded during generation' : '✓ Switched to: $model')
             : '✗ Failed to switch — check the server logs';
       });
     }
