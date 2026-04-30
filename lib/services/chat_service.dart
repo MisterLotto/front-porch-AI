@@ -383,6 +383,7 @@ class ChatService extends ChangeNotifier {
   ExpressionClassifierService? _expressionClassifierService;
   String? _onnxExpressionLabel;
   String? _onnxCachedForEmotion;
+  int _lastOnnxMessageCount = 0;
   bool _onnxClassifying = false;
 
   // Passage of time
@@ -906,8 +907,8 @@ class ChatService extends ChangeNotifier {
       if (_onnxCachedForEmotion == lower && _onnxExpressionLabel != null) {
         return _onnxExpressionLabel;
       }
-      // Trigger async ONNX classification if emotion changed
-      if (_onnxCachedForEmotion != lower && !_onnxClassifying) {
+      // Trigger async ONNX classification if emotion changed OR a new message arrived
+      if ((_onnxCachedForEmotion != lower || _messages.length != _lastOnnxMessageCount) && !_onnxClassifying) {
         _classifyWithOnnxAsync(lower);
       }
       return _onnxExpressionLabel ?? 'neutral';
@@ -1047,6 +1048,7 @@ class ChatService extends ChangeNotifier {
     if (_expressionClassifierService == null) return;
 
     _onnxClassifying = true;
+    _lastOnnxMessageCount = _messages.length;
     try {
       // Initialize classifier with current mode
       await _expressionClassifierService!.ensureInitialized(
