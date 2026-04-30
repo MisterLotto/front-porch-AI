@@ -70,50 +70,19 @@ Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; \
 ; Launch the app after install (user can uncheck this)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
-[UninstallDelete]
-; These are only deleted if the user selects the "Wipe User Data" option in the uninstaller UI
-Type: filesandordirs; Name: "{userdocs}\FrontPorchAI-Beta"; Check: WipeUserDataRequested
-
 [Code]
-var
-  WipeDataCheckBox: TCheckBox;
-
 // Returns true if VC++ 2015-2022 x64 Redistributable is NOT already installed.
+// Checks the registry key that Microsoft documents as the canonical detection method.
+// See: https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
 function VCRedistNeedsInstall: Boolean;
 var
   Installed: Cardinal;
 begin
+  // The "Installed" DWORD under this key is set to 1 when VC++ 2022 x64 is present
   Result := not RegQueryDWordValue(
     HKLM,
     'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64',
     'Installed',
     Installed
   ) or (Installed <> 1);
-end;
-
-// Create a checkbox on the uninstallation confirmation page
-procedure InitializeUninstallProgressForm();
-var
-  UninstallMsgLabel: TStringLabel;
-begin
-  if not UninstallSilent then
-  begin
-    UninstallMsgLabel := UninstallProgressForm.StatusLabel;
-    
-    WipeDataCheckBox := TCheckBox.Create(UninstallProgressForm);
-    WipeDataCheckBox.Parent := UninstallProgressForm;
-    WipeDataCheckBox.Caption := 'Wipe all user data (chats, models, and settings)';
-    WipeDataCheckBox.Top := UninstallProgressForm.ClientHeight - WipeDataCheckBox.Height - 10;
-    WipeDataCheckBox.Left := 10;
-    WipeDataCheckBox.Width := UninstallProgressForm.ClientWidth - 20;
-    WipeDataCheckBox.Checked := False;
-    WipeDataCheckBox.Hint := 'WARNING: This will permanently delete your character library and chat history.';
-    WipeDataCheckBox.ShowHint := True;
-  end;
-end;
-
-// Check function for [UninstallDelete]
-function WipeUserDataRequested: Boolean;
-begin
-  Result := Assigned(WipeDataCheckBox) and WipeDataCheckBox.Checked;
 end;
