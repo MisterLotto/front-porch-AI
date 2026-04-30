@@ -201,6 +201,8 @@ finally:
     script = script.replaceAll('NEGATIVE_PROMPT', negativePrompt.replaceAll("'", "\\'"));
     script = script.replaceAll('OUTPUT_PATH', outputPath);
 
+    debugPrint('DrawThingsGrpcService: Generated Python script:\n$script');
+
     final scriptFile = await _writePythonScript(script);
 
     try {
