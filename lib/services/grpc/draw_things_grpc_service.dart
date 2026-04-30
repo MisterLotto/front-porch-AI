@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 /// Progress update from image generation
 class ImageGenProgress {
@@ -144,10 +146,14 @@ finally:
     int seed = -1,
     Function(ImageGenProgress)? onProgress,
   }) async {
-    final tempDir = await Directory.systemTemp.createTemp('dt_gen_');
-    final outputPath = '${tempDir.path}/output.png';
+    final tempRoot = await getTemporaryDirectory();
+    final requestId = DateTime.now().millisecondsSinceEpoch;
+    final tempDir = await Directory(p.join(tempRoot.path, 'dt_gen_$requestId')).create(recursive: true);
+    final outputPath = p.join(tempDir.path, 'output.png');
 
-    var script = '''
+    debugPrint('DrawThingsGrpcService: Output path will be: $outputPath');
+
+    var script = r'''
 import sys, json, os
 sys.path.insert(0, 'PYTHON_CLIENT_DIR')
 from client import DrawThingsClient, GenerationConfig, Sampler, SeedMode
@@ -179,14 +185,16 @@ try:
     )
     
     if result.images:
-        img_data = result.images[0]
-        with open('OUTPUT_PATH', 'wb') as f:
-            f.write(img_data)
-            f.flush()
-            os.fsync(f.fileno())
-        file_size = os.path.getsize('OUTPUT_PATH')
-        print(f'FILE_SIZE:{file_size}')
-        print('SUCCESS')
+        # Use result.save() which handles NNC tensor decoding if needed
+        out_path = 'OUTPUT_PATH'
+        result.save(out_path)
+        
+        if os.path.exists(out_path):
+            file_size = os.path.getsize(out_path)
+            print(f'FILE_SIZE:{file_size}')
+            print('SUCCESS')
+        else:
+            print('ERROR: File was not written to ' + out_path)
     else:
         print('NO_IMAGE')
 except Exception as e:
@@ -195,18 +203,29 @@ finally:
     client.close()
 ''';
 
-    script = script.replaceAll('PYTHON_CLIENT_DIR', pythonClientDir);
-    script = script.replaceAll('HOST', host);
-    script = script.replaceAll('PORT', port.toString());
-    script = script.replaceAll('MODEL', model);
-    script = script.replaceAll('WIDTH_DIV64', (width ~/ 64).toString());
-    script = script.replaceAll('HEIGHT_DIV64', (height ~/ 64).toString());
-    script = script.replaceAll('SEED', (seed == -1 ? 0 : seed).toString());
-    script = script.replaceAll('STEPS', steps.toString());
-    script = script.replaceAll('CFG_SCALE', cfgScale.toString());
-    script = script.replaceAll('PROMPT', prompt.replaceAll("'", "\\'"));
-    script = script.replaceAll('NEGATIVE_PROMPT', negativePrompt.replaceAll("'", "\\'"));
-    script = script.replaceAll('OUTPUT_PATH', outputPath);
+
+    // Robust escaping for Python string literals
+    final escapedPrompt = prompt.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', ' ');
+    final escapedNegative = negativePrompt.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', ' ');
+
+    final replacements = {
+      'PYTHON_CLIENT_DIR': pythonClientDir,
+      'HOST': host,
+      'PORT': port.toString(),
+      'MODEL': model,
+      'WIDTH_DIV64': (width ~/ 64).toString(),
+      'HEIGHT_DIV64': (height ~/ 64).toString(),
+      'SEED': (seed == -1 ? 0 : seed).toString(),
+      'STEPS': steps.toString(),
+      'CFG_SCALE': cfgScale.toString(),
+      'PROMPT': escapedPrompt,
+      'NEGATIVE_PROMPT': escapedNegative,
+      'OUTPUT_PATH': outputPath,
+    };
+
+    replacements.forEach((key, value) {
+      script = script.replaceAll(key, value);
+    });
 
     debugPrint('DrawThingsGrpcService: Generated Python script:\n$script');
 
@@ -225,7 +244,14 @@ finally:
         debugPrint('DrawThingsGrpcService: Python stderr: ${result.stderr}');
       }
 
-      await scriptFile.delete();
+      // Cleanup script file immediately
+      try {
+        await scriptFile.delete();
+        final scriptDir = scriptFile.parent;
+        if (await scriptDir.exists()) {
+          await scriptDir.delete(recursive: true);
+        }
+      } catch (_) {}
 
       if (result.exitCode != 0 || !result.stdout.toString().contains('SUCCESS')) {
         throw Exception('Generation failed: ${result.stdout}');
@@ -233,40 +259,48 @@ finally:
 
       final file = File(outputPath);
       if (!await file.exists()) {
-        throw Exception('Output file not created');
+        throw Exception('Output file not created at $outputPath');
       }
 
-      // Verify file still exists and has content
       final fileSize = await file.length();
       debugPrint('DrawThingsGrpcService: Output file size: $fileSize bytes');
+      
       if (fileSize == 0) {
         throw Exception('Output file is empty after Python generation');
       }
 
-      // Small delay to ensure file is fully written
-      await Future.delayed(const Duration(milliseconds: 100));
-
+      // Read bytes
       final bytes = await file.readAsBytes();
-      debugPrint('DrawThingsGrpcService: Read ${bytes.length} bytes');
+      debugPrint('DrawThingsGrpcService: Successfully read ${bytes.length} bytes');
 
-      // Clean up temp directory BEFORE returning
-      try {
-        await tempDir.delete(recursive: true);
-      } catch (_) {}
+      // Debug: Print first 16 bytes to check header
+      if (bytes.length >= 16) {
+        final header = bytes.sublist(0, 16).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+        debugPrint('DrawThingsGrpcService: First 16 bytes: $header');
+      }
 
       return bytes;
     } catch (e) {
-      // Clean up temp directory on error
-      try {
-        await tempDir.delete(recursive: true);
-      } catch (_) {}
+      debugPrint('DrawThingsGrpcService: Error during generation: $e');
       rethrow;
+    } finally {
+      // Always cleanup the generation temp directory
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+          debugPrint('DrawThingsGrpcService: Cleaned up temp directory');
+        }
+      } catch (e) {
+        debugPrint('DrawThingsGrpcService: Cleanup failed: $e');
+      }
     }
   }
 
   Future<File> _writePythonScript(String content) async {
-    final tempDir = await Directory.systemTemp.createTemp('dt_script_');
-    final scriptFile = File('${tempDir.path}/script.py');
+    final tempRoot = await getTemporaryDirectory();
+    final requestId = DateTime.now().millisecondsSinceEpoch;
+    final tempDir = await Directory(p.join(tempRoot.path, 'dt_script_$requestId')).create(recursive: true);
+    final scriptFile = File(p.join(tempDir.path, 'script.py'));
     await scriptFile.writeAsString(content);
     return scriptFile;
   }
@@ -277,9 +311,15 @@ finally:
     Duration timeout,
   ) async {
     final process = await Process.start(executable, arguments);
-    final stdout = process.stdout.transform(utf8.decoder).join();
-    final stderr = process.stderr.transform(utf8.decoder).join();
+    final stdoutFuture = process.stdout.transform(utf8.decoder).join();
+    final stderrFuture = process.stderr.transform(utf8.decoder).join();
     final exitCode = await process.exitCode.timeout(timeout);
-    return ProcessResult(process.pid, exitCode, await stdout, stderr);
+    
+    // Await both streams before returning
+    final stdout = await stdoutFuture;
+    final stderr = await stderrFuture;
+    
+    return ProcessResult(process.pid, exitCode, stdout, stderr);
   }
+
 }
