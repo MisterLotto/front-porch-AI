@@ -49,11 +49,17 @@ finally:
     client.close()
 ''');
 
+      final scriptContent = await scriptFile.readAsString();
+      debugPrint('DrawThingsGrpcService: Script:\n$scriptContent');
+      
       final result = await _runWithTimeout(
         pythonPath,
         [scriptFile.path],
         const Duration(seconds: 30),
       );
+      debugPrint('DrawThingsGrpcService: Exit code: ${result.exitCode}');
+      debugPrint('DrawThingsGrpcService: Stdout: ${result.stdout}');
+      debugPrint('DrawThingsGrpcService: Stderr: ${result.stderr}');
       await scriptFile.delete();
 
       if (result.exitCode == 0 && result.stdout.toString().trim() == 'OK') {
