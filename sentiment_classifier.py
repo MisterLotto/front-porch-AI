@@ -41,7 +41,18 @@ Flags:
 import sys
 import json
 import os
+import io
 import numpy as np
+
+# Force UTF-8 for stdin/stdout on Windows to prevent encoding crashes with special characters
+if sys.platform == "win32":
+    sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+# Suppress confusing transformers/torch warnings
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow too
 
 # ── CLI argument parsing ───────────────────────────────────────────────────────
 
@@ -64,12 +75,16 @@ MODEL_CACHE_DIR = _get_arg('--cache-dir', _default_cache)
 
 MODEL_REPO = 'Cohee/distilbert-base-uncased-go-emotions-onnx'
 
+# The Cohee/distilbert-base-uncased-go-emotions-onnx model uses the standard 
+# GoEmotions dataset labels (28 total). The previous list was missing 
+# 'disapproval' and 'relief' and had some labels out of order.
 EMOTION_LABELS = [
     'admiration', 'amusement', 'anger', 'annoyance', 'approval',
     'caring', 'confusion', 'curiosity', 'desire', 'disappointment',
-    'disgust', 'embarrassment', 'excitement', 'fear', 'gratitude',
-    'grief', 'joy', 'love', 'nervousness', 'optimism', 'pride',
-    'realization', 'remorse', 'sadness', 'surprise', 'neutral',
+    'disapproval', 'disgust', 'embarrassment', 'excitement', 'fear',
+    'gratitude', 'grief', 'joy', 'love', 'nervousness', 'optimism',
+    'pride', 'realization', 'relief', 'remorse', 'sadness',
+    'surprise', 'neutral',
 ]
 
 _model = None
@@ -148,6 +163,10 @@ def _load_model():
     try:
         import onnxruntime as ort
         from huggingface_hub import hf_hub_download
+        
+        # Suppress warnings before importing transformers
+        import logging
+        logging.getLogger("transformers").setLevel(logging.ERROR)
         from transformers import AutoTokenizer
     except ImportError as e:
         _err(f'Missing dependency: {e}. Run: pip install onnxruntime huggingface_hub transformers numpy')
@@ -158,6 +177,7 @@ def _load_model():
 
         # Signal start to the Dart side
         print(json.dumps({'status': 'loading_model', 'model': MODEL_REPO}), file=sys.stderr, flush=True)
+        print("Note: Running in ONNX mode. PyTorch/TensorFlow warnings can be ignored.", file=sys.stderr, flush=True)
 
         # Patch tqdm BEFORE calling from_pretrained so downloads are tracked.
         # Do NOT pass progress_callback= — it is not a valid kwarg for these APIs.
@@ -190,10 +210,8 @@ def classify(text: str) -> dict:
 
     inputs = tokenizer(text, return_tensors='np', truncation=True, max_length=512, padding=True)
     
-    ort_inputs = {
-        "input_ids": inputs["input_ids"],
-        "attention_mask": inputs["attention_mask"]
-    }
+    # Pass all inputs returned by the tokenizer to the ONNX session
+    ort_inputs = {k: v for k, v in inputs.items()}
     outputs = model.run(None, ort_inputs)
 
     logits = outputs[0][0]
