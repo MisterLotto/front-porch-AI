@@ -33,7 +33,7 @@ class DrawThingsGrpcService {
   /// Tests connection to Draw Things via Python client
   Future<bool> testConnection() async {
     try {
-      final scriptFile = await _writePythonScript('''
+      var script = '''
 import sys
 sys.path.insert(0, 'PYTHON_CLIENT_DIR')
 from client import DrawThingsClient
@@ -47,10 +47,13 @@ except Exception as e:
     sys.exit(1)
 finally:
     client.close()
-''');
+''';
+      script = script.replaceAll('PYTHON_CLIENT_DIR', pythonClientDir);
+      script = script.replaceAll('HOST', host);
+      script = script.replaceAll('PORT', port.toString());
 
-      final scriptContent = await scriptFile.readAsString();
-      debugPrint('DrawThingsGrpcService: Script:\n$scriptContent');
+      final scriptFile = await _writePythonScript(script);
+      debugPrint('DrawThingsGrpcService: Script:\n$script');
       
       final result = await _runWithTimeout(
         pythonPath,
@@ -78,7 +81,7 @@ finally:
   /// Fetches available checkpoint models from Draw Things
   Future<List<String>> fetchModels() async {
     try {
-      final scriptFile = await _writePythonScript('''
+      var script = '''
 import sys, json
 sys.path.insert(0, 'PYTHON_CLIENT_DIR')
 from client import DrawThingsClient
@@ -98,7 +101,12 @@ except Exception as e:
     print('[]')
 finally:
     client.close()
-''');
+''';
+      script = script.replaceAll('PYTHON_CLIENT_DIR', pythonClientDir);
+      script = script.replaceAll('HOST', host);
+      script = script.replaceAll('PORT', port.toString());
+
+      final scriptFile = await _writePythonScript(script);
 
       final result = await _runWithTimeout(
         pythonPath,
@@ -137,7 +145,7 @@ finally:
     final tempDir = await Directory.systemTemp.createTemp('dt_gen_');
     final outputPath = '${tempDir.path}/output.png';
 
-    final scriptFile = await _writePythonScript('''
+    var script = '''
 import sys, json
 sys.path.insert(0, 'PYTHON_CLIENT_DIR')
 from client import DrawThingsClient, GenerationConfig, Sampler, SeedMode
@@ -178,10 +186,8 @@ except Exception as e:
     print('ERROR: ' + str(e))
 finally:
     client.close()
-''');
+''';
 
-    // Replace placeholders
-    String script = await scriptFile.readAsString();
     script = script.replaceAll('PYTHON_CLIENT_DIR', pythonClientDir);
     script = script.replaceAll('HOST', host);
     script = script.replaceAll('PORT', port.toString());
@@ -194,6 +200,8 @@ finally:
     script = script.replaceAll('PROMPT', prompt.replaceAll("'", "\\'"));
     script = script.replaceAll('NEGATIVE_PROMPT', negativePrompt.replaceAll("'", "\\'"));
     script = script.replaceAll('OUTPUT_PATH', outputPath);
+
+    final scriptFile = await _writePythonScript(script);
 
     try {
       final result = await _runWithTimeout(
