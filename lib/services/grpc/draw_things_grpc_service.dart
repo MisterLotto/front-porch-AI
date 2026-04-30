@@ -85,12 +85,14 @@ finally:
 import sys, json
 sys.path.insert(0, 'PYTHON_CLIENT_DIR')
 from client import DrawThingsClient
+import imageService_pb2 as pb2
 
 client = DrawThingsClient('HOST', PORT)
 try:
-    response = client.echo('models')
+    stub = client._stub
+    response = stub.Echo(pb2.EchoRequest(name='models'))
     files = []
-    for f in response.get('files', []):
+    for f in response.files:
         lower = f.lower()
         if any(x in lower for x in ['lora', 'controlnet', 'clip', 't5', 'encoder', 'gemma', 'llama', 'mistral', 'qwen', 'phi', 'chroma', 'ltx', 'vicuna', 'alpaca']):
             continue

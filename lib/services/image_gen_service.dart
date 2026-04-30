@@ -175,11 +175,18 @@ class ImageGenService extends ChangeNotifier {
           _statusMessage = 'Connecting to Draw Things...';
           notifyListeners();
           
+          final modelCheckpoint = model ?? _storage.imageGenModel;
+          if (modelCheckpoint.isNotEmpty && !modelCheckpoint.toLowerCase().endsWith('.ckpt')) {
+            _statusMessage = 'Invalid model name for Draw Things: must end with .ckpt (got: $modelCheckpoint)';
+            _isGenerating = false;
+            notifyListeners();
+            return null;
+          }
+          
           try {
             final grpcService = _ensureDrawThingsGrpc;
             final imageSize = size ?? _storage.imageGenSize;
             final (width, height) = _parseSize(imageSize);
-            final modelCheckpoint = model ?? _storage.imageGenModel;
             final steps = _storage.imageGenSteps;
             final cfgScale = _storage.imageGenCfgScale;
             final seed = _storage.imageGenSeed;
