@@ -148,7 +148,7 @@ finally:
     final outputPath = '${tempDir.path}/output.png';
 
     var script = '''
-import sys, json
+import sys, json, os
 sys.path.insert(0, 'PYTHON_CLIENT_DIR')
 from client import DrawThingsClient, GenerationConfig, Sampler, SeedMode
 
@@ -182,6 +182,8 @@ try:
         img_data = result.images[0]
         with open('OUTPUT_PATH', 'wb') as f:
             f.write(img_data)
+            f.flush()
+            os.fsync(f.fileno())
         print('SUCCESS')
     else:
         print('NO_IMAGE')
