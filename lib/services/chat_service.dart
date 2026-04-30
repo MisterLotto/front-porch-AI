@@ -18,6 +18,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
@@ -3109,7 +3110,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
       // Invalidate ONNX cache for the new response
       _onnxCachedForEmotion = null;
-      _onnxCachedLabel = null;
+      _onnxExpressionLabel = null;
       _lastOnnxMessageText = null;
 
       // Generate into a new message — it will be appended by _generateResponse
