@@ -914,7 +914,7 @@ class ChatService extends ChangeNotifier {
       // As requested, we don't want "live" updates. We keep the current
       // face until the message is complete.
       if (_isGenerating) {
-        return _onnxExpressionLabel ?? EmotionLabels.nuancedToStandard(lower);
+        return _onnxExpressionLabel ?? EmotionLabels.nuancedToStandard[lower] ?? 'neutral';
       }
 
       // Trigger async ONNX classification if a new message arrived, text changed, or emotion changed
@@ -934,7 +934,7 @@ class ChatService extends ChangeNotifier {
       if (_onnxCachedForEmotion == lower && _onnxExpressionLabel != null) {
         return _onnxExpressionLabel;
       }
-      return _onnxExpressionLabel ?? EmotionLabels.nuancedToStandard(lower);
+      return _onnxExpressionLabel ?? EmotionLabels.nuancedToStandard[lower] ?? 'neutral';
     }
 
     if (_characterEmotion.isEmpty) return 'neutral';

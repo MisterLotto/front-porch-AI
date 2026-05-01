@@ -433,16 +433,7 @@ class ONNXExpressionClassifier implements ExpressionClassifier {
     _stopProcess();
   }
 
-      _modelReady = true;
-      _logDebug('Classification success: ${json['emotion']}');
-      return EmotionResult.fromJson(json);
-    } catch (e) {
-      final msg = '[ExpressionClassifier] Exception: $e';
-      debugPrint(msg);
-      _logDebug(msg);
-      return const EmotionResult(emotion: 'neutral', confidence: 0.0);
-    }
-  }
+
 
   @override
   Future<bool> isAvailable() async {
