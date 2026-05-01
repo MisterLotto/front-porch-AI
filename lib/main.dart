@@ -35,6 +35,7 @@ import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/backend_manager.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
+import 'package:front_porch_ai/services/download_manager.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/hardware_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
@@ -136,6 +137,13 @@ void main(List<String> args) async {
         Provider<bool>.value(value: needsMigration), // migration flag
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => StorageService()),
+        ChangeNotifierProxyProvider<StorageService, DownloadManager>(
+          create: (context) => DownloadManager(
+            targetDir: Provider.of<StorageService>(context, listen: false).modelsDir.path,
+          ),
+          update: (context, storage, previous) =>
+              previous ?? DownloadManager(targetDir: storage.modelsDir.path),
+        ),
         ChangeNotifierProxyProvider<StorageService, KoboldService>(
           create: (context) => KoboldService(
             Provider.of<StorageService>(context, listen: false),
@@ -190,11 +198,13 @@ void main(List<String> args) async {
           update: (context, storage, previous) =>
               previous ?? BackendManager(storage),
         ),
-        ChangeNotifierProxyProvider<StorageService, ModelManager>(
-          create: (context) =>
-              ModelManager(Provider.of<StorageService>(context, listen: false)),
-          update: (context, storage, previous) =>
-              previous ?? ModelManager(storage),
+        ChangeNotifierProxyProvider2<StorageService, DownloadManager, ModelManager>(
+          create: (context) => ModelManager(
+            Provider.of<StorageService>(context, listen: false),
+            Provider.of<DownloadManager>(context, listen: false),
+          ),
+          update: (context, storage, downloadManager, previous) =>
+              previous ?? ModelManager(storage, downloadManager),
         ),
         ChangeNotifierProvider(create: (_) => OpenRouterService()),
         ChangeNotifierProxyProvider3<
