@@ -2734,158 +2734,139 @@ class _ChatPageState extends State<ChatPage> {
             },
           ),
 
-          // Action Buttons
+          // Settings Button
           Container(
             padding: const EdgeInsets.all(8),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Colors.white10)),
             ),
-            child: Column(
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final result = await showDialog(
-                        context: context,
-                        builder: (context) =>
-                            EditCharacterDialog(character: character),
-                      );
-                      if (result == true) {
-                        // Force rebuild if character changed
-                        setState(() {});
-                      }
-                    },
-                    icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('Edit Character'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: const BorderSide(color: Colors.white24),
-                    ),
+            child: SizedBox(
+              width: double.infinity,
+              child: PopupMenuButton<String>(
+                child: const Text(
+                  'Settings',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+                color: const Color(0xFF1e293b),
+                elevation: 8,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white24),
+                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: Colors.white12),
+              ),
+              offset: const Offset(0, 8),
+              onSelected: (value) async {
+                switch (value) {
+                  case 'edit_character':
+                    final result = await showDialog(
+                      context: context,
+                      builder: (context) =>
+                          EditCharacterDialog(character: character),
+                    );
+                    if (result == true) {
+                      setState(() {});
+                    }
+                    break;
+                  case 'expressions':
+                    final storage = Provider.of<StorageService>(
+                      context,
+                      listen: false,
+                    );
+                    final repo = Provider.of<CharacterRepository>(
+                      context,
+                      listen: false,
+                    );
+                    final result = await CharacterAvatarsDialog.show(
+                      context: context,
+                      character: character,
+                      repository: repo,
+                      storage: storage,
+                    );
+                    if (result == true) {
+                      setState(() {});
+                    }
+                    break;
+                  case 'ui':
+                    showDialog(
+                      context: context,
+                      builder: (context) => const UiSettingsDialog(),
+                    );
+                    break;
+                  case 'chat':
+                    showDialog(
+                      context: context,
+                      builder: (context) => const ChatSettingsDialog(),
+                    );
+                    break;
+                  case 'model':
+                    showDialog(
+                      context: context,
+                      builder: (context) => const ModelSettingsDialog(),
+                    );
+                    break;
+                  case 'tts':
+                    showDialog(
+                      context: context,
+                      builder: (context) => const TtsSettingsDialog(),
+                    );
+                    break;
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'edit_character',
+                  child: _SettingsMenuItem(
+                    icon: Icons.edit_outlined,
+                    label: 'Edit Character',
                   ),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      final storage = Provider.of<StorageService>(
-                        context,
-                        listen: false,
-                      );
-                      final repo = Provider.of<CharacterRepository>(
-                        context,
-                        listen: false,
-                      );
-                      final result = await CharacterAvatarsDialog.show(
-                        context: context,
-                        character: character,
-                        repository: repo,
-                        storage: storage,
-                      );
-                      if (result == true) {
-                        setState(() {});
-                      }
-                    },
-                    icon: const Icon(Icons.mood, size: 16),
-                    label: const Text('Expression Images'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: const BorderSide(color: Colors.white24),
-                    ),
+                PopupMenuItem(
+                  value: 'expressions',
+                  child: _SettingsMenuItem(
+                    icon: Icons.mood_outlined,
+                    label: 'Expression Images',
                   ),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => const UiSettingsDialog(),
-                      );
-                    },
-                    icon: const Icon(Icons.tune, size: 16),
-                    label: const Text('UI Settings'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: const BorderSide(color: Colors.white24),
-                    ),
+                PopupMenuItem(
+                  value: 'ui',
+                  child: _SettingsMenuItem(
+                    icon: Icons.tune_outlined,
+                    label: 'UI Settings',
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => const ChatSettingsDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.settings, size: 16),
-                        label: const Text(
-                          'Chat',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => const ModelSettingsDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.memory, size: 16),
-                        label: const Text(
-                          'Model',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => const TtsSettingsDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.volume_up, size: 16),
-                        label: const Text(
-                          'TTS',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                        ),
-                      ),
-                    ),
-                  ],
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem(
+                  value: 'chat',
+                  child: _SettingsMenuItem(
+                    icon: Icons.chat_bubble_outline,
+                    label: 'Chat Settings',
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'model',
+                  child: _SettingsMenuItem(
+                    icon: Icons.memory_outlined,
+                    label: 'Model Settings',
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'tts',
+                  child: _SettingsMenuItem(
+                    icon: Icons.volume_up_outlined,
+                    label: 'TTS Settings',
+                  ),
                 ),
               ],
             ),
-          ),
+              ),
+            ),
 
-          Expanded(
-            child: ListView(
+            Expanded(
+              child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 // ── RAG Memory ──
@@ -10728,6 +10709,33 @@ class _PulsingIconState extends State<_PulsingIcon>
           child: Icon(widget.icon, size: 16, color: widget.color),
         );
       },
+    );
+  }
+}
+
+class _SettingsMenuItem extends StatelessWidget {
+  const _SettingsMenuItem({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.white70),
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+          ),
+        ),
+      ],
     );
   }
 }
