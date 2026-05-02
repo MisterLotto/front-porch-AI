@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -307,107 +308,242 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     });
   }
 
-   void _editLoreEntry(int index) {
-     final entry = _loreEntries[index];
-     final keyController = TextEditingController(text: entry.key);
-     final contentController = TextEditingController(text: entry.content);
-     bool isConstant = entry.constant;
-     int stickyDepth = entry.stickyDepth;
+  Future<void> _importLorebookJson() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (result == null || result.files.single.path == null) return;
 
-     showDialog(
-       context: context,
-       builder: (context) => StatefulBuilder(
-         builder: (context, setStateDialog) {
-           return AlertDialog(
-             backgroundColor: const Color(0xFF1E293B),
-             title: const Text('Edit Lorebook Entry'),
-             content: SingleChildScrollView(
-               child: Column(
-                 mainAxisSize: MainAxisSize.min,
-                 children: [
-                   Row(
-                     children: [
-                       const Text('Always Active', style: TextStyle(color: Colors.white)),
-                       const Spacer(),
-                       Switch(
-                         value: isConstant,
-                         onChanged: (val) {
-                           setStateDialog(() {
-                             isConstant = val;
-                           });
-                         },
-                       ),
-                     ],
-                   ),
-                   if (!isConstant) ...[
-                     const SizedBox(height: 8),
-                     Row(
-                       children: [
-                         Text('Trigger Depth: $stickyDepth ${stickyDepth == 1 ? "message" : "messages"}', style: const TextStyle(color: Colors.white70)),
-                       ],
-                     ),
-                     Slider(
-                       value: stickyDepth.toDouble(),
-                       min: 1,
-                       max: 100,
-                       divisions: 99,
-                       label: stickyDepth.toString(),
-                       onChanged: (val) {
-                         setStateDialog(() {
-                           stickyDepth = val.toInt();
-                         });
-                       },
-                     ),
-                   ],
-                   const SizedBox(height: 8),
-                   TextField(
-                     controller: keyController,
-                     enabled: !isConstant,
-                     style: const TextStyle(color: Colors.white),
-                     decoration: InputDecoration(
-                       labelText: isConstant ? 'Keywords (Disabled)' : 'Keywords (comma separated)',
-                       helperText: isConstant ? 'Always included in context' : null,
-                       filled: true,
-                       fillColor: Colors.black26,
-                     ),
-                   ),
-                   const SizedBox(height: 16),
-                    AppTextField(
+    try {
+      final content = await File(result.files.single.path!).readAsString();
+      final Map<String, dynamic> json = jsonDecode(content) as Map<String, dynamic>;
+
+      if (json['entries'] == null && json['lorebook'] == null) {
+        throw FormatException(
+          'Invalid lorebook file: missing "entries" or "lorebook" field. '
+          'Supported formats: SillyTavern, Chub.ai, Front Porch.',
+        );
+      }
+
+      final lorebook = Lorebook.fromJson(json);
+
+      if (lorebook.entries.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No entries found in file.')),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _loreEntries.addAll(lorebook.entries);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported ${lorebook.entries.length} entries.')),
+        );
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e')),
+        );
+      }
+    }
+  }
+
+    void _editLoreEntry(int index) {
+      final entry = _loreEntries[index];
+      final keyController = TextEditingController(text: entry.key);
+      final contentController = TextEditingController(text: entry.content);
+      final nameController = TextEditingController(text: entry.name);
+      bool isConstant = entry.constant;
+      int stickyDepth = entry.stickyDepth;
+
+      showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.menu_book, color: Colors.blueAccent, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Edit Lorebook Entry',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isConstant
+                              ? Colors.amberAccent.withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.push_pin,
+                            size: 16,
+                            color: isConstant
+                                ? Colors.amberAccent
+                                : Colors.white38,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Always Active',
+                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          Switch(
+                            value: isConstant,
+                            onChanged: (val) =>
+                                setStateDialog(() => isConstant = val),
+                            activeTrackColor: Colors.amberAccent.withValues(
+                              alpha: 0.5,
+                            ),
+                            activeThumbColor: Colors.amberAccent,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!isConstant) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.layers,
+                            size: 14,
+                            color: Colors.white38,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Trigger Depth: $stickyDepth ${stickyDepth == 1 ? "message" : "messages"}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SliderTheme(
+                        data: SliderThemeData(
+                          activeTrackColor: Colors.blueAccent,
+                          inactiveTrackColor: Colors.white12,
+                          thumbColor: Colors.blueAccent,
+                          trackHeight: 3,
+                        ),
+                        child: Slider(
+                          value: stickyDepth.toDouble(),
+                          min: 1,
+                          max: 100,
+                          divisions: 99,
+                          label: stickyDepth.toString(),
+                          onChanged: (val) =>
+                              setStateDialog(() => stickyDepth = val.toInt()),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Name (optional)',
+                        filled: true,
+                        fillColor: const Color(0xFF0F172A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: keyController,
+                      enabled: !isConstant,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: isConstant
+                            ? 'Keywords (Disabled — Always Active)'
+                            : 'Keywords (comma separated)',
+                        filled: true,
+                        fillColor: isConstant
+                            ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+                            : const Color(0xFF0F172A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
                       controller: contentController,
                       maxLines: 5,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Content',
                         filled: true,
-                        fillColor: Colors.black26,
+                        fillColor: const Color(0xFF0F172A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
-                 ],
-               ),
-             ),
-             actions: [
-               TextButton(
-                 onPressed: () => Navigator.pop(context),
-                 child: const Text('Cancel'),
-               ),
-               TextButton(
-                 onPressed: () {
-                   setState(() {
-                     entry.key = keyController.text;
-                     entry.content = contentController.text;
-                     entry.constant = isConstant;
-                     entry.stickyDepth = stickyDepth;
-                   });
-                   Navigator.pop(context);
-                 },
-                 child: const Text('Save'),
-               ),
-             ],
-           );
-         }
-       ),
-     );
-  }
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(foregroundColor: Colors.white38),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      entry.name = nameController.text;
+                      entry.key = keyController.text;
+                      entry.content = contentController.text;
+                      entry.constant = isConstant;
+                      entry.stickyDepth = stickyDepth;
+                    });
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          }
+        ),
+      );
+   }
 
   @override
   Widget build(BuildContext context) {
@@ -691,60 +827,267 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
   }
 
   Widget _buildLorebookTab() {
-     return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: ElevatedButton.icon(
-              onPressed: _addLoreEntry,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Entry'),
-            ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Lorebook',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'World lore entries inject context when keywords are detected.',
+                      style: TextStyle(fontSize: 11, color: Colors.white54),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _addLoreEntry,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Entry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  textStyle: const TextStyle(fontSize: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _importLorebookJson,
+                icon: const Icon(Icons.file_download, size: 16),
+                label: const Text('Import'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF374151),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  textStyle: const TextStyle(fontSize: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+
+          if (_loreEntries.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.menu_book_outlined,
+                      size: 40,
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'No lorebook entries yet',
+                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Add entries manually or import a JSON lorebook.',
+                      style: TextStyle(color: Colors.white24, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ..._loreEntries.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final lore = entry.value;
+              return _buildLoreCard(idx, lore);
+            }),
+
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoreCard(int index, LorebookEntry entry) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: entry.constant
+              ? Colors.amberAccent.withValues(alpha: 0.3)
+              : entry.enabled
+                  ? Colors.blueAccent.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.06),
         ),
-        Expanded(
-          child: _loreEntries.isEmpty
-            ? const Center(child: Text('No lorebook entries.', style: TextStyle(color: Colors.white30)))
-            : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _loreEntries.length,
-              itemBuilder: (context, index) {
-                final entry = _loreEntries[index];
-                return Card(
-                  color: const Color(0xFF374151),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(entry.key.isEmpty && entry.constant ? 'Always Active' : entry.key, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text(entry.content, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70)),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Switch(
-                          value: entry.enabled,
-                          onChanged: (val) {
-                            setState(() {
-                              entry.enabled = val;
-                            });
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blueAccent),
-                          onPressed: () => _editLoreEntry(index),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.redAccent),
-                          onPressed: () => _removeLoreEntry(index),
-                        ),
-                      ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.menu_book,
+                size: 14,
+                color: entry.constant
+                    ? Colors.amberAccent
+                    : entry.enabled
+                        ? Colors.blueAccent
+                        : Colors.white38,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  entry.displayName,
+                  style: TextStyle(
+                    color: entry.enabled ? Colors.white : Colors.white38,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (entry.constant)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Always Active',
+                    style: TextStyle(
+                      color: Colors.amberAccent,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                );
-              },
+                ),
+              if (!entry.constant)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Depth ${entry.stickyDepth}',
+                    style: const TextStyle(
+                      color: Colors.blueAccent,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              Switch(
+                value: entry.enabled,
+                onChanged: (val) {
+                  setState(() {
+                    entry.enabled = val;
+                  });
+                },
+                activeTrackColor: Colors.blueAccent.withValues(alpha: 0.5),
+                activeThumbColor: Colors.blueAccent,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              IconButton(
+                onPressed: () => _editLoreEntry(index),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 16,
+                  color: Colors.white38,
+                ),
+                tooltip: 'Edit entry',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.all(4),
+              ),
+              IconButton(
+                onPressed: () => _removeLoreEntry(index),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color: Colors.redAccent,
+                ),
+                tooltip: 'Delete entry',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.all(4),
+              ),
+            ],
+          ),
+          if (entry.key.isNotEmpty && !entry.constant) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 4,
+              runSpacing: 3,
+              children: entry.key
+                  .split(',')
+                  .map(
+                    (k) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        k.trim(),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
-        ),
-      ],
+          ],
+          const SizedBox(height: 6),
+          Text(
+            entry.content,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
