@@ -123,6 +123,7 @@ void main(List<String> args) async {
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.normal,
+    title: 'Front Porch AI',
   );
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {

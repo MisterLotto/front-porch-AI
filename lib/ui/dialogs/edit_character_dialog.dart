@@ -46,7 +46,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
   late TextEditingController _personalityController;
   late TextEditingController _scenarioController;
   late TextEditingController _firstMessageController;
-  late TextEditingController _mesExampleController;
+  late TextEditingController _exampleDialoguesController;
   late TextEditingController _systemPromptController;
   late TextEditingController _postHistoryController;
   List<TextEditingController> _altGreetingControllers = [];
@@ -65,10 +65,10 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     _descriptionController = TextEditingController(text: widget.character.description);
     _personalityController = TextEditingController(text: widget.character.personality);
     _scenarioController = TextEditingController(text: widget.character.scenario);
-    _firstMessageController = TextEditingController(text: widget.character.firstMessage);
-    _mesExampleController = TextEditingController(text: widget.character.mesExample);
-    _systemPromptController = TextEditingController(text: widget.character.systemPrompt);
-    _postHistoryController = TextEditingController(text: widget.character.postHistoryInstructions);
+  _firstMessageController = TextEditingController(text: widget.character.firstMessage);
+  _exampleDialoguesController = TextEditingController(text: widget.character.mesExample);
+  _systemPromptController = TextEditingController(text: widget.character.systemPrompt);
+  _postHistoryController = TextEditingController(text: widget.character.postHistoryInstructions);
 
     _altGreetingControllers = widget.character.alternateGreetings
         .map((g) => TextEditingController(text: g))
@@ -92,7 +92,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     _personalityController.dispose();
     _scenarioController.dispose();
     _firstMessageController.dispose();
-    _mesExampleController.dispose();
+    _exampleDialoguesController.dispose();
     _systemPromptController.dispose();
     _postHistoryController.dispose();
     for (final c in _altGreetingControllers) {
@@ -159,7 +159,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not open file picker: $e'),
+            content: Text('Could not open file picker. Please try again.'),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -214,7 +214,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                     style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
                     decoration: InputDecoration(
                       hintText: hintText,
-                      hintStyle: const TextStyle(color: Colors.white24),
+          hintStyle: const TextStyle(color: Colors.white54),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
@@ -243,7 +243,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
     widget.character.personality = _personalityController.text;
     widget.character.scenario = _scenarioController.text;
     widget.character.firstMessage = _firstMessageController.text;
-    widget.character.mesExample = _mesExampleController.text;
+    widget.character.mesExample = _exampleDialoguesController.text;
     widget.character.systemPrompt = _systemPromptController.text;
     widget.character.postHistoryInstructions = _postHistoryController.text;
     widget.character.alternateGreetings = _altGreetingControllers
@@ -283,14 +283,17 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
 
     try {
       await Provider.of<CharacterRepository>(context, listen: false)
-          .updateCharacter(widget.character);
+          .updateCharacter(
+            widget.character,
+            worldRepo: Provider.of<WorldRepository>(context, listen: false),
+          );
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating character: $e')),
+          SnackBar(content: Text('Failed to save character. Please try again.')),
         );
       }
     }
@@ -317,7 +320,14 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
 
     try {
       final content = await File(result.files.single.path!).readAsString();
-      final Map<String, dynamic> json = jsonDecode(content) as Map<String, dynamic>;
+      final dynamic jsonData = jsonDecode(content);
+      
+      // Validate that we have a Map<String, dynamic>
+      if (jsonData is! Map<String, dynamic>) {
+        throw FormatException('Invalid JSON format: expected a JSON object');
+      }
+      
+      final Map<String, dynamic> json = jsonData as Map<String, dynamic>;
 
       if (json['entries'] == null && json['lorebook'] == null) {
         throw FormatException(
@@ -346,204 +356,218 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
           SnackBar(content: Text('Imported ${lorebook.entries.length} entries.')),
         );
       }
+    } on FormatException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid file format: ${e.message}')),
+        );
+      }
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e')),
+          SnackBar(content: Text('Import failed: An unexpected error occurred')),
         );
       }
     }
   }
 
-    void _editLoreEntry(int index) {
-      final entry = _loreEntries[index];
-      final keyController = TextEditingController(text: entry.key);
-      final contentController = TextEditingController(text: entry.content);
-      final nameController = TextEditingController(text: entry.name);
-      bool isConstant = entry.constant;
-      int stickyDepth = entry.stickyDepth;
+void _editLoreEntry(int index) {
+  final entry = _loreEntries[index];
+  final keyController = TextEditingController(text: entry.key);
+  final contentController = TextEditingController(text: entry.content);
+  final nameController = TextEditingController(text: entry.name);
+  bool isConstant = entry.constant;
+  int stickyDepth = entry.stickyDepth;
 
-      showDialog(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setStateDialog) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.menu_book, color: Colors.blueAccent, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Edit Lorebook Entry',
+                style: TextStyle(color: Colors.white),
               ),
-              title: Row(
-                children: [
-                  const Icon(Icons.menu_book, color: Colors.blueAccent, size: 20),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Edit Lorebook Entry',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isConstant
-                              ? Colors.amberAccent.withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.08),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.push_pin,
-                            size: 16,
-                            color: isConstant
-                                ? Colors.amberAccent
-                                : Colors.white38,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Always Active',
-                            style: TextStyle(color: Colors.white70, fontSize: 13),
-                          ),
-                          const Spacer(),
-                          Switch(
-                            value: isConstant,
-                            onChanged: (val) =>
-                                setStateDialog(() => isConstant = val),
-                            activeTrackColor: Colors.amberAccent.withValues(
-                              alpha: 0.5,
-                            ),
-                            activeThumbColor: Colors.amberAccent,
-                          ),
-                        ],
-                      ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isConstant
+                          ? Colors.amberAccent.withValues(alpha: 0.3)
+                          : Colors.white.withValues(alpha: 0.08),
                     ),
-                    if (!isConstant) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.layers,
-                            size: 14,
-                            color: Colors.white38,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Trigger Depth: $stickyDepth ${stickyDepth == 1 ? "message" : "messages"}',
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.push_pin,
+                        size: 16,
+                        color: isConstant
+                            ? Colors.amberAccent
+                            : Colors.white38,
                       ),
-                      SliderTheme(
-                        data: SliderThemeData(
-                          activeTrackColor: Colors.blueAccent,
-                          inactiveTrackColor: Colors.white12,
-                          thumbColor: Colors.blueAccent,
-                          trackHeight: 3,
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Always Active',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const Spacer(),
+                      Switch(
+                        value: isConstant,
+                        onChanged: (val) =>
+                            setStateDialog(() => isConstant = val),
+                        activeTrackColor: Colors.amberAccent.withValues(
+                          alpha: 0.5,
                         ),
-                        child: Slider(
-                          value: stickyDepth.toDouble(),
-                          min: 1,
-                          max: 100,
-                          divisions: 99,
-                          label: stickyDepth.toString(),
-                          onChanged: (val) =>
-                              setStateDialog(() => stickyDepth = val.toInt()),
+                        activeThumbColor: Colors.amberAccent,
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isConstant) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.layers,
+                        size: 14,
+                        color: Colors.white38,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Trigger Depth: $stickyDepth ${stickyDepth == 1 ? "message" : "messages"}',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
                         ),
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Name (optional)',
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
+                  ),
+                  SliderTheme(
+                    data: SliderThemeData(
+                      activeTrackColor: Colors.blueAccent,
+                      inactiveTrackColor: Colors.white12,
+                      thumbColor: Colors.blueAccent,
+                      trackHeight: 3,
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: keyController,
-                      enabled: !isConstant,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: isConstant
-                            ? 'Keywords (Disabled — Always Active)'
-                            : 'Keywords (comma separated)',
-                        filled: true,
-                        fillColor: isConstant
-                            ? const Color(0xFF0F172A).withValues(alpha: 0.5)
-                            : const Color(0xFF0F172A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: contentController,
-                      maxLines: 5,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Content',
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(foregroundColor: Colors.white38),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      entry.name = nameController.text;
-                      entry.key = keyController.text;
-                      entry.content = contentController.text;
-                      entry.constant = isConstant;
-                      entry.stickyDepth = stickyDepth;
-                    });
-                    Navigator.pop(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                    child: Slider(
+                      value: stickyDepth.toDouble(),
+                      min: 1,
+                      max: 100,
+                      divisions: 99,
+                      label: stickyDepth.toString(),
+                      onChanged: (val) =>
+                          setStateDialog(() => stickyDepth = val.toInt()),
                     ),
                   ),
-                  child: const Text('Save'),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Name (optional)',
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: keyController,
+                  enabled: !isConstant,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: isConstant
+                        ? 'Keywords (Disabled — Always Active)'
+                        : 'Keywords (comma separated)',
+                    filled: true,
+                    fillColor: isConstant
+                        ? const Color(0xFF0F172A).withValues(alpha: 0.5)
+                        : const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: contentController,
+                  maxLines: 5,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Content',
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
               ],
-            );
-          }
-        ),
-      );
-   }
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                keyController.dispose();
+                contentController.dispose();
+                nameController.dispose();
+                Navigator.pop(context);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.white38),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  entry.name = nameController.text;
+                  entry.key = keyController.text;
+                  entry.content = contentController.text;
+                  entry.constant = isConstant;
+                  entry.stickyDepth = stickyDepth;
+                });
+                keyController.dispose();
+                contentController.dispose();
+                nameController.dispose();
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      }
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -649,9 +673,9 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                     backgroundImage: _avatarFile != null && _avatarFile!.existsSync()
                         ? FileImage(_avatarFile!) as ImageProvider
                         : null,
-                    child: _avatarFile == null || !_avatarFile!.existsSync()
-                        ? const Icon(Icons.person, size: 48, color: Colors.white24)
-                        : null,
+                     child: _avatarFile == null || !_avatarFile!.existsSync()
+                         ? const Icon(Icons.person, size: 48, color: Colors.white54)
+                         : null,
                   ),
                   Positioned(
                     bottom: 0,
@@ -671,10 +695,10 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Tap to change avatar',
-            style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.3)),
-          ),
+           Text(
+             'Tap to change avatar',
+             style: TextStyle(fontSize: 11, color: Colors.white54),
+           ),
           const SizedBox(height: 16),
           _buildTextField(controller: _nameController, label: 'Name'),
           const SizedBox(height: 16),
@@ -736,14 +760,14 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
             );
           }),
           const SizedBox(height: 24),
-          // Example Dialogues
-          _buildTextField(
-            controller: _mesExampleController,
-            label: 'Example Dialogues',
-            maxLines: 5,
-            expandable: true,
-            hintText: '(Examples of chat dialog. Begin each example with <START> on a new line.)',
-          ),
+           // Example Dialogues
+           _buildTextField(
+             controller: _exampleDialoguesController,
+             label: 'Example Dialogues',
+             maxLines: 5,
+             expandable: true,
+             hintText: '(Examples of chat dialog. Begin each example with <START> on a new line.)',
+           ),
           const SizedBox(height: 24),
           // System Prompt
           _buildTextField(
@@ -788,7 +812,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Add a tag...',
-                    hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+                    hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
                     filled: true,
                     fillColor: Colors.black26,
                     border: OutlineInputBorder(
@@ -869,20 +893,19 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                 ),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: _importLorebookJson,
-                icon: const Icon(Icons.file_download, size: 16),
-                label: const Text('Import'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF374151),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  textStyle: const TextStyle(fontSize: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+            ElevatedButton.icon(
+              onPressed: _importLorebookJson,
+              icon: const Icon(Icons.cloud_upload, size: 16),
+              label: const Text('Import'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
+            ),
             ],
           ),
           const SizedBox(height: 12),
@@ -961,14 +984,14 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  entry.displayName,
-                  style: TextStyle(
-                    color: entry.enabled ? Colors.white : Colors.white38,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
+            child: Text(
+              entry.displayName,
+              style: TextStyle(
+                color: entry.enabled ? Colors.white : Colors.white70,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
               ),
               if (entry.constant)
                 Container(
@@ -989,25 +1012,25 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
                     ),
                   ),
                 ),
-              if (!entry.constant)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'Depth ${entry.stickyDepth}',
-                    style: const TextStyle(
-                      color: Colors.blueAccent,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                    ),
+            if (!entry.constant)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Trigger Depth ${entry.stickyDepth}',
+                  style: const TextStyle(
+                    color: Colors.blueAccent,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+              ),
               const SizedBox(width: 4),
               Switch(
                 value: entry.enabled,
@@ -1076,16 +1099,16 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
             ),
           ],
           const SizedBox(height: 6),
-          Text(
-            entry.content,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 11,
-              height: 1.4,
+            Text(
+              entry.content,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                height: 1.4,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1147,14 +1170,14 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
             ),
             if (expandable) ...[
               const SizedBox(width: 6),
-              InkWell(
-                onTap: () => _openExpandedEditor(label, controller, hintText: hintText),
-                borderRadius: BorderRadius.circular(4),
-                child: const Padding(
-                  padding: EdgeInsets.all(2),
-                  child: Icon(Icons.open_in_full, size: 14, color: Colors.white30),
-                ),
+            InkWell(
+              onTap: () => _openExpandedEditor(label, controller, hintText: hintText),
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.all(2),
+                child: Icon(Icons.open_in_full, size: 14, color: Colors.white54),
               ),
+            ),
             ],
           ],
         ),
@@ -1165,7 +1188,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog> with SingleTi
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hintText,
-            hintStyle: const TextStyle(color: Colors.white24),
+            hintStyle: const TextStyle(color: Colors.white54),
             filled: true,
             fillColor: Colors.black26,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),

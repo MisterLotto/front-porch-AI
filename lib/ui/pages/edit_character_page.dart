@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -490,7 +491,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       await Provider.of<CharacterRepository>(
         context,
         listen: false,
-      ).updateCharacter(widget.character);
+      ).updateCharacter(
+        widget.character,
+        worldRepo: Provider.of<WorldRepository>(context, listen: false),
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -692,6 +696,65 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         },
       ),
     );
+  }
+
+  Future<void> _importLorebookJson() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (result == null || result.files.single.path == null) return;
+
+    try {
+      final content = await File(result.files.single.path!).readAsString();
+      final dynamic jsonData = jsonDecode(content);
+
+      if (jsonData is! Map<String, dynamic>) {
+        throw FormatException('Invalid JSON format: expected a JSON object');
+      }
+
+      final Map<String, dynamic> json = jsonData;
+
+      if (json['entries'] == null && json['lorebook'] == null) {
+        throw FormatException(
+          'Invalid lorebook file: missing "entries" or "lorebook" field. '
+          'Supported formats: SillyTavern, Chub.ai, Front Porch.',
+        );
+      }
+
+      final lorebook = Lorebook.fromJson(json);
+
+      if (lorebook.entries.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No entries found in file.')),
+          );
+        }
+        return;
+      }
+
+      setState(() {
+        _loreEntries.addAll(lorebook.entries);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported ${lorebook.entries.length} entries.')),
+        );
+      }
+    } on FormatException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid file format: ${e.message}')),
+        );
+      }
+    } on Exception catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Import failed. Please try again.')),
+        );
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1280,6 +1343,19 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     ),
                   ),
                   const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: _importLorebookJson,
+                    icon: const Icon(Icons.cloud_upload, size: 18),
+                    label: const Text('Import'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF374151),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: _addLoreEntry,
                     icon: const Icon(Icons.add, size: 18),

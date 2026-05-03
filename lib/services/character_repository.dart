@@ -486,7 +486,10 @@ class CharacterRepository extends ChangeNotifier {
     return {'imported': imported, 'failed': failed, 'errors': errors};
   }
 
-  Future<void> updateCharacter(CharacterCard card) async {
+  Future<void> updateCharacter(
+    CharacterCard card, {
+    WorldRepository? worldRepo,
+  }) async {
     if (card.imagePath == null) return;
 
     _isLoading = true;
@@ -526,6 +529,20 @@ class CharacterRepository extends ChangeNotifier {
             updatedAt: Value(DateTime.now()),
           ),
         );
+      }
+
+      // Sync lorebook to linked world if it exists
+      if (worldRepo != null &&
+          card.lorebook != null &&
+          card.lorebook!.entries.isNotEmpty) {
+        final linkedWorld = worldRepo.worlds
+            .where((w) => w.linkedCharacterName == card.name)
+            .firstOrNull;
+        if (linkedWorld != null) {
+          linkedWorld.lorebook =
+              Lorebook(entries: List.from(card.lorebook!.entries));
+          await worldRepo.saveWorld(linkedWorld);
+        }
       }
 
       // Update the list entry
