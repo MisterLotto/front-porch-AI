@@ -6944,12 +6944,8 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     debugPrint('[Realism] Realism eval cancel requested');
     try {
       if (llmService != null) {
-        try {
-          await llmService.abortGeneration();
-          debugPrint('[Realism] abortGeneration invoked');
-        } catch (e) {
-          debugPrint('[Realism:Abort] abortGeneration failed: $e');
-        }
+        llmService.abortGeneration();
+        debugPrint('[Realism] abortGeneration invoked');
       }
     } catch (e) {
       // Ensure we always proceed to reset state even if abortion fails unexpectedly
