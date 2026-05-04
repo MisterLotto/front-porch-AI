@@ -257,6 +257,7 @@ class ChatService extends ChangeNotifier {
   List<Objective> _activeObjectives = [];
   int _messagesSinceLastCheck = 0;
   bool _isCheckingCompletion = false;
+  bool _isNewChat = false;
 
   List<Objective> get activeObjectives => _activeObjectives;
   Objective? get primaryObjective =>
@@ -2478,9 +2479,40 @@ class ChatService extends ChangeNotifier {
     _summary = '';
     _summaryLastIndex = 0;
 
+    // Mark this as a new chat to prevent memory retrieval
+    _isNewChat = true;
+    debugPrint('[startNewChat] Marked as new chat - memories will be filtered');
+
     // Clear objectives for fresh session start
     _activeObjectives = [];
     _messagesSinceLastCheck = 0;
+
+    // Clear objectives from database for this character
+    if (_activeCharacter?.dbId != null) {
+      try {
+        final charId = _getCharacterIdFromCard(_activeCharacter!);
+        await _db.deleteObjectivesForCharacter(charId);
+        debugPrint('[startNewChat] Cleared objectives from DB for $charId');
+      } catch (e) {
+        debugPrint('[startNewChat] Failed to clear DB objectives: $e');
+      }
+    }
+
+    // Clear memory sources to prevent old memories from being retrieved
+    // Cross-character memory can still be re-selected by user after new chat starts
+    if (_activeCharacter?.dbId != null) {
+      try {
+        await _db.updateCharacter(
+          CharactersCompanion(
+            id: drift.Value(_activeCharacter!.dbId!),
+            memorySources: drift.Value('[]'),
+          ),
+        );
+        debugPrint('[startNewChat] Cleared memory sources from DB');
+      } catch (e) {
+        debugPrint('[startNewChat] Failed to clear memory sources: $e');
+      }
+    }
 
     // Seed Realism Engine state from V2.5 card extensions for 1:1 mode only,
     // ensuring realism settings persist across chat sessions (group mode handled elsewhere)
@@ -2773,6 +2805,12 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     _messages.add(ChatMessage(text: text, sender: senderName, isUser: true));
     await _saveChat();
     notifyListeners();
+
+    // Clear the new chat flag after first user message to allow memory retrieval
+    if (_isNewChat) {
+      _isNewChat = false;
+      debugPrint('[sendMessage] Cleared new chat flag, memories now allowed');
+    }
 
     // Scan user input for lore keywords
     _scanLorebook(text);
@@ -3754,8 +3792,11 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
       // ── RAG Memory Retrieval ──
       // When messages are dropped from context, search for relevant past memories
+      // Skip retrieval for brand new chats to prevent old memories from interfering
       String memoriesBlock = '';
-      if (droppedMessages > 0 &&
+      if (_isNewChat) {
+        debugPrint('[RAG:Chat] Skipping memory retrieval - new chat in progress');
+      } else if (droppedMessages > 0 &&
           _memoryService != null &&
           _storageService.ragEnabled) {
         debugPrint(
@@ -6154,7 +6195,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
       // Gather context: RAG memories + summary + recent messages
       String memoryContext = '';
-      if (_memoryService != null && _memoryService!.isOperational) {
+      if (_memoryService != null && _memoryService!.isOperational && !_isNewChat) {
         _evolutionStatus = 'Gathering memories...';
         notifyListeners();
         try {
