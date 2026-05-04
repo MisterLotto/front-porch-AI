@@ -42,6 +42,12 @@ import 'package:front_porch_ai/utils/emotion_labels.dart';
 import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:drift/drift.dart' as drift;
 
+// Internal flag to signal a cancellation request for realism evaluation.
+// This is a file-scope flag to avoid needing to thread state through the
+// entire class in this patch, and is reset once the interruption is surfaced
+// to the UI.
+bool _realismEvalCancelled = false;
+
 // ── Realism Engine GBNF Grammars ─────────────────────────────────────────────
 // Used by KoboldCPP local backend when reasoning mode is OFF.
 // Forces JSON-structured output at the token-sampling level, guaranteeing the
@@ -1113,6 +1119,20 @@ class ChatService extends ChangeNotifier {
       _onnxExpressionLabel = 'neutral';
       _onnxCachedForEmotion = emotion;
       notifyListeners();
+      // If a cancellation was requested during realism evaluation, surface the interruption
+      // to the user as a blank/interruption message and abort generation.
+      if (_realismEvalCancelled) {
+        _messages.add(ChatMessage(
+          text: 'Realism evaluation interrupted, regenerate response to retry',
+          sender: 'Interruption',
+          isUser: false,
+        ));
+        await _saveChat();
+        _realismEvalCancelled = false;
+        _isEvaluatingRealism = false;
+        notifyListeners();
+        return;
+      }
     } catch (e) {
       debugPrint('[Expression:ONNX] classification error: $e');
       _onnxExpressionLabel = 'neutral';
@@ -6938,6 +6958,8 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     }
 
     _isCancellingRealismEval = true;
+    // Signal to any ongoing realism evaluation that a cancel has been requested.
+    _realismEvalCancelled = true;
     notifyListeners();
 
     final llmService = _llmProvider?.activeService ?? _koboldService;
