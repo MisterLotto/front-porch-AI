@@ -6906,6 +6906,12 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     // briefly (OOM during dense thinking sessions). One retry after a short
     // pause is enough to recover without user-visible impact.
     for (int attempt = 0; attempt < 2; attempt++) {
+
+      // If cancellation was requested, abort immediately
+      if (_isCancellingRealismEval) {
+        debugPrint('[Realism] eval cancelled before attempt ${attempt + 1}');
+        return null;
+      }
       if (attempt > 0) {
         debugPrint(
           '[Realism:Eval] Retrying after connection drop (attempt ${attempt + 1})...',
@@ -6937,6 +6943,11 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         break; // stream completed cleanly — exit retry loop
       } catch (e) {
         debugPrint('[Realism:Eval] Stream error on attempt ${attempt + 1}: $e');
+        // Check if cancellation was requested during the error handling
+        if (_isCancellingRealismEval) {
+          debugPrint('[Realism] eval cancelled during error handling');
+          return null;
+        }
         if (attempt >= 1) {
           // Second failure — give up silently; don't surface to UI
           return null;
