@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_BUNDLE="$ROOT/build/macos/Build/Products/Release/front_porch_ai.app"
+APP_BUNDLE="$ROOT/build/macos/Build/Products/Release/FrontPorchAI.app"
 EMBED_SRC="$ROOT/tools/embed_server"
 
 echo "==> Installing Flutter dependencies..."

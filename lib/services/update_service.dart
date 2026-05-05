@@ -358,8 +358,8 @@ class UpdateService extends ChangeNotifier {
   }
 
   /// Get the current .app bundle path from the resolved executable.
-  /// e.g. /Applications/Front Porch AI.app/Contents/MacOS/front_porch_ai
-  ///   → /Applications/Front Porch AI.app
+  /// e.g. /Applications/FrontPorchAI.app/Contents/MacOS/front_porch_ai
+  ///   → /Applications/FrontPorchAI.app
   String get _currentMacAppPath {
     final exe = Platform.resolvedExecutable;
     // Walk up from MacOS/binary → Contents → .app
