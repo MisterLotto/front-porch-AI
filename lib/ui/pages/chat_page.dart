@@ -2869,6 +2869,10 @@ class _ChatPageState extends State<ChatPage> {
               child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // ── Author's Note ──
+                _AuthorNoteSection(chatService: chatService),
+                const SizedBox(height: 16),
+
                 // ── RAG Memory ──
                 _MemorySection(chatService: chatService),
                 const SizedBox(height: 16),
@@ -2947,10 +2951,6 @@ class _ChatPageState extends State<ChatPage> {
 
                 // ── Objective ──
                 _ObjectiveSection(chatService: chatService),
-                const SizedBox(height: 16),
-
-                // ── Author's Note ──
-                _AuthorNoteSection(chatService: chatService),
                 const SizedBox(height: 16),
 
                 // ── Character Evolution (collapsed by default) ──
