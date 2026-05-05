@@ -5,7 +5,7 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = front_porch_ai
+PRODUCT_NAME = "Front Porch AI"
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.linux4life1.frontPorchAi
