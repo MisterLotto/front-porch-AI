@@ -111,15 +111,11 @@ class _UserPersonaPageState extends State<UserPersonaPage>
     if (_formKey.currentState!.validate()) {
       final service = Provider.of<UserPersonaService>(context, listen: false);
       final personaText = _personaController.text;
-      final autoDescription = personaText.length > 150
-          ? '${personaText.substring(0, 147)}...'
-          : personaText;
 
       if (_editingPersona != null) {
         final updated = _editingPersona!.copyWith(
           title: _titleController.text,
           name: _nameController.text,
-          description: autoDescription,
           persona: personaText,
           avatarPath: _avatarPath,
         );
@@ -128,7 +124,6 @@ class _UserPersonaPageState extends State<UserPersonaPage>
         await service.createPersona(
           _titleController.text,
           _nameController.text,
-          autoDescription,
           personaText,
           _avatarPath,
         );
@@ -461,10 +456,10 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                         ),
                       ),
                     ],
-                    if (activePersona.description.isNotEmpty) ...[
+                    if (activePersona.persona.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        activePersona.description,
+                        activePersona.persona,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -731,16 +726,12 @@ class _UserPersonaPageState extends State<UserPersonaPage>
             // Description
             Expanded(
               child: Text(
-                persona.description.isNotEmpty
-                    ? persona.description
-                    : persona.persona.isNotEmpty
-                        ? persona.persona
-                        : 'No description',
+                persona.persona.isNotEmpty ? persona.persona : 'No description',
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.white.withValues(alpha: persona.description.isNotEmpty ? 0.55 : 0.3),
+                  color: Colors.white.withValues(alpha: persona.persona.isNotEmpty ? 0.55 : 0.3),
                   height: 1.5,
                 ),
               ),

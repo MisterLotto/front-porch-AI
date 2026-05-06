@@ -2124,8 +2124,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       if (persona != null) {
         final parts = <String>[];
         if (persona.name.isNotEmpty) parts.add('Name: ${persona.name}');
-        if (persona.description.isNotEmpty) parts.add('Description: ${persona.description}');
-        if (persona.persona.isNotEmpty) parts.add('Persona: ${persona.persona}');
+          if (persona.persona.isNotEmpty) parts.add('Persona: ${persona.persona}');
         userPersonaContext = parts.join('\n');
       }
     }
@@ -5200,7 +5199,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       if (selectedPersona != null) {
         final parts = <String>[];
         if (selectedPersona.name.isNotEmpty) parts.add('Name: ${selectedPersona.name}');
-        if (selectedPersona.description.isNotEmpty) parts.add('Description: ${selectedPersona.description}');
         if (selectedPersona.persona.isNotEmpty) parts.add('Persona: ${selectedPersona.persona}');
         userPersonaContext = parts.join('\n');
       }
@@ -5692,7 +5690,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
       if (selectedPersona != null) {
         final parts = <String>[];
         if (selectedPersona.name.isNotEmpty) parts.add('Name: ${selectedPersona.name}');
-        if (selectedPersona.description.isNotEmpty) parts.add('Description: ${selectedPersona.description}');
         if (selectedPersona.persona.isNotEmpty) parts.add('Persona: ${selectedPersona.persona}');
         userPersonaContext = parts.join('\n');
       }

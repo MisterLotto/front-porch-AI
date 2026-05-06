@@ -1248,11 +1248,11 @@ class ChatService extends ChangeNotifier {
   /// for the current conversation context instead of injecting all facts.
   Future<String> _buildUserPersonaBlock(String userName) async {
     final persona = _userPersonaService.persona;
-    final description = persona.description.trim();
+    final personaText = persona.persona.trim();
     final allFacts = persona.learnedFacts;
 
     // Nothing to inject
-    if (description.isEmpty && allFacts.isEmpty) return '';
+    if (personaText.isEmpty && allFacts.isEmpty) return '';
 
     // Select relevant facts using embeddings if available
     List<String> facts;
@@ -1272,7 +1272,7 @@ class ChatService extends ChangeNotifier {
     }
 
     final buf = StringBuffer();
-    buf.writeln("$userName's Persona: $description");
+    buf.writeln("$userName's Persona: $personaText");
 
     if (facts.isNotEmpty) {
       buf.writeln(

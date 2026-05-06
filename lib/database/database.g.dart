@@ -5617,18 +5617,6 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
     requiredDuringInsert: false,
     defaultValue: const Constant('User'),
   );
-  static const VerificationMeta _descriptionMeta = const VerificationMeta(
-    'description',
-  );
-  @override
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
-  );
   static const VerificationMeta _personaMeta = const VerificationMeta(
     'persona',
   );
@@ -5707,7 +5695,6 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
     id,
     title,
     name,
-    description,
     persona,
     learnedFacts,
     avatarPath,
@@ -5742,15 +5729,6 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
       context.handle(
         _nameMeta,
         name.isAcceptableOrUnknown(data['name']!, _nameMeta),
-      );
-    }
-    if (data.containsKey('description')) {
-      context.handle(
-        _descriptionMeta,
-        description.isAcceptableOrUnknown(
-          data['description']!,
-          _descriptionMeta,
-        ),
       );
     }
     if (data.containsKey('persona')) {
@@ -5813,10 +5791,6 @@ class $PersonasTable extends Personas with TableInfo<$PersonasTable, Persona> {
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
-      description: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}description'],
-      )!,
       persona: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}persona'],
@@ -5854,7 +5828,6 @@ class Persona extends DataClass implements Insertable<Persona> {
   final String id;
   final String title;
   final String name;
-  final String description;
   final String persona;
   final String learnedFacts;
   final String? avatarPath;
@@ -5865,7 +5838,6 @@ class Persona extends DataClass implements Insertable<Persona> {
     required this.id,
     required this.title,
     required this.name,
-    required this.description,
     required this.persona,
     required this.learnedFacts,
     this.avatarPath,
@@ -5879,7 +5851,6 @@ class Persona extends DataClass implements Insertable<Persona> {
     map['id'] = Variable<String>(id);
     map['title'] = Variable<String>(title);
     map['name'] = Variable<String>(name);
-    map['description'] = Variable<String>(description);
     map['persona'] = Variable<String>(persona);
     map['learned_facts'] = Variable<String>(learnedFacts);
     if (!nullToAbsent || avatarPath != null) {
@@ -5898,7 +5869,6 @@ class Persona extends DataClass implements Insertable<Persona> {
       id: Value(id),
       title: Value(title),
       name: Value(name),
-      description: Value(description),
       persona: Value(persona),
       learnedFacts: Value(learnedFacts),
       avatarPath: avatarPath == null && nullToAbsent
@@ -5921,7 +5891,6 @@ class Persona extends DataClass implements Insertable<Persona> {
       id: serializer.fromJson<String>(json['id']),
       title: serializer.fromJson<String>(json['title']),
       name: serializer.fromJson<String>(json['name']),
-      description: serializer.fromJson<String>(json['description']),
       persona: serializer.fromJson<String>(json['persona']),
       learnedFacts: serializer.fromJson<String>(json['learnedFacts']),
       avatarPath: serializer.fromJson<String?>(json['avatarPath']),
@@ -5937,7 +5906,6 @@ class Persona extends DataClass implements Insertable<Persona> {
       'id': serializer.toJson<String>(id),
       'title': serializer.toJson<String>(title),
       'name': serializer.toJson<String>(name),
-      'description': serializer.toJson<String>(description),
       'persona': serializer.toJson<String>(persona),
       'learnedFacts': serializer.toJson<String>(learnedFacts),
       'avatarPath': serializer.toJson<String?>(avatarPath),
@@ -5951,7 +5919,6 @@ class Persona extends DataClass implements Insertable<Persona> {
     String? id,
     String? title,
     String? name,
-    String? description,
     String? persona,
     String? learnedFacts,
     Value<String?> avatarPath = const Value.absent(),
@@ -5962,7 +5929,6 @@ class Persona extends DataClass implements Insertable<Persona> {
     id: id ?? this.id,
     title: title ?? this.title,
     name: name ?? this.name,
-    description: description ?? this.description,
     persona: persona ?? this.persona,
     learnedFacts: learnedFacts ?? this.learnedFacts,
     avatarPath: avatarPath.present ? avatarPath.value : this.avatarPath,
@@ -5975,9 +5941,6 @@ class Persona extends DataClass implements Insertable<Persona> {
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
       name: data.name.present ? data.name.value : this.name,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
       persona: data.persona.present ? data.persona.value : this.persona,
       learnedFacts: data.learnedFacts.present
           ? data.learnedFacts.value
@@ -5997,7 +5960,6 @@ class Persona extends DataClass implements Insertable<Persona> {
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('name: $name, ')
-          ..write('description: $description, ')
           ..write('persona: $persona, ')
           ..write('learnedFacts: $learnedFacts, ')
           ..write('avatarPath: $avatarPath, ')
@@ -6013,7 +5975,6 @@ class Persona extends DataClass implements Insertable<Persona> {
     id,
     title,
     name,
-    description,
     persona,
     learnedFacts,
     avatarPath,
@@ -6028,7 +5989,6 @@ class Persona extends DataClass implements Insertable<Persona> {
           other.id == this.id &&
           other.title == this.title &&
           other.name == this.name &&
-          other.description == this.description &&
           other.persona == this.persona &&
           other.learnedFacts == this.learnedFacts &&
           other.avatarPath == this.avatarPath &&
@@ -6041,7 +6001,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
   final Value<String> id;
   final Value<String> title;
   final Value<String> name;
-  final Value<String> description;
   final Value<String> persona;
   final Value<String> learnedFacts;
   final Value<String?> avatarPath;
@@ -6053,7 +6012,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.name = const Value.absent(),
-    this.description = const Value.absent(),
     this.persona = const Value.absent(),
     this.learnedFacts = const Value.absent(),
     this.avatarPath = const Value.absent(),
@@ -6066,7 +6024,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     required String id,
     this.title = const Value.absent(),
     this.name = const Value.absent(),
-    this.description = const Value.absent(),
     this.persona = const Value.absent(),
     this.learnedFacts = const Value.absent(),
     this.avatarPath = const Value.absent(),
@@ -6079,7 +6036,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     Expression<String>? id,
     Expression<String>? title,
     Expression<String>? name,
-    Expression<String>? description,
     Expression<String>? persona,
     Expression<String>? learnedFacts,
     Expression<String>? avatarPath,
@@ -6092,7 +6048,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
       if (id != null) 'id': id,
       if (title != null) 'title': title,
       if (name != null) 'name': name,
-      if (description != null) 'description': description,
       if (persona != null) 'persona': persona,
       if (learnedFacts != null) 'learned_facts': learnedFacts,
       if (avatarPath != null) 'avatar_path': avatarPath,
@@ -6107,7 +6062,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     Value<String>? id,
     Value<String>? title,
     Value<String>? name,
-    Value<String>? description,
     Value<String>? persona,
     Value<String>? learnedFacts,
     Value<String?>? avatarPath,
@@ -6120,7 +6074,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
       id: id ?? this.id,
       title: title ?? this.title,
       name: name ?? this.name,
-      description: description ?? this.description,
       persona: persona ?? this.persona,
       learnedFacts: learnedFacts ?? this.learnedFacts,
       avatarPath: avatarPath ?? this.avatarPath,
@@ -6142,9 +6095,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
     }
     if (persona.present) {
       map['persona'] = Variable<String>(persona.value);
@@ -6176,7 +6126,6 @@ class PersonasCompanion extends UpdateCompanion<Persona> {
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('name: $name, ')
-          ..write('description: $description, ')
           ..write('persona: $persona, ')
           ..write('learnedFacts: $learnedFacts, ')
           ..write('avatarPath: $avatarPath, ')
@@ -11861,7 +11810,6 @@ typedef $$PersonasTableCreateCompanionBuilder =
       required String id,
       Value<String> title,
       Value<String> name,
-      Value<String> description,
       Value<String> persona,
       Value<String> learnedFacts,
       Value<String?> avatarPath,
@@ -11875,7 +11823,6 @@ typedef $$PersonasTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> title,
       Value<String> name,
-      Value<String> description,
       Value<String> persona,
       Value<String> learnedFacts,
       Value<String?> avatarPath,
@@ -11906,11 +11853,6 @@ class $$PersonasTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get description => $composableBuilder(
-    column: $table.description,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11969,11 +11911,6 @@ class $$PersonasTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get description => $composableBuilder(
-    column: $table.description,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get persona => $composableBuilder(
     column: $table.persona,
     builder: (column) => ColumnOrderings(column),
@@ -12022,11 +11959,6 @@ class $$PersonasTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumn<String> get description => $composableBuilder(
-    column: $table.description,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<String> get persona =>
       $composableBuilder(column: $table.persona, builder: (column) => column);
@@ -12082,7 +12014,6 @@ class $$PersonasTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<String> description = const Value.absent(),
                 Value<String> persona = const Value.absent(),
                 Value<String> learnedFacts = const Value.absent(),
                 Value<String?> avatarPath = const Value.absent(),
@@ -12094,7 +12025,6 @@ class $$PersonasTableTableManager
                 id: id,
                 title: title,
                 name: name,
-                description: description,
                 persona: persona,
                 learnedFacts: learnedFacts,
                 avatarPath: avatarPath,
@@ -12108,7 +12038,6 @@ class $$PersonasTableTableManager
                 required String id,
                 Value<String> title = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<String> description = const Value.absent(),
                 Value<String> persona = const Value.absent(),
                 Value<String> learnedFacts = const Value.absent(),
                 Value<String?> avatarPath = const Value.absent(),
@@ -12120,7 +12049,6 @@ class $$PersonasTableTableManager
                 id: id,
                 title: title,
                 name: name,
-                description: description,
                 persona: persona,
                 learnedFacts: learnedFacts,
                 avatarPath: avatarPath,

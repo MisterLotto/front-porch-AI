@@ -244,7 +244,6 @@ class Personas extends Table {
   TextColumn get id => text()();
   TextColumn get title => text().withDefault(const Constant(''))();
   TextColumn get name => text().withDefault(const Constant('User'))();
-  TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get persona => text().withDefault(const Constant(''))();
   TextColumn get learnedFacts => text().withDefault(
     const Constant('[]'),
@@ -930,6 +929,17 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(
             'ALTER TABLE sessions ADD COLUMN user_persona_id TEXT',
           );
+        } catch (_) {}
+      }
+      if (from < 26) {
+        // v25->v26: consolidate persona fields — merge description into persona, drop description
+        // For rows where persona is empty but description has content → copy description to persona
+        // For rows where both have content → keep persona (it's the full text)
+        try {
+          await customStatement(
+            "UPDATE personas SET persona = COALESCE(NULLIF(persona, ''), description) WHERE description != ''",
+          );
+          await customStatement('ALTER TABLE personas DROP COLUMN description');
         } catch (_) {}
       }
     },

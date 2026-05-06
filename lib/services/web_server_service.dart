@@ -1877,8 +1877,7 @@ class WebServerService extends ChangeNotifier {
           'id': p.id,
           'title': p.title,
           'name': p.name,
-          'description': p.description,
-          'persona': p.persona,
+        'persona': p.persona,
           'isActive': p.isActive,
           'learnedFacts': facts,
         };
@@ -1921,7 +1920,6 @@ class WebServerService extends ChangeNotifier {
         id: id,
         title: Value(body['title']?.toString() ?? ''),
         name: Value(body['name']?.toString() ?? 'User'),
-        description: Value(body['description']?.toString() ?? ''),
         persona: Value(body['persona']?.toString() ?? ''),
       );
       await _db!.insertPersona(companion);
@@ -1972,7 +1970,6 @@ class WebServerService extends ChangeNotifier {
         id: Value(existing.id),
         title: Value(body['title']?.toString() ?? existing.title),
         name: Value(body['name']?.toString() ?? existing.name),
-        description: Value(body['description']?.toString() ?? existing.description),
         persona: Value(body['persona']?.toString() ?? existing.persona),
         avatarPath: Value(existing.avatarPath),
         isActive: Value(existing.isActive),
@@ -4085,7 +4082,7 @@ class WebServerService extends ChangeNotifier {
         final persona = _userPersonaService!.persona;
         if (persona.name.isNotEmpty) {
           userPersonaContext = 'Name: ${persona.name}';
-          if (persona.description.isNotEmpty) userPersonaContext += '\n${persona.description}';
+          if (persona.persona.isNotEmpty) userPersonaContext += '\n${persona.persona}';
         }
       }
 

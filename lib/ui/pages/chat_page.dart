@@ -1947,7 +1947,7 @@ class _ChatPageState extends State<ChatPage> {
       scenario: character?.scenario,
       worldInfo: worldInfo,
       personaName: personaService.persona.name,
-      personaDescription: personaService.persona.description,
+                  personaText: personaService.persona.persona,
       recentMessages: recentMessages,
       llmService: llmService,
       onAccept: onAccept,

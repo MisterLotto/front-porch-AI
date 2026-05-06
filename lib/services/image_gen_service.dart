@@ -573,7 +573,7 @@ class ImageGenService extends ChangeNotifier {
     String? scenario,
     String? worldInfo,
     String? personaName,
-    String? personaDescription,
+    String? personaText,
     List<String>? recentMessages,
   }) async {
     final paradigm = _storage.imageGenPromptParadigm; // 'natural' or 'tags'
@@ -636,7 +636,7 @@ class ImageGenService extends ChangeNotifier {
         scenario: scenario,
         worldInfo: worldInfo,
         personaName: personaName,
-        personaDescription: personaDescription,
+        personaText: personaText,
         recentMessages: recentMessages,
       );
       return _truncate('$fallback. $styleSuffix', _maxPromptLength);
@@ -725,7 +725,7 @@ class ImageGenService extends ChangeNotifier {
           scenario: scenario,
           worldInfo: worldInfo,
           personaName: personaName,
-          personaDescription: personaDescription,
+personaText: personaText,
           recentMessages: recentMessages,
         );
         return _truncate('$fallback. $styleSuffix', _maxPromptLength);
@@ -762,7 +762,7 @@ class ImageGenService extends ChangeNotifier {
         scenario: scenario,
         worldInfo: worldInfo,
         personaName: personaName,
-        personaDescription: personaDescription,
+        personaText: personaText,
         recentMessages: recentMessages,
       );
       return _truncate('$fallback. $styleSuffix', _maxPromptLength);
@@ -780,7 +780,7 @@ class ImageGenService extends ChangeNotifier {
     String? scenario,
     String? worldInfo,
     String? personaName,
-    String? personaDescription,
+    String? personaText,
     List<String>? recentMessages,
   }) {
     String raw;
@@ -836,8 +836,8 @@ class ImageGenService extends ChangeNotifier {
         if (personaName != null && personaName.isNotEmpty) {
           parts.add('Portrait of $personaName.');
         }
-        if (personaDescription != null && personaDescription.isNotEmpty) {
-          parts.add(_truncate(personaDescription, 400));
+if (personaText != null && personaText.isNotEmpty) {
+      parts.add(_truncate(personaText, 400));
         }
         parts.add('A detailed close-up portrait, expressive face, high quality rendering.');
         raw = parts.join(' ');
