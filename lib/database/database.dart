@@ -1191,6 +1191,7 @@ class AppDatabase extends _$AppDatabase {
       'groups',
       'folders',
       'personas',
+      'worlds',
     ]) {
       final count = await customUpdate(
         'DELETE FROM $table WHERE deleted_at IS NOT NULL',

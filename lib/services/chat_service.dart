@@ -1395,10 +1395,13 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
 
     if (_activeCharacter != null) {
-      // Reset lorebook trigger state
+      // Reset lorebook trigger state (skip constant entries — they're always active)
       if (_activeCharacter!.lorebook != null) {
         for (var entry in _activeCharacter!.lorebook!.entries) {
-          entry.isTriggered = false;
+          if (!entry.constant) {
+            entry.isTriggered = false;
+            entry.remainingDepth = 0;
+          }
         }
       }
       // Reset world lore triggers
@@ -1408,7 +1411,10 @@ class ChatService extends ChangeNotifier {
              .firstOrNull;
          if (world != null) {
            for (final entry in world.lorebook.entries) {
-             entry.isTriggered = false;
+             if (!entry.constant) {
+               entry.isTriggered = false;
+               entry.remainingDepth = 0;
+             }
            }
          }
        }
@@ -1524,11 +1530,14 @@ class ChatService extends ChangeNotifier {
         .whereType<CharacterCard>()
         .toList();
 
-    // Reset all lorebook triggers
+    // Reset all lorebook triggers (skip constant entries — they're always active)
     for (final ch in _groupCharacters) {
       if (ch.lorebook != null) {
         for (final entry in ch.lorebook!.entries) {
-          entry.isTriggered = false;
+          if (!entry.constant) {
+            entry.isTriggered = false;
+            entry.remainingDepth = 0;
+          }
         }
       }
       for (final worldName in ch.worldNames) {
@@ -1537,7 +1546,10 @@ class ChatService extends ChangeNotifier {
             .firstOrNull;
         if (world != null) {
           for (final entry in world.lorebook.entries) {
-            entry.isTriggered = false;
+            if (!entry.constant) {
+              entry.isTriggered = false;
+              entry.remainingDepth = 0;
+            }
           }
         }
       }
@@ -3385,7 +3397,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
       // Lorebook
       String loreContent = '';
-      List<String> activeLoreStrings = [];
+      final activeLoreStrings = <String>{}; // Set for deduplication
       final loreCharacters = _activeGroup != null
           ? _groupCharacters
           : [_activeCharacter!];
@@ -3696,7 +3708,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
       // Build Lorebook content from all relevant characters
       String loreContent = '';
-      List<String> activeLoreStrings = [];
+      final activeLoreStrings = <String>{}; // Set for deduplication
 
       final loreCharacters = _activeGroup != null
           ? _groupCharacters
@@ -4668,7 +4680,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
               .map((k) => k.trim().toLowerCase())
               .where((k) => k.isNotEmpty);
           for (final key in keys) {
-            if (lowerText.contains(key)) {
+            if (_matchKeyword(key, lowerText)) {
               if (!entry.isTriggered) {
                 entry.isTriggered = true;
                 changed = true;
@@ -4694,7 +4706,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
               .map((k) => k.trim().toLowerCase())
               .where((k) => k.isNotEmpty);
           for (final key in keys) {
-            if (lowerText.contains(key)) {
+            if (_matchKeyword(key, lowerText)) {
               if (!entry.isTriggered) {
                 entry.isTriggered = true;
                 changed = true;
@@ -4709,6 +4721,21 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
     if (changed) {
       notifyListeners();
+    }
+  }
+
+  /// Match a keyword against text with wildcard (*) and word-boundary support.
+  /// - `pot*` matches `potato`, `pottery`, `potion`
+  /// - `fire` matches `fire` (whole word only, not `fireball`)
+  /// - `*ball` matches `fireball`, `snowball`
+  bool _matchKeyword(String key, String text) {
+    if (key.contains('*')) {
+      // Wildcard pattern: escape regex specials except *, then replace * with .*
+      final escaped = RegExp.escape(key).replaceAll(r'\*', '.*');
+      return RegExp(escaped).hasMatch(text);
+    } else {
+      // Exact word match with word boundaries
+      return RegExp(r'\b${RegExp.escape(key)}\b').hasMatch(text);
     }
   }
 
