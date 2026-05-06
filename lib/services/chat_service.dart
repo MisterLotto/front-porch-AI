@@ -7698,7 +7698,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     void Function(String)? onChunk,
   }) async {
     if (!_realismEnabled || !_passageOfTimeEnabled || _activeCharacter == null) return;
-    final recentCount = _messages.length < 4 ? _messages.length : 4;
+    final recentCount = _messages.length < 6 ? _messages.length : 6;
     final recent = _messages.reversed
         .take(recentCount)
         .toList()
@@ -7724,17 +7724,20 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
     if (timeEligible) {
       final currentPostureCtx = _spatialStance.isNotEmpty
-          ? '$charName is currently: "$_spatialStance".\n'
-                'Maintain spatial continuity — only change position if the conversation describes them moving. '
-                'Do NOT teleport them to a new location or stance without narrative cause.\n\n'
+          ? 'Recent position reference: $charName was "$_spatialStance".\n'
           : '';
       final holdPrompt =
           'You are evaluating physical state for $charName.\n\n'
           '$currentPostureCtx'
+          'Current time: $_timeOfDay (Day $_dayCount). Time is advancing to the next period.\n'
           'Enough turns have passed that time should advance from "$_timeOfDay" to the next period.\n'
           '1. "hold_time": true ONLY if the scene is visibly mid-action (e.g. mid-fight, actively doing something). false otherwise — let time advance normally.\n'
           '2. "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, scene break). Only valid when current time is "night".\n'
-          '3. "posture": $charName\'s current physical position and location (brief phrase). Evolve naturally from their previous stance — only change if the scene describes movement. Use "none" if unknown.\n\n'
+          '3. "posture": $charName\'s current physical position and location (brief grounded phrase). Use "none" if unclear.\n'
+          '   - If the scene/location has changed (new setting, time passed, scene break), update to match the new context.\n'
+          '   - If time advanced significantly or a new day started, characters naturally shift positions.\n'
+          '   - Maintain continuity only within the SAME scene — do NOT anchor them to a position from a previous scene.\n'
+          '   - Avoid sudden jumps without setup, but DO update when the narrative context clearly shifted.\n\n'
           'Recent conversation:\n$recent\n\n'
           'Respond with ONLY a flat JSON object containing "hold_time", "new_day", and "posture".';
       try {
@@ -7818,14 +7821,15 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
           ? '$charName is currently feeling $_characterEmotion ($_emotionIntensity). '
           : '';
       final currentPostureCtx = _spatialStance.isNotEmpty
-          ? 'Current position: "$_spatialStance". '
+          ? 'Recent position reference: $charName was "$_spatialStance". '
           : '';
       final posturePrompt =
-          '${emotionCtx}${currentPostureCtx}Relationship tension: $shortTermTierName.\n\n'
-          'Based on the emotional context and recent exchange, what is $charName\'s '
-          'current physical position and stance? Maintain spatial continuity — only '
-          'change if the conversation describes them moving. Do NOT teleport them to a '
-          'new location without narrative cause.\n\n'
+          '${emotionCtx}${currentPostureCtx}Relationship tension: $shortTermTierName. Current time: $_timeOfDay.\n\n'
+          'What is $charName\'s current physical position and stance? Use "none" if unclear.\n'
+          '- Match the posture to the current scene context and emotional state.\n'
+          '- If the conversation implies a location or activity change, update accordingly.\n'
+          '- Within the same scene, maintain natural continuity (don\'t jump locations).\n'
+          '- Across scene breaks or time jumps, update to the new context.\n\n'
           'Recent conversation:\n$recent\n\n'
           'Respond with ONLY valid JSON like: {"posture": "standing by the window"} or {"posture": "none"}';
 
@@ -7953,7 +7957,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
     // Keep the eval prompt lean for local models — use fewer messages and a
     // shorter personality snippet to reduce prefill time on large models.
-    final recentCount = _messages.length < 4 ? _messages.length : 4;
+    final recentCount = _messages.length < 6 ? _messages.length : 6;
     final recent = _messages.reversed
         .take(recentCount)
         .toList()
@@ -7977,8 +7981,11 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     final emotionCtx = _characterEmotion.isNotEmpty
         ? 'Current emotional state: $_characterEmotion ($_emotionIntensity). '
         : '';
+    final postureCtx = _spatialStance.isNotEmpty
+        ? 'Recent position reference: $charName was "$_spatialStance". '
+        : '';
     final relationshipCtx =
-        '${emotionCtx}Current relationship tension: $shortTermTierName | Trust level: $_trustLevel\n\n';
+        '${emotionCtx}${postureCtx}Current relationship tension: $shortTermTierName | Trust level: $_trustLevel\n\n';
 
     final arousalField = _nsfwCooldownEnabled
         ? ', "arousal_delta": <number -10 to +10>'
@@ -8025,7 +8032,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         '${_storageService.expressionEnabled ? '   ⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.\n' : ''}'
         '4. "emotion_intensity": mild, moderate, or strong\n'
         '5. "bond_reason": One brief in-character thought from $charName explaining the relationship shift, or "none" if delta is 0.\n'
-        '6. "posture": $charName\'s spatial/physical stance (brief grounded phrase), or "none"\n'
+        '6. "posture": $charName\'s current physical position and location (brief grounded phrase), or "none". Match the current scene context — update if the setting changed, time passed, or scene broke. Maintain continuity only within the same scene.\n'
         '$arousalInstr'
         '${primaryObjective != null ? '$objNum. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primaryObjective!.objective}"). Triggered by a STRONG event THIS turn.\n   ⚠ Default to "none". 90% of turns should produce "none".\n' : '$objNum. "proposed_objective": A meaningful, emotionally-driven goal triggered by a strong event THIS turn. Default: "none". 90% of turns should produce "none".\n'}'
         '$fixNum. "fixation_topic": An *intrusive* thought $charName cannot stop returning to — haunts them across scenes, not a temporary reaction. Default: "none".\n'
