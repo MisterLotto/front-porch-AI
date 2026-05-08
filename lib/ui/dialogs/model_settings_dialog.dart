@@ -101,6 +101,12 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
     }
   }
 
+  /// Check whether a .kcpps preset is currently active.
+  bool _isPresetActive(BuildContext ctx) {
+    final storage = Provider.of<StorageService>(ctx, listen: false);
+    return storage.activeKcppsPath != null && storage.activeKcppsPath!.isNotEmpty;
+  }
+
   @override
   void dispose() {
     _gpuLayersController.dispose();
@@ -181,6 +187,26 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
     }
 
     final storage = Provider.of<StorageService>(context, listen: false);
+
+    // Validate preset file exists if one is active
+    if (storage.activeKcppsPath != null && storage.activeKcppsPath!.isNotEmpty) {
+      if (!File(storage.activeKcppsPath!).existsSync()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Selected preset not found. It may have been deleted or moved.\n'
+              'Clearing the preset and falling back to app settings.',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        storage.setActiveKcppsPath(null);
+        if (_selectedModelPath != null) {
+          storage.setModelPreset(_selectedModelPath!, '');
+        }
+        return;
+      }
+    }
     storage.setLastUsedModelPath(_selectedModelPath);
     storage.setGpuLayers(int.tryParse(_gpuLayersController.text) ?? 0);
     storage.setContextSize(int.tryParse(_contextSizeController.text) ?? 8192);
@@ -653,6 +679,31 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                 ),
                 const SizedBox(height: 16),
                 
+                // When a preset is active, show a clear label instead of just fading
+                // the fields. Users need to know these controls are overridden.
+                if (isPresetActive)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.1),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.amber, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Controlled by preset: ${pathLib.basename(storage.activeKcppsPath!)}',
+                            style: const TextStyle(color: Colors.amber, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 IgnorePointer(
                   ignoring: isPresetActive,
                   child: Opacity(
@@ -871,7 +922,11 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
           child: ElevatedButton.icon(
             onPressed: _restartBackend,
             icon: const Icon(Icons.refresh),
-            label: Text(koboldService.isRunning ? 'Restart Backend' : 'Start Backend'),
+            label: Text(
+              _isPresetActive(context)
+                  ? (koboldService.isRunning ? 'Restart with Preset' : 'Start with Preset')
+                  : (koboldService.isRunning ? 'Restart Backend' : 'Start Backend'),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blueAccent,
               foregroundColor: Colors.white,
