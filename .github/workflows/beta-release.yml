@@ -372,7 +372,7 @@ jobs:
           cd ${{ matrix.build_path }}
           tar -czvf ../../../../../${{ matrix.asset_name }} .
 
-       - name: Upload Build Artifacts
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v5
         with:
           name: build-${{ matrix.platform }}
@@ -381,7 +381,7 @@ jobs:
             Front_Porch_AI-Linux.AppImage
           if-no-files-found: ignore
 
-       - name: Create or Update Release
+      - name: Create or Update Release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
