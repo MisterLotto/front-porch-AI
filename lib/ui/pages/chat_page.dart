@@ -2883,7 +2883,7 @@ class _ChatPageState extends State<ChatPage> {
                   case 'ui':
                     showDialog(
                       context: context,
-                      builder: (context) => const UiSettingsDialog(),
+                      builder: (context) => UiSettingsDialog(character: character),
                     );
                     break;
                   case 'chat':
@@ -4273,31 +4273,27 @@ class _MessageBubbleState extends State<_MessageBubble> {
             child: Container(
               padding: const EdgeInsets.all(12),
                decoration: BoxDecoration(
-                 color: isDirectorNote
-                     ? Colors.amberAccent.withValues(alpha: 0.1 * bubbleOpacity)
-                     : message.isUser
-                     ? storage.getUserBubbleColor(character).withValues(alpha: bubbleOpacity)
-                     : widget.senderColor != null
-                     ? widget.senderColor!.withValues(
-                         alpha: 0.15 * bubbleOpacity,
+                  color: isDirectorNote
+                      ? Colors.amberAccent.withValues(alpha: 0.1 * bubbleOpacity)
+                      : message.isUser
+                      ? storage.getUserBubbleColor(character).withValues(alpha: bubbleOpacity)
+                      : storage.getAiBubbleColor(character).withValues(alpha: bubbleOpacity),
+                 borderRadius: BorderRadius.only(
+                   topLeft: const Radius.circular(12),
+                   topRight: const Radius.circular(12),
+                   bottomLeft: message.isUser && !isDirectorNote
+                       ? const Radius.circular(12)
+                       : Radius.zero,
+                   bottomRight: message.isUser && !isDirectorNote
+                       ? Radius.zero
+                       : const Radius.circular(12),
+                 ),
+                 border: isDirectorNote
+                     ? Border.all(
+                         color: Colors.amberAccent.withValues(alpha: 0.3),
                        )
-                     : storage.getAiBubbleColor(character).withValues(alpha: bubbleOpacity),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(12),
-                  topRight: const Radius.circular(12),
-                  bottomLeft: message.isUser && !isDirectorNote
-                      ? const Radius.circular(12)
-                      : Radius.zero,
-                  bottomRight: message.isUser && !isDirectorNote
-                      ? Radius.zero
-                      : const Radius.circular(12),
-                ),
-                border: isDirectorNote
-                    ? Border.all(
-                        color: Colors.amberAccent.withValues(alpha: 0.3),
-                      )
-                    : null,
-              ),
+                     : null,
+               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -5419,10 +5415,13 @@ class _StyledChatMessage extends StatelessWidget {
   Widget _buildStyledText(BuildContext context, String segment, double scaledSize, CharacterCard? character) {
     final storageService = Provider.of<StorageService>(context);
     final fontFamily = storageService.getChatFontFamily(character);
+    final textColor = isUser
+        ? storageService.getUserTextColor(character)
+        : storageService.getAiTextColor(character);
     final plainStyle = _applyGoogleFont(
       fontFamily,
       TextStyle(
-        color: storageService.getAiTextColor(character),
+        color: textColor,
         fontSize: scaledSize,
       ),
     );
@@ -5483,7 +5482,7 @@ class _StyledChatMessage extends StatelessWidget {
           style: _applyGoogleFont(
             fontFamily,
             TextStyle(
-              color: storageService.getAiTextColor(character),
+              color: textColor,
               fontSize: scaledSize,
               height: 1.4,
             ),
@@ -5498,7 +5497,7 @@ class _StyledChatMessage extends StatelessWidget {
           style: _applyGoogleFont(
             fontFamily,
             TextStyle(
-              color: storageService.getAiTextColor(character),
+              color: textColor,
               fontSize: scaledSize,
               height: 1.4,
             ),

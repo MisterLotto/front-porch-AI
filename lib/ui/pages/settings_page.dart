@@ -5631,96 +5631,106 @@ Future<void> _showColorPicker(
     Color(0xFF84CC16), // Lime
   ];
 
+  // Track selected color outside the builder so it persists across rebuilds
+  Color selectedColor = initialColor;
+  void Function(void Function())? setStateCallback;
+
   final picked = await showDialog<Color>(
     context: context,
     builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Select Color'),
-        content: SizedBox(
-          width: 380,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Preset colors row
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Quick Select',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: presetColors.map((color) => GestureDetector(
-                    onTap: () => Navigator.pop(context, color),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: color == initialColor 
-                            ? Colors.blueAccent 
-                            : Colors.white24,
-                          width: 2,
-                        ),
+      builder: (context, setState) {
+        setStateCallback = setState;
+        return AlertDialog(
+          title: const Text('Select Color'),
+          content: SizedBox(
+            width: 380,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Preset colors row
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Quick Select',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w500,
                       ),
-                      child: color == initialColor
-                        ? const Icon(
-                            Icons.check,
-                            size: 18,
-                            color: Colors.white,
-                          )
-                        : null,
-                    ),
-                  )).toList(),
-                ),
-                const SizedBox(height: 12),
-                // Color picker - use wheel picker for full color spectrum
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: ColorPicker(
-                    color: initialColor,
-                    onColorChanged: (color) => setState(() {}),
-                    wheelDiameter: 160,
-                    pickersEnabled: const <ColorPickerType, bool>{
-                      ColorPickerType.wheel: true,
-                    },
-                    showColorCode: true,
-                    colorCodeHasColor: true,
-                    copyPasteBehavior: const ColorPickerCopyPasteBehavior(
-                      copyButton: true,
-                      pasteButton: true,
                     ),
                   ),
-                ),
-                 const SizedBox(height: 16),
-               ],
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: presetColors.map((color) => GestureDetector(
+                      onTap: () => Navigator.pop(context, color),
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: color == selectedColor
+                                ? Colors.blueAccent
+                                : Colors.white24,
+                            width: 2,
+                          ),
+                        ),
+                        child: color == selectedColor
+                            ? const Icon(
+                                Icons.check,
+                                size: 18,
+                                color: Colors.white,
+                              )
+                            : null,
+                      ),
+                    )).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  // Color picker - use wheel picker for full color spectrum
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: ColorPicker(
+                      color: selectedColor,
+                      onColorChanged: (color) {
+                        selectedColor = color;
+                        setStateCallback?.call(() {});
+                      },
+                      wheelDiameter: 160,
+                      pickersEnabled: const <ColorPickerType, bool>{
+                        ColorPickerType.wheel: true,
+                      },
+                      showColorCode: true,
+                      colorCodeHasColor: true,
+                      copyPasteBehavior: const ColorPickerCopyPasteBehavior(
+                        copyButton: true,
+                        pasteButton: true,
+                      ),
+                    ),
+                  ),
+                   const SizedBox(height: 16),
+                 ],
+               ),
              ),
            ),
-         ),
-         actions: [
-           TextButton(
-             onPressed: () => Navigator.pop(context),
-             child: const Text('Cancel'),
-           ),
-           ElevatedButton(
-             onPressed: () => Navigator.pop(context, initialColor),
-             style: ElevatedButton.styleFrom(
-               backgroundColor: Colors.blueAccent,
-               foregroundColor: Colors.white,
+           actions: [
+             TextButton(
+               onPressed: () => Navigator.pop(context),
+               child: const Text('Cancel'),
              ),
-             child: const Text('OK'),
-           ),
-         ],
-       ),
+             ElevatedButton(
+               onPressed: () => Navigator.pop(context, selectedColor),
+               style: ElevatedButton.styleFrom(
+                 backgroundColor: Colors.blueAccent,
+                 foregroundColor: Colors.white,
+               ),
+               child: const Text('OK'),
+             ),
+           ],
+         );
+       },
      ),
    );
     if (picked != null) {

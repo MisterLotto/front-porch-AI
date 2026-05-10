@@ -28,6 +28,8 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
@@ -1266,7 +1268,7 @@ void _editLoreEntry(int index) {
     } else {
       extensions = widget.character.frontPorchExtensions!.copyWith();
     }
-    
+
     switch (fieldName) {
       case 'userBubbleColor':
         extensions.userBubbleColor = color;
@@ -1287,9 +1289,22 @@ void _editLoreEntry(int index) {
         extensions.actionColor = color;
         break;
     }
-    
+
     widget.character.frontPorchExtensions = extensions;
-    
+
+    // Save to PNG so changes persist
+    try {
+      final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+      await charRepo.updateCharacter(widget.character);
+      // Reload from PNG to ensure extensions are persisted
+      final reloaded = await V2CardService().readCard(widget.character.imagePath!);
+      // Update ChatService with reloaded character
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? widget.character);
+    } catch (e) {
+      debugPrint('Failed to save color changes: $e');
+    }
+
     if (mounted) {
       setState(() {}); // Refresh UI
     }

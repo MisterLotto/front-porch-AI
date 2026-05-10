@@ -19,6 +19,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
@@ -229,96 +231,106 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       Color(0xFF84CC16), // Lime
     ];
 
+    // Track selected color outside the builder so it persists across rebuilds
+    Color selectedColor = initialColor;
+    void Function(void Function())? setStateCallback;
+
     final picked = await showDialog<Color>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Select Color'),
-          content: SizedBox(
-            width: 380,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Preset colors row
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'Quick Select',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: presetColors.map((color) => GestureDetector(
-                      onTap: () => Navigator.pop(context, color),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: color == initialColor 
-                              ? Colors.blueAccent 
-                              : Colors.white24,
-                            width: 2,
-                          ),
+        builder: (context, setState) {
+          setStateCallback = setState;
+          return AlertDialog(
+            title: const Text('Select Color'),
+            content: SizedBox(
+              width: 380,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Preset colors row
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'Quick Select',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w500,
                         ),
-                        child: color == initialColor
-                          ? const Icon(
-                              Icons.check,
-                              size: 18,
-                              color: Colors.white,
-                            )
-                          : null,
-                      ),
-                    )).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  // Color picker - use wheel picker for full color spectrum
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: ColorPicker(
-                      color: initialColor,
-                      onColorChanged: (color) => setState(() {}),
-                      wheelDiameter: 160,
-                      pickersEnabled: const <ColorPickerType, bool>{
-                        ColorPickerType.wheel: true,
-                      },
-                      showColorCode: true,
-                      colorCodeHasColor: true,
-                      copyPasteBehavior: const ColorPickerCopyPasteBehavior(
-                        copyButton: true,
-                        pasteButton: true,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: presetColors.map((color) => GestureDetector(
+                        onTap: () => Navigator.pop(context, color),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: color == selectedColor
+                                  ? Colors.blueAccent
+                                  : Colors.white24,
+                              width: 2,
+                            ),
+                          ),
+                          child: color == selectedColor
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 18,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    // Color picker - use wheel picker for full color spectrum
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: ColorPicker(
+                        color: selectedColor,
+                        onColorChanged: (color) {
+                          selectedColor = color;
+                          setStateCallback?.call(() {});
+                        },
+                        wheelDiameter: 160,
+                        pickersEnabled: const <ColorPickerType, bool>{
+                          ColorPickerType.wheel: true,
+                        },
+                        showColorCode: true,
+                        colorCodeHasColor: true,
+                        copyPasteBehavior: const ColorPickerCopyPasteBehavior(
+                          copyButton: true,
+                          pasteButton: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, initialColor),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                foregroundColor: Colors.white,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, selectedColor),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (picked != null) {
@@ -329,10 +341,11 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
   Future<void> _updateUserBubbleColor(BuildContext context, Color color) async {
     final storage = Provider.of<StorageService>(context, listen: false);
     final character = widget.character;
-    
-    if (character != null && character.frontPorchExtensions != null) {
-      // Update per-character setting
-      final updatedExtensions = character.frontPorchExtensions!.copyWith(
+
+    if (character != null) {
+      // Update per-character setting (create extensions if null)
+      final currentExtensions = character.frontPorchExtensions ?? FrontPorchExtensions();
+      final updatedExtensions = currentExtensions.copyWith(
         userBubbleColor: color,
       );
       final updatedCharacter = CharacterCard(
@@ -364,8 +377,12 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       // Save to database
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       await charRepo.updateCharacter(updatedCharacter);
+      // Reload from PNG to ensure extensions are persisted
+      final reloaded = await V2CardService().readCard(character.imagePath!);
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? updatedCharacter);
     } else {
-      // Update global setting
+      // Update global setting (no character selected)
       await storage.setGlobalUserBubbleColor(color);
     }
     // Refresh UI
@@ -377,9 +394,10 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
   Future<void> _updateUserTextColor(BuildContext context, Color color) async {
     final storage = Provider.of<StorageService>(context, listen: false);
     final character = widget.character;
-    
-    if (character != null && character.frontPorchExtensions != null) {
-      final updatedExtensions = character.frontPorchExtensions!.copyWith(
+
+    if (character != null) {
+      final currentExtensions = character.frontPorchExtensions ?? FrontPorchExtensions();
+      final updatedExtensions = currentExtensions.copyWith(
         userTextColor: color,
       );
       final updatedCharacter = CharacterCard(
@@ -410,6 +428,9 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       );
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       await charRepo.updateCharacter(updatedCharacter);
+      final reloaded = await V2CardService().readCard(character.imagePath!);
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? updatedCharacter);
     } else {
       await storage.setGlobalUserTextColor(color);
     }
@@ -421,9 +442,10 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
   Future<void> _updateAiBubbleColor(BuildContext context, Color color) async {
     final storage = Provider.of<StorageService>(context, listen: false);
     final character = widget.character;
-    
-    if (character != null && character.frontPorchExtensions != null) {
-      final updatedExtensions = character.frontPorchExtensions!.copyWith(
+
+    if (character != null) {
+      final currentExtensions = character.frontPorchExtensions ?? FrontPorchExtensions();
+      final updatedExtensions = currentExtensions.copyWith(
         aiBubbleColor: color,
       );
       final updatedCharacter = CharacterCard(
@@ -454,6 +476,9 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       );
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       await charRepo.updateCharacter(updatedCharacter);
+      final reloaded = await V2CardService().readCard(character.imagePath!);
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? updatedCharacter);
     } else {
       await storage.setGlobalAiBubbleColor(color);
     }
@@ -465,9 +490,10 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
   Future<void> _updateAiTextColor(BuildContext context, Color color) async {
     final storage = Provider.of<StorageService>(context, listen: false);
     final character = widget.character;
-    
-    if (character != null && character.frontPorchExtensions != null) {
-      final updatedExtensions = character.frontPorchExtensions!.copyWith(
+
+    if (character != null) {
+      final currentExtensions = character.frontPorchExtensions ?? FrontPorchExtensions();
+      final updatedExtensions = currentExtensions.copyWith(
         aiTextColor: color,
       );
       final updatedCharacter = CharacterCard(
@@ -498,6 +524,9 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       );
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       await charRepo.updateCharacter(updatedCharacter);
+      final reloaded = await V2CardService().readCard(character.imagePath!);
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? updatedCharacter);
     } else {
       await storage.setGlobalAiTextColor(color);
     }
@@ -509,9 +538,10 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
   Future<void> _updateDialogueColor(BuildContext context, Color color) async {
     final storage = Provider.of<StorageService>(context, listen: false);
     final character = widget.character;
-    
-    if (character != null && character.frontPorchExtensions != null) {
-      final updatedExtensions = character.frontPorchExtensions!.copyWith(
+
+    if (character != null) {
+      final currentExtensions = character.frontPorchExtensions ?? FrontPorchExtensions();
+      final updatedExtensions = currentExtensions.copyWith(
         dialogueColor: color,
       );
       final updatedCharacter = CharacterCard(
@@ -542,6 +572,9 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       );
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       await charRepo.updateCharacter(updatedCharacter);
+      final reloaded = await V2CardService().readCard(character.imagePath!);
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? updatedCharacter);
     } else {
       await storage.setGlobalDialogueColor(color);
     }
@@ -553,9 +586,10 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
   Future<void> _updateActionColor(BuildContext context, Color color) async {
     final storage = Provider.of<StorageService>(context, listen: false);
     final character = widget.character;
-    
-    if (character != null && character.frontPorchExtensions != null) {
-      final updatedExtensions = character.frontPorchExtensions!.copyWith(
+
+    if (character != null) {
+      final currentExtensions = character.frontPorchExtensions ?? FrontPorchExtensions();
+      final updatedExtensions = currentExtensions.copyWith(
         actionColor: color,
       );
       final updatedCharacter = CharacterCard(
@@ -586,6 +620,9 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       );
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       await charRepo.updateCharacter(updatedCharacter);
+      final reloaded = await V2CardService().readCard(character.imagePath!);
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.setActiveCharacter(reloaded ?? updatedCharacter);
     } else {
       await storage.setGlobalActionColor(color);
     }
