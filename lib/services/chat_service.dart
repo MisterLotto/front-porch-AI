@@ -1570,8 +1570,8 @@ class ChatService extends ChangeNotifier {
         if (_activeCharacter!.frontPorchExtensions != null) {
           final ext = _activeCharacter!.frontPorchExtensions!;
           _realismEnabled = ext.realismEnabled;
-          _affectionScore = ext.shortTermBond.clamp(-150, 150);
-          _longTermScore = ext.longTermBond.clamp(-150, 150);
+          _affectionScore = ext.shortTermBond.clamp(-300, 300);
+          _longTermScore = ext.longTermBond.clamp(-300, 300);
           _trustLevel = ext.trustLevel.clamp(-100, 100);
           _dayCount = ext.dayCount.clamp(1, 9999);
           _timeOfDay = ext.timeOfDay;
@@ -2688,8 +2688,8 @@ class ChatService extends ChangeNotifier {
 
       _realismEnabled = extSeed.realismEnabled;
        // Migration: scale old scores (±150) to new range (±300)
-       _affectionScore = _migrateShortTermScore(extSeed.shortTermBond.clamp(-150, 150));
-       _longTermScore = _migrateLongTermScore(extSeed.longTermBond.clamp(-150, 150));
+       _affectionScore = _migrateShortTermScore(extSeed.shortTermBond.clamp(-300, 300));
+       _longTermScore = _migrateLongTermScore(extSeed.longTermBond.clamp(-300, 300));
       _trustLevel = extSeed.trustLevel.clamp(-100, 100);
       _dayCount = extSeed.dayCount.clamp(1, 9999);
       _timeOfDay = extSeed.timeOfDay;
@@ -8627,7 +8627,7 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     final oldScore = _affectionScore;
     final oldTier = _relationshipTier;
 
-    _affectionScore = (_affectionScore + delta).clamp(-150, 150);
+    _affectionScore = (_affectionScore + delta).clamp(-300, 300);
     _relationshipTier = _calculateTier(_affectionScore);
 
     if (_affectionScore != oldScore || _relationshipTier != oldTier) {

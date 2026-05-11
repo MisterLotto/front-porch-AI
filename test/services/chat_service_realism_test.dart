@@ -96,8 +96,8 @@ class _RealismEngineStub {
     // Seed from extensions
     if (characterExtensions != null) {
       _realismEnabled = characterExtensions.realismEnabled;
-      _affectionScore = characterExtensions.shortTermBond.clamp(-150, 150);
-      _longTermScore = characterExtensions.longTermBond.clamp(-150, 150);
+      _affectionScore = characterExtensions.shortTermBond.clamp(-300, 300);
+      _longTermScore = characterExtensions.longTermBond.clamp(-300, 300);
       _trustLevel = characterExtensions.trustLevel.clamp(-100, 100);
       _nsfwCooldownEnabled = characterExtensions.nsfwCooldownEnabled;
       _characterEmotion = characterExtensions.characterEmotion;

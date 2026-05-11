@@ -57,8 +57,8 @@ class _RealismStateStub {
     if (ext == null) return;
 
     _realismEnabled = ext.realismEnabled;
-    _affectionScore = ext.shortTermBond.clamp(-150, 150);
-    _longTermScore = ext.longTermBond.clamp(-150, 150);
+    _affectionScore = ext.shortTermBond.clamp(-300, 300);
+    _longTermScore = ext.longTermBond.clamp(-300, 300);
     _trustLevel = ext.trustLevel.clamp(-100, 100);
     _dayCount = ext.dayCount.clamp(1, 9999);
     _timeOfDay = ext.timeOfDay;
@@ -117,8 +117,8 @@ class _RealismStateStub {
     final extSeed = character.frontPorchExtensions ?? FrontPorchExtensions();
 
     _realismEnabled = extSeed.realismEnabled;
-    _affectionScore = extSeed.shortTermBond.clamp(-150, 150);
-    _longTermScore = extSeed.longTermBond.clamp(-150, 150);
+    _affectionScore = extSeed.shortTermBond.clamp(-300, 300);
+    _longTermScore = extSeed.longTermBond.clamp(-300, 300);
     _trustLevel = extSeed.trustLevel.clamp(-100, 100);
     _dayCount = extSeed.dayCount.clamp(1, 9999);
     _timeOfDay = extSeed.timeOfDay;
@@ -226,19 +226,19 @@ void main() {
           reason: 'global setting overrides card setting');
     });
 
-    test('clamps short-term bond to -150..150', () {
+    test('clamps short-term bond to -300..300', () {
       final stub = _RealismStateStub();
-      stub.seedFromExtensions(FrontPorchExtensions(shortTermBond: 200));
-      expect(stub.affectionScore, 150);
+      stub.seedFromExtensions(FrontPorchExtensions(shortTermBond: 400));
+      expect(stub.affectionScore, 300);
 
-      stub.seedFromExtensions(FrontPorchExtensions(shortTermBond: -200));
-      expect(stub.affectionScore, -150);
+      stub.seedFromExtensions(FrontPorchExtensions(shortTermBond: -400));
+      expect(stub.affectionScore, -300);
     });
 
-    test('clamps long-term bond to -150..150', () {
+    test('clamps long-term bond to -300..300', () {
       final stub = _RealismStateStub();
-      stub.seedFromExtensions(FrontPorchExtensions(longTermBond: 200));
-      expect(stub.longTermScore, 150);
+      stub.seedFromExtensions(FrontPorchExtensions(longTermBond: 400));
+      expect(stub.longTermScore, 300);
     });
 
     test('clamps trust level to -100..100', () {
