@@ -550,26 +550,31 @@ class _SettingsPageState extends State<SettingsPage> {
         );
         return;
       }
-      if (_selectedModelPath == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Please select a model.')));
-        return;
-      }
+      final storage = Provider.of<StorageService>(context, listen: false);
 
-      // Check if model file actually exists
-      if (!File(_selectedModelPath!).existsSync()) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Selected model file does not exist!')),
-        );
-        return;
+      // Case A — preset has its own model: skip all model-path checks.
+      // Case B — preset has no model OR no preset: require a Flutter selection.
+      final presetOwnsModel = storage.kcppsHasModel;
+
+      if (!presetOwnsModel) {
+        if (_selectedModelPath == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select a model.')),
+          );
+          return;
+        }
+        if (!File(_selectedModelPath!).existsSync()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Selected model file does not exist!')),
+          );
+          return;
+        }
       }
 
       final gpuLayers = int.tryParse(_gpuLayersController.text) ?? 0;
       final contextSize = int.tryParse(_contextSizeController.text) ?? 4096;
 
       // Persist settings so autostart uses them on next launch
-      final storage = Provider.of<StorageService>(context, listen: false);
       storage.setGpuLayers(gpuLayers);
       storage.setContextSize(contextSize);
       storage.setUseCublas(_useCublas);
@@ -577,9 +582,14 @@ class _SettingsPageState extends State<SettingsPage> {
       storage.setUseMetal(_useMetal);
       storage.setUseRocm(_useRocm);
 
+      // When the preset owns the model, pass empty string — KoboldCPP reads
+      // it from the .kcpps config. When the user picked a model via the
+      // Flutter picker, pass it so KoboldCPP never opens its own file dialog.
+      final effectiveModel = presetOwnsModel ? '' : _selectedModelPath!;
+
       koboldService.startKobold(
         backendManager.backendPath!,
-        _selectedModelPath!,
+        effectiveModel,
         kcppsPath: storage.activeKcppsPath,
         gpuLayers: gpuLayers,
         contextSize: contextSize,
@@ -2732,7 +2742,36 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 24),
             _buildSectionHeader('Model Selection', context),
             const SizedBox(height: 16),
-            if (modelManager.models.isEmpty)
+            // When the active .kcpps preset specifies its own model path,
+            // KoboldCPP loads it automatically — grey out the picker so the
+            // user isn't confused about why their selection has no effect.
+            if (storageService.kcppsHasModel)
+              Tooltip(
+                message: 'Model is controlled by the active .kcpps preset',
+                child: Opacity(
+                  opacity: 0.45,
+                  child: IgnorePointer(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_outline, size: 16, color: Colors.white38),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Controlled by preset',
+                            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white38),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (modelManager.models.isEmpty)
               const Text(
                 'No models available. Go to "Manage Models" to download one.',
                 style: TextStyle(color: Colors.orange),

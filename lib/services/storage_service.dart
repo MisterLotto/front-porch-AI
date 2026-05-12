@@ -119,6 +119,11 @@ class StorageService extends ChangeNotifier {
   bool _autostartBackend = true;
   String? _lastUsedModelPath;
   String? _activeKcppsPath;
+  /// True when the active .kcpps file contains a non-empty "model" key.
+  /// KoboldCPP will load that model automatically, so the Flutter model picker
+  /// should be disabled. False when no preset is active OR the preset has no
+  /// model (user must select one via the Flutter picker).
+  bool _kcppsHasModel = false;
   Map<String, String> _modelPresetMap = {};
   int _gpuLayers = 0;
   int _contextSize = 8192;
@@ -300,6 +305,9 @@ class StorageService extends ChangeNotifier {
   bool get autostartBackend => _autostartBackend;
   String? get lastUsedModelPath => _lastUsedModelPath;
   String? get activeKcppsPath => _activeKcppsPath;
+  /// Whether the active .kcpps preset specifies its own model path.
+  /// When true the Flutter model picker should be greyed out.
+  bool get kcppsHasModel => _kcppsHasModel;
   Map<String, String> get modelPresetMap => Map.unmodifiable(_modelPresetMap);
   int get gpuLayers => _gpuLayers;
   int get contextSize => _contextSize;
@@ -468,6 +476,9 @@ class StorageService extends ChangeNotifier {
         _prefs?.getBool(_k('autostart_backend')) ?? _autostartBackend;
     _lastUsedModelPath = _prefs?.getString(_k('last_used_model_path'));
     _activeKcppsPath = _prefs?.getString(_k('active_kcpps_path'));
+    // Restore the kcppsHasModel flag from the persisted preset path so the UI
+    // is correct immediately after a hot restart or app relaunch.
+    _kcppsHasModel = _parseKcppsHasModel(_activeKcppsPath);
     final presetMapJson = _prefs?.getString(_k('model_preset_map'));
     if (presetMapJson != null) {
       try {
@@ -898,12 +909,29 @@ class StorageService extends ChangeNotifier {
 
   Future<void> setActiveKcppsPath(String? value) async {
     _activeKcppsPath = value;
+    // Parse synchronously so _kcppsHasModel is accurate in the same notifyListeners call.
+    _kcppsHasModel = _parseKcppsHasModel(value);
     if (value != null) {
       await _prefs?.setString(_k('active_kcpps_path'), value);
     } else {
       await _prefs?.remove(_k('active_kcpps_path'));
     }
     notifyListeners();
+  }
+
+  /// Parse a .kcpps JSON file and return true if it contains a non-empty
+  /// "model" key. Any I/O or parse error returns false (safe default).
+  static bool _parseKcppsHasModel(String? kcppsPath) {
+    if (kcppsPath == null || kcppsPath.isEmpty) return false;
+    try {
+      final file = File(kcppsPath);
+      if (!file.existsSync()) return false;
+      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      final model = json['model'];
+      return model is String && model.trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> setModelPreset(String modelPath, String? kcppsPath) async {

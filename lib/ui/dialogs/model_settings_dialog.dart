@@ -181,12 +181,19 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backend not found.')));
       return;
     }
-    if (_selectedModelPath == null || !File(_selectedModelPath!).existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valid model not selected.')));
-      return;
-    }
 
     final storage = Provider.of<StorageService>(context, listen: false);
+
+    // Case A — preset owns the model: skip model-path checks entirely.
+    // Case B — no preset / preset has no model: user must have picked one.
+    final presetOwnsModel = storage.kcppsHasModel;
+
+    if (!presetOwnsModel) {
+      if (_selectedModelPath == null || !File(_selectedModelPath!).existsSync()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valid model not selected.')));
+        return;
+      }
+    }
 
     // Validate preset file exists if one is active
     if (storage.activeKcppsPath != null && storage.activeKcppsPath!.isNotEmpty) {
@@ -207,6 +214,11 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
         return;
       }
     }
+
+    // When the preset owns the model, pass empty string — KoboldCPP reads
+    // it from the .kcpps config. Otherwise pass the Flutter-selected path.
+    final effectiveModel = presetOwnsModel ? '' : _selectedModelPath!;
+
     storage.setLastUsedModelPath(_selectedModelPath);
     storage.setGpuLayers(int.tryParse(_gpuLayersController.text) ?? 0);
     storage.setContextSize(int.tryParse(_contextSizeController.text) ?? 8192);
@@ -228,7 +240,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
 
     koboldService.startKobold(
       backendManager.backendPath!,
-      _selectedModelPath!,
+      effectiveModel,
       kcppsPath: storage.activeKcppsPath,
       gpuLayers: int.tryParse(_gpuLayersController.text) ?? 0,
       contextSize: int.tryParse(_contextSizeController.text) ?? 4096,
@@ -528,6 +540,36 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       children: [
         // Model Selector
         Builder(builder: (context) {
+          final storage = Provider.of<StorageService>(context, listen: false);
+
+          // When the active .kcpps file has its own model, grey out the picker.
+          // The user's selection has no effect in this case — KoboldCPP loads
+          // the model from the preset. Show a clear disabled state instead.
+          if (storage.kcppsHasModel) {
+            return Tooltip(
+              message: 'Model is controlled by the active .kcpps preset',
+              child: Opacity(
+                opacity: 0.45,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF374151),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.lock_outline, size: 16, color: Colors.white38),
+                        SizedBox(width: 8),
+                        Text('Controlled by preset', style: TextStyle(color: Colors.white38)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
           // Normalize every scanned path and deduplicate — on macOS, /Users is a
           // symlink to /private/Users so the same file can appear with two different
           // path strings, bypassing a simple toSet() check if canonical resolution fails.

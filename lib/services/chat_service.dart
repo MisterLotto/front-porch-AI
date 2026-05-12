@@ -3119,9 +3119,15 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
           } else {
             // KoboldCPP is single-threaded — run sequentially
             await _evaluateRelationshipCall(onChunk: handleChunk);
-            await _evaluateEmotionalStateCall(onChunk: handleChunk);
-            await _evaluatePhysicalStateCall(onChunk: handleChunk);
-            await _evaluateNarrativeCall(onChunk: handleChunk);
+            if (!_realismEvalCancelled) {
+              await _evaluateEmotionalStateCall(onChunk: handleChunk);
+            }
+            if (!_realismEvalCancelled) {
+              await _evaluatePhysicalStateCall(onChunk: handleChunk);
+            }
+            if (!_realismEvalCancelled) {
+              await _evaluateNarrativeCall(onChunk: handleChunk);
+            }
           }
         } else {
           // API (Remote Backends)
@@ -3385,14 +3391,33 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
           // KoboldCPP is single-threaded — run evals sequentially to avoid concurrent
           // HTTP requests being dropped before headers are received.
           await _evaluateRelationshipCall(onChunk: handleChunk);
-          await _evaluateEmotionalStateCall(onChunk: handleChunk);
-          await _evaluatePhysicalStateCall(onChunk: handleChunk);
-          await _evaluateNarrativeCall(onChunk: handleChunk);
+          if (!_realismEvalCancelled) {
+            await _evaluateEmotionalStateCall(onChunk: handleChunk);
+          }
+          if (!_realismEvalCancelled) {
+            await _evaluatePhysicalStateCall(onChunk: handleChunk);
+          }
+          if (!_realismEvalCancelled) {
+            await _evaluateNarrativeCall(onChunk: handleChunk);
+          }
 
-          _pendingRealismMetadata ??= {};
-          _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
-          _pendingRealismMetadata!['realism_state'] = _captureRealismState();
-          _saveChat();
+          if (!_realismEvalCancelled) {
+            _pendingRealismMetadata ??= {};
+            _pendingRealismMetadata!['emotion_label'] = _characterEmotion;
+            _pendingRealismMetadata!['realism_state'] = _captureRealismState();
+            _saveChat();
+          }
+        }
+
+        // Check for cancellation after evals complete
+        if (_realismEvalCancelled) {
+          debugPrint('[Realism] Evaluation cancelled during regenerate, aborting');
+          _realismEvalCancelled = false;
+          _evalChunkTimer?.cancel();
+          _evalChunkTimer = null;
+          _isEvaluatingRealism = false;
+          notifyListeners();
+          return;
         }
 
         // Cancel any pending debounce notify before closing the overlay
@@ -3400,6 +3425,13 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         _evalChunkTimer = null;
         _isEvaluatingRealism = false;
         notifyListeners();
+      }
+
+      // If cancellation was requested during realism evaluation, abort generation
+      if (_realismEvalCancelled) {
+        _realismEvalCancelled = false;
+        notifyListeners();
+        return;
       }
 
       // Invalidate ONNX cache for the new response

@@ -56,6 +56,7 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/kobold_log_dialog.dart';
 import 'package:front_porch_ai/services/embedding_sidecar.dart';
 import 'package:front_porch_ai/ui/widgets/call_overlay.dart';
 import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
@@ -2171,6 +2172,11 @@ class _ChatPageState extends State<ChatPage> {
                     );
                   } else if (value == 'fork_group') {
                     _showForkToGroupDialog(context, chatService);
+                  } else if (value == 'kobold_log') {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const KoboldLogDialog(),
+                    );
                   }
                 },
                 itemBuilder: (context) => [
@@ -2262,6 +2268,21 @@ class _ChatPageState extends State<ChatPage> {
                         ],
                       ),
                     ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'kobold_log',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.terminal,
+                          size: 20,
+                          color: Colors.greenAccent,
+                        ),
+                        SizedBox(width: 12),
+                        Text('KoboldCpp Log'),
+                      ],
+                    ),
+                  ),
                 ],
               ),
 

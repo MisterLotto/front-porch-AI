@@ -227,15 +227,22 @@ class KoboldService extends ChangeNotifier
 
     if (kcppsPath != null) {
       // ── Preset mode (.kcpps) ────────────────────────────────────────────────
-      // When a config preset is active, we bypass ALL UI-derived arguments 
-      // (model, context, GPU layers, GPU backend, flash attention, mlock, etc.)
-      // and let KoboldCpp load everything from the file. We only force the port
-      // so the app's _baseUrl doesn't break.
+      // Let KoboldCpp load GPU, context, and all other settings from the file.
+      // We only force the port so the app's _baseUrl doesn't break.
+      //
+      // If the .kcpps file has NO model key (StorageService.kcppsHasModel is
+      // false), the user selected one via the Flutter model picker and we pass
+      // it via --model.  Without this KoboldCPP would open its own native file
+      // picker — which is the bug we're fixing.
+      //
+      // If the .kcpps file DOES have a model, modelPath is empty here and we
+      // let the preset handle it entirely.
       args = [
         '--config',
         kcppsPath,
         '--port',
         port.toString(),
+        if (modelPath.isNotEmpty) ...['--model', modelPath],
       ];
     } else {
       // ── Standard UI-driven mode ─────────────────────────────────────────────
@@ -339,7 +346,7 @@ class KoboldService extends ChangeNotifier
       _process!.stdout
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
-            _addLog(data.trim());
+            _addLog(data);
             _parseLoadingStatus(data);
           });
 
@@ -826,12 +833,49 @@ class KoboldService extends ChangeNotifier
     }
   }
 
+  /// Regex matching KoboldCPP per-token / per-batch progress messages.
+  /// These are purely informational counters that fire for every token and
+  /// would otherwise flood the log with thousands of identical-looking lines.
+  static final RegExp _progressLinePattern = RegExp(
+    r'^(Generating \(|Processing Prompt(?: \[BATCH\])? \()',
+    caseSensitive: false,
+  );
+
   void _addLog(String data) {
     if (data.trim().isEmpty) return;
-    _logs.add(data);
-    _writeToLogFile(data);
-    if (_logs.length > 1000) _logs.removeAt(0);
-    notifyListeners();
+
+    // KoboldCPP uses bare \r (carriage return) to overwrite the current
+    // terminal line.  Split on any combination of \r\n, \r, or \n so each
+    // logical line is processed individually.
+    final rawLines = data.split(RegExp(r'\r\n|\r|\n'));
+    bool changed = false;
+
+    for (final rawLine in rawLines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      final isProgress = _progressLinePattern.hasMatch(line);
+
+      if (isProgress && _logs.isNotEmpty) {
+        final lastEntry = _logs.last;
+        // If the last stored log entry is also a progress line, overwrite it
+        // in-place rather than appending a new entry.  This keeps the list
+        // at O(1) growth during a long generation instead of O(n).
+        if (_progressLinePattern.hasMatch(lastEntry)) {
+          _logs.last = line;
+          changed = true;
+          // Do NOT write progress lines to the file — they are noise.
+          continue;
+        }
+      }
+
+      _logs.add(line);
+      if (!isProgress) _writeToLogFile(line + '\n');
+      if (_logs.length > 1000) _logs.removeAt(0);
+      changed = true;
+    }
+
+    if (changed) notifyListeners();
   }
 
   bool get isProcessAlive => _process != null && _isRunning;
