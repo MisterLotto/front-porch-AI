@@ -8839,7 +8839,7 @@ class _NsfwEnhancementsSectionState extends State<_NsfwEnhancementsSection> {
                        ),
                        const SizedBox(width: 8),
                        Text(
-                         '${widget.chat.arousalLevel.clamp(0, 100)}/100',
+                         '${widget.chat.arousalLevel.clamp(-100, 100)}/100',
                          style: const TextStyle(
                            fontSize: 10,
                            color: Colors.white38,
@@ -8850,17 +8850,51 @@ class _NsfwEnhancementsSectionState extends State<_NsfwEnhancementsSection> {
                   const SizedBox(height: 3),
                    ClipRRect(
                      borderRadius: BorderRadius.circular(3),
-                     child: LinearProgressIndicator(
-                       value: (widget.chat.arousalLevel / 100).clamp(0.0, 1.0),
-                       minHeight: 4,
-                       backgroundColor: Colors.white10,
-                       valueColor: AlwaysStoppedAnimation<Color>(
-                         widget.chat.arousalTier >= 6
-                             ? Colors.deepOrangeAccent
-                             : widget.chat.arousalTier <= -1
-                             ? Colors.lightBlueAccent
-                             : Colors.white30,
-                       ),
+                     child: Stack(
+                       children: [
+                         // Background track
+                         Container(
+                           height: 4,
+                           decoration: BoxDecoration(
+                             color: Colors.white10,
+                             borderRadius: BorderRadius.circular(3),
+                           ),
+                         ),
+                         // Positive arousal bar (fills left to right)
+                         if (widget.chat.arousalLevel > 0)
+                           Positioned.fill(
+                             child: ClipRRect(
+                               borderRadius: BorderRadius.only(
+                                 topLeft: Radius.circular(3),
+                                 bottomLeft: Radius.circular(3),
+                               ),
+                               child: Container(
+                                 width: (widget.chat.arousalLevel / 100) * 100,
+                                 decoration: BoxDecoration(
+                                   color: widget.chat.arousalTier >= 6
+                                       ? Colors.deepOrangeAccent
+                                       : Colors.lightBlueAccent,
+                                 ),
+                               ),
+                             ),
+                           ),
+                         // Negative arousal bar (fills right to left)
+                         if (widget.chat.arousalLevel < 0)
+                           Positioned.fill(
+                             child: ClipRRect(
+                               borderRadius: BorderRadius.only(
+                                 topRight: Radius.circular(3),
+                                 bottomRight: Radius.circular(3),
+                               ),
+                               child: Container(
+                                 width: (widget.chat.arousalLevel.abs() / 100) * 100,
+                                 decoration: BoxDecoration(
+                                   color: Colors.lightBlueAccent,
+                                 ),
+                               ),
+                             ),
+                           ),
+                       ],
                      ),
                    ),
                   const SizedBox(height: 12),
