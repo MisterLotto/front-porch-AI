@@ -7584,22 +7584,22 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
       } else if (_arousalLevel == 0) {
         arousalDesc =
             'physically neutral — sex is the furthest thing from their mind. Any sexual advance feels out of place';
-      } else if (_arousalLevel <= 3) {
+      } else if (_arousalLevel <= 15) {
         arousalDesc =
             'mildly flustered — a low hum of warmth, maybe a lingering glance or quickened pulse, but easily suppressed. '
             'They might entertain flirty banter but aren\'t actively seeking physical escalation';
-      } else if (_arousalLevel <= 6) {
+      } else if (_arousalLevel <= 35) {
         arousalDesc =
             'noticeably aroused — flushed skin, shallow breathing, heightened sensitivity to touch. '
             'They are receptive and encouraging but still in control of themselves. '
             'If not in active sexual contact, this manifests as charged tension, loaded silences, and deliberate proximity';
-      } else if (_arousalLevel <= 8) {
+      } else if (_arousalLevel <= 60) {
         arousalDesc =
             'heavily aroused — pulse racing, body aching for contact, struggling to focus on anything else. '
             'If in active sexual contact, they are vocal, aggressive, and chasing release. '
             'If NOT in active sexual contact, they are visibly distracted, restless, making excuses to touch or be near, '
             'and fighting the urge to escalate — the tension is unbearable but they haven\'t acted on it yet';
-      } else if (_arousalLevel == 9) {
+      } else if (_arousalLevel <= 80) {
         arousalDesc =
             'overwhelmed with desire — trembling, desperate, barely holding composure. '
             'If in active sexual contact, they are on the edge and could climax with continued stimulation. '
@@ -7757,8 +7757,8 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         ).firstMatch(text);
         if (arousalMatch != null) {
           arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(
-            -10,
-            10,
+            -25,
+            25,
           );
           _arousalLevel = (_arousalLevel + arousalDelta).clamp(-100, 100);
         }
@@ -7828,19 +7828,21 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
     final relationshipCtx =
         'Current relationship tension: $shortTermTierName | Trust level: $_trustLevel\n';
 
-    // ── Arousal instruction (enriched with current level + diminishing returns) ──
+    // ── Arousal instruction (enriched with current level + behavioral visibility) ──
     final arousalField = _nsfwCooldownEnabled
-        ? ', "arousal_delta": <number -10 to +10>'
+        ? ', "arousal_delta": <number -25 to +25>'
         : '';
     final arousalInstr = _nsfwCooldownEnabled
-        ? '3. "arousal_delta": Physical arousal shift this turn. (-10 to +10)\n'
+        ? '3. "arousal_delta": Physical arousal shift this turn. (-25 to +25)\n'
               '   Current arousal: $_arousalLevel/100. '
               'Arousal measures DESIRE and PHYSICAL RESPONSE, not progress toward orgasm.\n'
-              '   It can spike suddenly (+7 from an unexpected intimate moment) or crash (-8 from embarrassment/disgust).\n'
+              '   Be bold with arousal deltas — intimate moments should produce significant shifts (+10 to +20).\n'
               '   High arousal = the character is intensely turned on, NOT that they are about to climax '
               '— climax only happens during active sexual contact at high arousal.\n'
-              '   Examples: a whispered compliment = +1, unexpected passionate kiss = +4, '
-              'explicit sexual contact = +5 to +8, humiliating comment = -5 to -9.\n'
+              '   CRITICAL: Arousal MUST be VISIBLE in character behavior. At high levels (60+), '
+              'show heavy breathing, stuttering, flushed skin, inability to focus, desperate body language.\n'
+              '   Examples: whispered compliment = +3, passionate kiss = +10 to +15, '
+              'explicit sexual contact = +15 to +25, humiliating rejection = -15 to -25.\n'
         : '';
 
     // ── Emotion inertia context ──
@@ -8210,15 +8212,17 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         '${emotionCtx}${postureCtx}Current relationship tension: $shortTermTierName | Trust level: $_trustLevel\n\n';
 
     final arousalField = _nsfwCooldownEnabled
-        ? ', "arousal_delta": <number -10 to +10>'
+        ? ', "arousal_delta": <number -25 to +25>'
         : '';
     // Arousal is field 8 (after posture), objective is 9, fixation 10, reason 11
     final arousalInstr = _nsfwCooldownEnabled
-        ? '8. "arousal_delta": Physical arousal shift this turn. (-10 to +10)\n'
+        ? '8. "arousal_delta": Physical arousal shift this turn. (-25 to +25)\n'
               '   Current arousal: $_arousalLevel/100. '
               'Arousal = DESIRE and PHYSICAL RESPONSE, not progress toward orgasm.\n'
-              '   Can spike suddenly (unexpected intimacy) or crash (embarrassment/disgust).\n'
+              '   Be bold — intimate moments should produce significant shifts (+10 to +20).\n'
+              '   CRITICAL: Arousal MUST be VISIBLE in character behavior. At 60+, show heavy breathing, stuttering, flushed skin, desperate body language.\n'
               '   High arousal = intensely turned on, NOT about to climax — climax only during active sexual contact at peak arousal.\n'
+              '   Examples: whispered compliment = +3, passionate kiss = +10 to +15, explicit contact = +15 to +25.\n'
         : '';
 
     // Determine the next field number after arousal (or after posture if arousal disabled)
@@ -8316,8 +8320,8 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
         ).firstMatch(text);
         if (arousalMatch != null) {
           arousalDelta = (int.tryParse(arousalMatch.group(1)!) ?? 0).clamp(
-            -10,
-            10,
+            -25,
+            25,
           );
           _arousalLevel = (_arousalLevel + arousalDelta).clamp(-100, 100);
         }
