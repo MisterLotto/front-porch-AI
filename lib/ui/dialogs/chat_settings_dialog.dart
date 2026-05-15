@@ -321,7 +321,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                             child: Tooltip(
                               message: storage.activeKcppsPath != null && storage.activeKcppsPath!.isNotEmpty
                                   ? 'Context size is controlled by the active .kcpps preset and cannot be edited here.'
-                                  : null,
+                                  : '',
                               child: SliderWithInput(
                                 label: 'Context Size',
                                 value: _gen.resolveContextSize(storage).toDouble().clamp(512, isRemote ? 500000 : 131072),

@@ -1260,7 +1260,7 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                           child: Tooltip(
                             message: storage.activeKcppsPath != null && storage.activeKcppsPath!.isNotEmpty
                                 ? 'Context size is controlled by the active .kcpps preset and cannot be edited here.'
-                                : null,
+                                : '',
                             child: SliderTheme(
                               data: SliderThemeData(
                                 activeTrackColor: Colors.blueAccent,

@@ -789,16 +789,21 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                 ignoring: _isPresetActive(context),
                 child: Opacity(
                   opacity: _isPresetActive(context) ? 0.5 : 1.0,
-                  child: Tooltip(
-                    message: _isPresetActive(context)
-                        ? 'Context size is controlled by the active .kcpps preset and cannot be edited here.'
-                        : null,
-                    child: _buildTextField(
-                      label: 'Context Size',
-                      controller: _contextSizeController,
-                      isNumber: true,
-                    ),
-                  ),
+                  child: _isPresetActive(context)
+                      ? Tooltip(
+                          message:
+                              'Context size is controlled by the active .kcpps preset and cannot be edited here.',
+                          child: _buildTextField(
+                            label: 'Context Size',
+                            controller: _contextSizeController,
+                            isNumber: true,
+                          ),
+                        )
+                      : _buildTextField(
+                          label: 'Context Size',
+                          controller: _contextSizeController,
+                          isNumber: true,
+                        ),
                 ),
               ),
             ),

@@ -3582,7 +3582,7 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Tooltip(
                 message: isPresetActive
                     ? 'Context size is controlled by the active .kcpps preset and cannot be edited here.'
-                    : null,
+                    : '',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
