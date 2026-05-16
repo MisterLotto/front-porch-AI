@@ -52,16 +52,44 @@ jobs:
       - name: Sync Version from Tag
         shell: bash
         run: |
+          # This step converts the Git tag (e.g. v0.9.8.0.1) into proper version strings
+          # for both pubspec.yaml and the in-app version constant.
+          # See detailed explanation in the bash logic below.
           TAG="${GITHUB_REF_NAME}"
           VERSION=$(echo "$TAG" | sed 's/^[vV]//')
-          # Convert 4-part (0.0.4.1) to Flutter format (0.0.4+1)
-          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.([0-9]+)$ ]]; then
-            FLUTTER_VERSION="$(echo $VERSION | sed 's/\.\([^.]*\)$/+\1/')"
+
+          # === Version Normalization for Flutter ===
+          # This project uses "deep" versioning (e.g. 0.9.8.0.1, 0.9.8.1.1) to allow
+          # many small patch releases under a minor version line without exhausting
+          # the 0.9.8.1 → 0.9.8.9 range.
+          #
+          # Rule: The LAST numeric segment of the tag is always treated as the
+          # Flutter build number (the part after "+").
+          #
+          # Examples:
+          #   0.9.8       → 0.9.8+0
+          #   0.9.8.1     → 0.9.8+1
+          #   0.9.8.0.1   → 0.9.8.0+1
+          #   0.9.8.1.1   → 0.9.8.1+1
+          #
+          # FLUTTER_VERSION  = normalized form written to pubspec.yaml (must be valid for Flutter)
+          # DISPLAY_VERSION  = original full version string written to app_version.dart (shown to users)
+          IFS='.' read -ra PARTS <<< "$VERSION"
+          COUNT=${#PARTS[@]}
+
+          if [ "$COUNT" -gt 1 ]; then
+              # Join all parts except the last one with .
+              BASE=$(IFS='.'; echo "${PARTS[*]:0:$((COUNT-1))}")
+              BUILD=${PARTS[$((COUNT-1))]}
+              FLUTTER_VERSION="${BASE}+${BUILD}"
           else
-            FLUTTER_VERSION="${VERSION}+0"
+              FLUTTER_VERSION="${VERSION}+0"
           fi
+
           echo "Setting version to: $FLUTTER_VERSION"
-          # Use the full version (including 4th part if present) for the Dart display constant
+
+          # DISPLAY_VERSION keeps the original tag (e.g. "0.9.8.0.1") so it shows
+          # correctly in the app's About/Settings screen and update dialogs.
           DISPLAY_VERSION="$VERSION"
           # Use Python for cross-platform reliability (sed can fail silently with Windows \r\n line endings)
           python3 -c "
