@@ -29,7 +29,7 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 |---|---|---|---|---|
 | **Native desktop app** | ✅ Flutter (Win/Mac/Linux) | ❌ Web-based (local server) | ✅ Electron | ✅ (abandoned) |
 | **Fully offline — no cloud required** | ✅ | ✅ | ✅ | ✅ |
-| **Remote LLM Providers** | ✅ OpenRouter, Nano-GPT, OpenAI, custom endpoints (full flexibility, no lock-in) | ⚙️ Extension required | ⚠️ Limited | ❌ (service discontinued) |
+| **Remote LLM Endpoints** | ✅ Native multi-provider support (OpenRouter, Nano-GPT, custom, etc.) with deep integration | ✅ Strong native support for custom OpenAI-compatible endpoints | ⚠️ Limited | ❌ (service discontinued) |
 | **Built-in TTS (50+ voices)** | ✅ Kokoro + Piper + ElevenLabs + OpenAI | ⚙️ Extension required | ❌ | ❌ |
 | **Speech-to-text (push-to-talk)** | ✅ Whisper, built-in | ⚙️ Extension required | ❌ | ❌ |
 | **Local image generation** | ✅ A1111, Forge, Draw Things | ⚙️ Extension required | ❌ | ❌ |
