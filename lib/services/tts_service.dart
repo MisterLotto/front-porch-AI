@@ -237,12 +237,18 @@ class TtsService extends ChangeNotifier {
         }
       }
 
-      final bool isVerbatimKokoro = _storageService.ttsEngine == 'kokoro'
-          && !_storageService.ttsIgnoreAsterisks
-          && !_storageService.ttsNarrateQuotedOnly;
+      final bool isKokoro = _storageService.ttsEngine == 'kokoro';
 
-      if (isVerbatimKokoro) {
-        kDebugPrint('[TtsService] Verbatim mode - single full-text generation (no sentence splitting)');
+      // For Kokoro we now always use the reliable single-call path (persistent workers +
+      // smart chunking + collation to one file + real progress). The filter settings
+      // (Ignore Asterisks / Only Narrate Quotes) only affect what `sanitized` contains.
+      if (isKokoro) {
+        final modeLabel = _storageService.ttsNarrateQuotedOnly
+            ? 'Only Quotes'
+            : _storageService.ttsIgnoreAsterisks
+                ? 'Ignore Asterisks'
+                : 'Verbatim';
+        kDebugPrint('[TtsService] Kokoro single full-text generation ($modeLabel mode)');
 
         // Kick the progress bar so the UI shows a determinate percentage instead of
         // an indeterminate spinner (important for users without the debug TUI open).
@@ -884,11 +890,16 @@ class TtsService extends ChangeNotifier {
     }
     // Step 2: If narrateQuotedOnly, extract only text within quotes (straight or curly)
     if (_storageService.ttsNarrateQuotedOnly) {
-      // Match both straight "..." and curly "..." quotes
-      final quotePattern = RegExp(r'(?:"([^"]+)"|["\u201C]([^\u201D"]+)["\u201D])');
+      // Robust extraction for spoken dialogue in "..." or “...” (curly quotes)
+      // We deliberately avoid single quotes here because they are too ambiguous with apostrophes.
+      final quotePattern = RegExp(r'["“]([^"”]+)["”]', dotAll: true);
       final matches = quotePattern.allMatches(result);
-      final extracted = matches.map((m) => m.group(1) ?? m.group(2) ?? '').where((s) => s.trim().isNotEmpty).toList();
-      result = extracted.isNotEmpty ? extracted.join('... ') : '';
+      final extracted = matches
+          .map((m) => m.group(1)?.trim() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+
+      result = extracted.isNotEmpty ? extracted.join('. ') : '';
     }
 
     // ── Standard cleanup ──
