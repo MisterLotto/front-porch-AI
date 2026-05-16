@@ -20,6 +20,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/kokoro_debug.dart';
+import 'package:front_porch_ai/services/kokoro_chunk.dart';
 import 'package:front_porch_ai/services/ordered_audio_collector.dart';
 import 'package:front_porch_ai/utils/wav_utils.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -238,52 +239,121 @@ class TtsService extends ChangeNotifier {
       }
 
       final bool isKokoro = _storageService.ttsEngine == 'kokoro';
+      final bool isPiper = _isPiperEngine;
 
-      // For Kokoro we now always use the reliable single-call path (persistent workers +
-      // smart chunking + collation to one file + real progress). The filter settings
-      // (Ignore Asterisks / Only Narrate Quotes) only affect what `sanitized` contains.
-      if (isKokoro) {
+      // Unified modern path for Kokoro (persistent) and Piper (one-shot).
+      // Both now benefit from proper sanitization, smart chunking for long text,
+      // real progress reporting, and correct ordering/collation.
+      // Piper remains strictly one-shot under the hood (as the binary is designed).
+      if (isKokoro || isPiper) {
+        final engineName = isPiper ? 'Piper' : 'Kokoro';
         final modeLabel = _storageService.ttsNarrateQuotedOnly
             ? 'Only Quotes'
             : _storageService.ttsIgnoreAsterisks
                 ? 'Ignore Asterisks'
                 : 'Verbatim';
-        kDebugPrint('[TtsService] Kokoro single full-text generation ($modeLabel mode)');
+        kDebugPrint('[TtsService] $engineName single full-text generation ($modeLabel mode)');
 
-        // Kick the progress bar so the UI shows a determinate percentage instead of
-        // an indeterminate spinner (important for users without the debug TUI open).
         _generationProgress = 0.01;
+        _isGenerating = true;
         notifyListeners();
 
-        final wav = await activeEngine.generateAudio(
-          sanitized,
-          voice,
-          speed,
-          onProgress: (progress) {
-            _generationProgress = progress;
+        List<File> generatedWavs = [];
+
+        if (isPiper) {
+          // Piper: one-shot per chunk, but we still use smart chunking + progress.
+          final modelPath = await _voiceManager.getVoiceModelPath(voice);
+
+          // Early check for the binary so we don't spam errors once per chunk
+          final piperBinary = _piperBinaryPath();
+          if (!File(piperBinary).existsSync() && piperBinary != 'piper' && piperBinary != 'piper.exe') {
+            print('Piper binary not found at: $piperBinary');
+            print('See the detailed error below when generation is attempted.');
+          }
+
+          final bool readEverythingMode = !_storageService.ttsIgnoreAsterisks && !_storageService.ttsNarrateQuotedOnly;
+
+          final List<KokoroChunk> chunks;
+          if (readEverythingMode) {
+            chunks = KokoroChunker.splitFixedCharacterCount(
+              text: sanitized,
+              voice: voice,
+              speed: speed,
+              lang: 'en-us',
+              modelPath: modelPath,
+              voicesPath: '',
+              chunkSize: KokoroChunker.verbatimChunkSize,
+            );
+          } else {
+            chunks = KokoroChunker.split(
+              text: sanitized,
+              voice: voice,
+              speed: speed,
+              lang: 'en-us',
+              modelPath: modelPath,
+              voicesPath: '',
+              maxChars: 450,
+            );
+          }
+
+          final total = chunks.length;
+          for (int i = 0; i < total; i++) {
+            if (!_isSpeaking) break;
+
+            final chunk = chunks[i];
+            final wav = await _generatePiperWav(chunk.text, modelPath, i);
+            if (wav != null) {
+              generatedWavs.add(wav);
+            }
+
+            _generationProgress = (i + 1) / total;
             notifyListeners();
-          },
-        );
-
-        if (wav != null && _isSpeaking) {
-          _generationProgress = 1.0;
-          _isGenerating = false;
-          notifyListeners();
-
-          // Cache and play the single collated file (the "generate everything, collate, one playback" path)
-          _cachedWav = wav;
-          _cachedMessageId = messageId;
-          _cachedTextHash = sanitized.hashCode;
-          _cachedVoice = voice;
-          _cachedEngine = _storageService.ttsEngine;
-
-          await _playWavFile(wav);
+          }
         } else {
-          _isGenerating = false;
+          // Kokoro: uses the persistent worker pool + internal chunking + collation
+          final wav = await activeEngine.generateAudio(
+            sanitized,
+            voice,
+            speed,
+            onProgress: (progress) {
+              _generationProgress = progress;
+              notifyListeners();
+            },
+          );
+
+          if (wav != null) {
+            generatedWavs = [wav];
+          }
+        }
+
+        _isGenerating = false;
+        notifyListeners();
+
+        if (generatedWavs.isNotEmpty && _isSpeaking) {
+          File? finalAudio;
+
+          if (generatedWavs.length == 1) {
+            finalAudio = generatedWavs.first;
+          } else {
+            finalAudio = await WavUtils.concatenateWavFiles(generatedWavs);
+            _cleanupFiles(generatedWavs);
+          }
+
+          if (finalAudio != null) {
+            _cachedWav = finalAudio;
+            _cachedMessageId = messageId;
+            _cachedTextHash = sanitized.hashCode;
+            _cachedVoice = voice;
+            _cachedEngine = _storageService.ttsEngine;
+
+            await _playWavFile(finalAudio);
+          }
+        } else {
           _generationProgress = 0.0;
           notifyListeners();
         }
-        return; // finally block will reset _isSpeaking / _isGenerating
+
+        return; // finally block will reset speaking state
       }
 
       final sentences = _splitSentences(sanitized);
@@ -681,17 +751,62 @@ class TtsService extends ChangeNotifier {
 
   // ---- Piper legacy support ----
 
-  /// Resolve the path to the bundled Piper binary (PyInstaller --onedir bundle).
+  /// Resolve the path to the Piper binary.
+  ///
+  /// This method tries multiple locations so Piper works in both:
+  /// - Release builds (where the binary is bundled via PyInstaller + build scripts)
+  /// - Development (`flutter run`) where the binary may live elsewhere
   String _piperBinaryPath() {
-    final execDir = File(Platform.resolvedExecutable).parent.path;
+    final execFile = File(Platform.resolvedExecutable);
+    final execDir = execFile.parent.path;
+
+    // 1. Try the standard bundled location first (release builds)
+    String bundledPath;
     if (Platform.isWindows) {
-      return p.join(execDir, 'piper', 'piper', 'piper.exe');
+      bundledPath = p.join(execDir, 'piper', 'piper', 'piper.exe');
     } else if (Platform.isMacOS) {
-      final contentsDir = File(Platform.resolvedExecutable).parent.parent.path;
-      return p.join(contentsDir, 'Resources', 'piper', 'piper', 'piper');
+      final contentsDir = execFile.parent.parent.path;
+      bundledPath = p.join(contentsDir, 'Resources', 'piper', 'piper', 'piper');
     } else {
-      return p.join(execDir, 'piper', 'piper', 'piper');
+      bundledPath = p.join(execDir, 'piper', 'piper', 'piper');
     }
+
+    if (File(bundledPath).existsSync()) {
+      return bundledPath;
+    }
+
+    // 2. Walk up from the executable (helpful in some debug bundle layouts)
+    var currentDir = execFile.parent;
+    for (int i = 0; i < 12; i++) {
+      final candidate = p.join(currentDir.path, 'piper', 'piper', 'piper');
+      if (File(candidate).existsSync()) {
+        return candidate;
+      }
+      final parent = currentDir.parent;
+      if (parent.path == currentDir.path) break;
+      currentDir = parent;
+    }
+
+    // 3. Development fallbacks - look relative to current working directory
+    final cwd = Directory.current.path;
+    final devCandidates = <String>[
+      p.join(cwd, 'piper', 'piper', 'piper'),
+      p.join(cwd, 'piper', 'piper', 'piper.exe'),
+      p.join(cwd, '..', 'piper', 'piper', 'piper'),
+      p.join(cwd, '..', 'piper', 'piper', 'piper.exe'),
+      // Sometimes people put it directly in the project root
+      p.join(cwd, 'piper', 'piper'),
+    ];
+
+    for (final candidate in devCandidates) {
+      if (File(candidate).existsSync()) {
+        return candidate;
+      }
+    }
+
+    // 4. Last resort - assume `piper` is available on the system PATH
+    // (user may have installed it via Homebrew, built from source, etc.)
+    return Platform.isWindows ? 'piper.exe' : 'piper';
   }
 
   /// Check if the Piper binary is available.
@@ -737,7 +852,34 @@ class TtsService extends ChangeNotifier {
       }
       return wavFile;
     } catch (e) {
-      print('Piper error: $e');
+      final piperPath = _piperBinaryPath();
+
+      if (e is ProcessException && e.message.contains('No such file or directory')) {
+        print('''
+════════════════════════════════════════════════════════════
+Piper TTS binary not found!
+
+Expected location tried: $piperPath
+
+This usually happens in development builds.
+To use Piper locally:
+
+  • Run a release build (recommended for testing Piper):
+      ./scripts/build-macos.sh
+
+  • Or place the Piper binary at one of these locations:
+      <project>/piper/piper/piper
+      <project>/piper/piper/piper.exe
+
+  • Or install `piper` on your PATH (build from source or use prebuilts)
+
+See docs for current bundling instructions.
+════════════════════════════════════════════════════════════
+''');
+      } else {
+        print('Piper error: $e');
+      }
+
       _piperProcess = null;
       return null;
     }

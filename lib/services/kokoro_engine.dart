@@ -267,7 +267,15 @@ class KokoroEngine implements TtsEngine {
 
   /// Eagerly start the configured number of workers in the background.
   /// This makes the first audio start much faster (avoids lazy model loading on first speak).
+  ///
+  /// This method is a no-op if TTS is globally disabled, to avoid unnecessarily
+  /// loading the large Kokoro model into memory when the user has turned TTS off.
   Future<void> ensureWorkersWarm() async {
+    if (!_storageService.ttsEnabled) {
+      kDebugPrint('[KokoroEngine] ensureWorkersWarm skipped (TTS disabled)');
+      return;
+    }
+
     kDebugPrint('[KokoroEngine] ensureWorkersWarm called (ttsConcurrency=${_storageService.ttsConcurrency})');
     _pool ??= KokoroWorkerPool(_storageService, _spawnWorkerProcess);
     await _pool!.warmUp();
