@@ -59,27 +59,34 @@ jobs:
           VERSION=$(echo "$TAG" | sed 's/^[vV]//')
 
           # === Version Normalization for Flutter ===
-          # This project uses "deep" versioning (e.g. 0.9.8.0.1, 0.9.8.1.1) to allow
-          # many small patch releases under a minor version line without exhausting
-          # the 0.9.8.1 → 0.9.8.9 range.
+          # This project deliberately uses "deep" versioning (e.g. 0.9.8.0.1, 0.9.8.1.1)
+          # so the maintainer can do many tiny patches under 0.9.8 without burning
+          # through 0.9.8.1 → 0.9.8.9.
           #
-          # Rule: The LAST numeric segment of the tag is always treated as the
-          # Flutter build number (the part after "+").
+          # For pubspec.yaml (FLUTTER_VERSION), we must produce a valid Flutter version.
+          # Flutter expects at most 3 numeric segments before the "+" build number.
+          #
+          # Rule:
+          #   - Use the first 3 segments as the base version (0.9.8)
+          #   - Use the LAST segment from the tag as the build number
           #
           # Examples:
           #   0.9.8       → 0.9.8+0
           #   0.9.8.1     → 0.9.8+1
-          #   0.9.8.0.1   → 0.9.8.0+1
-          #   0.9.8.1.1   → 0.9.8.1+1
+          #   0.9.8.0.1   → 0.9.8+1
+          #   0.9.8.1.1   → 0.9.8+1
           #
-          # FLUTTER_VERSION  = normalized form written to pubspec.yaml (must be valid for Flutter)
-          # DISPLAY_VERSION  = original full version string written to app_version.dart (shown to users)
+          # DISPLAY_VERSION keeps the original full string (e.g. "0.9.8.0.1")
+          # so it shows correctly inside the app.
+          #
+          # FLUTTER_VERSION is only for pubspec.yaml compatibility.
           IFS='.' read -ra PARTS <<< "$VERSION"
           COUNT=${#PARTS[@]}
 
           if [ "$COUNT" -gt 1 ]; then
-              # Join all parts except the last one with .
-              BASE=$(IFS='.'; echo "${PARTS[*]:0:$((COUNT-1))}")
+              # Always use first 3 parts as base (or fewer if the version is short)
+              BASE_PARTS=${PARTS[@]:0:3}
+              BASE=$(IFS='.'; echo "${BASE_PARTS[*]}")
               BUILD=${PARTS[$((COUNT-1))]}
               FLUTTER_VERSION="${BASE}+${BUILD}"
           else
