@@ -85,7 +85,7 @@ jobs:
 
           if [ "$COUNT" -gt 1 ]; then
               # Always use first 3 parts as base (or fewer if the version is short)
-              BASE_PARTS=${PARTS[@]:0:3}
+              BASE_PARTS=("${PARTS[@]:0:3}")
               BASE=$(IFS='.'; echo "${BASE_PARTS[*]}")
               BUILD=${PARTS[$((COUNT-1))]}
               FLUTTER_VERSION="${BASE}+${BUILD}"
