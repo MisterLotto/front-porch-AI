@@ -460,9 +460,9 @@ void main() {
 
     test('setTtsConcurrency clamps and persists', () async {
       final svc = await createStorageService();
-      await svc.setTtsConcurrency(999); // should clamp to 16
+      await svc.setTtsConcurrency(999); // should clamp to 8
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('tts_concurrency'), 16);
+      expect(prefs.getInt('tts_concurrency'), 8);
     });
 
     test('setDirectorDelay clamps and persists', () async {

@@ -19,6 +19,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:front_porch_ai/services/kokoro_debug.dart';
+import 'package:front_porch_ai/services/ordered_audio_collector.dart';
+import 'package:front_porch_ai/utils/wav_utils.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -40,6 +43,7 @@ class TtsService extends ChangeNotifier {
 
   // Engines
   late final KokoroEngine _kokoroEngine = KokoroEngine(_storageService);
+  OrderedAudioCollector? _audioCollector;
   final OpenAiTtsEngine _openaiEngine = OpenAiTtsEngine();
   final ElevenLabsTtsEngine _elevenlabsEngine = ElevenLabsTtsEngine();
 
@@ -164,6 +168,8 @@ class TtsService extends ChangeNotifier {
       return;
     }
 
+    final speed = _storageService.ttsSpeechRate;
+
     // For Piper, check model file exists
     if (_isPiperEngine) {
       final modelPath = await _voiceManager.getVoiceModelPath(voice);
@@ -224,10 +230,58 @@ class TtsService extends ChangeNotifier {
           print('TTS: Kokoro model not ready');
           return;
         }
+
+        // Pre-start the worker pool so first audio doesn't have cold-start delay
+        if (activeEngine is KokoroEngine) {
+          unawaited((activeEngine as KokoroEngine).ensureWorkersWarm());
+        }
+      }
+
+      final bool isVerbatimKokoro = _storageService.ttsEngine == 'kokoro'
+          && !_storageService.ttsIgnoreAsterisks
+          && !_storageService.ttsNarrateQuotedOnly;
+
+      if (isVerbatimKokoro) {
+        kDebugPrint('[TtsService] Verbatim mode - single full-text generation (no sentence splitting)');
+
+        // Kick the progress bar so the UI shows a determinate percentage instead of
+        // an indeterminate spinner (important for users without the debug TUI open).
+        _generationProgress = 0.01;
+        notifyListeners();
+
+        final wav = await activeEngine.generateAudio(
+          sanitized,
+          voice,
+          speed,
+          onProgress: (progress) {
+            _generationProgress = progress;
+            notifyListeners();
+          },
+        );
+
+        if (wav != null && _isSpeaking) {
+          _generationProgress = 1.0;
+          _isGenerating = false;
+          notifyListeners();
+
+          // Cache and play the single collated file (the "generate everything, collate, one playback" path)
+          _cachedWav = wav;
+          _cachedMessageId = messageId;
+          _cachedTextHash = sanitized.hashCode;
+          _cachedVoice = voice;
+          _cachedEngine = _storageService.ttsEngine;
+
+          await _playWavFile(wav);
+        } else {
+          _isGenerating = false;
+          _generationProgress = 0.0;
+          notifyListeners();
+        }
+        return; // finally block will reset _isSpeaking / _isGenerating
       }
 
       final sentences = _splitSentences(sanitized);
-      final wavFiles = List<File?>.filled(sentences.length, null);
+      final wavFiles = <File?>[]; // Filled via OrderedAudioCollector for Kokoro
 
       // Phase 1: Generate audio
       // ElevenLabs is fast enough to process full text in one request —
@@ -254,10 +308,17 @@ class TtsService extends ChangeNotifier {
           notifyListeners();
         }
       } else {
-        // Parallel for Kokoro / OpenAI
+        // Parallel for Kokoro / OpenAI — all results go through the OrderedAudioCollector
         final engine = activeEngine;
         final speed = _storageService.ttsSpeechRate;
         final maxConcurrency = _storageService.ttsConcurrency;
+
+        _audioCollector = OrderedAudioCollector(
+          maxLookahead: _storageService.ttsAudioLookahead,
+        );
+        _audioCollector!.reset(); // Ensure clean state for new utterance
+
+        kDebugPrint('[TtsService] Starting parallel generation of ${sentences.length} sentences (concurrency=$maxConcurrency)');
 
         for (int batchStart = 0; batchStart < sentences.length; batchStart += maxConcurrency) {
           if (!_isSpeaking) break;
@@ -271,11 +332,21 @@ class TtsService extends ChangeNotifier {
 
           final results = await Future.wait(futures);
 
-          // Store results in order
           bool failed = false;
           for (int j = 0; j < results.length; j++) {
-            if (results[j] == null || !_isSpeaking) { failed = true; break; }
-            wavFiles[batchStart + j] = results[j];
+            final sentenceIndex = batchStart + j;
+            final file = results[j];
+
+            if (file == null || !_isSpeaking) {
+              failed = true;
+              break;
+            }
+
+            // Submit to collector — it will only release files in the correct global order
+            final readyFiles = _audioCollector!.submit(sentenceIndex, file);
+            for (final readyFile in readyFiles) {
+              wavFiles.add(readyFile); // We collect in correct order
+            }
           }
           if (failed) break;
 
@@ -284,7 +355,7 @@ class TtsService extends ChangeNotifier {
         }
       }
 
-      // Collect non-null results in order
+      // wavFiles should be in correct order thanks to OrderedAudioCollector
       final validWavFiles = wavFiles.whereType<File>().toList();
 
       if (!_isSpeaking || validWavFiles.isEmpty) {
@@ -301,7 +372,7 @@ class TtsService extends ChangeNotifier {
         // ElevenLabs returns a single MP3 — play directly, no WAV concat needed.
         audioFile = validWavFiles.first;
       } else {
-        audioFile = await _concatenateWavFiles(validWavFiles);
+        audioFile = await WavUtils.concatenateWavFiles(validWavFiles);
         _cleanupFiles(validWavFiles);
       }
 
@@ -369,6 +440,10 @@ class TtsService extends ChangeNotifier {
       });
       _isDownloadingModel = false;
       if (!ready) return;
+
+      if (activeEngine is KokoroEngine) {
+        unawaited((activeEngine as KokoroEngine).ensureWorkersWarm());
+      }
     }
 
     _isSpeaking = true;
@@ -387,7 +462,7 @@ class TtsService extends ChangeNotifier {
     int bufferTarget = _storageService.callBufferSentences.clamp(1, 10);
 
     try {
-      var maxConcurrency = _isPiperEngine ? 1 : _storageService.ttsConcurrency.clamp(1, 16);
+      var maxConcurrency = _isPiperEngine ? 1 : _storageService.ttsConcurrency.clamp(1, 8);
       // ElevenLabs: one at a time from the stream (already fast enough)
       if (_storageService.ttsEngine == 'elevenlabs') maxConcurrency = 1;
 
@@ -415,6 +490,7 @@ class TtsService extends ChangeNotifier {
               final modelPath = await _voiceManager.getVoiceModelPath(voice);
               wavFile = await _generatePiperWav(sanitized, modelPath, idx);
             } else {
+              kDebugPrint('[TtsService] Streaming: generating audio for chunk (len=${sanitized.length})');
               wavFile = await engine.generateAudio(sanitized, voice, speed);
             }
             return wavFile;
@@ -521,6 +597,10 @@ class TtsService extends ChangeNotifier {
       if (_storageService.ttsEngine == 'kokoro') {
         final ready = await activeEngine.ensureModelReady(onProgress: (_) {});
         if (!ready) return null;
+
+        if (activeEngine is KokoroEngine) {
+          unawaited((activeEngine as KokoroEngine).ensureWorkersWarm());
+        }
       }
 
       final sentences = _splitSentences(sanitized);
@@ -567,7 +647,7 @@ class TtsService extends ChangeNotifier {
         return wavFiles.first;
       }
 
-      final combinedWav = await _concatenateWavFiles(wavFiles);
+      final combinedWav = await WavUtils.concatenateWavFiles(wavFiles);
       _cleanupFiles(wavFiles);
       return combinedWav;
     } catch (e) {
@@ -660,7 +740,7 @@ class TtsService extends ChangeNotifier {
   // ---- Audio utilities ----
 
   /// Concatenate multiple WAV files into a single WAV file.
-  Future<File?> _concatenateWavFiles(List<File> wavFiles) async {
+  static Future<File?> concatenateWavFiles(List<File> wavFiles) async {
     if (wavFiles.isEmpty) return null;
     if (wavFiles.length == 1) return wavFiles.first;
 

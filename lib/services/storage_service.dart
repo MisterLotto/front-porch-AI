@@ -180,7 +180,8 @@ class StorageService extends ChangeNotifier {
   double _elevenlabsStyle = 0.0;
   bool _ttsNarrateQuotedOnly = false;
   bool _ttsIgnoreAsterisks = false;
-  int _ttsConcurrency = Platform.numberOfProcessors.clamp(1, 16);
+  int _ttsConcurrency = Platform.numberOfProcessors.clamp(1, 8);
+  int _ttsAudioLookahead = 6; // How many future chunks the OrderedAudioCollector will buffer
   double _directorDelay =
       15.0; // seconds between auto-chat responses in Director Mode
 
@@ -205,7 +206,7 @@ class StorageService extends ChangeNotifier {
 
   // Cloud sync settings
   bool _cloudSyncEnabled = false;
-  String _cloudSyncProvider = 'none'; // 'none', 'webdav', 'gdrive', 'onedrive'
+  String _cloudSyncProvider = 'none'; // 'none', 'webdav', 'gdrive'
   String _cloudSyncUrl = '';
   String _cloudSyncUsername = '';
   String _cloudSyncPassword = '';
@@ -343,7 +344,8 @@ class StorageService extends ChangeNotifier {
   double get elevenlabsStyle => _elevenlabsStyle;
   bool get ttsNarrateQuotedOnly => _ttsNarrateQuotedOnly;
   bool get ttsIgnoreAsterisks => _ttsIgnoreAsterisks;
-  int get ttsConcurrency => _ttsConcurrency;
+  int get ttsConcurrency => _ttsConcurrency.clamp(1, 8);
+  int get ttsAudioLookahead => _ttsAudioLookahead;
   double get directorDelay => _directorDelay;
   bool get sttEnabled => _sttEnabled;
   String get whisperModel => _whisperModel;
@@ -540,9 +542,9 @@ class StorageService extends ChangeNotifier {
     _ttsSpeechRate = _prefs?.getDouble(_k('tts_speech_rate')) ?? 1.0;
     _ttsAutoPlay = _prefs?.getBool(_k('tts_auto_play')) ?? false;
     _openaiTtsApiKey = _prefs?.getString(_k('openai_tts_api_key')) ?? '';
-    _ttsConcurrency =
-        _prefs?.getInt(_k('tts_concurrency')) ??
-        Platform.numberOfProcessors.clamp(1, 16);
+    _ttsConcurrency = (_prefs?.getInt(_k('tts_concurrency')) ??
+        Platform.numberOfProcessors).clamp(1, 8);
+    _ttsAudioLookahead = _prefs?.getInt(_k('tts_audio_lookahead')) ?? 6;
     _kvQuantizationLevel = _prefs?.getInt(_k('kv_quantization_level')) ?? 0;
     _openaiTtsModel = _prefs?.getString(_k('openai_tts_model')) ?? 'tts-1';
     _openaiTtsBaseUrl =
@@ -1189,8 +1191,14 @@ class StorageService extends ChangeNotifier {
   }
 
   Future<void> setTtsConcurrency(int value) async {
-    _ttsConcurrency = value.clamp(1, 16);
+    _ttsConcurrency = value.clamp(1, 8);
     await _prefs?.setInt(_k('tts_concurrency'), _ttsConcurrency);
+    notifyListeners();
+  }
+
+  Future<void> setTtsAudioLookahead(int value) async {
+    _ttsAudioLookahead = value.clamp(1, 32);
+    await _prefs?.setInt(_k('tts_audio_lookahead'), _ttsAudioLookahead);
     notifyListeners();
   }
 
