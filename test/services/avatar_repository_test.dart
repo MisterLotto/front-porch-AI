@@ -50,8 +50,8 @@ void main() {
       await db.close();
     });
 
-    test('schema version is 24', () {
-      expect(db.schemaVersion, 24);
+    test('schema version is 25', () {
+      expect(db.schemaVersion, 25);
     });
 
     test('characters table has prime_avatar_index column', () async {
