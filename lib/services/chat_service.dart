@@ -4887,10 +4887,13 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
       if (ch.lorebook != null) {
         for (final entry in ch.lorebook!.entries) {
           if (!entry.enabled) continue;
+
           final keys = entry.key
               .split(',')
               .map((k) => k.trim().toLowerCase())
-              .where((k) => k.isNotEmpty);
+              .where((k) => k.isNotEmpty)
+              .toList();
+
           for (final key in keys) {
             if (_matchKeyword(key, lowerText)) {
               if (!entry.isTriggered) {
@@ -4913,10 +4916,13 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
 
         for (final entry in world.lorebook.entries) {
           if (!entry.enabled) continue;
+
           final keys = entry.key
               .split(',')
               .map((k) => k.trim().toLowerCase())
-              .where((k) => k.isNotEmpty);
+              .where((k) => k.isNotEmpty)
+              .toList();
+
           for (final key in keys) {
             if (_matchKeyword(key, lowerText)) {
               if (!entry.isTriggered) {
@@ -4947,7 +4953,9 @@ if (_realismEnabled && _activeGroup == null && _activeCharacter!.frontPorchExten
       return RegExp(escaped).hasMatch(text);
     } else {
       // Exact word match with word boundaries
-      return RegExp(r'\b${RegExp.escape(key)}\b').hasMatch(text);
+      // Using string concatenation instead of ${} inside a raw string
+      // because Dart raw strings (r'...') do not process ${} interpolation.
+      return RegExp(r'\b' + RegExp.escape(key) + r'\b').hasMatch(text);
     }
   }
 
