@@ -5,7 +5,6 @@ env:
 
 on:
   schedule:
-    # Run every day at 07:00 UTC = 00:00 (midnight) Arizona time (MST, UTC-7)
     - cron: '0 7 * * *'
   workflow_dispatch:
 
@@ -17,6 +16,7 @@ jobs:
     name: Build Nightly
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -32,9 +32,9 @@ jobs:
 
     steps:
       - name: Checkout Rawhide
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
-          ref: rawhide
+          ref: Rawhide
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -59,32 +59,33 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Setting nightly version to: $VERSION"
 
-          # Write version into pubspec and app_version.dart
-          python3 -c "
-          import re
-          v = '$VERSION'
-          with open('pubspec.yaml', 'r') as f: content = f.read()
-          content = re.sub(r'^version: .*$', 'version: ' + v.replace('rawhide.', '0.0.0+')[:20], content, flags=re.MULTILINE)
-          with open('pubspec.yaml', 'w') as f: f.write(content)
+          # Write version file
+          echo '/// Single source of truth for the app version.' > lib/app_version.dart
+          echo "const String appVersion = '$VERSION';" >> lib/app_version.dart
+          echo '' >> lib/app_version.dart
+          echo '/// Whether the current build is a pre-release.' >> lib/app_version.dart
+          echo 'bool get isPreRelease {' >> lib/app_version.dart
+          echo "  final lower = appVersion.toLowerCase();" >> lib/app_version.dart
+          echo "  return lower.contains('rawhide') || lower.contains('-nightly');" >> lib/app_version.dart
+          echo '}' >> lib/app_version.dart
+          echo '' >> lib/app_version.dart
+          echo '/// The stable version base (used by Cloud Sync messaging).' >> lib/app_version.dart
+          echo "String get stableVersionBase => appVersion.split('-').first;" >> lib/app_version.dart
 
-          with open('lib/app_version.dart', 'w') as f:
-              f.write('''/// Single source of truth for the app version.
-const String appVersion = '$v';
-
-/// Whether the current build is a pre-release.
-bool get isPreRelease {
-  final lower = appVersion.toLowerCase();
-  return lower.contains('rawhide') || lower.contains('-nightly');
-}
-''')
-          "
           echo "Version written: $VERSION"
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Application
+        if: matrix.platform != 'linux'
         run: flutter build ${{ matrix.platform }} --release
+
+      - name: Build Application (Linux)
+        if: matrix.platform == 'linux'
+        env:
+          CXXFLAGS: "-Wno-unknown-warning-option"
+        run: flutter build linux --release
 
       - name: Bundle ML Engines (Kokoro TTS, Piper TTS, Whisper STT, ONNX Embeddings)
         shell: bash
@@ -263,10 +264,25 @@ bool get isPreRelease {
       - name: Ensure correct Nightly artifact names
         shell: bash
         run: |
-          # Windows - the Inno step above already produces Front_Porch_AI_Nightly_Setup.exe
-          # macOS - handled in the DMG step
-          # Linux - handled below
           echo "Artifact naming normalized for Nightly"
+      - name: Re-sign macOS App (ad-hoc with entitlements)
+        if: matrix.platform == 'macos'
+        run: |
+          APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app | head -1)
+          ENTITLEMENTS="${{ github.workspace }}/macos/Runner/Release.entitlements"
+          echo "Re-signing $APP_NAME after ML engine bundling..."
+          echo "Using entitlements: $ENTITLEMENTS"
+          # Sign inner frameworks/helpers first (inside-out signing)
+          find "$APP_NAME/Contents/Frameworks" -name "*.framework" -o -name "*.dylib" | while read f; do
+            codesign --force --sign - "$f" 2>/dev/null || true
+          done
+          find "$APP_NAME/Contents/Resources" -type f -perm +111 | while read f; do
+            codesign --force --sign - "$f" 2>/dev/null || true
+          done
+          # Sign the main app with entitlements
+          codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP_NAME"
+          echo "✓ Ad-hoc signature applied with entitlements"
+
 
       - name: Build macOS DMG (Nightly)
         if: matrix.platform == 'macos'
@@ -338,7 +354,7 @@ bool get isPreRelease {
           body: |
             **Rawhide Nightly Build** — `${{ steps.version.outputs.VERSION }}`
 
-            Built from the `rawhide` branch.
+            Built from the `Rawhide` branch.
             This is the bleeding-edge version. Use at your own risk.
 
             Data directory: `FrontPorchAI-Beta`
