@@ -77,6 +77,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Disable inappwebview Linux plugin (uses external browser fallback)
+        if: matrix.platform == 'linux'
+        run: |
+          echo "" >> pubspec.yaml
+          echo "dependency_overrides:" >> pubspec.yaml
+          echo "  flutter_inappwebview_linux:" >> pubspec.yaml
+          echo "    path: ci/flutter_inappwebview_linux_stub" >> pubspec.yaml
+          flutter pub get
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Build Application
         if: matrix.platform != 'linux'
         run: flutter build ${{ matrix.platform }} --release
