@@ -1111,6 +1111,11 @@ See docs for current bundling instructions.
     result = result.replaceAll(RegExp(r'\[([^\]]+)\]\([^\)]+\)'), r'$1');
     result = result.replaceAll(RegExp(r'!\[.*?\]\(.*?\)'), '');
     result = result.replaceAll(RegExp(r':[a-zA-Z0-9_]+:'), '');
+    // Remove emojis (fpai-feature-004)
+    result = result.replaceAll(
+        RegExp(r'[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}]',
+            unicode: true),
+        '');
     result = result.replaceAll(RegExp(r'\s+'), ' ');
     return result.trim();
   }
