@@ -108,8 +108,8 @@ class StoryLoreEntry {
     topic: json['topic'] ?? '',
     detail: json['detail'] ?? '',
     relatedTo: (json['related_to'] as List?)?.map((e) => e.toString()).toList() ?? [],
-    validFromAct: json['valid_from_act'] ?? 1,
-    validFromScene: json['valid_from_scene'] ?? 1,
+    validFromAct: (json['valid_from_act'] as num?)?.toInt() ?? 1,
+    validFromScene: (json['valid_from_scene'] as num?)?.toInt() ?? 1,
   );
 }
 
@@ -174,7 +174,7 @@ class StoryAct {
   };
 
   factory StoryAct.fromJson(Map<String, dynamic> json) => StoryAct(
-    number: json['number'] ?? 1,
+    number: (json['number'] as num?)?.toInt() ?? 1,
     title: json['title'] ?? '',
     description: json['description'] ?? '',
     focusThreadIds: (json['focus_thread_ids'] as List?)?.map((e) => e.toString()).toList() ?? [],
@@ -234,13 +234,13 @@ class StoryScene {
   };
 
   factory StoryScene.fromJson(Map<String, dynamic> json) => StoryScene(
-    number: json['number'] ?? 1,
+    number: (json['number'] as num?)?.toInt() ?? 1,
     title: json['title'] ?? '',
     description: json['description'] ?? '',
     activeThreadIds: (json['active_thread_ids'] as List?)?.map((e) => e.toString()).toList() ?? [],
     location: json['location'] ?? '',
     castNames: (json['cast_names'] as List?)?.map((e) => e.toString()).toList() ?? [],
-    valence: json['valence'] ?? 0,
+    valence: (json['valence'] as num?)?.toInt() ?? 0,
     causality: json['causality'] != null
         ? SceneCausality.fromJson(json['causality'])
         : SceneCausality(),
@@ -275,12 +275,12 @@ class StoryBeat {
   };
 
   factory StoryBeat.fromJson(Map<String, dynamic> json) => StoryBeat(
-    number: json['number'] ?? 1,
+    number: (json['number'] as num?)?.toInt() ?? 1,
     type: json['type'] ?? 'Action',
     description: json['description'] ?? '',
     emotionalShift: json['emotional_shift'] ?? '',
-    valence: json['valence'] ?? 0,
-    pacing: json['pacing'] ?? 1,
+    valence: (json['valence'] as num?)?.toInt() ?? 0,
+    pacing: (json['pacing'] as num?)?.toInt() ?? 1,
   );
 }
 
@@ -482,7 +482,7 @@ class StoryProject {
       includeUserPersona: json['include_user_persona'] ?? false,
       userPersonaRole: json['user_persona_role'] ?? 'Protagonist',
       pov: json['pov'] ?? 'Third Person Limited',
-      actCount: json['act_count'] ?? 3,
+      actCount: (json['act_count'] as num?)?.toInt() ?? 3,
       selectedGenres: (json['selected_genres'] as List?)?.map((e) => e.toString()).toList(),
       selectedMoods: (json['selected_moods'] as List?)?.map((e) => e.toString()).toList(),
       writingStyle: json['writing_style'] ?? '',
@@ -491,7 +491,7 @@ class StoryProject {
       dialogueDensity: json['dialogue_density'] ?? 'Balanced',
       maturityRating: json['maturity_rating'] ?? 'Mature',
       distilledTimeline: json['distilled_timeline'] ?? '',
-      lastReadPageIndex: json['last_read_page_index'] ?? 0,
+      lastReadPageIndex: (json['last_read_page_index'] as num?)?.toInt() ?? 0,
       cast: (json['cast'] as List?)?.map((c) => StoryCastMember.fromJson(c)).toList(),
       threads: (json['threads'] as List?)?.map((t) => StoryThread.fromJson(t)).toList(),
       lore: (json['lore'] as List?)?.map((l) => StoryLoreEntry.fromJson(l)).toList(),
