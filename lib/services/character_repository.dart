@@ -497,8 +497,22 @@ class CharacterRepository extends ChangeNotifier {
 
     try {
       final v2Service = V2CardService();
-      // Overwrite the existing file with updated data
-      await v2Service.saveCardAsPng(card, card.imagePath!, card.imagePath!);
+
+      // Resolve imagePath to a real filesystem path before any I/O.
+      // In-memory CharacterCards are supposed to carry full absolute paths
+      // (see loadCharacters + the convention documented in chat_page.dart:2381).
+      // However, defensive handling here prevents crashes if any caller ever
+      // passes a bare basename (as the full-page editor used to do before the
+      // fix in edit_character_page.dart). We also normalize the card so that
+      // after updateCharacter the object always holds a full path.
+      final fsPath = p.isAbsolute(card.imagePath!)
+          ? card.imagePath!
+          : _resolveImagePath(card.imagePath!);
+      card.imagePath = fsPath;
+
+      // Overwrite the existing file with updated data (now using a guaranteed
+      // absolute path that lands in the correct Characters/ directory).
+      await v2Service.saveCardAsPng(card, fsPath, fsPath);
 
       // Update in database — store basename only for cross-platform portability
       if (card.dbId != null) {

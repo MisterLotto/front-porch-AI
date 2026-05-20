@@ -425,9 +425,15 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       );
     }
 
-    // Update avatar if changed
+    // Update avatar if changed — store the *full* absolute path in the
+    // in-memory model (the documented convention). The repository will
+    // extract the basename only when writing to the database for
+    // cross-platform portability. Storing only the basename here used to
+    // cause updateCharacter() to attempt a relative write into the CWD,
+    // which is read-only inside packaged macOS .app bundles (and can be
+    // surprising on other platforms).
     if (_newAvatarPath != null) {
-      widget.character.imagePath = p.basename(_newAvatarPath!);
+      widget.character.imagePath = _newAvatarPath!;
     }
 
     // Always embed V2 card data into the PNG to preserve extensions
