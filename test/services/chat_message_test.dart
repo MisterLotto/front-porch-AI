@@ -64,7 +64,10 @@ void main() {
       expect(msg.swipes, isEmpty);
     });
 
-    test('swipeIndex out of range throws RangeError', () {
+    test('swipeIndex out of range is clamped to 0 instead of throwing', () {
+      // The constructor clamps an out-of-range swipeIndex to 0 to defend against
+      // corrupted DB rows / previous buggy state (chat_service.dart ChatMessage
+      // ctor), so accessing text must not throw a RangeError.
       final msg = ChatMessage(
         text: 'Hello',
         sender: 'Luna',
@@ -73,7 +76,8 @@ void main() {
         swipeIndex: 99,
       );
 
-      expect(() => msg.text, throwsRangeError);
+      expect(msg.swipeIndex, 0);
+      expect(msg.text, 'Hello');
     });
   });
 
@@ -277,6 +281,9 @@ void main() {
         text: 'Hello',
         sender: 'Luna',
         isUser: false,
+        // Provide enough swipes that swipeIndex:1 stays valid (the ctor clamps
+        // an out-of-range index to 0, which would otherwise hide this behavior).
+        swipes: ['Hello', 'Hi'],
         swipeMetadata: [
           null,
           {'swipeKey': 'swipeValue'},
@@ -313,6 +320,9 @@ void main() {
         text: 'Hello',
         sender: 'Luna',
         isUser: false,
+        // Provide enough swipes that swipeIndex:2 stays valid (the ctor clamps
+        // an out-of-range index to 0, which would otherwise hide this behavior).
+        swipes: ['a', 'b', 'c'],
         swipeMetadata: [null, null, null],
         swipeIndex: 2,
       );
