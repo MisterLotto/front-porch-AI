@@ -389,12 +389,15 @@ void main() {
 
       // Deltas should have been applied via the one-shot path.
       expect(chat.affectionScore, anyOf(greaterThanOrEqualTo(startBond), greaterThan(startBond - 20)));
-      // Contract: the one-shot prompt was used.
+      // Contract: the fused one-shot eval prompt was used. The one-shot path
+      // emits a single prompt asking for all deltas at once (relationship_delta,
+      // trust_delta, etc.) — distinct from the multi-call narrative prompt
+      // ("autonomous story engine"). Assert on markers actually present in
+      // _evaluateOneShotCall's prompt.
       expect(
         fakeLlm.seenPrompts.any((p) =>
-            p.toLowerCase().contains('autonomous story engine') ||
-            p.toLowerCase().contains('one shot') ||
-            p.contains('bond_delta')),
+            p.contains('relationship_delta') &&
+            p.contains('trust_delta')),
         isTrue,
       );
     });
@@ -535,7 +538,12 @@ void main() {
           defaultMemberRealismState: drift.Value(smallDefaultState),
           baselineRealismState: const drift.Value('{}'),
           characterSystemPrompts: const drift.Value('{}'),
-          chaosModeEnabled: const drift.Value(true),
+          // Chaos OFF: this test exercises per-speaker eval + inter-char
+          // seeding, not Chance Time. When chaos auto-triggers (random ~5% roll),
+          // sendMessage awaits _chanceTimeCompleter which is only completed by the
+          // UI wheel (applyChanceTimeResult) — never in a headless test — causing
+          // an intermittent 30s timeout. Not a prod bug; the UI resolves it live.
+          chaosModeEnabled: const drift.Value(false),
           chaosNsfwEnabled: const drift.Value(false),
           groupLorebook: const drift.Value(''),
           worldIds: const drift.Value('[]'),
@@ -577,7 +585,7 @@ void main() {
         name: 'Small Circle',
         defaultMemberRealismState: smallDefaultState,
         baselineRealismState: '{}',
-        chaosModeEnabled: true,
+        chaosModeEnabled: false, // see GroupsCompanion note above (headless wheel hang)
       );
 
       await chat.setActiveGroup(group, groupRepo: groupRepo);
