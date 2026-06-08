@@ -257,6 +257,27 @@ class ChatService extends ChangeNotifier {
   @visibleForTesting
   bool testIsLocalOverride = false;
 
+  /// True once [dispose] has run. Several methods do `await`-ed DB work and then
+  /// call [notifyListeners] (e.g. [_loadActiveObjectives]); if the service is
+  /// torn down while that future is in flight — a user closing a chat mid-load,
+  /// or a test's tearDown — the late notify would throw
+  /// "A ChatService was used after being disposed". We guard centrally by
+  /// overriding [notifyListeners] to no-op after disposal, rather than
+  /// null-checking at each of the ~120 call sites.
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   // Action suggestions
   List<String> _suggestedActions = [];
   bool _isGeneratingActions = false;
@@ -3981,13 +4002,14 @@ class ChatService extends ChangeNotifier {
           _activeCharacter!.frontPorchExtensions ?? FrontPorchExtensions();
 
       _realismEnabled = extSeed.realismEnabled;
-      // Migration: scale old scores (±150) to new range (±300)
-      _affectionScore = _migrateShortTermScore(
-        extSeed.shortTermBond.clamp(-300, 300),
-      );
-      _longTermScore = _migrateLongTermScore(
-        extSeed.longTermBond.clamp(-300, 300),
-      );
+      // V2.5 card seeds are authored on the current ±300 scale
+      // (see FrontPorchExtensions.shortTermBond/longTermBond docs: "-300 to 300").
+      // Do NOT run the legacy ±150→±300 migration here — that helper exists only
+      // for upgrading previously-persisted *session* scores (see _loadLastSession /
+      // loadSession). Applying it to a fresh card seed double-counts the value
+      // (e.g. a card authored at 55 would start every new chat at 110).
+      _affectionScore = extSeed.shortTermBond.clamp(-300, 300);
+      _longTermScore = extSeed.longTermBond.clamp(-300, 300);
       _trustLevel = extSeed.trustLevel.clamp(-100, 100);
       _dayCount = extSeed.dayCount.clamp(1, 9999);
       _timeOfDay = extSeed.timeOfDay;
