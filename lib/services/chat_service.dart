@@ -161,6 +161,20 @@ class ChatService extends ChangeNotifier {
   // see also _loadActiveObjectives and keep-reset sites. 0 new god private _ methods.
   bool _disposed = false;
 
+  // ── Dynamic Responses (idle timer / fourth-wall auto-ping) ─────────────
+  Timer? _idleTimer;
+  String? _pendingIdleCue;
+  DateTime? _lastAutoResponse;
+  bool _autoResponseInProgress = false;
+  bool _hasCompletedExchange = false;
+  int _consecutiveAutoResponses = 0;
+
+  static const List<String> _idleCues = [
+    "*{{char}} glances around, a quiet moment settling between them. They speak softly, a flicker of something unreadable in their voice.*",
+    "*The silence stretches. {{char}} shifts, clearing their throat, before finally speaking into the quiet room.*",
+    "*{{char}} breaks the stillness with a gentle sigh. A moment passes before they speak, their tone carrying into the empty space.*",
+  ];
+
   List<Objective> get activeObjectives => _activeObjectives;
   Objective? get primaryObjective =>
       _activeObjectives.where((o) => o.isPrimary).firstOrNull;
@@ -2619,7 +2633,7 @@ class ChatService extends ChangeNotifier {
   /// Director/observerMode (per design — Director is narrative control,
   /// not simulation).
   bool get _realismActiveThisMode =>
-      _realismEnabled && (_activeGroup == null || !_observerMode);
+      _realismEnabled && !_autoResponseInProgress && (_activeGroup == null || !_observerMode);
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;
   bool get isCancellingRealismEval => _isCancellingRealismEval;
@@ -3073,6 +3087,85 @@ class ChatService extends ChangeNotifier {
     );
   }
 
+  // ── Dynamic Responses timer management ────────────────────────────────
+  /// Called when the user leaves the chat page.
+  void pauseDynamicResponses() {
+    _cancelIdleTimer();
+  }
+
+  /// Called when the user re-enters the chat page.
+  void resumeDynamicResponses() {
+    if (!_storageService.generationSettings.dynamicResponses) return;
+    if (!_hasCompletedExchange) return;
+    if (_disposed) return;
+    _resetIdleTimer();
+  }
+
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    if (!_storageService.generationSettings.dynamicResponses) return;
+    if (!_hasCompletedExchange) return;
+    if (_autoResponseInProgress) {
+      final cooldown = _storageService.generationSettings.dynamicResponseInterval * 2;
+      _idleTimer = Timer(Duration(seconds: cooldown), _onIdleTimerFired);
+      return;
+    }
+    final interval = _storageService.generationSettings.dynamicResponseInterval;
+    _idleTimer = Timer(Duration(seconds: interval), _onIdleTimerFired);
+  }
+
+  /// Reset timer with forced 2x cooldown (used after auto-response completes).
+  void _resetIdleTimerWithCooldown() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    if (!_storageService.generationSettings.dynamicResponses) return;
+    if (!_hasCompletedExchange) return;
+    final cooldown = _storageService.generationSettings.dynamicResponseInterval * 2;
+    _idleTimer = Timer(Duration(seconds: cooldown), _onIdleTimerFired);
+  }
+
+  void _cancelIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    _pendingIdleCue = null;
+    _autoResponseInProgress = false;
+    _consecutiveAutoResponses = 0;
+  }
+
+  void _onIdleTimerFired() {
+    if (_disposed) return;
+    // Don't fire during generation or TTS playback
+    if (_isGenerating) { _resetIdleTimer(); return; }
+    if (_ttsService != null && _ttsService!.isSpeaking) { _resetIdleTimer(); return; }
+    // Check LLM is ready (fall back to _koboldService for local backend)
+    final llm = _llmProvider?.activeService ?? _koboldService;
+    if (!llm.isReady) { _resetIdleTimer(); return; }
+    // Check max AFK responses limit (0 = unlimited)
+    final maxResponses = _storageService.generationSettings.maxAfkResponses;
+    if (maxResponses > 0 && _consecutiveAutoResponses >= maxResponses) return;
+    // Pick a cue
+    final cueIndex = _lastAutoResponse == null
+        ? 0
+        : (_lastAutoResponse!.millisecondsSinceEpoch ~/ 1000) % _idleCues.length;
+    _pendingIdleCue = _idleCues[cueIndex];
+    _autoResponseInProgress = true;
+    _lastAutoResponse = DateTime.now();
+    _consecutiveAutoResponses++;
+    // Fire generation (the cue is injected in _generateResponse)
+    _generateResponse(GenerationMode.normal).then((_) {
+      _pendingIdleCue = null;
+      // Use 2x cooldown after an auto-response (before clearing the flag)
+      _resetIdleTimerWithCooldown();
+      _autoResponseInProgress = false;
+    }).catchError((_) {
+      _pendingIdleCue = null;
+      _autoResponseInProgress = false;
+      // Still restart the timer even if generation failed
+      _resetIdleTimerWithCooldown();
+    });
+  }
+
   Future<void> sendMessage(String text) async {
     if ((_activeCharacter == null && _activeGroup == null) ||
         text.trim().isEmpty) {
@@ -3085,6 +3178,9 @@ class ChatService extends ChangeNotifier {
     // runs a separate LLM call that doesn't set _isGenerating).
     if (_guestBusy) return;
     clearSuggestions();
+
+    // User is interacting — clear any pending auto-response state
+    _pendingIdleCue = null;
 
     // ── Slash Command Handling (delegated to leaf) ──────────────────────
     final trimmed = text.trim();
@@ -3110,6 +3206,9 @@ class ChatService extends ChangeNotifier {
     _messages.add(ChatMessage(text: text, sender: senderName, isUser: true));
     await _saveChat();
     notifyListeners();
+
+    // Reset the idle timer — user is interacting
+    _cancelIdleTimer();
 
     // Clear the new chat flag after first user message to allow memory retrieval
     if (_isNewChat) {
@@ -3206,6 +3305,12 @@ class ChatService extends ChangeNotifier {
     }
 
     await _generateResponse(GenerationMode.normal);
+    // First exchange complete — arm idle timer
+    _hasCompletedExchange = true;
+    if (_storageService.generationSettings.dynamicResponses) {
+      debugPrint('[DynamicResponses] First exchange done, arming idle timer (interval=${_storageService.generationSettings.dynamicResponseInterval}s)');
+      _resetIdleTimer();
+    }
 
     // Long-gen decay removed with buffers (decay via tick only now; model deltas via impact).
     // Compute needs_deltas AFTER generation so the post-generation checks
@@ -4217,6 +4322,7 @@ class ChatService extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _cancelIdleTimer();
     _guestStatusClearTimer?.cancel();
     _characterRepository?.removeListener(_onCharacterLibraryChanged);
     super.dispose();

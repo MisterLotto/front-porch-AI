@@ -3879,6 +3879,46 @@ class _SettingsPageState extends State<SettingsPage> {
               showInput: true,
               decimalPlaces: 1,
             ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text(
+                'Provide periodic responses when user is AFK?',
+                style: TextStyle(color: Colors.white70),
+              ),
+              const Spacer(),
+              Switch(
+                value: storage.dynamicResponses,
+                onChanged: (val) => storage.setDynamicResponses(val),
+                activeTrackColor: Colors.blueAccent,
+              ),
+            ],
+          ),
+          if (storage.dynamicResponses) ...[
+            _buildSlider(
+              'Idle Timeout (seconds)',
+              storage.dynamicResponseInterval.toDouble(),
+              30,
+              300,
+              (val) => storage.setDynamicResponseInterval(val.toInt()),
+              context,
+              divisions: 27,
+              showInput: true,
+              decimalPlaces: 0,
+            ),
+            const SizedBox(height: 8),
+            _buildSlider(
+              'Max AFK Responses (0 = unlimited)',
+              storage.maxAfkResponses.toDouble(),
+              0,
+              20,
+              (val) => storage.setMaxAfkResponses(val.toInt()),
+              context,
+              divisions: 20,
+              showInput: true,
+              decimalPlaces: 0,
+            ),
+          ],
           const SizedBox(height: 24),
 
           // ── Output Limits ──────────────────────────────────────────────
