@@ -42,7 +42,6 @@ interface Gen {
   dynamicTempEnabled: boolean;
   dynamicResponses: boolean;
   dynamicResponseInterval: number;
-  maxAfkResponses: number;
 }
 interface Settings {
   backend: string;
@@ -286,8 +285,6 @@ export function SettingsPage() {
           <>
             <SliderField label="Idle timeout (s)" value={s.generation.dynamicResponseInterval} min={30} max={300} step={10}
               onChange={(v) => patchGen({ dynamicResponseInterval: Math.round(v) })} />
-            <SliderField label="Max AFK responses (0 = unlimited)" value={s.generation.maxAfkResponses} min={0} max={20} step={1}
-              onChange={(v) => patchGen({ maxAfkResponses: Math.round(v) })} />
           </>
         )}
       </section>

@@ -3141,9 +3141,8 @@ class ChatService extends ChangeNotifier {
     // Check LLM is ready (fall back to _koboldService for local backend)
     final llm = _llmProvider?.activeService ?? _koboldService;
     if (!llm.isReady) { _resetIdleTimer(); return; }
-    // Check max AFK responses limit (0 = unlimited)
-    final maxResponses = _storageService.generationSettings.maxAfkResponses;
-    if (maxResponses > 0 && _consecutiveAutoResponses >= maxResponses) return;
+    // Check max AFK responses limit
+    if (_consecutiveAutoResponses >= 3) return;
     // Pick a cue
     final cueIndex = _lastAutoResponse == null
         ? 0

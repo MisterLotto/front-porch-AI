@@ -3906,18 +3906,6 @@ class _SettingsPageState extends State<SettingsPage> {
               showInput: true,
               decimalPlaces: 0,
             ),
-            const SizedBox(height: 8),
-            _buildSlider(
-              'Max AFK Responses (0 = unlimited)',
-              storage.maxAfkResponses.toDouble(),
-              0,
-              20,
-              (val) => storage.setMaxAfkResponses(val.toInt()),
-              context,
-              divisions: 20,
-              showInput: true,
-              decimalPlaces: 0,
-            ),
           ],
           const SizedBox(height: 24),
 
