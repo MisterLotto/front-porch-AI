@@ -40,6 +40,9 @@ interface Gen {
   maxLength: number;
   minLength: number;
   dynamicTempEnabled: boolean;
+  dynamicResponses: boolean;
+  dynamicResponseInterval: number;
+  maxAfkResponses: number;
 }
 interface Settings {
   backend: string;
@@ -271,6 +274,22 @@ export function SettingsPage() {
           Turn on for reasoning models (e.g. GLM-*:thinking) so their thinking is captured and shown
           as a collapsible block under each reply. Off discards the reasoning.
         </p>
+        <label className="row-label">
+          <span>Provide periodic responses when user is AFK?</span>
+          <input
+            type="checkbox"
+            checked={s.generation.dynamicResponses}
+            onChange={(e) => patchGen({ dynamicResponses: e.target.checked })}
+          />
+        </label>
+        {s.generation.dynamicResponses && (
+          <>
+            <SliderField label="Idle timeout (s)" value={s.generation.dynamicResponseInterval} min={30} max={300} step={10}
+              onChange={(v) => patchGen({ dynamicResponseInterval: Math.round(v) })} />
+            <SliderField label="Max AFK responses (0 = unlimited)" value={s.generation.maxAfkResponses} min={0} max={20} step={1}
+              onChange={(v) => patchGen({ maxAfkResponses: Math.round(v) })} />
+          </>
+        )}
       </section>
 
       {error && <p className="error">{error}</p>}
