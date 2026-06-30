@@ -33,7 +33,6 @@ Diagnosis and fixes for common issues.
 ### Data Issues
 - [Database corruption](#database-corruption)
 - [Missing character images](#missing-character-images)
-- [Cloud sync failing](#cloud-sync-failing)
 - [Beta vs stable data confusion](#beta-vs-stable-data-confusion)
 
 ### Platform-Specific
@@ -520,35 +519,6 @@ After a successful restore you may still need to re-index RAG (`Settings → Mem
 
 Images are never deleted automatically when you delete a character (soft-delete first for 30 days), giving you a safety window.
 
-### Cloud sync failing
-
-> ⚠️ **Cloud Sync is deprecated and will be removed in a future release.** It is unreliable across devices (a known issue can resurrect deleted characters when the deletion isn't propagated). Rather than troubleshoot it, prefer the **automatic local Backups** (every 30 min, with daily restore points kept for a week) and **Card export / import** for moving data between devices. The notes below are retained only for existing setups.
-
-**CloudSyncService + provider-specific logic (`GoogleDriveProvider`, `DatabaseMergeService`):**
-
-1. **Connection / auth failures**:
-   - Google Drive: re-authenticate (the OAuth token can expire). The app opens the browser consent screen.
-   - WebDAV: verify host, username, password, and that the target folder is writable. Use `https://` not `http://` unless you have a self-signed cert configured.
-
-2. **Schema version mismatch**:
-   - The app stores a `sync_version` in the DB. On major schema changes the merge service may refuse to import an older backup.
-   - Solution: update both machines to the exact same app version (including beta vs stable).
-
-3. **Conflict resolution**:
-   - When the same character/chat was edited on two devices, the `DatabaseMergeService` performs a last-writer-wins merge based on `updated_at` timestamps + UUIDs.
-   - If a conflict is detected you will see a "Reunification" overlay after sync (`DbReunificationService`).
-   - Choose which version to keep per item or let the newest win.
-
-4. **Diagnostic steps**:
-   - Open **Settings → Cloud Sync → View Sync Log**.
-   - Common errors are printed with `[CloudSync]` tags.
-   - Before uploading, the app always runs `checkpoint()` to flush the WAL so the `.db` file on the server is self-contained.
-
-5. **Recovery**:
-   - Disconnect the provider, delete the remote `frontporch.db` (or rename it), then force a fresh upload from the "good" machine.
-
-Always keep at least one local backup before enabling sync on a new device.
-
 ### Beta vs stable data confusion
 
 **Complete isolation logic (`StorageService`, `app_version.dart` `isPreRelease`):**
@@ -557,10 +527,6 @@ Always keep at least one local backup before enabling sync on a new device.
 - **Stable builds** (e.g. `0.9.8`): use `~/Documents/FrontPorchAI` with normal keys.
 
 This guarantees a beta tester never accidentally corrupts a stable user's characters, chats, or settings.
-
-**Rawhide / dev cloud sync isolation**:
-- Rawhide builds sync to their own remote namespace (`/FrontPorchAI-Rawhide`) instead of sharing `/FrontPorchAI` with Stable.
-- This prevents Rawhide changes (including deletions) from affecting Stable cloud data and vice versa.
 
 **Migration between them**:
 1. Close both apps.
@@ -636,7 +602,7 @@ If you see "Intel Mac" warnings, you are running the x64 build under Rosetta —
    - Windows Security → Virus & threat protection → Manage settings → Add or remove exclusions → Add the `Front Porch AI` folder and the `koboldcpp_bin` subfolder.
 3. For corporate / strict environments, build from source yourself (`flutter build windows`) and sign the binary with your own certificate.
 
-The source code is fully public on GitHub; the binaries contain only what is described in the build scripts. No telemetry or hidden miners are present.
+The source code is fully public on GitHub; the binaries contain only what is described in the build scripts — no hidden telemetry, trackers, or miners. (The only analytics is the optional Stoop's disclosed, **opt-out** device-stats ping — see the [Privacy Policy](https://github.com/linux4life1/front-porch-AI/blob/main/PRIVACY.md).)
 
 ---
 

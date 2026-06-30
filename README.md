@@ -152,11 +152,13 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 - 5-stage autonomous pipeline: concept → outline → draft → edit → publish
 - Skeuomorphic page-flip reader with audiobook TTS read-along
 
-### ☁️ Cloud Sync *(deprecated)*
-> **Deprecated:** Cloud Sync is being phased out — under some conditions it could resurrect data you'd deleted on another device. Use **local Backups** instead (two-tier rolling: 30-minute snapshots + one per day for 7 days, with one-click restore). The sync code remains for now, behind an in-app notice.
-- Sync your entire database and character PNGs via **Google Drive** or **Nextcloud/WebDAV**
-- Row-level merge engine with UUID primary keys — no ID collisions across devices
-- **Privacy-first**: syncs only to accounts you own, no data touches our servers
+### 🏡 The Stoop *(optional community hub)*
+- **Browse, share, and download** community character & group cards — opt-in, account-gated, strictly 18+.
+- **Optional online feature**: the rest of the app stays fully local. When you sign in, it handles your account, the cards you choose to upload, a salted **hash** of your IP for anti–ban-evasion (never the raw IP), and an **opt-out** anonymous device-stats ping (platform / app version / GPU tier — no chats, no characters, no IP). See the [Privacy Policy](PRIVACY.md).
+- Adult content is **hidden by default**; optional **two-factor authentication** for your account.
+
+### 💾 Local Backups *(replaced Cloud Sync)*
+- Two-tier rolling local backups (30-minute snapshots + one per day for 7 days) with one-click restore. **Cloud Sync was removed** in favor of these.
 
 ### 🎭 Character Expressions
 - **Emotion-driven avatar swapping** — the character's portrait changes in real time as their mood shifts during the conversation
@@ -363,7 +365,7 @@ If Front Porch AI is useful to you, please consider starring these projects too 
 
 ## 🔒 Privacy
 
-Front Porch AI does not collect, store, or transmit any personal data. Full details: [Privacy Policy](https://app.dreamersai.art/privacy.html)
+The app is **local-first**: using it offline collects nothing and sends us nothing. The **only** part that involves an account or data collection is **The Stoop** — the optional online community hub — and only if you sign in and use it. The Stoop then handles your account info, the cards you choose to upload, a salted **hash** of your IP for anti-abuse (never the raw IP), and an **opt-out** anonymous device-stats ping (no chats, characters, or IP). Full details: [Privacy Policy](PRIVACY.md).
 
 ## 📄 License
 

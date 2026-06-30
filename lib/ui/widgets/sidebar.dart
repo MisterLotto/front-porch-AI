@@ -25,6 +25,8 @@ import 'package:front_porch_ai/services/update_service.dart';
 import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
 import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/create_group_chat_page.dart';
+import 'package:front_porch_ai/ui/pages/repository_page.dart';
+import 'package:front_porch_ai/ui/pages/backups_page.dart';
 
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key});
@@ -59,6 +61,60 @@ class Sidebar extends StatelessWidget {
             label: 'Home',
             isSelected: appState.selectedIndex == 0,
             onTap: () => appState.setIndex(0),
+          ),
+          // The Stoop (community character hub) — a flagship destination, so it
+          // sits right under Home.
+          InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const RepositoryPage()),
+            ),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.resolve(
+                  context,
+                  Colors.tealAccent.withValues(alpha: 0.08),
+                  Colors.teal.withValues(alpha: 0.10),
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 12.0,
+              ),
+              margin: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 4.0,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.travel_explore,
+                    color: AppColors.resolve(
+                      context,
+                      Colors.tealAccent,
+                      Colors.teal.shade700,
+                    ),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      'The Stoop',
+                      style: TextStyle(
+                        color: AppColors.resolve(
+                          context,
+                          Colors.tealAccent,
+                          Colors.teal.shade700,
+                        ),
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           InkWell(
             onTap: () => Navigator.of(
@@ -178,11 +234,44 @@ class Sidebar extends StatelessWidget {
             isSelected: appState.selectedIndex == 5,
             onTap: () => appState.setIndex(5),
           ),
-          _SidebarItem(
-            icon: Icons.cloud_sync_outlined,
-            label: 'Cloud Sync',
-            isSelected: appState.selectedIndex == 6,
-            onTap: () => appState.setIndex(6),
+          // Local DB Backups & Restore — preserved from the removed Cloud Sync
+          // page (it was never cloud-dependent). Opens as its own full page.
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 4.0,
+            ),
+            child: InkWell(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BackupsPage()),
+              ),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12.0,
+                  horizontal: 12.0,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.settings_backup_restore,
+                      color: AppColors.iconSecondary(context),
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        'Backups & Restore',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(

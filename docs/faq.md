@@ -51,13 +51,13 @@ Front Porch AI is completely free and open-source under the **AGPL-3.0-or-later*
 **Yes for local use.** When running local models via KoboldCpp:
 
 - All chat processing, embeddings, and TTS happen on your machine.
-- No prompts, chats, or character data are ever sent to Front Porch AI servers (there are none).
+- Your prompts, chats, and RAG memory are **never** sent to us.
 
-When you enable **remote APIs** (OpenRouter, etc.) or cloud TTS (ElevenLabs, OpenAI), your prompts are sent to those providers — review their privacy policies.
+When you enable **remote APIs** (OpenRouter, etc.) or cloud TTS (ElevenLabs, OpenAI), your prompts/audio are sent to those providers — review their privacy policies.
 
-**Cloud Sync** (optional) uploads your files only to **your own** Google Drive or WebDAV/Nextcloud account. Credentials stay local; developers have zero access. Data is not end-to-end encrypted by the app before upload (use a provider with encryption-at-rest if desired).
+**The Stoop** — the optional online community hub for sharing character cards — is the only part of the app that uses an account or involves any data collection, and only if you sign in and use it. It then handles your account info, the cards you choose to upload, a salted **hash** of your IP for anti–ban-evasion (never the raw IP; deleted after ~90 days), and an **opt-out**, anonymous device-stats ping (platform / app version / GPU tier — no chats, no characters, no IP). Full details in the [Privacy Policy](https://github.com/linux4life1/front-porch-AI/blob/main/PRIVACY.md).
 
-Front Porch AI includes **no telemetry, analytics, or crash reporting**.
+Front Porch AI ships **no third-party ad/tracking SDKs and no crash reporting**. The only first-party analytics is the Stoop's opt-out device ping above (off-switch on the sign-up screen and in Account settings).
 
 ### What platforms are supported?
 
@@ -72,7 +72,7 @@ All platforms include the Rust embedding server and Python sidecar support.
 - **Fully offline capable**: After the initial download of KoboldCpp + a GGUF model, local chats, RAG memory, local TTS (Kokoro/Piper), and everything else work without internet.
 - **Requires internet**:
   - Remote LLM APIs (OpenRouter, etc.)
-  - Cloud sync (Google Drive / WebDAV)
+  - The Stoop (browsing / sharing / downloading community character cards)
   - Cloud TTS engines (ElevenLabs, OpenAI TTS)
   - Chub.ai browser import (embedded webview)
   - Model Hub downloads
