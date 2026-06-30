@@ -720,6 +720,8 @@ class RealismEvals {
               'show heavy breathing, stuttering, flushed skin, inability to focus, desperate body language.\n'
               '   Examples: whispered compliment = +3, passionate kiss = +10 to +15, '
               'explicit sexual contact = +15 to +25, humiliating rejection = -15 to -25.\n'
+              '   ⚠ Default to 0. Non-sexual, platonic, or mundane content (food, work, errands, small talk, comfort) is 0 — NOT a small positive. Only move arousal when THIS turn is genuinely sexual, romantic, or sensual.\n'
+              '   ⚠ Arousal does NOT linger on its own. If current arousal is above 0 and this turn is not sexual or romantically charged, return a NEGATIVE delta (e.g. -5 to -10) so it cools back toward neutral.\n'
         : '';
 
     final prompt =
@@ -956,6 +958,8 @@ class RealismEvals {
               '   CRITICAL: Arousal MUST be VISIBLE in character behavior. At 60+, show heavy breathing, stuttering, flushed skin, desperate body language.\n'
               '   High arousal = intensely turned on, NOT about to climax — climax only during active sexual contact at peak arousal.\n'
               '   Examples: whispered compliment = +3, passionate kiss = +10 to +15, explicit contact = +15 to +25.\n'
+              '   ⚠ Default to 0. Non-sexual, platonic, or mundane content (food, work, errands, small talk, comfort) is 0 — NOT a small positive. Only move arousal when THIS turn is genuinely sexual, romantic, or sensual.\n'
+              '   ⚠ Arousal does NOT linger on its own. If current arousal is above 0 and this turn is not sexual or romantically charged, return a NEGATIVE delta (e.g. -5 to -10) so it cools back toward neutral.\n'
         : '';
 
     // Determine the next field number after arousal (or after posture if arousal disabled)
