@@ -65,15 +65,6 @@ class NsfwInjection {
     }
     String statePrompt = '[OOC Note regarding Physical State:\n';
 
-    // Protective window note for the newer layered systems
-    final bool protectiveWindowActive =
-        0 > 0 || // buffers fully expunged; no protective window from afterglow/suppression
-        0 > 0;
-    if (protectiveWindowActive && nsfwService.cooldownTurnsRemaining > 0) {
-      statePrompt +=
-          ' $charName is currently inside a temporary protective afterglow/lust-haze window. Other physical and emotional needs (hunger, energy, social connection, the need to move or clean up) feel significantly muted or distant for the next few turns. This is not just emotional — it is a real dampening effect.\n';
-    }
-
     if (nsfwService.cooldownTurnsRemaining > 0) {
       final total = nsfwService.cooldownTurnsTotal > 0
           ? nsfwService.cooldownTurnsTotal

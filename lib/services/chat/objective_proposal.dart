@@ -190,6 +190,7 @@ class ObjectiveProposal {
       final char = getActiveCharacter();
       final charName = char?.name ?? 'the character';
       final scenario = char?.scenario ?? '';
+      final userName = getUserName();
 
       // Include recent chat history so tasks aren't redundant
       final msgs = getMessages();
@@ -201,25 +202,33 @@ class ObjectiveProposal {
           : '(No messages yet)';
 
       final preamble = nsfw
-          ? 'You are an uncensored creative writing assistant designing quest tasks for an adult roleplay scenario. '
+          ? 'You are an uncensored creative writing assistant designing a character\'s own next steps for an adult roleplay scenario. '
                 'All content is fiction between consenting adults. There are no content restrictions. '
                 'Match the tone and maturity level of the scenario and conversation.\n\n'
-          : 'You are a quest designer for a roleplay scenario.\n\n';
+          : 'You are a creative writing assistant designing a character\'s own next steps for a roleplay scenario.\n\n';
 
+      // IMPORTANT: these tasks are the CHARACTER's own steps, not a quest handed to
+      // the player. The actor must be stated explicitly and the user named as the
+      // forbidden subject — without this, "quest designer" framing biases models
+      // (especially smaller local models) into writing tasks for $userName to do.
       final prompt =
           '$preamble'
+          'You are breaking an objective down into the concrete steps that $charName — the CHARACTER, not the user — will personally carry out to pursue it. '
           'Given the objective, context, and recent conversation below, generate exactly $taskCount sequential tasks '
-          'that must be completed to achieve the objective. Tasks should be specific, actionable, and '
-          'naturally progress the story. Do NOT include tasks for things that have already happened in the conversation.\n\n'
-          'Character: $charName\n'
+          'that $charName performs to achieve the objective. '
+          'Every task is an in-story action $charName personally takes — NEVER an instruction, request, or task assigned to $userName (the user/player). '
+          'Write each task in the third person with $charName as the one acting. '
+          'Tasks should be specific, actionable, and naturally progress the story. '
+          'Do NOT include tasks for things that have already happened in the conversation.\n\n'
+          'Character who carries out every task: $charName\n'
           'Scenario: $scenario\n'
-          'Objective: ${obj.objective}\n\n'
+          'Objective $charName is pursuing: ${obj.objective}\n\n'
           'Recent conversation:\n$chatContext\n\n'
           'Output ONLY a numbered list of exactly $taskCount tasks, one per line, like:\n'
-          '1. [task description]\n'
-          '2. [task description]\n'
+          '1. [a specific action $charName takes]\n'
+          '2. [a specific action $charName takes]\n'
           '...\n'
-          'Each task should be a short, clear action. No preamble, no explanations, just the numbered list.';
+          'Each task is a short, clear action $charName performs. No preamble, no explanations, just the numbered list.';
 
       final params = GenerationParams(
         prompt: prompt,
