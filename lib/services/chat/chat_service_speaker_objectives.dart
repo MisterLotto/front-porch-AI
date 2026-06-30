@@ -246,7 +246,22 @@ extension ChatServiceSpeakerObjectives on ChatService {
   /// snapshot for chips, post _saveScalarsIntoGroupRealism + attach needs_deltas,
   /// (orchestration + impersonation dance in god; full in evaluator).
   Future<void> _runPostGenNeedsChecks(String responseText) async {
-    await _needsImpactEvaluator.evaluateAndApply(responseText);
+    // During AFK, store current needs vector so the evaluator can include it
+    // in its prompt for better-contextualized delta estimates.
+    final wasAfk = _pendingIdleCue != null;
+    if (wasAfk) {
+      _pendingRealismMetadata ??= {};
+      _pendingRealismMetadata!['_afk_needs_vector'] =
+          Map<String, int>.from(needsSimulation.vector);
+      _pendingRealismMetadata!['_afk_decay_turns'] = 0;
+    }
+    await _needsImpactEvaluator.evaluateAndApply(responseText, isAfk: wasAfk);
+    // During AFK, clear the scene-level reason so per-need reasons
+    // ("Scene action", "Natural decay") appear in the delta chip
+    // instead of the evaluator's single scene-level reason.
+    if (wasAfk) {
+      needsSimulation.clearLastSceneReason();
+    }
   }
 
   // (unified thin + evaluator; prior _check* excised as dead. See CLAUDE.md).

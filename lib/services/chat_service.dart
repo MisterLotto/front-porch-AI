@@ -164,16 +164,9 @@ class ChatService extends ChangeNotifier {
   // ── Dynamic Responses (idle timer / fourth-wall auto-ping) ─────────────
   Timer? _idleTimer;
   String? _pendingIdleCue;
-  DateTime? _lastAutoResponse;
   bool _autoResponseInProgress = false;
   bool _hasCompletedExchange = false;
   int _consecutiveAutoResponses = 0;
-
-  static const List<String> _idleCues = [
-    "*{{char}} glances around, a quiet moment settling between them. They speak softly, a flicker of something unreadable in their voice.*",
-    "*The silence stretches. {{char}} shifts, clearing their throat, before finally speaking into the quiet room.*",
-    "*{{char}} breaks the stillness with a gentle sigh. A moment passes before they speak, their tone carrying into the empty space.*",
-  ];
 
   List<Objective> get activeObjectives => _activeObjectives;
   Objective? get primaryObjective =>
@@ -3135,34 +3128,86 @@ class ChatService extends ChangeNotifier {
 
   void _onIdleTimerFired() {
     if (_disposed) return;
-    // Don't fire during generation or TTS playback
     if (_isGenerating) { _resetIdleTimer(); return; }
     if (_ttsService != null && _ttsService!.isSpeaking) { _resetIdleTimer(); return; }
-    // Check LLM is ready (fall back to _koboldService for local backend)
     final llm = _llmProvider?.activeService ?? _koboldService;
     if (!llm.isReady) { _resetIdleTimer(); return; }
-    // Check max AFK responses limit
     if (_consecutiveAutoResponses >= 3) return;
-    // Pick a cue
-    final cueIndex = _lastAutoResponse == null
-        ? 0
-        : (_lastAutoResponse!.millisecondsSinceEpoch ~/ 1000) % _idleCues.length;
-    _pendingIdleCue = _idleCues[cueIndex];
+
+    // Capture pre-AFK needs vector so the needs delta chip has a baseline
+    if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {
+      _pendingRealismMetadata ??= {};
+      _pendingRealismMetadata!['needs_pre_turn_vector'] =
+          Map<String, int>.from(_needsSimulation.vector);
+    }
+
+    // Advance narrative time for the elapsed period.
+    // Needs are NOT decayed automatically during AFK — the evaluator is the
+    // sole source of need changes, so the character isn't stuck firefighting
+    // survival needs and has room for varied activities.
+    if (_realismEnabled) {
+      _timeService.advanceTimePeriods(1);
+    }
+
+    _pendingIdleCue = _buildAutonomousCue();
     _autoResponseInProgress = true;
-    _lastAutoResponse = DateTime.now();
     _consecutiveAutoResponses++;
-    // Fire generation (the cue is injected in _generateResponse)
+
     _generateResponse(GenerationMode.normal).then((_) {
       _pendingIdleCue = null;
-      // Use 2x cooldown after an auto-response (before clearing the flag)
       _resetIdleTimerWithCooldown();
       _autoResponseInProgress = false;
     }).catchError((_) {
       _pendingIdleCue = null;
       _autoResponseInProgress = false;
-      // Still restart the timer even if generation failed
       _resetIdleTimerWithCooldown();
     });
+  }
+
+  String _buildAutonomousCue() {
+    final charName = _activeCharacter?.name ?? '{{char}}';
+
+    final timeStr = '${_timeService.timeOfDay} (Day ${_timeService.dayCount})';
+
+    if (!_needsSimEnabled || _needsSimulation.vector.isEmpty) {
+      return '*A few hours have passed. It is now $timeStr.\n\n'
+          'Describe a quiet snapshot from part of $charName\'s day '
+          '\u2014 something they have been doing, a moment of rest, '
+          'a personal routine. Reference what they have been up to '
+          'naturally, so the scene feels like part of a lived-in day.\n\n'
+          'Write ONLY narrative action and internal thought \u2014 '
+          'NO dialogue, do NOT address or refer to the user, '
+          'do NOT have $charName notice the user. '
+          'This is a solitary scene observed from outside the chat.*';
+    }
+
+    // Full autonomous cue with needs data
+    final lowNeeds = _needsSimulation
+        .getLowNeedsForInjection(_needsSimulation.vector);
+    String needsStr = '';
+    if (lowNeeds.isNotEmpty) {
+      needsStr = lowNeeds.map((n) {
+        final desc = n.value <= 20
+            ? 'low'
+            : n.value <= 35
+                ? 'getting low'
+                : 'noticeable';
+        return '${n.key} is $desc (${n.value}/100)';
+      }).join(', ');
+    }
+
+    return '*A few hours have passed. It is now $timeStr.\n\n'
+        'While you were away, $charName has been going about their day '
+        '\u2014 handling meals, rest, and personal needs as life went on.'
+        '${needsStr.isNotEmpty ? "\n\n$charName\'s current state \u2014 $needsStr." : ""}\n\n'
+        'Describe a quiet snapshot from $charName\'s day, touching on '
+        'some of what they have been up to (a meal, bathroom, rest, bath, '
+        'or similar daily routines) so the scene feels like part of a '
+        'lived-in day.\n\n'
+        'IMPORTANT: Write ONLY narrative action and internal thought \u2014 '
+        'NO dialogue, do NOT address or refer to the user, '
+        'do NOT have $charName notice the user. '
+        'This is a solitary scene observed from outside the chat.*';
   }
 
   Future<void> sendMessage(String text) async {

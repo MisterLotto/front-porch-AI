@@ -333,6 +333,12 @@ class NeedsSimulation {
     _lastSceneReason = null;
   }
 
+  /// Clears the scene-level reason so the delta chip falls back to
+  /// per-need reasons ("Scene action", "Natural decay", "Stable").
+  void clearLastSceneReason() {
+    _lastSceneReason = null;
+  }
+
   void consumePendingCatastrophe() {
     _pendingCatastrophe = null;
   }

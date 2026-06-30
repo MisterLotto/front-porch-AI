@@ -96,10 +96,26 @@ NeedsImpactEvaluator createTestEvaluator({
       );
 
   return NeedsImpactEvaluator(
-    evaluateNeedsImpactCall:
-        impactCallFn ??
-        ((resp, {onChunk, strength = 1, userCritique, previousDeltas}) async =>
-            '{"hunger_delta": 0}'),
+    evaluateNeedsImpactCall: (
+      String resp, {
+      void Function(String)? onChunk,
+      int strength = 1,
+      String? userCritique,
+      Map<String, int>? previousDeltas,
+      Map<String, int>? currentNeeds,
+      int? decayTurns,
+    }) async {
+      if (impactCallFn != null) {
+        return impactCallFn(
+          resp,
+          onChunk: onChunk,
+          strength: strength,
+          userCritique: userCritique,
+          previousDeltas: previousDeltas,
+        );
+      }
+      return '{"hunger_delta": 0}';
+    },
     verifyRealismOutput: verifyFn,
     getPendingRealismMetadata: () => <String, dynamic>{},
     setPendingRealismMetadata: (_) {},

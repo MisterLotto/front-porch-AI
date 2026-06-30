@@ -257,6 +257,28 @@ class TimeService {
     onNudgePatchLastMessageRealismState(_timeOfDay, _dayCount);
   }
 
+  /// Advance the clock by [count] time periods (skip LLM eval).
+  /// Used during AFK auto-response mode to simulate hours passing.
+  /// Respects the passageOfTimeEnabled toggle. Rolls over days naturally.
+  void advanceTimePeriods(int count) {
+    if (!_passageOfTimeEnabled) return;
+    if (count <= 0) return;
+
+    const validTimes = [
+      'dawn', 'morning', 'late_morning', 'afternoon', 'evening', 'night',
+    ];
+    int idx = validTimes.indexOf(_timeOfDay);
+    for (int i = 0; i < count; i++) {
+      idx++;
+      if (idx >= validTimes.length) {
+        idx = 0;
+        _dayCount++;
+      }
+    }
+    _timeOfDay = validTimes[idx];
+    _turnsSinceLastTimeAdvance = 0;
+  }
+
   // ── OOC Time-Skip Detector ────────────────────────────────────────────────
 
   /// Scans the user message for OOC/narrative time-skip language and advances

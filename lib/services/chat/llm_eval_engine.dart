@@ -409,6 +409,8 @@ class LlmEvalEngine {
         1, // 1-5; injected into the prompt so the model emits deltas at the user-requested magnitude on the *first* call (e.g. normal -3 becomes ~-15 at 5x). When Director authority is on, the verifier is also told the strength and corrects in the scaled space. The evaluator no longer post-multiplies after Director (avoids double-scaling a -15 into -75).
     String? userCritique,
     Map<String, int>? previousDeltas,
+    Map<String, int>? currentNeeds,
+    int? decayTurns,
   }) async {
     if (!getRealismEnabled()) return null;
     if (getActiveCharacter() == null && getActiveGroup() == null) return null;
@@ -452,8 +454,56 @@ class LlmEvalEngine {
         'When (and only when) "is_climax" is true, also emit "refractory_turns" as an int from 3 to 7 for how long the post-orgasm '
         'cooldown should last (~6-7 for an intense, drawn-out, or repeated climax; ~3 for a quick one). When false, set "refractory_turns" to 0.\n\n';
 
+    final needsStateStr = currentNeeds != null && currentNeeds.isNotEmpty
+        ? '\nCurrent needs for $charName (0-100, lower = more urgent): '
+            '${currentNeeds.entries.map((e) => '${e.key}: ${e.value}').join(', ')}\n\n'
+        : '';
+
+    final decayContextStr = decayTurns != null
+        ? (decayTurns > 0
+            ? '\nNOTE: Time has passed \u2014 needs have drifted lower by $decayTurns turn(s) of normal decline. '
+                'When the scene describes an activity that restores a need (using the bathroom -> bladder +60 to +100, '
+                'eating -> hunger +50 to +90, resting/sleeping -> energy +60 to +100, washing -> hygiene +50 to +90), '
+                'use the full chart magnitude \u2014 do not undershoot. The baseline was higher before the decline.\n\n'
+            : '\nNOTE: No passive decay is occurring. Report only the scene\'s direct effects on needs \u2014 '
+                'do not subtract any baseline drift.\n\n')
+        : '';
+
     final String prompt;
-    if (userCritique != null && userCritique.trim().isNotEmpty) {
+    if (decayTurns != null) {
+      // ── AFK auto-response simplified prompt ──────────────────────────
+      // The normal evaluator prompt (~2000 chars) is too complex for
+      // local models, causing them to return small negative defaults
+      // instead of proper restorative deltas. This stripped-down version
+      // only lists restorative activities with positive deltas.
+      prompt =
+          'Evaluate how this daily scene affects $charName\'s needs.\n\n'
+          '$needsStateStr'
+          'Scene:\n$responseText\n\n'
+          'Return ONLY raw JSON with all seven _delta fields and a reason. '
+          'Do not use markdown code blocks. No other text.\n'
+          '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, '
+          '"fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, '
+          '"comfort_delta": <int>, "reason": "<brief reason>"}\n\n'
+          'Guidelines (at ${strength}x scale \u2014 scale these baselines by $strength):\n'
+          '  • Eating food or a meal \u2192 hunger +15 to +70\n'
+          '  • Using toilet or bathroom \u2192 bladder +30 to +90\n'
+          '  • Sleeping or long rest \u2192 energy +40 to +80\n'
+          '  • Napping, dozing, or lying down \u2192 energy +15 to +35\n'
+          '  • Shower, bath, or full washing \u2192 hygiene +30 to +70\n'
+          '  • Washing face, brushing teeth, freshening up \u2192 hygiene +5 to +20\n'
+          '  • Reading, browsing, or quiet relaxation \u2192 comfort +10 to +40\n'
+          '  • Watching TV or videos \u2192 comfort +5 to +15\n'
+          '  • Looking at photos, albums, or mementos \u2192 comfort +10 to +25\n'
+          '  • Using phone or computer for leisure \u2192 fun +5 to +15\n'
+          '  • Scrolling social media on phone \u2192 fun +5 to +10\n'
+          '  • Standing at a window, enjoying a view, or looking outside \u2192 comfort +5 to +15\n'
+          '  • Exercise, yoga, or stretching \u2192 energy +5 to +15, comfort +5\n'
+          '  • Drinking any beverage \u2192 energy +5 to +10\n'
+          '  • Cooking or preparing food \u2192 comfort +5\n\n'
+          'Only report positive gains. Do NOT subtract anything.\n'
+          'Return raw JSON with no markdown, no explanation.';
+    } else if (userCritique != null && userCritique.trim().isNotEmpty) {
       // B: unified rich correction prompt (no duplication of context logic)
       final prev = jsonEncode(previousDeltas ?? {});
       prompt =
@@ -462,6 +512,8 @@ class LlmEvalEngine {
           '$currentStance'
           'RESPONSE (the scene that just happened):\n$responseText\n\n'
           'Recent exchange for context:\n$recent\n\n'
+          '$needsStateStr'
+          '$decayContextStr'
           'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states, fluids, dominance, submission, power exchange, and explicit narration of actions should influence needs (fun, social, comfort, hygiene, energy, hunger, bladder) in natural grounded ways.\n\n'
           'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
           'PREVIOUS DELTAS:\n$prev\n\n'
@@ -469,7 +521,7 @@ class LlmEvalEngine {
           'Analyze what actually occurred and output a corrected set of net signed effects (deltas) on each need.\n\n'
           'User has set Needs delta strength to ${strength}x. Emit deltas with magnitude scaled by this factor.\n\n'
           'Even if the critique suggests little/no change, you MUST output the complete flat JSON with all seven _delta keys (0 is valid). Do not omit fields.\n\n'
-          'MAGNITUDE: needs run 0–100 (100 = fully satisfied); ±8 BARELY registers. When the scene SATISFIES/RESTORES a need, use a LARGE positive delta so it actually fills — using the bathroom → bladder +60 to +100; a full meal → hunger +50 to +90; sleeping / a long rest → energy +60 to +100; a thorough wash → hygiene +50 to +90. Reserve small numbers for incidental effects, never a complete relief. (1x baselines; scale by the strength above.)\n\n'
+          'MAGNITUDE: needs run 0–100 (100 = fully satisfied); ±8 BARELY registers. When the scene SATISFIES/RESTORES a need, use a LARGE positive delta so it actually fills — using the bathroom → bladder +60 to +100; a full meal → hunger +50 to +90; sleeping / a long rest → energy +60 to +100; cozy solitude, lounging, drowsing → comfort +20 to +45, energy +10 to +30; a thorough wash → hygiene +50 to +90. Reserve small numbers for incidental effects, never a complete relief. (1x baselines; scale by the strength above.)\n\n'
           'Examples of valid correction output:\n'
           '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique", "is_climax": false, "refractory_turns": 0}\n'
           '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact", "is_climax": false, "refractory_turns": 0}\n'
@@ -488,7 +540,10 @@ class LlmEvalEngine {
               '$currentStance'
               'RESPONSE (the scene that just happened):\n$responseText\n\n'
               'Recent exchange for context:\n$recent\n\n'
-              'Analyze what actually occurred in the scene (actions, physical descriptions, dialogue, power dynamics, emotional tone) and determine the *net signed effects* on each of $charName\'s needs caused by this scene, on top of normal decay.\n\n'
+              '$needsStateStr'
+              '$decayContextStr'
+              'Analyze what actually occurred in the scene (actions, physical descriptions, dialogue, power dynamics, emotional tone) and determine the *net signed effects* on each of $charName\'s needs caused by this scene'
+              '${decayContextStr.isEmpty ? ', on top of normal decay' : ''}.\n\n'
               'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states ("charging", "aching", "swollen", "leaking through fabric"), fluids, dominance, submission, "choosing", begging, power exchange, and explicit narration of what the character is doing or feeling should influence the relevant needs (fun, social, comfort, hygiene, energy, etc.) in natural, grounded ways.\n\n'
               'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
               'Report *net signed effects* (deltas) on each need.\n\n'
@@ -499,9 +554,10 @@ class LlmEvalEngine {
               'CRITICAL — MAGNITUDE: needs run 0–100 (100 = fully satisfied). A delta of ±5 is a nudge and ±8 BARELY registers, so when the scene clearly SATISFIES or RESTORES a need you MUST use a LARGE positive delta so the need actually fills — do NOT lowball a complete relief:\n'
               '  • Using the bathroom / relieving oneself → bladder +60 to +100 (a full relief nearly maxes it; +8 leaves them still desperate to go)\n'
               '  • A full meal → hunger +50 to +90 (a snack is smaller, ~+15)\n'
-              '  • Sleeping, a long rest, or "through the night / waking next morning" → energy +60 to +100 (and broadly restores other physical needs as the body recovers; hygiene/comfort/social/fun stay only mildly affected)\n'
+              '  • Sleeping, a long rest, or "through the night / waking next morning" → energy +60 to +100 (and broadly restores other physical needs as the body recovers; hygiene/social/fun stay only mildly affected)\n'
+              '  • Drowsing, lounging, cozy solitude, or quiet relaxation → comfort +20 to +45, energy +10 to +30\n'
               '  • A thorough wash, shower, or bath → hygiene +50 to +90\n'
-              '  • Deep, fulfilling connection, comfort, or play → social / fun / comfort +20 to +50\n'
+              '  • Deep, fulfilling social connection, cuddling, or play → social / fun +20 to +50; comfort +10 to +25\n'
               'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
           climaxGuidance +
           'Respond with ONLY a flat JSON object. Do NOT use markdown code blocks — return raw JSON only:\n'

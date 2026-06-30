@@ -536,18 +536,6 @@ extension ChatServiceGeneration on ChatService {
         droppedMessages = 0;
       }
 
-      // ── Dynamic Responses: synthetic user action ───────────────────────
-      // When the idle timer fired, inject a fake user action into the
-      // conversation prompt (not the saved _messages) so the model sees
-      // a natural input to respond to instead of falling back to assistant
-      // mode on the silence.
-      if (_pendingIdleCue != null) {
-        final userName = _userPersonaService.persona.name;
-        if (userName.isNotEmpty) {
-          history += '\n$userName: ...';
-        }
-      }
-
       // ── RAG Memory Retrieval ──
       // When messages are dropped from context, search for relevant past memories
       // Skip retrieval for brand new chats to prevent old memories from interfering
@@ -637,18 +625,21 @@ extension ChatServiceGeneration on ChatService {
 
       // Realism injection was already computed above for budget
 
-      // Inject fourth-wall idle cue if Dynamic Responses triggered
+      // Inject fourth-wall idle cue if Dynamic Responses triggered.
+      // Placed in the user-prompt body (not system prompt) so it sits right
+      // before the generation point — local models often ignore system-role
+      // instructions but follow the last content in the user message.
       final idleCue = _pendingIdleCue;
-      final effectiveSystemPrompt = idleCue != null
-          ? "$systemPrompt\n\n$idleCue"
-          : systemPrompt;
+      if (idleCue != null) {
+        suffix = '\n${speakingCharacter.name}: *';
+      }
 
       // Every backend now speaks the OpenAI chat protocol (local KoboldCpp via
       // its /v1/chat/completions door), so always send the system content as a
       // proper 'system' role message and the transcript as the 'user' message —
       // the server applies the model's instruct template server-side.
       final chatSystemPrompt =
-          "$effectiveSystemPrompt\n$loreContent$personaBlock\n$userPersonaBlock"
+          "$systemPrompt\n$loreContent$personaBlock\n$userPersonaBlock"
           "Scenario: $scenario\n$mesExampleBlock";
 
       final prompt =
@@ -661,6 +652,7 @@ extension ChatServiceGeneration on ChatService {
           "$objectiveBlock"
           "$realismBlock"
           "$needsCatastropheBlock"
+          "${idleCue != null ? '\n$idleCue' : ''}"
           "$suffix"
           "$chanceTimeBlock";
 
@@ -1268,9 +1260,7 @@ extension ChatServiceGeneration on ChatService {
             }
           }
 
-          if (!_autoResponseInProgress) {
-            await _runPostGenNeedsChecks(finalResponse);
-          }
+          await _runPostGenNeedsChecks(finalResponse);
 
           if (prePostActiveChar != null) {
             _activeCharacter = prePostActiveChar;
@@ -1301,7 +1291,7 @@ extension ChatServiceGeneration on ChatService {
           // and chime-ins reach _generateResponse but never sendMessage's old
           // chip block, which is why only the first responder showed chips.
           // Normal turns only; regen/continue manage their own chips.
-          if (mode == GenerationMode.normal && !_autoResponseInProgress) {
+          if (mode == GenerationMode.normal) {
             await _attachNeedsDeltaChipToLastMessage();
           }
 
