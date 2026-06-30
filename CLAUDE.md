@@ -79,7 +79,7 @@ lib/
 │   ├── memory_service.dart      # RAG memory extraction and retrieval
 │   ├── tts_service.dart         # TTS orchestration (Kokoro, ElevenLabs, OpenAI, Piper)
 │   ├── stt_service.dart         # Whisper STT via Python subprocess
-│   ├── cloud_sync_service.dart  # Google Drive / WebDAV sync
+│   ├── backup_service.dart      # Automatic local DB backups + restore
 │   ├── hardware_service.dart    # GPU detection, VRAM estimation
 │   ├── backend_manager.dart     # KoboldCpp lifecycle (start/stop/restart)
 │   ├── services.dart            # Curated public barrel (high-frequency surface; does NOT re-export chat/ leaves)

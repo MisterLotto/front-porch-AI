@@ -27,7 +27,6 @@ import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart' as world_model;
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
-import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
@@ -330,7 +329,6 @@ class CharacterRepository extends ChangeNotifier {
     CharacterCard character, {
     WorldRepository? worldRepo,
     Directory? chatsDir,
-    CloudSyncService? cloudSyncService,
   }) async {
     // Remove from in-memory list
     _characters.remove(character);
@@ -366,15 +364,6 @@ class CharacterRepository extends ChangeNotifier {
         } catch (e) {
           print('Error deleting chat folder: $e');
         }
-      }
-
-      // Delete from cloud storage (best-effort immediate cleanup while online).
-      // The authoritative cleanup happens later in CloudSyncService._reconcileDeletedAssets
-      // during the next fullSync, using the DB as source of truth.
-      if (cloudSyncService != null) {
-        final charId = p.basenameWithoutExtension(character.imagePath!);
-        final pngName = p.basename(character.imagePath!);
-        await cloudSyncService.deleteRemoteCharacter(charId, pngName);
       }
     }
 

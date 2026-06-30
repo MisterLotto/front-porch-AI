@@ -27,7 +27,6 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/download_task.dart';
 import 'package:front_porch_ai/models/local_model_info.dart';
-import 'package:front_porch_ai/services/cloud_sync_service.dart';
 import 'package:front_porch_ai/services/download_manager.dart';
 import 'package:front_porch_ai/services/hardware_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
@@ -35,32 +34,6 @@ import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/pseudo_remote_service.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
-
-/// [CloudSyncService] double. Exposes the status surface that
-/// [CloudSyncPage._buildCloudSyncSection] reads at build time.
-class FakeCloudSyncService extends ChangeNotifier implements CloudSyncService {
-  FakeCloudSyncService({
-    this.isConnected = false,
-    this.status = SyncStatus.idle,
-    this.progress = 0.0,
-    this.lastError,
-    this.cloudRoot = '/FrontPorchAI',
-  });
-
-  @override
-  final bool isConnected;
-  @override
-  final SyncStatus status;
-  @override
-  final double progress;
-  @override
-  final String? lastError;
-  @override
-  final String cloudRoot;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
 
 /// [ModelManager] double. Exposes the getters [ModelManagerPage.build] reads
 /// directly (localModels, modelsPath, downloadManager, customModelsPath).

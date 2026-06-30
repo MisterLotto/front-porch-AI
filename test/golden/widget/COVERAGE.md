@@ -28,13 +28,13 @@ and flip the row to ✅.
   `FakeFolderService` ✅. `FakeGroupChatRepository` ✅. `FakeAppState` ✅.
   `FakeUpdateService` ✅ (extended with `downloadComplete`, `downloading`,
   `displayLatestVersion`, `releaseNotes`, `downloadProgress` for UpdateDialog).
-- ✅ `support/fakes_services.dart` — `FakeCloudSyncService`, `FakeModelManager`
+- ✅ `support/fakes_services.dart` — `FakeModelManager`
   (with real `DownloadManager` for `DownloadQueuePanel`; `refreshModels()` no-ops
   so `ModelManagerPage.initState` doesn't throw), `FakeHardwareService` (seeded
   RTX 4070 hardware info).
 - ✅ `support/fakes_storage.dart` — `FakeStorageService` with all build-time getters
   including `generationSettings` (for `resolveTemperature` etc.) and `backendSettings`
-  (for `resolveContextSize`). Audited against CloudSyncPage, BackgroundSettingsDialog,
+  (for `resolveContextSize`). Audited against BackgroundSettingsDialog,
   UiSettingsDialog, ChatSettingsDialog, ModelSettingsDialog, ModelManagerPage,
   TtsSettingsDialog (ttsEngine/Enabled/SpeechRate/Concurrency/AutoPlay/NarrateQuotedOnly/
   IgnoreAsterisks/ReplaceCurlyQuotes/VoiceModel/openaiTtsApiKey/BaseUrl/Model),
@@ -204,8 +204,6 @@ The June-6 "Stage 4" refactor shipped a *functionally dead* creator to stable
   Surface 1280×900.
 - ✅ `world_management_page.dart` — empty world list (empty state). `FakeWorldRepository`
   in provider. `settle: false` (`AnimationController.repeat()` header glow). Surface 1280×900.
-- ✅ `cloud_sync_page.dart` — disconnected / idle (full sync section; `isPreRelease=false`).
-  `FakeStorageService` + `FakeCloudSyncService` multi-provider. Surface 1280×900.
 - ⬜ **chat page** (`chat_page.dart`, ~3800 lines) — the MessageBubble surface is
   now covered (see Chat bubbles above). Full page golden deferred: needs
   `FakeExpressionClassifierService` + a seeded `ChatService` with a message list;

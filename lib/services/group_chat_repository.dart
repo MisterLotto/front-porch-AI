@@ -25,7 +25,6 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/group_member.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/cloud_sync_service.dart';
 
 /// Persists group chat definitions to the database.
 class GroupChatRepository extends ChangeNotifier {
@@ -185,10 +184,7 @@ class GroupChatRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> delete(
-    String groupId, {
-    CloudSyncService? cloudSyncService,
-  }) async {
+  Future<void> delete(String groupId) async {
     // Delete from database
     await _db.deleteGroupById(groupId);
     _groups.removeWhere((g) => g.id == groupId);
@@ -198,11 +194,6 @@ class GroupChatRepository extends ChangeNotifier {
     for (final session in sessions) {
       await _db.deleteMessagesForSession(session.id);
       await _db.deleteSessionById(session.id);
-    }
-
-    // Delete from cloud storage
-    if (cloudSyncService != null) {
-      cloudSyncService.deleteRemoteGroupChat(groupId);
     }
 
     // Best-effort recursive delete of private group avatar tree (groups/<id>/).
@@ -242,5 +233,28 @@ class GroupChatRepository extends ChangeNotifier {
       debugPrint('Failed to load group members for $groupId: $e');
       return [];
     }
+  }
+
+  /// Resolves the on-disk avatar [File]s for a group's members, in member
+  /// order. Members without an avatar are skipped. Paths are absolute (under
+  /// the group's private avatars dir). Shared by the home grid's group card and
+  /// the Stoop share picker so both preview a group from the same source.
+  Future<List<File>> getMemberAvatarFiles(String groupId) async {
+    final rows = await getMembersForGroup(groupId);
+    final files = <File>[];
+    for (final m in rows) {
+      if (m.avatarFilename == null) continue;
+      files.add(
+        File(
+          path.join(
+            _storageService.groupsDir.path,
+            groupId,
+            'avatars',
+            m.avatarFilename!,
+          ),
+        ),
+      );
+    }
+    return files;
   }
 }

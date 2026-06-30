@@ -17,14 +17,12 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
-import 'package:image/image.dart' as img;
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
@@ -40,13 +38,12 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
+import 'package:front_porch_ai/services/group_card_importer.dart';
 import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/story_home_view.dart';
 import 'package:front_porch_ai/ui/dialogs/byaf_import_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
-import 'package:uuid/uuid.dart';
-import 'package:drift/drift.dart' show Value;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -1127,14 +1124,7 @@ class _HomePageState extends State<HomePage> {
                 context,
                 listen: false,
               );
-              final cloudSyncService = Provider.of<CloudSyncService>(
-                context,
-                listen: false,
-              );
-              await groupRepo.delete(
-                group.id,
-                cloudSyncService: cloudSyncService,
-              );
+              await groupRepo.delete(group.id);
               // No post-delete snackbar for groups (character delete shows one via the outer context)
             },
             child: const Text('Delete'),
@@ -1572,15 +1562,10 @@ class _HomePageState extends State<HomePage> {
                 context,
                 listen: false,
               );
-              final cloudSyncService = Provider.of<CloudSyncService>(
-                context,
-                listen: false,
-              );
               await repo.deleteCharacter(
                 character,
                 worldRepo: worldRepo,
                 chatsDir: storageService.chatsDir,
-                cloudSyncService: cloudSyncService,
               );
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -2410,394 +2395,36 @@ class _HomePageState extends State<HomePage> {
     File file,
     GroupCard groupCard,
   ) async {
-    final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
-
-    // Clean-break private import (per plan + user directive): NEVER touch library/CharacterRepository.
-    // All members go to private groups/<id>/avatars/ + typed group_members rows (UUID keys).
-    // "Separate to my library" is the sole allowed bridge (later).
+    final groups = Provider.of<GroupChatRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
     final db = Provider.of<AppDatabase>(context, listen: false);
-
-    final groupId = 'group_${DateTime.now().millisecondsSinceEpoch}';
-    int successCount = 0;
-    int failCount = 0;
-
-    // Mapping from original exported stable IDs (or names) to the *new UUIDs* for this group's members.
-    // Realism, prompts, objectives, relationships etc. are remapped to these UUIDs (correct for decoupled model).
-    final Map<String, String> oldStableIdToNewStableId = {};
-
-    // Use the high-fidelity raw member data when available
-    final rawMembers = groupCard.rawMemberData.isNotEmpty
-        ? groupCard.rawMemberData
-        : groupCard.members.map((c) => c.toJson()).toList();
-
-    for (final raw in rawMembers) {
-      File? tempPng;
-      try {
-        // Create a temporary valid character card PNG from the raw portable data
-        // (existing high-fidelity temp + embed logic reused verbatim for private target)
-        final memberJson = {
-          'spec': 'chara_card_v2',
-          'spec_version': '2.0',
-          'data': raw,
-        };
-        final jsonStr = jsonEncode(memberJson);
-        final b64 = base64Encode(utf8.encode(jsonStr));
-
-        final tempDir = await Directory.systemTemp.createTemp(
-          'fp_group_member_',
-        );
-
-        // Check if this member has an embedded avatar from a previous Group Card export
-        final avatarBase64 =
-            raw['avatar_base64'] as String? ??
-            (raw['data'] as Map?)?['avatar_base64'] as String?;
-
-        if (avatarBase64 != null && avatarBase64.isNotEmpty) {
-          // Use the real avatar that was embedded on export
-          final avatarBytes = base64Decode(avatarBase64);
-          var avatarImg =
-              img.decodePng(avatarBytes) ?? img.decodeImage(avatarBytes);
-
-          if (avatarImg != null) {
-            // Embed the character metadata into the real avatar image
-            avatarImg.textData ??= {};
-            avatarImg.textData!['chara'] = b64;
-
-            tempPng = File(
-              path.join(
-                tempDir.path,
-                'member_${DateTime.now().millisecondsSinceEpoch}.png',
-              ),
-            );
-            await tempPng.writeAsBytes(img.encodePng(avatarImg));
-          }
-        }
-
-        // Fallback: create a colored placeholder if no embedded avatar (foreign group cards, or old exports)
-        if (tempPng == null) {
-          final memberName =
-              (raw['name'] ?? raw['data']?['name'] ?? 'Character').toString();
-
-          // Deterministic pleasant color from the name
-          final hash = memberName.codeUnits.fold(0, (a, b) => a + b);
-          final r = (80 + (hash % 120)).clamp(60, 200);
-          final g = (70 + ((hash * 7) % 130)).clamp(60, 200);
-          final b = (90 + ((hash * 13) % 110)).clamp(70, 190);
-
-          final placeholder = img.Image(width: 400, height: 600);
-          img.fill(placeholder, color: img.ColorRgb8(r, g, b));
-
-          placeholder.textData ??= {};
-          placeholder.textData!['chara'] = b64;
-
-          tempPng = File(
-            path.join(
-              tempDir.path,
-              'member_${DateTime.now().millisecondsSinceEpoch}.png',
-            ),
-          );
-          await tempPng.writeAsBytes(img.encodePng(placeholder));
-        }
-
-        // === DECOUPLED PRIVATE MATERIALIZATION (replaces charRepo.importCharacter pollution) ===
-        final memberId = const Uuid().v4();
-
-        // Private avatars dir under groups/<groupId>/avatars (created on demand; never library)
-        final avDir = Directory(
-          path.join(storage.groupsDir.path, groupId, 'avatars'),
-        );
-        await avDir.create(recursive: true);
-        final targetAvatar = File(path.join(avDir.path, '$memberId.png'));
-        await tempPng.copy(targetAvatar.path);
-        // tempPng is guaranteed non-null here (set in embedded or fallback placeholder path above)
-
-        // Map raw (portable V2 shape) to typed GroupMembers row. Inline (no new helper).
-        final data = (raw['data'] is Map)
-            ? Map<String, dynamic>.from(raw['data'] as Map)
-            : Map<String, dynamic>.from(raw as Map);
-        String jsonOrDefault(dynamic v, [String d = '[]']) {
-          if (v == null) return d;
-          if (v is String) return v;
-          try {
-            return jsonEncode(v);
-          } catch (_) {
-            return d;
-          }
-        }
-
-        await db.insertGroupMember(
-          GroupMembersCompanion.insert(
-            id: memberId,
-            groupId: groupId,
-            name: (data['name'] ?? data['data']?['name'] ?? 'Unknown')
-                .toString(),
-            description: Value(
-              (data['description'] ?? data['desc'] ?? '').toString(),
-            ),
-            personality: Value((data['personality'] ?? '').toString()),
-            scenario: Value((data['scenario'] ?? '').toString()),
-            firstMessage: Value(
-              (data['first_mes'] ?? data['firstMessage'] ?? '').toString(),
-            ),
-            mesExample: Value(
-              (data['mes_example'] ?? data['mesExample'] ?? '').toString(),
-            ),
-            systemPrompt: Value(
-              (data['system_prompt'] ?? data['systemPrompt'] ?? '').toString(),
-            ),
-            postHistoryInstructions: Value(
-              (data['post_history_instructions'] ?? '').toString(),
-            ),
-            alternateGreetings: Value(
-              jsonOrDefault(
-                data['alternate_greetings'] ?? data['alternateGreetings'],
-              ),
-            ),
-            tags: Value(jsonOrDefault(data['tags'] ?? [])),
-            avatarFilename: Value('$memberId.png'),
-            ttsVoice: Value(data['tts_voice']?.toString()),
-            lorebook: Value(
-              data['character_book'] != null
-                  ? jsonEncode(data['character_book'])
-                  : null,
-            ),
-            worldNames: Value(jsonOrDefault(data['world_names'] ?? [])),
-            frontPorchExtensions: Value(
-              (data['extensions'] is Map &&
-                      (data['extensions'] as Map)['front_porch'] != null)
-                  ? jsonEncode((data['extensions'] as Map)['front_porch'])
-                  : null,
-            ),
-            rawExtensions: Value(
-              (data['extensions'] is Map)
-                  ? jsonEncode(
-                      Map<String, dynamic>.from(data['extensions'] as Map)
-                        ..remove('front_porch'),
-                    )
-                  : null,
-            ),
-            // Provenance — Group Card portable origin (cast-unification work): if
-            // the card carried the member's TRUE library origin
-            // (`_origin_library_stable_id` = the source character's stableGroupId,
-            // written by our export), stamp it so this re-imported member is
-            // reconnectable by MemberOriginResolver. Legacy/foreign cards without
-            // the key stay origin-unknown ('{}') (encodeProvenance yields '{}' for
-            // null) and fall back to name-match resolution. We intentionally do NOT
-            // stamp from `_original_stable_id` (the realism-remap instance id, NOT a
-            // library origin) and do NOT carry originLibraryDbId (machine-local).
-            // Tolerant read: a non-string value on a malformed card degrades to
-            // origin-unknown rather than aborting the whole member import (matches
-            // the .toString()/is-String coercion used for every other foreign field
-            // in this loop).
-            memberState: Value(
-              GroupMember.encodeProvenance(
-                originStableId: raw['_origin_library_stable_id'] is String
-                    ? (raw['_origin_library_stable_id'] as String).trim()
-                    : null,
-              ),
-            ),
-          ),
-        );
-
-        // Record mapping for realism remap (now to our UUID, correct for decoupled model)
-        final originalStableId = (raw['_original_stable_id'] as String?)
-            ?.trim();
-        if (originalStableId != null && originalStableId.isNotEmpty) {
-          oldStableIdToNewStableId[originalStableId] = memberId;
-        }
-        successCount++;
-      } catch (e) {
-        debugPrint('Failed to import one group member: $e');
-        failCount++;
-      } finally {
-        // Clean temp (best effort)
-        try {
-          if (tempPng != null && await tempPng.exists()) {
-            await tempPng.delete();
-            await tempPng.parent.delete(recursive: true);
-          }
-        } catch (_) {}
-      }
-    }
-
-    if (successCount == 0) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Group import failed — no members could be created.'),
-          ),
-        );
-      }
-      // Best-effort cleanup of any partially materialized private avatar tree
-      // (prevents orphan dirs/files from failed imports; addresses data bloat risk
-      // for user-provided imagery that traveled in the Group Card).
-      try {
-        final orphanDir = Directory(path.join(storage.groupsDir.path, groupId));
-        if (await orphanDir.exists()) {
-          await orphanDir.delete(recursive: true);
-        }
-      } catch (_) {}
-      return;
-    }
-
-    // Create the group itself (shell + portable realism state with UUID keys)
-    // Seed portable group realism/needs defaults (including relationships for Group Dynamics)
-    // from the imported card if present. This fulfills the v30+ contract that
-    // defaultMemberRealismState travels with Group Cards for new sessions and split-to-solo.
-    final importedRealism = groupCard.extensions?['realism_state'];
-
-    // Path B compatibility: Prefer the new top-level `character_system_prompts` key in the Group Card.
-    // Fall back to promoting from the legacy location inside `realism_state` (for cards exported before this change).
-    Map<String, String> importedCharPrompts = groupCard.characterSystemPrompts;
-    if (importedCharPrompts.isEmpty && importedRealism is Map) {
-      final legacy =
-          importedRealism['characterSystemPrompts'] ??
-          importedRealism['character_system_prompts'];
-      if (legacy is Map) {
-        importedCharPrompts = legacy.map(
-          (k, v) => MapEntry(k.toString(), (v ?? '').toString()),
-        );
-      }
-    }
-
-    // ── Remap ID-keyed data using the old→new stable ID mapping we built during import ──
-    String finalBaseline = groupCard.baselineRealismState;
-    String finalDefaultMember = groupCard.defaultMemberRealismState;
-    Map<String, String> finalCharPrompts = importedCharPrompts;
-    Map<String, List<Map<String, dynamic>>> finalObjectives =
-        groupCard.memberObjectives;
-
-    if (oldStableIdToNewStableId.isNotEmpty) {
-      String _remapIdsInJson(String jsonString, Map<String, String> mapping) {
-        if (jsonString.isEmpty || jsonString == '{}') return jsonString;
-        try {
-          final decoded = jsonDecode(jsonString);
-          if (decoded is! Map) return jsonString;
-
-          final Map<String, dynamic> rewritten = {};
-
-          Map<String, dynamic> rewritePerCharMap(Map input) {
-            final Map<String, dynamic> out = {};
-            for (final entry in input.entries) {
-              final oldId = entry.key.toString();
-              final newId = mapping[oldId] ?? oldId;
-              final value = entry.value;
-
-              if (value is Map && value.containsKey('relationships')) {
-                final inner = Map<String, dynamic>.from(value);
-                final rels = inner['relationships'];
-                if (rels is Map) {
-                  final newRels = <String, dynamic>{};
-                  for (final r in rels.entries) {
-                    final oldTarget = r.key.toString();
-                    final newTarget = mapping[oldTarget] ?? oldTarget;
-                    newRels[newTarget] = r.value;
-                  }
-                  inner['relationships'] = newRels;
-                }
-                out[newId] = inner;
-              } else {
-                out[newId] = value;
-              }
-            }
-            return out;
-          }
-
-          if (decoded.containsKey('perChar') && decoded['perChar'] is Map) {
-            rewritten['perChar'] = rewritePerCharMap(decoded['perChar'] as Map);
-            for (final k in decoded.keys) {
-              if (k != 'perChar') rewritten[k] = decoded[k];
-            }
-          } else {
-            rewritten.addAll(rewritePerCharMap(decoded));
-          }
-
-          return jsonEncode(rewritten);
-        } catch (_) {
-          return jsonString;
-        }
-      }
-
-      finalBaseline = _remapIdsInJson(
-        groupCard.baselineRealismState,
-        oldStableIdToNewStableId,
-      );
-      finalDefaultMember = _remapIdsInJson(
-        groupCard.defaultMemberRealismState,
-        oldStableIdToNewStableId,
-      );
-
-      final remappedPrompts = <String, String>{};
-      for (final e in importedCharPrompts.entries) {
-        remappedPrompts[oldStableIdToNewStableId[e.key] ?? e.key] = e.value;
-      }
-      finalCharPrompts = remappedPrompts;
-
-      final remappedObjectives = <String, List<Map<String, dynamic>>>{};
-      for (final e in groupCard.memberObjectives.entries) {
-        remappedObjectives[oldStableIdToNewStableId[e.key] ?? e.key] = e.value;
-      }
-      finalObjectives = remappedObjectives;
-    }
-
-    final newGroup = GroupChat(
-      id: groupId,
-      name: groupCard.name,
-      turnOrder: groupCard.turnOrder == 'random'
-          ? TurnOrder.random
-          : TurnOrder.roundRobin,
-      autoAdvance: groupCard.autoAdvance,
-      directorMode: groupCard.directorMode,
-      firstMessage: groupCard.firstMessage,
-      scenario: groupCard.scenario,
-      systemPrompt: groupCard.systemPrompt,
-      groupLorebook: groupCard.groupLorebook ?? '',
-      worldIds: groupCard.worldIds,
-      inheritCharacterLorebooks: groupCard.inheritCharacterLorebooks,
-      chaosModeEnabled: groupCard.chaosModeEnabled,
-      chaosNsfwEnabled: groupCard.chaosNsfwEnabled,
-      baselineRealismState: finalBaseline.isNotEmpty ? finalBaseline : '{}',
-      defaultMemberRealismState: finalDefaultMember.isNotEmpty
-          ? finalDefaultMember
-          : '{}',
-      characterSystemPrompts: finalCharPrompts,
-    );
-
-    // Carry per-char objectives (now with correctly remapped IDs)
-    if (finalObjectives.isNotEmpty) {
-      try {
-        final currentState = jsonDecode(newGroup.defaultMemberRealismState);
-        final mutable = (currentState is Map)
-            ? Map<String, dynamic>.from(currentState)
-            : <String, dynamic>{};
-        mutable['imported_member_objectives'] = finalObjectives;
-        newGroup.defaultMemberRealismState = jsonEncode(mutable);
-      } catch (_) {}
-    }
-
-    await groupRepo.save(newGroup);
-
-    if (context.mounted) {
-      final msg = failCount > 0
-          ? 'Partially imported group "${groupCard.name}": $successCount member(s) succeeded, $failCount failed. The group shell was created with the successful members only (their data + private avatars are fully usable; use "Separate to my library" to extract any as solo characters).'
-          : 'Imported group "${groupCard.name}" with $successCount members!';
+    final result = await GroupCardImporter(
+      groups,
+      storage,
+      db,
+    ).importCard(groupCard);
+    if (!context.mounted) return;
+    if (!result.created) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg),
-          backgroundColor: failCount > 0
-              ? Colors.orange.shade700
-              : Colors.purpleAccent.shade700,
+        const SnackBar(
+          content: Text('Group import failed — no members could be created.'),
         ),
       );
+      return;
     }
+    final msg = result.failCount > 0
+        ? 'Partially imported group "${result.groupName}": ${result.successCount} member(s) succeeded, ${result.failCount} failed. The group shell was created with the successful members only (their data + private avatars are fully usable; use "Separate to my library" to extract any as solo characters).'
+        : 'Imported group "${result.groupName}" with ${result.successCount} members!';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: result.failCount > 0
+            ? Colors.orange.shade700
+            : Colors.purpleAccent.shade700,
+      ),
+    );
   }
 
-  /// Extract all members of a group as independent standalone characters.
-  /// This creates fresh copies so you can use them in 1:1 chats, heavily customize
-  /// them, or put them in other groups — without affecting the original group.
-  ///
-  /// Especially valuable after importing someone else's Group Card.
   Future<void> _extractCharactersFromGroup(GroupChat group) async {
     final charRepo = Provider.of<CharacterRepository>(context, listen: false);
 

@@ -28,6 +28,8 @@ import 'package:provider/provider.dart';
 
 import 'package:window_manager/window_manager.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
+import 'package:front_porch_ai/providers/auth_state.dart';
+import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart'; // Keep original import for MainLayout
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/database/database.dart';
@@ -50,10 +52,6 @@ import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
 import 'package:front_porch_ai/services/file_consolidation_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
-
-// Cloud provider implementations (not re-exported from the services barrel)
-import 'package:front_porch_ai/services/cloud_providers/webdav_provider.dart';
-import 'package:front_porch_ai/services/cloud_providers/google_drive_provider.dart';
 
 // Dialogs and specific widgets used only in main.dart (direct imports are appropriate)
 import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
@@ -190,6 +188,10 @@ void main(List<String> args) async {
         // Theme / dark mode is now driven exclusively by StorageService (single source of truth,
         // persisted, notifies after async prefs load). This eliminates the prior race + glue bugs.
         ChangeNotifierProvider(create: (_) => AppState()),
+        // Repository (Backporch) account session. Lazy — constructed + restored
+        // only when the Repository page is first opened, so users who never
+        // touch the online hub pay nothing and make no network calls.
+        ChangeNotifierProvider(create: (_) => AuthState()..init()),
         ChangeNotifierProxyProvider<StorageService, DownloadManager>(
           create: (context) => DownloadManager(
             targetDir: Provider.of<StorageService>(
@@ -212,6 +214,17 @@ void main(List<String> args) async {
               previous ?? KoboldService(storage),
         ),
         ChangeNotifierProvider(create: (_) => HardwareService()),
+        // Anonymous, opt-out app analytics. Lazy like AuthState — only built
+        // when the Stoop is first opened (RepositoryPage reads it), so users who
+        // never touch the hub make no network calls. It listens to AuthState and
+        // pings once per launch when signed in and analytics is enabled.
+        Provider<StoopAnalytics>(
+          create: (ctx) => StoopAnalytics(
+            ctx.read<AuthState>(),
+            ctx.read<HardwareService>(),
+          ),
+          dispose: (_, s) => s.dispose(),
+        ),
         ChangeNotifierProxyProvider<StorageService, CharacterRepository>(
           create: (context) => CharacterRepository(
             db,
@@ -463,7 +476,6 @@ void main(List<String> args) async {
             return previous ?? SttService(storage);
           },
         ),
-        ChangeNotifierProvider(create: (_) => CloudSyncService()),
         ChangeNotifierProxyProvider<StorageService, ImageGenService>(
           create: (context) {
             return ImageGenService(
@@ -909,7 +921,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
                 _updateChecked = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _checkForUpdates(context);
-                  _runCloudSync(context);
                   _autoStartWebServer(context);
                   // Start auto-backup (always on, every 10 minutes)
                   BackupService.startAutoBackup();
@@ -1806,285 +1817,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
     final hasUpdate = await updateService.checkForUpdate();
     if (hasUpdate && context.mounted) {
       UpdateDialog.show(context);
-    }
-  }
-
-  Future<void> _runCloudSync(BuildContext context) async {
-    // Wait for reunification to finish before syncing — they share the DB
-    while (_isReunifying) {
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-
-    // Pre-release builds must not sync to prevent schema version conflicts
-    if (isPreRelease) {
-      debugPrint(
-        '[CloudSync] Skipped — pre-release build uses separate beta DB',
-      );
-      return;
-    }
-
-    final storage = Provider.of<StorageService>(context, listen: false);
-    await storage.initialized;
-    if (!storage.cloudSyncSettings.cloudSyncEnabled ||
-        storage.cloudSyncSettings.cloudSyncProvider == 'none') {
-      return;
-    }
-
-    final syncService = Provider.of<CloudSyncService>(context, listen: false);
-
-    // Create and connect the appropriate provider
-    CloudStorageProvider provider;
-    switch (storage.cloudSyncSettings.cloudSyncProvider) {
-      case 'webdav':
-        provider = WebDavProvider();
-        break;
-      case 'gdrive':
-        provider = GoogleDriveProvider();
-        break;
-      default:
-        return;
-    }
-
-    try {
-      await provider.connect({
-        'url': storage.cloudSyncSettings.cloudSyncUrl,
-        'username': storage.cloudSyncSettings.cloudSyncUsername,
-        'password': storage.cloudSyncSettings.cloudSyncPassword,
-      });
-      syncService.setProvider(provider);
-
-      // Get paths
-      final chatsPath = storage.chatsDir.path;
-      final rootPath = storage.rootPath ?? chatsPath;
-      final charactersPath =
-          '$rootPath${Platform.pathSeparator}KoboldManager${Platform.pathSeparator}Characters';
-
-      // Safety net: backup DB before every cloud sync
-      await BackupService.createBackup();
-      await BackupService.pruneBackups();
-
-      // Purge any accumulated soft-deleted rows before sync.
-      // We skip characters + groups to protect recent soft-deletes (used by the
-      // new deletion + reconciliation system) so the deletion signal can propagate
-      // via the DB before being hard-purged. This is especially important within
-      // the same cloud namespace (e.g. Rawhide talking only to other Rawhide instances).
-      final db = await AppDatabase.instance();
-      await db.purgeDeletedRows(skipTables: {'characters', 'groups'});
-
-      await syncService.fullSync(chatsPath, charactersPath);
-
-      // Check for schema version mismatch (e.g. newer UUID schema on another device)
-      if (syncService.schemaMismatch) {
-        // Disable cloud sync so it doesn't keep failing
-        await storage.cloudSyncSettings.setCloudSyncEnabled(false);
-
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
-              title: const Row(
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.amberAccent,
-                    size: 28,
-                  ),
-                  SizedBox(width: 12),
-                  Text(
-                    'Database Version Mismatch',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-              content: Text(
-                'The cloud database was created by a newer version of Front Porch AI '
-                '(schema v${syncService.remoteSchemaVersion}) and is incompatible with '
-                'this version (schema v${syncService.localSchemaVersion}).\n\n'
-                'Cloud sync has been disabled to prevent data corruption.\n\n'
-                'Please update this app to the latest version, then re-enable cloud sync in Settings.',
-                style: const TextStyle(color: Colors.white70, height: 1.5),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(color: Colors.blueAccent),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-
-      // Check for pending schema upgrade (old cloud DB downloaded and migrated locally)
-      if (syncService.pendingSchemaUpgrade) {
-        // The DB was downloaded and migrated — reload all repositories
-        if (syncService.dbWasDownloaded) {
-          debugPrint(
-            '[CloudSync] Schema upgrade: reloading all repositories after migration',
-          );
-          final newDb = await AppDatabase.instance();
-          final charRepo = Provider.of<CharacterRepository>(
-            context,
-            listen: false,
-          );
-          final folderService = Provider.of<FolderService>(
-            context,
-            listen: false,
-          );
-          final personaService = Provider.of<UserPersonaService>(
-            context,
-            listen: false,
-          );
-          final groupRepo = Provider.of<GroupChatRepository>(
-            context,
-            listen: false,
-          );
-          final worldRepo = Provider.of<WorldRepository>(
-            context,
-            listen: false,
-          );
-          charRepo.updateDatabase(newDb);
-          folderService.updateDatabase(newDb);
-          personaService.updateDatabase(newDb);
-          groupRepo.updateDatabase(newDb);
-          worldRepo.updateDatabase(newDb);
-          final chatService = Provider.of<ChatService>(context, listen: false);
-          chatService.updateDatabase(newDb);
-          await charRepo.loadCharacters();
-          await charRepo.cleanOrphanedPngs();
-          await folderService.reload();
-          await personaService.reload();
-          await groupRepo.reload();
-          await worldRepo.loadWorlds();
-          await chatService.reloadCurrentSession();
-        }
-
-        // Show confirmation dialog before uploading v3 DB to cloud
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
-              title: const Row(
-                children: [
-                  Icon(
-                    Icons.upgrade_rounded,
-                    color: Colors.amberAccent,
-                    size: 28,
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Database Upgrade',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-              ),
-              content: Text(
-                'Your cloud database has been migrated from schema v${syncService.remoteSchemaVersion} '
-                'to v${syncService.localSchemaVersion} on this device.\n\n'
-                'If you upload the upgraded database to the cloud, any other devices running '
-                'an older version of this app will no longer be able to sync until they are updated.\n\n'
-                'Would you like to upload now?',
-                style: const TextStyle(color: Colors.white70, height: 1.5),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text(
-                    'Later',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.of(ctx).pop();
-                    try {
-                      await syncService.forceUploadDatabase();
-                      await storage.cloudSyncSettings.setCloudSyncLastTime(
-                        DateTime.now().toIso8601String(),
-                      );
-                    } catch (e) {
-                      debugPrint('Schema upgrade upload failed: $e');
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amberAccent,
-                    foregroundColor: Colors.black87,
-                  ),
-                  child: const Text('Upload Now'),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-
-      if (syncService.status == SyncStatus.success) {
-        await storage.cloudSyncSettings.setCloudSyncLastTime(
-          DateTime.now().toIso8601String(),
-        );
-        // Reload characters so newly downloaded PNGs appear in the UI
-        final charRepo = Provider.of<CharacterRepository>(
-          context,
-          listen: false,
-        );
-        await charRepo.loadCharacters();
-        await charRepo.cleanOrphanedPngs();
-
-        // If a new database was downloaded, update all repo DB references and reload
-        if (syncService.dbWasDownloaded) {
-          debugPrint(
-            '[CloudSync] DB was downloaded — updating all repositories',
-          );
-          final newDb = await AppDatabase.instance();
-
-          // Push the new DB connection to every repo
-          charRepo.updateDatabase(newDb);
-          final folderService = Provider.of<FolderService>(
-            context,
-            listen: false,
-          );
-          final personaService = Provider.of<UserPersonaService>(
-            context,
-            listen: false,
-          );
-          final groupRepo = Provider.of<GroupChatRepository>(
-            context,
-            listen: false,
-          );
-          final worldRepo = Provider.of<WorldRepository>(
-            context,
-            listen: false,
-          );
-          folderService.updateDatabase(newDb);
-          personaService.updateDatabase(newDb);
-          groupRepo.updateDatabase(newDb);
-          worldRepo.updateDatabase(newDb);
-          final chatService = Provider.of<ChatService>(context, listen: false);
-          chatService.updateDatabase(newDb);
-
-          // Now reload all data from the new DB
-          await charRepo.loadCharacters();
-          await charRepo.cleanOrphanedPngs();
-          await folderService.reload();
-          await personaService.reload();
-          await groupRepo.reload();
-          await worldRepo.loadWorlds();
-          await chatService.reloadCurrentSession();
-        }
-      }
-    } catch (e) {
-      debugPrint('Cloud sync startup error: \$e');
     }
   }
 

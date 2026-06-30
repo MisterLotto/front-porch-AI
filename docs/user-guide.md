@@ -913,7 +913,7 @@ Generation progress, queue, and history are shown in the download queue panel an
 
 ## Cloud Sync
 
-> ⚠️ **Deprecated — no longer supported, will be removed in a future release.** Cloud Sync has proven unreliable across devices (it can occasionally bring deleted characters back). Don't rely on it. Instead, use the **automatic local Backups** (every 30 minutes, with a rolling week of daily restore points) for safekeeping, and **Card export / import** to move characters or groups between devices. Cloud Sync still runs for now, but no further fixes or features are planned.
+> ⚠️ **Removed.** Cloud Sync proved unreliable across devices (it could occasionally bring deleted characters back) and has been **removed** from the app. Use the **automatic local Backups** (every 30 minutes, with a rolling week of daily restore points) for safekeeping, **Card export / import** to move characters or groups between devices, and **The Stoop** to share/download characters online. The steps below are retained for historical reference only.
 
 Your characters, chats, lorebooks, worlds, and settings can be kept in sync across multiple devices using the built-in **Cloud Sync** service (accessible from the sidebar or Settings). Supported providers: Google Drive and WebDAV (Nextcloud, ownCloud, Synology, etc.).
 
