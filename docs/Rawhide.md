@@ -21,3 +21,4 @@ unreleased delta remains below.
 ## Recent improvements (unreleased — ships in the next build)
 
 - 🌐 **Front Porch AI now runs in your browser and on your phone** — a brand-new web app brings the full desktop experience anywhere: chat with live-streaming replies, browse and organize your whole library, create and edit characters, manage models and backends, write Porch Stories, and tune the complete Realism & Needs engine — all kept in sync with the desktop app. Open it in any browser on your computer, or set it up on your phone over Tailscale in a couple of taps.
+- ⚖️ **Realism Engine no longer assumes anyone's gender** — the behind-the-scenes relationship/trust evaluations had baked-in "he/she/her" wording that could misgender you or your character (e.g. a male persona getting "His eagerness warms me"). Those prompts are now gender-neutral, so the realism notes reflect the actual people in your scene.
