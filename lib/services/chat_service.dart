@@ -1420,6 +1420,12 @@ class ChatService extends ChangeNotifier {
   _pendingChanceTimeEvent; // set when wheel lands; cleared after UI reads it
   bool _chanceTimePendingTrigger =
       false; // true for one cycle to pop the overlay
+  // The single event the web/mobile "reveal your fate" modal shows + accepts
+  // while sendMessage is parked on the completer below. The desktop samples its
+  // own spinning wheel; a phone has no room for one, so we pre-pick one event
+  // from the same pool. Lives only during the park (set at the gate, cleared on
+  // resume) — see [isAwaitingChanceTime] / [acceptPendingChanceTime].
+  String? _webChanceTimeEvent;
 
   // ── Sims/Needs Simulation (extracted) + Needs Impact Evaluator ──
   // Straight decay ticks in _needsSimulation; model deltas (+ optional Director review when authority) in _needsImpactEvaluator.
@@ -2682,6 +2688,40 @@ class ChatService extends ChangeNotifier {
   /// Called by the overlay once it has opened. Clears the auto-trigger flag.
   void consumeChanceTimeTrigger() => _chanceTimePendingTrigger = false;
 
+  // ── Web/mobile Chance Time surface ──────────────────────────────────────
+  // The desktop pops its wheel from the one-shot [chanceTimePendingTrigger] via
+  // a ChangeNotifier. Web clients (which drive the same shared ChatService over
+  // HTTP/WS) have no such hook and no spinning wheel, so they observe the park
+  // through these accessors and resolve it with [acceptPendingChanceTime]. All
+  // of this is UI-coordination glue for the completer above — the simulation is
+  // untouched, so 1:1/group parity is unaffected.
+
+  /// True from the moment a Chance Time parks [sendMessage] until it is
+  /// accepted. The durable signal the web surface uses to show — and, after a
+  /// phone wakes and reconnects, re-show — the reveal modal.
+  bool get isAwaitingChanceTime =>
+      _chanceTimeCompleter != null && !_chanceTimeCompleter!.isCompleted;
+
+  /// The speaker a Chance Time event is attributed to: the upcoming group
+  /// speaker, else the 1:1 host. Shared by the desktop wheel overlay and the
+  /// web accept path so both attribute the event identically.
+  String get chanceTimeSpeakerName =>
+      nextCharacter?.name ?? activeCharacter?.name ?? 'Character';
+
+  /// The pre-picked pending event with `{{char}}` resolved, for the web reveal
+  /// modal. Null when nothing is parked.
+  String? get webChanceTimeDisplay =>
+      _webChanceTimeEvent?.replaceAll('{{char}}', chanceTimeSpeakerName);
+
+  /// Web/mobile "Accept Your Fate": applies the pre-picked pending event using
+  /// the same attribution the desktop wheel uses, then lets generation resume.
+  /// No-op if nothing is parked (e.g. the desktop already accepted).
+  Future<void> acceptPendingChanceTime() async {
+    final raw = _webChanceTimeEvent;
+    if (raw == null) return;
+    await applyChanceTimeResult(raw, chanceTimeSpeakerName);
+  }
+
   // (nsfw/relationship long list of @Dep shims excised in final cleanup; use nsfwService / relationshipService)
 
   /// Human-readable mood label containing exact emotion string and valence direction.
@@ -3128,10 +3168,17 @@ class ChatService extends ChangeNotifier {
         // Create a completer so sendMessage pauses here until the wheel resolves
         _chanceTimeCompleter = Completer<void>();
         _chanceTimePendingTrigger = true;
+        // Pre-pick the one event the web/mobile reveal modal shows + accepts
+        // (the desktop spins its own wheel instead — same pool, same accept).
+        final webWheel = _chaosModeService.spinWheelEvents();
+        _webChanceTimeEvent = webWheel.isNotEmpty
+            ? webWheel.first
+            : 'Fate intervenes in an unexpected way.';
         notifyListeners(); // UI observes this to show the wheel
         // Wait for the user to spin + accept fate (completes in applyChanceTimeResult)
         await _chanceTimeCompleter!.future;
         _chanceTimeCompleter = null;
+        _webChanceTimeEvent = null;
       }
     }
 
@@ -4106,11 +4153,19 @@ class ChatService extends ChangeNotifier {
   /// Thin wrapper: compute display ({{char}} replace), set UI flag, delegate core
   /// (pressure/injection/metadata/save/notify) to service, then complete completer.
   Future<void> applyChanceTimeResult(String event, String charName) async {
+    // One shared ChatService serves both the desktop wheel and any web clients,
+    // so either surface may resolve the same parked completer. Whoever lands
+    // first wins; a late second accept is a no-op instead of completing an
+    // already-completed completer (which would throw a StateError).
+    final completer = _chanceTimeCompleter;
+    if (completer == null || completer.isCompleted) return;
     final display = event.replaceAll('{{char}}', charName);
     _pendingChanceTimeEvent = display;
     await _chaosModeService.applyPreparedEvent(display);
-    // Resume the paused sendMessage flow (UI coordination stays in god)
-    _chanceTimeCompleter?.complete();
+    // Resume the paused sendMessage flow (UI coordination stays in god).
+    // Re-check: applyPreparedEvent awaited above, so the other surface could
+    // have completed it in the gap.
+    if (!completer.isCompleted) completer.complete();
   }
 
   /// Per-turn auto-trigger check. Delegates to service (verbatim roll/pressure logic).

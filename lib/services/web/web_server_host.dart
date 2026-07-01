@@ -82,6 +82,7 @@ class WebServerHost extends ChangeNotifier {
   // we can detach it on stop().
   VoidCallback? _realismListener;
   bool _wasEvaluatingRealism = false;
+  bool _wasAwaitingChanceTime = false;
 
   // Near-instant library live-sync: one debounced listener attached to the
   // CharacterRepository, FolderService and GroupChatRepository (all
@@ -216,6 +217,27 @@ class WebServerHost extends ChangeNotifier {
           streamHub.broadcast({'event': 'processing', 'active': false});
         }
         _wasEvaluatingRealism = active;
+
+        // Chance Time: chaos parks sendMessage on a completer until the user
+        // accepts their fate. Desktop pops its wheel from a ChangeNotifier flag;
+        // web clients have no such hook, so announce the park (and its release)
+        // here so the reveal modal can open/close. `data` carries the
+        // pre-resolved event for an instant reveal; /api/chat/state.chanceTime
+        // is the reconnect fallback. Edge-triggered — a couple of cheap reads on
+        // every other notify.
+        final awaitingChance = chatService.isAwaitingChanceTime;
+        if (awaitingChance != _wasAwaitingChanceTime) {
+          streamHub.broadcast(
+            awaitingChance
+                ? {
+                    'event': 'chance_time',
+                    'pending': true,
+                    'data': ?chatService.webChanceTimeDisplay,
+                  }
+                : {'event': 'chance_time', 'pending': false},
+          );
+          _wasAwaitingChanceTime = awaitingChance;
+        }
       }
 
       _realismListener = onProcessing;

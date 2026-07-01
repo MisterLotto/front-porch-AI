@@ -14,6 +14,7 @@ import { ChatComposer } from '../components/ChatComposer';
 import { ChatInsight } from '../components/ChatInsight';
 import { ConversationsDrawer, type SessionSummary } from '../components/ConversationsDrawer';
 import { ReprocessNeedsModal } from '../components/ReprocessNeedsModal';
+import { ChanceTimeModal } from '../components/ChanceTimeModal';
 import { type Message, type Realism, type LoreEntry } from '../components/chatTypes';
 
 interface ChatState {
@@ -39,12 +40,19 @@ interface ChatState {
   cast?: CastMember[];
   guestActivity?: { status: string | null; isError: boolean; busy: boolean };
   pendingDetection?: string | null;
+  // Chaos "Chance Time" park state: while pending, the engine is frozen waiting
+  // for the user to accept their fate (event is pre-resolved server-side).
+  chanceTime?: { pending: boolean; event?: string };
 }
 
 export function ChatPage() {
   const navigate = useNavigate();
   const [state, setState] = useState<ChatState | null>(null);
   const [streaming, setStreaming] = useState('');
+  // Chaos "Chance Time" reveal modal. Opened by the `chance_time` WS event (or a
+  // reconnect that finds the engine still parked); `revealed` is the pure-UI
+  // flip from the teaser to the event card. Null = no modal.
+  const [chance, setChance] = useState<{ event: string; revealed: boolean } | null>(null);
   // Realism/Objective engine overlay, driven by the `processing` WS event.
   const [processing, setProcessing] = useState<Processing>(NO_PROCESSING);
   // Resizable insight sidebar (desktop) — width persists across sessions.
@@ -83,6 +91,12 @@ export function ChatPage() {
   const refresh = useCallback(async () => {
     const s = await api.get<ChatState>('/api/chat/state');
     setState(s);
+    // Recover the Chance Time modal after a reconnect — a phone may have slept
+    // through the live `chance_time` event while the engine stayed parked.
+    // Preserve an already-open modal's reveal state; close it once unparked.
+    setChance((c) =>
+      s.chanceTime?.pending ? c ?? { event: s.chanceTime.event ?? '', revealed: false } : null,
+    );
     setToolsBump((b) => b + 1);
     // Safety net: if the engines are fully idle (and not generating), make sure
     // the processing overlay is dismissed even if its final WS event was missed
@@ -160,6 +174,11 @@ export function ChatPage() {
               }
             : NO_PROCESSING,
         );
+      } else if (e.event === 'chance_time') {
+        // Chaos parked the send waiting for "accept your fate". Pop the reveal
+        // modal instantly (desktop shows its own wheel); `pending:false` closes
+        // it — e.g. the desktop, or another device, accepted first.
+        setChance(e.pending ? { event: e.data ?? '', revealed: false } : null);
       } else if (e.event === 'chat_updated' || e.event === 'generating') {
         scheduleRefresh();
       }
@@ -215,6 +234,19 @@ export function ChatPage() {
   };
 
   const stop = () => api.post('/api/chat/stop');
+  // Chance Time: flip the teaser to the event card, then accept — which unfreezes
+  // the parked send server-side so the reply streams in (close optimistically).
+  const revealFate = () => setChance((c) => (c ? { ...c, revealed: true } : c));
+  const acceptFate = async () => {
+    const pending = chance;
+    setChance(null);
+    try {
+      await api.post('/api/chat/chance-time/accept');
+    } catch {
+      // Network hiccup — reopen so the still-parked send can be resolved.
+      if (pending) setChance(pending);
+    }
+  };
   const cancelRealism = () => {
     setProcessing(NO_PROCESSING);
     void api.post('/api/chat/cancel-realism').catch(() => {});
@@ -460,6 +492,15 @@ export function ChatPage() {
         <ReprocessNeedsModal
           onSubmit={submitReprocess}
           onClose={() => setReprocessIndex(null)}
+        />
+      )}
+
+      {chance && (
+        <ChanceTimeModal
+          event={chance.event}
+          revealed={chance.revealed}
+          onReveal={revealFate}
+          onAccept={acceptFate}
         />
       )}
 
