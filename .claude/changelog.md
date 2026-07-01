@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-30 — Stoop update flow uses the real character editor (Save→Next, backflow)
+- **Files:** lib/ui/pages/edit_character_page.dart (opt-in continue mode), lib/ui/pages/repository/stoop_home_view.dart (_startUpdate routes through the editor), lib/ui/pages/repository/stoop_upload_page.dart (removed the ad-hoc 5-field content editor added earlier).
+- **Reason:** The prior 5-field content editor was a parallel, partial re-implementation. Per the user's suggestion, the Mine "Update" flow now reuses the FULL character editor (Details/Dialogue/Lorebook/Worlds/Advanced/Realism) for UX continuity: EditCharacterPage gains two opt-in params — saveLabel (shows "Next") and popWithCardOnSave (a successful save pops returning the saved CharacterCard instead of the toast+plain pop). _startUpdate pushes the editor (Save→Next), which saves to the library first (so edits BACKFLOW — one canonical character, no Stoop-vs-library drift), then pushes StoopUploadPage(update mode) to set the Stoop listing (summary/tags/NSFW/standards) and publish the freshly-saved card in place via /versions. Removed the 5-field editor + its controllers/helper/override from stoop_upload_page.dart (net simplification). Default editor behavior is unchanged (opt-in params default off).
+- **Verified:** flutter analyze clean (3 files); flutter build macos ✓. No backend change (uses existing endpoints).
+- **Commit:** (below)
+
 ## 2026-06-30 — Stoop update flow: edit card content by hand
 - **Files:** lib/ui/pages/repository/stoop_upload_page.dart.
 - **Reason:** The Update (and Share) flow only let you change the Stoop listing metadata (name/summary/tags/NSFW), not the card's actual content — so you couldn't fix a typo or tweak the persona/scenario without editing the library character and re-uploading. Added an editable "Card content" section (Persona/description, Personality, Scenario, First message, Example dialogue) to the wizard's Content step (solo only). Pre-filled from the chosen character via the existing _applySelection; on publish, those five keys (plus name) are overridden onto a copy of card.toJson() so edits go to the SHARED card only — the local library copy is never touched. New helper _contentField (one labelled multiline editor, reused 5×). Lorebook/greetings/avatar/realism still come from the library card (noted for a later pass).

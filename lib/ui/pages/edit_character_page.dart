@@ -50,7 +50,21 @@ const _borderFocus = Colors.blueAccent;
 class EditCharacterPage extends StatefulWidget {
   final CharacterCard character;
 
-  const EditCharacterPage({super.key, required this.character});
+  /// Label for the save action (default "Save"). The Stoop update flow passes
+  /// "Next" so this editor reads as the first step of publishing an update.
+  final String saveLabel;
+
+  /// When true, a successful save pops this page returning the saved
+  /// [CharacterCard] (instead of showing the "updated" snackbar and popping with
+  /// no result), so a caller can continue a flow with the freshly-saved card.
+  final bool popWithCardOnSave;
+
+  const EditCharacterPage({
+    super.key,
+    required this.character,
+    this.saveLabel = 'Save',
+    this.popWithCardOnSave = false,
+  });
 
   @override
   State<EditCharacterPage> createState() => _EditCharacterPageState();
@@ -480,23 +494,29 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                const Text('Character updated successfully!'),
-              ],
+        // Continue mode (e.g. the Stoop update flow): return the saved card so
+        // the caller can proceed, instead of the standard "updated" toast + pop.
+        if (widget.popWithCardOnSave) {
+          Navigator.pop(context, widget.character);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Character updated successfully!'),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            backgroundColor: const Color(0xFF1E293B),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-        Navigator.pop(context);
+          );
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -638,8 +658,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton.icon(
               onPressed: _saveCharacter,
-              icon: const Icon(Icons.save_outlined, size: 18),
-              label: const Text('Save'),
+              icon: Icon(
+                widget.popWithCardOnSave
+                    ? Icons.arrow_forward_rounded
+                    : Icons.save_outlined,
+                size: 18,
+              ),
+              label: Text(widget.saveLabel),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blueAccent,
                 foregroundColor: Colors.white,

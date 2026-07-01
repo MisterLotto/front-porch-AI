@@ -15,6 +15,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_upload_page.dart';
@@ -126,10 +127,23 @@ class _StoopHomeViewState extends State<StoopHomeView> {
       return;
     }
     final libCard = match;
+    // 1) Full character editor (Save → "Next"). Saves to the library first, so
+    //    there's one canonical character, then returns the freshly-saved card.
+    final saved = await Navigator.of(context).push<CharacterCard>(
+      MaterialPageRoute(
+        builder: (_) => EditCharacterPage(
+          character: libCard,
+          saveLabel: 'Next',
+          popWithCardOnSave: true,
+        ),
+      ),
+    );
+    if (saved == null || !mounted) return; // backed out without saving
+    // 2) Stoop publish step (summary/tags/NSFW/standards → new version in place).
     final updated = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => StoopUploadPage(
-          updateCharacter: libCard,
+          updateCharacter: saved,
           updateStoopId: c.id,
           initialNsfw: c.nsfw,
         ),
