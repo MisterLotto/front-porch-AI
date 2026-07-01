@@ -128,6 +128,22 @@ class _StoopCardTileState extends State<StoopCardTile> {
                                 fontSize: 11,
                               ),
                             ),
+                            if (stoopTokenLabel(card.tokenCount) case final tl?) ...[
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.data_usage_rounded,
+                                size: 11,
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                tl,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],

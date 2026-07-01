@@ -37,6 +37,11 @@ class StoopCard {
   final StoopCreatorRef? creator;
   final String? primaryAssetId;
 
+  /// Approximate Llama token count of the card's content (server-computed), so
+  /// the browser can show "how big is this" before download. Null on older
+  /// records not yet backfilled.
+  final int? tokenCount;
+
   const StoopCard({
     required this.id,
     required this.name,
@@ -48,6 +53,7 @@ class StoopCard {
     required this.modPick,
     required this.creator,
     required this.primaryAssetId,
+    this.tokenCount,
   });
 
   bool get isGroup => type == 'GROUP';
@@ -65,6 +71,7 @@ class StoopCard {
         ? StoopCreatorRef.fromJson(j['creator'] as Map<String, dynamic>)
         : null,
     primaryAssetId: j['primaryAssetId'] as String?,
+    tokenCount: (j['tokenCount'] as num?)?.toInt(),
   );
 }
 
@@ -98,6 +105,10 @@ class StoopCardDetail {
   final int score;
   final int downloadCount;
   final int version;
+
+  /// Approximate Llama token count of the card's content (server-computed).
+  /// Null on older records not yet backfilled.
+  final int? tokenCount;
   final StoopCreatorRef? creator;
 
   /// The V2/V2.5 card payload (description, personality, scenario, first_mes,
@@ -118,6 +129,7 @@ class StoopCardDetail {
     required this.score,
     required this.downloadCount,
     required this.version,
+    this.tokenCount,
     required this.creator,
     required this.card,
     required this.tags,
@@ -136,6 +148,7 @@ class StoopCardDetail {
     score: (j['score'] as num?)?.toInt() ?? 0,
     downloadCount: (j['downloadCount'] as num?)?.toInt() ?? 0,
     version: (j['version'] as num?)?.toInt() ?? 1,
+    tokenCount: (j['tokenCount'] as num?)?.toInt(),
     creator: j['creator'] is Map<String, dynamic>
         ? StoopCreatorRef.fromJson(j['creator'] as Map<String, dynamic>)
         : null,

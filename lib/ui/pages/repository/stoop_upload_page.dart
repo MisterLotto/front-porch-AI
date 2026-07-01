@@ -51,6 +51,10 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   final _name = TextEditingController();
   final _summary = TextEditingController();
   final _tagInput = TextEditingController();
+  final _pickSearch = TextEditingController();
+
+  /// Lowercased filter for the Pick step's character/group grids.
+  String _pickQuery = '';
 
   /// Every candidate tag (the card's own, plus any the creator types).
   List<String> _tagPool = [];
@@ -67,6 +71,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _name.dispose();
     _summary.dispose();
     _tagInput.dispose();
+    _pickSearch.dispose();
     super.dispose();
   }
 
@@ -359,13 +364,13 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   // Step 0 — pick a local character or a group (only those with an avatar /
   // members-with-avatars can be shared).
   Widget _pickStep() {
-    final cards = context
+    final allCards = context
         .read<CharacterRepository>()
         .characters
         .where((c) => c.imagePath != null && c.imagePath!.isNotEmpty)
         .toList();
-    final groups = context.read<GroupChatRepository>().groups;
-    if (cards.isEmpty && groups.isEmpty) {
+    final allGroups = context.read<GroupChatRepository>().groups;
+    if (allCards.isEmpty && allGroups.isEmpty) {
       return _centeredHint(
         Icons.person_off_outlined,
         'Nothing to share yet',
@@ -373,6 +378,17 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             'can be shared.',
       );
     }
+    // Filter by name so a large library stays navigable.
+    final cards = _pickQuery.isEmpty
+        ? allCards
+        : allCards
+              .where((c) => c.name.toLowerCase().contains(_pickQuery))
+              .toList();
+    final groups = _pickQuery.isEmpty
+        ? allGroups
+        : allGroups
+              .where((g) => g.name.toLowerCase().contains(_pickQuery))
+              .toList();
     const grid = SliverGridDelegateWithMaxCrossAxisExtent(
       maxCrossAxisExtent: 150,
       childAspectRatio: 0.78,
@@ -383,6 +399,19 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       key: const ValueKey('pick'),
       padding: const EdgeInsets.all(16),
       children: [
+        _pickSearchField(),
+        const SizedBox(height: 14),
+        if (cards.isEmpty && groups.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 40),
+            child: Center(
+              child: Text(
+                'No characters or groups match “$_pickQuery”.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textTertiary(context)),
+              ),
+            ),
+          ),
         // Groups first — they're the marquee thing to share and shouldn't be
         // buried under a long character list.
         if (groups.isNotEmpty) ...[
@@ -407,6 +436,40 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           ),
         ],
       ],
+    );
+  }
+
+  // Name filter for the Pick step — mirrors the browse view's search field.
+  Widget _pickSearchField() {
+    return TextField(
+      controller: _pickSearch,
+      onChanged: (v) => setState(() => _pickQuery = v.trim().toLowerCase()),
+      style: TextStyle(color: AppColors.textPrimary(context)),
+      decoration: InputDecoration(
+        hintText: 'Search your characters and groups',
+        hintStyle: TextStyle(color: AppColors.textTertiary(context)),
+        prefixIcon: Icon(Icons.search, color: AppColors.iconSecondary(context)),
+        suffixIcon: _pickQuery.isEmpty
+            ? null
+            : IconButton(
+                icon: Icon(Icons.close, color: AppColors.iconSecondary(context)),
+                onPressed: () {
+                  _pickSearch.clear();
+                  setState(() => _pickQuery = '');
+                },
+              ),
+        filled: true,
+        fillColor: AppColors.surfaceContainerOf(context),
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.borderOf(context)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.borderOf(context)),
+        ),
+      ),
     );
   }
 

@@ -433,6 +433,21 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                         color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
+                    if (stoopTokenLabel(d.tokenCount) case final tl?) ...[
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.data_usage_rounded,
+                        size: 13,
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '~$tl tokens',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
                     if (d.nsfw) ...[
                       const SizedBox(width: 12),
                       Text(

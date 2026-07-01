@@ -28,6 +28,16 @@ String stoopResolveMacros(String text, String charName) {
   );
 }
 
+/// Compact label for a card's token count — `620` or `1.2k` (drops a trailing
+/// `.0`). Returns null for a null/zero count so callers can hide the chip
+/// (older records may not be backfilled yet).
+String? stoopTokenLabel(int? tokens) {
+  if (tokens == null || tokens <= 0) return null;
+  if (tokens < 1000) return '$tokens';
+  final s = (tokens / 1000).toStringAsFixed(1);
+  return '${s.endsWith('.0') ? s.substring(0, s.length - 2) : s}k';
+}
+
 /// The Stoop's signature accent (teal) and its teal→purple gradient — used for
 /// glows, score badges, and the hero scrim. Built from AppColors.resolve so it
 /// adapts to light/dark like the rest of the app.
