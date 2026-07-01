@@ -769,6 +769,52 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
           needsSimStrength:
               (seed['needsSimStrength'] as int?) ??
               source.frontPorchExtensions!.needsSimStrength,
+          // Carry the group-creator's per-member needs baselines + decay
+          // choices (the seed). Without these two blocks, cards that already
+          // ship a FrontPorchExtensions (the common case) silently lost every
+          // baseline/decay adjustment made in the creator at save time.
+          needsBaselineHunger:
+              (seed['needsBaselineHunger'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineHunger,
+          needsBaselineBladder:
+              (seed['needsBaselineBladder'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineBladder,
+          needsBaselineEnergy:
+              (seed['needsBaselineEnergy'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineEnergy,
+          needsBaselineSocial:
+              (seed['needsBaselineSocial'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineSocial,
+          needsBaselineFun:
+              (seed['needsBaselineFun'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineFun,
+          needsBaselineHygiene:
+              (seed['needsBaselineHygiene'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineHygiene,
+          needsBaselineComfort:
+              (seed['needsBaselineComfort'] as int?) ??
+              source.frontPorchExtensions!.needsBaselineComfort,
+          needsDecayHunger:
+              (seed['needsDecayHunger'] as int?) ??
+              source.frontPorchExtensions!.needsDecayHunger,
+          needsDecayBladder:
+              (seed['needsDecayBladder'] as int?) ??
+              source.frontPorchExtensions!.needsDecayBladder,
+          needsDecayEnergy:
+              (seed['needsDecayEnergy'] as int?) ??
+              source.frontPorchExtensions!.needsDecayEnergy,
+          needsDecaySocial:
+              (seed['needsDecaySocial'] as int?) ??
+              source.frontPorchExtensions!.needsDecaySocial,
+          needsDecayFun:
+              (seed['needsDecayFun'] as int?) ??
+              source.frontPorchExtensions!.needsDecayFun,
+          needsDecayHygiene:
+              (seed['needsDecayHygiene'] as int?) ??
+              source.frontPorchExtensions!.needsDecayHygiene,
+          needsDecayComfort:
+              (seed['needsDecayComfort'] as int?) ??
+              source.frontPorchExtensions!.needsDecayComfort,
         );
       } else if (_realismEnabled) {
         memberFp = FrontPorchExtensions(
@@ -2432,6 +2478,64 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                               _updateMemberRealism(id, {
                                 'needsBaselineComfort': v,
                               });
+                            },
+                            // Per-member decay ("tick rate") — each member
+                            // decays at its own rate, exactly like a solo card.
+                            decayHunger:
+                                _memberNeedsBaselines[id]?['decayHunger'] ?? 5,
+                            onDecayHungerChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decayHunger'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecayHunger': v});
+                            },
+                            decayBladder:
+                                _memberNeedsBaselines[id]?['decayBladder'] ?? 5,
+                            onDecayBladderChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decayBladder'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecayBladder': v});
+                            },
+                            decayEnergy:
+                                _memberNeedsBaselines[id]?['decayEnergy'] ?? 5,
+                            onDecayEnergyChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decayEnergy'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecayEnergy': v});
+                            },
+                            decaySocial:
+                                _memberNeedsBaselines[id]?['decaySocial'] ?? 5,
+                            onDecaySocialChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decaySocial'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecaySocial': v});
+                            },
+                            decayFun:
+                                _memberNeedsBaselines[id]?['decayFun'] ?? 5,
+                            onDecayFunChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decayFun'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecayFun': v});
+                            },
+                            decayHygiene:
+                                _memberNeedsBaselines[id]?['decayHygiene'] ?? 5,
+                            onDecayHygieneChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decayHygiene'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecayHygiene': v});
+                            },
+                            decayComfort:
+                                _memberNeedsBaselines[id]?['decayComfort'] ?? 5,
+                            onDecayComfortChanged: (v) {
+                              setState(() {
+                                _memberNeedsBaselines[id]!['decayComfort'] = v;
+                              });
+                              _updateMemberRealism(id, {'needsDecayComfort': v});
                             },
                           ),
                           showVerificationToggle: true,
