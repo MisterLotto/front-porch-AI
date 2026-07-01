@@ -195,6 +195,40 @@ class BackporchApi {
     );
   }
 
+  /// Publish a new version of an existing character IN PLACE (owner only). Keeps
+  /// the Stoop id, downloads, score, and votes; re-enters the moderation queue.
+  /// Used by the Mine-tab "Update" flow.
+  Future<({String id, int version, String status})> publishVersion({
+    required String accessToken,
+    required String characterId,
+    required Map<String, dynamic> payload,
+    required Uint8List avatarBytes,
+    required String avatarFilename,
+  }) async {
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/characters/$characterId/versions'),
+    )
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..fields['payload'] = jsonEncode(payload)
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'avatar',
+          avatarBytes,
+          filename: avatarFilename,
+        ),
+      );
+    final res = await http.Response.fromStream(
+      await req.send().timeout(const Duration(seconds: 60)),
+    );
+    final json = _parse(res);
+    return (
+      id: json['id'] as String? ?? characterId,
+      version: (json['version'] as num?)?.toInt() ?? 2,
+      status: json['status'] as String? ?? 'PENDING',
+    );
+  }
+
   /// The signed-in user's own uploads and their moderation status.
   Future<List<StoopCharacter>> myCharacters(String accessToken) async {
     final json = await _get('/me/characters', accessToken);

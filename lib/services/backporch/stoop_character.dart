@@ -28,6 +28,10 @@ class StoopCharacter {
   final int downloadCount;
   final String? primaryAssetId;
 
+  /// The card's permanent stable id (if it carried one), used to find the local
+  /// library character this post came from when publishing an in-place update.
+  final String? originStableId;
+
   const StoopCharacter({
     required this.id,
     required this.name,
@@ -39,6 +43,7 @@ class StoopCharacter {
     required this.version,
     required this.downloadCount,
     required this.primaryAssetId,
+    this.originStableId,
   });
 
   bool get isPending => status == 'PENDING';
@@ -56,5 +61,6 @@ class StoopCharacter {
     version: (json['version'] as num?)?.toInt() ?? 1,
     downloadCount: (json['downloadCount'] as num?)?.toInt() ?? 0,
     primaryAssetId: json['primaryAssetId'] as String?,
+    originStableId: json['originStableId'] as String?,
   );
 }

@@ -448,6 +448,40 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                         ),
                       ),
                     ],
+                    // Version pill — only once the card has been updated (v2+),
+                    // so it reads as "this was updated" rather than noise on v1.
+                    if (d.version >= 2) ...[
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.autorenew_rounded,
+                              size: 12,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'v${d.version}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (d.nsfw) ...[
                       const SizedBox(width: 12),
                       Text(

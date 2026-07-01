@@ -11,8 +11,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
+import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_upload_page.dart';
@@ -81,6 +83,62 @@ class _StoopHomeViewState extends State<StoopHomeView> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Submitted for review.')));
+      _load();
+    }
+  }
+
+  // Publish a new version of an already-shared character IN PLACE. Finds the
+  // local library card this post came from (by the card's stable id, else by
+  // name) and opens the wizard locked to it in update mode.
+  Future<void> _startUpdate(StoopCharacter c) async {
+    final repo = context.read<CharacterRepository>();
+    CharacterCard? match;
+    final sid = c.originStableId;
+    if (sid != null && sid.isNotEmpty) {
+      for (final card in repo.characters) {
+        if (card.frontPorchExtensions?.stableId == sid) {
+          match = card;
+          break;
+        }
+      }
+    }
+    if (match == null) {
+      final wanted = c.name.trim().toLowerCase();
+      for (final card in repo.characters) {
+        if (card.imagePath != null &&
+            card.name.trim().toLowerCase() == wanted) {
+          match = card;
+          break;
+        }
+      }
+    }
+    if (match == null || match.imagePath == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Couldn’t find “${c.name}” in your library to update — '
+              'it may have been renamed or removed.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    final libCard = match;
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => StoopUploadPage(
+          updateCharacter: libCard,
+          updateStoopId: c.id,
+          initialNsfw: c.nsfw,
+        ),
+      ),
+    );
+    if (updated == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Update submitted for review.')),
+      );
       _load();
     }
   }
@@ -230,13 +288,38 @@ class _StoopHomeViewState extends State<StoopHomeView> {
             ),
           ],
           const SizedBox(height: 6),
-          Text(
-            'v${c.version} · ${c.downloadCount} downloads'
-            '${c.nsfw ? ' · NSFW' : ''}',
-            style: TextStyle(
-              color: AppColors.textTertiary(context),
-              fontSize: 12,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'v${c.version} · ${c.downloadCount} downloads'
+                  '${c.nsfw ? ' · NSFW' : ''}',
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              // Update publishes a new version of THIS post in place. Groups get
+              // this once they carry a stable id (handled separately).
+              if (c.type == 'SOLO')
+                OutlinedButton.icon(
+                  onPressed: () => _startUpdate(c),
+                  icon: const Icon(Icons.autorenew_rounded, size: 15),
+                  label: const Text('Update'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary(context),
+                    side: BorderSide(color: AppColors.borderOf(context)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                ),
+            ],
           ),
           if (c.isRejected && (c.rejectionNote?.isNotEmpty ?? false)) ...[
             const SizedBox(height: 8),

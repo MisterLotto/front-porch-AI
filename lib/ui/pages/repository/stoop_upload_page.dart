@@ -32,7 +32,23 @@ import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
 /// app's create-wizard chrome (step dots + AnimatedSwitcher + nav buttons).
 /// Pops `true` once a card has been submitted for review.
 class StoopUploadPage extends StatefulWidget {
-  const StoopUploadPage({super.key});
+  /// When set, the wizard runs in UPDATE mode: it is locked to this local
+  /// character (the Pick step is skipped) and publishes a new version of the
+  /// existing Stoop post [updateStoopId] IN PLACE, instead of creating a new one.
+  final CharacterCard? updateCharacter;
+  final String? updateStoopId;
+
+  /// The posted card's current NSFW flag, so update mode preserves it by default.
+  final bool initialNsfw;
+
+  const StoopUploadPage({
+    super.key,
+    this.updateCharacter,
+    this.updateStoopId,
+    this.initialNsfw = false,
+  });
+
+  bool get isUpdate => updateStoopId != null && updateCharacter != null;
 
   @override
   State<StoopUploadPage> createState() => _StoopUploadPageState();
@@ -100,23 +116,39 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     });
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // Update mode: lock to the given character and start past the Pick step.
+    final uc = widget.updateCharacter;
+    if (uc != null) {
+      _applySelection(uc);
+      _nsfw = widget.initialNsfw;
+      _currentStep = 1;
+    }
+  }
+
   void _select(CharacterCard card) {
-    setState(() {
-      _selected = card;
-      _selectedGroup = null;
-      _name.text = card.name;
-      _setSummaryFrom(card.description);
-      // De-duplicate (preserving order) into the candidate pool, then
-      // pre-select the first [_maxTags]; the creator can re-pick on the step.
-      final seen = <String>{};
-      final pool = <String>[];
-      for (final t in card.tags) {
-        final tt = t.trim();
-        if (tt.isNotEmpty && seen.add(tt)) pool.add(tt);
-      }
-      _tagPool = pool;
-      _tags = pool.take(_maxTags).toList();
-    });
+    setState(() => _applySelection(card));
+  }
+
+  // Pre-fills the wizard from a chosen character. No setState — safe to call from
+  // initState (update mode) and from _select (wrapped in setState).
+  void _applySelection(CharacterCard card) {
+    _selected = card;
+    _selectedGroup = null;
+    _name.text = card.name;
+    _setSummaryFrom(card.description);
+    // De-duplicate (preserving order) into the candidate pool, then
+    // pre-select the first [_maxTags]; the creator can re-pick on the step.
+    final seen = <String>{};
+    final pool = <String>[];
+    for (final t in card.tags) {
+      final tt = t.trim();
+      if (tt.isNotEmpty && seen.add(tt)) pool.add(tt);
+    }
+    _tagPool = pool;
+    _tags = pool.take(_maxTags).toList();
   }
 
   String _mapError(String code) {
@@ -152,20 +184,32 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     try {
       final bytes = await File(card.imagePath!).readAsBytes();
       final ext = card.imagePath!.split('.').last.toLowerCase();
-      await BackporchApi().uploadCharacter(
-        accessToken: auth.accessToken!,
-        payload: {
-          'name': _name.text.trim(),
-          'summary': _summary.text.trim(),
-          'type': 'SOLO',
-          'nsfw': _nsfw,
-          'tags': _tags,
-          'card': card.toJson(),
-          'changelog': 'Initial upload',
-        },
-        avatarBytes: bytes,
-        avatarFilename: 'avatar.$ext',
-      );
+      final payload = {
+        'name': _name.text.trim(),
+        'summary': _summary.text.trim(),
+        'type': 'SOLO',
+        'nsfw': _nsfw,
+        'tags': _tags,
+        'card': card.toJson(),
+        'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
+      };
+      if (widget.isUpdate) {
+        // In-place new version of the existing post (keeps id/downloads/score).
+        await BackporchApi().publishVersion(
+          accessToken: auth.accessToken!,
+          characterId: widget.updateStoopId!,
+          payload: payload,
+          avatarBytes: bytes,
+          avatarFilename: 'avatar.$ext',
+        );
+      } else {
+        await BackporchApi().uploadCharacter(
+          accessToken: auth.accessToken!,
+          payload: payload,
+          avatarBytes: bytes,
+          avatarFilename: 'avatar.$ext',
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
       if (mounted) setState(() => _error = _mapError(e.code));
@@ -269,7 +313,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       appBar: AppBar(
         backgroundColor: AppColors.surfaceOf(context),
         foregroundColor: AppColors.textPrimary(context),
-        title: const Text('Share a character'),
+        title: Text(widget.isUpdate ? 'Update character' : 'Share a character'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Padding(
@@ -844,7 +888,8 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         ),
         child: Row(
           children: [
-            if (_currentStep > 0)
+            // In update mode the Pick step (0) is skipped, so Back stops at 1.
+            if (_currentStep > (widget.isUpdate ? 1 : 0))
               TextButton(
                 onPressed: _busy ? null : () => setState(() => _currentStep--),
                 child: const Text('Back'),
