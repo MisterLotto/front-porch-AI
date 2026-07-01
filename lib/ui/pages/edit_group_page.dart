@@ -20,11 +20,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:drift/drift.dart' show Value;
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
+import 'package:front_porch_ai/database/database.dart' as db;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/utils/character_id.dart';
@@ -241,6 +244,54 @@ class _EditGroupPageState extends State<EditGroupPage>
     }
   }
 
+  // Edit one member's card content in the reused single-character editor. Saves
+  // to THIS group's member row only (never the source library character), and
+  // preserves the member's group state (realism/needs, avatar) by writing just
+  // the content columns.
+  Future<void> _editMember(CharacterCard member, String memberId) async {
+    final database = Provider.of<db.AppDatabase>(context, listen: false);
+    final edited = await Navigator.of(context).push<CharacterCard>(
+      MaterialPageRoute(
+        builder: (_) => EditCharacterPage(
+          character: member,
+          showRealismTab: false,
+          allowAvatarChange: false,
+          popWithCardOnSave: true,
+          onSaveOverride: (card) async {
+            await database.updateGroupMember(
+              db.GroupMembersCompanion(
+                id: Value(memberId),
+                name: Value(card.name),
+                description: Value(card.description),
+                personality: Value(card.personality),
+                scenario: Value(card.scenario),
+                firstMessage: Value(card.firstMessage),
+                mesExample: Value(card.mesExample),
+                systemPrompt: Value(card.systemPrompt),
+                postHistoryInstructions: Value(card.postHistoryInstructions),
+                alternateGreetings: Value(jsonEncode(card.alternateGreetings)),
+                tags: Value(jsonEncode(card.tags)),
+                lorebook: Value(
+                  card.lorebook != null
+                      ? jsonEncode(card.lorebook!.toJson())
+                      : null,
+                ),
+                worldNames: Value(jsonEncode(card.worldNames)),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    if (edited != null && mounted) {
+      // The member card was mutated in place, so a rebuild reflects the edits.
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('“${edited.name}” updated in this group.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Local (non-class) helpers keep total class-level private methods at 1 (_saveGroup).
@@ -390,12 +441,39 @@ class _EditGroupPageState extends State<EditGroupPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              c.name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary(context),
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    c.name,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary(context),
+                                    ),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => _editMember(c, id),
+                                  icon: const Icon(Icons.edit_outlined, size: 15),
+                                  label: const Text('Edit'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.textSecondary(
+                                      context,
+                                    ),
+                                    side: BorderSide(
+                                      color: AppColors.borderOf(context),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: const Size(0, 32),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    textStyle: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 6),
                             AppTextField(

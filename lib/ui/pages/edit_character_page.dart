@@ -59,11 +59,28 @@ class EditCharacterPage extends StatefulWidget {
   /// no result), so a caller can continue a flow with the freshly-saved card.
   final bool popWithCardOnSave;
 
+  /// When set, save persistence is DELEGATED to this callback instead of writing
+  /// to the library (`CharacterRepository.updateCharacter`). Used to edit a group
+  /// member: the field updates + PNG save still run on the card, but the row is
+  /// written to the group (via the caller) so nothing backflows to the library.
+  final Future<void> Function(CharacterCard saved)? onSaveOverride;
+
+  /// Show the Realism/Needs section (default true). Hidden for group members,
+  /// whose realism/needs are group state edited in Group Settings.
+  final bool showRealismTab;
+
+  /// Allow changing the avatar (default true). Disabled for group members in this
+  /// pass, since a member's avatar lives at a private group path.
+  final bool allowAvatarChange;
+
   const EditCharacterPage({
     super.key,
     required this.character,
     this.saveLabel = 'Save',
     this.popWithCardOnSave = false,
+    this.onSaveOverride,
+    this.showRealismTab = true,
+    this.allowAvatarChange = true,
   });
 
   @override
@@ -352,10 +369,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     widget.character.worldNames = _selectedWorldNames;
 
     // Always persist extensions — even when realism is disabled — so that
-    // configured-but-disabled values survive the PNG round-trip.
-    if (_realismEnabled ||
-        _realismSettingsModified ||
-        widget.character.frontPorchExtensions != null) {
+    // configured-but-disabled values survive the PNG round-trip. Skipped when
+    // the Realism section is hidden (group member): the member's existing
+    // realism/needs ext is group state and must be preserved untouched.
+    if (widget.showRealismTab &&
+        (_realismEnabled ||
+            _realismSettingsModified ||
+            widget.character.frontPorchExtensions != null)) {
       debugPrint(
         '[_saveCharacter] Saving realism: enabled=$_realismEnabled, modified=$_realismSettingsModified',
       );
@@ -473,23 +493,32 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     }
 
     try {
-      await Provider.of<CharacterRepository>(
-        context,
-        listen: false,
-      ).updateCharacter(
-        widget.character,
-        worldRepo: Provider.of<WorldRepository>(context, listen: false),
-      );
+      if (widget.onSaveOverride != null) {
+        // Delegated persistence (e.g. a group member → its group row, never the
+        // library). The field updates + PNG save above already ran on the card.
+        await widget.onSaveOverride!(widget.character);
+      } else {
+        await Provider.of<CharacterRepository>(
+          context,
+          listen: false,
+        ).updateCharacter(
+          widget.character,
+          worldRepo: Provider.of<WorldRepository>(context, listen: false),
+        );
 
-      // Refresh the "Enjoys low hygiene" flag in any active chat so that
-      // toggling it on the character immediately affects existing sessions
-      // (without requiring a database change).
-      if (mounted) {
-        try {
-          final chatService = Provider.of<ChatService>(context, listen: false);
-          chatService.refreshEnjoysLowHygieneFromActiveCharacter();
-        } catch (_) {
-          // ChatService not available in this context — that's fine.
+        // Refresh the "Enjoys low hygiene" flag in any active chat so that
+        // toggling it on the character immediately affects existing sessions
+        // (without requiring a database change).
+        if (mounted) {
+          try {
+            final chatService = Provider.of<ChatService>(
+              context,
+              listen: false,
+            );
+            chatService.refreshEnjoysLowHygieneFromActiveCharacter();
+          } catch (_) {
+            // ChatService not available in this context — that's fine.
+          }
         }
       }
 
@@ -779,7 +808,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               // ── Avatar Section ──
               Center(
                 child: GestureDetector(
-                  onTap: _pickAvatar,
+                  // Group members keep their group-path avatar in this pass.
+                  onTap: widget.allowAvatarChange ? _pickAvatar : null,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: Stack(
@@ -1041,8 +1071,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               const SizedBox(height: 20),
 
-              // ── Realism Engine Summary ──
-              _buildRealismSection(),
+              // ── Realism Engine Summary ── (hidden for group members, whose
+              // realism/needs are group state edited in Group Settings)
+              if (widget.showRealismTab) _buildRealismSection(),
 
               const SizedBox(height: 80), // Space for token badge
             ],
