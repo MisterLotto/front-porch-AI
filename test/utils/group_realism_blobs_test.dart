@@ -4,6 +4,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/group_member.dart';
+import 'package:front_porch_ai/utils/character_id.dart';
 import 'package:front_porch_ai/utils/group_realism_blobs.dart';
 
 void main() {
@@ -141,6 +144,115 @@ void main() {
 
     test('tolerates a legacy blob with no perChar wrapper', () {
       expect(parseGroupRealismSeeds('{"alice":{"affection":10}}'), isEmpty);
+    });
+  });
+
+  group('remapSeedsToMemberIds — source library id → runtime member id (mid)', () {
+    test('re-keys member entries AND relationship targets to the mid', () {
+      final seeds = sampleSeeds(); // keyed by 'alice' / 'bob' (source ids)
+      final idMap = {'alice': 'mid-a', 'bob': 'mid-b'};
+
+      final remapped = remapSeedsToMemberIds(seeds, idMap);
+
+      // Member keys are now the mids the realism engine reads.
+      expect(remapped.keys, containsAll(['mid-a', 'mid-b']));
+      expect(remapped.containsKey('alice'), isFalse);
+      // Intragroup relationship targets are re-pointed at the mids too, so
+      // "alice feels +40 about bob" survives as "mid-a → {mid-b: 40}".
+      expect((remapped['mid-a']!['relationships'] as Map)['mid-b'], 40);
+      expect((remapped['mid-b']!['relationships'] as Map)['mid-a'], -20);
+      // Scalars/needs ride along untouched.
+      expect(remapped['mid-a']!['affection'], 75);
+      expect((remapped['mid-a']!['needs'] as Map)['hunger'], 80);
+    });
+
+    test('passes through ids (and targets) with no mapping, unchanged', () {
+      final remapped = remapSeedsToMemberIds({
+        'known': {
+          'affection': 10,
+          'relationships': {'known': 5, 'stranger': 9},
+        },
+      }, {'known': 'mid-k'});
+      expect(remapped.keys, ['mid-k']);
+      final rels = remapped['mid-k']!['relationships'] as Map;
+      expect(rels['mid-k'], 5); // mapped target
+      expect(rels['stranger'], 9); // unmapped target left as-is
+    });
+
+    test('does NOT mutate the caller\'s seed map', () {
+      final seeds = sampleSeeds();
+      remapSeedsToMemberIds(seeds, {'alice': 'mid-a', 'bob': 'mid-b'});
+      // Original still keyed by the source ids with the original targets.
+      expect(seeds.containsKey('alice'), isTrue);
+      expect((seeds['alice']!['relationships'] as Map)['bob'], 40);
+    });
+  });
+
+  // The regression this whole change exists to fix: a creator seed must be
+  // reachable at runtime, where the lookup key is the resolved member card's
+  // `stableGroupId` (== the group member's UUID / avatar basename `mid`), NOT
+  // the source library character's basename the creator seeds under.
+  group('end-to-end reachability (real GroupMember id derivation)', () {
+    // A library character the user dragged into the group. Its stableGroupId is
+    // the image-filename basename — the key the creator historically seeded by.
+    final sourceCard = CharacterCard(
+      name: 'Alice',
+      imagePath: '/library/characters/alice_library.png',
+    );
+    // The group stores a decoupled copy under a FRESH uuid; the avatar file (and
+    // therefore the runtime card's stableGroupId) is that uuid.
+    const mid = '11111111-2222-3333-4444-555555555555';
+    final memberCard = GroupMember(
+      id: mid,
+      groupId: 'group_1',
+      name: 'Alice',
+      avatarFilename: '$mid.png',
+    ).toCharacterCard(
+      resolvedImagePath: '/data/groups/group_1/avatars/$mid.png',
+    );
+
+    test('sanity: the id-spaces genuinely differ', () {
+      expect(sourceCard.stableGroupId, 'alice_library');
+      expect(memberCard.stableGroupId, mid);
+      expect(sourceCard.stableGroupId == memberCard.stableGroupId, isFalse);
+    });
+
+    test('WITHOUT remap: the seed is NOT reachable by the member id (the bug)', () {
+      final blobs = buildGroupRealismBlobs(
+        seeds: {
+          sourceCard.stableGroupId: {'affection': 90, 'trust': 80},
+        },
+        needsEnabled: true,
+        timeOfDay: 'morning',
+        dayCount: 1,
+      );
+      final perChar = parseGroupRealismSeeds(blobs.defaultMemberJson);
+      // Runtime reads perChar[memberCard.stableGroupId] → miss → defaults.
+      expect(perChar.containsKey(memberCard.stableGroupId), isFalse);
+    });
+
+    test('WITH remap: the seed IS reachable by the member id (the fix)', () {
+      final remapped = remapSeedsToMemberIds({
+        sourceCard.stableGroupId: {'affection': 90, 'trust': 80},
+      }, {sourceCard.stableGroupId: memberCard.stableGroupId});
+
+      final blobs = buildGroupRealismBlobs(
+        seeds: remapped,
+        needsEnabled: true,
+        timeOfDay: 'morning',
+        dayCount: 1,
+      );
+
+      // defaultMemberRealismState.perChar is now keyed by the mid the engine reads.
+      final perChar = parseGroupRealismSeeds(blobs.defaultMemberJson);
+      expect(perChar.containsKey(memberCard.stableGroupId), isTrue);
+      expect(perChar[memberCard.stableGroupId]!['affection'], 90);
+      // baselineRealismState (read by getBaselineSeedForGroupCharacter via the
+      // same mid) is likewise keyed by the mid.
+      final baseline =
+          jsonDecode(blobs.baselineJson) as Map<String, dynamic>;
+      expect(baseline.containsKey(memberCard.stableGroupId), isTrue);
+      expect((baseline[memberCard.stableGroupId] as Map)['trust'], 80);
     });
   });
 }

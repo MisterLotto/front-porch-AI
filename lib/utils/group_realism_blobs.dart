@@ -70,6 +70,84 @@ GroupRealismBlobs buildGroupRealismBlobs({
   );
 }
 
+/// The neutral-but-alive starting seed for a group member's realism/needs. Shared
+/// by the group creator (initial per-member seed) and the post-creation group
+/// editor so both produce an identical default — one contract, no divergence.
+/// The `relationships` map is filled in the Group Dynamics step for small groups.
+Map<String, dynamic> defaultGroupMemberRealismSeed() => {
+  'affection': 35,
+  'trust': 40,
+  'emotion': 'neutral',
+  'emotionIntensity': 'mild',
+  'timeOfDay': 'morning',
+  'dayCount': 1,
+  'needs': <String, int>{
+    'hunger': 70,
+    'thirst': 75,
+    'rest': 65,
+    'social': 60,
+    'hygiene': 80,
+    'bladder': 85,
+  },
+  'enjoysLowHygiene': false,
+  'verificationEnabled': false,
+  'verificationMaxReprocesses': 1,
+  'verificationStrictness': 3,
+  'needsDirectorAuthority': false,
+  'needsSimStrength': 1,
+  'needsBaselineHunger': 80,
+  'needsBaselineBladder': 80,
+  'needsBaselineEnergy': 80,
+  'needsBaselineSocial': 80,
+  'needsBaselineFun': 80,
+  'needsBaselineHygiene': 80,
+  'needsBaselineComfort': 80,
+  'needsDecayHunger': 5,
+  'needsDecayBladder': 5,
+  'needsDecayEnergy': 5,
+  'needsDecaySocial': 5,
+  'needsDecayFun': 5,
+  'needsDecayHygiene': 5,
+  'needsDecayComfort': 5,
+  'relationships': <String, int>{},
+};
+
+/// Re-key member realism seeds from arbitrary *source* ids to the RUNTIME member
+/// ids the realism engine actually reads.
+///
+/// The group creator builds its per-member seeds keyed by the SOURCE library
+/// character's `stableGroupId` (an image-filename basename), but every runtime
+/// read (`_groupRealism[id]`, baseline lookups, per-member system prompts) keys
+/// off the group member's own UUID (`GroupMember.id` == the member avatar's
+/// basename, a.k.a. `mid`). Those id-spaces differ, so seeds written under the
+/// source id are never found at runtime — bond/trust/emotion/relationships and
+/// starting-needs silently fall back to defaults. This closes that gap by
+/// re-keying both the member entries AND their intragroup `relationships`
+/// targets (which reference OTHER members by the same source id) to `mid`.
+///
+/// [idMap] maps each source id → its member `mid`. Ids (and relationship
+/// targets) with no mapping pass through unchanged — defensive for already-`mid`
+/// keys and for a relationship target that has since left the group. Works on a
+/// copy; the caller's [seedsBySourceId] is never mutated.
+Map<String, Map<String, dynamic>> remapSeedsToMemberIds(
+  Map<String, Map<String, dynamic>> seedsBySourceId,
+  Map<String, String> idMap,
+) {
+  String mapId(String id) => idMap[id] ?? id;
+  final out = <String, Map<String, dynamic>>{};
+  seedsBySourceId.forEach((sourceId, seed) {
+    final copy = Map<String, dynamic>.from(seed);
+    final rels = copy['relationships'];
+    if (rels is Map) {
+      final remapped = <String, dynamic>{};
+      rels.forEach((target, v) => remapped[mapId(target.toString())] = v);
+      copy['relationships'] = remapped;
+    }
+    out[mapId(sourceId)] = copy;
+  });
+  return out;
+}
+
 /// Inverse of [buildGroupRealismBlobs]: read the per-member seeds back out of a
 /// group's `defaultMemberRealismState` (the `perChar` map holds the full seeds).
 /// Returns an empty map for absent/blank state.

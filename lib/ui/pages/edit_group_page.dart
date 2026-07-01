@@ -29,8 +29,8 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/ui/widgets/group_realism_dynamics_editor.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
 
 /// Tabbed group editor (edit-only flow).
 /// Matches the visual tabbed style, section cards, and field treatment of EditCharacterPage
@@ -43,7 +43,19 @@ import 'package:front_porch_ai/utils/character_id.dart';
 class EditGroupPage extends StatefulWidget {
   final GroupChat group;
 
-  const EditGroupPage({super.key, required this.group});
+  /// Update-flow mode (e.g. the Stoop group Update): label the primary action
+  /// (default 'Save', pass 'Next') and, when [popWithGroupOnSave] is true, pop
+  /// returning the saved [GroupChat] instead of showing a toast + plain pop, so
+  /// the caller can continue to a publish step. Defaults preserve normal editing.
+  final String saveLabel;
+  final bool popWithGroupOnSave;
+
+  const EditGroupPage({
+    super.key,
+    required this.group,
+    this.saveLabel = 'Save',
+    this.popWithGroupOnSave = false,
+  });
 
   @override
   State<EditGroupPage> createState() => _EditGroupPageState();
@@ -59,6 +71,11 @@ class _EditGroupPageState extends State<EditGroupPage>
   late final TextEditingController _systemPromptController;
 
   final List<CharacterCard> _members = [];
+  // Members as the realism editor needs them (mid + name + origin + avatar). The
+  // origin lets the editor recover realism seeds from groups made before the
+  // id-keying fix. Populated together with _members.
+  final List<GroupRealismMember> _realismMembers = [];
+  bool _realismLoaded = false;
   final Map<String, TextEditingController> _charPromptControllers = {};
 
   final List<LorebookEntry> _groupLoreEntries = [];
@@ -79,7 +96,7 @@ class _EditGroupPageState extends State<EditGroupPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     final g = widget.group;
     _nameController = TextEditingController(text: g.name);
@@ -109,38 +126,51 @@ class _EditGroupPageState extends State<EditGroupPage>
     // groupRepo + private paths + toCharacterCard. Functional for pre-existing and new groups.
     final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
-    // Fire-and-forget async load (didChangeDependencies is sync)
+    // Fire-and-forget async load (didChangeDependencies is sync). Collect the
+    // full roster once, then a single setState — the Realism tab needs the whole
+    // member list (with origin ids) before it initializes its seeds.
     () async {
       final memberRows = await groupRepo.getMembersForGroup(g.id);
+      final cards = <CharacterCard>[];
+      final realismMembers = <GroupRealismMember>[];
       for (final m in memberRows) {
-        if (m.avatarFilename != null) {
-          final avatarPath = p.join(
-            storage.groupsDir.path,
-            g.id,
-            'avatars',
-            m.avatarFilename!,
-          );
-          if (await File(avatarPath).exists()) {
-            if (mounted) {
-              setState(() {
-                _members.add(m.toCharacterCard(resolvedImagePath: avatarPath));
-              });
-            }
+        final fn = m.avatarFilename;
+        if (fn == null) continue;
+        final avatarPath = p.join(storage.groupsDir.path, g.id, 'avatars', fn);
+        if (!await File(avatarPath).exists()) continue;
+        cards.add(m.toCharacterCard(resolvedImagePath: avatarPath));
+        realismMembers.add(
+          GroupRealismMember(
+            mid: m.id,
+            name: m.name,
+            originStableId: m.originStableId,
+            avatarPath: avatarPath,
+          ),
+        );
+      }
+      if (mounted) {
+        setState(() {
+          _members.addAll(cards);
+          _realismMembers.addAll(realismMembers);
+          _realismLoaded = true;
+          // Per-char prompt controllers keyed by the member mid (matches the
+          // runtime read + the fixed creator write).
+          for (final rm in realismMembers) {
+            _charPromptControllers.putIfAbsent(
+              rm.mid,
+              () => TextEditingController(),
+            );
           }
-        }
+        });
       }
     }();
 
-    // Per-char prompt controllers (edit-only; no roster mutation)
+    // Per-char prompt controllers seeded from the stored overrides (member-level
+    // empty controllers are added in the async roster load above).
     for (final entry in g.characterSystemPrompts.entries) {
       _charPromptControllers[entry.key] = TextEditingController(
         text: entry.value,
       );
-    }
-    for (final m in _members) {
-      // Use the canonical stable group ID.
-      final id = m.stableGroupId;
-      _charPromptControllers.putIfAbsent(id, () => TextEditingController());
     }
 
     // Parse existing group lorebook (preserve raw on failure for data safety)
@@ -192,6 +222,10 @@ class _EditGroupPageState extends State<EditGroupPage>
 
     final updated = GroupChat(
       id: widget.group.id,
+      // Preserve the portable stable id (used for in-place Stoop updates +
+      // cross-device). Rebuilding the GroupChat from scratch would otherwise
+      // silently drop it.
+      stableId: widget.group.stableId,
       name: _nameController.text.trim().isEmpty
           ? widget.group.name
           : _nameController.text.trim(),
@@ -221,6 +255,14 @@ class _EditGroupPageState extends State<EditGroupPage>
       // Capture *before* any pop (fixes snackbar attachment + supports active-chat desync notice)
       final messenger = ScaffoldMessenger.of(context);
       final nav = Navigator.of(context);
+
+      // Update-flow mode: hand the saved group back to the caller (which
+      // continues to the Stoop publish step) instead of toasting + plain pop.
+      if (widget.popWithGroupOnSave) {
+        nav.pop(updated);
+        return;
+      }
+
       final wasActive = chatService.activeGroup?.id == updated.id;
       nav.pop();
       final msg = wasActive
@@ -966,6 +1008,29 @@ class _EditGroupPageState extends State<EditGroupPage>
       );
     }
 
+    Widget buildRealismTab() {
+      if (!_realismLoaded) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+      // Edits flow straight into the two blobs the Save button already persists.
+      // No setState needed — the editor owns its own display state.
+      return GroupRealismDynamicsEditor(
+        key: const ValueKey('group-realism-editor'),
+        members: _realismMembers,
+        initialDefaultMemberJson: _defaultMemberRealismState,
+        initialBaselineJson: _baselineRealismState,
+        onChanged: (d, b) {
+          _defaultMemberRealismState = d;
+          _baselineRealismState = b;
+        },
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.backgroundOf(context),
       appBar: AppBar(
@@ -989,6 +1054,7 @@ class _EditGroupPageState extends State<EditGroupPage>
             AppColors.userBubbleLight,
           ),
           indicatorWeight: 3,
+          isScrollable: true,
           tabs: const [
             Tab(icon: Icon(Icons.person_outline, size: 18), text: 'Details'),
             Tab(
@@ -998,6 +1064,10 @@ class _EditGroupPageState extends State<EditGroupPage>
             Tab(
               icon: Icon(Icons.auto_stories_outlined, size: 18),
               text: 'Lore & Worlds',
+            ),
+            Tab(
+              icon: Icon(Icons.favorite_outline, size: 18),
+              text: 'Realism & Dynamics',
             ),
           ],
         ),
@@ -1010,8 +1080,13 @@ class _EditGroupPageState extends State<EditGroupPage>
                 final hasName = value.text.trim().isNotEmpty;
                 return ElevatedButton.icon(
                   onPressed: hasName ? _saveGroup : null,
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text('Save'),
+                  icon: Icon(
+                    widget.popWithGroupOnSave
+                        ? Icons.arrow_forward
+                        : Icons.save_outlined,
+                    size: 18,
+                  ),
+                  label: Text(widget.saveLabel),
                 );
               },
             ),
@@ -1027,6 +1102,7 @@ class _EditGroupPageState extends State<EditGroupPage>
               buildDetailsTab(),
               buildDialogueTab(),
               buildLoreWorldsTab(),
+              buildRealismTab(),
             ],
           ),
         ),
