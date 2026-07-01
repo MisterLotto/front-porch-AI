@@ -289,6 +289,16 @@ class Groups extends Table {
   TextColumn get characterSystemPrompts =>
       text().withDefault(const Constant('{}'))();
 
+  /// Portable, device-independent stable id for this group (schema v34).
+  ///
+  /// Distinct from [id] (a device-local `group_<timestamp>` handle): this id
+  /// travels in the exported Group Card and is preserved on import, so a shared
+  /// group can be UPDATED in place on The Stoop (no duplicate) and re-associated
+  /// after switching devices — the group analogue of a character's stable id.
+  /// Nullable + additive; groups is outside the Character Card Forge external-
+  /// writer set, so adding it cannot break CCF. Generated lazily in code.
+  TextColumn get stableId => text().nullable()();
+
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -1002,7 +1012,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1561,6 +1571,17 @@ class AppDatabase extends _$AppDatabase {
             revoked INTEGER NOT NULL DEFAULT 0
           )
         ''');
+      }
+      if (from < 34) {
+        // v33→v34: portable per-group stable id. Lets a shared group be UPDATED
+        // in place on The Stoop (and re-associated after switching devices)
+        // instead of creating a duplicate — the group analogue of a character's
+        // stable id. Nullable + additive, and the groups table is outside the
+        // Character Card Forge external-writer set, so this cannot break it.
+        // Backfilled lazily in code (null → generated on first export/share).
+        try {
+          await customStatement('ALTER TABLE groups ADD COLUMN stable_id TEXT');
+        } catch (_) {}
       }
     },
   );

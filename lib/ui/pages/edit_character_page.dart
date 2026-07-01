@@ -50,7 +50,38 @@ const _borderFocus = Colors.blueAccent;
 class EditCharacterPage extends StatefulWidget {
   final CharacterCard character;
 
-  const EditCharacterPage({super.key, required this.character});
+  /// Label for the save action (default "Save"). The Stoop update flow passes
+  /// "Next" so this editor reads as the first step of publishing an update.
+  final String saveLabel;
+
+  /// When true, a successful save pops this page returning the saved
+  /// [CharacterCard] (instead of showing the "updated" snackbar and popping with
+  /// no result), so a caller can continue a flow with the freshly-saved card.
+  final bool popWithCardOnSave;
+
+  /// When set, save persistence is DELEGATED to this callback instead of writing
+  /// to the library (`CharacterRepository.updateCharacter`). Used to edit a group
+  /// member: the field updates + PNG save still run on the card, but the row is
+  /// written to the group (via the caller) so nothing backflows to the library.
+  final Future<void> Function(CharacterCard saved)? onSaveOverride;
+
+  /// Show the Realism/Needs section (default true). Hidden for group members,
+  /// whose realism/needs are group state edited in Group Settings.
+  final bool showRealismTab;
+
+  /// Allow changing the avatar (default true). Disabled for group members in this
+  /// pass, since a member's avatar lives at a private group path.
+  final bool allowAvatarChange;
+
+  const EditCharacterPage({
+    super.key,
+    required this.character,
+    this.saveLabel = 'Save',
+    this.popWithCardOnSave = false,
+    this.onSaveOverride,
+    this.showRealismTab = true,
+    this.allowAvatarChange = true,
+  });
 
   @override
   State<EditCharacterPage> createState() => _EditCharacterPageState();
@@ -338,10 +369,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     widget.character.worldNames = _selectedWorldNames;
 
     // Always persist extensions — even when realism is disabled — so that
-    // configured-but-disabled values survive the PNG round-trip.
-    if (_realismEnabled ||
-        _realismSettingsModified ||
-        widget.character.frontPorchExtensions != null) {
+    // configured-but-disabled values survive the PNG round-trip. Skipped when
+    // the Realism section is hidden (group member): the member's existing
+    // realism/needs ext is group state and must be preserved untouched.
+    if (widget.showRealismTab &&
+        (_realismEnabled ||
+            _realismSettingsModified ||
+            widget.character.frontPorchExtensions != null)) {
       debugPrint(
         '[_saveCharacter] Saving realism: enabled=$_realismEnabled, modified=$_realismSettingsModified',
       );
@@ -459,44 +493,59 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     }
 
     try {
-      await Provider.of<CharacterRepository>(
-        context,
-        listen: false,
-      ).updateCharacter(
-        widget.character,
-        worldRepo: Provider.of<WorldRepository>(context, listen: false),
-      );
+      if (widget.onSaveOverride != null) {
+        // Delegated persistence (e.g. a group member → its group row, never the
+        // library). The field updates + PNG save above already ran on the card.
+        await widget.onSaveOverride!(widget.character);
+      } else {
+        await Provider.of<CharacterRepository>(
+          context,
+          listen: false,
+        ).updateCharacter(
+          widget.character,
+          worldRepo: Provider.of<WorldRepository>(context, listen: false),
+        );
 
-      // Refresh the "Enjoys low hygiene" flag in any active chat so that
-      // toggling it on the character immediately affects existing sessions
-      // (without requiring a database change).
-      if (mounted) {
-        try {
-          final chatService = Provider.of<ChatService>(context, listen: false);
-          chatService.refreshEnjoysLowHygieneFromActiveCharacter();
-        } catch (_) {
-          // ChatService not available in this context — that's fine.
+        // Refresh the "Enjoys low hygiene" flag in any active chat so that
+        // toggling it on the character immediately affects existing sessions
+        // (without requiring a database change).
+        if (mounted) {
+          try {
+            final chatService = Provider.of<ChatService>(
+              context,
+              listen: false,
+            );
+            chatService.refreshEnjoysLowHygieneFromActiveCharacter();
+          } catch (_) {
+            // ChatService not available in this context — that's fine.
+          }
         }
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                const SizedBox(width: 8),
-                const Text('Character updated successfully!'),
-              ],
+        // Continue mode (e.g. the Stoop update flow): return the saved card so
+        // the caller can proceed, instead of the standard "updated" toast + pop.
+        if (widget.popWithCardOnSave) {
+          Navigator.pop(context, widget.character);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Character updated successfully!'),
+                ],
+              ),
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            backgroundColor: const Color(0xFF1E293B),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-        Navigator.pop(context);
+          );
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -638,8 +687,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton.icon(
               onPressed: _saveCharacter,
-              icon: const Icon(Icons.save_outlined, size: 18),
-              label: const Text('Save'),
+              icon: Icon(
+                widget.popWithCardOnSave
+                    ? Icons.arrow_forward_rounded
+                    : Icons.save_outlined,
+                size: 18,
+              ),
+              label: Text(widget.saveLabel),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blueAccent,
                 foregroundColor: Colors.white,
@@ -754,7 +808,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               // ── Avatar Section ──
               Center(
                 child: GestureDetector(
-                  onTap: _pickAvatar,
+                  // Group members keep their group-path avatar in this pass.
+                  onTap: widget.allowAvatarChange ? _pickAvatar : null,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: Stack(
@@ -1016,8 +1071,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               const SizedBox(height: 20),
 
-              // ── Realism Engine Summary ──
-              _buildRealismSection(),
+              // ── Realism Engine Summary ── (hidden for group members, whose
+              // realism/needs are group state edited in Group Settings)
+              if (widget.showRealismTab) _buildRealismSection(),
 
               const SizedBox(height: 80), // Space for token badge
             ],

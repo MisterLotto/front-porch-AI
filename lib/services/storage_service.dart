@@ -35,7 +35,6 @@ import 'storage/settings/stt_settings.dart';
 import 'storage/settings/image_gen_settings.dart';
 import 'storage/settings/expression_settings.dart';
 import 'storage/settings/web_server_settings.dart';
-import 'storage/settings/cloud_sync_settings.dart';
 import 'storage/settings/realism_settings.dart';
 import 'storage/settings/memory_settings.dart';
 import 'storage/settings/preset_settings.dart';
@@ -58,7 +57,6 @@ class StorageService extends ChangeNotifier {
   late final ImageGenSettings _imageGenSettings = ImageGenSettings();
   late final ExpressionSettings _expressionSettings = ExpressionSettings();
   late final WebServerSettings _webServerSettings = WebServerSettings();
-  late final CloudSyncSettings _cloudSyncSettings = CloudSyncSettings();
   late final RealismSettings _realismSettings = RealismSettings();
   late final MemorySettings _memorySettings = MemorySettings();
   late final PresetSettings _presetSettings = PresetSettings();
@@ -105,7 +103,6 @@ class StorageService extends ChangeNotifier {
   ImageGenSettings get imageGenSettings => _imageGenSettings;
   ExpressionSettings get expressionSettings => _expressionSettings;
   WebServerSettings get webServerSettings => _webServerSettings;
-  CloudSyncSettings get cloudSyncSettings => _cloudSyncSettings;
   RealismSettings get realismSettings => _realismSettings;
   MemorySettings get memorySettings => _memorySettings;
   PresetSettings get presetSettings => _presetSettings;
@@ -192,26 +189,6 @@ class StorageService extends ChangeNotifier {
       uiSettings.getChatFontFamily(c);
   Color getActionColor([CharacterCard? c]) => uiSettings.getActionColor(c);
   Future<void> setIsDark(bool v) => uiSettings.setIsDark(v);
-
-  // Cloud sync
-  bool get cloudSyncEnabled => cloudSyncSettings.cloudSyncEnabled;
-  String get cloudSyncProvider => cloudSyncSettings.cloudSyncProvider;
-  String get cloudSyncUrl => cloudSyncSettings.cloudSyncUrl;
-  String get cloudSyncUsername => cloudSyncSettings.cloudSyncUsername;
-  String get cloudSyncPassword => cloudSyncSettings.cloudSyncPassword;
-  String get cloudSyncLastTime => cloudSyncSettings.cloudSyncLastTime;
-  Future<void> setCloudSyncEnabled(bool v) =>
-      cloudSyncSettings.setCloudSyncEnabled(v);
-  Future<void> setCloudSyncProvider(String v) =>
-      cloudSyncSettings.setCloudSyncProvider(v);
-  Future<void> setCloudSyncUrl(String v) =>
-      cloudSyncSettings.setCloudSyncUrl(v);
-  Future<void> setCloudSyncUsername(String v) =>
-      cloudSyncSettings.setCloudSyncUsername(v);
-  Future<void> setCloudSyncPassword(String v) =>
-      cloudSyncSettings.setCloudSyncPassword(v);
-  Future<void> setCloudSyncLastTime(String v) =>
-      cloudSyncSettings.setCloudSyncLastTime(v);
 
   // Web server
   bool get webServerEnabled => webServerSettings.webServerEnabled;
@@ -646,7 +623,6 @@ class StorageService extends ChangeNotifier {
     _imageGenSettings.initializeBase(_prefs, notifyListeners);
     _expressionSettings.initializeBase(_prefs, notifyListeners);
     _webServerSettings.initializeBase(_prefs, notifyListeners);
-    _cloudSyncSettings.initializeBase(_prefs, notifyListeners);
     _realismSettings.initializeBase(_prefs, notifyListeners);
     _memorySettings.initializeBase(_prefs, notifyListeners);
     _presetSettings.initializeBase(_prefs, notifyListeners);
@@ -659,7 +635,6 @@ class StorageService extends ChangeNotifier {
     _imageGenSettings.load();
     _expressionSettings.load();
     _webServerSettings.load();
-    _cloudSyncSettings.load();
     _realismSettings.load();
     _memorySettings.load();
     _presetSettings.load();

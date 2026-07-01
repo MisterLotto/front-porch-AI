@@ -30,6 +30,7 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/group_stable_id.dart';
 
 /// Builds a portable Front Porch Group Card (the `fpa_group` PNG) for a group
 /// chat with zero-compromise member fidelity.
@@ -52,6 +53,11 @@ class GroupCardExporter {
   Future<GroupCard?> buildGroupCard(GroupChat group) async {
     final members = await _groups.getMembersForGroup(group.id);
     if (members.isEmpty) return null;
+
+    // Guarantee the group has a portable stable id (persisted) before we embed
+    // it in the card — so a re-upload updates the same Stoop post in place and
+    // survives switching devices, exactly like a solo character.
+    await _groups.ensureStableId(group);
 
     // Always produce a CharacterCard for 100% of members (resolve the private
     // avatar path when the file exists; '' otherwise — downstream tolerates it).
@@ -183,8 +189,10 @@ class GroupCardExporter {
     return true;
   }
 
-  /// The legacy/extra realism-state extension blob carried on the card so older
-  /// external readers can still find a `realism_state`.
+  /// The card's `extensions` blob: the portable group stable id (at the path the
+  /// Stoop backend reads — see [embedGroupStableId]) plus the legacy/extra
+  /// realism-state blob so older external readers can still find a
+  /// `realism_state`. Returns null only when there is genuinely nothing to carry.
   Map<String, dynamic>? _buildExtensions(GroupChat group) {
     final hasBaseline =
         group.baselineRealismState.isNotEmpty &&
@@ -192,22 +200,24 @@ class GroupCardExporter {
     final hasDefault =
         group.defaultMemberRealismState.isNotEmpty &&
         group.defaultMemberRealismState != '{}';
+
+    final map = <String, dynamic>{};
     if (hasBaseline) {
-      return {
-        'realism_state': jsonDecode(group.baselineRealismState),
-        if (hasDefault)
-          'default_member_realism_state': jsonDecode(
-            group.defaultMemberRealismState,
-          ),
-      };
-    }
-    if (hasDefault) {
-      return {
-        'default_member_realism_state': jsonDecode(
+      map['realism_state'] = jsonDecode(group.baselineRealismState);
+      if (hasDefault) {
+        map['default_member_realism_state'] = jsonDecode(
           group.defaultMemberRealismState,
-        ),
-      };
+        );
+      }
+    } else if (hasDefault) {
+      map['default_member_realism_state'] = jsonDecode(
+        group.defaultMemberRealismState,
+      );
     }
-    return null;
+
+    // Embed the portable stable id so the backend treats a re-upload as an
+    // in-place update (buildGroupCard ensured it exists just above).
+    final withId = embedGroupStableId(map, group.stableId);
+    return withId.isEmpty ? null : withId;
   }
 }

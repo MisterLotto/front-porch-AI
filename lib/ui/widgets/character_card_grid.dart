@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/utils/utils.dart';
@@ -861,45 +862,6 @@ class CharacterCardGrid extends StatelessWidget {
     return files;
   }
 
-  /// A 2x2 thumbnail grid of folder member avatars (iOS-style). Missing slots
-  /// render as subtle placeholders so the grid stays square for 1-3 members.
-  Widget _buildFolderPreviewGrid(
-    BuildContext context,
-    List<File> images,
-    double side,
-  ) {
-    const gap = 3.0;
-    final cell = (side - gap) / 2;
-    Widget tile(int i) {
-      final img = i < images.length ? images[i] : null;
-      return Container(
-        width: cell,
-        height: cell,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerOf(context),
-          borderRadius: BorderRadius.circular(6),
-          image: img != null
-              ? DecorationImage(image: FileImage(img), fit: BoxFit.cover)
-              : null,
-        ),
-      );
-    }
-
-    Widget row(int a, int b) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [tile(a), const SizedBox(width: gap), tile(b)],
-    );
-
-    return SizedBox(
-      width: side,
-      height: side,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [row(0, 1), const SizedBox(height: gap), row(2, 3)],
-      ),
-    );
-  }
-
   Widget _buildFolderCard(BuildContext context, CharacterFolder folder) {
     final charCount = folder.characterPaths.length;
 
@@ -935,9 +897,9 @@ class CharacterCardGrid extends StatelessWidget {
                 // Scale the preview to the card width so it fills a real chunk
                 // of the card (and scales with the grid size) rather than a
                 // fixed thumbnail that looks tiny on larger cards.
-                final previewSide = (constraints.maxWidth * 0.66).clamp(
-                  56.0,
-                  170.0,
+                final previewSide = (constraints.maxWidth * 0.78).clamp(
+                  64.0,
+                  220.0,
                 );
                 final fontSize = isTiny ? 11.0 : (isSmall ? 13.0 : 16.0);
 
@@ -957,7 +919,7 @@ class CharacterCardGrid extends StatelessWidget {
                             : AppColors.iconSecondary(context),
                       )
                     else
-                      _buildFolderPreviewGrid(context, previews, previewSide),
+                      GroupAvatarMontage(images: previews, side: previewSide),
                     SizedBox(height: isTiny ? 4 : (isSmall ? 8 : 16)),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1568,31 +1530,10 @@ class CharacterCardGrid extends StatelessWidget {
     GroupChat group,
     void Function(String action, GroupChat group)? onGroupContextMenuAction,
   ) {
-    return FutureBuilder<List<CharacterCard>>(
-      future: () async {
-        final storage = Provider.of<StorageService>(context, listen: false);
-        final rows = await groupRepo.getMembersForGroup(group.id);
-        final resolved = <CharacterCard>[];
-        for (final m in rows) {
-          if (m.avatarFilename != null) {
-            final p = path.join(
-              storage.groupsDir.path,
-              group.id,
-              'avatars',
-              m.avatarFilename!,
-            );
-            if (!await File(p).exists()) {
-              debugPrint(
-                '[CharacterCardGrid] Group card: member ${m.name} missing avatar at $p',
-              );
-            }
-            resolved.add(m.toCharacterCard(resolvedImagePath: p));
-          }
-        }
-        return resolved;
-      }(),
+    return FutureBuilder<List<File>>(
+      future: groupRepo.getMemberAvatarFiles(group.id),
       builder: (context, snapshot) {
-        final characters = snapshot.data ?? <CharacterCard>[];
+        final memberFiles = snapshot.data ?? <File>[];
         return Card(
           color: AppColors.cardOf(context),
           clipBehavior: Clip.antiAlias,
@@ -1610,13 +1551,15 @@ class CharacterCardGrid extends StatelessWidget {
                   builder: (context, constraints) {
                     final h = constraints.maxHeight;
                     final isCompactGroup = h < 220;
-                    final avatarSize = isCompactGroup ? 40.0 : 56.0;
-                    final avatarAreaH = isCompactGroup ? 50.0 : 80.0;
-                    final overlapStep = isCompactGroup ? 22.0 : 30.0;
                     final nameFontSize = isCompactGroup ? 12.0 : 16.0;
                     final subFontSize = isCompactGroup ? 10.0 : 13.0;
                     final badgeFontSize = isCompactGroup ? 9.0 : 11.0;
-                    final iconSize = isCompactGroup ? 16.0 : 20.0;
+                    // Folder-style avatar montage: bigger than the old overlapping
+                    // circles, filling the top of the card.
+                    final gridSide = (constraints.maxWidth * 0.78).clamp(
+                      110.0,
+                      230.0,
+                    );
 
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1624,96 +1567,15 @@ class CharacterCardGrid extends StatelessWidget {
                       children: [
                         SizedBox(height: isCompactGroup ? 8 : 16),
                         SizedBox(
-                          height: avatarAreaH,
                           width: double.infinity,
                           child: Center(
-                            child: SizedBox(
-                              width:
-                                  avatarSize +
-                                  (characters.take(4).length - 1) * overlapStep,
-                              height: avatarAreaH,
-                              child: Stack(
-                                children: [
-                                  for (
-                                    int i = 0;
-                                    i < characters.take(4).length;
-                                    i++
-                                  )
-                                    Positioned(
-                                      left: i * overlapStep,
-                                      child: Container(
-                                        width: avatarSize,
-                                        height: avatarSize,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.purpleAccent,
-                                            width: 2,
-                                          ),
-                                        ),
-                                        child: characters[i].imagePath != null
-                                            ? ClipOval(
-                                                child: Image.file(
-                                                  onResolveCharImage(
-                                                    characters[i].imagePath!,
-                                                  ),
-                                                  fit: BoxFit.cover,
-                                                  alignment:
-                                                      Alignment.topCenter,
-                                                  errorBuilder: (_, _, _) =>
-                                                      Container(
-                                                        color:
-                                                            AppColors.resolve(
-                                                              context,
-                                                              Colors
-                                                                  .grey
-                                                                  .shade700,
-                                                              Colors
-                                                                  .grey
-                                                                  .shade200,
-                                                            ),
-                                                        child: Icon(
-                                                          Icons.person,
-                                                          color:
-                                                              AppColors.resolve(
-                                                                context,
-                                                                Colors.white24,
-                                                                Colors.black45,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                ),
-                                              )
-                                            : Container(
-                                                color: AppColors.resolve(
-                                                  context,
-                                                  Colors.grey.shade700,
-                                                  Colors.grey.shade200,
-                                                ),
-                                                child: Icon(
-                                                  Icons.person,
-                                                  color: AppColors.resolve(
-                                                    context,
-                                                    Colors.white24,
-                                                    Colors.black45,
-                                                  ),
-                                                  size: avatarSize * 0.5,
-                                                ),
-                                              ),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                            child: GroupAvatarMontage(
+                              images: memberFiles.take(4).toList(),
+                              side: gridSide,
                             ),
                           ),
                         ),
-                        SizedBox(height: isCompactGroup ? 4 : 16),
-                        Icon(
-                          Icons.group,
-                          color: Colors.purpleAccent,
-                          size: iconSize,
-                        ),
-                        SizedBox(height: isCompactGroup ? 2 : 8),
+                        SizedBox(height: isCompactGroup ? 8 : 12),
                         Flexible(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1733,7 +1595,7 @@ class CharacterCardGrid extends StatelessWidget {
                         if (!isCompactGroup) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '${characters.length} character${characters.length == 1 ? '' : 's'}',
+                            '${memberFiles.length} character${memberFiles.length == 1 ? '' : 's'}',
                             style: TextStyle(
                               color: AppColors.textSecondary(context),
                               fontSize: subFontSize,

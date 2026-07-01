@@ -21,13 +21,13 @@ Welcome to Front Porch AI — a private, offline-first AI chat application for d
 
 Front Porch AI is a warm, privacy-first desktop companion that lets you chat, roleplay, and tell stories with AI characters — all running completely on *your* computer.
 
-Built with Flutter for smooth native performance, it works beautifully on Windows, macOS (Apple Silicon recommended), and Linux. The app uses powerful local language models through KoboldCpp (automatically managed for you) or optional remote APIs like OpenRouter when you want access to the biggest frontier models. No subscriptions. No data sent to the cloud unless you explicitly choose to.
+Built with Flutter for smooth native performance, it works beautifully on Windows, macOS (Apple Silicon recommended), and Linux. The app uses powerful local language models through KoboldCpp (automatically managed for you) or optional remote APIs like OpenRouter when you want access to the biggest frontier models. No subscriptions. Nothing leaves your PC unless you opt into an online feature (a remote API, or The Stoop community hub).
 
 At its heart is immersive character chat with **persistent memory** and the groundbreaking **Realism Engine** — a system that tracks how characters feel, how much they trust you, their evolving relationships, the passage of time in the story, and even lets them develop new traits organically as your conversations unfold. Add voice (local Kokoro TTS + Whisper STT or premium cloud voices), group chats, local image generation, and **Porch Stories** (a full novel generator that turns your chats into beautiful illustrated books), and you have a complete private storytelling studio.
 
 Everything is free and open-source under the AGPL-3.0 license. Your characters, chats, and memories stay on your machine. Join the friendly community on Discord for help, sharing cards, and feedback.
 
-> **Privacy promise:** By default, nothing leaves your PC. Cloud sync (Google Drive / WebDAV) and remote APIs are strictly opt-in.
+> **Privacy promise:** By default, nothing leaves your PC. Remote APIs and **The Stoop** (the optional online community hub) are opt-in. When you choose to use The Stoop it collects your account info, the cards you upload, a salted **hash** of your IP for anti-abuse (never the raw IP), and an **opt-out** anonymous device-stats ping — see the [Privacy Policy](https://github.com/linux4life1/front-porch-AI/blob/main/PRIVACY.md). The rest of the app stays fully local.
 
 ---
 

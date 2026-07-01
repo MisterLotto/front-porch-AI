@@ -29,6 +29,7 @@
 export 'emotion_labels.dart';
 export 'gguf_parser.dart';
 export 'character_id.dart';
+export 'group_realism_blobs.dart';
 export 'json_sanitizer.dart';
 export 'kobold_layer_solver.dart';
 export 'persona_colors.dart';

@@ -9,6 +9,10 @@
 
 **A privacy-first AI companion for Windows, Linux, and macOS.** Runs fully offline with local LLMs (KoboldCpp, etc.) by default, but also supports remote APIs like OpenRouter, Nano-GPT, and OpenAI with no lock-in when you want them.
 
+> ### 🏡 New — The Stoop: pull up a chair, the neighbours brought characters
+> Every porch is really about who shows up to it. **The Stoop** is a community character hub built right into the app — browse, share, and **download character & group cards without ever leaving Front Porch.** No browser, no separate website, no fragile copy-paste imports. Featured & mod-picked cards, follow the creators you love, upvote/downvote, and one-tap download straight into your library. Whole **group casts** travel too — members, avatars, lorebooks, **and** the pre-seeded realism/needs state all survive the round-trip, not just single cards.
+> It's **opt-in, account-gated, strictly 18+** (NSFW hidden by default), and **fully open-source (AGPL-3.0)** — while the rest of the app stays 100% local. Other apps have in-app hubs, but the closed ones eventually go paid-SaaS (Backyard AI killed its desktop app to do exactly that); The Stoop is the open, local-first porch that shares living casts, not just cards. **Come sit a while → [The Stoop](#-the-stoop--built-in-community-character-hub).**
+
 💬 **[Join the Discord](https://discord.gg/e4tET6rpdv)** — questions, feedback, and hanging out welcome.
 
 ### 🌟 Community Showcase
@@ -31,6 +35,8 @@ If you use it, a star would mean a lot to the developer.
 ## 🆕 What's New on Rawhide (vs main)
 
 These are the user-facing changes and improvements that have landed on the Rawhide branch since it diverged from `main`. Many originated on the dedicated refactor workstream and were promoted here; others are targeted fixes and polish.
+
+- 🏡 **The Stoop — a built-in community character repository** *(headline feature)* — Browse, share, and **download character & group cards from right inside the app**. No browser, no separate website, no fragile copy-paste imports — a real character hub, built in. Featured & mod-picked cards, follow the creators you like, upvote/downvote, and one-tap download straight into your library. Full **group cards** round-trip losslessly: members, avatars, lorebooks, **and** pre-seeded realism, needs baselines, and intra-group dynamics all survive the trip. It's **opt-in, account-gated, and strictly 18+** (NSFW hidden by default), with optional **two-factor auth** and an **opt-out** anonymous device-stats ping; the rest of the app stays 100% local. In-app character hubs aren't unheard of (Backyard AI, RisuAI have them), but The Stoop is the **open-source (AGPL-3.0), local-first** one that round-trips full **group casts** — with realism/needs engine state intact — while the closed, for-profit hubs drift toward paywalled SaaS (Backyard killed its desktop app to do exactly that). See **[The Stoop](#-the-stoop--built-in-community-character-hub)** below for the full breakdown.
 
 - 🎭 **One chat, a cast that changes** — 1:1 and group chats are now the same thing: a 1:1 is a cast of one, a group is the same chat with more characters. Turn a solo chat into a group **in place** with `/join --full` (no more fork-and-duplicate), bring a character in or out with `/join` / `/exit` (goodbye narration + one-tap **undo**), force a turn with `/speak`, and set the speaking order — including your own slot — with `/turnorder`. Collapsing back to one character returns a clean 1:1 with the **original** library character (no orphan copies). Realism, needs, RAG memory, evolution, objectives, author notes, and expressions all carry across the conversion **both ways**. This round also fixes a batch of group bugs: needs-delta chips now show under *every* speaker's message (not just the first), each character reacts to **their own** needs/relationship instead of a castmate's, members inherit their **expression images** in groups, the shared scenario no longer drifts per character, and Character Evolution cadence is configurable per character.
 
@@ -75,6 +81,7 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 | Feature | **Front Porch AI** | SillyTavern | Jan.ai | Backyard AI |
 |---|---|---|---|---|
 | **Native desktop app** | ✅ Flutter (Win/Mac/Linux) | ❌ Web-based (local server) | ✅ Electron | ✅ (abandoned) |
+| **Built-in community character hub** | ✅ **The Stoop** — **open-source (AGPL-3.0)**, local-first; browse / share / download in-app, incl. full **group casts** (members + lorebooks + realism/needs state) | ❌ (external sites only) | ❌ | ⚠️ Character Hub — **closed, paid-SaaS**; desktop app killed (2025), web/mobile only; single cards |
 | **Fully offline — no cloud required** | ✅ | ✅ | ✅ | ✅ |
 | **Remote LLM Endpoints** | ✅ Native multi-provider support (OpenRouter, Nano-GPT, custom, etc.) with deep integration | ✅ Strong native support for custom OpenAI-compatible endpoints | ⚠️ Limited | ❌ (service discontinued) |
 | **Built-in TTS (50+ voices)** | ✅ Kokoro + Piper + ElevenLabs + OpenAI | ⚙️ Extension required | ❌ | ❌ |
@@ -95,6 +102,18 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 ---
 
 ## ✨ Features
+
+### 🏡 The Stoop — Built-In Community Character Hub
+
+A stoop is where the neighbourhood meets — the front step where people swap stories and pass things back and forth. **The Stoop** brings that to Front Porch: a community character hub built right into the app, so you can discover and share characters without ever leaving home, while everything else stays offline. What sets it apart from other in-app hubs (Backyard AI's Character Hub, RisuAI's RisuRealm) is that The Stoop hands over **entire group casts** — not just single character cards — carrying members, lorebooks, **and** the pre-seeded Realism/Needs engine state intact, so a whole living scene arrives ready to play.
+
+- **Browse & discover** — featured and moderator-picked cards, search, tag filters, and a live feed of what the neighbours are sharing.
+- **One-tap download** — pull any card straight into your library; it lands ready to chat, exactly as the creator tuned it.
+- **Whole casts come over, not just cards** — share a full group and the recipient gets everything: members, avatars, lorebooks, **and** the pre-seeded Realism state, Needs baselines/tick-rates, and intra-group dynamics. Nothing is flattened on the round-trip — no other character hub carries a living cast like this.
+- **Share what you made** — a guided upload wizard with member-avatar montages for groups, comma-formed tag pills, and a clean review flow before anything goes live.
+- **Follow creators & vote** — follow the people whose characters you love, upvote/downvote, and report anything that breaks the house rules.
+- **Open porch, not a walled garden** — The Stoop is **open-source (AGPL-3.0)** and local-first. The for-profit hubs tend to drift closed and paywalled (Backyard killed its desktop app and went subscription-SaaS to do exactly that); AGPL exists precisely so The Stoop can't be fenced off the same way. Your app, your characters, your data stay yours.
+- **Safe by design** — **opt-in** and **account-gated**; the rest of the app stays 100% local and offline. Strictly **18+**, with adult content **hidden by default**, optional **two-factor authentication**, and an **opt-out** anonymous device-stats ping (platform / app version / GPU tier — never your chats, characters, or raw IP). See the [Privacy Policy](PRIVACY.md).
 
 ### 💬 Chat
 - **Immersive roleplay** with V2-spec character cards — full SillyTavern / Backyard AI compatibility
@@ -152,11 +171,8 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 - 5-stage autonomous pipeline: concept → outline → draft → edit → publish
 - Skeuomorphic page-flip reader with audiobook TTS read-along
 
-### ☁️ Cloud Sync *(deprecated)*
-> **Deprecated:** Cloud Sync is being phased out — under some conditions it could resurrect data you'd deleted on another device. Use **local Backups** instead (two-tier rolling: 30-minute snapshots + one per day for 7 days, with one-click restore). The sync code remains for now, behind an in-app notice.
-- Sync your entire database and character PNGs via **Google Drive** or **Nextcloud/WebDAV**
-- Row-level merge engine with UUID primary keys — no ID collisions across devices
-- **Privacy-first**: syncs only to accounts you own, no data touches our servers
+### 💾 Local Backups *(replaced Cloud Sync)*
+- Two-tier rolling local backups (30-minute snapshots + one per day for 7 days) with one-click restore. **Cloud Sync was removed** in favor of these.
 
 ### 🎭 Character Expressions
 - **Emotion-driven avatar swapping** — the character's portrait changes in real time as their mood shifts during the conversation
@@ -363,7 +379,7 @@ If Front Porch AI is useful to you, please consider starring these projects too 
 
 ## 🔒 Privacy
 
-Front Porch AI does not collect, store, or transmit any personal data. Full details: [Privacy Policy](https://app.dreamersai.art/privacy.html)
+The app is **local-first**: using it offline collects nothing and sends us nothing. The **only** part that involves an account or data collection is **The Stoop** — the optional online community hub — and only if you sign in and use it. The Stoop then handles your account info, the cards you choose to upload, a salted **hash** of your IP for anti-abuse (never the raw IP), and an **opt-out** anonymous device-stats ping (no chats, characters, or IP). Full details: [Privacy Policy](PRIVACY.md).
 
 ## 📄 License
 

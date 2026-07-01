@@ -72,9 +72,12 @@ extension ChatServiceRealismDance on ChatService {
       _pendingRealismMetadata ??= {};
       _pendingRealismMetadata!['needs_pre_turn_vector'] = preDecay;
 
-      // Apply one tick of decay directly to this speaker's group entry (custom rates or defaults).
+      // Apply one tick of decay directly to this speaker's group entry using
+      // THIS speaker's own per-member decay rates (from their card ext) — the
+      // same source the 1:1 path uses — so each group member decays at its own
+      // authored rate. `_activeCharacter` is this speaker (impersonated above).
       final decayed = Map<String, int>.from(preDecay);
-      final customRates = _groupDecayRates;
+      final customRates = _activeDecayRates();
       for (final key in NeedsSimulation.needKeys) {
         final cur = decayed[key] ?? 80;
         final decay = customRates[key] ?? NeedsSimulation.needDecay[key] ?? 0;

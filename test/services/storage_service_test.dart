@@ -574,52 +574,6 @@ void main() {
     });
   });
 
-  // ─── Cloud Sync Settings ──────────────────────────────────────────
-
-  group('Cloud sync settings persistence', () {
-    test('setCloudSyncEnabled persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setCloudSyncEnabled(true);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('cloud_sync_enabled'), true);
-    });
-
-    test('setCloudSyncProvider persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setCloudSyncProvider('webdav');
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('cloud_sync_provider'), 'webdav');
-    });
-
-    test('setCloudSyncUrl persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setCloudSyncUrl('https://dav.example.com');
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('cloud_sync_url'), 'https://dav.example.com');
-    });
-
-    test('setCloudSyncUsername persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setCloudSyncUsername('user');
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('cloud_sync_username'), 'user');
-    });
-
-    test('setCloudSyncPassword persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setCloudSyncPassword('pass');
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('cloud_sync_password'), 'pass');
-    });
-
-    test('setCloudSyncLastTime persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setCloudSyncLastTime('2026-04-11T10:00:00Z');
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('cloud_sync_last_time'), '2026-04-11T10:00:00Z');
-    });
-  });
-
   // ─── Image Generation Settings ────────────────────────────────────
 
   group('Image generation settings persistence', () {

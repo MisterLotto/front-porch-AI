@@ -1435,8 +1435,10 @@ class ChatService extends ChangeNotifier {
   bool _enjoysLowHygiene =
       false; // inversion for hygiene (enjoys being dirty/sweaty/musky)
 
+  // Legacy shared group decay map. No longer the runtime source of truth (that
+  // is each member's card ext, via `_activeDecayRates()`); retained only as a
+  // load/save + fallback bridge for pre-per-member groups (see session state).
   Map<String, int> _groupDecayRates = {};
-  Map<String, int> get groupDecayRates => _groupDecayRates;
 
   // Forwarding for critical threshold (moved to NeedsSimulation after buffer removal; UI + cards still reference the old ChatService surface)
   static int get needCriticalThreshold => NeedsSimulation.needCriticalThreshold;
@@ -1544,20 +1546,7 @@ class ChatService extends ChangeNotifier {
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getNeedsSimEnabled: () => _needsSimEnabled,
     setArousalLevel: (v) => _nsfwService.setArousalLevel(v),
-    getCustomDecayRates: () {
-      if (_activeGroup != null) return _groupDecayRates;
-      final ext = _activeCharacter?.frontPorchExtensions;
-      if (ext == null) return const <String, int>{};
-      return {
-        'hunger': ext.needsDecayHunger,
-        'bladder': ext.needsDecayBladder,
-        'energy': ext.needsDecayEnergy,
-        'social': ext.needsDecaySocial,
-        'fun': ext.needsDecayFun,
-        'hygiene': ext.needsDecayHygiene,
-        'comfort': ext.needsDecayComfort,
-      };
-    },
+    getCustomDecayRates: () => _activeDecayRates(),
   );
 
   late final _relationshipService = RelationshipService(
@@ -4286,16 +4275,31 @@ class ChatService extends ChangeNotifier {
   // rules (void _ count must stay exactly 15 live grep after every edit + final).
   // Deletion of the now-redundant per-site try/catch guard in _loadActiveObjectives
   // (and its comment) is part of this task (see that site for the removed code).
-  /// Update a global group decay rate, propagating it to all group members' PNGs
-  Future<void> setGroupNeedsDecayRate(String key, int value) async {
+  /// Update a group member's needs decay rate. With [memberId] null this targets
+  /// every member (legacy "apply to all"); with a [memberId] it targets that one
+  /// member — the per-character path the Group Settings UI now uses so each
+  /// member decays at its own rate. Persists to the member card ext + PNG + the
+  /// GroupMembers row, which is exactly what runtime `_activeDecayRates()` reads.
+  Future<void> setGroupNeedsDecayRate(
+    String key,
+    int value, {
+    String? memberId,
+  }) async {
     if (_activeGroup == null) return;
-    _groupDecayRates[key] = value;
+    // The legacy shared map only has meaning for the "apply to all" call; a
+    // per-member edit writes straight to that member's card ext below.
+    if (memberId == null) _groupDecayRates[key] = value;
 
     if (_characterRepository != null) {
       final v2Service = V2CardService();
       final db = await AppDatabase.instance();
 
-      for (final char in _groupCharacters) {
+      final targets = memberId == null
+          ? _groupCharacters
+          : _groupCharacters.where(
+              (c) => _getCharacterIdFromCard(c) == memberId,
+            );
+      for (final char in targets) {
         final ext = char.frontPorchExtensions ?? FrontPorchExtensions();
         final newExt = ext.copyWith(
           needsDecayHunger: key == 'hunger' ? value : null,

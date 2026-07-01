@@ -5040,6 +5040,17 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
         requiredDuringInsert: false,
         defaultValue: const Constant('{}'),
       );
+  static const VerificationMeta _stableIdMeta = const VerificationMeta(
+    'stableId',
+  );
+  @override
+  late final GeneratedColumn<String> stableId = GeneratedColumn<String>(
+    'stable_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -5082,6 +5093,7 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
     inheritCharacterLorebooks,
     baselineRealismState,
     characterSystemPrompts,
+    stableId,
     updatedAt,
     deletedAt,
   ];
@@ -5236,6 +5248,12 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
         ),
       );
     }
+    if (data.containsKey('stable_id')) {
+      context.handle(
+        _stableIdMeta,
+        stableId.isAcceptableOrUnknown(data['stable_id']!, _stableIdMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -5325,6 +5343,10 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
         DriftSqlType.string,
         data['${effectivePrefix}character_system_prompts'],
       )!,
+      stableId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stable_id'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -5385,6 +5407,16 @@ class Group extends DataClass implements Insertable<Group> {
   /// Takes precedence over a character's normal system prompt when that character
   /// speaks inside this specific group, but sits under the group-level systemPrompt.
   final String characterSystemPrompts;
+
+  /// Portable, device-independent stable id for this group (schema v34).
+  ///
+  /// Distinct from [id] (a device-local `group_<timestamp>` handle): this id
+  /// travels in the exported Group Card and is preserved on import, so a shared
+  /// group can be UPDATED in place on The Stoop (no duplicate) and re-associated
+  /// after switching devices — the group analogue of a character's stable id.
+  /// Nullable + additive; groups is outside the Character Card Forge external-
+  /// writer set, so adding it cannot break CCF. Generated lazily in code.
+  final String? stableId;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const Group({
@@ -5405,6 +5437,7 @@ class Group extends DataClass implements Insertable<Group> {
     required this.inheritCharacterLorebooks,
     required this.baselineRealismState,
     required this.characterSystemPrompts,
+    this.stableId,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -5432,6 +5465,9 @@ class Group extends DataClass implements Insertable<Group> {
     );
     map['baseline_realism_state'] = Variable<String>(baselineRealismState);
     map['character_system_prompts'] = Variable<String>(characterSystemPrompts);
+    if (!nullToAbsent || stableId != null) {
+      map['stable_id'] = Variable<String>(stableId);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
@@ -5458,6 +5494,9 @@ class Group extends DataClass implements Insertable<Group> {
       inheritCharacterLorebooks: Value(inheritCharacterLorebooks),
       baselineRealismState: Value(baselineRealismState),
       characterSystemPrompts: Value(characterSystemPrompts),
+      stableId: stableId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stableId),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -5496,6 +5535,7 @@ class Group extends DataClass implements Insertable<Group> {
       characterSystemPrompts: serializer.fromJson<String>(
         json['characterSystemPrompts'],
       ),
+      stableId: serializer.fromJson<String?>(json['stableId']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -5527,6 +5567,7 @@ class Group extends DataClass implements Insertable<Group> {
       'characterSystemPrompts': serializer.toJson<String>(
         characterSystemPrompts,
       ),
+      'stableId': serializer.toJson<String?>(stableId),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -5550,6 +5591,7 @@ class Group extends DataClass implements Insertable<Group> {
     bool? inheritCharacterLorebooks,
     String? baselineRealismState,
     String? characterSystemPrompts,
+    Value<String?> stableId = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => Group(
@@ -5573,6 +5615,7 @@ class Group extends DataClass implements Insertable<Group> {
     baselineRealismState: baselineRealismState ?? this.baselineRealismState,
     characterSystemPrompts:
         characterSystemPrompts ?? this.characterSystemPrompts,
+    stableId: stableId.present ? stableId.value : this.stableId,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -5619,6 +5662,7 @@ class Group extends DataClass implements Insertable<Group> {
       characterSystemPrompts: data.characterSystemPrompts.present
           ? data.characterSystemPrompts.value
           : this.characterSystemPrompts,
+      stableId: data.stableId.present ? data.stableId.value : this.stableId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -5644,6 +5688,7 @@ class Group extends DataClass implements Insertable<Group> {
           ..write('inheritCharacterLorebooks: $inheritCharacterLorebooks, ')
           ..write('baselineRealismState: $baselineRealismState, ')
           ..write('characterSystemPrompts: $characterSystemPrompts, ')
+          ..write('stableId: $stableId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -5669,6 +5714,7 @@ class Group extends DataClass implements Insertable<Group> {
     inheritCharacterLorebooks,
     baselineRealismState,
     characterSystemPrompts,
+    stableId,
     updatedAt,
     deletedAt,
   );
@@ -5693,6 +5739,7 @@ class Group extends DataClass implements Insertable<Group> {
           other.inheritCharacterLorebooks == this.inheritCharacterLorebooks &&
           other.baselineRealismState == this.baselineRealismState &&
           other.characterSystemPrompts == this.characterSystemPrompts &&
+          other.stableId == this.stableId &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -5715,6 +5762,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
   final Value<bool> inheritCharacterLorebooks;
   final Value<String> baselineRealismState;
   final Value<String> characterSystemPrompts;
+  final Value<String?> stableId;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -5736,6 +5784,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     this.inheritCharacterLorebooks = const Value.absent(),
     this.baselineRealismState = const Value.absent(),
     this.characterSystemPrompts = const Value.absent(),
+    this.stableId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -5758,6 +5807,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     this.inheritCharacterLorebooks = const Value.absent(),
     this.baselineRealismState = const Value.absent(),
     this.characterSystemPrompts = const Value.absent(),
+    this.stableId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -5781,6 +5831,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     Expression<bool>? inheritCharacterLorebooks,
     Expression<String>? baselineRealismState,
     Expression<String>? characterSystemPrompts,
+    Expression<String>? stableId,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -5807,6 +5858,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
         'baseline_realism_state': baselineRealismState,
       if (characterSystemPrompts != null)
         'character_system_prompts': characterSystemPrompts,
+      if (stableId != null) 'stable_id': stableId,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -5831,6 +5883,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     Value<bool>? inheritCharacterLorebooks,
     Value<String>? baselineRealismState,
     Value<String>? characterSystemPrompts,
+    Value<String?>? stableId,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -5856,6 +5909,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
       baselineRealismState: baselineRealismState ?? this.baselineRealismState,
       characterSystemPrompts:
           characterSystemPrompts ?? this.characterSystemPrompts,
+      stableId: stableId ?? this.stableId,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -5924,6 +5978,9 @@ class GroupsCompanion extends UpdateCompanion<Group> {
         characterSystemPrompts.value,
       );
     }
+    if (stableId.present) {
+      map['stable_id'] = Variable<String>(stableId.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -5956,6 +6013,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
           ..write('inheritCharacterLorebooks: $inheritCharacterLorebooks, ')
           ..write('baselineRealismState: $baselineRealismState, ')
           ..write('characterSystemPrompts: $characterSystemPrompts, ')
+          ..write('stableId: $stableId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -14555,6 +14613,7 @@ typedef $$GroupsTableCreateCompanionBuilder =
       Value<bool> inheritCharacterLorebooks,
       Value<String> baselineRealismState,
       Value<String> characterSystemPrompts,
+      Value<String?> stableId,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -14578,6 +14637,7 @@ typedef $$GroupsTableUpdateCompanionBuilder =
       Value<bool> inheritCharacterLorebooks,
       Value<String> baselineRealismState,
       Value<String> characterSystemPrompts,
+      Value<String?> stableId,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -14674,6 +14734,11 @@ class $$GroupsTableFilterComposer
 
   ColumnFilters<String> get characterSystemPrompts => $composableBuilder(
     column: $table.characterSystemPrompts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stableId => $composableBuilder(
+    column: $table.stableId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -14782,6 +14847,11 @@ class $$GroupsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get stableId => $composableBuilder(
+    column: $table.stableId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -14877,6 +14947,9 @@ class $$GroupsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get stableId =>
+      $composableBuilder(column: $table.stableId, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -14929,6 +15002,7 @@ class $$GroupsTableTableManager
                 Value<bool> inheritCharacterLorebooks = const Value.absent(),
                 Value<String> baselineRealismState = const Value.absent(),
                 Value<String> characterSystemPrompts = const Value.absent(),
+                Value<String?> stableId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -14950,6 +15024,7 @@ class $$GroupsTableTableManager
                 inheritCharacterLorebooks: inheritCharacterLorebooks,
                 baselineRealismState: baselineRealismState,
                 characterSystemPrompts: characterSystemPrompts,
+                stableId: stableId,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -14973,6 +15048,7 @@ class $$GroupsTableTableManager
                 Value<bool> inheritCharacterLorebooks = const Value.absent(),
                 Value<String> baselineRealismState = const Value.absent(),
                 Value<String> characterSystemPrompts = const Value.absent(),
+                Value<String?> stableId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -14994,6 +15070,7 @@ class $$GroupsTableTableManager
                 inheritCharacterLorebooks: inheritCharacterLorebooks,
                 baselineRealismState: baselineRealismState,
                 characterSystemPrompts: characterSystemPrompts,
+                stableId: stableId,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
