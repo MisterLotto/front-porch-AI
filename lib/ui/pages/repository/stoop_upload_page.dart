@@ -33,9 +33,12 @@ import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
 /// Pops `true` once a card has been submitted for review.
 class StoopUploadPage extends StatefulWidget {
   /// When set, the wizard runs in UPDATE mode: it is locked to this local
-  /// character (the Pick step is skipped) and publishes a new version of the
-  /// existing Stoop post [updateStoopId] IN PLACE, instead of creating a new one.
+  /// character OR group (the Pick step is skipped) and publishes a new version
+  /// of the existing Stoop post [updateStoopId] IN PLACE, instead of creating a
+  /// new one. Exactly one of [updateCharacter] / [updateGroup] is set in update
+  /// mode.
   final CharacterCard? updateCharacter;
+  final GroupChat? updateGroup;
   final String? updateStoopId;
 
   /// The posted card's current NSFW flag, so update mode preserves it by default.
@@ -44,11 +47,14 @@ class StoopUploadPage extends StatefulWidget {
   const StoopUploadPage({
     super.key,
     this.updateCharacter,
+    this.updateGroup,
     this.updateStoopId,
     this.initialNsfw = false,
   });
 
-  bool get isUpdate => updateStoopId != null && updateCharacter != null;
+  bool get isUpdate =>
+      updateStoopId != null &&
+      (updateCharacter != null || updateGroup != null);
 
   @override
   State<StoopUploadPage> createState() => _StoopUploadPageState();
@@ -106,23 +112,32 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   }
 
   void _selectGroup(GroupChat group) {
-    setState(() {
-      _selectedGroup = group;
-      _selected = null;
-      _name.text = group.name;
-      _setSummaryFrom(group.scenario); // groups have no description; seed scenario
-      _tagPool = [];
-      _tags = [];
-    });
+    setState(() => _applyGroupSelection(group));
+  }
+
+  // Pre-fills the wizard from a chosen group. No setState — safe to call from
+  // initState (update mode) and from _selectGroup (wrapped in setState).
+  void _applyGroupSelection(GroupChat group) {
+    _selectedGroup = group;
+    _selected = null;
+    _name.text = group.name;
+    _setSummaryFrom(group.scenario); // groups have no description; seed scenario
+    _tagPool = [];
+    _tags = [];
   }
 
   @override
   void initState() {
     super.initState();
-    // Update mode: lock to the given character and start past the Pick step.
+    // Update mode: lock to the given character OR group and skip the Pick step.
     final uc = widget.updateCharacter;
+    final ug = widget.updateGroup;
     if (uc != null) {
       _applySelection(uc);
+      _nsfw = widget.initialNsfw;
+      _currentStep = 1;
+    } else if (ug != null) {
+      _applyGroupSelection(ug);
       _nsfw = widget.initialNsfw;
       _currentStep = 1;
     }
@@ -260,20 +275,34 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         return;
       }
       final collage = await createGroupAvatarCollage(avatarPaths);
-      await BackporchApi().uploadCharacter(
-        accessToken: auth.accessToken!,
-        payload: {
-          'name': _name.text.trim(),
-          'summary': _summary.text.trim(),
-          'type': 'GROUP',
-          'nsfw': _nsfw,
-          'tags': _tags,
-          'card': groupCard.toJson(),
-          'changelog': 'Initial upload',
-        },
-        avatarBytes: collage,
-        avatarFilename: 'cover.png',
-      );
+      final payload = {
+        'name': _name.text.trim(),
+        'summary': _summary.text.trim(),
+        'type': 'GROUP',
+        'nsfw': _nsfw,
+        'tags': _tags,
+        'card': groupCard.toJson(),
+        'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
+      };
+      if (widget.isUpdate) {
+        // In-place new version of the existing group post (keeps id/downloads/
+        // score). The group card now carries a stable id, so this is the same
+        // in-place path solo characters use.
+        await BackporchApi().publishVersion(
+          accessToken: auth.accessToken!,
+          characterId: widget.updateStoopId!,
+          payload: payload,
+          avatarBytes: collage,
+          avatarFilename: 'cover.png',
+        );
+      } else {
+        await BackporchApi().uploadCharacter(
+          accessToken: auth.accessToken!,
+          payload: payload,
+          avatarBytes: collage,
+          avatarFilename: 'cover.png',
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
       if (mounted) setState(() => _error = _mapError(e.code));

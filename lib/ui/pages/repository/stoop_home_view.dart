@@ -12,10 +12,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
+import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_upload_page.dart';
@@ -144,6 +147,75 @@ class _StoopHomeViewState extends State<StoopHomeView> {
       MaterialPageRoute(
         builder: (_) => StoopUploadPage(
           updateCharacter: saved,
+          updateStoopId: c.id,
+          initialNsfw: c.nsfw,
+        ),
+      ),
+    );
+    if (updated == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Update submitted for review.')),
+      );
+      _load();
+    }
+  }
+
+  // Publish a new version of an already-shared GROUP in place. Finds the local
+  // group this post came from (by the portable group stable id, else by name),
+  // opens the full group editor (Save → "Next", which saves locally + returns
+  // the group), then the Stoop publish step re-publishes the same post.
+  Future<void> _startGroupUpdate(StoopCharacter c) async {
+    final repo = context.read<GroupChatRepository>();
+    GroupChat? match;
+    final sid = c.originStableId;
+    if (sid != null && sid.isNotEmpty) {
+      for (final g in repo.groups) {
+        if (g.stableId == sid) {
+          match = g;
+          break;
+        }
+      }
+    }
+    if (match == null) {
+      final wanted = c.name.trim().toLowerCase();
+      for (final g in repo.groups) {
+        if (g.name.trim().toLowerCase() == wanted) {
+          match = g;
+          break;
+        }
+      }
+    }
+    if (match == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Couldn’t find “${c.name}” in your groups to update — '
+              'it may have been renamed or removed.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    // 1) Full group editor (Save → "Next"). Saves the local group first (so the
+    //    edits — including the new Realism & Dynamics tab — are the source of
+    //    truth), then returns the freshly-saved group.
+    final saved = await Navigator.of(context).push<GroupChat>(
+      MaterialPageRoute(
+        builder: (_) => EditGroupPage(
+          group: match!,
+          saveLabel: 'Next',
+          popWithGroupOnSave: true,
+        ),
+      ),
+    );
+    if (saved == null || !mounted) return; // backed out without saving
+    // 2) Stoop publish step (summary/tags/NSFW/standards → new version in place).
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => StoopUploadPage(
+          updateGroup: saved,
           updateStoopId: c.id,
           initialNsfw: c.nsfw,
         ),
@@ -314,11 +386,13 @@ class _StoopHomeViewState extends State<StoopHomeView> {
                   ),
                 ),
               ),
-              // Update publishes a new version of THIS post in place. Groups get
-              // this once they carry a stable id (handled separately).
-              if (c.type == 'SOLO')
-                OutlinedButton.icon(
-                  onPressed: () => _startUpdate(c),
+              // Update publishes a new version of THIS post in place — for solo
+              // characters and (now that groups carry a portable stable id) group
+              // cards alike, each through its own editor + publish flow.
+              OutlinedButton.icon(
+                  onPressed: () => c.type == 'GROUP'
+                      ? _startGroupUpdate(c)
+                      : _startUpdate(c),
                   icon: const Icon(Icons.autorenew_rounded, size: 15),
                   label: const Text('Update'),
                   style: OutlinedButton.styleFrom(
