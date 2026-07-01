@@ -19,6 +19,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/group_card.dart';
+import 'package:front_porch_ai/utils/group_stable_id.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/group_member.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
@@ -299,6 +300,10 @@ class GroupCardImporter {
 
     final newGroup = GroupChat(
       id: groupId,
+      // Preserve the card's portable stable id so the owner can UPDATE the same
+      // Stoop post from this device (cross-device). Absent on older cards → left
+      // null; a fresh id is generated on first export/share here instead.
+      stableId: readGroupStableIdFromExtensions(groupCard.extensions),
       name: groupCard.name,
       turnOrder: groupCard.turnOrder == 'random'
           ? TurnOrder.random

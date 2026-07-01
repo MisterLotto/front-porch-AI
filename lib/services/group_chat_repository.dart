@@ -21,6 +21,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as path;
+import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/group_member.dart';
@@ -81,6 +82,7 @@ class GroupChatRepository extends ChangeNotifier {
         _groups.add(
           GroupChat(
             id: g.id,
+            stableId: g.stableId,
             name: g.name,
             turnOrder: TurnOrder.values.firstWhere(
               (e) => e.name == g.turnOrder,
@@ -125,6 +127,7 @@ class GroupChatRepository extends ChangeNotifier {
     // characterIds is legacy dead weight (always '[]' — membership is in group_members).
     final companion = GroupsCompanion(
       id: Value(group.id),
+      stableId: Value(group.stableId),
       name: Value(group.name),
       characterIds: const Value('[]'),
       turnOrder: Value(group.turnOrder.name),
@@ -149,6 +152,7 @@ class GroupChatRepository extends ChangeNotifier {
       await _db.insertGroup(
         GroupsCompanion.insert(
           id: group.id,
+          stableId: Value(group.stableId),
           name: group.name,
           characterIds: const Value(
             '[]',
@@ -182,6 +186,20 @@ class GroupChatRepository extends ChangeNotifier {
       _groups.add(group);
     }
     notifyListeners();
+  }
+
+  /// Guarantee this group has a portable, device-independent [GroupChat.stableId]
+  /// (used to update a shared group in place on The Stoop instead of duplicating
+  /// it, and to re-associate it after switching devices). Generates + persists
+  /// one on the first call for a group that lacks it; a no-op afterwards.
+  /// Returns the id. Mutates the passed [group] so callers see it immediately.
+  Future<String> ensureStableId(GroupChat group) async {
+    final existing = group.stableId?.trim();
+    if (existing != null && existing.isNotEmpty) return existing;
+    final id = const Uuid().v4();
+    group.stableId = id;
+    await save(group);
+    return id;
   }
 
   Future<void> delete(String groupId) async {

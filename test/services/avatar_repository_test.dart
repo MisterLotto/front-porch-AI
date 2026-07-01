@@ -50,8 +50,27 @@ void main() {
       await db.close();
     });
 
-    test('schema version is 33', () {
-      expect(db.schemaVersion, 33);
+    test('schema version is 34', () {
+      expect(db.schemaVersion, 34);
+    });
+
+    test('groups table has stable_id column (v34) — nullable, round-trips', () async {
+      final base = DateTime.now().millisecondsSinceEpoch;
+      // Nullable: a group inserted without a stable id keeps it null.
+      final gid1 = 'grp-a-$base';
+      await db.insertGroup(GroupsCompanion.insert(id: gid1, name: 'G1'));
+      expect((await db.getGroupById(gid1))!.stableId, null);
+
+      // Round-trips when provided.
+      final gid2 = 'grp-b-$base';
+      await db.insertGroup(
+        GroupsCompanion.insert(
+          id: gid2,
+          name: 'G2',
+          stableId: const Value('sid-xyz'),
+        ),
+      );
+      expect((await db.getGroupById(gid2))!.stableId, 'sid-xyz');
     });
 
     test('characters table has prime_avatar_index column', () async {
