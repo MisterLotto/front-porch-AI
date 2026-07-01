@@ -31,6 +31,7 @@ import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
 import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/group_realism_blobs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:uuid/uuid.dart';
@@ -680,43 +681,26 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
     final lb = Lorebook(entries: List.from(_groupLoreEntries));
     final groupLoreJson = jsonEncode(lb.toJson());
 
-    // Build realism blobs (create-only path now).
+    // Build realism blobs via the shared serializer (the SAME contract the
+    // post-creation group editor uses — one source of truth, unit-tested in
+    // test/utils/group_realism_blobs_test.dart).
     String baselineJson = '{}';
     String defaultMemberJson = '{}';
 
     if (_realismEnabled) {
-      final defaultMember = <String, dynamic>{'perChar': <String, dynamic>{}};
-
-      for (final c in _members) {
-        final id = _stableId(c);
-        var seed = _memberRealismSeeds[id] ?? _defaultRealismSeedFor(c);
-
-        if (!_needsSimEnabled) {
-          seed = Map<String, dynamic>.from(seed)..remove('needs');
-        }
-
-        (defaultMember['perChar'] as Map)[id] = seed;
-      }
-
-      defaultMemberJson = jsonEncode(defaultMember);
-
-      final baseline = <String, dynamic>{};
-      for (final c in _members) {
-        final id = _stableId(c);
-        var seed = _memberRealismSeeds[id] ?? _defaultRealismSeedFor(c);
-        if (!_needsSimEnabled) {
-          seed = Map<String, dynamic>.from(seed)..remove('needs');
-        }
-        baseline[id] = {
-          'affection': (seed['affection'] as num?)?.toInt() ?? 35,
-          'trust': (seed['trust'] as num?)?.toInt() ?? 40,
-          'emotion': (seed['emotion'] as String?) ?? 'neutral',
-          'emotionIntensity': (seed['emotionIntensity'] as String?) ?? 'mild',
-          'timeOfDay': _globalTimeOfDay,
-          'dayCount': _globalDayCount,
-        };
-      }
-      baselineJson = jsonEncode(baseline);
+      final seeds = <String, Map<String, dynamic>>{
+        for (final c in _members)
+          _stableId(c): _memberRealismSeeds[_stableId(c)] ??
+              _defaultRealismSeedFor(c),
+      };
+      final blobs = buildGroupRealismBlobs(
+        seeds: seeds,
+        needsEnabled: _needsSimEnabled,
+        timeOfDay: _globalTimeOfDay,
+        dayCount: _globalDayCount,
+      );
+      defaultMemberJson = blobs.defaultMemberJson;
+      baselineJson = blobs.baselineJson;
     }
 
     final groupId = 'group_${DateTime.now().millisecondsSinceEpoch}';
