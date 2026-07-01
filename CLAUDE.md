@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Front Porch AI is a Flutter desktop application (Windows/Linux/macOS) for AI-powered character chat using local LLMs via KoboldCpp. It features a "Realism Engine" for emotion/trust/relationship tracking, RAG memory via ONNX embeddings, TTS/STT, cloud sync, and a novel generator.
+Front Porch AI is a Flutter desktop application (Windows/Linux/macOS) for AI-powered character chat using local LLMs via KoboldCpp. It features a "Realism Engine" for emotion/trust/relationship tracking, RAG memory via ONNX embeddings, TTS/STT, a novel generator, **The Stoop** (a built-in, opt-in community character hub — see its section below), and a companion **web/mobile UI** (`web_ui/`). (Cloud Sync has been removed; automatic local backups are its replacement.)
 
 **License:** AGPL-3.0 (v0.9.0+), GPLv3 (earlier)
 **State management:** Provider (migrating to Riverpod for new code)
@@ -190,6 +190,22 @@ When you touch any of the above you **must**: keep 1:1 and group producing equiv
 
 `StoryPipelineService` is created via `ChangeNotifierProxyProvider2` in `main.dart`. The `update` function must NOT return the previous instance early — it must recreate the service with `llmProvider.activeService` each time so backend switches (Kobold ↔ OpenRouter/Nano-GPT) take effect.
 
+## The Stoop (Community Character Hub) & Its Backend
+
+**The Stoop** is the built-in, opt-in, account-gated, strictly-18+ community hub for sharing character and group cards (browse/search, upload, download, upvotes, follow creators, and mod↔user messaging). It is served by a **companion backend API** (an independent service) that the app talks to over HTTPS. The Dart client lives in **`lib/services/backporch/`** — auth, browse/search, upload, downloads, messaging (+ a WebSocket for live messages/typing), and models such as `StoopCard` / `StoopCardDetail`. Everything else in the app remains local-first; The Stoop and any remote APIs are opt-in.
+
+**The backend's source, hosting, and deployment are maintained privately and are NOT part of this repository.** Do not add operational details (hosts, IPs, deploy steps, buckets, credentials) to this file or the repo.
+
+### API backward-compatibility (non-negotiable)
+The backend is deployed independently and **far more frequently** than the app, and users update the app slowly — so the live fleet is **always a mix of app versions**. A backend change must never break an already-installed app:
+- **Responses are additive-only.** Never remove, rename, or change the type/meaning of a field an app reads. New response fields are **optional/nullable**.
+- Never make a previously-optional **request** field required, and never tighten validation to reject payloads older apps send. Prefer computing derived values **server-side** over demanding new client inputs (e.g. a card's token count is computed on the server from the card the app already uploads).
+- **DB migrations stay additive** (nullable columns / defaults) so a mixed fleet — and a rollback — stay safe.
+- The Dart client must **parse defensively**: null-safe casts with defaults; tolerate missing *and* unknown fields.
+- A genuinely breaking change ships as a **new endpoint** (e.g. `/v2/…`), never by mutating an existing one, and keeps the old one alive until the fleet ages out.
+
+There is no app-version gating in the backend, and there must not be — the contract above is what keeps old and new apps interoperable.
+
 ## Branch Workflow
 
 | Change Type                  | Target Branch              |
@@ -280,6 +296,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 
 ### Verification
 - **ALWAYS run `flutter analyze` after making code changes** — the project is at 0 warnings on the active rule set. New code must not introduce warnings. Never claim changes are "verified" without running it. Variables declared inside `try` blocks are not accessible outside — declare them before the `try` with defaults.
+- **Do NOT bulk-run `dart format` / `flutter format` on whole files.** The codebase is mid-migration to the Dart 3.11 "tall style" formatter, so running the new formatter on a not-yet-migrated file rewraps **hundreds of unrelated lines** (and can even introduce lint errors — e.g. splitting a one-line `if (x) return;` trips `curly_braces_in_flow_control_structures`), burying your real change in churn. Match the surrounding style **by hand** in the regions you edit; the Edit tool already preserves it. A whole-file reformat is its own intentional, isolated commit — never a side effect of a feature change.
 - **Cross-platform verification is mandatory.** Front Porch AI is a Windows + macOS + Linux desktop app. Every non-trivial change must be checked (or have an explicit plan) so it does not regress on any platform — especially file paths, process spawning, Python sidecars, and anything touching `dart:io` or native binaries.
 - **Realism & Needs parity is mandatory** (see the dedicated section). Any change to the Realism Engine or Needs simulation must keep 1:1 and group behavior consistent unless explicitly approved otherwise.
 - **Because the user cannot review code**, treat every change as if it will be accepted without scrutiny. Leave the codebase strictly cleaner (or at minimum no worse) than you found it.
