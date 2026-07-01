@@ -69,6 +69,14 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   final _tagInput = TextEditingController();
   final _pickSearch = TextEditingController();
 
+  // Editable card content (solo). Pre-filled from the chosen character; edits
+  // here go into the published card only — the local library copy is untouched.
+  final _descCtrl = TextEditingController();
+  final _persCtrl = TextEditingController();
+  final _scenCtrl = TextEditingController();
+  final _firstMesCtrl = TextEditingController();
+  final _exCtrl = TextEditingController();
+
   /// Lowercased filter for the Pick step's character/group grids.
   String _pickQuery = '';
 
@@ -88,6 +96,11 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _summary.dispose();
     _tagInput.dispose();
     _pickSearch.dispose();
+    _descCtrl.dispose();
+    _persCtrl.dispose();
+    _scenCtrl.dispose();
+    _firstMesCtrl.dispose();
+    _exCtrl.dispose();
     super.dispose();
   }
 
@@ -139,6 +152,12 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _selectedGroup = null;
     _name.text = card.name;
     _setSummaryFrom(card.description);
+    // Pre-fill the editable content fields (solo) from the card.
+    _descCtrl.text = card.description;
+    _persCtrl.text = card.personality;
+    _scenCtrl.text = card.scenario;
+    _firstMesCtrl.text = card.firstMessage;
+    _exCtrl.text = card.mesExample;
     // De-duplicate (preserving order) into the candidate pool, then
     // pre-select the first [_maxTags]; the creator can re-pick on the step.
     final seen = <String>{};
@@ -184,13 +203,22 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     try {
       final bytes = await File(card.imagePath!).readAsBytes();
       final ext = card.imagePath!.split('.').last.toLowerCase();
+      // Apply any by-hand content edits onto the card that gets published (the
+      // local library copy is never touched).
+      final cardJson = card.toJson();
+      cardJson['name'] = _name.text.trim();
+      cardJson['description'] = _descCtrl.text;
+      cardJson['personality'] = _persCtrl.text;
+      cardJson['scenario'] = _scenCtrl.text;
+      cardJson['first_mes'] = _firstMesCtrl.text;
+      cardJson['mes_example'] = _exCtrl.text;
       final payload = {
         'name': _name.text.trim(),
         'summary': _summary.text.trim(),
         'type': 'SOLO',
         'nsfw': _nsfw,
         'tags': _tags,
-        'card': card.toJson(),
+        'card': cardJson,
         'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
       };
       if (widget.isUpdate) {
@@ -707,6 +735,27 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       key: const ValueKey('content'),
       padding: const EdgeInsets.all(24),
       children: [
+        // Editable card content (solo only — groups carry per-member cards).
+        // Pre-filled from the character; edits publish to the Stoop card only,
+        // leaving the local library copy untouched.
+        if (_selected != null) ...[
+          _label('Card content'),
+          Text(
+            'Tweak the text that ships with this card. Changes here apply to the '
+            'shared card only — your library copy stays as-is.',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _contentField('Persona / description', _descCtrl, minLines: 3),
+          _contentField('Personality', _persCtrl, minLines: 2),
+          _contentField('Scenario', _scenCtrl, minLines: 2),
+          _contentField('First message', _firstMesCtrl, minLines: 3),
+          _contentField('Example dialogue', _exCtrl, minLines: 2),
+          const SizedBox(height: 12),
+        ],
         Container(
           decoration: BoxDecoration(
             color: AppColors.surfaceContainerOf(context),
@@ -928,6 +977,41 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       ),
     ),
   );
+
+  // A labelled, multi-line editor for one card-content field.
+  Widget _contentField(
+    String label,
+    TextEditingController ctrl, {
+    int minLines = 2,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: ctrl,
+            minLines: minLines,
+            maxLines: minLines + 6,
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 13,
+            ),
+            decoration: _input(''),
+          ),
+        ],
+      ),
+    );
+  }
 
   InputDecoration _input(String hint) => InputDecoration(
     hintText: hint,

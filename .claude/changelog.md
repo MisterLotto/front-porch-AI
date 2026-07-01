@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-30 — Stoop update flow: edit card content by hand
+- **Files:** lib/ui/pages/repository/stoop_upload_page.dart.
+- **Reason:** The Update (and Share) flow only let you change the Stoop listing metadata (name/summary/tags/NSFW), not the card's actual content — so you couldn't fix a typo or tweak the persona/scenario without editing the library character and re-uploading. Added an editable "Card content" section (Persona/description, Personality, Scenario, First message, Example dialogue) to the wizard's Content step (solo only). Pre-filled from the chosen character via the existing _applySelection; on publish, those five keys (plus name) are overridden onto a copy of card.toJson() so edits go to the SHARED card only — the local library copy is never touched. New helper _contentField (one labelled multiline editor, reused 5×). Lorebook/greetings/avatar/realism still come from the library card (noted for a later pass).
+- **Verified:** flutter analyze clean; flutter build macos ✓.
+- **Commit:** (below)
+
 ## 2026-06-30 — Stoop: in-place character updates (Mine "Update" + version pill)
 - **Dart files:** lib/services/backporch/stoop_character.dart (+originStableId), backporch_api.dart (+publishVersion → POST /characters/:id/versions), lib/ui/pages/repository/stoop_card_detail_page.dart (version pill v2+ in hero footer), stoop_home_view.dart (Mine "Update" button + _startUpdate library-match), stoop_upload_page.dart (update mode: updateCharacter/updateStoopId/initialNsfw params, initState pre-fill, _applySelection extracted from _select, _publish branches to publishVersion, Back stops at Details, title "Update character").
 - **Backend files (separate private repo — backporch-server):** prisma/schema.prisma (+Character.originStableId + unique(ownerId,originStableId)), migration 20260701030126_add_character_origin_stable_id, src/lib/card-tokens.ts (+cardStableId + backfillOriginStableIds), src/routes/characters.ts (idempotent create on (owner,stableId) via shared appendCharacterVersion helper; /versions now uses that helper; /me/characters returns originStableId), src/server.ts (boot backfill).
