@@ -153,8 +153,14 @@ class WebServerHost extends ChangeNotifier {
       _storyPipelineService = service;
 
   /// The auth service (lazily built once a database is available) — exposed so
-  /// settings UI can surface account/2FA state.
-  AuthService? get auth => _auth;
+  /// the desktop settings UI can surface the account and offer the local
+  /// recovery actions (sign out all devices / reset web login) even while the
+  /// server itself is stopped. `start()` reuses the same instance.
+  AuthService? get auth {
+    final db = _db;
+    if (db == null) return null;
+    return _auth ??= AuthService(db);
+  }
 
   /// Remote-access orchestrator (null until the server is running). Exposed so
   /// the Flutter settings UI can read tunnel state directly.
@@ -185,7 +191,7 @@ class WebServerHost extends ChangeNotifier {
         (settings.webServerAutoRemote && tsRunning);
     final bindAddress = exposeAll ? InternetAddress.anyIPv4 : '127.0.0.1';
 
-    final auth = _auth = AuthService(db);
+    final auth = _auth ??= AuthService(db);
     await auth.sessions.sweep();
 
     final chatService = _chatService;

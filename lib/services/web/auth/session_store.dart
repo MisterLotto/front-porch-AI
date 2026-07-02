@@ -148,6 +148,17 @@ class SessionStore {
     );
   }
 
+  /// Log out every device for [userId] EXCEPT the session holding
+  /// [keepRawToken] — used after a password change so the device that made
+  /// the change stays signed in while any stolen/stale session dies.
+  Future<void> revokeOthers(String userId, String keepRawToken) async {
+    await _db.customStatement(
+      'UPDATE web_auth_sessions SET revoked = 1 '
+      'WHERE user_id = ? AND token_hash != ?',
+      [userId, _hashToken(keepRawToken)],
+    );
+  }
+
   /// Delete expired or revoked rows. Cheap; safe to call periodically/at start.
   Future<void> sweep() async {
     await _db.customStatement(

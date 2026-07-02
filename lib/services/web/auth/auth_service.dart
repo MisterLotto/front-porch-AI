@@ -51,6 +51,16 @@ class TotpEnrollment {
   final String provisioningUri;
 }
 
+/// Outcome of a credential change (or another re-authenticated operation).
+enum CredentialChangeStatus {
+  success,
+  invalidCurrentPassword,
+  totpRequired,
+  invalidInput,
+  notSetUp,
+  lockedOut,
+}
+
 /// The single-account secure-login service for the rewritten web server.
 ///
 /// One credentials row (id 'local'). Coordinates Argon2id password hashing,
@@ -87,6 +97,14 @@ class AuthService {
 
   /// True when no account exists yet — the server runs in setup mode.
   Future<bool> isSetupRequired() async => (await _loadCredentials()) == null;
+
+  /// The account's public bits for display (web account page, desktop
+  /// settings card). Null when no account exists yet.
+  Future<({String username, bool totpEnabled})?> accountInfo() async {
+    final creds = await _loadCredentials();
+    if (creds == null) return null;
+    return (username: creds.username, totpEnabled: creds.totpEnabled);
+  }
 
   /// Create the single account. Fails if one already exists or input is invalid.
   Future<bool> setupAccount(String username, String password) async {
@@ -166,6 +184,60 @@ class AuthService {
 
   Future<void> logout(String rawToken) => sessions.revoke(rawToken);
 
+  // ── Credential management ─────────────────────────────────────────────────
+
+  /// Change the username and/or password. Requires the CURRENT password (and,
+  /// with 2FA on, a current code) even from a signed-in session, so a stolen
+  /// device with a live cookie cannot take the account over. Failed attempts
+  /// feed the same lockout as login, so this endpoint can't be used to
+  /// brute-force the current password from a hijacked session.
+  Future<CredentialChangeStatus> changeCredentials({
+    required String currentPassword,
+    String? totpCode,
+    String? newUsername,
+    String? newPassword,
+    String? ip,
+  }) async {
+    final creds = await _loadCredentials();
+    if (creds == null) return CredentialChangeStatus.notSetUp;
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return denied;
+
+    final u = newUsername?.trim() ?? '';
+    final p = newPassword ?? '';
+    if (u.isEmpty && p.isEmpty) return CredentialChangeStatus.invalidInput;
+    if (p.isNotEmpty && p.length < 8) return CredentialChangeStatus.invalidInput;
+
+    await _db.customStatement(
+      'UPDATE web_auth_credentials SET username = ?, password_hash = ?, '
+      'updated_at = ? WHERE id = ?',
+      [
+        u.isEmpty ? creds.username : u,
+        p.isEmpty ? creds.passwordHash : await _hasher.hash(p),
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        _accountId,
+      ],
+    );
+    _limiter.recordSuccess(creds.username);
+    return CredentialChangeStatus.success;
+  }
+
+  /// Log out every signed-in web device (desktop settings "Sign out all").
+  Future<void> signOutAllDevices() => sessions.revokeAllFor(_accountId);
+
+  /// Wipe the account and every session, returning the server to first-run
+  /// setup mode. Desktop-only recovery: whoever sits at the desktop already
+  /// owns the database, so local access is strictly a stronger credential
+  /// than the web password — this is the "forgot password" path.
+  Future<void> resetAccount() async {
+    _pendingTotpSecret = null;
+    await sessions.revokeAllFor(_accountId);
+    await _db.customStatement(
+      'DELETE FROM web_auth_credentials WHERE id = ?',
+      [_accountId],
+    );
+  }
+
   // ── TOTP enrollment ───────────────────────────────────────────────────────
 
   /// Start enrollment: returns a fresh secret + provisioning URI for the QR.
@@ -204,17 +276,61 @@ class AuthService {
     return recovery;
   }
 
-  /// Disable 2FA, clearing the secret and recovery codes.
-  Future<void> disableTotp() async {
+  /// Disable 2FA, clearing the secret and recovery codes. Requires the
+  /// current password + a current code (same re-auth policy as
+  /// [changeCredentials]) so a hijacked session can't silently strip the
+  /// second factor.
+  Future<CredentialChangeStatus> disableTotp({
+    required String currentPassword,
+    String? totpCode,
+    String? ip,
+  }) async {
+    final creds = await _loadCredentials();
+    if (creds == null) return CredentialChangeStatus.notSetUp;
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return denied;
     _pendingTotpSecret = null;
     await _db.customStatement(
       'UPDATE web_auth_credentials SET totp_secret = NULL, totp_enabled = 0, '
       'recovery_codes = NULL, updated_at = ? WHERE id = ?',
       [DateTime.now().millisecondsSinceEpoch ~/ 1000, _accountId],
     );
+    _limiter.recordSuccess(creds.username);
+    return CredentialChangeStatus.success;
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
+
+  /// Shared "sudo mode" gate for credential operations: verify the current
+  /// password and, when 2FA is on, a current TOTP or recovery code. Failures
+  /// count toward the login lockout. Returns null when re-auth passes, else
+  /// the status to surface.
+  Future<CredentialChangeStatus?> _reauthenticate(
+    WebAuthCredential creds,
+    String currentPassword,
+    String? totpCode,
+    String? ip,
+  ) async {
+    if (!_limiter.ipAllowed(ip) || _limiter.lockoutFor(creds.username) != null) {
+      return CredentialChangeStatus.lockedOut;
+    }
+    if (!await _hasher.verify(currentPassword, creds.passwordHash)) {
+      _limiter.recordFailure(creds.username, ip);
+      return CredentialChangeStatus.invalidCurrentPassword;
+    }
+    if (creds.totpEnabled) {
+      final code = totpCode?.trim() ?? '';
+      final secret = creds.totpSecret;
+      final accepted = code.isNotEmpty &&
+          ((secret != null && _totp.verify(secret, code)) ||
+              await _consumeRecoveryCode(creds, code));
+      if (!accepted) {
+        if (code.isNotEmpty) _limiter.recordFailure(creds.username, ip);
+        return CredentialChangeStatus.totpRequired;
+      }
+    }
+    return null;
+  }
 
   Future<WebAuthCredential?> _loadCredentials() async {
     final rows = await _db.customSelect(
