@@ -8560,6 +8560,1041 @@ class DataBankEntriesCompanion extends UpdateCompanion<DataBankEntry> {
   }
 }
 
+class $JournalMemoriesTable extends JournalMemories
+    with TableInfo<$JournalMemoriesTable, JournalMemoryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JournalMemoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceMessageIdsMeta = const VerificationMeta(
+    'sourceMessageIds',
+  );
+  @override
+  late final GeneratedColumn<String> sourceMessageIds = GeneratedColumn<String>(
+    'source_message_ids',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('moment'),
+  );
+  static const VerificationMeta _emotionLabelMeta = const VerificationMeta(
+    'emotionLabel',
+  );
+  @override
+  late final GeneratedColumn<String> emotionLabel = GeneratedColumn<String>(
+    'emotion_label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _emotionIntensityMeta = const VerificationMeta(
+    'emotionIntensity',
+  );
+  @override
+  late final GeneratedColumn<String> emotionIntensity = GeneratedColumn<String>(
+    'emotion_intensity',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _originalEmotionLabelMeta =
+      const VerificationMeta('originalEmotionLabel');
+  @override
+  late final GeneratedColumn<String> originalEmotionLabel =
+      GeneratedColumn<String>(
+        'original_emotion_label',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _heatMeta = const VerificationMeta('heat');
+  @override
+  late final GeneratedColumn<double> heat = GeneratedColumn<double>(
+    'heat',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
+  );
+  static const VerificationMeta _accessCountMeta = const VerificationMeta(
+    'accessCount',
+  );
+  @override
+  late final GeneratedColumn<int> accessCount = GeneratedColumn<int>(
+    'access_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _embeddingMeta = const VerificationMeta(
+    'embedding',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> embedding = GeneratedColumn<Uint8List>(
+    'embedding',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dimensionsMeta = const VerificationMeta(
+    'dimensions',
+  );
+  @override
+  late final GeneratedColumn<int> dimensions = GeneratedColumn<int>(
+    'dimensions',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastAccessedAtMeta = const VerificationMeta(
+    'lastAccessedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAccessedAt =
+      GeneratedColumn<DateTime>(
+        'last_accessed_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _metadataMeta = const VerificationMeta(
+    'metadata',
+  );
+  @override
+  late final GeneratedColumn<String> metadata = GeneratedColumn<String>(
+    'metadata',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    characterId,
+    sourceMessageIds,
+    content,
+    category,
+    emotionLabel,
+    emotionIntensity,
+    originalEmotionLabel,
+    heat,
+    accessCount,
+    pinned,
+    embedding,
+    dimensions,
+    createdAt,
+    lastAccessedAt,
+    updatedAt,
+    metadata,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'journal_memories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JournalMemoryData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('source_message_ids')) {
+      context.handle(
+        _sourceMessageIdsMeta,
+        sourceMessageIds.isAcceptableOrUnknown(
+          data['source_message_ids']!,
+          _sourceMessageIdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('emotion_label')) {
+      context.handle(
+        _emotionLabelMeta,
+        emotionLabel.isAcceptableOrUnknown(
+          data['emotion_label']!,
+          _emotionLabelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('emotion_intensity')) {
+      context.handle(
+        _emotionIntensityMeta,
+        emotionIntensity.isAcceptableOrUnknown(
+          data['emotion_intensity']!,
+          _emotionIntensityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('original_emotion_label')) {
+      context.handle(
+        _originalEmotionLabelMeta,
+        originalEmotionLabel.isAcceptableOrUnknown(
+          data['original_emotion_label']!,
+          _originalEmotionLabelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('heat')) {
+      context.handle(
+        _heatMeta,
+        heat.isAcceptableOrUnknown(data['heat']!, _heatMeta),
+      );
+    }
+    if (data.containsKey('access_count')) {
+      context.handle(
+        _accessCountMeta,
+        accessCount.isAcceptableOrUnknown(
+          data['access_count']!,
+          _accessCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('embedding')) {
+      context.handle(
+        _embeddingMeta,
+        embedding.isAcceptableOrUnknown(data['embedding']!, _embeddingMeta),
+      );
+    }
+    if (data.containsKey('dimensions')) {
+      context.handle(
+        _dimensionsMeta,
+        dimensions.isAcceptableOrUnknown(data['dimensions']!, _dimensionsMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_accessed_at')) {
+      context.handle(
+        _lastAccessedAtMeta,
+        lastAccessedAt.isAcceptableOrUnknown(
+          data['last_accessed_at']!,
+          _lastAccessedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('metadata')) {
+      context.handle(
+        _metadataMeta,
+        metadata.isAcceptableOrUnknown(data['metadata']!, _metadataMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JournalMemoryData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JournalMemoryData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      sourceMessageIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_message_ids'],
+      ),
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      emotionLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}emotion_label'],
+      ),
+      emotionIntensity: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}emotion_intensity'],
+      ),
+      originalEmotionLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}original_emotion_label'],
+      ),
+      heat: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}heat'],
+      )!,
+      accessCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}access_count'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      embedding: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}embedding'],
+      ),
+      dimensions: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dimensions'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastAccessedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_accessed_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      metadata: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}metadata'],
+      ),
+    );
+  }
+
+  @override
+  $JournalMemoriesTable createAlias(String alias) {
+    return $JournalMemoriesTable(attachedDatabase, alias);
+  }
+}
+
+class JournalMemoryData extends DataClass
+    implements Insertable<JournalMemoryData> {
+  final String id;
+  final String sessionId;
+  final String characterId;
+
+  /// JSON array of int message POSITIONS (not DB ids — message UUIDs are
+  /// regenerated on every save, so positions are the stable receipt, same
+  /// trade-off MessageEmbeddings.positionStart/End already makes).
+  final String? sourceMessageIds;
+  final String content;
+  final String category;
+  final String? emotionLabel;
+  final String? emotionIntensity;
+  final String? originalEmotionLabel;
+  final double heat;
+  final int accessCount;
+  final bool pinned;
+  final Uint8List? embedding;
+  final int dimensions;
+  final DateTime createdAt;
+  final DateTime lastAccessedAt;
+  final DateTime updatedAt;
+  final String? metadata;
+  const JournalMemoryData({
+    required this.id,
+    required this.sessionId,
+    required this.characterId,
+    this.sourceMessageIds,
+    required this.content,
+    required this.category,
+    this.emotionLabel,
+    this.emotionIntensity,
+    this.originalEmotionLabel,
+    required this.heat,
+    required this.accessCount,
+    required this.pinned,
+    this.embedding,
+    required this.dimensions,
+    required this.createdAt,
+    required this.lastAccessedAt,
+    required this.updatedAt,
+    this.metadata,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['character_id'] = Variable<String>(characterId);
+    if (!nullToAbsent || sourceMessageIds != null) {
+      map['source_message_ids'] = Variable<String>(sourceMessageIds);
+    }
+    map['content'] = Variable<String>(content);
+    map['category'] = Variable<String>(category);
+    if (!nullToAbsent || emotionLabel != null) {
+      map['emotion_label'] = Variable<String>(emotionLabel);
+    }
+    if (!nullToAbsent || emotionIntensity != null) {
+      map['emotion_intensity'] = Variable<String>(emotionIntensity);
+    }
+    if (!nullToAbsent || originalEmotionLabel != null) {
+      map['original_emotion_label'] = Variable<String>(originalEmotionLabel);
+    }
+    map['heat'] = Variable<double>(heat);
+    map['access_count'] = Variable<int>(accessCount);
+    map['pinned'] = Variable<bool>(pinned);
+    if (!nullToAbsent || embedding != null) {
+      map['embedding'] = Variable<Uint8List>(embedding);
+    }
+    map['dimensions'] = Variable<int>(dimensions);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_accessed_at'] = Variable<DateTime>(lastAccessedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || metadata != null) {
+      map['metadata'] = Variable<String>(metadata);
+    }
+    return map;
+  }
+
+  JournalMemoriesCompanion toCompanion(bool nullToAbsent) {
+    return JournalMemoriesCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      characterId: Value(characterId),
+      sourceMessageIds: sourceMessageIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceMessageIds),
+      content: Value(content),
+      category: Value(category),
+      emotionLabel: emotionLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emotionLabel),
+      emotionIntensity: emotionIntensity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emotionIntensity),
+      originalEmotionLabel: originalEmotionLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalEmotionLabel),
+      heat: Value(heat),
+      accessCount: Value(accessCount),
+      pinned: Value(pinned),
+      embedding: embedding == null && nullToAbsent
+          ? const Value.absent()
+          : Value(embedding),
+      dimensions: Value(dimensions),
+      createdAt: Value(createdAt),
+      lastAccessedAt: Value(lastAccessedAt),
+      updatedAt: Value(updatedAt),
+      metadata: metadata == null && nullToAbsent
+          ? const Value.absent()
+          : Value(metadata),
+    );
+  }
+
+  factory JournalMemoryData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JournalMemoryData(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      sourceMessageIds: serializer.fromJson<String?>(json['sourceMessageIds']),
+      content: serializer.fromJson<String>(json['content']),
+      category: serializer.fromJson<String>(json['category']),
+      emotionLabel: serializer.fromJson<String?>(json['emotionLabel']),
+      emotionIntensity: serializer.fromJson<String?>(json['emotionIntensity']),
+      originalEmotionLabel: serializer.fromJson<String?>(
+        json['originalEmotionLabel'],
+      ),
+      heat: serializer.fromJson<double>(json['heat']),
+      accessCount: serializer.fromJson<int>(json['accessCount']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      embedding: serializer.fromJson<Uint8List?>(json['embedding']),
+      dimensions: serializer.fromJson<int>(json['dimensions']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastAccessedAt: serializer.fromJson<DateTime>(json['lastAccessedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      metadata: serializer.fromJson<String?>(json['metadata']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'characterId': serializer.toJson<String>(characterId),
+      'sourceMessageIds': serializer.toJson<String?>(sourceMessageIds),
+      'content': serializer.toJson<String>(content),
+      'category': serializer.toJson<String>(category),
+      'emotionLabel': serializer.toJson<String?>(emotionLabel),
+      'emotionIntensity': serializer.toJson<String?>(emotionIntensity),
+      'originalEmotionLabel': serializer.toJson<String?>(originalEmotionLabel),
+      'heat': serializer.toJson<double>(heat),
+      'accessCount': serializer.toJson<int>(accessCount),
+      'pinned': serializer.toJson<bool>(pinned),
+      'embedding': serializer.toJson<Uint8List?>(embedding),
+      'dimensions': serializer.toJson<int>(dimensions),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastAccessedAt': serializer.toJson<DateTime>(lastAccessedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'metadata': serializer.toJson<String?>(metadata),
+    };
+  }
+
+  JournalMemoryData copyWith({
+    String? id,
+    String? sessionId,
+    String? characterId,
+    Value<String?> sourceMessageIds = const Value.absent(),
+    String? content,
+    String? category,
+    Value<String?> emotionLabel = const Value.absent(),
+    Value<String?> emotionIntensity = const Value.absent(),
+    Value<String?> originalEmotionLabel = const Value.absent(),
+    double? heat,
+    int? accessCount,
+    bool? pinned,
+    Value<Uint8List?> embedding = const Value.absent(),
+    int? dimensions,
+    DateTime? createdAt,
+    DateTime? lastAccessedAt,
+    DateTime? updatedAt,
+    Value<String?> metadata = const Value.absent(),
+  }) => JournalMemoryData(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    characterId: characterId ?? this.characterId,
+    sourceMessageIds: sourceMessageIds.present
+        ? sourceMessageIds.value
+        : this.sourceMessageIds,
+    content: content ?? this.content,
+    category: category ?? this.category,
+    emotionLabel: emotionLabel.present ? emotionLabel.value : this.emotionLabel,
+    emotionIntensity: emotionIntensity.present
+        ? emotionIntensity.value
+        : this.emotionIntensity,
+    originalEmotionLabel: originalEmotionLabel.present
+        ? originalEmotionLabel.value
+        : this.originalEmotionLabel,
+    heat: heat ?? this.heat,
+    accessCount: accessCount ?? this.accessCount,
+    pinned: pinned ?? this.pinned,
+    embedding: embedding.present ? embedding.value : this.embedding,
+    dimensions: dimensions ?? this.dimensions,
+    createdAt: createdAt ?? this.createdAt,
+    lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    metadata: metadata.present ? metadata.value : this.metadata,
+  );
+  JournalMemoryData copyWithCompanion(JournalMemoriesCompanion data) {
+    return JournalMemoryData(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      sourceMessageIds: data.sourceMessageIds.present
+          ? data.sourceMessageIds.value
+          : this.sourceMessageIds,
+      content: data.content.present ? data.content.value : this.content,
+      category: data.category.present ? data.category.value : this.category,
+      emotionLabel: data.emotionLabel.present
+          ? data.emotionLabel.value
+          : this.emotionLabel,
+      emotionIntensity: data.emotionIntensity.present
+          ? data.emotionIntensity.value
+          : this.emotionIntensity,
+      originalEmotionLabel: data.originalEmotionLabel.present
+          ? data.originalEmotionLabel.value
+          : this.originalEmotionLabel,
+      heat: data.heat.present ? data.heat.value : this.heat,
+      accessCount: data.accessCount.present
+          ? data.accessCount.value
+          : this.accessCount,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      embedding: data.embedding.present ? data.embedding.value : this.embedding,
+      dimensions: data.dimensions.present
+          ? data.dimensions.value
+          : this.dimensions,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastAccessedAt: data.lastAccessedAt.present
+          ? data.lastAccessedAt.value
+          : this.lastAccessedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      metadata: data.metadata.present ? data.metadata.value : this.metadata,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JournalMemoryData(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('characterId: $characterId, ')
+          ..write('sourceMessageIds: $sourceMessageIds, ')
+          ..write('content: $content, ')
+          ..write('category: $category, ')
+          ..write('emotionLabel: $emotionLabel, ')
+          ..write('emotionIntensity: $emotionIntensity, ')
+          ..write('originalEmotionLabel: $originalEmotionLabel, ')
+          ..write('heat: $heat, ')
+          ..write('accessCount: $accessCount, ')
+          ..write('pinned: $pinned, ')
+          ..write('embedding: $embedding, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastAccessedAt: $lastAccessedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('metadata: $metadata')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    characterId,
+    sourceMessageIds,
+    content,
+    category,
+    emotionLabel,
+    emotionIntensity,
+    originalEmotionLabel,
+    heat,
+    accessCount,
+    pinned,
+    $driftBlobEquality.hash(embedding),
+    dimensions,
+    createdAt,
+    lastAccessedAt,
+    updatedAt,
+    metadata,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JournalMemoryData &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.characterId == this.characterId &&
+          other.sourceMessageIds == this.sourceMessageIds &&
+          other.content == this.content &&
+          other.category == this.category &&
+          other.emotionLabel == this.emotionLabel &&
+          other.emotionIntensity == this.emotionIntensity &&
+          other.originalEmotionLabel == this.originalEmotionLabel &&
+          other.heat == this.heat &&
+          other.accessCount == this.accessCount &&
+          other.pinned == this.pinned &&
+          $driftBlobEquality.equals(other.embedding, this.embedding) &&
+          other.dimensions == this.dimensions &&
+          other.createdAt == this.createdAt &&
+          other.lastAccessedAt == this.lastAccessedAt &&
+          other.updatedAt == this.updatedAt &&
+          other.metadata == this.metadata);
+}
+
+class JournalMemoriesCompanion extends UpdateCompanion<JournalMemoryData> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<String> characterId;
+  final Value<String?> sourceMessageIds;
+  final Value<String> content;
+  final Value<String> category;
+  final Value<String?> emotionLabel;
+  final Value<String?> emotionIntensity;
+  final Value<String?> originalEmotionLabel;
+  final Value<double> heat;
+  final Value<int> accessCount;
+  final Value<bool> pinned;
+  final Value<Uint8List?> embedding;
+  final Value<int> dimensions;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastAccessedAt;
+  final Value<DateTime> updatedAt;
+  final Value<String?> metadata;
+  final Value<int> rowid;
+  const JournalMemoriesCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.sourceMessageIds = const Value.absent(),
+    this.content = const Value.absent(),
+    this.category = const Value.absent(),
+    this.emotionLabel = const Value.absent(),
+    this.emotionIntensity = const Value.absent(),
+    this.originalEmotionLabel = const Value.absent(),
+    this.heat = const Value.absent(),
+    this.accessCount = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.embedding = const Value.absent(),
+    this.dimensions = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastAccessedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JournalMemoriesCompanion.insert({
+    required String id,
+    required String sessionId,
+    required String characterId,
+    this.sourceMessageIds = const Value.absent(),
+    required String content,
+    this.category = const Value.absent(),
+    this.emotionLabel = const Value.absent(),
+    this.emotionIntensity = const Value.absent(),
+    this.originalEmotionLabel = const Value.absent(),
+    this.heat = const Value.absent(),
+    this.accessCount = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.embedding = const Value.absent(),
+    this.dimensions = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastAccessedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       characterId = Value(characterId),
+       content = Value(content);
+  static Insertable<JournalMemoryData> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<String>? characterId,
+    Expression<String>? sourceMessageIds,
+    Expression<String>? content,
+    Expression<String>? category,
+    Expression<String>? emotionLabel,
+    Expression<String>? emotionIntensity,
+    Expression<String>? originalEmotionLabel,
+    Expression<double>? heat,
+    Expression<int>? accessCount,
+    Expression<bool>? pinned,
+    Expression<Uint8List>? embedding,
+    Expression<int>? dimensions,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastAccessedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<String>? metadata,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (characterId != null) 'character_id': characterId,
+      if (sourceMessageIds != null) 'source_message_ids': sourceMessageIds,
+      if (content != null) 'content': content,
+      if (category != null) 'category': category,
+      if (emotionLabel != null) 'emotion_label': emotionLabel,
+      if (emotionIntensity != null) 'emotion_intensity': emotionIntensity,
+      if (originalEmotionLabel != null)
+        'original_emotion_label': originalEmotionLabel,
+      if (heat != null) 'heat': heat,
+      if (accessCount != null) 'access_count': accessCount,
+      if (pinned != null) 'pinned': pinned,
+      if (embedding != null) 'embedding': embedding,
+      if (dimensions != null) 'dimensions': dimensions,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastAccessedAt != null) 'last_accessed_at': lastAccessedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (metadata != null) 'metadata': metadata,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JournalMemoriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<String>? characterId,
+    Value<String?>? sourceMessageIds,
+    Value<String>? content,
+    Value<String>? category,
+    Value<String?>? emotionLabel,
+    Value<String?>? emotionIntensity,
+    Value<String?>? originalEmotionLabel,
+    Value<double>? heat,
+    Value<int>? accessCount,
+    Value<bool>? pinned,
+    Value<Uint8List?>? embedding,
+    Value<int>? dimensions,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastAccessedAt,
+    Value<DateTime>? updatedAt,
+    Value<String?>? metadata,
+    Value<int>? rowid,
+  }) {
+    return JournalMemoriesCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      characterId: characterId ?? this.characterId,
+      sourceMessageIds: sourceMessageIds ?? this.sourceMessageIds,
+      content: content ?? this.content,
+      category: category ?? this.category,
+      emotionLabel: emotionLabel ?? this.emotionLabel,
+      emotionIntensity: emotionIntensity ?? this.emotionIntensity,
+      originalEmotionLabel: originalEmotionLabel ?? this.originalEmotionLabel,
+      heat: heat ?? this.heat,
+      accessCount: accessCount ?? this.accessCount,
+      pinned: pinned ?? this.pinned,
+      embedding: embedding ?? this.embedding,
+      dimensions: dimensions ?? this.dimensions,
+      createdAt: createdAt ?? this.createdAt,
+      lastAccessedAt: lastAccessedAt ?? this.lastAccessedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      metadata: metadata ?? this.metadata,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (sourceMessageIds.present) {
+      map['source_message_ids'] = Variable<String>(sourceMessageIds.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (emotionLabel.present) {
+      map['emotion_label'] = Variable<String>(emotionLabel.value);
+    }
+    if (emotionIntensity.present) {
+      map['emotion_intensity'] = Variable<String>(emotionIntensity.value);
+    }
+    if (originalEmotionLabel.present) {
+      map['original_emotion_label'] = Variable<String>(
+        originalEmotionLabel.value,
+      );
+    }
+    if (heat.present) {
+      map['heat'] = Variable<double>(heat.value);
+    }
+    if (accessCount.present) {
+      map['access_count'] = Variable<int>(accessCount.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (embedding.present) {
+      map['embedding'] = Variable<Uint8List>(embedding.value);
+    }
+    if (dimensions.present) {
+      map['dimensions'] = Variable<int>(dimensions.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastAccessedAt.present) {
+      map['last_accessed_at'] = Variable<DateTime>(lastAccessedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (metadata.present) {
+      map['metadata'] = Variable<String>(metadata.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JournalMemoriesCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('characterId: $characterId, ')
+          ..write('sourceMessageIds: $sourceMessageIds, ')
+          ..write('content: $content, ')
+          ..write('category: $category, ')
+          ..write('emotionLabel: $emotionLabel, ')
+          ..write('emotionIntensity: $emotionIntensity, ')
+          ..write('originalEmotionLabel: $originalEmotionLabel, ')
+          ..write('heat: $heat, ')
+          ..write('accessCount: $accessCount, ')
+          ..write('pinned: $pinned, ')
+          ..write('embedding: $embedding, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastAccessedAt: $lastAccessedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('metadata: $metadata, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ObjectivesTable extends Objectives
     with TableInfo<$ObjectivesTable, Objective> {
   @override
@@ -12493,6 +13528,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DataBankEntriesTable dataBankEntries = $DataBankEntriesTable(
     this,
   );
+  late final $JournalMemoriesTable journalMemories = $JournalMemoriesTable(
+    this,
+  );
   late final $ObjectivesTable objectives = $ObjectivesTable(this);
   late final $StoryProjectsTable storyProjects = $StoryProjectsTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
@@ -12502,6 +13540,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $WebAuthCredentialsTable(this);
   late final $WebAuthSessionsTable webAuthSessions = $WebAuthSessionsTable(
     this,
+  );
+  late final Index journalMemoriesSessionCharacter = Index(
+    'journal_memories_session_character',
+    'CREATE INDEX journal_memories_session_character ON journal_memories (session_id, character_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -12517,6 +13559,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     worlds,
     messageEmbeddings,
     dataBankEntries,
+    journalMemories,
     objectives,
     storyProjects,
     syncMeta,
@@ -12524,6 +13567,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     groupMembers,
     webAuthCredentials,
     webAuthSessions,
+    journalMemoriesSessionCharacter,
   ];
 }
 
@@ -16382,6 +17426,475 @@ typedef $$DataBankEntriesTableProcessedTableManager =
       DataBankEntry,
       PrefetchHooks Function()
     >;
+typedef $$JournalMemoriesTableCreateCompanionBuilder =
+    JournalMemoriesCompanion Function({
+      required String id,
+      required String sessionId,
+      required String characterId,
+      Value<String?> sourceMessageIds,
+      required String content,
+      Value<String> category,
+      Value<String?> emotionLabel,
+      Value<String?> emotionIntensity,
+      Value<String?> originalEmotionLabel,
+      Value<double> heat,
+      Value<int> accessCount,
+      Value<bool> pinned,
+      Value<Uint8List?> embedding,
+      Value<int> dimensions,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastAccessedAt,
+      Value<DateTime> updatedAt,
+      Value<String?> metadata,
+      Value<int> rowid,
+    });
+typedef $$JournalMemoriesTableUpdateCompanionBuilder =
+    JournalMemoriesCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<String> characterId,
+      Value<String?> sourceMessageIds,
+      Value<String> content,
+      Value<String> category,
+      Value<String?> emotionLabel,
+      Value<String?> emotionIntensity,
+      Value<String?> originalEmotionLabel,
+      Value<double> heat,
+      Value<int> accessCount,
+      Value<bool> pinned,
+      Value<Uint8List?> embedding,
+      Value<int> dimensions,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastAccessedAt,
+      Value<DateTime> updatedAt,
+      Value<String?> metadata,
+      Value<int> rowid,
+    });
+
+class $$JournalMemoriesTableFilterComposer
+    extends Composer<_$AppDatabase, $JournalMemoriesTable> {
+  $$JournalMemoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceMessageIds => $composableBuilder(
+    column: $table.sourceMessageIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get emotionLabel => $composableBuilder(
+    column: $table.emotionLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get emotionIntensity => $composableBuilder(
+    column: $table.emotionIntensity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get originalEmotionLabel => $composableBuilder(
+    column: $table.originalEmotionLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get heat => $composableBuilder(
+    column: $table.heat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get accessCount => $composableBuilder(
+    column: $table.accessCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get metadata => $composableBuilder(
+    column: $table.metadata,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JournalMemoriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $JournalMemoriesTable> {
+  $$JournalMemoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceMessageIds => $composableBuilder(
+    column: $table.sourceMessageIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get emotionLabel => $composableBuilder(
+    column: $table.emotionLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get emotionIntensity => $composableBuilder(
+    column: $table.emotionIntensity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get originalEmotionLabel => $composableBuilder(
+    column: $table.originalEmotionLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get heat => $composableBuilder(
+    column: $table.heat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get accessCount => $composableBuilder(
+    column: $table.accessCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get metadata => $composableBuilder(
+    column: $table.metadata,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JournalMemoriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JournalMemoriesTable> {
+  $$JournalMemoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceMessageIds => $composableBuilder(
+    column: $table.sourceMessageIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get emotionLabel => $composableBuilder(
+    column: $table.emotionLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get emotionIntensity => $composableBuilder(
+    column: $table.emotionIntensity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get originalEmotionLabel => $composableBuilder(
+    column: $table.originalEmotionLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get heat =>
+      $composableBuilder(column: $table.heat, builder: (column) => column);
+
+  GeneratedColumn<int> get accessCount => $composableBuilder(
+    column: $table.accessCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get embedding =>
+      $composableBuilder(column: $table.embedding, builder: (column) => column);
+
+  GeneratedColumn<int> get dimensions => $composableBuilder(
+    column: $table.dimensions,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastAccessedAt => $composableBuilder(
+    column: $table.lastAccessedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get metadata =>
+      $composableBuilder(column: $table.metadata, builder: (column) => column);
+}
+
+class $$JournalMemoriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JournalMemoriesTable,
+          JournalMemoryData,
+          $$JournalMemoriesTableFilterComposer,
+          $$JournalMemoriesTableOrderingComposer,
+          $$JournalMemoriesTableAnnotationComposer,
+          $$JournalMemoriesTableCreateCompanionBuilder,
+          $$JournalMemoriesTableUpdateCompanionBuilder,
+          (
+            JournalMemoryData,
+            BaseReferences<
+              _$AppDatabase,
+              $JournalMemoriesTable,
+              JournalMemoryData
+            >,
+          ),
+          JournalMemoryData,
+          PrefetchHooks Function()
+        > {
+  $$JournalMemoriesTableTableManager(
+    _$AppDatabase db,
+    $JournalMemoriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JournalMemoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$JournalMemoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$JournalMemoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String?> sourceMessageIds = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String?> emotionLabel = const Value.absent(),
+                Value<String?> emotionIntensity = const Value.absent(),
+                Value<String?> originalEmotionLabel = const Value.absent(),
+                Value<double> heat = const Value.absent(),
+                Value<int> accessCount = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<Uint8List?> embedding = const Value.absent(),
+                Value<int> dimensions = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastAccessedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> metadata = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JournalMemoriesCompanion(
+                id: id,
+                sessionId: sessionId,
+                characterId: characterId,
+                sourceMessageIds: sourceMessageIds,
+                content: content,
+                category: category,
+                emotionLabel: emotionLabel,
+                emotionIntensity: emotionIntensity,
+                originalEmotionLabel: originalEmotionLabel,
+                heat: heat,
+                accessCount: accessCount,
+                pinned: pinned,
+                embedding: embedding,
+                dimensions: dimensions,
+                createdAt: createdAt,
+                lastAccessedAt: lastAccessedAt,
+                updatedAt: updatedAt,
+                metadata: metadata,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required String characterId,
+                Value<String?> sourceMessageIds = const Value.absent(),
+                required String content,
+                Value<String> category = const Value.absent(),
+                Value<String?> emotionLabel = const Value.absent(),
+                Value<String?> emotionIntensity = const Value.absent(),
+                Value<String?> originalEmotionLabel = const Value.absent(),
+                Value<double> heat = const Value.absent(),
+                Value<int> accessCount = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<Uint8List?> embedding = const Value.absent(),
+                Value<int> dimensions = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastAccessedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> metadata = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JournalMemoriesCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                characterId: characterId,
+                sourceMessageIds: sourceMessageIds,
+                content: content,
+                category: category,
+                emotionLabel: emotionLabel,
+                emotionIntensity: emotionIntensity,
+                originalEmotionLabel: originalEmotionLabel,
+                heat: heat,
+                accessCount: accessCount,
+                pinned: pinned,
+                embedding: embedding,
+                dimensions: dimensions,
+                createdAt: createdAt,
+                lastAccessedAt: lastAccessedAt,
+                updatedAt: updatedAt,
+                metadata: metadata,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JournalMemoriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JournalMemoriesTable,
+      JournalMemoryData,
+      $$JournalMemoriesTableFilterComposer,
+      $$JournalMemoriesTableOrderingComposer,
+      $$JournalMemoriesTableAnnotationComposer,
+      $$JournalMemoriesTableCreateCompanionBuilder,
+      $$JournalMemoriesTableUpdateCompanionBuilder,
+      (
+        JournalMemoryData,
+        BaseReferences<_$AppDatabase, $JournalMemoriesTable, JournalMemoryData>,
+      ),
+      JournalMemoryData,
+      PrefetchHooks Function()
+    >;
 typedef $$ObjectivesTableCreateCompanionBuilder =
     ObjectivesCompanion Function({
       required String id,
@@ -18373,6 +19886,8 @@ class $AppDatabaseManager {
       $$MessageEmbeddingsTableTableManager(_db, _db.messageEmbeddings);
   $$DataBankEntriesTableTableManager get dataBankEntries =>
       $$DataBankEntriesTableTableManager(_db, _db.dataBankEntries);
+  $$JournalMemoriesTableTableManager get journalMemories =>
+      $$JournalMemoriesTableTableManager(_db, _db.journalMemories);
   $$ObjectivesTableTableManager get objectives =>
       $$ObjectivesTableTableManager(_db, _db.objectives);
   $$StoryProjectsTableTableManager get storyProjects =>

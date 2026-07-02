@@ -33,7 +33,6 @@
 // realism/oneShot/group parity qualified.
 // aug exercising only passive/qualified (no objective-proposal-specific aug file edits; full in dedicated + manual; exercised via god thins generate/check ; qualified notes only in dedicated header + god + MD per precedent). (step 11 fix round 2: 11 bodies post del in obj test, zeroing/mark/timing fixes in god/leaf, surfaces 0 warnings post clean).
 // aug exercising only passive/qualified (no summary-specific aug file edits; full in dedicated + manual; exercised via god thins _maybeUpdateSummary/force/generate ; qualified notes only in dedicated header + god + MD per precedent).
-// aug exercising only passive/qualified (no fact-extraction-specific aug file edits; full in dedicated + manual; exercised via god thins _maybeRunPeriodicEvals/_runPeriodicEvalsInSequence/_extractFactsInBackground ; qualified notes only in dedicated header + god + MD per precedent).
 // aug exercising only passive/qualified (no evolution-specific aug file edits; full in dedicated + manual; exercised via god thins _maybeRunPeriodicEvals/_runPeriodicEvalsInSequence/_triggerCharacterEvolution ; qualified notes only in dedicated header + god + MD per precedent).
 
 // ignore_for_file: unnecessary_underscores, must_call_super

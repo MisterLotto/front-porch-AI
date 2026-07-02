@@ -220,7 +220,6 @@ extension ChatServiceImpersonate on ChatService {
       final macroCtx = MacroContext(
         userName: userName,
         characterName: speakingCharacter.name,
-        summaryMaxWords: _storageService.memorySettings.summaryMaxWords,
         chatId: _currentSessionId,
         characterId: speakingCharacter.dbId,
       );

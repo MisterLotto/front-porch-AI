@@ -59,20 +59,20 @@ class ChatToolsFacade {
         'ragEnabled': _storage.ragEnabled,
         'ragRetrievalCount': _storage.ragRetrievalCount,
         'ragWindowSize': _storage.ragWindowSize,
-        'autoPersonaEnabled': _storage.autoPersonaEnabled,
-        'autoPersonaInterval': _storage.autoPersonaInterval,
+        'journalEnabled': _storage.journalEnabled,
+        'journalInterval': _storage.journalInterval,
         'evolutionEnabled': _storage.characterEvolutionEnabled,
         'evolutionInterval': _storage.evolutionInterval,
         'evolutionCount': _chat.characterEvolutionCount,
       },
+      // Kept under the 'summary' key for the bundled web UI: this is the
+      // Journal's per-chat recap ("Where we are") — same ChatService surface
+      // as before (text/paused/isGenerating/lastIndex).
       'summary': {
         'text': _chat.summary,
         'paused': _chat.summaryPaused,
         'isGenerating': _chat.isSummaryGenerating,
         'lastIndex': _chat.summaryLastIndex,
-        'interval': _storage.summaryInterval,
-        'maxWords': _storage.summaryMaxWords,
-        'prompt': _storage.summaryPrompt,
       },
       'chaos': {
         'enabled': chaos.chaosModeEnabled,
@@ -321,15 +321,11 @@ class ChatToolsFacade {
     await ifBool('ragEnabled', _storage.setRagEnabled);
     await ifInt('ragRetrievalCount', _storage.setRagRetrievalCount);
     await ifInt('ragWindowSize', _storage.setRagWindowSize);
-    await ifBool('autoPersonaEnabled', _storage.setAutoPersonaEnabled);
-    await ifInt('autoPersonaInterval', _storage.setAutoPersonaInterval);
+    await ifBool('journalEnabled', _storage.setJournalEnabled);
+    await ifInt('journalInterval', _storage.setJournalInterval);
+    await ifInt('journalMaxCards', _storage.setJournalMaxCards);
     await ifBool('evolutionEnabled', _storage.setCharacterEvolutionEnabled);
     await ifInt('evolutionInterval', _storage.setEvolutionInterval);
-    await ifInt('summaryInterval', _storage.setSummaryInterval);
-    await ifInt('summaryMaxWords', _storage.setSummaryMaxWords);
-    if (f['summaryPrompt'] is String) {
-      await _storage.setSummaryPrompt(f['summaryPrompt'] as String);
-    }
     _notify();
   }
 

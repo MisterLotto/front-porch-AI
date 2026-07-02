@@ -33,20 +33,19 @@ interface ToolsState {
     ragEnabled: boolean;
     ragRetrievalCount: number;
     ragWindowSize: number;
-    autoPersonaEnabled: boolean;
-    autoPersonaInterval: number;
+    journalEnabled: boolean;
+    journalInterval: number;
     evolutionEnabled: boolean;
     evolutionInterval: number;
     evolutionCount: number;
   };
+  // The Journal's per-chat recap ("Where we are") — key kept as `summary`
+  // to match the facade block name.
   summary: {
     text: string;
     paused: boolean;
     isGenerating: boolean;
     lastIndex: number;
-    interval: number;
-    maxWords: number;
-    prompt: string;
   };
   chaos: { enabled: boolean; nsfwEnabled: boolean; pressure: number; hasPendingEvent: boolean };
   nsfw: { cooldownEnabled: boolean; cooldownTurnsRemaining: number; arousalLevel: number; arousalTier: string };
@@ -183,9 +182,9 @@ export function ChatTools({
               <NumField label="Window size" value={t.memory.ragWindowSize} onCommit={(v) => settings({ ragWindowSize: v })} />
             </>
           )}
-          <Toggle label="Auto-persona learning" value={t.memory.autoPersonaEnabled} onChange={(v) => settings({ autoPersonaEnabled: v })} />
-          {t.memory.autoPersonaEnabled && (
-            <NumField label="Every (msgs)" value={t.memory.autoPersonaInterval} onCommit={(v) => settings({ autoPersonaInterval: v })} />
+          <Toggle label="Journal (memories + recap)" value={t.memory.journalEnabled} onChange={(v) => settings({ journalEnabled: v })} />
+          {t.memory.journalEnabled && (
+            <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
           )}
           <Toggle label="Character evolution" value={t.memory.evolutionEnabled} onChange={(v) => settings({ evolutionEnabled: v })} />
           {t.memory.evolutionEnabled && (
@@ -273,7 +272,7 @@ export function ChatTools({
       </details>
 
       <details className="tool-section">
-        <summary>Summary</summary>
+        <summary>Where we are</summary>
         <div className="tool-body">
           <textarea
             className="note-input"
@@ -281,7 +280,7 @@ export function ChatTools({
             value={t.summary.text}
             onChange={(e) => setT({ ...t, summary: { ...t.summary, text: e.target.value } })}
             onBlur={() => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text: t.summary.text }))}
-            placeholder="Running summary of the conversation…"
+            placeholder="The character's recap of where things stand…"
           />
           <div className="tool-row">
             <button
@@ -292,9 +291,7 @@ export function ChatTools({
               {t.summary.isGenerating ? 'Generating…' : 'Regenerate'}
             </button>
           </div>
-          <Toggle label="Pause auto-summary" value={t.summary.paused} onChange={(v) => toggle('summaryPaused', v)} />
-          <NumField label="Update every (msgs)" value={t.summary.interval} onCommit={(v) => settings({ summaryInterval: v })} />
-          <NumField label="Max words" value={t.summary.maxWords} onCommit={(v) => settings({ summaryMaxWords: v })} />
+          <Toggle label="Pause journal updates" value={t.summary.paused} onChange={(v) => toggle('summaryPaused', v)} />
         </div>
       </details>
 

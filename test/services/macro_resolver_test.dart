@@ -34,19 +34,6 @@ void main() {
       );
     });
 
-    test('resolves {{words}}', () {
-      final wCtx = const MacroContext(
-        userName: 'A',
-        characterName: 'B',
-        summaryMaxWords: 50,
-      );
-      expect(resolver.resolve('Use {{words}} words', wCtx), 'Use 50 words');
-    });
-
-    test('{{words}} with no max returns empty', () {
-      expect(resolver.resolve('{{words}}', ctx), '');
-    });
-
     test('unknown macros pass through', () {
       expect(
         resolver.resolve('{{unknown}} here', ctx),

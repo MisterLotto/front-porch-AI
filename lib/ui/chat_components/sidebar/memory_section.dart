@@ -30,7 +30,6 @@ class MemorySectionState extends State<MemorySection> {
   bool _sourcesLoaded = false;
   double? _dragRagRetrievalCount;
   double? _dragRagWindowSize;
-  double? _dragAutoPersonaInterval;
   double? _dragEvolutionInterval;
 
   /// Derive the embedding ID for a character card (must match ChatService._getCharacterIdFromCard)
@@ -421,72 +420,6 @@ class MemorySectionState extends State<MemorySection> {
                   const SizedBox(height: 10),
                   const Divider(color: Colors.white12, height: 1),
                   const SizedBox(height: 10),
-                  // Auto-persona toggle
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.auto_awesome,
-                        size: 14,
-                        color: Colors.purpleAccent,
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Auto-update persona',
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
-                      ),
-                      const Spacer(),
-                      SizedBox(
-                        height: 24,
-                        child: FittedBox(
-                          child: Switch(
-                            value: storage.autoPersonaEnabled,
-                            onChanged: (val) =>
-                                storage.setAutoPersonaEnabled(val),
-                            activeTrackColor: Colors.purpleAccent,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (storage.autoPersonaEnabled) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Text(
-                          'Extract every',
-                          style: TextStyle(color: Colors.white38, fontSize: 10),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${(_dragAutoPersonaInterval ?? storage.autoPersonaInterval.toDouble()).round()} messages',
-                          style: const TextStyle(
-                            color: Colors.purpleAccent,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value:
-                          _dragAutoPersonaInterval ??
-                          storage.autoPersonaInterval.toDouble(),
-                      min: 5,
-                      max: 50,
-                      divisions: 9,
-                      activeColor: Colors.purpleAccent,
-                      onChanged: (val) =>
-                          setState(() => _dragAutoPersonaInterval = val),
-                      onChangeEnd: (val) {
-                        _dragAutoPersonaInterval = null;
-                        storage.setAutoPersonaInterval(val.round());
-                      },
-                    ),
-                    const Text(
-                      'Extracts personal facts from your messages using the LLM. View facts in Persona settings.',
-                      style: TextStyle(fontSize: 10, color: Colors.white24),
-                    ),
-                  ],
                   const SizedBox(height: 10),
                   const Divider(color: Colors.white12, height: 1),
                   const SizedBox(height: 10),

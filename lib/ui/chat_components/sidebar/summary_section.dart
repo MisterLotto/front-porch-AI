@@ -6,8 +6,11 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
-/// Chat Summary sidebar section — shows enable toggle, config,
-/// current summary, and allows editing/pause/regeneration.
+/// "Where we are" sidebar section — the Journal's per-chat recap.
+/// Shows the Journal enable toggle, the editable recap text, pause/regenerate
+/// controls, and the maintenance-pass interval. (Replaced the old Chat
+/// Summary section; the full Journal card UI lands in phase 3 —
+/// docs/design/journal-memory.md §8.)
 class SummarySection extends StatefulWidget {
   final ChatService chatService;
   const SummarySection({super.key, required this.chatService});
@@ -20,8 +23,13 @@ class SummarySectionState extends State<SummarySection> {
   late TextEditingController _controller;
   bool _showSettings = false;
   bool _expanded = false;
-  double? _dragSummaryInterval;
-  double? _dragSummaryMaxWords;
+  double? _dragJournalInterval;
+
+  Color _accent(BuildContext context) => AppColors.resolve(
+    context,
+    const Color(0xFF26A69A), // teal accent (via resolve for light/dark)
+    const Color(0xFF00796B),
+  );
 
   @override
   void initState() {
@@ -47,7 +55,8 @@ class SummarySectionState extends State<SummarySection> {
   @override
   Widget build(BuildContext context) {
     final storage = Provider.of<StorageService>(context);
-    final enabled = storage.summaryEnabled;
+    final enabled = storage.journalEnabled;
+    final accent = _accent(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,20 +74,10 @@ class SummarySectionState extends State<SummarySection> {
                   color: AppColors.iconSecondary(context),
                 ),
                 const SizedBox(width: 4),
-                Icon(
-                  Icons.auto_stories,
-                  size: 14,
-                  color: AppColors.resolve(
-                    context,
-                    const Color(
-                      0xFF26A69A,
-                    ), // teal accent for summary active (via resolve for light/dark)
-                    Color(0xFF00796B),
-                  ),
-                ),
+                Icon(Icons.auto_stories, size: 14, color: accent),
                 const SizedBox(width: 6),
                 Text(
-                  'Chat Summary',
+                  'Where we are',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary(context),
@@ -94,11 +93,7 @@ class SummarySectionState extends State<SummarySection> {
                       height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.resolve(
-                          context,
-                          Color(0xFF26A69A),
-                          Color(0xFF00796B),
-                        ),
+                        color: accent,
                       ),
                     ),
                   ),
@@ -108,14 +103,10 @@ class SummarySectionState extends State<SummarySection> {
                     child: Switch(
                       value: enabled,
                       onChanged: (val) {
-                        storage.setSummaryEnabled(val);
+                        storage.setJournalEnabled(val);
                         if (val) setState(() => _expanded = true);
                       },
-                      activeTrackColor: AppColors.resolve(
-                        context,
-                        Color(0xFF26A69A),
-                        Color(0xFF00796B),
-                      ),
+                      activeTrackColor: accent,
                     ),
                   ),
                 ),
@@ -129,7 +120,9 @@ class SummarySectionState extends State<SummarySection> {
             Padding(
               padding: const EdgeInsets.only(top: 4, left: 20),
               child: Text(
-                'Auto-summarize conversations so the AI remembers earlier events even after they leave the context window.',
+                'The character keeps a journal of this chat — memories of '
+                'what happened and how it felt, plus this recap of where '
+                'things stand.',
                 style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textTertiary(context),
@@ -139,7 +132,7 @@ class SummarySectionState extends State<SummarySection> {
 
           if (enabled) ...[
             const SizedBox(height: 8),
-            // Summary text field
+            // Recap text field (editable — the character reads this back)
             Padding(
               padding: const EdgeInsets.only(left: 20.0),
               child: AppTextField(
@@ -152,7 +145,7 @@ class SummarySectionState extends State<SummarySection> {
                 ),
                 decoration: InputDecoration(
                   hintText:
-                      'No summary yet. It will generate after enough messages...',
+                      'No recap yet. It will generate after enough messages...',
                   hintStyle: TextStyle(
                     color: AppColors.textTertiary(context),
                     fontSize: 12,
@@ -169,13 +162,7 @@ class SummarySectionState extends State<SummarySection> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(
-                      color: AppColors.resolve(
-                        context,
-                        Color(0xFF26A69A),
-                        Color(0xFF00796B),
-                      ),
-                    ),
+                    borderSide: BorderSide(color: accent),
                   ),
                   contentPadding: const EdgeInsets.all(10),
                 ),
@@ -251,13 +238,13 @@ class SummarySectionState extends State<SummarySection> {
                         Icons.tune,
                         size: 14,
                         color: _showSettings
-                            ? Color(0xFF26A69A)
-                            : Colors.white38,
+                            ? accent
+                            : AppColors.iconSecondary(context),
                       ),
                     ),
                   ),
                   const Spacer(),
-                  // Regenerate button
+                  // Regenerate button (runs a full Journal pass: cards + recap)
                   InkWell(
                     onTap: widget.chatService.isSummaryGenerating
                         ? null
@@ -275,8 +262,8 @@ class SummarySectionState extends State<SummarySection> {
                             Icons.refresh,
                             size: 14,
                             color: widget.chatService.isSummaryGenerating
-                                ? Colors.white12
-                                : Color(0xFF26A69A),
+                                ? AppColors.textTertiary(context)
+                                : accent,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -284,8 +271,8 @@ class SummarySectionState extends State<SummarySection> {
                             style: TextStyle(
                               fontSize: 10,
                               color: widget.chatService.isSummaryGenerating
-                                  ? Colors.white12
-                                  : Color(0xFF26A69A),
+                                  ? AppColors.textTertiary(context)
+                                  : accent,
                             ),
                           ),
                         ],
@@ -300,7 +287,10 @@ class SummarySectionState extends State<SummarySection> {
                 padding: const EdgeInsets.only(top: 4, left: 24),
                 child: Text(
                   'Last updated at message #${widget.chatService.summaryLastIndex}',
-                  style: const TextStyle(fontSize: 10, color: Colors.white24),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textTertiary(context),
+                  ),
                 ),
               ),
 
@@ -312,9 +302,9 @@ class SummarySectionState extends State<SummarySection> {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111827),
+                    color: AppColors.surfaceContainerOf(context),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
+                    border: Border.all(color: AppColors.borderOf(context)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,19 +312,19 @@ class SummarySectionState extends State<SummarySection> {
                       // Update Interval
                       Row(
                         children: [
-                          const Text(
+                          Text(
                             'Update every',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.white54,
+                              color: AppColors.textSecondary(context),
                             ),
                           ),
                           const Spacer(),
                           Text(
-                            '${(_dragSummaryInterval ?? storage.summaryInterval.toDouble()).round()} messages',
-                            style: const TextStyle(
+                            '${(_dragJournalInterval ?? storage.journalInterval.toDouble()).round()} messages',
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Color(0xFF26A69A),
+                              color: accent,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -349,130 +339,20 @@ class SummarySectionState extends State<SummarySection> {
                         ),
                         child: Slider(
                           value:
-                              _dragSummaryInterval ??
-                              storage.summaryInterval.toDouble(),
+                              _dragJournalInterval ??
+                              storage.journalInterval.toDouble(),
                           min: 3,
                           max: 50,
                           divisions: 47,
-                          activeColor: Color(0xFF26A69A),
-                          inactiveColor: Colors.white12,
+                          activeColor: accent,
+                          inactiveColor: AppColors.borderOf(context),
                           onChanged: (val) =>
-                              setState(() => _dragSummaryInterval = val),
+                              setState(() => _dragJournalInterval = val),
                           onChangeEnd: (val) {
-                            _dragSummaryInterval = null;
-                            storage.setSummaryInterval(val.toInt());
+                            _dragJournalInterval = null;
+                            storage.setJournalInterval(val.toInt());
                           },
                         ),
-                      ),
-                      // Max Words
-                      Row(
-                        children: [
-                          const Text(
-                            'Max words',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white54,
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${(_dragSummaryMaxWords ?? storage.summaryMaxWords.toDouble()).round()}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF26A69A),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 6,
-                          ),
-                        ),
-                        child: Slider(
-                          value:
-                              _dragSummaryMaxWords ??
-                              storage.summaryMaxWords.toDouble(),
-                          min: 50,
-                          max: 1000,
-                          divisions: 19,
-                          activeColor: Color(0xFF26A69A),
-                          inactiveColor: Colors.white12,
-                          onChanged: (val) =>
-                              setState(() => _dragSummaryMaxWords = val),
-                          onChangeEnd: (val) {
-                            _dragSummaryMaxWords = null;
-                            storage.setSummaryMaxWords(val.toInt());
-                          },
-                        ),
-                      ),
-                      // Summary Prompt
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Text(
-                            'Summary Prompt',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white54,
-                            ),
-                          ),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: () {
-                              storage.setSummaryPrompt(
-                                storage.defaultSummaryPrompt,
-                              );
-                              setState(() {});
-                            },
-                            child: const Text(
-                              'Reset',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Color(0xFF26A69A),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      AppTextField(
-                        controller: TextEditingController(
-                          text: storage.summaryPrompt,
-                        ),
-                        maxLines: 3,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Instructions for summarizing...',
-                          hintStyle: const TextStyle(
-                            color: Colors.white24,
-                            fontSize: 11,
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFF0D1117),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6),
-                            borderSide: const BorderSide(color: Colors.white12),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6),
-                            borderSide: const BorderSide(color: Colors.white12),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF26A69A),
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.all(8),
-                        ),
-                        onChanged: (val) => storage.setSummaryPrompt(val),
                       ),
                       const SizedBox(height: 6),
                       const Row(

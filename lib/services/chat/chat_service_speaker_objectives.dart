@@ -116,9 +116,6 @@ extension ChatServiceSpeakerObjectives on ChatService {
           false; // explicit secondary zero for _summaryPaused (symmetric; _loadObjectivesForCurrentSpeaker no-speaker hygiene)
       _isSummaryGenerating =
           false; // secondary zero in _loadObjectivesForCurrentSpeaker no-speaker (group hygiene for summary flag)
-      _userMessagesSinceLastPeriodicEval = 0;
-      _isExtractingFacts =
-          false; // secondary fact flag + counter zero in _loadObjectivesForCurrentSpeaker no-speaker (group hygiene; fact_extraction)
       _isEvolvingCharacter = false;
       _evolutionStatus = '';
       _evolutionError =

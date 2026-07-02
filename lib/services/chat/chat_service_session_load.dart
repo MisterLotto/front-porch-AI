@@ -57,9 +57,6 @@ extension ChatServiceSessionLoad on ChatService {
           false; // explicit secondary zero for _summaryPaused (symmetric; _loadLast empty early return 0-session)
       _isSummaryGenerating =
           false; // secondary zero in _loadLast empty (0-session for summary flag)
-      _userMessagesSinceLastPeriodicEval = 0;
-      _isExtractingFacts =
-          false; // secondary fact flag + counter zero in _loadLast empty early return (0-session path hygiene; fact_extraction)
       _isEvolvingCharacter = false;
       _evolutionStatus = '';
       _evolutionError =
@@ -193,10 +190,7 @@ extension ChatServiceSessionLoad on ChatService {
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; _loadLast empty/loaded hygiene)
     _isSummaryGenerating =
-        false; // secondary flag zero for summary_service (stateless/prompt-only; incomplete zeroing ... now complete)
-    _userMessagesSinceLastPeriodicEval = 0;
-    _isExtractingFacts =
-        false; // secondary fact flag + counter zero in _loadLast loaded path (incomplete zeroing ... now complete; fact_extraction)
+        false; // secondary flag zero for the journal recap state (stateless/prompt-only; incomplete zeroing ... now complete)
     _isEvolvingCharacter = false;
     _evolutionStatus = '';
     _evolutionError =
@@ -440,12 +434,9 @@ extension ChatServiceSessionLoad on ChatService {
       _summary = session.summary ?? '';
       _summaryLastIndex = session.summaryLastIndex ?? 0;
       _summaryPaused =
-          false; // explicit secondary zero for _summaryPaused on loadSession loaded path (incomplete zeroing ... now complete; see keep-sync + summary_service)
+          false; // explicit secondary zero for _summaryPaused on loadSession loaded path (incomplete zeroing ... now complete; see keep-sync + journal_maintenance)
       _isSummaryGenerating =
           false; // secondary zero for flag on loadSession loaded (symmetric)
-      _userMessagesSinceLastPeriodicEval = 0;
-      _isExtractingFacts =
-          false; // secondary fact flag + counter zero on loadSession loaded (symmetric; incomplete zeroing ... now complete; fact_extraction)
       _isEvolvingCharacter = false;
       _evolutionStatus = '';
       _evolutionError =

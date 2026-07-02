@@ -112,9 +112,6 @@ extension ChatServiceSessionManage on ChatService {
         false; // explicit secondary zero for _summaryPaused (symmetric to generating; fork hygiene + incomplete zeroing now complete)
     _isSummaryGenerating =
         false; // zero secondary flag on fork (new branch hygiene, matches summary scalar reset)
-    _userMessagesSinceLastPeriodicEval = 0;
-    _isExtractingFacts =
-        false; // secondary fact flag + counter zero on fork (new branch hygiene + incomplete zeroing now complete; fact_extraction)
     _isEvolvingCharacter = false;
     _evolutionStatus = '';
     _evolutionError =
@@ -234,7 +231,7 @@ extension ChatServiceSessionManage on ChatService {
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; startNew 1:1/ext-seed branch + incomplete zeroing ... now complete)
     _isSummaryGenerating =
-        false; // explicit in startNewChat 1:1/ext-seed branch (both startNew explicit + incomplete zeroing... now complete (see CLAUDE.md); summary_service) + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete in both branches)"
+        false; // explicit in startNewChat 1:1/ext-seed branch (both startNew explicit + incomplete zeroing... now complete (see CLAUDE.md); journal_maintenance) + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete in both branches)"
 
     // Explicitly clear any prior branching/fork metadata. A "New Chat" is
     // never a branch/fork from a previous session. This prevents stale
@@ -260,9 +257,6 @@ extension ChatServiceSessionManage on ChatService {
     _messagesSinceLastCheck = 0;
     _isCheckingCompletion =
         false; // see decl + keep reset blocks (incomplete zeroing... now complete (see CLAUDE.md); explicit in both startNew branches)
-    _userMessagesSinceLastPeriodicEval = 0;
-    _isExtractingFacts =
-        false; // explicit secondary fact flag + counter zero in startNew 1:1/ext-seed branch (both startNew explicit + incomplete zeroing ... now complete; fact_extraction)
     _isEvolvingCharacter = false;
     _evolutionStatus = '';
     _evolutionError =
@@ -348,7 +342,7 @@ extension ChatServiceSessionManage on ChatService {
       }
       _needsSimulation.resetBuffers();
       // needs_impact_evaluator is stateless/prompt-only (no reset calls needed on it;
-      // see full list in "keep reset blocks in sync" comments + cross-ref setActiveCharacter:1572 + fact_extraction (stateless or prompt-only; no reset calls needed) + evolution_service (stateless or prompt-only; no reset calls needed) + realism_verification (stateless or prompt-only; no reset calls needed) + " ; read live from ext on active/group speaker; incomplete zeroing... now complete (see CLAUDE.md) (no extra scalar)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)".
+      // see full list in "keep reset blocks in sync" comments + cross-ref setActiveCharacter:1572 + evolution_service (stateless or prompt-only; no reset calls needed) + realism_verification (stateless or prompt-only; no reset calls needed) + " ; read live from ext on active/group speaker; incomplete zeroing... now complete (see CLAUDE.md) (no extra scalar)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)".
 
       // pending covered by relationship service reset in the ext-seed or non-ext paths below.
       // Always reset per-chat runtime realism fields (arousal/fixation/cooldowns) for a fresh
@@ -420,9 +414,6 @@ extension ChatServiceSessionManage on ChatService {
             false; // explicit secondary zero for _summaryPaused (symmetric to generating; non-ext/group/0-session startNew path + now complete)
         _isSummaryGenerating =
             false; // explicit secondary zero in startNew non-ext/group/0-session path (both branches + now complete for summary flag too)
-        _userMessagesSinceLastPeriodicEval = 0;
-        _isExtractingFacts =
-            false; // explicit secondary fact flag + counter zero in startNew non-ext/group/0-session path (both branches + now complete for fact flag/counter; fact_extraction)
         _isEvolvingCharacter = false;
         _evolutionStatus = '';
         _evolutionError =
@@ -432,7 +423,6 @@ extension ChatServiceSessionManage on ChatService {
 
     // Explicit flag + cadence counter zero for evolution (in addition to per-branch) to keep "incomplete zeroing... now complete (see CLAUDE.md)" + both startNew explicit; evolution_service (stateless or prompt-only; no reset calls needed) + " ; no god scalar zero needed -- live ext read; see also setActiveCharacter + group 0-session paths)" + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)".
     // Also zero the facts counter here for symmetric hygiene on the two periodic cadence counters.
-    _userMessagesSinceLastPeriodicEval = 0;
     _isEvolvingCharacter = false;
     _evolutionStatus = '';
     _evolutionError = '';

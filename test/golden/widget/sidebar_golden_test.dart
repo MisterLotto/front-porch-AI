@@ -99,7 +99,7 @@ void main() {
     );
   });
 
-  testWidgets('SummarySection — populated summary', (tester) async {
+  testWidgets('SummarySection — populated recap', (tester) async {
     final chat = FakeChatService(
       summary: '{{user}} and {{char}} agreed to meet at the harbor at dawn '
           'after {{char}} admitted the lighthouse logs were forged.',
@@ -118,9 +118,9 @@ void main() {
       name: 'summary',
       surface: const Size(360, 420),
       settle: false,
-      // Section defaults disabled+collapsed; tapping the enable toggle turns it
-      // on and expands it, revealing the summary body.
-      afterPump: (t) => t.tap(find.byType(Switch).first),
+      // The Journal is enabled by default but the section starts collapsed;
+      // tapping the header expands it, revealing the recap body.
+      afterPump: (t) => t.tap(find.text('Where we are')),
     );
   });
 

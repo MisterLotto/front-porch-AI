@@ -9,14 +9,12 @@ import 'package:intl/intl.dart';
 class MacroContext {
   final String? userName;
   final String? characterName;
-  final int? summaryMaxWords;
   final String? chatId;
   final String? characterId;
 
   const MacroContext({
     this.userName,
     this.characterName,
-    this.summaryMaxWords,
     this.chatId,
     this.characterId,
   });
@@ -53,7 +51,8 @@ class MacroResolver {
 
     register('user', (args, ctx) => ctx.userName ?? '');
     register('char', (args, ctx) => ctx.characterName ?? '');
-    register('words', (args, ctx) => ctx.summaryMaxWords?.toString() ?? '');
+    // ({{words}} was removed with the old summary-prompt feature — the
+    // Journal recap has a fixed length instruction.)
 
     // Phase 2 P0
     register('newline', (args, ctx) {

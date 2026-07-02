@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Tests for the extracted EvolutionService (step 14 of Stage 3 god-file
-// modularization; plain leaf sibling after fact_extraction step 13).
+// modularization; plain leaf sibling of journal_maintenance).
 // Owns triggerCharacterEvolution / triggerEvolutionNow (target selection for
 // group per-speaker via last non-user + 1:1, LLM stream, maxLen heuristic,
 // strip via cb, multi JSON parse incl truncated recovery, persist via cb,
@@ -18,7 +18,7 @@
 // on* cbs (persist, setStatus etc) exercised in dedicated with asserts.
 // aug (chat_service_session_test etc.) receive *only* qualified passive notes
 // in headers/comments (no evolution-specific aug file edits; full in dedicated
-// + manual; exercised via god thins _maybeRunPeriodicEvals/_runPeriodicEvalsInSequence/_triggerCharacterEvolution ;
+// + manual; exercised via god thins _maybeRunPeriodicEvals/_triggerCharacterEvolution ;
 // qualified notes only in dedicated header + god + MD per precedent).
 // 1:1 vs group parity for evolution (per-char counts + effective layering +
 // trigger target via cbs; dispatch via impersonation in god for group).
@@ -71,7 +71,7 @@ class _FakeLlmForEvolution extends LLMService {
 ChatMessage _mkMsg(String sender, String text, {bool isUser = false}) =>
     ChatMessage(text: text, sender: sender, isUser: isUser);
 
-/// Test factory (modeled exactly on createTestFactExtraction / createTestSummaryService).
+/// Test factory (live-closure pattern shared by the former leaf test factories).
 /// Live closures for group maps + cbs (real dispatch for target/impersonation, persist,
 /// flag, status, effective via maps, prompt capture).
 EvolutionService createTestEvolutionService({

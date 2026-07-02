@@ -463,12 +463,6 @@ class StorageService extends ChangeNotifier {
   String get ragEmbeddingModel => memorySettings.ragEmbeddingModel;
   Future<void> setRagEmbeddingModel(String v) =>
       memorySettings.setRagEmbeddingModel(v);
-  bool get autoPersonaEnabled => memorySettings.autoPersonaEnabled;
-  Future<void> setAutoPersonaEnabled(bool v) =>
-      memorySettings.setAutoPersonaEnabled(v);
-  int get autoPersonaInterval => memorySettings.autoPersonaInterval;
-  Future<void> setAutoPersonaInterval(int v) =>
-      memorySettings.setAutoPersonaInterval(v);
   bool get characterEvolutionEnabled =>
       memorySettings.characterEvolutionEnabled;
   Future<void> setCharacterEvolutionEnabled(bool v) =>
@@ -476,17 +470,15 @@ class StorageService extends ChangeNotifier {
   int get evolutionInterval => memorySettings.evolutionInterval;
   Future<void> setEvolutionInterval(int v) =>
       memorySettings.setEvolutionInterval(v);
-  bool get summaryEnabled => memorySettings.summaryEnabled;
-  Future<void> setSummaryEnabled(bool v) => memorySettings.setSummaryEnabled(v);
-  int get summaryInterval => memorySettings.summaryInterval;
-  Future<void> setSummaryInterval(int v) =>
-      memorySettings.setSummaryInterval(v);
-  int get summaryMaxWords => memorySettings.summaryMaxWords;
-  Future<void> setSummaryMaxWords(int v) =>
-      memorySettings.setSummaryMaxWords(v);
-  String get summaryPrompt => memorySettings.summaryPrompt;
-  Future<void> setSummaryPrompt(String v) => memorySettings.setSummaryPrompt(v);
-  String get defaultSummaryPrompt => MemorySettings.defaultSummaryPrompt;
+  // The Journal (replaced the old summary + auto-persona settings)
+  bool get journalEnabled => memorySettings.journalEnabled;
+  Future<void> setJournalEnabled(bool v) => memorySettings.setJournalEnabled(v);
+  int get journalInterval => memorySettings.journalInterval;
+  Future<void> setJournalInterval(int v) =>
+      memorySettings.setJournalInterval(v);
+  int get journalMaxCards => memorySettings.journalMaxCards;
+  Future<void> setJournalMaxCards(int v) =>
+      memorySettings.setJournalMaxCards(v);
 
   // Realism / banned (bannedPhrases, defaults lifted to realismSettings)
   bool get realismOneShotEval => realismSettings.realismOneShotEval;
