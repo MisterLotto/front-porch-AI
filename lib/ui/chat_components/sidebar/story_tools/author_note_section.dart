@@ -21,8 +21,10 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import '../sidebar_tokens.dart';
 
-/// Author note section (extracted, group + 1:1 support).
+/// Author note section (group + 1:1 support) — lives inside the Story Tools
+/// accordion.
 class AuthorNoteSection extends StatefulWidget {
   final ChatService chatService;
   const AuthorNoteSection({super.key, required this.chatService});
@@ -61,29 +63,16 @@ class _AuthorNoteSectionState extends State<AuthorNoteSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Icon(
-              Icons.sticky_note_2_outlined,
-              size: 16,
-              color: Colors.amber,
-            ),
-            const SizedBox(width: 6),
-            Tooltip(
-              message: isGroup
-                  ? 'Group Author\'s Note — injected for every character in the group.\n'
-                        'For per-character author\'s notes, go to Group Settings → Prompt Engineering.'
-                  : 'Author\'s Note — injected into the character\'s context.',
-              child: Text(
-                isGroup ? "Group Author's Note" : "Author's Note",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary(context),
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
+        Tooltip(
+          message: isGroup
+              ? 'Group Author\'s Note — injected for every character in the group.\n'
+                    'For per-character author\'s notes, go to Group Settings → Prompt Engineering.'
+              : 'Author\'s Note — injected into the character\'s context.',
+          child: SidebarSubHeader(
+            icon: Icons.sticky_note_2_outlined,
+            label: isGroup ? "Group Author's Note" : "Author's Note",
+            accent: AppColors.porchHoneyOf(context),
+          ),
         ),
         const SizedBox(height: 8),
         AppTextField(
@@ -109,13 +98,7 @@ class _AuthorNoteSectionState extends State<AuthorNoteSection> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(
-                color: AppColors.resolve(
-                  context,
-                  Colors.blueAccent,
-                  Colors.blue.shade700,
-                ),
-              ),
+              borderSide: BorderSide(color: AppColors.bondMidOf(context)),
             ),
             contentPadding: const EdgeInsets.all(10),
           ),
@@ -133,13 +116,13 @@ class _AuthorNoteSectionState extends State<AuthorNoteSection> {
             Color sliderColor;
             String tierLabel;
             if (strength <= 3) {
-              sliderColor = Colors.blueAccent;
+              sliderColor = AppColors.bondMidOf(context);
               tierLabel = 'Subtle';
             } else if (strength <= 7) {
-              sliderColor = Colors.amberAccent;
+              sliderColor = AppColors.porchAmberOf(context);
               tierLabel = 'Moderate';
             } else {
-              sliderColor = Colors.redAccent;
+              sliderColor = AppColors.negativeAccentOf(context);
               tierLabel = 'Strong';
             }
             return Column(
