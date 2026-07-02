@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-02 — CI publishes apt/rpm to the frontporchai.app deploy host
+- Files: .github/workflows/release.yml (publish-apt + publish-rpm jobs: `ssh-keyscan` + `REMOTE` host `dreamersai.art` → `apt`/`rpm.frontporchai.app`).
+- Reason: completes the repo cutover. The stable-release workflow uploaded packages via SSH to `apt-deploy@dreamersai.art`; that still resolves to the droplet but would break when dreamersai.art lapses. Repointed to the droplet-resolving frontporchai.app subdomains (same box/user/key — pure hostname swap; the bare apex is GitHub Pages, hence the api/apt/rpm subdomains).
+- Not a client change: release.yml only uploads packages and runs reprepro/createrepo (repo metadata); it does NOT write install.sh/.repo, so the served repo-address files (already on the new domain) are untouched.
+- Verified: release.yml still valid YAML; no `dreamersai.art` left in any workflow.
+
 ## 2026-07-02 — Migrate the app + Linux repos to frontporchai.app (dual-served with dreamersai.art)
 - Files: lib/services/backporch/backporch_api.dart (default BACKPORCH_BASE_URL → https://api.frontporchai.app; still --dart-define overridable), lib/ui/widgets/sidebar.dart (removed the retired Matrix link — Discord button already present), docs/install.md + scripts/apt-install.sh (apt/rpm → frontporchai.app).
 - Droplet (not in this repo; additive/dual-serve): added Caddy site blocks for api/apt/rpm.frontporchai.app mirroring the dreamersai.art ones (same 127.0.0.1:8080 backend / same /var/www/{apt,rpm} roots; Let's Encrypt certs auto-issued), and repointed the served /var/www/apt/install.sh REPO_URL + /var/www/rpm/front-porch-ai.repo baseurl to the new host (same GPG key, served on both). Matrix + existing dreamersai.art blocks untouched. Backups: /etc/caddy/Caddyfile.bak.*, /root/webroot-backups/.

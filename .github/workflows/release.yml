@@ -929,7 +929,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Publish .deb to APT repository at apt.dreamersai.art ──
+  # ── Publish .deb to APT repository at apt.frontporchai.app ──
   publish-apt:
     name: Publish to APT Repository
     needs: [release, publish-release]
@@ -951,10 +951,10 @@ jobs:
           chmod 600 ~/.ssh/apt_deploy_key
 
           # Add host key to known_hosts (avoids interactive prompt)
-          ssh-keyscan -H dreamersai.art >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H apt.frontporchai.app >> ~/.ssh/known_hosts 2>/dev/null
 
           SSH_OPTS="-i ~/.ssh/apt_deploy_key -o StrictHostKeyChecking=accept-new"
-          REMOTE="apt-deploy@dreamersai.art"
+          REMOTE="apt-deploy@apt.frontporchai.app"
           REPO_PATH="/var/www/apt"
 
           # Upload the .deb
@@ -984,7 +984,7 @@ jobs:
           # Clean up local SSH key
           rm -f ~/.ssh/apt_deploy_key
 
-  # ── Publish .rpm to RPM repository at rpm.dreamersai.art ──
+  # ── Publish .rpm to RPM repository at rpm.frontporchai.app ──
   publish-rpm:
     name: Publish to RPM Repository
     needs: [release, publish-release]
@@ -1006,10 +1006,10 @@ jobs:
           chmod 600 ~/.ssh/apt_deploy_key
 
           # Add host key to known_hosts
-          ssh-keyscan -H dreamersai.art >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H rpm.frontporchai.app >> ~/.ssh/known_hosts 2>/dev/null
 
           SSH_OPTS="-i ~/.ssh/apt_deploy_key -o StrictHostKeyChecking=accept-new"
-          REMOTE="apt-deploy@dreamersai.art"
+          REMOTE="apt-deploy@rpm.frontporchai.app"
 
           # Upload the .rpm
           echo "Uploading .rpm to RPM server..."
