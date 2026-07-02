@@ -343,21 +343,6 @@ class Sidebar extends StatelessWidget {
                     ),
                   ),
                 ),
-                Tooltip(
-                  message: 'Join our Matrix Server',
-                  child: GestureDetector(
-                    onTap: () =>
-                        launchUrl(Uri.parse('https://matrix.dreamersai.art')),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Icon(
-                        Icons.grid_view_rounded,
-                        size: 20,
-                        color: AppColors.textSecondary(context),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

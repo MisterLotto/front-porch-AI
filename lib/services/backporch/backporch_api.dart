@@ -55,7 +55,7 @@ class BackporchApi {
   /// via `--dart-define=BACKPORCH_BASE_URL=http://localhost:8090`.
   static const String defaultBaseUrl = String.fromEnvironment(
     'BACKPORCH_BASE_URL',
-    defaultValue: 'https://api.dreamersai.art',
+    defaultValue: 'https://api.frontporchai.app',
   );
   final String baseUrl;
 

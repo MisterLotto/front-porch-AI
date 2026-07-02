@@ -54,13 +54,13 @@ We provide official repositories for major distributions to ensure easy updates.
 
 #### **Debian / Ubuntu / Mint / Pop!_OS (APT)**
 ```bash
-curl -fsSL https://apt.dreamersai.art/install.sh | bash
+curl -fsSL https://apt.frontporchai.app/install.sh | bash
 sudo apt install front-porch-ai
 ```
 
 #### **Fedora / RHEL / openSUSE / CentOS (RPM)**
 ```bash
-sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
+sudo dnf config-manager --add-repo https://rpm.frontporchai.app/front-porch-ai.repo
 sudo dnf install front-porch-ai
 ```
 
