@@ -23,6 +23,7 @@ import { StoryWriterPage } from './pages/StoryWriterPage';
 import { StoryReaderPage } from './pages/StoryReaderPage';
 import { ModelsPage } from './pages/ModelsPage';
 import { AccountPage } from './pages/AccountPage';
+import { StoopSection } from './pages/stoop/StoopSection';
 
 export function App() {
   const { loading, setupRequired, authenticated } = useAuth();
@@ -55,6 +56,7 @@ export function App() {
         <Route path="/stories/:id/write/:act/:scene" element={<StoryWriterPage />} />
         <Route path="/stories/:id/read" element={<StoryReaderPage />} />
         <Route path="/models" element={<ModelsPage />} />
+        <Route path="/stoop/*" element={<StoopSection />} />
         <Route path="/edit/:id" element={<CharacterEditPage />} />
         <Route path="/account" element={<AccountPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

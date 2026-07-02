@@ -13,7 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'stoop_aup.dart';
+import 'package:front_porch_ai/services/backporch/stoop_aup.dart';
 
 /// The Acceptable Use Policy gate. Shown once a user is signed in but has not
 /// yet agreed to the live AUP version. The Stoop's content stays behind this

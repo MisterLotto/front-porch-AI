@@ -32,6 +32,7 @@ import 'package:front_porch_ai/services/web/routes/group_routes.dart';
 import 'package:front_porch_ai/services/web/routes/remote_routes.dart';
 import 'package:front_porch_ai/services/web/routes/settings_routes.dart';
 import 'package:front_porch_ai/services/web/routes/static_routes.dart';
+import 'package:front_porch_ai/services/web/routes/stoop_routes.dart';
 import 'package:front_porch_ai/services/web/routes/story_export_routes.dart';
 import 'package:front_porch_ai/services/web/routes/story_routes.dart';
 import 'package:front_porch_ai/services/web/routes/stream_routes.dart';
@@ -78,6 +79,7 @@ shelf.Handler buildWebHandler(WebServerDeps deps) {
   if (deps.settingsFacade != null) {
     WebSettingsRoutes(deps.settingsFacade!, router);
   }
+  if (deps.stoopFacade != null) WebStoopRoutes(deps.stoopFacade!, router);
   if (deps.worldFacade != null) WebWorldRoutes(deps.worldFacade!, router);
   if (deps.backendFacade != null || deps.imageFacade != null) {
     WebBackendRoutes(

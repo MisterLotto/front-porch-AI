@@ -54,6 +54,8 @@ export default defineConfig({
       // 403. Without this, live token streaming silently never connects and the
       // chat only updates after leaving and re-entering the conversation.
       '/api/ws': { target: 'ws://localhost:8085', ws: true },
+      // The Stoop live-messaging relay — same WebSocket rules as /api/ws.
+      '/api/stoop/ws': { target: 'ws://localhost:8085', ws: true },
       '/api': { target: 'http://localhost:8085', changeOrigin: true },
     },
   },
@@ -73,6 +75,8 @@ export default defineConfig({
       // 403. Without this, live token streaming silently never connects and the
       // chat only updates after leaving and re-entering the conversation.
       '/api/ws': { target: 'ws://localhost:8085', ws: true },
+      // The Stoop live-messaging relay — same WebSocket rules as /api/ws.
+      '/api/stoop/ws': { target: 'ws://localhost:8085', ws: true },
       '/api': { target: 'http://localhost:8085', changeOrigin: true },
     },
   },

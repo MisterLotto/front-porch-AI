@@ -22,6 +22,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:front_porch_ai/services/web/util/json_response.dart';
+import 'package:front_porch_ai/services/web/util/ws_guard.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 /// The single authenticated WebSocket endpoint (`/api/ws`).
@@ -44,18 +45,9 @@ class StreamRoutes {
 
   Future<shelf.Response> _handle(shelf.Request request) async {
     final origin = request.headers['origin'];
-    if (origin != null && !_originAllowed(request, origin)) {
+    if (origin != null && !wsOriginAllowed(request, origin)) {
       return JsonResponse.forbidden('Cross-origin WebSocket rejected');
     }
     return await _wsHandler(request);
-  }
-
-  /// Allow same-origin (origin host == request host) and the localhost dev
-  /// origins used by the Vite dev server.
-  bool _originAllowed(shelf.Request request, String origin) {
-    final o = Uri.tryParse(origin);
-    if (o == null) return false;
-    if (o.host == 'localhost' || o.host == '127.0.0.1') return true;
-    return o.host == request.requestedUri.host;
   }
 }

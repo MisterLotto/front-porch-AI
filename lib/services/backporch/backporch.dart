@@ -13,3 +13,4 @@ export 'stoop_creator.dart';
 export 'stoop_message.dart';
 export 'stoop_message_socket.dart';
 export 'stoop_analytics.dart';
+export 'stoop_aup.dart';
