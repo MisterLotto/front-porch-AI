@@ -305,6 +305,16 @@ class WebServerHost extends ChangeNotifier {
         ? SettingsFacade(_storage, _llmProvider!)
         : null;
 
+    // The Stoop relay. The web client keeps its own Stoop session (tokens in
+    // browser localStorage, sent per-request); the facade only relays calls
+    // and runs the local import chain on downloads.
+    final stoopFacade = StoopFacade(
+      _storage,
+      db,
+      characters: _characterRepository,
+      groups: _groupChatRepository,
+    );
+
     final worldFacade = _worldRepository != null
         ? WorldFacade(_worldRepository!, _characterRepository)
         : null;
@@ -370,6 +380,7 @@ class WebServerHost extends ChangeNotifier {
       chatToolsFacade: chatToolsFacade,
       groupFacade: groupFacade,
       settingsFacade: settingsFacade,
+      stoopFacade: stoopFacade,
       worldFacade: worldFacade,
       backendFacade: backendFacade,
       imageFacade: imageFacade,

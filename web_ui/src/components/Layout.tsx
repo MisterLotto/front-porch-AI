@@ -12,6 +12,7 @@ const NAV = [
   { to: '/chat', label: 'Chat', icon: '💬', end: false },
   { to: '/worlds', label: 'Worlds', icon: '🗺️', end: false },
   { to: '/stories', label: 'Stories', icon: '📖', end: false },
+  { to: '/stoop', label: 'The Stoop', icon: '🏘️', end: false },
   { to: '/models', label: 'Models', icon: '🧠', end: false },
   { to: '/remote', label: 'Remote', icon: '🌐', end: false },
   { to: '/settings', label: 'Settings', icon: '🎛️', end: false },
