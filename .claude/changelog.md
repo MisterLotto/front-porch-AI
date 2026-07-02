@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-02 — macOS: app never showed its window on Finder/dock launches (disable experimental merged platform/UI thread)
+- Files: macos/Runner/Info.plist (`FLTEnableMergedPlatformUIThread` = false).
+- Reason: Launched from Finder/dock/Spotlight, the app bounced once and never presented a window — the process ran fine (engine up, DB + characters loaded, ~290 MB, clean stderr, no crash report), but no window appeared. The SAME build launched via `open`/`flutter run` rendered every time, which made it look intermittent/env-dependent.
+- Root cause: Flutter 3.41.x defaults the experimental "merged platform/UI thread" mode ON (FlutterEngine.mm: `mergedPlatformUIThread = YES` unless Info.plist `FLTEnableMergedPlatformUIThread` overrides it). In that mode the window fails to present specifically on a LaunchServices double-click (Finder foreground-activation timing); a programmatic `open` dodges it. Likely tipped over by a macOS update applied on the user's reboot.
+- Ruled out first (with evidence): the DownloadManager relative-path fix (df1094c) was already in the build (no `models` exception); environment/PATH (a truly bare `env -i` launch still rendered via open); code signing (spctl accepted, codesign OK); off-screen window (single internal Retina display, on-screen saved bounds); a crash (no crash report, clean stderr).
+- Fix: opt out in Info.plist → revert to Flutter's stable separate-thread model, which renders in every launch path. Safe regardless — shipping a production desktop app on an experimental rendering mode isn't worth the risk.
+- Verified: `flutter build macos --release` ✓; staged the build and the user double-clicked it from Finder → window appears (root cause + fix confirmed end-to-end).
+- Commit: (below)
+
 ## 2026-07-02 — CI publishes apt/rpm to the frontporchai.app deploy host
 - Files: .github/workflows/release.yml (publish-apt + publish-rpm jobs: `ssh-keyscan` + `REMOTE` host `dreamersai.art` → `apt`/`rpm.frontporchai.app`).
 - Reason: completes the repo cutover. The stable-release workflow uploaded packages via SSH to `apt-deploy@dreamersai.art`; that still resolves to the droplet but would break when dreamersai.art lapses. Repointed to the droplet-resolving frontporchai.app subdomains (same box/user/key — pure hostname swap; the bare apex is GitHub Pages, hence the api/apt/rpm subdomains).
