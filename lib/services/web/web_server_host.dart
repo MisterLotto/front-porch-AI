@@ -44,7 +44,13 @@ import 'package:front_porch_ai/services/web/server_bootstrap.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
 import 'package:front_porch_ai/services/web/tunnels/tunnel_manager.dart';
+import 'package:front_porch_ai/services/web/tunnels/lan_ip.dart';
+import 'package:front_porch_ai/services/web/tunnels/remote_setup_result.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
+
+// Re-export the extracted RemoteSetupResult so existing consumers importing
+// this host file are unaffected.
+export 'package:front_porch_ai/services/web/tunnels/remote_setup_result.dart';
 
 /// Lifecycle owner for the web server (the ChangeNotifier that `main.dart` and
 /// the settings UI talk to). It only bootstraps + binds; all request behavior
@@ -404,7 +410,7 @@ class WebServerHost extends ChangeNotifier {
     _server = await shelf_io.serve(buildWebHandler(deps), bindAddress, bindPort)
       ..autoCompress = true;
 
-    if (exposeAll) _lanIp = await _detectLanIp();
+    if (exposeAll) _lanIp = await detectPrivateLanIp();
     debugPrint(
       '[WebServerHost] Listening on http://${exposeAll ? (_lanIp ?? '0.0.0.0') : 'localhost'}:${_server!.port}',
     );
@@ -415,6 +421,42 @@ class WebServerHost extends ChangeNotifier {
       await tunnelManager.enableTailscale();
     }
     notifyListeners();
+  }
+
+  /// Crash-loop-safe entry point for starting the server, used by launch-time
+  /// auto-start (main.dart) and the Settings toggle. A hung or crashing [start]
+  /// must never lock the user out, since "enabled" is already persisted and
+  /// would re-crash every launch. So a persisted "starting" breadcrumb is set
+  /// before the risky bind and cleared on success — if [isAutoStart] still sees
+  /// it set on a later launch, the previous start never finished, so we disable
+  /// the server and open cleanly. The start is also time-boxed, and any
+  /// error/timeout disables it and tears down the half-started state. Returns
+  /// whether the server ended up running.
+  Future<bool> startSafely(int port, {bool isAutoStart = false}) async {
+    final settings = _storage.webServerSettings;
+    if (isAutoStart && settings.webServerStarting) {
+      debugPrint(
+        '[WebServerHost] Previous start did not finish — disabling the web '
+        'server so the app launches cleanly (re-enable it in Settings).',
+      );
+      await settings.setWebServerStarting(false);
+      await settings.setWebServerEnabled(false);
+      return false;
+    }
+    try {
+      await settings.setWebServerStarting(true);
+      await start(port).timeout(const Duration(seconds: 25));
+      await settings.setWebServerStarting(false);
+      return isRunning;
+    } catch (e) {
+      debugPrint('[WebServerHost] Web server start failed: $e — disabling.');
+      await settings.setWebServerStarting(false);
+      await settings.setWebServerEnabled(false);
+      try {
+        await stop();
+      } catch (_) {}
+      return false;
+    }
   }
 
   Future<void> stop() async {
@@ -483,56 +525,4 @@ class WebServerHost extends ChangeNotifier {
     );
   }
 
-  Future<String?> _detectLanIp() async {
-    try {
-      final interfaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-        includeLoopback: false,
-      );
-      for (final iface in interfaces) {
-        for (final addr in iface.addresses) {
-          final ip = addr.address;
-          if (ip.startsWith('192.168.') ||
-              ip.startsWith('10.') ||
-              _is172Private(ip)) {
-            return ip;
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  bool _is172Private(String ip) {
-    if (!ip.startsWith('172.')) return false;
-    final second = int.tryParse(ip.split('.')[1]) ?? 0;
-    return second >= 16 && second <= 31;
-  }
-}
-
-/// Outcome of [WebServerHost.setupRemoteAccess] — drives the tutorial's final
-/// "you're live / enable HTTPS / not yet" state.
-class RemoteSetupResult {
-  const RemoteSetupResult({
-    required this.outcome,
-    this.httpsUrl,
-    this.portUrl,
-    this.reachable = false,
-  });
-
-  /// How the Tailscale HTTPS serve resolved (ok / needs the admin toggle / …).
-  final TailscaleServeOutcome outcome;
-
-  /// Clean no-port `https://<magicdns>` address — null unless [outcome] is ok.
-  final String? httpsUrl;
-
-  /// `http://<magicdns>:<port>` fallback — works whenever Tailscale is up, even
-  /// before HTTPS certs are enabled.
-  final String? portUrl;
-
-  /// Whether the best available address was just verified to route back here.
-  final bool reachable;
-
-  /// The address to surface first: HTTPS when available, else the port URL.
-  String? get primaryUrl => httpsUrl ?? portUrl;
 }

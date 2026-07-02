@@ -1826,6 +1826,11 @@ class _MyAppState extends State<MyApp> with WindowListener {
     if (!storage.webServerSettings.webServerEnabled) return;
 
     final webServer = Provider.of<WebServerHost>(context, listen: false);
-    await webServer.start(storage.webServerSettings.webServerPort);
+    // Crash-loop-safe: a hung or crashing start disables the server instead of
+    // re-crashing on every launch and locking the user out (see startSafely).
+    await webServer.startSafely(
+      storage.webServerSettings.webServerPort,
+      isAutoStart: true,
+    );
   }
 }

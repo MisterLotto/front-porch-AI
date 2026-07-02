@@ -26,6 +26,12 @@ import 'settings_base.dart';
 /// preferences.
 class WebServerSettings with SettingsBase {
   bool _webServerEnabled = false;
+
+  /// Launch breadcrumb: true while a start attempt is in flight. If a launch
+  /// still sees it set, the previous start never finished (a hard crash/kill
+  /// mid-start), so auto-start disables the server instead of re-crashing every
+  /// launch. Internal lifecycle state, not UI — its setter does not notify().
+  bool _webServerStarting = false;
   int _webServerPort = 8085;
 
   // Bind policy: localhost-only by default; LAN access is explicit opt-in.
@@ -43,6 +49,7 @@ class WebServerSettings with SettingsBase {
   bool _webServerAutoRemote = false;
 
   bool get webServerEnabled => _webServerEnabled;
+  bool get webServerStarting => _webServerStarting;
   int get webServerPort => _webServerPort;
   bool get webServerAllowLan => _webServerAllowLan;
   String get webServerNgrokAuthToken => _webServerNgrokAuthToken;
@@ -50,6 +57,7 @@ class WebServerSettings with SettingsBase {
 
   void load() {
     _webServerEnabled = prefs?.getBool(k('web_server_enabled')) ?? false;
+    _webServerStarting = prefs?.getBool(k('web_server_starting')) ?? false;
     _webServerPort = prefs?.getInt(k('web_server_port')) ?? 8085;
     _webServerAllowLan = prefs?.getBool(k('web_server_allow_lan')) ?? false;
     _webServerNgrokAuthToken =
@@ -62,6 +70,13 @@ class WebServerSettings with SettingsBase {
     _webServerEnabled = value;
     await prefs?.setBool(k('web_server_enabled'), value);
     notify();
+  }
+
+  /// Persist the start breadcrumb. No notify(): internal launch state, not UI,
+  /// and it is written on the hot launch path where a rebuild is undesirable.
+  Future<void> setWebServerStarting(bool value) async {
+    _webServerStarting = value;
+    await prefs?.setBool(k('web_server_starting'), value);
   }
 
   Future<void> setWebServerPort(int value) async {

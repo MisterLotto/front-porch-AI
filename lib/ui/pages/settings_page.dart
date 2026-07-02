@@ -2009,10 +2009,25 @@ class _SettingsPageState extends State<SettingsPage> {
                           onChanged: (val) async {
                             await storage.setWebServerEnabled(val);
                             if (val) {
-                              await webServer.start(storage.webServerPort);
-                              // Guide the user through how they'll reach it.
-                              if (context.mounted) {
+                              // startSafely reverts + disables on failure so a
+                              // bad start can never leave the app in a launch
+                              // crash loop.
+                              final ok = await webServer.startSafely(
+                                storage.webServerPort,
+                              );
+                              if (!context.mounted) return;
+                              if (ok) {
+                                // Guide the user through how they'll reach it.
                                 await WebAccessSetupDialog.show(context);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Web server failed to start and was '
+                                      'turned off.',
+                                    ),
+                                  ),
+                                );
                               }
                             } else {
                               await webServer.stop();
