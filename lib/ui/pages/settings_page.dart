@@ -42,6 +42,7 @@ import 'package:front_porch_ai/ui/settings/dialogs/model_search_dialog.dart';
 import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
 
 import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
+import 'package:front_porch_ai/ui/settings/widgets/web_login_section.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).
 // Only the discoverable on/off switch was re-surfaced in the Voice & Media tab via
@@ -2066,24 +2067,17 @@ class _SettingsPageState extends State<SettingsPage> {
                               ],
                             ),
                           ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Login', style: theme.textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Account + optional 2FA\n(create it in the browser)',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      Text('Login', style: theme.textTheme.bodySmall),
+                      const SizedBox(height: 4),
+                      if (webServer.auth case final auth?)
+                        WebLoginSection(
+                          // Rebuild after a reset from the web side too.
+                          key: ValueKey(webServer.isRunning),
+                          auth: auth,
+                        ),
                       const SizedBox(height: 8),
                       Row(
                         children: [

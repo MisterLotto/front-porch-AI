@@ -41,6 +41,7 @@ class WebAuthRoutes {
     router.post('/api/auth/setup', _setup);
     router.post('/api/auth/login', _login);
     router.post('/api/auth/logout', _logout);
+    router.post('/api/auth/change-credentials', _changeCredentials);
     router.get('/api/auth/sessions', _listSessions);
     router.post('/api/auth/sessions/revoke', _revokeSession);
     router.post('/api/auth/2fa/begin', _beginTotp);
@@ -66,9 +67,14 @@ class WebAuthRoutes {
     final token = Cookies.sessionToken(request);
     final userId =
         token == null ? null : await _auth.sessions.validate(token);
+    // Account details ride along ONLY for an authenticated caller — this
+    // endpoint is public (pre-login) and must not leak the username.
+    final info = userId != null ? await _auth.accountInfo() : null;
     return JsonResponse.ok({
       'setupRequired': await _auth.isSetupRequired(),
       'authenticated': userId != null,
+      if (info != null) 'username': info.username,
+      if (info != null) 'totpEnabled': info.totpEnabled,
     });
   }
 
@@ -160,6 +166,33 @@ class WebAuthRoutes {
     );
   }
 
+  /// Change username and/or password. Re-auth (current password + TOTP when
+  /// enabled) happens in the service; on a password change every OTHER
+  /// session is revoked so a stolen cookie dies with the old password.
+  Future<shelf.Response> _changeCredentials(shelf.Request request) async {
+    final Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid request body');
+    }
+    final newPassword = body['newPassword']?.toString() ?? '';
+    final status = await _auth.changeCredentials(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      totpCode: body['totpCode']?.toString(),
+      newUsername: body['newUsername']?.toString(),
+      newPassword: newPassword,
+      ip: _clientIp(request),
+    );
+    if (status == CredentialChangeStatus.success && newPassword.isNotEmpty) {
+      final token = Cookies.sessionToken(request);
+      if (token != null) {
+        await _auth.sessions.revokeOthers(_userId(request), token);
+      }
+    }
+    return _credentialChangeResponse(status);
+  }
+
   Future<shelf.Response> _listSessions(shelf.Request request) async {
     final userId = _userId(request);
     final sessions = await _auth.sessions.listActive(userId);
@@ -213,12 +246,49 @@ class WebAuthRoutes {
     return JsonResponse.ok({'recoveryCodes': codes});
   }
 
+  /// Turning 2FA off is a credential change: it demands the current password
+  /// AND a current code, so a hijacked session can't strip the second factor.
   Future<shelf.Response> _disableTotp(shelf.Request request) async {
-    await _auth.disableTotp();
-    return JsonResponse.ok({'ok': true});
+    final Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid request body');
+    }
+    final status = await _auth.disableTotp(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      totpCode: body['totpCode']?.toString(),
+      ip: _clientIp(request),
+    );
+    return _credentialChangeResponse(status);
   }
 
   // ── helpers ──────────────────────────────────────────────────────────────
+
+  /// Map a [CredentialChangeStatus] to its HTTP response (shared by the
+  /// change-credentials and 2FA-disable endpoints).
+  shelf.Response _credentialChangeResponse(CredentialChangeStatus status) {
+    switch (status) {
+      case CredentialChangeStatus.success:
+        return JsonResponse.ok({'ok': true});
+      case CredentialChangeStatus.invalidCurrentPassword:
+        return JsonResponse.unauthorized('Current password is incorrect');
+      case CredentialChangeStatus.totpRequired:
+        return JsonResponse.error(
+          401,
+          'Two-factor code required',
+          extra: const {'totpRequired': true},
+        );
+      case CredentialChangeStatus.lockedOut:
+        return JsonResponse.tooManyRequests('Too many attempts, try again later');
+      case CredentialChangeStatus.notSetUp:
+        return JsonResponse.error(409, 'Account not configured');
+      case CredentialChangeStatus.invalidInput:
+        return JsonResponse.badRequest(
+          'Provide a new username or a new password of at least 8 characters',
+        );
+    }
+  }
 
   String _userId(shelf.Request request) =>
       request.context[kAuthUserIdContextKey] as String;

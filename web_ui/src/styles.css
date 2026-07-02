@@ -1042,6 +1042,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .recovery { columns: 2; font-size: 0.9rem; }
 .session-list, .recovery { list-style: none; padding: 0; }
 .session-list li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.auth-note { color: var(--accent); }
 
 /* ── Realism / Objective processing overlay (chat) ───────────────────────── */
 .proc-overlay {
