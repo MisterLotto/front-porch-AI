@@ -479,6 +479,9 @@ class StorageService extends ChangeNotifier {
   int get journalMaxCards => memorySettings.journalMaxCards;
   Future<void> setJournalMaxCards(int v) =>
       memorySettings.setJournalMaxCards(v);
+  bool get journalReviewFirst => memorySettings.journalReviewFirst;
+  Future<void> setJournalReviewFirst(bool v) =>
+      memorySettings.setJournalReviewFirst(v);
 
   // Realism / banned (bannedPhrases, defaults lifted to realismSettings)
   bool get realismOneShotEval => realismSettings.realismOneShotEval;

@@ -79,6 +79,7 @@ import 'package:front_porch_ai/services/chat/objective_proposal.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_physics.dart';
+import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
 import 'package:front_porch_ai/services/chat/evolution_service.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
@@ -2048,9 +2049,49 @@ class ChatService extends ChangeNotifier {
     embedText: (text) async => await _memoryService?.embedText(text),
   );
 
+  // Review-first parking + the ONE proposal applier (both modes go through
+  // it). Public via [journalReview] for the sidebar banner + review dialog.
+  late final _journalReview = JournalReview(
+    store: _journalStore,
+    getSessionId: () => _currentSessionId,
+    setRecap: (t) => _summary = t,
+    setCursor: (i) => _summaryLastIndex = i,
+    onSaveChat: _saveChat,
+    onNotify: notifyListeners,
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+  );
+
+  JournalReview get journalReview => _journalReview;
+
   late final _journalMaintenance = JournalMaintenance(
     store: _journalStore,
+    review: _journalReview,
     fireLLMEval: (p) => _fireLLMEval(p),
+    // Tool-calling door (§4.3): same eval posture as _fireLLMEval (low temp,
+    // reasoning off); local KoboldCpp returns null → XML floor.
+    fireToolEval: (prompt, tools) {
+      final service =
+          testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+      return service.generateWithTools(
+        GenerationParams(
+          prompt: prompt,
+          maxLength: 4000,
+          temperature: 0.1,
+          repeatPenalty: 1.15,
+          topP: 0.5,
+          xtcProbability: 0.0,
+          reasoningEnabled: false,
+          stopSequences: const [],
+        ),
+        tools,
+      );
+    },
+    getReviewFirst: () => _storageService.memorySettings.journalReviewFirst,
+    getBackendIdentity: () {
+      final service =
+          testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+      return '${service.backendName}|${_storageService.remoteModelName}';
+    },
     stripThinkBlocks: _stripThinkBlocks,
     getSessionId: () => _currentSessionId,
     getActiveCharacter: () => _activeCharacter,

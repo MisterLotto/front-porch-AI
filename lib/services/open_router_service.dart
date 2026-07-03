@@ -20,39 +20,11 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/remote_model_info.dart';
 
-/// Metadata for a remote model, including pricing.
-class RemoteModelInfo {
-  final String id;
-  final String name;
-  final double? promptCostPerMillion; // USD per 1M input tokens
-  final double? completionCostPerMillion; // USD per 1M output tokens
-
-  const RemoteModelInfo({
-    required this.id,
-    this.name = '',
-    this.promptCostPerMillion,
-    this.completionCostPerMillion,
-  });
-
-  /// Human-readable pricing string, e.g. "$0.50 / $1.50"
-  String get pricingLabel {
-    if (promptCostPerMillion == null && completionCostPerMillion == null) {
-      return 'Pricing unavailable';
-    }
-    final input = promptCostPerMillion != null
-        ? '\$${promptCostPerMillion!.toStringAsFixed(2)}'
-        : '?';
-    final output = completionCostPerMillion != null
-        ? '\$${completionCostPerMillion!.toStringAsFixed(2)}'
-        : '?';
-    return '$input in / $output out per 1M tokens';
-  }
-
-  bool get isFree =>
-      (promptCostPerMillion == null || promptCostPerMillion == 0) &&
-      (completionCostPerMillion == null || completionCostPerMillion == 0);
-}
+// RemoteModelInfo lived here for years — re-export so importers keep working.
+export 'package:front_porch_ai/services/remote_model_info.dart';
 
 /// LLM backend that connects to OpenAI-compatible APIs
 /// (OpenRouter, Nano-GPT, vLLM, LM Studio, etc).
@@ -67,13 +39,14 @@ class OpenRouterService extends LLMService {
   String get apiKey => _apiKey;
   String get modelName => _modelName;
 
+  /// Local backends (LM Studio, vLLM, etc.) are usable without an API key.
+  bool get _isLocalUrl =>
+      _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
+
   @override
   bool get isReady {
     if (!_isReady || _modelName.isEmpty) return false;
-    // Allow empty API key for local backends (LM Studio, vLLM, etc.)
-    final isLocal =
-        _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
-    return _apiKey.isNotEmpty || isLocal;
+    return _apiKey.isNotEmpty || _isLocalUrl;
   }
 
   @override
@@ -86,9 +59,7 @@ class OpenRouterService extends LLMService {
   }) : _apiUrl = apiUrl,
        _apiKey = apiKey,
        _modelName = modelName {
-    final isLocal =
-        apiUrl.contains('localhost') || apiUrl.contains('127.0.0.1');
-    _isReady = (_apiKey.isNotEmpty || isLocal) && _modelName.isNotEmpty;
+    _isReady = (_apiKey.isNotEmpty || _isLocalUrl) && _modelName.isNotEmpty;
   }
 
   /// Update configuration at runtime (e.g. when user changes settings).
@@ -107,9 +78,8 @@ class OpenRouterService extends LLMService {
       changed = true;
     }
     // Allow local backends without API key
-    final isLocal =
-        _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
-    final newReady = (_apiKey.isNotEmpty || isLocal) && _modelName.isNotEmpty;
+    final newReady =
+        (_apiKey.isNotEmpty || _isLocalUrl) && _modelName.isNotEmpty;
     if (newReady != _isReady) {
       _isReady = newReady;
       changed = true;
@@ -256,16 +226,12 @@ class OpenRouterService extends LLMService {
     }
   }
 
-  @override
-  Stream<String> generateStream(GenerationParams params) async* {
-    if (!isReady) {
-      throw Exception(
-        'Remote API not configured. Please set API key and model.',
-      );
-    }
-
-    final uri = Uri.parse('$_apiUrl/chat/completions');
-
+  /// Chat-completions payload shared by [generateStream] and
+  /// [generateWithTools] (one builder, so the two paths can't drift).
+  Map<String, dynamic> _chatPayload(
+    GenerationParams params, {
+    required bool stream,
+  }) {
     // Build messages array with proper role separation for chat APIs.
     final messages = <Map<String, String>>[];
     if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
@@ -275,7 +241,7 @@ class OpenRouterService extends LLMService {
 
     final payload = <String, dynamic>{
       'model': _modelName,
-      'stream': true,
+      'stream': stream,
       'max_tokens': params.maxLength,
       'temperature': params.temperature,
       'top_p': params.topP,
@@ -314,15 +280,74 @@ class OpenRouterService extends LLMService {
       // OpenAI API supports max 4 stop sequences
       payload['stop'] = params.stopSequences!.take(4).toList();
     }
+    return payload;
+  }
 
-    final request = http.Request('POST', uri);
-    request.headers['Content-Type'] = 'application/json';
-    request.headers['Authorization'] = 'Bearer $_apiKey';
+  /// Shared identification/auth headers for both request paths.
+  Map<String, String> get _chatHeaders => {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $_apiKey',
     // Identify the app for providers that support it
-    request.headers['HTTP-Referer'] =
-        'https://github.com/linux4life1/front-porch-AI';
-    request.headers['X-Title'] = 'Front Porch AI';
-    request.body = jsonEncode(payload);
+    'HTTP-Referer': 'https://github.com/linux4life1/front-porch-AI',
+    'X-Title': 'Front Porch AI',
+  };
+
+  /// OpenAI-style tool calling (non-streaming) — used by the Journal's
+  /// tool transport. Returns null on ANY failure (model/provider without
+  /// tool support, network error, malformed body): the caller treats null
+  /// as "use the text transport instead", so this never surfaces an error
+  /// for what is a best-effort upgrade.
+  @override
+  Future<LlmToolResponse?> generateWithTools(
+    GenerationParams params,
+    List<Map<String, dynamic>> tools,
+  ) async {
+    if (!isReady) return null;
+    final payload = _chatPayload(params, stream: false)
+      ..['tools'] = tools
+      ..['tool_choice'] = 'auto';
+
+    final client = http.Client();
+    _activeClient = client;
+    try {
+      final response = await client
+          .post(
+            Uri.parse('$_apiUrl/chat/completions'),
+            headers: _chatHeaders,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 120));
+      if (response.statusCode != 200) {
+        debugPrint(
+          '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
+          'falling back to text transport',
+        );
+        return null;
+      }
+      return parseOpenAiToolResponse(response.body);
+    } catch (e) {
+      debugPrint('[RemoteAPI] Tool call failed: $e — falling back');
+      return null;
+    } finally {
+      if (identical(_activeClient, client)) _activeClient = null;
+      client.close();
+    }
+  }
+
+  @override
+  Stream<String> generateStream(GenerationParams params) async* {
+    if (!isReady) {
+      throw Exception(
+        'Remote API not configured. Please set API key and model.',
+      );
+    }
+
+    final request = http.Request(
+      'POST',
+      Uri.parse('$_apiUrl/chat/completions'),
+    );
+    request.headers.addAll(_chatHeaders);
+    request.body = jsonEncode(_chatPayload(params, stream: true));
 
     final client = http.Client();
     _activeClient = client;

@@ -23,6 +23,7 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/journal_card_editor.dart';
 import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/journal_review_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../sidebar_tokens.dart';
 
@@ -135,6 +136,55 @@ class _JournalPanelState extends State<JournalPanel> {
           ),
         ),
         const SizedBox(height: 6),
+        // Review-first mode: proposals parked by the last maintenance pass.
+        if (widget.chatService.journalReview.hasPendingFor(
+          widget.chatService.currentSessionId,
+        ))
+          Padding(
+            padding: const EdgeInsets.only(left: 20, bottom: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(SidebarTokens.wellRadius),
+              onTap: _openReview,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.porchHoneyOf(
+                    context,
+                  ).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(SidebarTokens.wellRadius),
+                  border: Border.all(
+                    color: AppColors.porchHoneyOf(
+                      context,
+                    ).withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.rate_review_outlined,
+                      size: 14,
+                      color: AppColors.porchHoneyOf(context),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${widget.chatService.journalReview.pending!.totalProposals} '
+                        'proposed update(s) — tap to review',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.porchHoneyOf(context),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         if (preview.isEmpty)
           Padding(
             padding: const EdgeInsets.only(left: 20),
@@ -225,6 +275,12 @@ class _JournalPanelState extends State<JournalPanel> {
         ),
       ],
     );
+  }
+
+  Future<void> _openReview() async {
+    await JournalReviewDialog.show(context, widget.chatService.journalReview);
+    // Applied cards / cleared banner — refresh either way.
+    await _load();
   }
 
   Future<void> _openJournal() async {

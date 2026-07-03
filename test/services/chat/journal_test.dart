@@ -18,7 +18,10 @@ import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_ops.dart';
+import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
+import 'package:front_porch_ai/services/llm_service.dart'
+    show LlmToolCall, LlmToolResponse;
 
 ChatMessage _msg(
   String sender,
@@ -120,6 +123,53 @@ void main() {
 
     test('returns null recap for garbage', () {
       expect(parseRecap('no tags here at all'), isNull);
+    });
+
+    test('tool calls parse into the same validated ops (phase 4)', () {
+      final (ops, recap) = parseJournalToolCalls([
+        const LlmToolCall(
+          name: 'add_memory',
+          arguments: {
+            'content': 'He fixed the porch light.',
+            'category': 'about-user', // dash variant → normalized
+            'msgs': [3, '4'], // mixed int/string positions tolerated
+          },
+        ),
+        const LlmToolCall(
+          name: 'revise_memory',
+          arguments: {'id': '2', 'content': 'He quit.', 'feeling': 'Proud'},
+        ),
+        const LlmToolCall(name: 'retire_memory', arguments: {'id': 1}),
+        const LlmToolCall(name: 'pin_memory', arguments: {'id': 3}),
+        const LlmToolCall(
+          name: 'write_recap',
+          arguments: {'text': 'We are close now.'},
+        ),
+      ]);
+      expect(ops, hasLength(4));
+      expect(ops[0].action, JournalOpAction.add);
+      expect(ops[0].category, 'about_user');
+      expect(ops[0].sourcePositions, [3, 4]);
+      expect(ops[1].action, JournalOpAction.revise);
+      expect(ops[1].handle, 2);
+      expect(ops[1].feeling, 'proud');
+      expect(ops[2].action, JournalOpAction.retire);
+      expect(ops[3].action, JournalOpAction.pin);
+      expect(recap, 'We are close now.');
+    });
+
+    test('unknown tools and invalid tool arguments are dropped', () {
+      final (ops, recap) = parseJournalToolCalls([
+        const LlmToolCall(name: 'explode', arguments: {'boom': true}),
+        const LlmToolCall(name: 'add_memory', arguments: {}), // no content
+        const LlmToolCall(
+          name: 'revise_memory',
+          arguments: {'content': 'x'}, // no id
+        ),
+        const LlmToolCall(name: 'write_recap', arguments: {'text': '   '}),
+      ]);
+      expect(ops, isEmpty);
+      expect(recap, isNull);
     });
   });
 
@@ -283,17 +333,36 @@ void main() {
       void Function(int)? onCursor,
       int cursor = 0,
       String recap = '',
+      // Phase 4 — tools transport + review-first (defaults preserve the
+      // classic XML/immediate behavior every pre-phase-4 test asserts).
+      Future<LlmToolResponse?> Function(String, List<Map<String, dynamic>>)?
+      fireToolEval,
+      bool reviewFirst = false,
+      JournalReview? review,
     }) {
       var running = false;
       var i = 0;
+      final session = getSessionId ?? () => 's1';
       return JournalMaintenance(
         store: store,
+        review:
+            review ??
+            JournalReview(
+              store: store,
+              getSessionId: session,
+              setRecap: (t) => onRecap?.call(t),
+              setCursor: (v) => onCursor?.call(v),
+              onSaveChat: () async {},
+              onNotify: () {},
+              getMaxCards: () => 200,
+            ),
         fireLLMEval: (p) async {
           prompts?.add(p);
           return i < responses.length ? responses[i++] : null;
         },
+        fireToolEval: fireToolEval ?? (p, t) async => null,
         stripThinkBlocks: (t) => t,
-        getSessionId: getSessionId ?? () => 's1',
+        getSessionId: session,
         getActiveCharacter: () => activeChar,
         getActiveGroup: () => group,
         getGroupCharacters: () => groupChars,
@@ -306,6 +375,8 @@ void main() {
         setRecap: (t) => onRecap?.call(t),
         getIsPassRunning: () => running,
         setIsPassRunning: (v) => running = v,
+        getReviewFirst: () => reviewFirst,
+        getBackendIdentity: () => 'test-backend',
         getMaxCards: () => 200,
         onNotify: () {},
         onSaveChat: () async {},
@@ -420,11 +491,21 @@ void main() {
       var running = false;
       final m = JournalMaintenance(
         store: store,
+        review: JournalReview(
+          store: store,
+          getSessionId: () => session,
+          setRecap: recaps.add,
+          setCursor: cursors.add,
+          onSaveChat: () async {},
+          onNotify: () {},
+          getMaxCards: () => 200,
+        ),
         fireLLMEval: (p) async {
           session = 's2'; // the user switched chats during the slow eval
           return '<memory action="add">He said something kind.</memory>'
               '<recap>stale recap from chat A</recap>';
         },
+        fireToolEval: (p, t) async => null,
         stripThinkBlocks: (t) => t,
         getSessionId: () => session,
         getActiveCharacter: () => mara,
@@ -439,6 +520,8 @@ void main() {
         setRecap: recaps.add,
         getIsPassRunning: () => running,
         setIsPassRunning: (v) => running = v,
+        getReviewFirst: () => false,
+        getBackendIdentity: () => 'test-backend',
         getMaxCards: () => 200,
         onNotify: () {},
         onSaveChat: () async {},
@@ -605,6 +688,222 @@ void main() {
       expect(embedCalls, 1);
       expect(card.embedding, isNotNull);
       expect(card.dimensions, 2);
+    });
+
+    test('tool transport: calls become ops, XML never fired', () async {
+      final xmlPrompts = <String>[];
+      final toolPrompts = <String>[];
+      final recaps = <String>[];
+      final cursors = <int>[];
+      final m = build(
+        responses: ['<recap>the XML transport must not be used</recap>'],
+        messages: [
+          _msg('Sam', 'evening', isUser: true),
+          _msg('Mara', 'evening!', metadata: {'emotion_label': 'joy'}),
+        ],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        onRecap: recaps.add,
+        onCursor: cursors.add,
+        fireToolEval: (p, tools) async {
+          toolPrompts.add(p);
+          expect(tools, kJournalTools);
+          return const LlmToolResponse(
+            calls: [
+              LlmToolCall(
+                name: 'add_memory',
+                arguments: {
+                  'content': 'He greeted me warmly.',
+                  'msgs': [1],
+                },
+              ),
+              LlmToolCall(
+                name: 'write_recap',
+                arguments: {'text': 'A warm hello.'},
+              ),
+            ],
+            text: '',
+          );
+        },
+      );
+      await m.runMaintenancePass();
+
+      expect(toolPrompts.single, contains('add_memory')); // tools-mode prompt
+      expect(xmlPrompts, isEmpty); // no XML round trip at all
+      final card = (await store.cardsFor('s1', 'mara')).single;
+      expect(card.content, 'He greeted me warmly.');
+      expect(card.emotionLabel, 'joy'); // stamp still deterministic
+      expect(recaps, ['A warm hello.']);
+      expect(cursors, [2]);
+    });
+
+    test('tools rejected once → XML fallback, probe not repeated', () async {
+      var toolAttempts = 0;
+      final xmlPrompts = <String>[];
+      final m = build(
+        responses: ['<recap>one</recap>', '<recap>two</recap>'],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        fireToolEval: (p, t) async {
+          toolAttempts++;
+          return null; // backend can't speak tools
+        },
+      );
+      await m.runMaintenancePass();
+      await m.runMaintenancePass(force: true);
+
+      expect(toolAttempts, 1); // remembered as XML-only after one probe
+      expect(xmlPrompts, hasLength(2)); // both passes journaled over XML
+    });
+
+    test('model ignores tools but writes tags — salvaged, no refire',
+        () async {
+      final xmlPrompts = <String>[];
+      final recaps = <String>[];
+      final m = build(
+        responses: ['<recap>must stay unused</recap>'],
+        messages: [_msg('Sam', 'hi', isUser: true)],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        onRecap: recaps.add,
+        fireToolEval: (p, t) async => const LlmToolResponse(
+          calls: [],
+          text: '<memory action="add">Salvaged from text.</memory>'
+              '<recap>Still works.</recap>',
+        ),
+      );
+      await m.runMaintenancePass();
+
+      expect(xmlPrompts, isEmpty);
+      expect(
+        (await store.cardsFor('s1', 'mara')).single.content,
+        'Salvaged from text.',
+      );
+      expect(recaps, ['Still works.']);
+    });
+
+    test('review-first parks proposals without writing anything', () async {
+      final recaps = <String>[];
+      final cursors = <int>[];
+      final prompts = <String>[];
+      final review = JournalReview(
+        store: store,
+        getSessionId: () => 's1',
+        setRecap: recaps.add,
+        setCursor: cursors.add,
+        onSaveChat: () async {},
+        onNotify: () {},
+        getMaxCards: () => 200,
+      );
+      final m = build(
+        responses: [
+          '<memory action="add" msgs="1">He was kind tonight.</memory>'
+              '<recap>Kindness is growing.</recap>',
+        ],
+        messages: [
+          _msg('Sam', 'here, I made you tea', isUser: true),
+          _msg('Mara', 'oh… thank you', metadata: {'emotion_label': 'gratitude'}),
+        ],
+        activeChar: mara,
+        prompts: prompts,
+        onRecap: recaps.add,
+        onCursor: cursors.add,
+        reviewFirst: true,
+        review: review,
+      );
+      await m.runMaintenancePass();
+
+      // Nothing written, nothing advanced — everything parked.
+      expect(await store.cardsFor('s1', 'mara'), isEmpty);
+      expect(recaps, isEmpty);
+      expect(cursors, isEmpty);
+      final batch = review.pending!;
+      expect(batch.sessionId, 's1');
+      expect(batch.cursorTarget, 2);
+      expect(batch.owners.single.ops.single.text, 'He was kind tonight.');
+      expect(batch.owners.single.ops.single.emotionLabel, 'gratitude');
+      expect(batch.recap, 'Kindness is growing.');
+
+      // The parked batch blocks further automatic passes.
+      await m.runMaintenancePass();
+      expect(prompts, hasLength(1));
+    });
+
+    test('review apply commits only the accepted ops', () async {
+      await store.addCard(
+        sessionId: 's1',
+        characterId: 'mara',
+        content: 'the old memory',
+        category: 'moment',
+        maxCards: 200,
+      );
+      final recaps = <String>[];
+      final cursors = <int>[];
+      final review = JournalReview(
+        store: store,
+        getSessionId: () => 's1',
+        setRecap: recaps.add,
+        setCursor: cursors.add,
+        onSaveChat: () async {},
+        onNotify: () {},
+        getMaxCards: () => 200,
+      );
+      final m = build(
+        responses: [
+          '<memory action="revise" id="1">the old memory, revised</memory>'
+              '<memory action="add">an unwanted extra</memory>'
+              '<recap>Fresh recap.</recap>',
+        ],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        reviewFirst: true,
+        review: review,
+      );
+      await m.runMaintenancePass();
+
+      final batch = review.pending!;
+      // Reject the add, keep the revise and the recap.
+      batch.owners.single.ops
+          .firstWhere((op) => op.action == JournalOpAction.add)
+          .accepted = false;
+      await review.apply();
+
+      final cards = await store.cardsFor('s1', 'mara');
+      expect(cards.single.content, 'the old memory, revised');
+      expect(recaps, ['Fresh recap.']);
+      expect(cursors, [2]);
+      expect(review.pending, isNull);
+    });
+
+    test('review discard writes nothing but settles the window', () async {
+      final recaps = <String>[];
+      final cursors = <int>[];
+      final review = JournalReview(
+        store: store,
+        getSessionId: () => 's1',
+        setRecap: recaps.add,
+        setCursor: cursors.add,
+        onSaveChat: () async {},
+        onNotify: () {},
+        getMaxCards: () => 200,
+      );
+      final m = build(
+        responses: [
+          '<memory action="add">not wanted at all</memory><recap>nor this</recap>',
+        ],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        reviewFirst: true,
+        review: review,
+      );
+      await m.runMaintenancePass();
+      await review.discard();
+
+      expect(await store.cardsFor('s1', 'mara'), isEmpty);
+      expect(recaps, isEmpty);
+      expect(cursors, [2]); // window handled — not re-proposed forever
+      expect(review.pending, isNull);
     });
 
     test('no session or empty window is a safe no-op', () async {

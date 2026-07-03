@@ -335,6 +335,41 @@ class SummarySectionState extends State<SummarySection> {
                         },
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    // Review-first mode (phase 4): proposed journal changes
+                    // wait in the sidebar for approval instead of applying.
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Review updates first',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary(context),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 24,
+                          child: FittedBox(
+                            child: Switch(
+                              value: storage.journalReviewFirst,
+                              activeThumbColor: accent,
+                              onChanged: (val) =>
+                                  storage.setJournalReviewFirst(val),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Proposed journal changes wait below for your approval '
+                      'instead of saving automatically.',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textTertiary(context),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [

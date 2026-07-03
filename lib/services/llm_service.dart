@@ -83,10 +83,38 @@ class GenerationParams {
   });
 }
 
+/// One tool invocation from a tool-calling response (OpenAI `tool_calls`
+/// entry, arguments already JSON-decoded; malformed arguments decode to {}).
+class LlmToolCall {
+  final String name;
+  final Map<String, dynamic> arguments;
+
+  const LlmToolCall({required this.name, required this.arguments});
+}
+
+/// Result of a tool-enabled, non-streaming generation: the tool calls the
+/// model made (possibly none) plus any plain assistant text it also wrote.
+class LlmToolResponse {
+  final List<LlmToolCall> calls;
+  final String text;
+
+  const LlmToolResponse({required this.calls, required this.text});
+}
+
 /// Abstract interface for all LLM backends (local KoboldCPP, OpenRouter, etc).
 abstract class LLMService extends ChangeNotifier {
   /// Stream tokens one at a time for real-time display.
   Stream<String> generateStream(GenerationParams params);
+
+  /// Non-streaming generation with OpenAI-style tool calling. Returns null
+  /// when this backend can't speak the tools protocol — callers fall back to
+  /// their text transport (the Journal falls back to its XML tags). Local
+  /// KoboldCpp deliberately stays null: tool support in local GGUF templates
+  /// is too inconsistent, and the text floor already works everywhere.
+  Future<LlmToolResponse?> generateWithTools(
+    GenerationParams params,
+    List<Map<String, dynamic>> tools,
+  ) async => null;
 
   /// Abort the current in-flight generation request (closes the HTTP client).
   void abortGeneration() {}

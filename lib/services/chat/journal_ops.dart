@@ -16,20 +16,24 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-/// The Journal — XML transport parsing (docs/design/journal-memory.md §4.3).
+/// The Journal — transport parsing (docs/design/journal-memory.md §4.3).
 ///
-/// Pure functions + value type, no dependencies: the maintenance pass hands
-/// the raw (already think-stripped) LLM text to [parseJournalOps] /
-/// [parseRecap] and applies the returned operations through one shared
-/// applier. The phase-4 tool-calling transport will produce the same
-/// [JournalOp] list — one applier, two front doors.
+/// One applier, two front doors, both normalized here into the same
+/// [JournalOp] list:
+/// - XML tags ([parseJournalOps]/[parseRecap]) — the default, works on any
+///   model (local floor);
+/// - native tool calls ([parseJournalToolCalls] over [kJournalTools]) — for
+///   backends that speak the OpenAI tools protocol (phase 4).
 ///
-/// Forgiving by design (local-model floor): regex-based, tolerates missing
+/// Forgiving by design: the XML path is regex-based and tolerates missing
 /// or single quotes, unknown attributes, interleaved prose, self-closing
-/// tags, and an unclosed final `<recap>`. A garbage response yields zero
-/// ops — never an exception (same philosophy as the realism regex
-/// extractors in llm_eval_engine.dart).
+/// tags, and an unclosed final `<recap>`; the tools path tolerates unknown
+/// tool names, missing/malformed arguments, and ids sent as strings. A
+/// garbage response yields zero ops — never an exception (same philosophy
+/// as the realism regex extractors in llm_eval_engine.dart).
 library;
+
+import 'package:front_porch_ai/services/llm_service.dart' show LlmToolCall;
 
 enum JournalOpAction { add, revise, retire, pin }
 
@@ -204,4 +208,186 @@ List<int> _parsePositions(String? raw) {
       .map((s) => int.tryParse(s.trim()))
       .whereType<int>()
       .toList();
+}
+
+// ── Tool-calling transport (phase 4) ────────────────────────────────────
+
+/// OpenAI tool schemas for the Journal maintenance pass — one tool per
+/// operation the XML transport already supports, plus the recap.
+const List<Map<String, dynamic>> kJournalTools = [
+  {
+    'type': 'function',
+    'function': {
+      'name': 'add_memory',
+      'description':
+          'Add one new journal memory: a single first-person sentence about '
+          'something durable that just happened.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'content': {
+            'type': 'string',
+            'description': 'The memory, first person, at most 40 words.',
+          },
+          'category': {
+            'type': 'string',
+            'enum': kJournalCategories,
+          },
+          'msgs': {
+            'type': 'array',
+            'items': {'type': 'integer'},
+            'description': 'The #numbered message positions it came from.',
+          },
+        },
+        'required': ['content'],
+      },
+    },
+  },
+  {
+    'type': 'function',
+    'function': {
+      'name': 'revise_memory',
+      'description':
+          'Rewrite an existing journal entry (and optionally how it feels '
+          'now) instead of adding a duplicate.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'id': {
+            'type': 'integer',
+            'description': 'The [N] handle of the entry to revise.',
+          },
+          'content': {'type': 'string'},
+          'feeling': {
+            'type': 'string',
+            'description': 'Optional new feeling, one lowercase word.',
+          },
+        },
+        'required': ['id', 'content'],
+      },
+    },
+  },
+  {
+    'type': 'function',
+    'function': {
+      'name': 'retire_memory',
+      'description': 'Remove a journal entry that became wrong or irrelevant.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'id': {'type': 'integer'},
+        },
+        'required': ['id'],
+      },
+    },
+  },
+  {
+    'type': 'function',
+    'function': {
+      'name': 'pin_memory',
+      'description': 'Pin a defining journal entry so it never fades.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'id': {'type': 'integer'},
+        },
+        'required': ['id'],
+      },
+    },
+  },
+  {
+    'type': 'function',
+    'function': {
+      'name': 'write_recap',
+      'description':
+          'Write the updated "where things stand now" recap — present '
+          'tense, your voice.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'text': {'type': 'string'},
+        },
+        'required': ['text'],
+      },
+    },
+  },
+];
+
+/// Parse tool calls into the same validated ([JournalOp] list, recap) the
+/// XML transport produces. Unknown tools and invalid ops are dropped; the
+/// last write_recap wins.
+(List<JournalOp>, String?) parseJournalToolCalls(List<LlmToolCall> calls) {
+  final ops = <JournalOp>[];
+  String? recap;
+
+  int? intArg(Map<String, dynamic> args, String key) {
+    final v = args[key];
+    if (v is int) return v;
+    if (v is String) return int.tryParse(v.trim());
+    return null;
+  }
+
+  for (final call in calls) {
+    final args = call.arguments;
+    switch (call.name) {
+      case 'add_memory':
+        var text = (args['content'] as String? ?? '').trim();
+        if (text.isEmpty) continue;
+        if (text.length > kJournalMemoryMaxChars) {
+          text = text.substring(0, kJournalMemoryMaxChars).trim();
+        }
+        final msgs = args['msgs'];
+        ops.add(
+          JournalOp(
+            action: JournalOpAction.add,
+            category: _normalizeCategory(args['category'] as String?),
+            sourcePositions: msgs is List
+                ? msgs
+                      .map((m) => m is int ? m : int.tryParse('$m'))
+                      .whereType<int>()
+                      .toList()
+                : _parsePositions(msgs is String ? msgs : null),
+            text: text,
+          ),
+        );
+        break;
+      case 'revise_memory':
+        final handle = intArg(args, 'id');
+        var text = (args['content'] as String? ?? '').trim();
+        if (handle == null || text.isEmpty) continue;
+        if (text.length > kJournalMemoryMaxChars) {
+          text = text.substring(0, kJournalMemoryMaxChars).trim();
+        }
+        final feeling = (args['feeling'] as String? ?? '').trim().toLowerCase();
+        ops.add(
+          JournalOp(
+            action: JournalOpAction.revise,
+            handle: handle,
+            feeling: feeling.isEmpty ? null : feeling,
+            text: text,
+          ),
+        );
+        break;
+      case 'retire_memory':
+      case 'pin_memory':
+        final handle = intArg(args, 'id');
+        if (handle == null) continue;
+        ops.add(
+          JournalOp(
+            action: call.name == 'pin_memory'
+                ? JournalOpAction.pin
+                : JournalOpAction.retire,
+            handle: handle,
+          ),
+        );
+        break;
+      case 'write_recap':
+        final text = (args['text'] as String? ?? '').trim();
+        if (text.isNotEmpty) recap = text;
+        break;
+      default:
+        continue; // unknown tool — drop
+    }
+  }
+  return (ops, recap);
 }

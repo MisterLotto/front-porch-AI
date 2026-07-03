@@ -408,6 +408,14 @@ class KoboldService extends ChangeNotifier
   /// This is the same transport the `.kcpps` pseudo-remote backend has always
   /// used against the same server. KoboldCpp ignores the model name.
   ///
+  // Local floor by design: GGUF tool support is too inconsistent, so the
+  // Journal (the only tools caller) uses its XML transport here.
+  @override
+  Future<LlmToolResponse?> generateWithTools(
+    GenerationParams params,
+    List<Map<String, dynamic>> tools,
+  ) async => null;
+
   /// `_activeClient` is registered for [abortGeneration]; `_pendingRequest`
   /// (a completer future) is tracked so [waitForIdle] still unblocks on close.
   @override

@@ -35,6 +35,7 @@ class MemorySettings with SettingsBase {
   bool _journalEnabled = true;
   int _journalInterval = 10;
   int _journalMaxCards = 200;
+  bool _journalReviewFirst = false; // §4.3 review-first mode (phase 4)
 
   // Character evolution
   bool _characterEvolutionEnabled = false;
@@ -49,6 +50,7 @@ class MemorySettings with SettingsBase {
   bool get journalEnabled => _journalEnabled;
   int get journalInterval => _journalInterval;
   int get journalMaxCards => _journalMaxCards;
+  bool get journalReviewFirst => _journalReviewFirst;
 
   bool get characterEvolutionEnabled => _characterEvolutionEnabled;
   int get evolutionInterval => _evolutionInterval;
@@ -64,6 +66,7 @@ class MemorySettings with SettingsBase {
     _journalEnabled = prefs?.getBool(k('journal_enabled')) ?? true;
     _journalInterval = prefs?.getInt(k('journal_interval')) ?? 10;
     _journalMaxCards = prefs?.getInt(k('journal_max_cards')) ?? 200;
+    _journalReviewFirst = prefs?.getBool(k('journal_review_first')) ?? false;
 
     _characterEvolutionEnabled =
         prefs?.getBool(k('character_evolution_enabled')) ?? false;
@@ -115,6 +118,12 @@ class MemorySettings with SettingsBase {
   Future<void> setJournalMaxCards(int value) async {
     _journalMaxCards = value.clamp(50, 1000);
     await prefs?.setInt(k('journal_max_cards'), _journalMaxCards);
+    notify();
+  }
+
+  Future<void> setJournalReviewFirst(bool value) async {
+    _journalReviewFirst = value;
+    await prefs?.setBool(k('journal_review_first'), value);
     notify();
   }
 

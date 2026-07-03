@@ -20,6 +20,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/services/chat/journal_ops.dart';
+import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
@@ -31,9 +33,22 @@ import '../../golden/support/creator_test_support.dart';
 import '../../golden/support/fakes.dart';
 
 class _JournalChat extends FakeChatService {
-  _JournalChat({required this.store, super.messages});
+  _JournalChat({required this.store, super.messages}) {
+    journalReview = JournalReview(
+      store: store,
+      getSessionId: () => 's1',
+      setRecap: (_) {},
+      setCursor: (_) {},
+      onSaveChat: () async {},
+      onNotify: () {},
+      getMaxCards: () => 200,
+    );
+  }
 
   final JournalStore store;
+
+  @override
+  late final JournalReview journalReview;
 
   @override
   JournalStore get journalStore => store;
@@ -203,6 +218,68 @@ void main() {
         find.text('He fixed the porch light without being asked.'),
         findsOneWidget,
       );
+      });
+    });
+    testWidgets('pending review shows the banner and applying commits',
+        (tester) async {
+      // Real-async escape: drift parks on real timers the fake-async
+      // zone never fires; runAsync runs the real event loop instead.
+      await tester.runAsync(() async {
+      final chat = _JournalChat(store: store);
+      addTearDown(chat.dispose);
+      chat.journalReview.park(
+        JournalReviewBatch(
+          sessionId: 's1',
+          cursorTarget: 0,
+          owners: [
+            JournalOwnerProposals(
+              ownerId: 'mara',
+              ownerName: 'Mara',
+              ops: [
+                JournalProposedOp(
+                  action: JournalOpAction.add,
+                  text: 'A proposed memory.',
+                ),
+              ],
+            ),
+          ],
+          recap: 'A proposed recap.',
+        ),
+      );
+      sizeForDialog(tester);
+      await tester.pumpWidget(
+        wrapPanel(
+          chat,
+          JournalPanel(
+            chatService: chat,
+            characterId: 'mara',
+            characterName: 'Mara',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('2 proposed update(s) — tap to review'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('2 proposed update(s) — tap to review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Proposed journal updates'), findsOneWidget);
+      expect(find.text('A proposed memory.'), findsOneWidget);
+      expect(find.text('A proposed recap.'), findsOneWidget);
+      await tester.tap(find.text('Apply selected'));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await store.cardsFor('s1', 'mara')).single.content,
+        'A proposed memory.',
+      );
+      expect(chat.journalReview.pending, isNull);
+      // The banner is gone and the applied card shows in the preview.
+      expect(find.textContaining('tap to review'), findsNothing);
+      expect(find.text('A proposed memory.'), findsOneWidget);
       });
     });
   });
