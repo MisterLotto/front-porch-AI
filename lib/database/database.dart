@@ -1035,7 +1035,16 @@ class AppDatabase extends _$AppDatabase {
 
   /// For testing: create a temporary database backed by a real file.
   /// Uses a system temp directory so the background isolate can access it.
-  factory AppDatabase.forTesting() {
+  ///
+  /// [sameIsolate] runs SQLite on the calling isolate (in-memory) instead of
+  /// the background one. Required inside `testWidgets`: the fake-async test
+  /// zone never yields to the real event loop, so a cross-isolate database
+  /// response can never be delivered and the first awaited query deadlocks
+  /// the whole run at 0% CPU. Plain `test()` bodies keep the default.
+  factory AppDatabase.forTesting({bool sameIsolate = false}) {
+    if (sameIsolate) {
+      return AppDatabase._internal(NativeDatabase.memory());
+    }
     final tmpDir = Directory.systemTemp.createTempSync('fpai_test_');
     final file = File('${tmpDir.path}/test.db');
     return AppDatabase._internal(

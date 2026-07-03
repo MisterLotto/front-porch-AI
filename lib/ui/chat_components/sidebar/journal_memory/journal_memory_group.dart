@@ -23,22 +23,28 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../porch_accordion.dart';
 import 'evolution_panel.dart';
+import 'journal_panel.dart';
 import 'memory_panel.dart';
 import 'summary_section.dart';
 
 /// 📖 Journal & Memory accordion — groups the "Where we are" recap
-/// (SummarySection), the Memory (RAG) panel, and the Character Evolution
-/// panel under one collapsible card.
+/// (SummarySection), the Journal card peek (JournalPanel — the focused
+/// participant's diary, per-member in groups), the Memory (RAG) panel, and
+/// the Character Evolution panel under one collapsible card.
 ///
-/// Branch gating matches the old chat_page sidebar: group and lite-NPC chats
-/// only get the recap; Memory (RAG) and Evolution are 1:1 full chats only.
-///
-/// NOTE (phase 3): the Journal memory-card list will be inserted between
-/// SummarySection and MemoryPanel (docs/design/journal-memory.md §8 item 3).
+/// Branch gating matches the old chat_page sidebar: Memory (RAG) and
+/// Evolution are 1:1 full chats only; the Journal shows everywhere except
+/// for lite scene guests (guests never journal).
 class JournalMemoryGroup extends StatelessWidget {
   final ChatService chatService;
   final bool isGroup;
   final bool isLite;
+
+  /// The focused participant whose diary the JournalPanel shows
+  /// (ChatParticipant.id — the same stable id the cards are keyed by).
+  final String diaryOwnerId;
+  final String diaryOwnerName;
+
   final bool initiallyExpanded;
   final ValueChanged<bool>? onExpansionChanged;
   final VoidCallback onEvolveNow;
@@ -48,6 +54,8 @@ class JournalMemoryGroup extends StatelessWidget {
     required this.chatService,
     required this.isGroup,
     required this.isLite,
+    required this.diaryOwnerId,
+    required this.diaryOwnerName,
     required this.initiallyExpanded,
     this.onExpansionChanged,
     required this.onEvolveNow,
@@ -73,6 +81,14 @@ class JournalMemoryGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SummarySection(chatService: chatService),
+          if (!isLite) ...[
+            const SizedBox(height: 12),
+            JournalPanel(
+              chatService: chatService,
+              characterId: diaryOwnerId,
+              characterName: diaryOwnerName,
+            ),
+          ],
           if (showMemory) ...[
             const SizedBox(height: 12),
             MemoryPanel(chatService: chatService),

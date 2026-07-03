@@ -2070,6 +2070,14 @@ class ChatService extends ChangeNotifier {
     onSaveChat: _saveChat,
   );
 
+  /// Public door for the Journal UI (phase 3): the sidebar panel and the
+  /// diary dialog read/mutate cards directly on the store (scoped by
+  /// [currentSessionId] + the participant's stable id); the injection builder
+  /// re-reads the DB every turn, so UI edits reach the prompt with no extra
+  /// plumbing. Instance getter (not extension) so FakeChatService can
+  /// override it via `implements` (see characterEvolutionCount precedent).
+  JournalStore get journalStore => _journalStore;
+
   late final _journalInjection = JournalInjection(
     store: _journalStore,
     getSessionId: () => _currentSessionId,

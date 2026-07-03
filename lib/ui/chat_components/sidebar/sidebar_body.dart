@@ -129,6 +129,10 @@ class SidebarBody extends StatelessWidget {
               chatService: chat,
               isGroup: isGroup,
               isLite: isLite,
+              // The diary follows the focused participant (per-member in
+              // groups; ChatParticipant.id is the cards' stable key).
+              diaryOwnerId: focused.id,
+              diaryOwnerName: focused.name,
               initiallyExpanded: ui.sidebarGroupExpanded(
                 'journal_memory',
                 fallback: false,
