@@ -79,7 +79,7 @@ class JournalInjection {
 
     // Hot set: pinned first (store order), then warm cards by heat + mood
     // boost, newest first on ties — so when the budget bites, the character
-    // keeps the memories that burn hottest and match her current mood.
+    // keeps the memories that burn hottest and match their current mood.
     final pinned = cards.where((c) => c.pinned).toList();
     final hot =
         cards.where((c) => !c.pinned && JournalPhysics.isHot(c)).toList()
