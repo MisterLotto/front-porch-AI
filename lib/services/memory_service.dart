@@ -334,7 +334,7 @@ class MemoryService extends ChangeNotifier {
         }
 
         // Deserialize the stored embedding
-        final storedVector = _bytesToVector(
+        final storedVector = bytesToVector(
           candidate.embedding,
           candidate.dimensions,
         );
@@ -363,7 +363,7 @@ class MemoryService extends ChangeNotifier {
 
       // Score Data Bank entries
       for (final entry in dataBankCandidates) {
-        final storedVector = _bytesToVector(entry.embedding!, entry.dimensions);
+        final storedVector = bytesToVector(entry.embedding!, entry.dimensions);
         if (storedVector == null) continue;
 
         final rawScore = cosineSimilarity(queryVector, storedVector);
@@ -417,8 +417,23 @@ class MemoryService extends ChangeNotifier {
     }
   }
 
+  /// Embed one piece of text, or null when embeddings aren't operational
+  /// (RAG off / sidecar unavailable). Availability-guarded single-text door
+  /// for other services — the Journal uses it for card vectors and cold-card
+  /// query embedding.
+  Future<List<double>?> embedText(String text) async {
+    if (!_availabilityChecked) {
+      _availabilityChecked = true;
+      await _embeddingService.checkAvailability();
+    }
+    if (!isOperational) return null;
+    final cleaned = _cleanForEmbedding(text);
+    if (cleaned.isEmpty) return null;
+    return _embeddingService.embed(cleaned);
+  }
+
   /// Convert stored bytes back to a vector of doubles.
-  List<double>? _bytesToVector(Uint8List bytes, int dimensions) {
+  static List<double>? bytesToVector(Uint8List bytes, int dimensions) {
     try {
       final floats = Float32List.view(
         bytes.buffer,

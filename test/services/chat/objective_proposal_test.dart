@@ -102,6 +102,7 @@ ObjectiveProposal createTestObjectiveProposal({
   String Function()? getLlmJson,
   String Function(String)? stripOverride,
   VoidCallback? onNotify,
+  VoidCallback? onObjectiveCompleted,
   List<String?>? prompts,
 }) {
   final saved = <String, String>{};
@@ -166,6 +167,7 @@ ObjectiveProposal createTestObjectiveProposal({
         () {
           notifies.add('notify');
         },
+    onObjectiveCompleted: onObjectiveCompleted,
   );
 }
 
@@ -311,8 +313,10 @@ void main() {
       },
     );
 
-    test('check taskless YES path (deact via cb)', () async {
+    test('check taskless YES path (deact via cb + journal event hook fires)',
+        () async {
       final deacts = <String>[];
+      var completedEvents = 0;
       final p = createTestObjectiveProposal(
         getLlmJson: () => 'YES',
         actives: [_mkObj('o6', 'tl')],
@@ -320,14 +324,18 @@ void main() {
           deacts.add(id);
         },
         tasksFor: (o) => const [],
+        onObjectiveCompleted: () => completedEvents++,
       );
       await p.checkTaskCompletionInBackground();
       expect(deacts, contains('o6'));
+      // Fired exactly once per check — the Journal's event-kick source.
+      expect(completedEvents, 1);
     });
 
-    test('check NO does nothing (no deact/load)', () async {
+    test('check NO does nothing (no deact/load, no journal event)', () async {
       final deacts = <String>[];
       final loads = <String>[];
+      var completedEvents = 0;
       final p = createTestObjectiveProposal(
         getLlmJson: () => 'NO',
         actives: [_mkObj('o7', 'g', primary: true)],
@@ -338,9 +346,11 @@ void main() {
           loads.add('l');
         },
         tasksFor: (o) => const [],
+        onObjectiveCompleted: () => completedEvents++,
       );
       await p.checkTaskCompletionInBackground();
       expect(deacts, isEmpty);
+      expect(completedEvents, 0);
     });
 
     test('check finally clears isChecking + notifies (via cb)', () async {

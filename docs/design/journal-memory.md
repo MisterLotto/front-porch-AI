@@ -1,6 +1,6 @@
 # The Journal — Unified Emotional Memory System
 
-**Status:** Approved design, locked 2026-07-02. Implementation phased on `Rawhide`.
+**Status:** Approved design, locked 2026-07-02. Implementation phased on `Rawhide` — phase 1 (core) shipped 2026-07-02, phase 2 (emotional physics, `journal_physics.dart`) shipped 2026-07-03; phases 3–4 pending.
 **Replaces:** `SummaryService` (periodic chat summaries) and `FactExtraction` (auto persona facts) — both deleted.
 **Prior art:** LettuceAI's memory system (AGPL-3, heat/pin/decay concepts adapted) + self-authored journal concept.
 
@@ -111,8 +111,8 @@ Tunable constants (code, not settings, until proven needed): hot-set token budge
 
 ## 8. Build phases (each leaves the app fully working)
 
-1. **Core:** `JournalMemories` table + regen; journal store + maintenance pass (XML transport); recap into existing slot; Journal injection block; chat-deletion cascade; all §7 deletions; settings swap.
-2. **Physics:** heat/decay/pin, flashbulb resistance, mood-congruent retrieval boost, event-triggered passes, max-cards trim, embedding of cards + cold-card semantic retrieval.
+1. **Core (shipped):** `JournalMemories` table + regen; journal store + maintenance pass (XML transport); recap into existing slot; Journal injection block; chat-deletion cascade; all §7 deletions; settings swap.
+2. **Physics (shipped):** heat/decay/pin, flashbulb resistance, mood-congruent retrieval boost, event-triggered passes (bond/trust swing ≥ 12, trust repair, Chance Time, objective completion), max-cards trim by lowest heat, embedding of cards + cold-card semantic retrieval, first-pass cap (trailing 50 messages on a virgin journal). All constants + pure math in `journal_physics.dart`.
 3. **The Journal UI:** journal tab/dialog — read, edit, pin, delete, "plant a memory," emotion chips (existing emoji map), tap-to-jump receipts; recap editor.
 4. **Polish:** tool-calling transport, review-first mode.
 

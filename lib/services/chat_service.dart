@@ -78,6 +78,7 @@ import 'package:front_porch_ai/services/chat/realism_verification.dart';
 import 'package:front_porch_ai/services/chat/objective_proposal.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
+import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
 import 'package:front_porch_ai/services/chat/evolution_service.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
@@ -2026,6 +2027,9 @@ class ChatService extends ChangeNotifier {
     getIsCheckingCompletion: () => _isCheckingCompletion,
     setIsCheckingCompletion: (v) => _isCheckingCompletion = v,
     onNotify: notifyListeners,
+    // The completion check runs pre-generation; the flag is consumed by
+    // _maybeRunJournalPass post-generation (event-triggered journal pass).
+    onObjectiveCompleted: () => _journalMaintenance.eventKickPending = true,
   );
 
   // ── The Journal (docs/design/journal-memory.md) ──
@@ -2037,7 +2041,12 @@ class ChatService extends ChangeNotifier {
   // via journal_store; the injection builder renders the speaker's pinned +
   // hot cards into the prompt. Strictly session-scoped — no memory ever
   // crosses chats. 1:1 ↔ group parity by construction (same owner loop).
-  late final _journalStore = JournalStore(getDb: () => _db);
+  late final _journalStore = JournalStore(
+    getDb: () => _db,
+    // Availability-guarded single-text embedder; null when RAG is off or the
+    // sidecar is down, which just disables cold-card recall (no-RAG floor).
+    embedText: (text) async => await _memoryService?.embedText(text),
+  );
 
   late final _journalMaintenance = JournalMaintenance(
     store: _journalStore,
@@ -2064,6 +2073,10 @@ class ChatService extends ChangeNotifier {
   late final _journalInjection = JournalInjection(
     store: _journalStore,
     getSessionId: () => _currentSessionId,
+    // Same scalar EmotionInjection reads — in group non-obs the pre-gen
+    // load-into-scalars dance has set it to the upcoming speaker's emotion
+    // by assembly time, so mood-congruent recall is per-speaker (parity).
+    getCurrentEmotion: () => _realismEnabled ? _characterEmotion : '',
   );
 
   // ── Character Evolution (step 14) wiring ──
@@ -3465,22 +3478,35 @@ class ChatService extends ChangeNotifier {
     await _journalMaintenance.runMaintenancePass(force: true);
   }
 
-  /// Check if a Journal maintenance pass is due and trigger it non-blockingly
-  /// (cadence: user messages since the _summaryLastIndex cursor vs the
-  /// journalInterval setting; guards mirror the old summary coordinator).
+  /// Check if a Journal maintenance pass is due and trigger it non-blockingly.
+  /// Cadence (design §4.2): user messages since the _summaryLastIndex cursor
+  /// vs the journalInterval setting, PLUS an immediate pass when the window
+  /// holds a significant engine-stamped event (big bond/trust swing, trust
+  /// repair, Chance Time) or an objective completed (the eventKickPending
+  /// flag, set pre-generation, consumed here post-generation so the pass
+  /// never competes with the main LLM call). Guards mirror the old summary
+  /// coordinator.
   void _maybeRunJournalPass() {
     if (!_storageService.memorySettings.journalEnabled) return;
     if (_summaryPaused) return;
     if (_isSummaryGenerating) return;
     if (_llmProvider == null) return;
 
+    final windowStart = _summaryLastIndex.clamp(0, _messages.length);
     int userMessagesSincePass = 0;
-    for (int i = _summaryLastIndex; i < _messages.length; i++) {
+    for (int i = windowStart; i < _messages.length; i++) {
       if (_messages[i].isUser) userMessagesSincePass++;
     }
+    if (userMessagesSincePass == 0) return;
 
-    if (userMessagesSincePass >=
-        _storageService.memorySettings.journalInterval) {
+    final due =
+        userMessagesSincePass >= _storageService.memorySettings.journalInterval;
+    final eventKick =
+        _journalMaintenance.eventKickPending ||
+        JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
+
+    if (due || eventKick) {
+      _journalMaintenance.eventKickPending = false;
       // Fire and forget — don't await
       _journalMaintenance.runMaintenancePass();
     }

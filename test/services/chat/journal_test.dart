@@ -166,7 +166,8 @@ void main() {
       expect(await store.cardsFor('s3', 'mara'), isEmpty);
     });
 
-    test('cap retires the oldest unpinned card first', () async {
+    test('cap retires the coldest unpinned card (oldest on equal heat)',
+        () async {
       await store.addCard(
         sessionId: 's1',
         characterId: 'mara',
@@ -521,6 +522,89 @@ void main() {
       expect(p, contains('felt grateful'));
       expect(p, contains('bond +15 — he checked in'));
       expect(p, contains('<recap>'));
+    });
+
+    test('first pass on a long existing chat reads only the recent tail',
+        () async {
+      final messages = List.generate(
+        60,
+        (i) =>
+            _msg(i.isEven ? 'Sam' : 'Mara', 'line $i', isUser: i.isEven),
+      );
+      final prompts = <String>[];
+      final cursors = <int>[];
+      final m = build(
+        responses: ['<recap>caught up</recap>'],
+        messages: messages,
+        activeChar: mara,
+        prompts: prompts,
+        onCursor: cursors.add,
+      );
+      await m.runMaintenancePass();
+
+      // Cursor 0 + 60 messages → window capped to the trailing 50 (#10–#59).
+      expect(prompts.single, contains('#10 '));
+      expect(prompts.single, isNot(contains('#9 ')));
+      expect(cursors, [60]);
+    });
+
+    test('a successful pass cools the existing cards one step', () async {
+      await store.addCard(
+        sessionId: 's1',
+        characterId: 'mara',
+        content: 'a mild memory',
+        category: 'moment',
+        emotionIntensity: 'mild',
+        maxCards: 200,
+      );
+      final m = build(
+        responses: ['<recap>nothing new</recap>'], // zero ops still succeeds
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+      );
+      await m.runMaintenancePass();
+      expect(
+        (await store.cardsFor('s1', 'mara')).single.heat,
+        closeTo(0.85, 1e-6),
+      );
+
+      // A failed pass must NOT cool (it retries the same window later).
+      final failing = build(
+        responses: [null],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+      );
+      await failing.runMaintenancePass();
+      expect(
+        (await store.cardsFor('s1', 'mara')).single.heat,
+        closeTo(0.85, 1e-6),
+      );
+    });
+
+    test('the pass embeds newly added cards when an embedder is wired',
+        () async {
+      var embedCalls = 0;
+      store = JournalStore(
+        getDb: () => db,
+        embedText: (text) async {
+          embedCalls++;
+          return [0.1, 0.2];
+        },
+      );
+      final m = build(
+        responses: [
+          '<memory action="add" msgs="0">He brought me coffee.</memory>'
+              '<recap>ok</recap>',
+        ],
+        messages: [_msg('Sam', 'coffee?', isUser: true)],
+        activeChar: mara,
+      );
+      await m.runMaintenancePass();
+
+      final card = (await store.cardsFor('s1', 'mara')).single;
+      expect(embedCalls, 1);
+      expect(card.embedding, isNotNull);
+      expect(card.dimensions, 2);
     });
 
     test('no session or empty window is a safe no-op', () async {

@@ -17,12 +17,17 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:drift/drift.dart';
 
 import 'package:front_porch_ai/database/database.dart';
+import 'journal_physics.dart';
 
-/// The Journal — card persistence (docs/design/journal-memory.md §5).
+/// The Journal — card persistence (docs/design/journal-memory.md §5) plus
+/// the DB half of the emotional physics (§4.4): per-pass cooling with
+/// flashbulb resistance, re-warming on retrieval, trim-by-coldest, and card
+/// embeddings for cold-card semantic recall.
 ///
 /// Plain leaf owning the DB half of the shared ops applier. Cards are
 /// strictly scoped per (sessionId, characterId) — no read or write ever
@@ -38,7 +43,12 @@ import 'package:front_porch_ai/database/database.dart';
 class JournalStore {
   final AppDatabase? Function() getDb;
 
-  JournalStore({required this.getDb});
+  /// Optional embedder (wired to MemoryService.embedText). Null result or a
+  /// null callback simply means no semantic recall — the Journal's hot/pinned
+  /// path never needs embeddings (design invariant: no-RAG floor).
+  final Future<List<double>?> Function(String text)? embedText;
+
+  JournalStore({required this.getDb, this.embedText});
 
   /// All cards for one diary owner in one chat — pinned first, then oldest
   /// first. This exact order is what the maintenance prompt numbers its
@@ -53,10 +63,9 @@ class JournalStore {
     return db.getJournalCards(sessionId, characterId);
   }
 
-  /// Insert a new memory. Enforces the per-owner cap by retiring the oldest
-  /// unpinned card first (phase 1 heat is uniform, so oldest-unpinned is the
-  /// coldest; phase 2 will switch this to lowest-heat). The raw transcript
-  /// stays in RAG, so a trimmed card is a demotion, not a loss.
+  /// Insert a new memory. Enforces the per-owner cap by retiring the coldest
+  /// unpinned card (lowest heat; oldest wins the tie — design §4.4). The raw
+  /// transcript stays in RAG, so a trimmed card is a demotion, not a loss.
   Future<void> addCard({
     required String sessionId,
     required String characterId,
@@ -71,14 +80,15 @@ class JournalStore {
     if (db == null) return;
     final existing = await db.getJournalCards(sessionId, characterId);
     if (existing.length >= maxCards) {
-      // getJournalCards orders pinned DESC then createdAt ASC, so the first
-      // unpinned entry is the oldest unpinned card.
+      // getJournalCards orders pinned DESC then createdAt ASC, so scanning in
+      // order and keeping strict `<` makes the oldest lowest-heat unpinned
+      // card the victim.
+      JournalMemoryData? coldest;
       for (final card in existing) {
-        if (!card.pinned) {
-          await db.deleteJournalCard(card.id);
-          break;
-        }
+        if (card.pinned) continue;
+        if (coldest == null || card.heat < coldest.heat) coldest = card;
       }
+      if (coldest != null) await db.deleteJournalCard(coldest.id);
     }
     await db.insertJournalCard(
       // id deliberately absent — filled by insertJournalCard (UUID).
@@ -98,7 +108,9 @@ class JournalStore {
 
   /// Edit a card in place. On the first feeling change the original emotion
   /// is preserved in originalEmotionLabel ("feelings that heal" — the diary
-  /// can show "once felt sad, now feels proud").
+  /// can show "once felt sad, now feels proud"). A revision re-warms the card
+  /// to full heat (the memory was just actively reworked) and, when the text
+  /// changed, drops the now-stale embedding so [embedMissing] re-embeds it.
   Future<void> reviseCard(
     JournalMemoryData card, {
     String? content,
@@ -106,19 +118,21 @@ class JournalStore {
   }) async {
     final db = getDb();
     if (db == null) return;
+    final contentChanged = content != null && content.isNotEmpty;
     final feelingChanged =
         feeling != null && feeling.isNotEmpty && feeling != card.emotionLabel;
     await db.updateJournalCard(
       card.id,
       JournalMemoriesCompanion(
-        content: content != null && content.isNotEmpty
-            ? Value(content)
-            : const Value.absent(),
+        content: contentChanged ? Value(content) : const Value.absent(),
         emotionLabel: feelingChanged ? Value(feeling) : const Value.absent(),
         originalEmotionLabel:
             feelingChanged && card.originalEmotionLabel == null
             ? Value(card.emotionLabel)
             : const Value.absent(),
+        heat: const Value(JournalPhysics.kMaxHeat),
+        embedding: contentChanged ? const Value(null) : const Value.absent(),
+        dimensions: contentChanged ? const Value(0) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -138,5 +152,64 @@ class JournalStore {
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// Cool every unpinned card one maintenance-pass step (flashbulb decay —
+  /// strong feelings barely fade, mild ones fade normally; JournalPhysics
+  /// owns the numbers). Called once per diary owner per successful pass.
+  Future<void> coolCards(String sessionId, String characterId) async {
+    final db = getDb();
+    if (db == null) return;
+    for (final card in await db.getJournalCards(sessionId, characterId)) {
+      final cooled = JournalPhysics.cooledHeat(card);
+      if (cooled == card.heat) continue; // pinned or already at 0
+      await db.updateJournalCard(
+        card.id,
+        JournalMemoriesCompanion(heat: Value(cooled)),
+      );
+    }
+  }
+
+  /// Semantic retrieval resurfaced a cold card: warm it back into the hot
+  /// set and record the access (design §4.4 heat lifecycle).
+  Future<void> rewarmCard(JournalMemoryData card) async {
+    final db = getDb();
+    if (db == null) return;
+    await db.updateJournalCard(
+      card.id,
+      JournalMemoriesCompanion(
+        heat: Value(
+          card.heat < JournalPhysics.kRewarmHeat
+              ? JournalPhysics.kRewarmHeat
+              : card.heat,
+        ),
+        accessCount: Value(card.accessCount + 1),
+        lastAccessedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Embed every card that has no vector yet (new cards, revised cards, and
+  /// cards written while the sidecar was down — self-healing). One sweep per
+  /// maintenance pass; silently a no-op without an embedder (no-RAG floor).
+  Future<void> embedMissing(String sessionId, String characterId) async {
+    final embed = embedText;
+    final db = getDb();
+    if (embed == null || db == null) return;
+    for (final card in await db.getJournalCards(sessionId, characterId)) {
+      if (card.embedding != null) continue;
+      final vector = await embed(card.content);
+      if (vector == null || vector.isEmpty) return; // embedder unavailable
+      final bytes = Float32List.fromList(
+        vector.map((e) => e.toDouble()).toList(),
+      );
+      await db.updateJournalCard(
+        card.id,
+        JournalMemoriesCompanion(
+          embedding: Value(Uint8List.view(bytes.buffer)),
+          dimensions: Value(vector.length),
+        ),
+      );
+    }
   }
 }

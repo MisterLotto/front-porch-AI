@@ -23,6 +23,7 @@ import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'journal_ops.dart';
+import 'journal_physics.dart';
 import 'journal_store.dart';
 
 /// The Journal — the one periodic background job
@@ -114,6 +115,12 @@ class JournalMaintenance {
   /// window (manual "regenerate" with nothing new since the cursor).
   static const int kForceWindowFallback = 10;
 
+  /// Set when a significant event fires outside message metadata (objective
+  /// completion, whose check runs pre-generation). Consumed by ChatService's
+  /// _maybeRunJournalPass — which runs post-generation, so the event pass
+  /// never competes with the main LLM call for the backend.
+  bool eventKickPending = false;
+
   Future<void> runMaintenancePass({bool force = false}) async {
     final sessionToken = getSessionId();
     if (sessionToken == null) return;
@@ -126,6 +133,12 @@ class JournalMaintenance {
     try {
       final messages = getMessages();
       var start = getCursor().clamp(0, messages.length);
+      if (start == 0 && messages.length > JournalPhysics.kFirstPassCap) {
+        // Virgin journal on an existing long chat: first pass reads only the
+        // recent tail instead of the whole history (older turns stay
+        // reachable through RAG; the recap catches the character up fast).
+        start = messages.length - JournalPhysics.kFirstPassCap;
+      }
       if (start >= messages.length) {
         if (!force) return;
         start = (messages.length - kForceWindowFallback).clamp(
@@ -162,6 +175,11 @@ class JournalMaintenance {
         final text = stripThinkBlocks(raw);
 
         final ops = parseJournalOps(text);
+        // Emotional physics: cool the existing cards one step first
+        // (flashbulb decay — strong feelings barely fade), so adds and
+        // revises land at full heat afterwards. Only on a successful eval —
+        // a failed pass retries next interval without double-cooling.
+        await store.coolCards(sessionToken, ownerId);
         await _applyOps(
           ops: ops,
           sessionId: sessionToken,
@@ -170,6 +188,10 @@ class JournalMaintenance {
           window: window,
           windowStart: start,
         );
+        // Vector any cards still missing embeddings (new, revised, or
+        // written while the sidecar was down) so cold-card recall can find
+        // them later. No-op without the embedder — the no-RAG floor.
+        await store.embedMissing(sessionToken, ownerId);
 
         if (i == 0) {
           final recap = parseRecap(text);

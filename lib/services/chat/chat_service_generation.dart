@@ -379,6 +379,13 @@ extension ChatServiceGeneration on ChatService {
           characterId: _getCharacterIdFromCard(speakingCharacter),
           characterName: speakingCharacter.name,
           userName: userName,
+          // Cold-card resurfacing query — same last-3-messages recipe as RAG
+          // retrieval below (built separately: that one runs after continue
+          // mode pops the tail message, this one before).
+          queryText: _messages.reversed
+              .take(3)
+              .map((m) => '${m.sender}: ${m.displayText}')
+              .join('\n'),
         );
       }
 
