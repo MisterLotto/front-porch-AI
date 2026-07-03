@@ -18,8 +18,10 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 
 /// Streams an OpenAI-compatible `/v1/chat/completions` response token by token.
 ///
@@ -44,15 +46,13 @@ import 'package:front_porch_ai/services/llm_service.dart';
 /// Kept intentionally minimal and identical to the long-proven pseudo-remote
 /// path: a single `user` message (plus optional `system`), `frequency_penalty`
 /// derived from `repeatPenalty`, and the model's own template doing the rest.
-Stream<String> streamOpenAiChat(
-  String baseUrl,
+/// Chat-completions payload shared by [streamOpenAiChat] and
+/// [postOpenAiChatWithTools] — one builder so the two paths can't drift.
+Map<String, dynamic> _chatPayload(
   GenerationParams params, {
-  String modelName = 'koboldcpp',
-  void Function(http.Client client)? registerClient,
-  void Function()? onDone,
-}) async* {
-  final uri = Uri.parse('$baseUrl/v1/chat/completions');
-
+  required String modelName,
+  required bool stream,
+}) {
   final messages = <Map<String, String>>[];
   if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
     messages.add({'role': 'system', 'content': params.systemPrompt!});
@@ -61,7 +61,7 @@ Stream<String> streamOpenAiChat(
 
   final payload = <String, dynamic>{
     'model': modelName,
-    'stream': true,
+    'stream': stream,
     'max_tokens': params.maxLength,
     'temperature': params.temperature,
     'top_p': params.topP,
@@ -88,6 +88,64 @@ Stream<String> streamOpenAiChat(
   if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
     payload['stop'] = params.stopSequences!.take(4).toList();
   }
+  return payload;
+}
+
+/// Non-streaming, tool-enabled chat completion against the same local
+/// endpoint — the local-backend implementation of
+/// [LLMService.generateWithTools]. Recent KoboldCpp versions support OpenAI
+/// tool calling with template-aware models (Qwen3 family and friends); older
+/// servers or non-tool models simply produce no tool calls and the Journal's
+/// transport negotiation falls back to (and remembers) the XML floor.
+/// Returns null on any failure — a best-effort upgrade, never an error.
+Future<LlmToolResponse?> postOpenAiChatWithTools(
+  String baseUrl,
+  GenerationParams params,
+  List<Map<String, dynamic>> tools, {
+  String modelName = 'koboldcpp',
+  void Function(http.Client client)? registerClient,
+  void Function()? onDone,
+}) async {
+  final payload = _chatPayload(params, modelName: modelName, stream: false)
+    ..['tools'] = tools
+    ..['tool_choice'] = 'auto';
+
+  final client = http.Client();
+  registerClient?.call(client);
+  try {
+    final response = await client
+        .post(
+          Uri.parse('$baseUrl/v1/chat/completions'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 120));
+    if (response.statusCode != 200) {
+      debugPrint(
+        '[OpenAiChat] Tool call rejected (HTTP ${response.statusCode}) — '
+        'falling back to text transport',
+      );
+      return null;
+    }
+    return parseOpenAiToolResponse(response.body);
+  } catch (e) {
+    debugPrint('[OpenAiChat] Tool call failed: $e — falling back');
+    return null;
+  } finally {
+    onDone?.call();
+    client.close();
+  }
+}
+
+Stream<String> streamOpenAiChat(
+  String baseUrl,
+  GenerationParams params, {
+  String modelName = 'koboldcpp',
+  void Function(http.Client client)? registerClient,
+  void Function()? onDone,
+}) async* {
+  final uri = Uri.parse('$baseUrl/v1/chat/completions');
+  final payload = _chatPayload(params, modelName: modelName, stream: true);
 
   final request = http.Request('POST', uri);
   request.headers['Content-Type'] = 'application/json';

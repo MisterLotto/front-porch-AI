@@ -108,9 +108,10 @@ abstract class LLMService extends ChangeNotifier {
 
   /// Non-streaming generation with OpenAI-style tool calling. Returns null
   /// when this backend can't speak the tools protocol — callers fall back to
-  /// their text transport (the Journal falls back to its XML tags). Local
-  /// KoboldCpp deliberately stays null: tool support in local GGUF templates
-  /// is too inconsistent, and the text floor already works everywhere.
+  /// their text transport (the Journal falls back to its XML tags). Every
+  /// real backend implements it (remote APIs and local KoboldCpp alike —
+  /// Qwen3-class local models call tools well); a model that can't simply
+  /// produces no calls and the caller's negotiation handles the rest.
   Future<LlmToolResponse?> generateWithTools(
     GenerationParams params,
     List<Map<String, dynamic>> tools,

@@ -2068,7 +2068,8 @@ class ChatService extends ChangeNotifier {
     review: _journalReview,
     fireLLMEval: (p) => _fireLLMEval(p),
     // Tool-calling door (§4.3): same eval posture as _fireLLMEval (low temp,
-    // reasoning off); local KoboldCpp returns null → XML floor.
+    // reasoning off). All backends probe — local KoboldCpp included (Qwen3
+    // etc. call tools fine); incapable models fall back to the XML floor.
     fireToolEval: (prompt, tools) {
       final service =
           testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
@@ -2090,7 +2091,10 @@ class ChatService extends ChangeNotifier {
     getBackendIdentity: () {
       final service =
           testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
-      return '${service.backendName}|${_storageService.remoteModelName}';
+      // Remote model name AND local model path both ride the key, so
+      // switching either re-probes tool support (capability is per model).
+      return '${service.backendName}|${_storageService.remoteModelName}'
+          '|${_storageService.lastUsedModelPath ?? ''}';
     },
     stripThinkBlocks: _stripThinkBlocks,
     getSessionId: () => _currentSessionId,

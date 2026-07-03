@@ -1,11 +1,13 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Tests for the OpenAI tool-calling door (phase 4 of the Journal):
+// Tests for the OpenAI tool-calling doors (phase 4 of the Journal):
 // - llm_tool_parsing.dart — response-body → LlmToolResponse (pure)
-// - OpenRouterService.generateWithTools — request shape + null-on-failure
-//   contract, exercised against a real loopback HTTP server (same pattern
-//   as the Stoop relay tests).
+// - OpenRouterService.generateWithTools (remote door) and
+//   postOpenAiChatWithTools (the shared LOCAL door KoboldService and
+//   PseudoRemoteService both delegate to) — request shape +
+//   null-on-failure contract, exercised against a real loopback HTTP
+//   server (same pattern as the Stoop relay tests).
 
 import 'dart:convert';
 import 'dart:io';
@@ -15,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
+import 'package:front_porch_ai/services/openai_chat_stream.dart';
 
 void main() {
   // The test binding stubs HttpClient (every request would 400 without a
@@ -173,6 +176,51 @@ void main() {
       );
       expect(await unready.generateWithTools(params, tools), isNull);
       expect(lastRequest, isNull);
+    });
+
+    test('local door (postOpenAiChatWithTools) — same shape, same contract',
+        () async {
+      // The shared function KoboldService/PseudoRemoteService delegate to,
+      // pointed at the KoboldCpp-style root (no /v1 — the helper appends).
+      responseBody = jsonEncode({
+        'choices': [
+          {
+            'message': {
+              'tool_calls': [
+                {
+                  'function': {
+                    'name': 'pin_memory',
+                    'arguments': '{"id": 2}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      final resp = await postOpenAiChatWithTools(
+        'http://127.0.0.1:${server.port}',
+        params,
+        tools,
+      );
+      expect(lastRequest!['stream'], false);
+      expect(lastRequest!['tools'], isNotEmpty);
+      expect(lastRequest!['tool_choice'], 'auto');
+      expect(lastRequest!['model'], 'koboldcpp'); // Kobold ignores the name
+      expect(resp!.calls.single.name, 'pin_memory');
+      expect(resp.calls.single.arguments['id'], 2);
+
+      // An old KoboldCpp that rejects the tools field → null → XML fallback.
+      statusCode = 400;
+      responseBody = '';
+      expect(
+        await postOpenAiChatWithTools(
+          'http://127.0.0.1:${server.port}',
+          params,
+          tools,
+        ),
+        isNull,
+      );
     });
   });
 }
