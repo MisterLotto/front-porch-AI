@@ -188,6 +188,28 @@ extension ChatServiceSessionState on ChatService {
     await _saveChain;
   }
 
+  /// Shutdown flush: guarantee the current in-memory chat state — most
+  /// importantly the just-applied Needs vector and Realism scalars from the
+  /// last turn — is durably on disk before the process exits.
+  ///
+  /// Why this exists: the post-generation Needs deltas are applied to
+  /// `_needsSimulation.vector` in memory and only reach the DB through
+  /// `_saveChat()`. Several `_saveChat()` calls across the service are
+  /// fire-and-forget (`unawaited`, `Future.microtask`, non-awaited setters), so
+  /// the write carrying the last message's post-impact vector can still be
+  /// queued or mid-commit when the user closes the window. Before this flush,
+  /// `onWindowClose` tore down backends and called `exit(0)` without waiting,
+  /// killing that pending write — the message text survived (saved earlier,
+  /// pre-impact) but the sidebar levels reverted on reopen. That was the
+  /// intermittent "the needs deltas from the last message didn't stick" bug.
+  ///
+  /// Awaiting `_saveChat()` here drains every already-queued save on
+  /// `_saveChain` (so nothing in flight is dropped) and then writes the live
+  /// state one final time — bounded and fast (a few SQLite writes). Safe to
+  /// call with no active chat: `_doSaveChat` no-ops when there is no session or
+  /// no messages.
+  Future<void> flushPendingSaves() => _saveChat();
+
   Future<void> _doSaveChat() async {
     if ((_activeCharacter == null && _activeGroup == null) ||
         _currentSessionId == null) {
