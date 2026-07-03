@@ -1,6 +1,6 @@
 # What's new in this release
 
-This release reworks the AFK needs system so characters have room for varied idle activities instead of spending every response survival-firefighting. No new breaking changes.
+This release adds Dynamic Responses (AFK) — autonomous character life simulation while you're away — plus the usual internal cleanup.
 
 ## 🎯 Dynamic Responses (AFK) — Autonomous Life Simulation
 
@@ -13,6 +13,14 @@ When you step away from the chat, Front Porch AI now keeps the scene alive with 
 - **Smart fallback for weaker models** — If the evaluator model returns no need changes (common on smaller local models toward the third response), a keyword-based system scans the scene for activities and fills in reasonable values — without overwriting anything the model got right.
 - **Three-response cap** — The cycle stops after three consecutive auto-responses, preventing runaway generation.
 - **Clean visual feedback** — Each AFK message shows a needs-delta chip at the bottom, with per-need tooltips explaining what changed and why.
+- **AFK works independently of Realism and Needs** — With both toggles off, AFK produces pure narration with no time advance, needs evaluation, or delta chip. Turning either one on adds the respective behavior without requiring the other.
+
+## Recent improvements
+
+- 🧹 **Cleaner idle timer** — Removed the redundant `_resetIdleTimerWithCooldown` helper that duplicated `_resetIdleTimer`'s cooldown branch. AFK now uses one timer-reset path everywhere.
+- 🔄 **Timer resets on chat switch** — Switching characters, groups, sessions, or starting a new chat now properly cancels the idle timer and resets the exchange-completed flag, so AFK starts fresh in every conversation.
+- 🎯 **Tighter keyword matching** — The AFK keyword fallback now uses `\b` word boundaries, preventing false matches like `"bedroom"` triggering the `bed` keyword or `"foodie"` triggering `food`. Added common plural and verb variants (`friends`, `books`, `shows`, `showered`, `bathing`, `washing`, etc.) to maintain coverage.
+- ⏰ **Time preamble respects passage-of-time setting** — The AFK idle cue's time preamble ("A few hours have passed. It is now...") only appears when passage of time is enabled in Time Service settings. With it off, the cue says "A while has passed" with no time reference.
 
 ## 🧹 Internal cleanup
 

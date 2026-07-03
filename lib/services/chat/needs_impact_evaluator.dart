@@ -120,8 +120,14 @@ class NeedsImpactEvaluator {
     final text = sceneText.toLowerCase();
     final result = <String, int>{};
 
+    bool matchesWordBoundary(Iterable<String> keywords, String text) {
+      return keywords.any((k) {
+        return RegExp('\\b${RegExp.escape(k)}\\b').hasMatch(text);
+      });
+    }
+
     void check(Iterable<String> keywords, Map<String, int> deltas) {
-      if (keywords.any((k) => text.contains(k))) {
+      if (matchesWordBoundary(keywords, text)) {
         for (final entry in deltas.entries) {
           final existing = result[entry.key] ?? 0;
           if (entry.value > existing) {
@@ -139,7 +145,8 @@ class NeedsImpactEvaluator {
 
     // Hygiene — specific phrases first
     check([
-      'shower', 'bath', 'bathed',
+      'shower', 'showering', 'showered', 'showers',
+      'bath', 'bathed', 'bathing',
     ], {'hygiene': 40, 'comfort': 10});
     check([
       'washed her face', 'washed up', 'washed herself', 'dish',
@@ -149,7 +156,7 @@ class NeedsImpactEvaluator {
       'splashed water on her face', 'splashed some water',
       'freshened up', 'freshening up',
     ], {'hygiene': 15});
-    check(['washed'], {'hygiene': 25});
+    check(['washed', 'washing'], {'hygiene': 25});
     check([
       'changed clothes', 'changed into', 'got dressed',
       'pajamas', 'clean clothes', 'comfy clothes',
@@ -161,9 +168,9 @@ class NeedsImpactEvaluator {
       'made breakfast', 'made lunch', 'made dinner',
     ], {'hunger': 35});
     check([
-      'food', 'meal', 'pizza', 'leftovers', 'leftover', 'pasta', 'sandwich', 'snack',
-      'popcorn', 'cereal', 'apple', 'cheese', 'toast', 'cooking', 'browsing recipes',
-      'recipe', 'groceries', 'takeout',
+      'food', 'foods', 'meal', 'pizza', 'leftovers', 'leftover', 'pasta',
+      'sandwich', 'snack', 'popcorn', 'cereal', 'apple', 'cheese', 'toast',
+      'cooking', 'browsing recipes', 'recipe', 'groceries', 'takeout',
     ], {'hunger': 25});
     check([
       'fridge', 'refrigerator', 'microwave', 'kitchen',
@@ -193,11 +200,11 @@ class NeedsImpactEvaluator {
 
     // Comfort
     check([
-      'book', 'reading', 'read a', 'novel', 'magazine',
+      'book', 'books', 'reading', 'reads', 'read a', 'novel', 'magazine',
       'page', 'chapter', 'story',
     ], {'comfort': 20});
     check([
-      'tv', 'television', 'movie', 'show', 'watching',
+      'tv', 'television', 'movie', 'show', 'shows', 'watching',
       'video', 'netflix', 'streaming',
     ], {'comfort': 10});
     check([
@@ -230,8 +237,9 @@ class NeedsImpactEvaluator {
 
     // Social
     check([
-      'friend', 'neighbor', 'talked to', 'chatting with',
-      'texted', 'called', 'phone call', 'messaged',
+      'friend', 'friends', 'neighbor', 'neighbors',
+      'talked to', 'chatting with', 'texted', 'called',
+      'phone call', 'messaged',
     ], {'social': 15});
 
     return result;

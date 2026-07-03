@@ -3097,15 +3097,6 @@ class ChatService extends ChangeNotifier {
     _idleTimer = Timer(Duration(seconds: interval), _onIdleTimerFired);
   }
 
-  /// Reset timer with forced 2x cooldown (used after auto-response completes).
-  void _resetIdleTimerWithCooldown() {
-    _idleTimer?.cancel();
-    _idleTimer = null;
-    if (!_storageService.generationSettings.dynamicResponses) return;
-    if (!_hasCompletedExchange) return;
-    final cooldown = _storageService.generationSettings.dynamicResponseInterval * 2;
-    _idleTimer = Timer(Duration(seconds: cooldown), _onIdleTimerFired);
-  }
 
   void _cancelIdleTimer() {
     _idleTimer?.cancel();
@@ -3144,22 +3135,27 @@ class ChatService extends ChangeNotifier {
 
     _generateResponse(GenerationMode.normal).then((_) {
       _pendingIdleCue = null;
-      _resetIdleTimerWithCooldown();
+      _resetIdleTimer();
       _autoResponseInProgress = false;
     }).catchError((_) {
       _pendingIdleCue = null;
       _autoResponseInProgress = false;
-      _resetIdleTimerWithCooldown();
+      _resetIdleTimer();
     });
   }
 
   String _buildAutonomousCue() {
     final charName = _activeCharacter?.name ?? '{{char}}';
-
-    final timeStr = '${_timeService.timeOfDay} (Day ${_timeService.dayCount})';
+    final timeEnabled = _timeService.passageOfTimeEnabled;
+    final timeStr = timeEnabled
+        ? '${_timeService.timeOfDay} (Day ${_timeService.dayCount})'
+        : '';
 
     if (!_needsSimEnabled || _needsSimulation.vector.isEmpty) {
-      return '*A few hours have passed. It is now $timeStr.\n\n'
+      final preamble = timeEnabled
+          ? '*A few hours have passed. It is now $timeStr.\n\n'
+          : '*A while has passed.\n\n';
+      return '$preamble'
           'Describe a quiet snapshot from part of $charName\'s day '
           '\u2014 something they have been doing, a moment of rest, '
           'a personal routine. Reference what they have been up to '
@@ -3185,7 +3181,10 @@ class ChatService extends ChangeNotifier {
       }).join(', ');
     }
 
-    return '*A few hours have passed. It is now $timeStr.\n\n'
+    final preamble = timeEnabled
+        ? '*A few hours have passed. It is now $timeStr.\n\n'
+        : '*A while has passed.\n\n';
+    return '$preamble'
         'While you were away, $charName has been going about their day '
         '\u2014 handling meals, rest, and personal needs as life went on.'
         '${needsStr.isNotEmpty ? "\n\n$charName\'s current state \u2014 $needsStr." : ""}\n\n'

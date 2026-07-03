@@ -132,6 +132,10 @@ extension ChatServiceSessionManage on ChatService {
   Future<void> startNewChat() async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
+    // Reset AFK idle state when starting a new chat
+    _cancelIdleTimer();
+    _hasCompletedExchange = false;
+
     debugPrint(
       '[startNewChat] START: arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
     );

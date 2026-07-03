@@ -332,6 +332,10 @@ extension ChatServiceSessionLoad on ChatService {
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
+    // Reset AFK idle state when loading a new session
+    _cancelIdleTimer();
+    _hasCompletedExchange = false;
+
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 

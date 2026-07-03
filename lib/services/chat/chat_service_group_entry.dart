@@ -30,6 +30,10 @@ extension ChatServiceGroupEntry on ChatService {
     await _cancelAndWaitForGeneration();
     _generationEpoch++;
 
+    // Reset AFK idle state when switching to a different group
+    _cancelIdleTimer();
+    _hasCompletedExchange = false;
+
     // Reset author notes and summary when starting fresh chat/group (will be overridden if loading existing session)
     _authorNote = '';
     _authorNoteStrength = 4;
