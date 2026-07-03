@@ -15,12 +15,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'backporch_api.dart';
+import 'stoop_card.dart';
 import 'stoop_message.dart';
 
 /// Live connection to the messaging WebSocket. Owned for the whole Stoop session
 /// (by the notification bell) so new moderator messages arrive instantly; the
-/// inbox shares the same socket while open for live append + typing. Reconnects
-/// itself on drop, reading a fresh access token each attempt.
+/// inbox shares the same socket while open for live append + typing, and the
+/// server also pushes live card counters (votes/downloads) down the same pipe.
+/// Reconnects itself on drop, reading a fresh access token each attempt.
 class StoopMessageSocket {
   final String Function() _token;
   final BackporchApi _api = BackporchApi();
@@ -33,6 +35,13 @@ class StoopMessageSocket {
   final _messages = StreamController<StoopMessage>.broadcast();
   final _modTyping = StreamController<bool>.broadcast();
 
+  // Card counters are global broadcast data (any vote/download, anywhere), and
+  // the surfaces showing them (browse grid, detail panel, creator page) don't
+  // own the socket — the bell does, and the detail panel even lives in the
+  // root overlay outside the Stoop widget subtree. A static stream lets any
+  // surface listen with zero plumbing; only one socket is ever live to feed it.
+  static final _cardStats = StreamController<StoopCardStats>.broadcast();
+
   /// Unread moderator-message count, for the bell badge.
   final ValueNotifier<int> unread = ValueNotifier<int>(0);
 
@@ -41,6 +50,9 @@ class StoopMessageSocket {
 
   /// Whether a moderator is currently typing.
   Stream<bool> get onModTyping => _modTyping.stream;
+
+  /// Live card counter updates (net score + unique downloads), app-wide.
+  static Stream<StoopCardStats> get onCardStats => _cardStats.stream;
 
   StoopMessageSocket(this._token) {
     _initUnread();
@@ -109,6 +121,9 @@ class StoopMessageSocket {
         break;
       case 'typing':
         if (j['fromMod'] == true) _modTyping.add(j['isTyping'] == true);
+        break;
+      case 'cardStats':
+        _cardStats.add(StoopCardStats.fromJson(j));
         break;
     }
   }

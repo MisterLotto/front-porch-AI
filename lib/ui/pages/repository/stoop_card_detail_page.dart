@@ -8,6 +8,7 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
@@ -91,15 +92,33 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
   bool _loading = true;
   String? _error;
   int _score = 0;
+  int _downloadCount = 0;
   int _myVote = 0;
   int _greetingIndex = 0;
   int _memberIndex = 0; // which group member the carousel is showing
   bool _downloading = false;
+  StreamSubscription<StoopCardStats>? _statsSub;
 
   @override
   void initState() {
     super.initState();
+    // Live counters while the panel is open. The server's numbers are
+    // authoritative — our own vote's broadcast carries the same score as its
+    // HTTP reply, so accepting every push is safe.
+    _statsSub = StoopMessageSocket.onCardStats.listen((s) {
+      if (s.cardId != widget.cardId || !mounted) return;
+      setState(() {
+        _score = s.score;
+        _downloadCount = s.downloadCount;
+      });
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _statsSub?.cancel();
+    super.dispose();
   }
 
   String get _token => context.read<AuthState>().accessToken ?? '';
@@ -115,6 +134,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
       setState(() {
         _detail = d;
         _score = d.score;
+        _downloadCount = d.downloadCount;
         _myVote = d.myVote;
         _loading = false;
       });
@@ -172,6 +192,11 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     Directory? tmp;
     try {
       final payload = await _api.download(_token, widget.cardId);
+      // Newer servers return the fresh count; covers a briefly-dropped socket.
+      final freshCount = (payload['downloadCount'] as num?)?.toInt();
+      if (freshCount != null && mounted) {
+        setState(() => _downloadCount = freshCount);
+      }
       final cardJson = payload['card'] as Map<String, dynamic>?;
       if (cardJson == null) throw Exception('no card data');
       if (groupImporter != null) {
@@ -428,7 +453,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                     ),
                     const SizedBox(width: 3),
                     Text(
-                      '${d.downloadCount}',
+                      '$_downloadCount',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),
                       ),

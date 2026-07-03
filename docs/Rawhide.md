@@ -20,6 +20,8 @@ unreleased delta remains below.
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📡 **The Stoop is alive now — upvotes and downloads tick up in real time** — when someone upvotes or downloads a character while you're browsing The Stoop, you see the number change *the moment it happens*: on the browse grid, the featured banner, an open character panel, creator profiles, even your past-downloads row. No more refreshing or hopping out and back in to see how a card is doing. Post a new character on Discord and watch the downloads roll in live.
+
 - 💾 **Fixed: your character's Needs sometimes "rewound" after closing the app** — occasionally, closing and reopening Front Porch AI would snap the Needs bars back to where they were *before* the last reply, as if that message's changes (the little "Bladder +85, Fun +18…" chips) never happened. The app was closing a beat too fast, before that last save finished writing to disk. It now waits for every pending save to fully land before it shuts down, so the state you see when you close is exactly the state you get when you reopen.
 
 - 🪟 **Fixed: app opening as a stuck taskbar icon you couldn't restore (Windows 11)** — if Front Porch AI ever launched to nothing but an icon on the taskbar that wouldn't maximize (and reinstalling didn't help), this is fixed. Closing the app while it was minimized could save a bogus off-screen window position that then got reloaded on the next launch, parking the window where you couldn't reach it. It now refuses to restore a window that wouldn't land on any of your monitors and recenters instead — which also repairs any install that was already stuck, and rescues windows left off-screen after unplugging a second monitor.
