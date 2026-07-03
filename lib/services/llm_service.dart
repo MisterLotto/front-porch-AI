@@ -40,6 +40,13 @@ class GenerationParams {
   final int? reasoningMaxTokens;
   final List<String>? bannedPhrases;
 
+  /// Top-K cutoff; 0 disables it (KoboldCpp and remote APIs both treat 0 as
+  /// off, so it's only serialized when > 0).
+  final int topK;
+
+  /// DRY anti-repetition strength (KoboldCpp only; 0 = off).
+  final double dryMultiplier;
+
   /// Optional system prompt for chat APIs. When provided, OpenRouter/LM Studio
   /// will send this as a proper 'system' role message instead of lumping
   /// everything into a single 'user' message. KoboldCPP ignores this field.
@@ -67,10 +74,12 @@ class GenerationParams {
     this.repeatPenalty = 1.1,
     this.topP = 0.9,
     this.minP = 0.0,
+    this.topK = 0,
+    this.dryMultiplier = 0.0,
     this.repPenTokens = 64,
     this.dynatempRange,
     this.xtcThreshold = 0.1,
-    this.xtcProbability = 0.5,
+    this.xtcProbability = 0.0, // 0 = off (samplers are delivered now)
     this.stopSequences,
     this.reasoningEnabled = false,
     this.reasoningEffort = 'medium',

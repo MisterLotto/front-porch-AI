@@ -65,10 +65,28 @@ Map<String, dynamic> _chatPayload(
     'max_tokens': params.maxLength,
     'temperature': params.temperature,
     'top_p': params.topP,
-    'frequency_penalty': params.repeatPenalty > 1.0
-        ? (params.repeatPenalty - 1.0).clamp(0.0, 2.0)
-        : 0.0,
     'messages': messages,
+    // KoboldCpp accepts its native sampler fields on /v1/chat/completions
+    // (same handler as the classic API), so the sliders actually reach the
+    // model. This replaced a lossy frequency_penalty≈rep_pen−1 conversion
+    // that both mistranslated Rep Pen and silently dropped everything else.
+    'min_p': params.minP,
+    'rep_pen': params.repeatPenalty,
+    'rep_pen_range': params.repPenTokens,
+    'xtc_threshold': params.xtcThreshold,
+    'xtc_probability': params.xtcProbability,
+    if (params.topK > 0) 'top_k': params.topK,
+    if (params.dynatempRange != null)
+      'dynatemp_range': params.dynatempRange,
+    if (params.dryMultiplier > 0) ...{
+      // Standard DRY companions (KoboldCpp defaults, stated explicitly).
+      'dry_multiplier': params.dryMultiplier,
+      'dry_base': 1.75,
+      'dry_allowed_length': 2,
+      'dry_sequence_breakers': ['\n', ':', '"', '*'],
+    },
+    if (params.bannedPhrases != null && params.bannedPhrases!.isNotEmpty)
+      'banned_tokens': params.bannedPhrases,
   };
 
   if (params.reasoningEnabled || params.reasoningMaxTokens != null) {

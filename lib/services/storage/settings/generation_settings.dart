@@ -30,13 +30,22 @@ class GenerationSettings with SettingsBase {
 
   String _systemPrompt = defaultSystemPrompt;
   double _minP = 0.1;
+  // 0.9 matches what the transport always hardcoded before Top-P became a
+  // real setting, so existing chats feel identical until the slider moves.
+  double _topP = 0.9;
+  int _topK = 0; // 0 = disabled (both KoboldCpp and remote APIs treat it so)
   double _temperature = 0.7;
   double _repeatPenalty = 1.1;
   int _repeatPenaltyTokens = 64;
+  // DRY anti-repetition (KoboldCpp only). 0 = off; ~0.8 is the usual dose.
+  double _dryMultiplier = 0.0;
   bool _dynamicTempEnabled = false;
   double _dynamicTempRange = 0.7;
   double _xtcThreshold = 0.1;
-  double _xtcProbability = 0.5;
+  // 0 = XTC off. The old default was 0.5, but XTC never actually reached the
+  // model back then — now that samplers are delivered, defaulting it ON would
+  // surprise-activate it. Users who explicitly set a value keep theirs.
+  double _xtcProbability = 0.0;
   int _maxLength = 1024;
   int _minLength = 0;
   List<String> _stopSequences = [
@@ -56,6 +65,9 @@ class GenerationSettings with SettingsBase {
 
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
+  double get topP => _topP;
+  int get topK => _topK;
+  double get dryMultiplier => _dryMultiplier;
   double get temperature => _temperature;
   double get repeatPenalty => _repeatPenalty;
   int get repeatPenaltyTokens => _repeatPenaltyTokens;
@@ -70,6 +82,9 @@ class GenerationSettings with SettingsBase {
   void load() {
     _systemPrompt = prefs?.getString(k('system_prompt')) ?? _systemPrompt;
     _minP = prefs?.getDouble(k('min_p')) ?? _minP;
+    _topP = prefs?.getDouble(k('top_p')) ?? _topP;
+    _topK = prefs?.getInt(k('top_k')) ?? _topK;
+    _dryMultiplier = prefs?.getDouble(k('dry_multiplier')) ?? _dryMultiplier;
     _temperature = prefs?.getDouble(k('temperature')) ?? _temperature;
     _repeatPenalty = prefs?.getDouble(k('repeat_penalty')) ?? _repeatPenalty;
     _repeatPenaltyTokens =
@@ -107,6 +122,24 @@ class GenerationSettings with SettingsBase {
   Future<void> setMinP(double value) async {
     _minP = value;
     await prefs?.setDouble(k('min_p'), value);
+    notify();
+  }
+
+  Future<void> setTopP(double value) async {
+    _topP = value;
+    await prefs?.setDouble(k('top_p'), value);
+    notify();
+  }
+
+  Future<void> setTopK(int value) async {
+    _topK = value;
+    await prefs?.setInt(k('top_k'), value);
+    notify();
+  }
+
+  Future<void> setDryMultiplier(double value) async {
+    _dryMultiplier = value;
+    await prefs?.setDouble(k('dry_multiplier'), value);
     notify();
   }
 

@@ -416,6 +416,13 @@ class StorageService extends ChangeNotifier {
   Future<void> setTemperature(double v) => generationSettings.setTemperature(v);
   double get minP => generationSettings.minP;
   Future<void> setMinP(double v) => generationSettings.setMinP(v);
+  double get topP => generationSettings.topP;
+  Future<void> setTopP(double v) => generationSettings.setTopP(v);
+  int get topK => generationSettings.topK;
+  Future<void> setTopK(int v) => generationSettings.setTopK(v);
+  double get dryMultiplier => generationSettings.dryMultiplier;
+  Future<void> setDryMultiplier(double v) =>
+      generationSettings.setDryMultiplier(v);
   double get repeatPenalty => generationSettings.repeatPenalty;
   Future<void> setRepeatPenalty(double v) =>
       generationSettings.setRepeatPenalty(v);

@@ -51,9 +51,18 @@ void main() {
       expect(params.xtcThreshold, 0.1);
     });
 
-    test('xtcProbability defaults to 0.5', () {
+    test('xtcProbability defaults to 0.0 (off)', () {
+      // Was 0.5 back when XTC never actually reached the model; now that
+      // samplers are delivered, defaulting a creativity-cutter ON would
+      // change every caller's output. 0 = off is the safe neutral.
       final params = GenerationParams(prompt: 'test');
-      expect(params.xtcProbability, 0.5);
+      expect(params.xtcProbability, 0.0);
+    });
+
+    test('topK and dryMultiplier default to off', () {
+      final params = GenerationParams(prompt: 'test');
+      expect(params.topK, 0);
+      expect(params.dryMultiplier, 0.0);
     });
 
     test('reasoningEnabled defaults to false', () {

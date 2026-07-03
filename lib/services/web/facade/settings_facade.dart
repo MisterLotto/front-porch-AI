@@ -59,6 +59,9 @@ class SettingsFacade {
       'generation': {
         'temperature': g.temperature,
         'minP': g.minP,
+        'topP': g.topP,
+        'topK': g.topK,
+        'dryMultiplier': g.dryMultiplier,
         'repeatPenalty': g.repeatPenalty,
         'repeatPenaltyTokens': g.repeatPenaltyTokens,
         'xtcThreshold': g.xtcThreshold,
@@ -118,6 +121,12 @@ class SettingsFacade {
       if (t is num) await g.setTemperature(t.toDouble());
       final mp = gen['minP'];
       if (mp is num) await g.setMinP(mp.toDouble());
+      final tp = gen['topP'];
+      if (tp is num) await g.setTopP(tp.toDouble());
+      final tk = gen['topK'];
+      if (tk is num) await g.setTopK(tk.toInt());
+      final dm = gen['dryMultiplier'];
+      if (dm is num) await g.setDryMultiplier(dm.toDouble());
       final rp = gen['repeatPenalty'];
       if (rp is num) await g.setRepeatPenalty(rp.toDouble());
       final rpt = gen['repeatPenaltyTokens'];

@@ -239,16 +239,29 @@ class OpenRouterService extends LLMService {
     }
     messages.add({'role': 'user', 'content': params.prompt});
 
+    // api.openai.com rejects unknown parameters outright, so it keeps the
+    // old conservative payload (frequency_penalty approximation, no
+    // extensions). Everyone else (OpenRouter, Nano-GPT, vLLM, LM Studio)
+    // supports or ignores the native sampler fields.
+    final strictOpenAi = _apiUrl.contains('openai.com');
     final payload = <String, dynamic>{
       'model': _modelName,
       'stream': stream,
       'max_tokens': params.maxLength,
       'temperature': params.temperature,
       'top_p': params.topP,
-      'frequency_penalty': params.repeatPenalty > 1.0
-          ? (params.repeatPenalty - 1.0).clamp(0.0, 2.0)
-          : 0.0,
       'messages': messages,
+      if (strictOpenAi)
+        'frequency_penalty': params.repeatPenalty > 1.0
+            ? (params.repeatPenalty - 1.0).clamp(0.0, 2.0)
+            : 0.0
+      else ...{
+        // The real thing — Rep Pen used to be mistranslated into
+        // frequency_penalty (1.15 → 0.15) and Min-P was dropped entirely.
+        'repetition_penalty': params.repeatPenalty,
+        'min_p': params.minP,
+        if (params.topK > 0) 'top_k': params.topK,
+      },
     };
 
     // Add reasoning params.
