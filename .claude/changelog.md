@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-03 — Remove the duplicate "Nudge time" row from the Character State gear flyout (user feedback)
+- **Files:** lib/ui/chat_components/sidebar/character_state/character_state_settings.dart (row + its chevron IconButtons deleted; header doc updated to record that manual nudging lives ONLY on the TimeStrip).
+- **Reason:** user spotted the duplication — the TimeStrip's chevrons next to "Tue · Day 1" already nudge time, so the flyout row was a second surface for the same action (exactly the anti-duplication rule, on the presentation side). `nudgeTimePeriod` keeps its two legitimate callers (TimeStrip, web facade).
+- **Note:** the `sidebar/character_state_settings` pixel golden will need its usual CI-runner regeneration (flyout got shorter).
+- **Verified:** flutter analyze → No issues; full suite 1543/1543; grep confirms no "Nudge time" strings or orphaned callers remain.
+- **Commit:** (below)
+
 ## 2026-07-03 — Enable the Journal's tool-calling probe for LOCAL backends too (user decision)
 - **Files:** lib/services/openai_chat_stream.dart (payload extracted into shared `_chatPayload` used by both streaming + the NEW `postOpenAiChatWithTools` — non-streaming tools POST against the local /v1/chat/completions, null on any failure), lib/services/kobold_service.dart + lib/services/pseudo_remote_service.dart (generateWithTools now delegates to postOpenAiChatWithTools instead of hard null), lib/services/llm_service.dart (base doc rewritten), lib/services/chat_service.dart (getBackendIdentity now includes lastUsedModelPath so swapping local GGUFs re-probes tool capability — it's per MODEL, not per backend), test/services/open_router_tools_test.dart (+1 local-door test: request shape, parse, 400→null), CLAUDE.md + docs/design/journal-memory.md + docs/Rawhide.md (local-floor wording corrected).
 - **Reason:** user overruled my "local GGUF tools are too inconsistent" call — correctly: Qwen3-class models (e.g. Qwen3 30B-A3B family) and finetunes tool-call well, and recent KoboldCpp supports OpenAI tools server-side. The existing negotiation already makes this safe for weak models: one probe per model per run, tag salvage from text replies, then remembered XML-only. §9 local floor invariant intact — a non-tool model costs exactly one extra eval round trip per run, then journals over XML as before.

@@ -26,9 +26,11 @@ import '../sidebar_tokens.dart';
 /// The Character State gear flyout — an inline inset panel (not a popup menu,
 /// which would dismiss on every toggle tap) collecting the simulation
 /// switches that used to be scattered through realism_section and the inline
-/// group NSFW toggle: Needs Simulation, Automatic Passage of Time, time
-/// nudge, One-Shot Eval, and NSFW Enhancements (the arousal system — its
-/// settings home after the Lust bar moved in among the bond bars).
+/// group NSFW toggle: Needs Simulation, Automatic Passage of Time, One-Shot
+/// Eval, and NSFW Enhancements (the arousal system — its settings home after
+/// the Lust bar moved in among the bond bars). Manual time nudging lives
+/// ONLY on the TimeStrip's chevrons (a duplicate row here was removed —
+/// user feedback 2026-07-03).
 ///
 /// NSFW visibility split-brain (documented at chat_service_group_settings):
 /// group READ uses the stable per-member flag [ChatService.isGroupNsfwEnabled]
@@ -97,47 +99,7 @@ class CharacterStateSettings extends StatelessWidget {
                 ? null
                 : (val) => chat.setPassageOfTimeEnabled(val),
           ),
-          const SizedBox(height: 6),
-          // Manual time nudge (the TimeStrip keeps its inline chevrons too)
-          Row(
-            children: [
-              Icon(
-                Icons.update,
-                size: 14,
-                color: AppColors.iconSecondary(context),
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  'Nudge time',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary(context),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                iconSize: 16,
-                icon: const Icon(Icons.chevron_left),
-                color: AppColors.iconSecondary(context),
-                onPressed: chat.isGenerating
-                    ? null
-                    : () => chat.nudgeTimePeriod(-1),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                iconSize: 16,
-                icon: const Icon(Icons.chevron_right),
-                color: AppColors.iconSecondary(context),
-                onPressed: chat.isGenerating
-                    ? null
-                    : () => chat.nudgeTimePeriod(1),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           _toggleRow(
             context,
             icon: Icons.speed,
