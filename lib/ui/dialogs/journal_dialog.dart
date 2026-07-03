@@ -43,11 +43,17 @@ class JournalDialog extends StatefulWidget {
   final String ownerId;
   final String ownerName;
 
+  /// Receipts tap-to-jump: called with a message position AFTER this dialog
+  /// has closed itself, so the chat behind it can scroll to the line. Null
+  /// hides the affordance (hosts without a scrollable chat).
+  final ValueChanged<int>? onJumpToMessage;
+
   const JournalDialog({
     super.key,
     required this.chatService,
     required this.ownerId,
     required this.ownerName,
+    this.onJumpToMessage,
   });
 
   static Future<void> show(
@@ -55,12 +61,14 @@ class JournalDialog extends StatefulWidget {
     required ChatService chatService,
     required String ownerId,
     required String ownerName,
+    ValueChanged<int>? onJumpToMessage,
   }) => showDialog(
     context: context,
     builder: (_) => JournalDialog(
       chatService: chatService,
       ownerId: ownerId,
       ownerName: ownerName,
+      onJumpToMessage: onJumpToMessage,
     ),
   );
 
@@ -356,15 +364,22 @@ class _JournalDialogState extends State<JournalDialog> {
   /// Receipts: the original chat lines this memory was written from
   /// (sourceMessageIds holds message positions — stable across saves, but a
   /// heavily edited/deleted history can outdate them, hence the guards).
+  /// Tapping a line closes the receipts AND the journal, then asks the chat
+  /// page to scroll to that message.
   Future<void> _showReceipts(JournalMemoryData card) async {
     final positions = _receiptPositions(card);
     final messages = _chat.messages;
-    final lines = [
+    final entries = [
       for (final pos in positions)
         if (pos >= 0 && pos < messages.length)
-          '#$pos  ${messages[pos].sender}: ${messages[pos].displayText}',
+          (
+            pos: pos,
+            line: '#$pos  ${messages[pos].sender}: '
+                '${messages[pos].displayText}',
+          ),
     ];
-    await showDialog<void>(
+    final jump = widget.onJumpToMessage;
+    final jumpTo = await showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.cardOf(ctx),
@@ -375,7 +390,7 @@ class _JournalDialogState extends State<JournalDialog> {
         ),
         content: SizedBox(
           width: 420,
-          child: lines.isEmpty
+          child: entries.isEmpty
               ? Text(
                   'The cited messages are no longer in this chat.',
                   style: TextStyle(
@@ -387,17 +402,38 @@ class _JournalDialogState extends State<JournalDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final line in lines)
+                      if (jump != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
-                            line,
-                            maxLines: 4,
-                            overflow: TextOverflow.ellipsis,
+                            'Tap a line to go to it in the chat.',
                             style: TextStyle(
-                              fontSize: 12,
-                              height: 1.4,
-                              color: AppColors.textSecondary(ctx),
+                              fontSize: 10.5,
+                              fontStyle: FontStyle.italic,
+                              color: AppColors.textTertiary(ctx),
+                            ),
+                          ),
+                        ),
+                      for (final entry in entries)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: jump == null
+                              ? null
+                              : () => Navigator.of(ctx).pop(entry.pos),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              entry.line,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: AppColors.textSecondary(ctx),
+                              ),
                             ),
                           ),
                         ),
@@ -416,6 +452,10 @@ class _JournalDialogState extends State<JournalDialog> {
         ],
       ),
     );
+    if (jumpTo == null || jump == null || !mounted) return;
+    // Close the journal itself so the chat is visible, THEN scroll.
+    Navigator.of(context).pop();
+    jump(jumpTo);
   }
 
   List<int> _receiptPositions(JournalMemoryData card) {

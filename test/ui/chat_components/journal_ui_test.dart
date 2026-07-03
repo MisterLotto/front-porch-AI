@@ -316,6 +316,63 @@ void main() {
       expect(find.text('Where this memory came from'), findsOneWidget);
       expect(find.textContaining('#0  Sam: I was wrong earlier.'), findsOneWidget);
       expect(find.textContaining('#1  Mara: That means a lot.'), findsOneWidget);
+      // No jump callback wired here → no tap affordance offered.
+      expect(find.text('Tap a line to go to it in the chat.'), findsNothing);
+      });
+    });
+
+    testWidgets('tapping a receipt line closes the journal and jumps',
+        (tester) async {
+      // Real-async escape: drift parks on real timers the fake-async
+      // zone never fires; runAsync runs the real event loop instead.
+      await tester.runAsync(() async {
+      await seedCard('He apologized first.', positions: [1]);
+      final chat = _JournalChat(
+        store: store,
+        messages: [
+          ChatMessage(text: 'I was wrong earlier.', sender: 'Sam', isUser: true),
+          ChatMessage(text: 'That means a lot.', sender: 'Mara', isUser: false),
+        ],
+      );
+      addTearDown(chat.dispose);
+      sizeForDialog(tester);
+      final jumps = <int>[];
+      // Push the journal as a real dialog route so its self-pop on jump is
+      // exercised (pumping it as `home` would pop the only route).
+      await tester.pumpWidget(
+        wrap(
+          chat,
+          Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () => JournalDialog.show(
+                ctx,
+                chatService: chat,
+                ownerId: 'mara',
+                ownerName: 'Mara',
+                onJumpToMessage: jumps.add,
+              ),
+              child: const Text('open journal'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open journal'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Where this came from'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tap a line to go to it in the chat.'), findsOneWidget);
+
+      await tester.tap(find.textContaining('#1  Mara: That means a lot.'));
+      await tester.pumpAndSettle();
+
+      expect(jumps, [1]);
+      // Both the receipts and the journal itself closed — the chat behind
+      // them is what the jump scrolls.
+      expect(find.text("Mara's Journal"), findsNothing);
+      expect(find.text('Where this memory came from'), findsNothing);
       });
     });
 

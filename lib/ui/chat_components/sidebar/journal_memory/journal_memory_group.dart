@@ -45,6 +45,9 @@ class JournalMemoryGroup extends StatelessWidget {
   final String diaryOwnerId;
   final String diaryOwnerName;
 
+  /// Journal receipts tap-to-jump (threaded down to the diary dialog).
+  final ValueChanged<int> onJumpToMessage;
+
   final bool initiallyExpanded;
   final ValueChanged<bool>? onExpansionChanged;
   final VoidCallback onEvolveNow;
@@ -56,6 +59,7 @@ class JournalMemoryGroup extends StatelessWidget {
     required this.isLite,
     required this.diaryOwnerId,
     required this.diaryOwnerName,
+    required this.onJumpToMessage,
     required this.initiallyExpanded,
     this.onExpansionChanged,
     required this.onEvolveNow,
@@ -87,6 +91,7 @@ class JournalMemoryGroup extends StatelessWidget {
               chatService: chatService,
               characterId: diaryOwnerId,
               characterName: diaryOwnerName,
+              onJumpToMessage: onJumpToMessage,
             ),
           ],
           if (showMemory) ...[

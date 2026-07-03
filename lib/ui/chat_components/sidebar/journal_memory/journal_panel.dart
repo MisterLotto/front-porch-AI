@@ -40,11 +40,16 @@ class JournalPanel extends StatefulWidget {
   final String characterId;
   final String characterName;
 
+  /// Receipts tap-to-jump, forwarded into the diary dialog (null in tests
+  /// or hosts without a scrollable chat behind the panel).
+  final ValueChanged<int>? onJumpToMessage;
+
   const JournalPanel({
     super.key,
     required this.chatService,
     required this.characterId,
     required this.characterName,
+    this.onJumpToMessage,
   });
 
   @override
@@ -228,6 +233,7 @@ class _JournalPanelState extends State<JournalPanel> {
       chatService: widget.chatService,
       ownerId: widget.characterId,
       ownerName: widget.characterName,
+      onJumpToMessage: widget.onJumpToMessage,
     );
     // Pick up whatever was pinned/edited/planted/retired in the dialog.
     await _load();

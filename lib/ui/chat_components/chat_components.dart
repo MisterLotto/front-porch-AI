@@ -37,4 +37,5 @@ export 'overlays/objective_check_overlay.dart';
 export 'overlays/generation_status_bar.dart';
 
 export 'widgets/eval_pill.dart';
+export 'widgets/message_jump.dart';
 export 'widgets/settings_menu_item.dart';

@@ -65,6 +65,8 @@ class _ChatPageState extends State<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   late final FocusNode _chatFocusNode;
   bool _autoScroll = true;
+  // Journal receipts tap-to-jump: the just-landed-on bubble, briefly tinted.
+  ChatMessage? _jumpFlashMessage;
   double _sidebarWidth = 300;
   int _inputMinLines = 1;
   double _dragAccumulator = 0;
@@ -412,6 +414,27 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  /// Journal receipts tap-to-jump: seek the chat to the message at
+  /// [position] (the stored absolute index), then flash the bubble so the
+  /// eye finds it. The seek itself lives in message_jump.dart.
+  Future<void> _jumpToMessage(int position) async {
+    final messages = Provider.of<ChatService>(context, listen: false).messages;
+    if (position < 0 || position >= messages.length) return;
+    final target = messages[position];
+    await jumpToMessage(
+      controller: _scrollController,
+      messages: messages,
+      target: target,
+    );
+    if (!mounted) return;
+    setState(() => _jumpFlashMessage = target);
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted && identical(_jumpFlashMessage, target)) {
+        setState(() => _jumpFlashMessage = null);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ChatService>(
@@ -625,8 +648,7 @@ class _ChatPageState extends State<ChatPage> {
                                       // or Scene Guest) — one path for all modes.
                                       final (senderImage, senderColor) =
                                           _resolveSpeaker(chatService, msg);
-                                      return MessageBubble(
-                                        key: ObjectKey(msg),
+                                      final bubble = MessageBubble(
                                         message: msg,
                                         characterImage: senderImage,
                                         index: reversedIndex,
@@ -802,6 +824,18 @@ class _ChatPageState extends State<ChatPage> {
                                                   .firstOrNull
                                             : character,
                                         chatService: chatService,
+                                      );
+                                      // GlobalObjectKey (was ObjectKey): same
+                                      // identity for list diffing, but
+                                      // locatable — jumpToMessage pages the
+                                      // list until this key materializes.
+                                      return JumpFlash(
+                                        key: GlobalObjectKey(msg),
+                                        flashed: identical(
+                                          msg,
+                                          _jumpFlashMessage,
+                                        ),
+                                        child: bubble,
                                       );
                                     },
                                   ),
@@ -3440,6 +3474,7 @@ class _ChatPageState extends State<ChatPage> {
               focused: focused,
               onSpinRequested: () => _showChanceTimeOverlay(context),
               onEvolveNow: () => _runEvolutionWithDialog(context, chatService),
+              onJumpToMessage: _jumpToMessage,
               resolveCharImage: _resolveCharImage,
             ),
           ),

@@ -47,6 +47,11 @@ class SidebarBody extends StatelessWidget {
   final ChatParticipant focused;
   final VoidCallback onSpinRequested;
   final VoidCallback onEvolveNow;
+
+  /// Journal receipts tap-to-jump: scroll the chat to this message position
+  /// (chat_page owns the scroll controller and the seek).
+  final ValueChanged<int> onJumpToMessage;
+
   final File? Function(String path) resolveCharImage;
 
   const SidebarBody({
@@ -55,6 +60,7 @@ class SidebarBody extends StatelessWidget {
     required this.focused,
     required this.onSpinRequested,
     required this.onEvolveNow,
+    required this.onJumpToMessage,
     required this.resolveCharImage,
   });
 
@@ -133,6 +139,7 @@ class SidebarBody extends StatelessWidget {
               // groups; ChatParticipant.id is the cards' stable key).
               diaryOwnerId: focused.id,
               diaryOwnerName: focused.name,
+              onJumpToMessage: onJumpToMessage,
               initiallyExpanded: ui.sidebarGroupExpanded(
                 'journal_memory',
                 fallback: false,
