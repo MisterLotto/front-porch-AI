@@ -68,15 +68,24 @@ class PorchAccordion extends StatefulWidget {
   });
 
   @override
-  State<PorchAccordion> createState() => _PorchAccordionState();
+  State<PorchAccordion> createState() => PorchAccordionState();
 }
 
-class _PorchAccordionState extends State<PorchAccordion> {
+class PorchAccordionState extends State<PorchAccordion> {
   late bool _expanded = widget.initiallyExpanded;
 
   void _toggle() {
     setState(() => _expanded = !_expanded);
     widget.onExpansionChanged?.call(_expanded);
+  }
+
+  /// Programmatically expand (used via a GlobalKey when a header switch turns
+  /// a feature ON — e.g. enabling Realism should reveal the stats it just
+  /// turned on, matching the old sections' auto-expand-on-enable behavior).
+  void expand() {
+    if (_expanded) return;
+    setState(() => _expanded = true);
+    widget.onExpansionChanged?.call(true);
   }
 
   @override

@@ -90,9 +90,12 @@ class CharacterStateSettings extends StatelessWidget {
                 'remain available.',
             value: chat.timeService.passageOfTimeEnabled,
             accent: AppColors.timeDayAccentOf(context),
+            // Must go through the ChatService wrapper — the raw TimeService
+            // setter is deliberately side-effect-free (no save, no notify),
+            // which is why this toggle looked dead / possessed before.
             onChanged: chat.isGenerating
                 ? null
-                : (val) => chat.timeService.setPassageOfTimeEnabled(val),
+                : (val) => chat.setPassageOfTimeEnabled(val),
           ),
           const SizedBox(height: 6),
           // Manual time nudge (the TimeStrip keeps its inline chevrons too)

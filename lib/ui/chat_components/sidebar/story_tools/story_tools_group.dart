@@ -23,7 +23,6 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../porch_accordion.dart';
-import 'author_note_section.dart';
 import 'chaos_panel.dart';
 import 'lorebook_panel.dart';
 import 'objective_panel.dart';
@@ -75,8 +74,9 @@ class StoryToolsGroup extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AuthorNoteSection(chatService: chatService),
-          const SizedBox(height: 12),
+          // (Author's Note moved OUT of this group — it leads the sidebar as
+          // its own card in SidebarBody, per user feedback that it was
+          // buried here.)
           if (!isGroup && !isLite) ...[
             ObjectivePanel(chatService: chatService),
             const SizedBox(height: 12),

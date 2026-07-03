@@ -63,6 +63,7 @@ class CharacterStateGroup extends StatefulWidget {
 
 class _CharacterStateGroupState extends State<CharacterStateGroup> {
   bool _showSettings = false;
+  final _accordionKey = GlobalKey<PorchAccordionState>();
 
   String _subtitle(ChatService chat) {
     if (widget.isGroup) {
@@ -85,6 +86,7 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
         : chat.realismEnabled;
 
     return PorchAccordion(
+      key: _accordionKey,
       id: 'character_state',
       emoji: '🎭',
       title: 'Character State',
@@ -104,7 +106,12 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                   activeThumbColor: AppColors.porchTerracottaOf(context),
                   onChanged: chat.isGenerating
                       ? null
-                      : (val) => chat.setRealismEnabled(val),
+                      : (val) {
+                          chat.setRealismEnabled(val);
+                          // Turning realism ON reveals the stats it enables
+                          // (old RealismSection auto-expanded the same way).
+                          if (val) _accordionKey.currentState?.expand();
+                        },
                 ),
               ),
             ),
@@ -116,7 +123,11 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
             color: _showSettings
                 ? AppColors.porchTerracottaOf(context)
                 : AppColors.iconSecondary(context),
-            onPressed: () => setState(() => _showSettings = !_showSettings),
+            onPressed: () {
+              setState(() => _showSettings = !_showSettings);
+              // Opening the flyout while collapsed would show nothing.
+              if (_showSettings) _accordionKey.currentState?.expand();
+            },
           ),
         ],
       ),

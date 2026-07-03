@@ -29,7 +29,9 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_card.dart';
 import 'character_state/character_state_group.dart';
 import 'journal_memory/journal_memory_group.dart';
+import 'porch_accordion.dart';
 import 'sidebar_tokens.dart';
+import 'story_tools/author_note_section.dart';
 import 'story_tools/story_tools_group.dart';
 
 /// The scrolling body of the warm-porch chat sidebar: the lite-NPC banner
@@ -90,6 +92,25 @@ class SidebarBody extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           children: [
             if (isLite) const _LiteNpcBanner(),
+            // Author's Note leads the sidebar as its own card (it was the
+            // always-first section in the old design; burying it inside
+            // Story Tools made it hard to find — user feedback).
+            PorchAccordion(
+              id: 'author_note',
+              emoji: '📝',
+              title: "Author's Note",
+              subtitle: chat.authorNote.trim().isEmpty
+                  ? null
+                  : 'active · strength ${chat.authorNoteStrength}',
+              accent: AppColors.porchAmberOf(context),
+              initiallyExpanded: ui.sidebarGroupExpanded(
+                'author_note',
+                fallback: true,
+              ),
+              onExpansionChanged: (v) =>
+                  ui.setSidebarGroupExpanded('author_note', v),
+              child: AuthorNoteSection(chatService: chat),
+            ),
             if (!isLite)
               CharacterStateGroup(
                 chat: chat,

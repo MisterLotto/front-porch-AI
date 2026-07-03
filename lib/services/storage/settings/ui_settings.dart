@@ -63,9 +63,11 @@ class UiSettings with SettingsBase {
   double _gridScale = 300.0; // maxCrossAxisExtent in pixels (150-450)
 
   // Chat-sidebar accordion expansion (persisted per group id so the layout
-  // survives restarts). Ids: character_state / journal_memory / story_tools.
+  // survives restarts). Ids: author_note / character_state / journal_memory /
+  // story_tools.
   final Map<String, bool> _sidebarGroupExpanded = {};
   static const List<String> _sidebarGroupIds = [
+    'author_note',
     'character_state',
     'journal_memory',
     'story_tools',
