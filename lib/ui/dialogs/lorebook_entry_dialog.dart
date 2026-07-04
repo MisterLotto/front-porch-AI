@@ -227,17 +227,16 @@ class _LorebookEntryDialogState extends State<_LorebookEntryDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            Navigator.pop(
-              context,
-              LorebookEntry(
-                name: _nameCtrl.text.trim(),
-                key: _keyCtrl.text.trim(),
-                content: _contentCtrl.text.trim(),
-                constant: _constant,
-                stickyDepth: _stickyDepth,
-                enabled: _enabled,
-              ),
-            );
+            // Clone-then-overwrite: editing only the simple fields must not
+            // strip the advanced/imported ST metadata an entry carries.
+            final entry = widget.existing?.clone() ?? LorebookEntry();
+            entry.name = _nameCtrl.text.trim();
+            entry.keys = LorebookEntry.parseKeyList(_keyCtrl.text.trim());
+            entry.content = _contentCtrl.text.trim();
+            entry.constant = _constant;
+            entry.stickyDepth = _stickyDepth;
+            entry.enabled = _enabled;
+            Navigator.pop(context, entry);
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.blueAccent,

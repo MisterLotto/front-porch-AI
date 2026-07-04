@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -16,188 +16,115 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 
 /// Plain (non-ChangeNotifier) domain service owning lorebook keyword scanning,
-/// trigger/depth state mutation on the live LorebookEntry objects, the
-/// _matchKeyword logic (wildcard + exact word-boundary with the raw-string +
-/// explicit concat fix), depth decrement (post-AI only for pre-AI triggered
-/// entries to preserve sticky for AI-discovered lore), and reset of non-constant
-/// trigger state.
+/// trigger/depth state mutation on the live LorebookEntry objects, depth
+/// decrement (post-AI only for pre-AI triggered entries to preserve sticky for
+/// AI-discovered lore), and reset of non-constant trigger state.
 ///
-/// LorebookEntry (isTriggered, remainingDepth, stickyDepth, constant, key,
-/// enabled, content, name) + Lorebook live on CharacterCard.lorebook and
-/// World.lorebook (part of loaded card/group/world data from DB). The scanner
-/// mutates them in-place (exact mechanical preservation of prior behavior).
-/// Scanner owns no separate trigger map or per-char state.
+/// Matching semantics live in lorebook_matcher.dart (ST-parity: regex keys,
+/// per-entry case/whole-word overrides, `*` wildcards). Per-entry activation
+/// gates handled here: secondary-key selective logic, probability rolls
+/// (skipped while an entry is already active, so sticky entries never
+/// re-roll), and the enabled flag. Positions/order/budget/recursion/timed
+/// effects are stored on the model but engine support is a later phase.
 ///
-/// ChatService owns the instance via late final (after nsfw) + thin
-/// delegations at call sites. 0 new private methods in god.
+/// The scanner mutates entries in-place; it owns no separate trigger map.
+/// Cross-state (group vs 1:1 characters, world lookup) is supplied via the
+/// three callbacks at construction, which keeps the service testable in
+/// isolation and preserves exact 1:1/group parity: scan/reset always process
+/// whatever characters the callback provides (all group members in group
+/// mode, the single active character in 1:1).
 ///
-/// Cross-state for characters (group vs 1:1: _groupCharacters vs _activeCharacter)
-/// and world lookup (_worldRepository) supplied exclusively via 3 granular cbs
-/// at construction: onNotify, getLoreCharacters, resolveWorld.
-/// (Mirrors nsfw's 3-group-cbs + time/relationship granular patterns.)
-/// This keeps the service testable in isolation (createTestLorebookScanner with
-/// live closures), avoids cycles with god's _groupRealism / _messages / load/save
-/// / pending / active state, and is future-friendly for step8+ prompt builders.
-///
-/// 1:1 vs group parity preserved exactly: group has group-level lorebook +
-/// per-member char lorebooks + per-char attached worlds; scanner's scan/reset
-/// always process the characters provided by the cb (which for group is all
-/// _groupCharacters, for 1:1 the single); depth tracking per-entry works for
-/// members. (Inherit flag affects only god's getActive/build filters for
-/// injection/sidebar, not scanning/triggering — preserved.)
-///
-/// Boundaries kept in god (per plan for step 7 / step 8):
-/// - getActiveGroupLoreEntries (for lorebook sidebar) + _buildLorebookContext
-///   (the prompt injection text builder) + pre-AI triggered snapshot collection
-///   stay in god. (They contain the (triggered || constant) filter logic on
-///   entries; lorebook injection text / full context building kept thin/stayed
-///   in god per plan for step8.)
-/// - The keep reset blocks in sync sites (startNewChat 1:1+group both branches now explicit,
-///   setActive*, _loadLastSession incl. empty/0-session, setActiveGroup x2, ext-seed, delete,
-///   fork, group paths, regen/swipe; 6 call sites on-disk for resetLorebookTriggerState) now call scanner.reset + list
-///   lorebook_scanner explicitly in comments (cross-ref to prior nsfw/time
-///   hygiene; startNew hygiene completed per review).
-/// - oneShot vs normal lorebook parity qualified: scan on finalResponse +
-///   preAi decr after AI, user-text scan in sendMessage, greeting scans, and
-///   resets are all delegated (dispatch preserved exactly); no behavior change.
-///
-/// @Deprecated shims: none (scan/match/decr were private _ ; getActiveGroupLoreEntries
-/// public getter body stays in god for smallest mechanical change — no body moved).
-///
-/// 0 new private methods added to ChatService as part of this step (thins +
-/// delegations at all ~10 call sites + reset calls in keep-sync blocks only;
-/// deletions of moved code are mandatory part of the task).
-///
-/// aug exercising only passive/qualified (resets/loads/scans/greetings hit by
-/// pre-existing startNew/setActive/_loadLast/group/greeting/sendMessage paths
-/// in key suites; full keyword/depth/scan/inject behavior only in dedicated + manual).
-/// test count via grep -c '^\s*test(' post any delete/edge (modeled on nsfw).
-/// real owner dispatch via live wiring in key suites (realism_engine, group_realism,
-/// session etc).
-///
-/// lorebook injection text / full context building kept thin/stayed in god per plan for step8.
+/// The "keep reset blocks in sync" call sites in ChatService (startNewChat,
+/// setActive*, _loadLastSession, setActiveGroup, ext-seed, delete, fork,
+/// regen/swipe) all route through [resetLorebookTriggerState].
 class LorebookScanner {
   final VoidCallback onNotify;
   final List<CharacterCard> Function() getLoreCharacters;
   final World? Function(String name) resolveWorld;
+  final Random _rng;
 
   LorebookScanner({
     required this.onNotify,
     required this.getLoreCharacters,
     required this.resolveWorld,
-  });
+    Random? rng,
+  }) : _rng = rng ?? Random();
 
-  // ── Public surface (for thin delegations in ChatService + direct test callers) ──
+  /// Run [visit] over every lorebook entry list in the current context:
+  /// each character's inline lorebook plus each of their attached worlds.
+  void _forEachEntryList(void Function(List<LorebookEntry> entries) visit) {
+    for (final ch in getLoreCharacters()) {
+      if (ch.lorebook != null) visit(ch.lorebook!.entries);
+      for (final worldName in ch.worldNames) {
+        final world = resolveWorld(worldName);
+        if (world != null) visit(world.lorebook.entries);
+      }
+    }
+  }
 
   /// Scan the given text against relevant lorebooks for current context
   /// (group members or the active 1:1 char + their attached worlds).
-  /// For each enabled entry, split its comma key, test _matchKeyword (lower),
-  /// on hit: set isTriggered=true (if not), remainingDepth=stickyDepth.
-  /// If any change, calls onNotify (matches original notifyListeners).
-  /// Verbatim from god _scanLorebook.
+  /// On a hit that passes the secondary-logic and probability gates:
+  /// isTriggered=true, remainingDepth=stickyDepth. Notifies on any change.
   void scanLorebook(String text) {
-    final characters = getLoreCharacters();
-    if (characters.isEmpty) return;
+    if (getLoreCharacters().isEmpty) return;
 
-    final lowerText = text.toLowerCase();
     bool changed = false;
+    _forEachEntryList((entries) {
+      for (final entry in entries) {
+        if (!entry.enabled) continue;
 
-    for (final ch in characters) {
-      if (ch.lorebook != null) {
-        for (final entry in ch.lorebook!.entries) {
-          if (!entry.enabled) continue;
+        bool matches(String key) => keyMatchesText(
+              key,
+              text,
+              caseSensitive: entry.caseSensitive ?? false,
+              matchWholeWords: entry.matchWholeWords,
+              forceRegex: entry.useRegex,
+            );
 
-          final keys = entry.key
-              .split(',')
-              .map((k) => k.trim().toLowerCase())
-              .where((k) => k.isNotEmpty)
-              .toList();
+        if (!entry.keys.any(matches)) continue;
+        if (!secondaryLogicSatisfied(entry, matches)) continue;
 
-          for (final key in keys) {
-            if (_matchKeyword(key, lowerText)) {
-              if (!entry.isTriggered) {
-                entry.isTriggered = true;
-                changed = true;
-              }
-              entry.remainingDepth = entry.stickyDepth;
-              break;
-            }
-          }
+        // Probability gate: rolled only when the entry is not already
+        // active — an active (sticky) entry refreshes without re-rolling.
+        if (!entry.isTriggered &&
+            entry.useProbability &&
+            entry.probability < 100) {
+          if (_rng.nextInt(100) >= entry.probability) continue;
         }
-      }
 
-      // Scan shared Worlds
-      for (final worldName in ch.worldNames) {
-        final world = resolveWorld(worldName);
-        if (world == null) continue;
-
-        for (final entry in world.lorebook.entries) {
-          if (!entry.enabled) continue;
-
-          final keys = entry.key
-              .split(',')
-              .map((k) => k.trim().toLowerCase())
-              .where((k) => k.isNotEmpty)
-              .toList();
-
-          for (final key in keys) {
-            if (_matchKeyword(key, lowerText)) {
-              if (!entry.isTriggered) {
-                entry.isTriggered = true;
-                changed = true;
-              }
-              entry.remainingDepth = entry.stickyDepth;
-              break;
-            }
-          }
+        if (!entry.isTriggered) {
+          entry.isTriggered = true;
+          changed = true;
         }
+        entry.remainingDepth = entry.stickyDepth;
       }
-    }
+    });
 
     if (changed) {
       onNotify();
     }
   }
 
-  /// Match a keyword against text with wildcard (*) and word-boundary support.
-  /// - `pot*` matches `potato`, `pottery`, `potion`
-  /// - `fire` matches `fire` (whole word only, not `fireball`)
-  /// - `*ball` matches `fireball`, `snowball`
-  ///
-  /// Preserves the raw-string + string concatenation fix exactly:
-  ///   RegExp(r'\b' + RegExp.escape(key) + r'\b')
-  /// (Because Dart raw strings (r'...') do not process ${} interpolation;
-  /// the original god code had this comment + fix for the gotcha.)
-  bool _matchKeyword(String key, String text) {
-    if (key.contains('*')) {
-      // Wildcard pattern: escape regex specials except *, then replace * with .*
-      final escaped = RegExp.escape(key).replaceAll(r'\*', '.*');
-      return RegExp(escaped).hasMatch(text);
-    } else {
-      // Exact word match with word boundaries
-      // Using string concatenation instead of ${} inside a raw string
-      // because Dart raw strings (r'...') do not process ${} interpolation.
-      return RegExp(r'\b' + RegExp.escape(key) + r'\b').hasMatch(text);
-    }
-  }
-
-  /// Public exposure of keyword matcher for tests (and any direct callers).
-  /// Delegates to the internal impl (preserves the concat/raw fix).
-  bool matchKeyword(String key, String text) => _matchKeyword(key, text);
+  /// Public exposure of the single-key matcher for tests and direct callers.
+  bool matchKeyword(String key, String text) =>
+      keyMatchesText(key.toLowerCase(), text.toLowerCase());
 
   /// Decrement remainingDepth only for the provided set of entries.
-  /// Used after AI response finalization so that lore entries *discovered in the AI's
-  /// own response* keep their full stickyDepth for the next user turn.
-  /// Only non-constant entries are decremented; when remaining <=0 , isTriggered=false.
-  /// If any un-trigger happens, calls onNotify.
-  /// Verbatim from god _decrementLoreDepthForEntries.
+  /// Used after AI response finalization so that lore entries *discovered in
+  /// the AI's own response* keep their full stickyDepth for the next user
+  /// turn. Only non-constant entries are decremented; when remaining <= 0,
+  /// isTriggered=false. If any un-trigger happens, calls onNotify.
   void decrementLoreDepthForEntries(Set<LorebookEntry> entriesToDecrement) {
     if (entriesToDecrement.isEmpty) return;
     bool changed = false;
@@ -218,35 +145,17 @@ class LorebookScanner {
   }
 
   /// Reset lorebook trigger state (isTriggered=false + remainingDepth=0) for
-  /// all non-constant entries on the current characters (via cb) + their
-  /// attached world lorebooks.
-  /// Constant entries are explicitly skipped (they are always active if enabled).
-  /// Replaces all prior inline reset blocks in god; supports the "keep reset
-  /// blocks in sync" hygiene across startNew/setActive/load/empty/group etc.
-  /// No notify (original zeros did not notify inside the block; load/greeting
-  /// etc drive subsequent UI).
+  /// all non-constant entries on the current characters + their attached
+  /// world lorebooks. Constant entries are skipped (always active if
+  /// enabled). No notify — callers drive subsequent UI updates.
   void resetLorebookTriggerState() {
-    final characters = getLoreCharacters();
-    for (final ch in characters) {
-      if (ch.lorebook != null) {
-        for (final entry in ch.lorebook!.entries) {
-          if (!entry.constant) {
-            entry.isTriggered = false;
-            entry.remainingDepth = 0;
-          }
+    _forEachEntryList((entries) {
+      for (final entry in entries) {
+        if (!entry.constant) {
+          entry.isTriggered = false;
+          entry.remainingDepth = 0;
         }
       }
-      for (final worldName in ch.worldNames) {
-        final world = resolveWorld(worldName);
-        if (world != null) {
-          for (final entry in world.lorebook.entries) {
-            if (!entry.constant) {
-              entry.isTriggered = false;
-              entry.remainingDepth = 0;
-            }
-          }
-        }
-      }
-    }
+    });
   }
 }

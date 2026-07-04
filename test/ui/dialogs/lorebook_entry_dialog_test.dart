@@ -201,5 +201,44 @@ void main() {
 
       expect(find.text('Sticky Depth'), findsNothing);
     });
+
+    testWidgets('Save preserves advanced/imported fields via clone',
+        (tester) async {
+      final imported = LorebookEntry.fromJson({
+        'keys': ['queen'],
+        'keysecondary': ['court'],
+        'content': 'Original content',
+        'name': 'Queen',
+        'probability': 25,
+        'order': 250,
+        'position': 4,
+        'sticky': 3,
+        'selectiveLogic': 3,
+        'extensions': {'chub_thing': true},
+      });
+
+      LorebookEntry? result;
+      await tester.pumpWidget(
+        _buildApp(existing: imported, onResult: (r) => result = r),
+      );
+      await tester.tap(find.text('Open Lorebook Dialog'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(AppTextField).at(2), 'Edited content');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(result, isNotNull);
+      expect(result!.content, 'Edited content');
+      // Everything the simple editor doesn't show must survive the edit.
+      expect(result!.secondaryKeys, ['court']);
+      expect(result!.probability, 25);
+      expect(result!.order, 250);
+      expect(result!.position, 4);
+      expect(result!.sticky, 3);
+      expect(result!.selectiveLogic, SelectiveLogic.andAll);
+      expect(result!.extensions['chub_thing'], true);
+    });
   });
 }

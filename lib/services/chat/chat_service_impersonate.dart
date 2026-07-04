@@ -91,7 +91,7 @@ extension ChatServiceImpersonate on ChatService {
           final active = gl.entries.where(
             (e) => e.enabled && (e.isTriggered || e.constant),
           );
-          activeLoreStrings.addAll(active.map((e) => e.content));
+          activeLoreStrings.addAll(active.map((e) => e.injectableContent));
         } catch (_) {}
       }
 
@@ -105,7 +105,7 @@ extension ChatServiceImpersonate on ChatService {
           final active = world.lorebook.entries.where(
             (e) => e.enabled && (e.isTriggered || e.constant),
           );
-          activeLoreStrings.addAll(active.map((e) => e.content));
+          activeLoreStrings.addAll(active.map((e) => e.injectableContent));
         }
       }
 
@@ -121,7 +121,7 @@ extension ChatServiceImpersonate on ChatService {
             final activeEntries = ch.lorebook!.entries.where(
               (e) => e.enabled && (e.isTriggered || e.constant),
             );
-            activeLoreStrings.addAll(activeEntries.map((e) => e.content));
+            activeLoreStrings.addAll(activeEntries.map((e) => e.injectableContent));
           }
           for (final worldName in ch.worldNames) {
             final world = _worldRepository.worlds
@@ -131,7 +131,7 @@ extension ChatServiceImpersonate on ChatService {
             final activeWorldEntries = world.lorebook.entries.where(
               (e) => e.enabled && (e.isTriggered || e.constant),
             );
-            activeLoreStrings.addAll(activeWorldEntries.map((e) => e.content));
+            activeLoreStrings.addAll(activeWorldEntries.map((e) => e.injectableContent));
           }
         }
       }

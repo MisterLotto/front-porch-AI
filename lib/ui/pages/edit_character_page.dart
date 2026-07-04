@@ -1459,8 +1459,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             Wrap(
               spacing: 4,
               runSpacing: 3,
-              children: entry.key
-                  .split(',')
+              children: entry.keys
                   .map(
                     (k) => Container(
                       padding: const EdgeInsets.symmetric(

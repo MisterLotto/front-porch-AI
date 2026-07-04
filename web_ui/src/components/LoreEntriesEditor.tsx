@@ -17,6 +17,10 @@ export interface LoreEntry {
   enabled: boolean;
   constant: boolean;
   stickyDepth: number;
+  /** Opaque full-fidelity entry blob from the server (advanced/imported ST
+   *  fields). Never edited here — round-tripped untouched so saving from the
+   *  web can't strip metadata the desktop model carries. */
+  ext?: unknown;
 }
 
 export function LoreEntriesEditor({
@@ -152,6 +156,9 @@ function parseLorebookJson(text: string): LoreEntry[] {
       content,
       enabled: e.enabled !== false && e.disable !== true,
       constant: e.constant === true,
+      // Carry the raw source entry so the server-side tolerant decoder keeps
+      // every ST/Chub field (secondary keys, probability, position, …).
+      ext: e,
       // Clamp to >=1: the Dart Lorebook model coerces 0 -> 1 on PNG reload, so a
       // stored 0 would silently change after a round-trip. Keep it stable here.
       stickyDepth: Math.max(

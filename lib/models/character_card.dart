@@ -18,6 +18,7 @@
 
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 
 import 'package:flutter/material.dart';
@@ -519,7 +520,7 @@ class CharacterCard {
       'post_history_instructions': postHistoryInstructions,
       'alternate_greetings': alternateGreetings,
       'tags': tags,
-      'character_book': lorebook?.toCharacterBook(),
+      'character_book': lorebook == null ? null : encodeCharacterBook(lorebook!),
       'world_names': worldNames,
       if (ttsVoice != null) 'tts_voice': ttsVoice,
       'extensions': ?extensions,

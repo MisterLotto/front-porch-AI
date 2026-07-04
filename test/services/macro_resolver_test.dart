@@ -265,6 +265,59 @@ void main() {
       expect(resolver.resolve('{{roll::bad}}', ctx), '{{roll::bad}}');
     });
 
+    // ── ST separator parity: single-colon + comma lists + roll shorthands ──
+
+    test('{{random:a,b,c}} single-colon comma form picks an option', () {
+      for (var i = 0; i < 20; i++) {
+        final result = resolver.resolve('{{random:sunny,rainy,foggy}}', ctx);
+        expect(['sunny', 'rainy', 'foggy'], contains(result));
+      }
+    });
+
+    test(r'comma list supports \, escape', () {
+      final result = resolver.resolve(r'{{random:a\,b}}', ctx);
+      expect(result, 'a,b'); // single option containing a comma
+    });
+
+    test('{{pick:a,b,c}} single-colon form is deterministic', () {
+      const pCtx = MacroContext(
+        userName: 'Alex',
+        characterName: 'Luna',
+        chatId: 'chat-1',
+        characterId: 'char-1',
+      );
+      final r1 = resolver.resolve('{{pick:a,b,c}}', pCtx);
+      final r2 = resolver.resolve('{{pick:a,b,c}}', pCtx);
+      expect(r1, r2);
+      expect(['a', 'b', 'c'], contains(r1));
+    });
+
+    test('{{roll:d6}} shorthand rolls 1-6', () {
+      for (var i = 0; i < 30; i++) {
+        final result = int.parse(resolver.resolve('{{roll:d6}}', ctx));
+        expect(result, inInclusiveRange(1, 6));
+      }
+    });
+
+    test('{{roll:6}} bare-number shorthand rolls 1-6', () {
+      for (var i = 0; i < 30; i++) {
+        final result = int.parse(resolver.resolve('{{roll:6}}', ctx));
+        expect(result, inInclusiveRange(1, 6));
+      }
+    });
+
+    test('{{roll d20}} space form rolls 1-20', () {
+      for (var i = 0; i < 30; i++) {
+        final result = int.parse(resolver.resolve('{{roll d20}}', ctx));
+        expect(result, inInclusiveRange(1, 20));
+      }
+    });
+
+    test('unknown single-colon macro passes through', () {
+      expect(resolver.resolve('{{setvar:mood:happy}}', ctx),
+          '{{setvar:mood:happy}}');
+    });
+
     // ── Phase 2 P0: time/date ──
 
     test('{{time}} matches HH:mm format', () {

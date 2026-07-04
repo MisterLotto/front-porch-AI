@@ -17,6 +17,8 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/lorebook_codec.dart';
+import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
@@ -114,9 +116,14 @@ class WorldFacade {
   /// size-capped JSON object. Returns false on an invalid structure (→ 400) so
   /// a random JSON upload can't create a junk world.
   Future<bool> importWorld(Map<String, dynamic> json) async {
-    // A valid lorebook file carries entries either at the top level (ST/Chub)
-    // or under a `lorebook` wrapper (Front Porch). Reject anything else.
-    if (json['entries'] == null && json['lorebook'] == null) return false;
+    // A valid lorebook file carries entries at the top level (ST/Chub), under
+    // a `lorebook` wrapper (Front Porch), or is a detectable foreign format
+    // (NovelAI/AgnAI/RisuAI/V3). Reject anything else.
+    if (json['entries'] == null &&
+        json['lorebook'] == null &&
+        detectLorebookFormat(json) == LorebookFormat.fpaiOrSt) {
+      return false;
+    }
     try {
       final world = World.fromJson(json);
       if (world.name.trim().isEmpty) return false;
@@ -127,12 +134,19 @@ class WorldFacade {
     }
   }
 
-  /// Export the named world as a Front Porch world JSON map (the same shape the
-  /// desktop writes via [WorldRepository.exportWorld]). The browser owns the
-  /// actual file download. Returns null when no world matches (→ 404).
+  /// Export the named world as native SillyTavern world info JSON (the same
+  /// shape the desktop writes via [WorldRepository.exportWorld]) so downloads
+  /// drop straight into ST/Chub. The browser owns the actual file download.
+  /// Returns null when no world matches (→ 404).
   Map<String, dynamic>? exportWorld(String name) {
     for (final w in _worlds.worlds) {
-      if (w.name == name) return w.toJson();
+      if (w.name == name) {
+        return encodeStWorldInfo(
+          w.lorebook,
+          name: w.name,
+          description: w.description,
+        );
+      }
     }
     return null;
   }

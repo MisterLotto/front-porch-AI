@@ -1832,8 +1832,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                       Wrap(
                         spacing: 4,
                         runSpacing: 3,
-                        children: entry.key
-                            .split(',')
+                        children: entry.keys
                             .map(
                               (k) => Container(
                                 padding: const EdgeInsets.symmetric(

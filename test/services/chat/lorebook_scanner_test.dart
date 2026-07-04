@@ -27,10 +27,13 @@
 // 1:1 vs group parity (group-level + per-char + world) exercised via cb + roundtrips.
 // 3 cbs (onNotify + getLoreCharacters + resolveWorld); onNotify wired for prod dispatch but unexercised via counter in dedicated (assert on live entries; passive/qualified per design); documented in service header + this + MD.
 
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 import 'package:front_porch_ai/services/chat/lorebook_scanner.dart';
 
 /// Test factory (modeled exactly on nsfw + time/expression/prior).
@@ -40,6 +43,7 @@ import 'package:front_porch_ai/services/chat/lorebook_scanner.dart';
 LorebookScanner createTestLorebookScanner({
   List<CharacterCard>? characters,
   Map<String, World>? worldsByName,
+  Random? rng,
 }) {
   final chars = characters ?? <CharacterCard>[];
   final worlds = worldsByName ?? <String, World>{};
@@ -50,6 +54,7 @@ LorebookScanner createTestLorebookScanner({
     },
     getLoreCharacters: () => chars,
     resolveWorld: (name) => worlds[name],
+    rng: rng,
   );
 }
 
@@ -373,6 +378,197 @@ void main() {
       svc.scanLorebook('');
       svc.decrementLoreDepthForEntries({});
       svc.resetLorebookTriggerState();
+    });
+  });
+
+  group('ST-parity activation gates', () {
+    CharacterCard charWith(LorebookEntry e) =>
+        CharacterCard(name: 'T', lorebook: Lorebook(entries: [e]));
+
+    test('AND ALL: primary + every secondary must match', () {
+      final e = LorebookEntry(
+        keys: const ['queen'],
+        secondaryKeys: const ['court', 'throne'],
+        selectiveLogic: SelectiveLogic.andAll,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+
+      svc.scanLorebook('the queen entered the court');
+      expect(e.isTriggered, isFalse); // throne missing
+
+      svc.scanLorebook('the queen took her throne in the court');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('AND ANY: primary + at least one secondary', () {
+      final e = LorebookEntry(
+        keys: const ['queen'],
+        secondaryKeys: const ['court', 'throne'],
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+
+      svc.scanLorebook('the queen was elsewhere');
+      expect(e.isTriggered, isFalse);
+
+      svc.scanLorebook('the queen entered the court');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('NOT ANY: primary blocked when any secondary present', () {
+      final e = LorebookEntry(
+        keys: const ['queen'],
+        secondaryKeys: const ['dream'],
+        selectiveLogic: SelectiveLogic.notAny,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+
+      svc.scanLorebook('the queen appeared in a dream');
+      expect(e.isTriggered, isFalse);
+
+      svc.scanLorebook('the queen appeared');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('NOT ALL: blocked only when every secondary present', () {
+      final e = LorebookEntry(
+        keys: const ['queen'],
+        secondaryKeys: const ['dream', 'fog'],
+        selectiveLogic: SelectiveLogic.notAll,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+
+      svc.scanLorebook('the queen walked through dream and fog');
+      expect(e.isTriggered, isFalse);
+
+      svc.scanLorebook('the queen walked through a dream');
+      expect(e.isTriggered, isTrue); // fog absent → allowed
+    });
+
+    test('selective=false ignores secondary keys entirely', () {
+      final e = LorebookEntry(
+        keys: const ['queen'],
+        secondaryKeys: const ['court'],
+        selective: false,
+        selectiveLogic: SelectiveLogic.andAll,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+      svc.scanLorebook('the queen alone');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('probability 0 never triggers; 100 skips the roll', () {
+      final never = LorebookEntry(
+        keys: const ['omen'],
+        probability: 0,
+        content: 'x',
+      );
+      final always = LorebookEntry(
+        keys: const ['omen'],
+        probability: 100,
+        content: 'y',
+      );
+      final svc = createTestLorebookScanner(
+        characters: [charWith(never), charWith(always)],
+        rng: Random(42),
+      );
+      svc.scanLorebook('an omen appears');
+      expect(never.isTriggered, isFalse);
+      expect(always.isTriggered, isTrue);
+    });
+
+    test('useProbability=false disables the roll', () {
+      final e = LorebookEntry(
+        keys: const ['omen'],
+        probability: 0,
+        useProbability: false,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+      svc.scanLorebook('an omen appears');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('already-active entry refreshes without re-rolling', () {
+      final e = LorebookEntry(
+        keys: const ['omen'],
+        probability: 0,
+        stickyDepth: 3,
+        content: 'x',
+      );
+      e.isTriggered = true;
+      e.remainingDepth = 1;
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+      svc.scanLorebook('an omen appears');
+      expect(e.isTriggered, isTrue);
+      expect(e.remainingDepth, 3); // refreshed despite probability 0
+    });
+
+    test('regex keys match; comma inside pattern survives; invalid → literal',
+        () {
+      final rx = LorebookEntry(
+        key: '/a{1,2}shfall/i, blight',
+        content: 'x',
+      );
+      expect(rx.keys, ['/a{1,2}shfall/i', 'blight']);
+      final svc = createTestLorebookScanner(characters: [charWith(rx)]);
+      svc.scanLorebook('The Ashfall returns.');
+      expect(rx.isTriggered, isTrue);
+
+      // Invalid regex falls back to literal matching (never throws).
+      expect(tryParseRegexKey('/[unclosed/'), isNull);
+      expect(keyMatchesText('/[unclosed/', 'text with /[unclosed/ inside'),
+          isTrue);
+    });
+
+    test('useRegex entries treat bare keys as patterns (V3)', () {
+      final e = LorebookEntry(
+        keys: const ['dragons?'],
+        useRegex: true,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+      svc.scanLorebook('A dragon lands.');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('caseSensitive override is honored', () {
+      final e = LorebookEntry(
+        keys: const ['Vale'],
+        caseSensitive: true,
+        content: 'x',
+      );
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+      svc.scanLorebook('into the vale we go');
+      expect(e.isTriggered, isFalse);
+      svc.scanLorebook('into the Vale we go');
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('matchWholeWords=false allows substring; CJK keys match', () {
+      final sub = LorebookEntry(
+        keys: const ['fire'],
+        matchWholeWords: false,
+        content: 'x',
+      );
+      final cjk = LorebookEntry(keys: const ['東京'], content: 'y');
+      final svc = createTestLorebookScanner(
+        characters: [charWith(sub), charWith(cjk)],
+      );
+      svc.scanLorebook('the fireball hit 私は東京にいます');
+      expect(sub.isTriggered, isTrue);
+      expect(cjk.isTriggered, isTrue);
+    });
+
+    test('multi-word keys use substring in whole-word mode (ST semantics)', () {
+      final e = LorebookEntry(keys: const ['new york'], content: 'x');
+      final svc = createTestLorebookScanner(characters: [charWith(e)]);
+      svc.scanLorebook('she is a new yorker at heart');
+      expect(e.isTriggered, isTrue);
     });
   });
 }

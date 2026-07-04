@@ -23,6 +23,8 @@ import 'package:drift/drift.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/world.dart' as model;
 import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/lorebook_codec.dart';
+import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
@@ -193,11 +195,15 @@ class WorldRepository extends ChangeNotifier {
       final Map<String, dynamic> json =
           jsonDecode(content) as Map<String, dynamic>;
 
-      // Validate basic structure
-      if (json['entries'] == null && json['lorebook'] == null) {
+      // Validate basic structure. Foreign formats (NovelAI, AgnAI, RisuAI,
+      // V3 lorebooks) carry their own markers instead of an `entries` key.
+      if (json['entries'] == null &&
+          json['lorebook'] == null &&
+          detectLorebookFormat(json) == LorebookFormat.fpaiOrSt) {
         throw FormatException(
           'Invalid lorebook file: missing "entries" or "lorebook" field. '
-          'Supported formats: SillyTavern, Chub.ai, Front Porch.',
+          'Supported formats: SillyTavern, Chub.ai, NovelAI, AgnAI, RisuAI, '
+          'Front Porch.',
         );
       }
 
@@ -219,9 +225,16 @@ class WorldRepository extends ChangeNotifier {
     }
   }
 
+  /// Write the world as a native SillyTavern world info file so exports drop
+  /// straight into ST/Chub (and re-import into any FPAI version) with all
+  /// entry metadata intact.
   Future<void> exportWorld(model.World world, String outputPath) async {
     final file = File(outputPath);
-    await file.writeAsString(jsonEncode(world.toJson()));
+    await file.writeAsString(jsonEncode(encodeStWorldInfo(
+      world.lorebook,
+      name: world.name,
+      description: world.description,
+    )));
   }
 }
 
