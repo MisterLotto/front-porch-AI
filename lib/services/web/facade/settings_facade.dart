@@ -71,6 +71,7 @@ class SettingsFacade {
         'dynamicTempEnabled': g.dynamicTempEnabled,
         'dynamicResponses': g.dynamicResponses,
         'dynamicResponseInterval': g.dynamicResponseInterval,
+        'dynamicResponseMaxMessages': g.dynamicResponseMaxMessages,
       },
     };
   }
@@ -147,6 +148,8 @@ class SettingsFacade {
       if (dr is bool) await g.setDynamicResponses(dr);
       final dri = gen['dynamicResponseInterval'];
       if (dri is num) await g.setDynamicResponseInterval(dri.toInt());
+      final drm = gen['dynamicResponseMaxMessages'];
+      if (drm is num) await g.setDynamicResponseMaxMessages(drm.toInt());
     }
   }
 

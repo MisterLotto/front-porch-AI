@@ -169,11 +169,9 @@ class ChatService extends ChangeNotifier {
   bool _autoResponseInProgress = false;
   bool _hasCompletedExchange = false;
   int _consecutiveAutoResponses = 0;
-
-  /// How many consecutive AFK auto-responses to allow before stopping (the
-  /// old hard-coded cap). Runtime-only; the settings toggle keeps the default
-  /// of 3, and `/afk --messages N` overrides it for the session.
-  int _maxAutoResponses = 3;
+  // The consecutive-response cap lives in the persisted
+  // generationSettings.dynamicResponseMaxMessages (default 3) so the sidebar
+  // flyout, /afk --messages, and the settings all share one source of truth.
 
   List<Objective> get activeObjectives => _activeObjectives;
   Objective? get primaryObjective =>
@@ -635,34 +633,31 @@ class ChatService extends ChangeNotifier {
       setGroupTurnOrder: (random, customOrder) =>
           setGroupTurnOrder(random, customOrder),
       configureAfk: (enabled, maxMessages, intervalSeconds) {
-        // Drive the same persisted Dynamic Responses setting the Settings
-        // toggle uses (single source of truth — no parallel AFK state), plus
-        // the runtime-only per-session message cap. Returns the effective
-        // values so the handler can word its confirmation.
+        // Drive the same persisted Dynamic Responses settings the sidebar panel
+        // uses (single source of truth — no parallel AFK state). Returns the
+        // effective values so the handler can word its confirmation.
         final gen = _storageService.generationSettings;
         if (!enabled) {
-          _cancelIdleTimer();
-          _maxAutoResponses = 3;
           gen.setDynamicResponses(false);
+          pauseDynamicResponses();
           return (
             enabled: false,
-            maxMessages: _maxAutoResponses,
+            maxMessages: gen.dynamicResponseMaxMessages,
             intervalSeconds: gen.dynamicResponseInterval,
           );
         }
         if (intervalSeconds != null) {
           gen.setDynamicResponseInterval(intervalSeconds);
         }
-        if (maxMessages != null) _maxAutoResponses = maxMessages;
+        if (maxMessages != null) gen.setDynamicResponseMaxMessages(maxMessages);
         gen.setDynamicResponses(true);
-        // Fresh AFK run. Arm now if an exchange already happened this session;
-        // otherwise the timer arms after the next reply (same as toggling the
-        // setting mid-chat).
+        // Fresh AFK run. resumeDynamicResponses arms now if an exchange already
+        // happened this session; otherwise the timer arms after the next reply.
         _consecutiveAutoResponses = 0;
-        if (_hasCompletedExchange) _resetIdleTimer();
+        resumeDynamicResponses();
         return (
           enabled: true,
-          maxMessages: _maxAutoResponses,
+          maxMessages: gen.dynamicResponseMaxMessages,
           intervalSeconds: gen.dynamicResponseInterval,
         );
       },
@@ -3144,7 +3139,10 @@ class ChatService extends ChangeNotifier {
     if (_ttsService != null && _ttsService!.isSpeaking) { _resetIdleTimer(); return; }
     final llm = _llmProvider?.activeService ?? _koboldService;
     if (!llm.isReady) { _resetIdleTimer(); return; }
-    if (_consecutiveAutoResponses >= _maxAutoResponses) return;
+    if (_consecutiveAutoResponses >=
+        _storageService.generationSettings.dynamicResponseMaxMessages) {
+      return;
+    }
 
     // Capture pre-AFK needs vector so the needs delta chip has a baseline
     if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {

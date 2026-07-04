@@ -23,7 +23,6 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/chat_participant.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:front_porch_ai/ui/dialogs/group_objectives_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_card.dart';
@@ -75,24 +74,6 @@ class SidebarBody extends StatelessWidget {
         final character = focused.card;
         final isGroup = chat.isGroupMode;
         final isLite = !isGroup && !focused.realismEnabled;
-
-        // Macro-resolved static texts (moved from _buildRightSidebar).
-        final userName = Provider.of<UserPersonaService>(
-          context,
-          listen: false,
-        ).persona.name;
-        String replace(String text) => MacroResolver().resolve(
-          text,
-          MacroContext(userName: userName, characterName: character.name),
-        );
-
-        // Scenario hides when an evolved scenario overrides it (1:1 only).
-        final evolvedScenario = chat.getEffectiveScenario;
-        final hideScenario =
-            !isGroup &&
-            storage.characterEvolutionEnabled &&
-            evolvedScenario != null &&
-            evolvedScenario.isNotEmpty;
 
         return ListView(
           padding: const EdgeInsets.all(12),
@@ -153,9 +134,6 @@ class SidebarBody extends StatelessWidget {
               isGroup: isGroup,
               isLite: isLite,
               character: character,
-              scenarioText: replace(character.scenario),
-              descriptionText: replace(character.description),
-              hideScenario: hideScenario,
               onSpinRequested: onSpinRequested,
               initiallyExpanded: ui.sidebarGroupExpanded(
                 'story_tools',

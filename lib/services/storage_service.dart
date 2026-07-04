@@ -447,6 +447,10 @@ class StorageService extends ChangeNotifier {
   int get dynamicResponseInterval => generationSettings.dynamicResponseInterval;
   Future<void> setDynamicResponseInterval(int v) =>
       generationSettings.setDynamicResponseInterval(v);
+  int get dynamicResponseMaxMessages =>
+      generationSettings.dynamicResponseMaxMessages;
+  Future<void> setDynamicResponseMaxMessages(int v) =>
+      generationSettings.setDynamicResponseMaxMessages(v);
   int get maxLength => generationSettings.maxLength;
   Future<void> setMaxLength(int v) => generationSettings.setMaxLength(v);
   int get minLength => generationSettings.minLength;

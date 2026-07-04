@@ -43,6 +43,7 @@ class GenerationSettings with SettingsBase {
   double _dynamicTempRange = 0.7;
   bool _dynamicResponses = false;
   int _dynamicResponseInterval = 60;
+  int _dynamicResponseMaxMessages = 3;
   double _xtcThreshold = 0.1;
   // 0 = XTC off. The old default was 0.5, but XTC never actually reached the
   // model back then — now that samplers are delivered, defaulting it ON would
@@ -77,6 +78,7 @@ class GenerationSettings with SettingsBase {
   double get dynamicTempRange => _dynamicTempRange;
   bool get dynamicResponses => _dynamicResponses;
   int get dynamicResponseInterval => _dynamicResponseInterval;
+  int get dynamicResponseMaxMessages => _dynamicResponseMaxMessages;
   double get xtcThreshold => _xtcThreshold;
   double get xtcProbability => _xtcProbability;
   int get maxLength => _maxLength;
@@ -101,6 +103,9 @@ class GenerationSettings with SettingsBase {
         prefs?.getBool(k('dynamic_responses')) ?? _dynamicResponses;
     _dynamicResponseInterval =
         prefs?.getInt(k('dynamic_response_interval')) ?? _dynamicResponseInterval;
+    _dynamicResponseMaxMessages =
+        prefs?.getInt(k('dynamic_response_max_messages')) ??
+        _dynamicResponseMaxMessages;
     _xtcThreshold = prefs?.getDouble(k('xtc_threshold')) ?? _xtcThreshold;
     _xtcProbability = prefs?.getDouble(k('xtc_probability')) ?? _xtcProbability;
     _maxLength = prefs?.getInt(k('max_length')) ?? _maxLength;
@@ -190,6 +195,12 @@ class GenerationSettings with SettingsBase {
   Future<void> setDynamicResponseInterval(int value) async {
     _dynamicResponseInterval = value;
     await prefs?.setInt(k('dynamic_response_interval'), value);
+    notify();
+  }
+
+  Future<void> setDynamicResponseMaxMessages(int value) async {
+    _dynamicResponseMaxMessages = value;
+    await prefs?.setInt(k('dynamic_response_max_messages'), value);
     notify();
   }
 

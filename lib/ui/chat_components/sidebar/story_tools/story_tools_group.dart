@@ -23,19 +23,17 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../porch_accordion.dart';
+import 'afk_panel.dart';
 import 'chaos_panel.dart';
 import 'lorebook_panel.dart';
 import 'objective_panel.dart';
-import 'static_text_panel.dart';
 
 /// 🎲 Story Tools accordion — author's note, objectives (1:1 full chats
-/// only), chaos mode, lorebook triggers, and the read-only Scenario /
-/// Description panels.
+/// only), chaos mode, dynamic responses (AFK, 1:1 only), and lorebook
+/// triggers.
 ///
-/// [scenarioText] and [descriptionText] arrive already macro-resolved;
-/// [hideScenario] is computed by the caller (SidebarBody) — chat_page hides
-/// Scenario when an evolved scenario exists. [character] is the active 1:1
-/// card the LorebookSection needs (unused in group mode).
+/// [character] is the active 1:1 card the LorebookSection needs (unused in
+/// group mode).
 class StoryToolsGroup extends StatelessWidget {
   final ChatService chatService;
   final bool isGroup;
@@ -43,9 +41,6 @@ class StoryToolsGroup extends StatelessWidget {
   final bool initiallyExpanded;
   final ValueChanged<bool>? onExpansionChanged;
   final VoidCallback onSpinRequested;
-  final String scenarioText;
-  final String descriptionText;
-  final bool hideScenario;
   final CharacterCard? character;
 
   const StoryToolsGroup({
@@ -56,9 +51,6 @@ class StoryToolsGroup extends StatelessWidget {
     required this.initiallyExpanded,
     this.onExpansionChanged,
     required this.onSpinRequested,
-    required this.scenarioText,
-    required this.descriptionText,
-    required this.hideScenario,
     this.character,
   });
 
@@ -86,18 +78,16 @@ class StoryToolsGroup extends StatelessWidget {
                 ChaosPanel(chat: chat, onSpinRequested: onSpinRequested),
           ),
           const SizedBox(height: 12),
+          // Dynamic Responses (AFK) sits directly under Chaos Mode. 1:1 only —
+          // the autonomous idle cue narrates the solo character's day.
+          if (!isGroup) ...[
+            AfkPanel(chat: chatService),
+            const SizedBox(height: 12),
+          ],
           if (isGroup)
             GroupLorebookSection(chatService: chatService)
           else if (character != null)
             LorebookSection(character: character!),
-          if (scenarioText.isNotEmpty && !hideScenario) ...[
-            const SizedBox(height: 12),
-            StaticTextPanel(title: 'Scenario', content: scenarioText),
-          ],
-          if (descriptionText.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            StaticTextPanel(title: 'Description', content: descriptionText),
-          ],
         ],
       ),
     );
