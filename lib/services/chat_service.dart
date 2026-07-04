@@ -168,6 +168,11 @@ class ChatService extends ChangeNotifier {
   bool _hasCompletedExchange = false;
   int _consecutiveAutoResponses = 0;
 
+  /// How many consecutive AFK auto-responses to allow before stopping (the
+  /// old hard-coded cap). Runtime-only; the settings toggle keeps the default
+  /// of 3, and `/afk --messages N` overrides it for the session.
+  int _maxAutoResponses = 3;
+
   List<Objective> get activeObjectives => _activeObjectives;
   Objective? get primaryObjective =>
       _activeObjectives.where((o) => o.isPrimary).firstOrNull;
@@ -627,6 +632,38 @@ class ChatService extends ChangeNotifier {
       isGroupTurnOrderRandom: () => isGroupTurnOrderRandom,
       setGroupTurnOrder: (random, customOrder) =>
           setGroupTurnOrder(random, customOrder),
+      configureAfk: (enabled, maxMessages, intervalSeconds) {
+        // Drive the same persisted Dynamic Responses setting the Settings
+        // toggle uses (single source of truth — no parallel AFK state), plus
+        // the runtime-only per-session message cap. Returns the effective
+        // values so the handler can word its confirmation.
+        final gen = _storageService.generationSettings;
+        if (!enabled) {
+          _cancelIdleTimer();
+          _maxAutoResponses = 3;
+          gen.setDynamicResponses(false);
+          return (
+            enabled: false,
+            maxMessages: _maxAutoResponses,
+            intervalSeconds: gen.dynamicResponseInterval,
+          );
+        }
+        if (intervalSeconds != null) {
+          gen.setDynamicResponseInterval(intervalSeconds);
+        }
+        if (maxMessages != null) _maxAutoResponses = maxMessages;
+        gen.setDynamicResponses(true);
+        // Fresh AFK run. Arm now if an exchange already happened this session;
+        // otherwise the timer arms after the next reply (same as toggling the
+        // setting mid-chat).
+        _consecutiveAutoResponses = 0;
+        if (_hasCompletedExchange) _resetIdleTimer();
+        return (
+          enabled: true,
+          maxMessages: _maxAutoResponses,
+          intervalSeconds: gen.dynamicResponseInterval,
+        );
+      },
     );
   }
 
@@ -3112,7 +3149,7 @@ class ChatService extends ChangeNotifier {
     if (_ttsService != null && _ttsService!.isSpeaking) { _resetIdleTimer(); return; }
     final llm = _llmProvider?.activeService ?? _koboldService;
     if (!llm.isReady) { _resetIdleTimer(); return; }
-    if (_consecutiveAutoResponses >= 3) return;
+    if (_consecutiveAutoResponses >= _maxAutoResponses) return;
 
     // Capture pre-AFK needs vector so the needs delta chip has a baseline
     if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {
@@ -3146,13 +3183,20 @@ class ChatService extends ChangeNotifier {
 
   String _buildAutonomousCue() {
     final charName = _activeCharacter?.name ?? '{{char}}';
-    final timeEnabled = _timeService.passageOfTimeEnabled;
-    final timeStr = timeEnabled
+    // Only announce elapsed time when the clock actually moved this cycle. Time
+    // advances iff Realism is on (the guard in _onIdleTimerFired) AND passage of
+    // time is enabled (the guard inside TimeService.advanceTimePeriods). If we
+    // announced "a few hours have passed" while the clock was frozen — e.g.
+    // Realism off but passage-of-time still defaulted on — the cue would
+    // contradict the unchanging time on every AFK turn.
+    final timeAdvancing =
+        _realismEnabled && _timeService.passageOfTimeEnabled;
+    final timeStr = timeAdvancing
         ? '${_timeService.timeOfDay} (Day ${_timeService.dayCount})'
         : '';
 
     if (!_needsSimEnabled || _needsSimulation.vector.isEmpty) {
-      final preamble = timeEnabled
+      final preamble = timeAdvancing
           ? '*A few hours have passed. It is now $timeStr.\n\n'
           : '*A while has passed.\n\n';
       return '$preamble'
@@ -3181,7 +3225,7 @@ class ChatService extends ChangeNotifier {
       }).join(', ');
     }
 
-    final preamble = timeEnabled
+    final preamble = timeAdvancing
         ? '*A few hours have passed. It is now $timeStr.\n\n'
         : '*A while has passed.\n\n';
     return '$preamble'

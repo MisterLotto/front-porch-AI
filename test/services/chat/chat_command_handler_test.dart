@@ -42,6 +42,7 @@ void main() {
     late List<CharacterCard> spokeMembers;
     late bool turnOrderRandom;
     late List<(bool, List<CharacterCard>?)> turnOrderCalls;
+    late List<(bool, int?, int?)> afkCalls;
     bool castScanFound = false;
 
     ChatCommandHandler build({bool activeSet = true}) {
@@ -79,6 +80,14 @@ void main() {
         setGroupTurnOrder: (random, order) async {
           turnOrderCalls.add((random, order));
         },
+        configureAfk: (enabled, maxMessages, intervalSeconds) {
+          afkCalls.add((enabled, maxMessages, intervalSeconds));
+          return (
+            enabled: enabled,
+            maxMessages: maxMessages ?? 3,
+            intervalSeconds: intervalSeconds ?? 60,
+          );
+        },
       );
     }
 
@@ -105,6 +114,7 @@ void main() {
       spokeMembers = [];
       turnOrderRandom = false;
       turnOrderCalls = [];
+      afkCalls = [];
       castScanFound = false;
     });
 
@@ -587,6 +597,44 @@ void main() {
         expect(await build().handle('/${c.command}'), true,
             reason: '/${c.command} is advertised but not handled');
       }
+    });
+
+    group('/afk', () {
+      test('bare /afk enables with defaults + confirms', () async {
+        final h = build();
+        expect(await h.handle('/afk'), true);
+        expect(afkCalls.single, (true, null, null));
+        expect(systemMessages.single, contains('AFK on'));
+      });
+
+      test('/afk off disables', () async {
+        final h = build();
+        await h.handle('/afk off');
+        expect(afkCalls.single, (false, null, null));
+        expect(systemMessages.single.toLowerCase(), contains('off'));
+      });
+
+      test('/afk --messages 3 --time 5m parses count + minutes', () async {
+        await build().handle('/afk --messages 3 --time 5m');
+        expect(afkCalls.single, (true, 3, 300));
+      });
+
+      test('/afk --time 90s parses seconds', () async {
+        await build().handle('/afk --time 90s');
+        expect(afkCalls.single, (true, null, 90));
+      });
+
+      test('out-of-range values are clamped to the settings ranges', () async {
+        await build().handle('/afk --messages 99 --time 9000s');
+        expect(afkCalls.single, (true, 10, 300)); // 1–10 messages, 30–300s
+      });
+
+      test('invalid time reports an error and does not enable', () async {
+        final h = build();
+        await h.handle('/afk --time soon');
+        expect(afkCalls, isEmpty);
+        expect(systemMessages.single, startsWith('⚠'));
+      });
     });
   });
 }

@@ -79,6 +79,12 @@ class ChatCommandHandler {
     required bool Function() isGroupTurnOrderRandom,
     required Future<void> Function(bool random, List<CharacterCard>? customOrder)
     setGroupTurnOrder,
+    required ({bool enabled, int maxMessages, int intervalSeconds}) Function(
+      bool enabled,
+      int? maxMessages,
+      int? intervalSeconds,
+    )
+    configureAfk,
   }) : _setExpression = setExpression,
        _activeCharacterIsSet = activeCharacterIsSet,
        _getSceneGuestCards = getSceneGuestCards,
@@ -100,7 +106,8 @@ class ChatCommandHandler {
        _removeGroupMember = removeGroupMember,
        _speakGroupMember = speakGroupMember,
        _isGroupTurnOrderRandom = isGroupTurnOrderRandom,
-       _setGroupTurnOrder = setGroupTurnOrder;
+       _setGroupTurnOrder = setGroupTurnOrder,
+       _configureAfk = configureAfk;
 
   final void Function(String? label) _setExpression;
   final bool Function() _activeCharacterIsSet;
@@ -125,6 +132,12 @@ class ChatCommandHandler {
   final bool Function() _isGroupTurnOrderRandom;
   final Future<void> Function(bool random, List<CharacterCard>? customOrder)
   _setGroupTurnOrder;
+  final ({bool enabled, int maxMessages, int intervalSeconds}) Function(
+    bool enabled,
+    int? maxMessages,
+    int? intervalSeconds,
+  )
+  _configureAfk;
 
   /// The user-facing slash-command reference (single source of truth for the
   /// "type /" helper panel). Order = display order. Aliases (/turn, /detect,
@@ -169,6 +182,11 @@ class ChatCommandHandler {
       'expression',
       '/expression [emotion]',
       "Set the character's expression (omit to clear it)",
+    ),
+    SlashCommandInfo(
+      'afk',
+      '/afk [off] [--messages N] [--time 5m]',
+      'Keep the scene alive while you step away — N solitary auto-responses at a set interval',
     ),
   ];
 
@@ -238,6 +256,10 @@ class ChatCommandHandler {
       case 'turnorder':
       case 'turn-order':
         await _handleTurnOrder(args);
+        return true;
+
+      case 'afk':
+        _handleAfk(args);
         return true;
 
       default:
@@ -696,6 +718,66 @@ class ChatCommandHandler {
     _onSystemMessage(
       '🔁 Turn order set to: ${displayOrder.join(' → ')} (this session).'
       '${userPlaced ? ' You take your turn by typing.' : ''}',
+    );
+  }
+
+  // ── Dynamic Responses: /afk [off] [--messages N] [--time 5m|90s] ────────
+  // A quick "I'm stepping away" macro. Flips the same persisted Dynamic
+  // Responses setting the Settings toggle owns (via [_configureAfk]) and, for
+  // this session, how many auto-responses to send and how far apart. Bare
+  // `/afk` enables with current defaults; `/afk off` disables. Values are
+  // clamped to the same ranges the settings UI enforces (1–10 messages,
+  // 30–300s) so the command can't push the feature out of bounds.
+  void _handleAfk(String args) {
+    final tokens = args
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    if (tokens.isNotEmpty &&
+        const {'off', 'stop', 'disable', 'end', '0'}
+            .contains(tokens.first.toLowerCase())) {
+      _configureAfk(false, null, null);
+      _onSystemMessage('💤 AFK auto-responses off.');
+      return;
+    }
+
+    const usage = 'Usage: /afk [off] [--messages N] [--time 5m].';
+    int? messages;
+    int? seconds;
+    for (var i = 0; i < tokens.length; i++) {
+      final t = tokens[i].toLowerCase();
+      if (t == '--messages' || t == '--message' || t == '-m' || t == '--msgs') {
+        final v = i + 1 < tokens.length ? tokens[++i] : '';
+        final n = int.tryParse(v);
+        if (n == null) {
+          _onSystemMessage('⚠ /afk: "$v" is not a number of messages. $usage');
+          return;
+        }
+        messages = n.clamp(1, 10).toInt();
+      } else if (t == '--time' || t == '--interval' || t == '-t') {
+        final v = i + 1 < tokens.length ? tokens[++i] : '';
+        final m = RegExp(r'^(\d+)(s|sec|secs|m|min|mins)?$').firstMatch(v);
+        if (m == null) {
+          _onSystemMessage('⚠ /afk: "$v" is not a valid time (try 90s or 5m). $usage');
+          return;
+        }
+        var sec = int.parse(m.group(1)!);
+        if ((m.group(2) ?? 's').startsWith('m')) sec *= 60;
+        seconds = sec.clamp(30, 300).toInt();
+      } else {
+        _onSystemMessage('⚠ /afk: unrecognized "${tokens[i]}". $usage');
+        return;
+      }
+    }
+
+    final r = _configureAfk(true, messages, seconds);
+    final iv = r.intervalSeconds;
+    final ivStr = iv % 60 == 0 ? '${iv ~/ 60} min' : '${iv}s';
+    _onSystemMessage(
+      '💤 AFK on — up to ${r.maxMessages} '
+      'message${r.maxMessages == 1 ? '' : 's'}, one every $ivStr. '
+      'Step away and I\'ll keep the scene alive; type anything to stop.',
     );
   }
 }

@@ -3882,15 +3882,19 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Text(
+              Text(
                 'Provide periodic responses when user is AFK?',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: AppColors.textSecondary(context)),
               ),
               const Spacer(),
               Switch(
                 value: storage.dynamicResponses,
                 onChanged: (val) => storage.setDynamicResponses(val),
-                activeTrackColor: Colors.blueAccent,
+                activeTrackColor: AppColors.resolve(
+                  context,
+                  Colors.blueAccent,
+                  Colors.blue,
+                ),
               ),
             ],
           ),
