@@ -31,6 +31,13 @@
     });
   }
 
+  /** Replace a node's children, skipping null/undefined/false (unlike the raw
+      DOM replaceChildren, which stringifies null into a literal "null" node). */
+  function mountChildren(node, children) {
+    node.replaceChildren();
+    appendAll(node, children);
+  }
+
   /* ---- toasts ---- */
   var toastBox = null;
   function toast(msg, kind) {
@@ -189,6 +196,58 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
   }
 
+  /** Download a card to a real file (shared by the picks hero and card detail).
+      `item` needs {id, name, type, primaryAssetId?}. Assembles a byte-compatible
+      chara / fpa_group PNG, JSON only as a fallback. `btn` (optional) shows
+      progress. Returns a Promise. */
+  function downloadCard(item, btn) {
+    var isGroup = item.type === 'GROUP';
+    var label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Packing it up…'; }
+    var restore = function () { if (btn) { btn.disabled = false; btn.textContent = label; } };
+    var Api = window.Stoop.api;
+    var png = window.Stoop.png;
+    return Api.download(item.id).then(function (res) {
+      var json = res.card;
+      var assetId = res.primaryAssetId || item.primaryAssetId;
+      var safe = (item.name || 'character').replace(/[^\w. -]+/g, '_').trim() || 'character';
+      var done = function () {
+        restore();
+        toast(isGroup
+          ? 'Group card saved — it only imports in Front Porch AI (group casts don’t work anywhere else).'
+          : 'Card saved! For the full Realism experience, import it into Front Porch AI.');
+      };
+      if (!json) { restore(); toast('That card couldn’t be downloaded.', 'err'); return; }
+      var envelope = { spec: 'chara_card_v2', spec_version: '2.0', data: json };
+      var jsonFallback = function () {
+        if (isGroup) saveFile(JSON.stringify(json, null, 2), safe + '.group.json', 'application/json');
+        else saveFile(JSON.stringify(envelope, null, 2), safe + '.json', 'application/json');
+        done();
+      };
+      if (!assetId) return jsonFallback();
+      return Api.assetBlob(assetId).then(png.toPngBytes).then(function (pngBytes) {
+        if (isGroup) saveFile(png.writeTextChunk(pngBytes, 'fpa_group', png.jsonToBase64(json)), safe + '.group.png', 'image/png');
+        else saveFile(png.writeTextChunk(pngBytes, 'chara', png.jsonToBase64(envelope)), safe + '.png', 'image/png');
+        done();
+      }).catch(jsonFallback);
+    }).catch(function (e) { restore(); toast(e.message, 'err'); });
+  }
+
+  /** 18+ self-certification gate for guests who want to see NSFW cards. Calls
+      onConfirm() only if they affirm they're an adult. */
+  function confirmAdult(onConfirm) {
+    dialog('Adults only (18+)', [
+      el('p', { class: 'hub-dim' },
+        'The Stoop is strictly for adults. NSFW cards can include explicit adult content. ' +
+        'By continuing you confirm that you are 18 years of age or older.'),
+      el('p', { class: 'hub-dim hub-small' },
+        'Making a free account remembers this and unlocks voting, following, and sharing your own cards.'),
+    ], [
+      { label: 'Cancel', kind: 'btn-ghost' },
+      { label: 'I’m 18 or older — show NSFW', kind: 'btn-amber', onclick: function () { onConfirm(); } },
+    ]);
+  }
+
   /** The "plays best in Front Porch AI" strip used on browse + detail. */
   function fpaiBanner(compact) {
     return el('div', { class: 'hub-fpai' + (compact ? ' compact' : '') }, [
@@ -204,6 +263,7 @@
   window.Stoop.ui = {
     el: el,
     appendAll: appendAll,
+    mountChildren: mountChildren,
     toast: toast,
     dialog: dialog,
     confirmDialog: confirmDialog,
@@ -216,6 +276,8 @@
     spinner: spinner,
     emptyState: emptyState,
     saveFile: saveFile,
+    downloadCard: downloadCard,
+    confirmAdult: confirmAdult,
     fpaiBanner: fpaiBanner,
   };
 })();

@@ -12,6 +12,7 @@
     refresh: 'stoop.refresh',
     installId: 'stoop.installId',
     apiBase: 'stoop.apiBase', // manual override for debugging
+    guestAdult: 'stoop.guestAdult', // guest self-certified 18+ (for NSFW)
   };
 
   function defaultBase() {
@@ -29,6 +30,8 @@
     refresh: localStorage.getItem(LS.refresh) || null,
     user: null,
     policyVersion: null,
+    // Guest 18+ self-cert: honored by the backend only for anonymous requests.
+    guestAdult: localStorage.getItem(LS.guestAdult) === '1',
   };
 
   function installId() {
@@ -121,6 +124,8 @@
     opts = opts || {};
     var headers = opts.headers || {};
     if (state.access && !opts.noAuth) headers.Authorization = 'Bearer ' + state.access;
+    // Guest 18+ self-cert rides read-only calls; ignored server-side once signed in.
+    else if (!state.access && state.guestAdult) headers['X-Guest-Adult'] = '1';
     var init = { method: method, headers: headers };
     if (body instanceof FormData) init.body = body;
     else if (body !== undefined && body !== null) {
@@ -220,6 +225,14 @@
     },
     policy: function () {
       return api('GET', '/policy', undefined, { noAuth: true });
+    },
+    // Guest 18+ self-cert. Drops the avatar cache so NSFW art (previously 404'd)
+    // is refetched with the new header.
+    setGuestAdult: function (on) {
+      state.guestAdult = !!on;
+      if (on) localStorage.setItem(LS.guestAdult, '1');
+      else localStorage.removeItem(LS.guestAdult);
+      avatarCache.clear();
     },
 
     /* 2FA */

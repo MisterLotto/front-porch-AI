@@ -1,7 +1,7 @@
 /* The Stoop hub — router + boot.
-   Hash-routed single page: everything renders into #stoop-app. Auth-walled by
-   design — the API only serves cards to signed-in, policy-accepted adults,
-   exactly like the hub inside the desktop app. */
+   Hash-routed single page: everything renders into #stoop-app. Signed-in users
+   get the full hub; anonymous visitors can opt into a limited GUEST mode
+   (browse + download only) to try the porch before making an account. */
 (function () {
   'use strict';
   var S = window.Stoop;
@@ -12,6 +12,8 @@
   var viewMount = null;
   var unreadBadge = null;
   var unread = 0;
+  // Guest mode persists for the tab so a refresh doesn't bounce back to the wall.
+  var guest = sessionStorage.getItem('stoop.guest') === '1';
 
   var app = {
     setUnread: function (n) {
@@ -23,6 +25,9 @@
     paintHeader: paintHeader,
     onAuthed: onAuthed,
     onLoggedOut: onLoggedOut,
+    enterGuest: enterGuest,
+    exitGuest: exitGuest,
+    isGuest: function () { return guest && !Api.state.user; },
   };
   S.app = app;
 
@@ -36,9 +41,24 @@
   function paintHeader() {
     if (!headerBar) return;
     var u = Api.state.user;
-    if (!u) { headerBar.classList.add('hub-hidden'); return; }
-    headerBar.classList.remove('hub-hidden');
     var h = location.hash || '#/';
+    if (!u) {
+      // Guest bar: browse only, with a standing invitation to join.
+      if (!app.isGuest()) { headerBar.classList.add('hub-hidden'); return; }
+      headerBar.classList.remove('hub-hidden');
+      headerBar.replaceChildren(
+        el('div', { class: 'hub-tabs' }, [
+          el('a', { class: 'hub-tab-link on', href: '#/' }, 'Browse'),
+          el('span', { class: 'hub-guest-tag' }, 'Guest'),
+        ]),
+        el('div', { class: 'hub-user' }, [
+          el('a', { class: 'btn btn-amber hub-share-btn', href: '#/signup' }, 'Create account'),
+          el('a', { class: 'hub-linklike', href: '#/signin' }, 'Sign in'),
+        ])
+      );
+      return;
+    }
+    headerBar.classList.remove('hub-hidden');
     headerBar.replaceChildren(
       el('div', { class: 'hub-tabs' }, TABS.map(function (t) {
         var extra = null;
@@ -61,9 +81,16 @@
     var authed = !!Api.state.user;
 
     if (!authed) {
+      // "#/signin" / "#/signup" always leave guest mode for the real auth wall.
+      if (h === '#/signin' || h === '#/login') { exitGuest(); headerBar.classList.add('hub-hidden'); S.viewsAuth.renderAuth(viewMount, 'login'); return; }
+      if (h === '#/signup') { exitGuest(); headerBar.classList.add('hub-hidden'); S.viewsAuth.renderAuth(viewMount, 'signup'); return; }
+      if (app.isGuest()) {
+        paintHeader();
+        window.scrollTo(0, 0);
+        return routeGuest(h);
+      }
       headerBar.classList.add('hub-hidden');
-      if (h === '#/signup') S.viewsAuth.renderAuth(viewMount, 'signup');
-      else S.viewsAuth.renderAuth(viewMount, 'login');
+      S.viewsAuth.renderAuth(viewMount, 'login');
       return;
     }
     if (needsPolicy()) {
@@ -86,16 +113,60 @@
     return S.viewsBrowse.renderBrowse(viewMount);
   }
 
+  // Guests may only browse cards, view detail, and view creators — everything
+  // else redirects to the invitation to join.
+  function routeGuest(h) {
+    var m;
+    if ((m = h.match(/^#\/card\/([\w-]+)/))) return S.viewsBrowse.renderCard(viewMount, m[1]);
+    if ((m = h.match(/^#\/creator\/([\w-]+)/))) return S.viewsBrowse.renderCreator(viewMount, m[1]);
+    if (h !== '#/' && h !== '') {
+      ui.toast('Make a free account to use that.');
+      location.hash = '#/';
+      return;
+    }
+    return S.viewsBrowse.renderBrowse(viewMount);
+  }
+
   function needsPolicy() {
     var u = Api.state.user;
     return !!(u && Api.state.policyVersion && u.acceptedPolicyVersion !== Api.state.policyVersion);
   }
 
+  /* ------------------------------ guest mode ------------------------------ */
+  function enterGuest() {
+    guest = true;
+    sessionStorage.setItem('stoop.guest', '1');
+    showGuestNotice();
+    if (location.hash === '#/login' || location.hash === '#/signup' || !location.hash) location.hash = '#/';
+    else route();
+  }
+
+  function exitGuest() {
+    guest = false;
+    sessionStorage.removeItem('stoop.guest');
+  }
+
+  function showGuestNotice() {
+    ui.dialog('You’re browsing as a guest', [
+      el('p', null, [
+        'Guest access is intentionally limited — you can ',
+        el('strong', null, 'browse and download cards'),
+        ', and that’s it. Voting, following, reporting, messaging the mods, and sharing your own characters all need a free account.',
+      ]),
+      el('p', { class: 'hub-dim' }, 'NSFW cards stay hidden until you confirm you’re 18 or older (the 🔞 button on the browse bar).'),
+      el('p', null, 'We hope you find some characters on The Stoop that you enjoy — and that you’ll join us. Make an account to share your own characters and unlock the full porch.'),
+    ], [
+      { label: 'Keep browsing', kind: 'btn-ghost' },
+      { label: 'Create an account', kind: 'btn-amber', onclick: function () { location.hash = '#/signup'; } },
+    ]);
+  }
+
   /* ------------------------------ auth flow ------------------------------ */
   function onAuthed() {
+    exitGuest();
     connectLive();
     Api.unread().then(function (r) { app.setUnread(r.count || 0); }).catch(function () {});
-    if (location.hash === '#/login' || location.hash === '#/signup' || !location.hash) {
+    if (location.hash === '#/login' || location.hash === '#/signup' || location.hash === '#/signin' || !location.hash) {
       location.hash = '#/'; // triggers route()
     } else {
       route();

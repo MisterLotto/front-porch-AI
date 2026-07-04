@@ -7,12 +7,12 @@
   var el, ui, Api;
 
   var TAKE = 24;
+  // Solo and group casts are kept strictly apart — a group never shows up in the
+  // solo grid. Groups get their own tab (with a loud FPAI-only warning).
   var FILTERS = [
-    { key: 'all', label: 'All' },
-    { key: 'solo', label: 'Solo' },
-    { key: 'group', label: '👥 Groups' },
-    { key: 'picks', label: '★ Mod’s Picks' },
-    { key: 'following', label: 'Following' },
+    { key: 'solo', label: 'Solo characters', type: 'solo' },
+    { key: 'group', label: '👥 Group casts', type: 'group' },
+    { key: 'following', label: '☆ Following', type: 'all' },
   ];
   var SORTS = [
     { key: 'newest', label: 'Newest' },
@@ -21,7 +21,11 @@
   ];
 
   // Sticky controls so leaving to a detail page and coming back feels stable.
-  var browseState = { filter: 'all', sort: 'newest', q: '' };
+  var browseState = { filter: 'solo', sort: 'newest', q: '' };
+
+  function nsfwOn() {
+    return Api.state.user ? !!Api.state.user.nsfwEnabled : !!Api.state.guestAdult;
+  }
 
   /* ================================ browse ================================ */
   function renderBrowse(mount) {
@@ -30,18 +34,33 @@
     var moreBtn = el('button', { class: 'btn btn-ghost hub-more', type: 'button', onclick: function () { load(page + 1); } }, 'Load more');
     var moreWrap = el('div', { class: 'hub-more-wrap hub-hidden' }, moreBtn);
     var status = el('div');
+    var showcase = el('div', { class: 'hub-showcase' });     // Mod's Picks hero + carousel
+    var groupWarn = el('div');                                 // strong FPAI-only warning
+
+    function activeFilter() {
+      return FILTERS.filter(function (f) { return f.key === browseState.filter; })[0] || FILTERS[0];
+    }
 
     function params(p) {
-      var f = browseState.filter;
+      var f = activeFilter();
       return {
         sort: browseState.sort,
-        type: f === 'solo' ? 'solo' : f === 'group' ? 'group' : 'all',
-        pick: f === 'picks' ? 'true' : undefined,
-        following: f === 'following' ? 'true' : undefined,
+        type: f.type,
+        following: browseState.filter === 'following' ? 'true' : undefined,
         q: browseState.q || undefined,
         page: p,
         take: TAKE,
       };
+    }
+
+    // The Mod's Picks hero belongs on the main (solo) discovery view only — not
+    // on the group tab, a search, or the personal Following feed. Cleared
+    // synchronously first so a stale hero never lingers through a tab switch.
+    function refreshChrome() {
+      var f = browseState.filter;
+      showcase.replaceChildren();
+      if (!browseState.q && f === 'solo') S.viewsPicks.renderPicksShowcase(showcase, 'solo');
+      ui.mountChildren(groupWarn, f === 'group' ? groupWarning() : null);
     }
 
     function load(p) {
@@ -49,6 +68,7 @@
       if (p === 0) {
         grid.replaceChildren();
         status.replaceChildren(ui.spinner('Looking around the porch…'));
+        refreshChrome();
       }
       moreBtn.disabled = true;
       Api.browse(params(p)).then(function (res) {
@@ -80,6 +100,33 @@
         return o;
       }));
 
+    // NSFW toggle right on the bar — works for accounts (persisted server-side)
+    // and guests (18+ self-cert). Fixes the "can't turn NSFW off" complaint.
+    var nsfwBtn = el('button', { class: 'hub-nsfw-toggle', type: 'button' });
+    function paintNsfw() {
+      var on = nsfwOn();
+      nsfwBtn.textContent = on ? '🔞 18+ on' : '🔞 18+ off';
+      nsfwBtn.classList.toggle('on', on);
+      nsfwBtn.title = on ? 'NSFW cards are showing — click to hide' : 'Show NSFW cards (18+)';
+    }
+    nsfwBtn.addEventListener('click', function () {
+      if (Api.state.user) {
+        var next = !Api.state.user.nsfwEnabled;
+        nsfwBtn.disabled = true;
+        Api.setNsfw(next).then(function () {
+          paintNsfw(); load(0);
+          ui.toast(next ? '18+ cards are now showing.' : '18+ cards are hidden.');
+        }).catch(function (e) { ui.toast(e.message, 'err'); })
+          .finally(function () { nsfwBtn.disabled = false; });
+      } else if (Api.state.guestAdult) {
+        Api.setGuestAdult(false); paintNsfw(); load(0);
+        ui.toast('18+ cards are hidden.');
+      } else {
+        ui.confirmAdult(function () { Api.setGuestAdult(true); paintNsfw(); load(0); });
+      }
+    });
+    paintNsfw();
+
     var chipRow = el('div', { class: 'hub-chips' }, FILTERS.map(function (f) {
       return el('button', {
         class: 'hub-chip' + (browseState.filter === f.key ? ' on' : ''),
@@ -93,24 +140,33 @@
       }, f.label);
     }));
 
-    var nsfwNote = null;
-    if (Api.state.user && !Api.state.user.nsfwEnabled) {
-      nsfwNote = el('p', { class: 'hub-nsfw-note' }, [
-        'NSFW cards are hidden. You can turn them on in ',
-        el('a', { href: '#/account' }, 'Account'), '.',
-      ]);
-    }
-
-    mount.replaceChildren(
+    ui.mountChildren(mount, [
       ui.fpaiBanner(),
-      el('div', { class: 'hub-controls' }, [search, sortSel]),
+      el('div', { class: 'hub-controls' }, [search, sortSel, nsfwBtn]),
       chipRow,
-      nsfwNote,
+      showcase,
+      groupWarn,
       status,
       grid,
-      moreWrap
-    );
+      moreWrap,
+    ]);
     load(0);
+  }
+
+  // The loud, unmissable group warning shown on the Groups tab.
+  function groupWarning() {
+    return el('div', { class: 'hub-groupwarn' }, [
+      el('span', { class: 'hub-groupwarn-ico' }, '⚠️'),
+      el('div', null, [
+        el('strong', null, 'Group casts open ONLY in Front Porch AI.'),
+        el('p', null, [
+          'A group card bundles multiple characters, their lorebooks, and shared Realism state. ',
+          el('strong', null, 'No other app can read it'),
+          ' — not SillyTavern, not Backyard, nothing. Download one only if you use Front Porch AI. ',
+          el('a', { href: 'https://frontporchai.app/#get', target: '_blank', rel: 'noopener' }, 'Get the app →'),
+        ]),
+      ]),
+    ]);
   }
 
   /* ============================== card detail ============================== */
@@ -137,8 +193,9 @@
     Api.cardDetail(id).then(function (c) {
       var isGroup = c.type === 'GROUP';
       var card = c.card || {};
+      var signedIn = !!Api.state.user;
 
-      /* --- votes --- */
+      /* --- votes (account only) --- */
       var myVote = c.myVote || 0;
       var upBtn = el('button', { class: 'hub-vote', type: 'button', title: 'Upvote' }, '▲');
       var dnBtn = el('button', { class: 'hub-vote', type: 'button', title: 'Downvote' }, '▼');
@@ -158,50 +215,13 @@
       dnBtn.addEventListener('click', function () { castVote(-1); });
       paintVotes();
 
-      /* --- download --- */
-      var dlBtn = el('button', { class: 'btn btn-amber', type: 'button', onclick: doDownload }, '⤓ Download card');
-      function doDownload() {
-        dlBtn.disabled = true;
-        dlBtn.textContent = 'Packing it up…';
-        Api.download(id).then(function (res) {
-          var json = res.card || card;
-          var assetId = res.primaryAssetId || c.primaryAssetId;
-          var safe = (c.name || 'character').replace(/[^\w. -]+/g, '_').trim() || 'character';
-          var finish = function () {
-            dlBtn.disabled = false;
-            dlBtn.textContent = '⤓ Download card';
-            ui.toast(isGroup
-              ? 'Group card saved — import it in Front Porch AI (group casts only work there).'
-              : 'Card saved! For the full Realism experience, import it into Front Porch AI.');
-          };
-          var jsonFallback = function () {
-            if (isGroup) ui.saveFile(JSON.stringify(json, null, 2), safe + '.group.json', 'application/json');
-            else ui.saveFile(JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: json }, null, 2), safe + '.json', 'application/json');
-            finish();
-          };
-          if (!assetId) return jsonFallback();
-          Api.assetBlob(assetId)
-            .then(S.png.toPngBytes)
-            .then(function (pngBytes) {
-              if (isGroup) {
-                var bytes = S.png.writeTextChunk(pngBytes, 'fpa_group', S.png.jsonToBase64(json));
-                ui.saveFile(bytes, safe + '.group.png', 'image/png');
-              } else {
-                var envelope = { spec: 'chara_card_v2', spec_version: '2.0', data: json };
-                var solo = S.png.writeTextChunk(pngBytes, 'chara', S.png.jsonToBase64(envelope));
-                ui.saveFile(solo, safe + '.png', 'image/png');
-              }
-              finish();
-            })
-            .catch(jsonFallback);
-        }).catch(function (e) {
-          dlBtn.disabled = false;
-          dlBtn.textContent = '⤓ Download card';
-          ui.toast(e.message, 'err');
-        });
-      }
+      /* --- download (everyone, incl. guests) --- */
+      var dlBtn = el('button', { class: 'btn btn-amber', type: 'button' }, '⤓ Download card');
+      dlBtn.addEventListener('click', function () {
+        ui.downloadCard({ id: id, name: c.name, type: c.type, primaryAssetId: c.primaryAssetId }, dlBtn);
+      });
 
-      /* --- report --- */
+      /* --- report (account only) --- */
       function showReport() {
         var sel = el('select', { class: 'hub-select hub-wide' }, REPORT_CATEGORIES.map(function (r) {
           return el('option', { value: r.key }, r.label);
@@ -238,12 +258,28 @@
         ]);
       }
 
-      var caveat = el('div', { class: 'hub-caveat' + (isGroup ? ' warn' : '') },
-        isGroup
-          ? [el('strong', null, '👥 Group cast — Front Porch AI only. '),
-             'No other app can open a group card. Members, lorebooks, and their living Realism state import in one tap in FPAI.']
-          : [el('strong', null, '🛋️ Best experienced in Front Porch AI. '),
-             'This card works in any V2-compatible app, but its Realism & Needs data (moods, bond, trust) only comes alive in FPAI — the recommended app for every card on The Stoop.']);
+      var caveat = isGroup
+        ? el('div', { class: 'hub-caveat group' }, [
+            el('span', { class: 'hub-caveat-ico' }, '⚠️'),
+            el('div', null, [
+              el('strong', null, 'This group cast opens ONLY in Front Porch AI. '),
+              'A group card bundles multiple characters, their lorebooks, and shared Realism state into one file. ',
+              el('strong', null, 'No other app can read it'),
+              ' — not SillyTavern, not Backyard, nothing. Only download it if you use Front Porch AI, where it imports in one tap.',
+            ]),
+          ])
+        : el('div', { class: 'hub-caveat' }, [
+            el('strong', null, '🛋️ Best experienced in Front Porch AI. '),
+            'This card works in any V2-compatible app, but its Realism & Needs data (moods, bond, trust) only comes alive in FPAI — the recommended app for every card on The Stoop.',
+          ]);
+
+      // Guests can download but not vote/report — invite them to join instead.
+      var actionExtras = signedIn
+        ? [
+            el('span', { class: 'hub-votebox' }, [upBtn, dnBtn]),
+            el('button', { class: 'hub-linklike', type: 'button', onclick: showReport }, '⚑ Report'),
+          ]
+        : [el('a', { class: 'hub-signin-nudge', href: '#/signin' }, 'Sign in to vote, follow & report')];
 
       var alts = Array.isArray(card.alternate_greetings) ? card.alternate_greetings.filter(Boolean).join('\n\n———\n\n') : '';
 
@@ -269,11 +305,7 @@
               ui.statsSpan(c),
               el('span', { class: 'hub-dim' }, 'v' + (c.version || 1) + (c.tokenCount ? ' · ~' + ui.num(c.tokenCount) + ' tokens' : '')),
             ]),
-            el('div', { class: 'hub-detail-actions' }, [
-              dlBtn,
-              el('span', { class: 'hub-votebox' }, [upBtn, dnBtn]),
-              el('button', { class: 'hub-linklike', type: 'button', onclick: showReport }, '⚑ Report'),
-            ]),
+            el('div', { class: 'hub-detail-actions' }, [dlBtn].concat(actionExtras)),
             caveat,
           ]),
         ]),
@@ -297,7 +329,9 @@
     mount.replaceChildren(ui.spinner());
     Api.creator(id).then(function (cr) {
       var followBtn = null;
-      if (!cr.isMe) {
+      if (!Api.state.user) {
+        followBtn = el('a', { class: 'hub-signin-nudge', href: '#/signin' }, 'Sign in to follow');
+      } else if (!cr.isMe) {
         followBtn = el('button', { class: 'btn ' + (cr.following ? 'btn-ghost' : 'btn-amber'), type: 'button' },
           cr.following ? '✓ Following' : '+ Follow');
         followBtn.addEventListener('click', function () {

@@ -124,6 +124,10 @@
         ]),
         form,
         switchLine,
+        el('div', { class: 'hub-guest-line' }, [
+          el('span', { class: 'hub-guest-or' }, 'or'),
+          el('button', { class: 'hub-linklike', type: 'button', onclick: function () { S.app.enterGuest(); } }, 'Just browse & download as a guest →'),
+        ]),
         el('p', { class: 'hub-auth-fine' }, '18+ only · one account works everywhere in Front Porch'),
       ]),
     ]));
