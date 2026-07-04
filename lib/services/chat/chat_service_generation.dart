@@ -367,6 +367,28 @@ extension ChatServiceGeneration on ChatService {
         summaryBlock = '[Summary of events so far: $_summary]\n';
       }
 
+      // The Journal — the upcoming speaker's pinned + hot memory cards, with
+      // their felt emotions (strictly this chat's cards; guests never
+      // journal). Built HERE, before the fixed-content token count below, so
+      // history budgeting accounts for it (async, unlike the sync builders).
+      String journalBlock = '';
+      if (_storageService.memorySettings.journalEnabled &&
+          guestSpeaker == null &&
+          _currentSessionId != null) {
+        journalBlock = await _journalInjection.buildJournalBlock(
+          characterId: _getCharacterIdFromCard(speakingCharacter),
+          characterName: speakingCharacter.name,
+          userName: userName,
+          // Cold-card resurfacing query — same last-3-messages recipe as RAG
+          // retrieval below (built separately: that one runs after continue
+          // mode pops the tail message, this one before).
+          queryText: _messages.reversed
+              .take(3)
+              .map((m) => '${m.sender}: ${m.displayText}')
+              .join('\n'),
+        );
+      }
+
       // ── Continue mode: remove the last message from history ──
       // For continue mode, we exclude the last message from the chat history
       // and place it as the prompt suffix so the LLM continues from it naturally.
@@ -391,7 +413,6 @@ extension ChatServiceGeneration on ChatService {
       final macroCtx = MacroContext(
         userName: userName,
         characterName: speakingCharacter.name,
-        summaryMaxWords: _storageService.memorySettings.summaryMaxWords,
         chatId: _currentSessionId,
         characterId: speakingCharacter.dbId,
       );
@@ -486,6 +507,7 @@ extension ChatServiceGeneration on ChatService {
             "$mesExampleBlock"
             "<START>\n"
             "$summaryBlock"
+            "$journalBlock"
             "$postHistoryBlock"
             "$authorNoteBlock"
             "$objectiveBlock"
@@ -645,6 +667,7 @@ extension ChatServiceGeneration on ChatService {
       final prompt =
           "<START>\n"
           "$summaryBlock"
+          "$journalBlock"
           "$memoriesBlock"
           "$history"
           "$postHistoryBlock"
@@ -665,6 +688,7 @@ extension ChatServiceGeneration on ChatService {
         'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
         'Examples': (mesExampleBlock.length / 4).ceil(),
         'Summary': (summaryBlock.length / 4).ceil(),
+        'Journal': (journalBlock.length / 4).ceil(),
         'Retrieved Memories': (memoriesBlock.length / 4).ceil(),
         'Chat History': (history.length / 4).ceil(),
         'Post-History': (postHistoryBlock.length / 4).ceil(),
@@ -739,6 +763,9 @@ extension ChatServiceGeneration on ChatService {
         maxLength: g2.resolveMaxLength(_storageService),
         minLength: g2.resolveMinLength(_storageService),
         minP: g2.resolveMinP(_storageService),
+        topP: g2.resolveTopP(_storageService),
+        topK: g2.resolveTopK(_storageService),
+        dryMultiplier: g2.resolveDryMultiplier(_storageService),
         temperature: g2.resolveTemperature(_storageService),
         repeatPenalty: g2.resolveRepeatPenalty(_storageService),
         repPenTokens: g2.resolveRepeatPenaltyTokens(_storageService),
@@ -1295,9 +1322,12 @@ extension ChatServiceGeneration on ChatService {
             await _attachNeedsDeltaChipToLastMessage();
           }
 
-          // Check if summary needs updating (fire-and-forget)
-          // Group name resolution for {{char}} in summary prompt is best-effort at trigger time (after prePostActiveChar restore dance); correct for 1:1, may use restored active or group fallback in group non-obs (timing-dependent per group impersonation; dispatch preserved via cbs). See leaf header + test for qualify.
-          _maybeUpdateSummary();
+          // Journal maintenance pass if due (fire-and-forget): memory cards +
+          // recap in one call. Card ownership is derived from the window's
+          // message characterIds (immune to the prePostActiveChar restore
+          // dance above); only the recap voice is best-effort at trigger time
+          // in group non-obs (same caveat the old summary had).
+          _maybeRunJournalPass();
 
           // Embed messages for RAG memory (fire-and-forget)
           _maybeEmbedMessages();

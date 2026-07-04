@@ -58,6 +58,22 @@ class StoopCard {
 
   bool get isGroup => type == 'GROUP';
 
+  /// This card with fresh live counters (from a [StoopCardStats] push).
+  StoopCard withStats({required int score, required int downloadCount}) =>
+      StoopCard(
+        id: id,
+        name: name,
+        summary: summary,
+        type: type,
+        nsfw: nsfw,
+        score: score,
+        downloadCount: downloadCount,
+        modPick: modPick,
+        creator: creator,
+        primaryAssetId: primaryAssetId,
+        tokenCount: tokenCount,
+      );
+
   factory StoopCard.fromJson(Map<String, dynamic> j) => StoopCard(
     id: j['id'] as String? ?? '',
     name: j['name'] as String? ?? '',
@@ -73,6 +89,41 @@ class StoopCard {
     primaryAssetId: j['primaryAssetId'] as String?,
     tokenCount: (j['tokenCount'] as num?)?.toInt(),
   );
+}
+
+/// A live counter update for one card, pushed over the Stoop socket whenever
+/// anyone votes on or first-downloads it — so counts tick up in real time
+/// while the user is browsing.
+class StoopCardStats {
+  final String cardId;
+  final int score;
+  final int downloadCount;
+  const StoopCardStats({
+    required this.cardId,
+    required this.score,
+    required this.downloadCount,
+  });
+
+  factory StoopCardStats.fromJson(Map<String, dynamic> j) => StoopCardStats(
+    cardId: j['cardId'] as String? ?? '',
+    score: (j['score'] as num?)?.toInt() ?? 0,
+    downloadCount: (j['downloadCount'] as num?)?.toInt() ?? 0,
+  );
+
+  /// Patch [cards] in place wherever the id matches; true if any tile changed.
+  bool applyTo(List<StoopCard> cards) {
+    var hit = false;
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].id == cardId) {
+        cards[i] = cards[i].withStats(
+          score: score,
+          downloadCount: downloadCount,
+        );
+        hit = true;
+      }
+    }
+    return hit;
+  }
 }
 
 /// A page of browse results.

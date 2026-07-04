@@ -408,6 +408,25 @@ class KoboldService extends ChangeNotifier
   /// This is the same transport the `.kcpps` pseudo-remote backend has always
   /// used against the same server. KoboldCpp ignores the model name.
   ///
+  // Local tool calling: recent KoboldCpp supports OpenAI tools with
+  // template-aware models (Qwen3 family etc.). Models/servers that can't
+  // simply yield no tool calls and the caller's negotiation falls back to
+  // its text transport (the Journal's XML floor).
+  @override
+  Future<LlmToolResponse?> generateWithTools(
+    GenerationParams params,
+    List<Map<String, dynamic>> tools,
+  ) async {
+    if (!isReady) return null;
+    return postOpenAiChatWithTools(
+      _baseUrl,
+      params,
+      tools,
+      registerClient: (client) => _activeClient = client,
+      onDone: () => _activeClient = null,
+    );
+  }
+
   /// `_activeClient` is registered for [abortGeneration]; `_pendingRequest`
   /// (a completer future) is tracked so [waitForIdle] still unblocks on close.
   @override

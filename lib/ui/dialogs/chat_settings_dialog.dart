@@ -428,6 +428,35 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       },
                     ),
                     SliderWithInput(
+                      label: 'Top-P',
+                      value: _gen.resolveTopP(storage),
+                      min: 0.1,
+                      max: 1.0,
+                      divisions: 90,
+                      tooltip:
+                          'Keeps only the most probable words up to this cumulative probability. 1.0 = off (let Min-P do the filtering). 0.9 is the classic default.',
+                      context: context,
+                      onChanged: (val) {
+                        setState(() => _gen.topP = val);
+                        _save();
+                      },
+                    ),
+                    SliderWithInput(
+                      label: 'Top-K',
+                      value: _gen.resolveTopK(storage).toDouble(),
+                      min: 0,
+                      max: 200,
+                      divisions: 200,
+                      isInteger: true,
+                      tooltip:
+                          'Limits choices to the K most likely words. 0 = off. 40–100 are typical values when used.',
+                      context: context,
+                      onChanged: (val) {
+                        setState(() => _gen.topK = val.toInt());
+                        _save();
+                      },
+                    ),
+                    SliderWithInput(
                       label: 'Repeat Penalty',
                       value: _gen.resolveRepeatPenalty(storage),
                       min: 1.0,
@@ -465,7 +494,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       max: 0.5,
                       divisions: 50,
                       tooltip:
-                          'Exclude Top Choices — removes the most obvious/cliché word choices. Lower = stronger effect. Try 0.1 for more creative writing.',
+                          'Exclude Top Choices — removes the most obvious/cliché word choices. Lower = stronger effect. Try 0.1 for more creative writing. (Local models only.)',
                       context: context,
                       onChanged: (val) {
                         setState(() => _gen.xtcThreshold = val);
@@ -479,10 +508,24 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       max: 1.0,
                       divisions: 20,
                       tooltip:
-                          'How often XTC activates. 0 = never, 1 = always. Try 0.5 for a balance between creativity and coherence.',
+                          'How often XTC activates. 0 = never, 1 = always. Try 0.5 for a balance between creativity and coherence. (Local models only.)',
                       context: context,
                       onChanged: (val) {
                         setState(() => _gen.xtcProbability = val);
+                        _save();
+                      },
+                    ),
+                    SliderWithInput(
+                      label: 'DRY Strength',
+                      value: _gen.resolveDryMultiplier(storage),
+                      min: 0.0,
+                      max: 3.0,
+                      divisions: 60,
+                      tooltip:
+                          'DRY ("Don\'t Repeat Yourself") — the modern anti-repetition sampler; catches repeated phrases, not just words. 0 = off, 0.8 is the usual dose. (Local models only.)',
+                      context: context,
+                      onChanged: (val) {
+                        setState(() => _gen.dryMultiplier = val);
                         _save();
                       },
                     ),

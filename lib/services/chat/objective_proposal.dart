@@ -141,6 +141,12 @@ class ObjectiveProposal {
   // Notify for UI after check completion (onNotify only; save via god paths).
   final VoidCallback onNotify;
 
+  /// Fired once per check when any task/objective completed — the Journal
+  /// uses it to flag a significant event for its next maintenance pass
+  /// (design §4.2 event-triggered cadence). Optional: null in dedicated
+  /// tests that don't exercise the journal hook.
+  final VoidCallback? onObjectiveCompleted;
+
   ObjectiveProposal({
     required this.stripThinkBlocks,
     required this.getLlmService,
@@ -159,6 +165,7 @@ class ObjectiveProposal {
     required this.getIsCheckingCompletion,
     required this.setIsCheckingCompletion,
     required this.onNotify,
+    this.onObjectiveCompleted,
   });
 
   /// Generate subtasks for the current objective using the LLM.
@@ -313,6 +320,7 @@ class ObjectiveProposal {
     if (getIsCheckingCompletion() || getActiveObjectives().isEmpty) return;
     setIsCheckingCompletion(true);
 
+    var anyCompleted = false;
     try {
       final llmService = getLlmService();
       if (!llmService.isReady) return;
@@ -373,6 +381,7 @@ class ObjectiveProposal {
         );
 
         if (responseText.toUpperCase().contains('YES')) {
+          anyCompleted = true;
           if (currentTask != null) {
             // Use thin cb (god impl) for best-effort task mutation (find uncompleted by desc, set completed:true, json+db update + load). Matches god toggleTask pattern exactly. Task vs taskless now both have side effects covered (taskless deact cb).
             await markTaskCompleted(obj, currentTask);
@@ -394,6 +403,9 @@ class ObjectiveProposal {
       debugPrint('[Objective] Completion check failed: $e');
     } finally {
       setIsCheckingCompletion(false);
+      // A completed step is a story beat worth journaling — flag it once
+      // (post-generation consumer; see onObjectiveCompleted doc).
+      if (anyCompleted) onObjectiveCompleted?.call();
       onNotify();
     }
   }

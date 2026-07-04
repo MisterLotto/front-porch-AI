@@ -416,6 +416,13 @@ class StorageService extends ChangeNotifier {
   Future<void> setTemperature(double v) => generationSettings.setTemperature(v);
   double get minP => generationSettings.minP;
   Future<void> setMinP(double v) => generationSettings.setMinP(v);
+  double get topP => generationSettings.topP;
+  Future<void> setTopP(double v) => generationSettings.setTopP(v);
+  int get topK => generationSettings.topK;
+  Future<void> setTopK(int v) => generationSettings.setTopK(v);
+  double get dryMultiplier => generationSettings.dryMultiplier;
+  Future<void> setDryMultiplier(double v) =>
+      generationSettings.setDryMultiplier(v);
   double get repeatPenalty => generationSettings.repeatPenalty;
   Future<void> setRepeatPenalty(double v) =>
       generationSettings.setRepeatPenalty(v);
@@ -469,12 +476,6 @@ class StorageService extends ChangeNotifier {
   String get ragEmbeddingModel => memorySettings.ragEmbeddingModel;
   Future<void> setRagEmbeddingModel(String v) =>
       memorySettings.setRagEmbeddingModel(v);
-  bool get autoPersonaEnabled => memorySettings.autoPersonaEnabled;
-  Future<void> setAutoPersonaEnabled(bool v) =>
-      memorySettings.setAutoPersonaEnabled(v);
-  int get autoPersonaInterval => memorySettings.autoPersonaInterval;
-  Future<void> setAutoPersonaInterval(int v) =>
-      memorySettings.setAutoPersonaInterval(v);
   bool get characterEvolutionEnabled =>
       memorySettings.characterEvolutionEnabled;
   Future<void> setCharacterEvolutionEnabled(bool v) =>
@@ -482,17 +483,18 @@ class StorageService extends ChangeNotifier {
   int get evolutionInterval => memorySettings.evolutionInterval;
   Future<void> setEvolutionInterval(int v) =>
       memorySettings.setEvolutionInterval(v);
-  bool get summaryEnabled => memorySettings.summaryEnabled;
-  Future<void> setSummaryEnabled(bool v) => memorySettings.setSummaryEnabled(v);
-  int get summaryInterval => memorySettings.summaryInterval;
-  Future<void> setSummaryInterval(int v) =>
-      memorySettings.setSummaryInterval(v);
-  int get summaryMaxWords => memorySettings.summaryMaxWords;
-  Future<void> setSummaryMaxWords(int v) =>
-      memorySettings.setSummaryMaxWords(v);
-  String get summaryPrompt => memorySettings.summaryPrompt;
-  Future<void> setSummaryPrompt(String v) => memorySettings.setSummaryPrompt(v);
-  String get defaultSummaryPrompt => MemorySettings.defaultSummaryPrompt;
+  // The Journal (replaced the old summary + auto-persona settings)
+  bool get journalEnabled => memorySettings.journalEnabled;
+  Future<void> setJournalEnabled(bool v) => memorySettings.setJournalEnabled(v);
+  int get journalInterval => memorySettings.journalInterval;
+  Future<void> setJournalInterval(int v) =>
+      memorySettings.setJournalInterval(v);
+  int get journalMaxCards => memorySettings.journalMaxCards;
+  Future<void> setJournalMaxCards(int v) =>
+      memorySettings.setJournalMaxCards(v);
+  bool get journalReviewFirst => memorySettings.journalReviewFirst;
+  Future<void> setJournalReviewFirst(bool v) =>
+      memorySettings.setJournalReviewFirst(v);
 
   // Realism / banned (bannedPhrases, defaults lifted to realismSettings)
   bool get realismOneShotEval => realismSettings.realismOneShotEval;

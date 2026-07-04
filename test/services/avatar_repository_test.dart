@@ -50,8 +50,24 @@ void main() {
       await db.close();
     });
 
-    test('schema version is 34', () {
-      expect(db.schemaVersion, 34);
+    test('schema version is 35', () {
+      expect(db.schemaVersion, 35);
+    });
+
+    test('journal_memories table exists and round-trips (v35)', () async {
+      await db.insertJournalCard(
+        const JournalMemoriesCompanion(
+          sessionId: Value('s-test'),
+          characterId: Value('c-test'),
+          content: Value('a memory'),
+        ),
+      );
+      final cards = await db.getJournalCards('s-test', 'c-test');
+      expect(cards, hasLength(1));
+      expect(cards.single.content, 'a memory');
+      expect(cards.single.heat, 1.0);
+      expect(cards.single.pinned, isFalse);
+      expect(await db.deleteJournalCardsForSession('s-test'), 1);
     });
 
     test('groups table has stable_id column (v34) — nullable, round-trips', () async {

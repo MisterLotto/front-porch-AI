@@ -40,9 +40,9 @@ extension ChatServiceGroupEntry on ChatService {
     _summary = '';
     _summaryLastIndex = 0;
     _summaryPaused =
-        false; // explicit secondary zero for _summaryPaused (symmetric; incomplete zeroing... now complete (see CLAUDE.md); see keep-sync + summary_service)
+        false; // explicit secondary zero for _summaryPaused (symmetric; incomplete zeroing... now complete (see CLAUDE.md); see keep-sync + journal_maintenance)
     _isSummaryGenerating =
-        false; // explicit secondary zero on setActiveGroup (incomplete zeroing ... now complete; keep-sync lists + summary_service + " ; authority for needs deltas thin path)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)"
+        false; // explicit secondary zero on setActiveGroup (incomplete zeroing ... now complete; keep-sync lists + journal_maintenance + " ; authority for needs deltas thin path)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)"
     _groupRealism = {};
     _groupDecayRates = {};
     _groupAuthorNotes = {};
@@ -226,10 +226,7 @@ extension ChatServiceGroupEntry on ChatService {
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; group fresh entry zero)
     _isSummaryGenerating =
-        false; // secondary flag zero for summary_service (stateless/prompt-only; see incomplete zeroing ... now complete + keep-sync lists)
-    _userMessagesSinceLastPeriodicEval = 0;
-    _isExtractingFacts =
-        false; // secondary fact flag + counter zero on group fresh entry (incomplete zeroing ... now complete; fact_extraction)
+        false; // secondary flag zero for the journal recap state (stateless/prompt-only; see incomplete zeroing ... now complete + keep-sync lists)
     _isEvolvingCharacter = false;
     _evolutionStatus = '';
     _evolutionError =

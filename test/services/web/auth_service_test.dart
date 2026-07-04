@@ -102,5 +102,159 @@ void main() {
       );
       expect(reuse.status, LoginStatus.totpRequired);
     });
+
+    test('changeCredentials demands the current password', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+
+      final denied = await auth.changeCredentials(
+        currentPassword: 'wrong',
+        newPassword: 'newpassword1',
+      );
+      expect(denied, CredentialChangeStatus.invalidCurrentPassword);
+      // The old credentials are untouched.
+      expect(
+        (await auth.login('admin', 'password123')).status,
+        LoginStatus.success,
+      );
+    });
+
+    test('changeCredentials rotates username and password', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+
+      final ok = await auth.changeCredentials(
+        currentPassword: 'password123',
+        newUsername: 'porchkeeper',
+        newPassword: 'newpassword1',
+      );
+      expect(ok, CredentialChangeStatus.success);
+      expect((await auth.accountInfo())?.username, 'porchkeeper');
+
+      // Old credentials are dead; the new pair signs in.
+      expect(
+        (await auth.login('admin', 'password123')).status,
+        LoginStatus.invalidCredentials,
+      );
+      expect(
+        (await auth.login('porchkeeper', 'newpassword1')).status,
+        LoginStatus.success,
+      );
+    });
+
+    test('changeCredentials validates input and requires a change', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+
+      expect(
+        await auth.changeCredentials(currentPassword: 'password123'),
+        CredentialChangeStatus.invalidInput,
+      );
+      expect(
+        await auth.changeCredentials(
+          currentPassword: 'password123',
+          newPassword: 'short',
+        ),
+        CredentialChangeStatus.invalidInput,
+      );
+    });
+
+    test('with 2FA on, credential changes demand a current code', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+      final enrollment = await auth.beginTotpEnrollment();
+      final code = OTP.generateTOTPCodeString(
+        enrollment!.secret,
+        fixedMs,
+        length: 6,
+        interval: 30,
+        algorithm: Algorithm.SHA1,
+        isGoogle: true,
+      );
+      await auth.confirmTotpEnrollment(code);
+
+      expect(
+        await auth.changeCredentials(
+          currentPassword: 'password123',
+          newPassword: 'newpassword1',
+        ),
+        CredentialChangeStatus.totpRequired,
+      );
+      expect(
+        await auth.changeCredentials(
+          currentPassword: 'password123',
+          totpCode: code,
+          newPassword: 'newpassword1',
+        ),
+        CredentialChangeStatus.success,
+      );
+    });
+
+    test('disabling 2FA requires the password and a current code', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+      final enrollment = await auth.beginTotpEnrollment();
+      final code = OTP.generateTOTPCodeString(
+        enrollment!.secret,
+        fixedMs,
+        length: 6,
+        interval: 30,
+        algorithm: Algorithm.SHA1,
+        isGoogle: true,
+      );
+      await auth.confirmTotpEnrollment(code);
+
+      expect(
+        await auth.disableTotp(currentPassword: 'wrong', totpCode: code),
+        CredentialChangeStatus.invalidCurrentPassword,
+      );
+      expect(
+        await auth.disableTotp(currentPassword: 'password123'),
+        CredentialChangeStatus.totpRequired,
+      );
+      expect(
+        await auth.disableTotp(currentPassword: 'password123', totpCode: code),
+        CredentialChangeStatus.success,
+      );
+      // Password alone signs in again.
+      expect(
+        (await auth.login('admin', 'password123')).status,
+        LoginStatus.success,
+      );
+    });
+
+    test('resetAccount returns to setup mode and kills sessions', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+      final session = await auth.login('admin', 'password123');
+      expect(await auth.sessions.validate(session.token!), isNotNull);
+
+      await auth.resetAccount();
+      expect(await auth.isSetupRequired(), isTrue);
+      expect(await auth.accountInfo(), isNull);
+      expect(await auth.sessions.validate(session.token!), isNull);
+      // A fresh setup works after the wipe.
+      expect(await auth.setupAccount('fresh', 'password456'), isTrue);
+    });
+
+    test('repeated wrong current passwords lock credential changes', () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+      for (var i = 0; i < 5; i++) {
+        await auth.changeCredentials(
+          currentPassword: 'wrong',
+          newPassword: 'newpassword1',
+          ip: '6.6.6.6',
+        );
+      }
+      expect(
+        await auth.changeCredentials(
+          currentPassword: 'password123',
+          newPassword: 'newpassword1',
+          ip: '6.6.6.6',
+        ),
+        CredentialChangeStatus.lockedOut,
+      );
+    });
   });
 }

@@ -8,6 +8,8 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -40,11 +42,22 @@ class _StoopHomeViewState extends State<StoopHomeView> {
   String? _error;
   List<StoopCharacter> _mine = const [];
   List<StoopCard> _downloads = const [];
+  StreamSubscription<StoopCardStats>? _statsSub;
 
   @override
   void initState() {
     super.initState();
+    // Live vote/download counters on the download-history tiles.
+    _statsSub = StoopMessageSocket.onCardStats.listen((s) {
+      if (s.applyTo(_downloads) && mounted) setState(() {});
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _statsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

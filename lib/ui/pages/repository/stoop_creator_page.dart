@@ -8,6 +8,8 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -35,11 +37,23 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
   bool _following = false;
   int _followers = 0;
   bool _followBusy = false;
+  StreamSubscription<StoopCardStats>? _statsSub;
 
   @override
   void initState() {
     super.initState();
+    // Live vote/download counters on this creator's card grid.
+    _statsSub = StoopMessageSocket.onCardStats.listen((s) {
+      final cards = _profile?.cards;
+      if (cards != null && s.applyTo(cards) && mounted) setState(() {});
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _statsSub?.cancel();
+    super.dispose();
   }
 
   String get _token => context.read<AuthState>().accessToken ?? '';

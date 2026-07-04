@@ -27,6 +27,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
 import 'package:window_manager/window_manager.dart';
+// screen_retriever is a transitive dep of window_manager (used here to validate
+// that restored window bounds are actually visible on a connected display).
+// ignore: depend_on_referenced_packages
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
@@ -60,6 +64,52 @@ import 'package:front_porch_ai/ui/dialogs/stable_db_import_dialog.dart';
 /// Prefix SharedPreferences keys for beta builds so window state is
 /// isolated from the stable installation.  Unchanged for stable builds.
 String _k(String key) => isPreRelease ? 'beta_$key' : key;
+
+/// True when a meaningful chunk of the given window rect overlaps at least one
+/// connected display's visible area — i.e. the window would actually be
+/// reachable on screen if we restored it there.
+///
+/// This is the guard for GitHub issue #78: on Windows, closing the app while
+/// the window is *minimized* makes `getPosition()` return the Win32 minimized
+/// sentinel (~ -32000, -32000). Without this check that poisoned coordinate was
+/// written to `window_x`/`window_y` and, on the next launch, `setBounds` placed
+/// the window far off-screen — it appeared only as an unreachable taskbar icon
+/// that WIN+arrow / ALT+Enter could not recover. Because SharedPreferences on
+/// Windows lives outside the app's data folders, uninstalling did not clear it,
+/// so the break survived a full reinstall. Rejecting off-screen bounds here
+/// self-heals those already-affected installs (we fall back to the centered
+/// default) as well as any window stranded by a since-disconnected monitor.
+Future<bool> _windowBoundsVisible(Rect bounds) async {
+  // Cheap, dependency-free rejection of the Win32 minimized sentinel first —
+  // this is also the fallback if display enumeration throws below.
+  const double kOffscreenSentinel = -30000;
+  if (bounds.left <= kOffscreenSentinel || bounds.top <= kOffscreenSentinel) {
+    return false;
+  }
+  try {
+    final displays = await screenRetriever.getAllDisplays();
+    for (final d in displays) {
+      final origin = d.visiblePosition ?? Offset.zero;
+      final size = d.visibleSize ?? d.size;
+      final screen = Rect.fromLTWH(
+        origin.dx,
+        origin.dy,
+        size.width,
+        size.height,
+      );
+      final overlap = bounds.intersect(screen);
+      // Require a grabbable chunk (roughly the title bar + a corner) to be
+      // visible, so a 1px sliver peeking onto a screen still counts as lost.
+      if (overlap.width > 120 && overlap.height > 60) return true;
+    }
+    return false;
+  } catch (e) {
+    // Display enumeration failed (rare, pre-runApp). We already ruled out the
+    // sentinel above, so trust the saved bounds rather than fighting the OS.
+    debugPrint('Failed to enumerate displays for window restore: $e');
+    return true;
+  }
+}
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -143,32 +193,41 @@ void main(List<String> args) async {
       // reproduce ghosting, but setBounds to the already-maximized size
       // is a no-op and the bug doesn't trigger. Even without this defense,
       // the stale values self-heal on the first non-maximized close (which
-      // saves correct bounds). This upgrade concern is only actionable if
-      // the _normal* seeding gap (see the NOTE in onWindowClose's max save
-      // branch) is ever fixed — that fix would need a migration guard here
-      // to ignore dimension values at or above screen resolution.
+      // saves correct bounds).
+      //
+      // Validate the saved rect is actually visible on a connected display
+      // before applying it (issue #78 — see _windowBoundsVisible). If it
+      // isn't (Win32 minimized sentinel, or a monitor that has since been
+      // unplugged), we skip setBounds and fall through to the centered
+      // default from WindowOptions instead of stranding the window off-screen.
+      Rect? savedBounds;
+      if (windowX != null &&
+          windowY != null &&
+          windowWidth != null &&
+          windowHeight != null) {
+        final candidate = Rect.fromLTWH(
+          windowX,
+          windowY,
+          windowWidth,
+          windowHeight,
+        );
+        if (await _windowBoundsVisible(candidate)) {
+          savedBounds = candidate;
+        }
+      }
+
       if (windowMaximized) {
         // Restore the non-maximized bounds first (so the OS remembers
         // the correct "restore down" size), then maximize. This never
         // puts the window at full-screen size in non-maximized state,
         // which was the root cause of the Windows ghost frame issue.
-        if (windowX != null &&
-            windowY != null &&
-            windowWidth != null &&
-            windowHeight != null) {
-          await windowManager.setBounds(
-            Rect.fromLTWH(windowX, windowY, windowWidth, windowHeight),
-          );
+        if (savedBounds != null) {
+          await windowManager.setBounds(savedBounds);
         }
         await windowManager.maximize();
-      } else if (windowX != null &&
-          windowY != null &&
-          windowWidth != null &&
-          windowHeight != null) {
+      } else if (savedBounds != null) {
         // Restore saved position + size
-        await windowManager.setBounds(
-          Rect.fromLTWH(windowX, windowY, windowWidth, windowHeight),
-        );
+        await windowManager.setBounds(savedBounds);
       }
     } catch (e) {
       debugPrint('Failed to restore window state: $e');
@@ -786,12 +845,20 @@ class _MyAppState extends State<MyApp> with WindowListener {
     // Must happen early while the window is still alive and queryable.
     try {
       final isMax = await windowManager.isMaximized();
+      // A window closed while MINIMIZED reports the Win32 minimized sentinel
+      // (~ -32000, -32000) from getPosition(). Saving that poisons the restore
+      // and strands the window off-screen next launch (issue #78). Treat
+      // minimized exactly like maximized: persist the tracked non-minimized
+      // _normal* bounds instead of the live (bogus) rect.
+      final isMin = await windowManager.isMinimized();
       final prefs = await SharedPreferences.getInstance();
 
-      if (isMax) {
-        // Save tracked NON-maximized bounds so the restore code never
-        // sets the window to full-screen size in non-maximized state.
-        // This eliminates the ghost frame root cause on Windows.
+      if (isMax || isMin) {
+        // Save tracked normal (non-maximized, non-minimized) bounds so the
+        // restore code never sets the window to full-screen size in the
+        // non-maximized state and never writes the minimized sentinel.
+        // This eliminates the ghost frame root cause on Windows and the
+        // off-screen-taskbar-icon bug from issue #78.
         //
         // NOTE: _normal* fields are populated ONLY from live windowManager
         // queries during this session (post-frame capture, resize/move
@@ -826,6 +893,23 @@ class _MyAppState extends State<MyApp> with WindowListener {
       await prefs.setBool(_k('window_maximized'), isMax);
     } catch (e) {
       debugPrint('Failed to save window state: $e');
+    }
+
+    // Flush any pending chat save BEFORE tearing anything down. The last turn's
+    // post-generation Needs vector + Realism scalars are applied in memory and
+    // reach the DB only through _saveChat(); some of those saves are
+    // fire-and-forget, so one can still be queued or mid-commit at close time.
+    // Awaiting the flush drains the save chain and writes the live state once
+    // more, so exit(0)/destroy() below can't kill an in-flight write. This is
+    // the fix for "the needs deltas from the last character message didn't
+    // stick after closing and reopening the app."
+    try {
+      await Provider.of<ChatService>(
+        context,
+        listen: false,
+      ).flushPendingSaves();
+    } catch (e) {
+      debugPrint('AG_DEBUG: Error flushing chat save on window close: $e');
     }
 
     // Stop managed backends (KoboldCPP + PseudoRemote) BEFORE destroying
@@ -1826,6 +1910,11 @@ class _MyAppState extends State<MyApp> with WindowListener {
     if (!storage.webServerSettings.webServerEnabled) return;
 
     final webServer = Provider.of<WebServerHost>(context, listen: false);
-    await webServer.start(storage.webServerSettings.webServerPort);
+    // Crash-loop-safe: a hung or crashing start disables the server instead of
+    // re-crashing on every launch and locking the user out (see startSafely).
+    await webServer.startSafely(
+      storage.webServerSettings.webServerPort,
+      isAutoStart: true,
+    );
   }
 }

@@ -32,7 +32,6 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
-import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
@@ -43,7 +42,6 @@ import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/user_persona_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/group_objectives_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
@@ -67,6 +65,8 @@ class _ChatPageState extends State<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   late final FocusNode _chatFocusNode;
   bool _autoScroll = true;
+  // Journal receipts tap-to-jump: the just-landed-on bubble, briefly tinted.
+  ChatMessage? _jumpFlashMessage;
   double _sidebarWidth = 300;
   int _inputMinLines = 1;
   double _dragAccumulator = 0;
@@ -422,6 +422,27 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  /// Journal receipts tap-to-jump: seek the chat to the message at
+  /// [position] (the stored absolute index), then flash the bubble so the
+  /// eye finds it. The seek itself lives in message_jump.dart.
+  Future<void> _jumpToMessage(int position) async {
+    final messages = Provider.of<ChatService>(context, listen: false).messages;
+    if (position < 0 || position >= messages.length) return;
+    final target = messages[position];
+    await jumpToMessage(
+      controller: _scrollController,
+      messages: messages,
+      target: target,
+    );
+    if (!mounted) return;
+    setState(() => _jumpFlashMessage = target);
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted && identical(_jumpFlashMessage, target)) {
+        setState(() => _jumpFlashMessage = null);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ChatService>(
@@ -635,8 +656,7 @@ class _ChatPageState extends State<ChatPage> {
                                       // or Scene Guest) — one path for all modes.
                                       final (senderImage, senderColor) =
                                           _resolveSpeaker(chatService, msg);
-                                      return MessageBubble(
-                                        key: ObjectKey(msg),
+                                      final bubble = MessageBubble(
                                         message: msg,
                                         characterImage: senderImage,
                                         index: reversedIndex,
@@ -812,6 +832,18 @@ class _ChatPageState extends State<ChatPage> {
                                                   .firstOrNull
                                             : character,
                                         chatService: chatService,
+                                      );
+                                      // GlobalObjectKey (was ObjectKey): same
+                                      // identity for list diffing, but
+                                      // locatable — jumpToMessage pages the
+                                      // list until this key materializes.
+                                      return JumpFlash(
+                                        key: GlobalObjectKey(msg),
+                                        flashed: identical(
+                                          msg,
+                                          _jumpFlashMessage,
+                                        ),
+                                        child: bubble,
                                       );
                                     },
                                   ),
@@ -1028,20 +1060,9 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  /// Per-character color palette for group chats.
-  static Color _groupCharacterColor(int index) {
-    const colors = [
-      Color(0xFF8B5CF6), // Purple
-      Color(0xFF10B981), // Emerald
-      Color(0xFFF59E0B), // Amber
-      Color(0xFFEF4444), // Red
-      Color(0xFF3B82F6), // Blue
-      Color(0xFFEC4899), // Pink
-      Color(0xFF14B8A6), // Teal
-      Color(0xFFF97316), // Orange
-    ];
-    return colors[index % colors.length];
-  }
+  /// Per-character color palette for group chats (single source lives in
+  /// sidebar_tokens.dart, shared with the sidebar widgets).
+  static Color _groupCharacterColor(int index) => groupCharacterColor(index);
 
   void _showGroupSettingsDialog(ChatService chatService) {
     final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
@@ -1567,28 +1588,6 @@ class _ChatPageState extends State<ChatPage> {
             child: const Text('Reset'),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildEvolveNowButton(BuildContext context, ChatService chat) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: () => _runEvolutionWithDialog(context, chat),
-        icon: const Icon(
-          Icons.auto_fix_high,
-          size: 14,
-          color: Colors.tealAccent,
-        ),
-        label: const Text(
-          'Evolve Now',
-          style: TextStyle(fontSize: 11, color: Colors.tealAccent),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Colors.tealAccent),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        ),
       ),
     );
   }
@@ -3092,16 +3091,6 @@ class _ChatPageState extends State<ChatPage> {
     final character = focused.card;
     final isGroup = chatService.isGroupMode;
     final cast = chatService.cast;
-    final userName = Provider.of<UserPersonaService>(
-      context,
-      listen: false,
-    ).persona.name;
-    String replace(String text) {
-      return MacroResolver().resolve(
-        text,
-        MacroContext(userName: userName, characterName: character.name),
-      );
-    }
 
     return Container(
       decoration: BoxDecoration(
@@ -3488,513 +3477,13 @@ class _ChatPageState extends State<ChatPage> {
           if (isGroup) _buildDirectorControls(chatService),
 
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // ── Author's Note (chat-level) ──
-                AuthorNoteSection(chatService: chatService),
-                const SizedBox(height: 16),
-
-                // ── Per-focused-participant detail (dispatched by store) ──
-                if (isGroup) ...[
-                  GroupMemberCard(
-                    character: character,
-                    chatService: chatService,
-                    avatarColor: _groupCharacterColor(
-                      cast.indexWhere((p) => p.id == focused.id) < 0
-                          ? 0
-                          : cast.indexWhere((p) => p.id == focused.id),
-                    ),
-                    isNextSpeaker:
-                        chatService.nextCharacter?.name == character.name,
-                    isExpanded: true,
-                    onTap: chatService.isGenerating
-                        ? () {}
-                        : () => chatService.setNextCharacter(character),
-                    avatarFile: character.imagePath != null
-                        ? _resolveCharImage(character.imagePath!)
-                        : null,
-                    evolutionCount: chatService.getEvolutionCountFor(character),
-                    // > 1 (not > 2): removing the second-to-last member is
-                    // allowed and auto-collapses the group back to a 1:1.
-                    canRemove: chatService.groupCharacters.length > 1 &&
-                        !chatService.isGenerating,
-                    onRemove:
-                        (chatService.groupCharacters.length > 1 &&
-                            !chatService.isGenerating)
-                        ? () async {
-                            final groupRepo =
-                                Provider.of<GroupChatRepository>(
-                                  context,
-                                  listen: false,
-                                );
-                            await chatService.removeCharacterFromGroup(
-                              character,
-                              groupRepo,
-                            );
-                          }
-                        : null,
-                    onOpenObjectives: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => GroupObjectivesDialog(
-                          chatService: chatService,
-                          groupCharacters: chatService.groupCharacters,
-                          initialCharacter: character,
-                        ),
-                      );
-                    },
-                  ),
-                  // The sidebar "Add Character" button was removed: adding a
-                  // member is now the `/join <name>` macro (always a full member
-                  // in a group), surfaced by the "type /" command helper. This
-                  // keeps the roster panel clean.
-                  const SizedBox(height: 12),
-                  Consumer<ChatService>(
-                    builder: (context, chat, _) => ChaosModeSection(
-                      chat: chat,
-                      onSpinRequested: () => _showChanceTimeOverlay(context),
-                    ),
-                  ),
-                  Consumer<ChatService>(
-                    builder: (context, chat, _) => SceneTimeSection(chat: chat),
-                  ),
-                  // NSFW Enhancement (arousal) — chat-wide toggle for the group.
-                  // A simple on/off (NOT the 1:1 NsfwEnhancementsSection, whose
-                  // per-speaker arousal gauge is volatile here and renders an empty
-                  // box when off — per-member arousal already shows in member cards).
-                  // Reads the stable group flag; the setter propagates to every
-                  // member so each speaker's eval actually evaluates arousal.
-                  Consumer<ChatService>(
-                    builder: (context, chat, _) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            size: 14,
-                            color: Color(0xFFEA580C),
-                          ),
-                          const SizedBox(width: 6),
-                          const Expanded(
-                            child: Text(
-                              'NSFW Enhancement (arousal)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFEA580C),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          SizedBox(
-                            height: 20,
-                            child: Switch(
-                              value: chat.isGroupNsfwEnabled,
-                              activeThumbColor: const Color(0xFFF97316),
-                              onChanged: chat.isGenerating
-                                  ? null
-                                  : (val) => chat.setNsfwCooldownEnabled(val),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  GroupLorebookSection(chatService: chatService),
-                  const SizedBox(height: 8),
-                  SummarySection(chatService: chatService),
-                ] else if (focused.realismEnabled) ...[
-                  // ── RAG Memory ──
-                  MemorySection(chatService: chatService),
-                  const SizedBox(height: 16),
-
-                // ── Active Fixation (always visible when set) ──
-                Consumer<ChatService>(
-                  builder: (context, chat, _) {
-                    if (chat.activeFixation.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.resolve(
-                            context,
-                            Colors.purpleAccent.withValues(alpha: 0.12),
-                            Colors.purple.shade50.withValues(alpha: 0.6),
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: AppColors.resolve(
-                              context,
-                              Colors.purpleAccent.withValues(alpha: 0.4),
-                              Colors.purple.shade200.withValues(alpha: 0.5),
-                            ),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.psychology,
-                              size: 16,
-                              color: AppColors.resolve(
-                                context,
-                                Colors.purpleAccent,
-                                Colors.purple.shade700,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'CURRENT FIXATION',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: AppColors.resolve(
-                                        context,
-                                        Colors.purpleAccent,
-                                        Colors.purple.shade700,
-                                      ),
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    chat.activeFixation,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textPrimary(context),
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                // ── Realism Mode ──
-                RealismSection(chatService: chatService),
-                const SizedBox(height: 8),
-
-                // ── Chaos Mode ──
-                Consumer<ChatService>(
-                  builder: (context, chat, _) => ChaosModeSection(
-                    chat: chat,
-                    onSpinRequested: () => _showChanceTimeOverlay(context),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // ── Objective ──
-                ObjectiveSection(chatService: chatService),
-                const SizedBox(height: 16),
-
-                // ── Character Evolution (collapsed by default) ──
-                Consumer<ChatService>(
-                  builder: (context, chat, _) {
-                    final storage = Provider.of<StorageService>(
-                      context,
-                      listen: false,
-                    );
-                    if (!storage.characterEvolutionEnabled) {
-                      return const SizedBox.shrink();
-                    }
-                    final evolvedP = chat.getEffectivePersonality;
-                    final evolvedS = chat.getEffectiveScenario;
-                    final count = chat.characterEvolutionCount;
-                    return CollapsibleSidebarSection(
-                      icon: Icons.psychology_alt,
-                      iconColor: AppColors.resolve(
-                        context,
-                        Colors.tealAccent,
-                        Colors.teal.shade700,
-                      ),
-                      title: 'Character Evolution',
-                      trailing: Text(
-                        count > 0 ? 'Evolved $count×' : 'Not evolved',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: count > 0
-                              ? AppColors.resolve(
-                                  context,
-                                  Colors.tealAccent,
-                                  Colors.teal.shade700,
-                                )
-                              : AppColors.textTertiary(context),
-                        ),
-                      ),
-                      initiallyExpanded: false,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (count > 0) ...[
-                            if (evolvedP != null && evolvedP.isNotEmpty) ...[
-                              Text(
-                                'Evolved Personality',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary(context),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainerOf(context),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: AppColors.resolve(
-                                      context,
-                                      Colors.tealAccent.withValues(alpha: 0.3),
-                                      Colors.teal.shade200.withValues(
-                                        alpha: 0.4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                constraints: const BoxConstraints(
-                                  maxHeight: 100,
-                                ),
-                                child: SingleChildScrollView(
-                                  child: Text(
-                                    evolvedP,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textPrimary(context),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (evolvedS != null && evolvedS.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Evolved Scenario',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.textSecondary(context),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainerOf(context),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: AppColors.resolve(
-                                      context,
-                                      Colors.tealAccent.withValues(alpha: 0.3),
-                                      Colors.teal.shade200.withValues(
-                                        alpha: 0.4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                constraints: const BoxConstraints(
-                                  maxHeight: 100,
-                                ),
-                                child: SingleChildScrollView(
-                                  child: Text(
-                                    evolvedS,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textPrimary(context),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: () => _showEvolutionDialog(
-                                    context,
-                                    chat,
-                                    focusedCard:
-                                        _focusedParticipant(chat)?.card,
-                                  ),
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    size: 14,
-                                    color: Colors.tealAccent,
-                                  ),
-                                  label: const Text(
-                                    'Review & Edit',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.tealAccent,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(
-                                      color: Colors.tealAccent.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                OutlinedButton.icon(
-                                  onPressed: () =>
-                                      _showResetEvolutionConfirmSidebar(
-                                        context,
-                                        chat,
-                                      ),
-                                  icon: const Icon(
-                                    Icons.restart_alt,
-                                    size: 14,
-                                    color: Colors.redAccent,
-                                  ),
-                                  label: const Text(
-                                    'Reset',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.redAccent,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    side: BorderSide(
-                                      color: Colors.redAccent.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            _buildEvolveNowButton(context, chat),
-                          ] else ...[
-                            _buildEvolveNowButton(context, chat),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Personality & scenario will evolve as you chat, or tap above to evolve now.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.white24,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // ── Chat Summary ──
-                SummarySection(chatService: chatService),
-                const SizedBox(height: 16),
-
-                // ── Scenario ──
-                Consumer<ChatService>(
-                  builder: (context, chat, _) {
-                    final storage = Provider.of<StorageService>(
-                      context,
-                      listen: false,
-                    );
-                    final evolvedS = chat.getEffectiveScenario;
-                    final hasEvolution =
-                        storage.characterEvolutionEnabled &&
-                        evolvedS != null &&
-                        evolvedS.isNotEmpty;
-                    if (hasEvolution) return const SizedBox.shrink();
-                    return SidebarSection(
-                      title: 'Scenario',
-                      content: replace(character.scenario),
-                    );
-                  },
-                ),
-
-                  // ── Lorebook Triggers (bottom) ──
-                  const SizedBox(height: 16),
-                  LorebookSection(character: character),
-
-                  // ── Description ──
-                  SidebarSection(
-                    title: 'Description',
-                    content: replace(character.description),
-                  ),
-                ] else ...[
-                  // ── Lite NPC (Scene Guest) — realism tracking off ──
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerOf(context),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppColors.borderOf(context).withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.visibility_off,
-                          size: 16,
-                          color: AppColors.iconSecondary(context),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Lite NPC — no realism or needs tracking for this guest.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary(context),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SidebarSection(
-                    title: 'Scenario',
-                    content: replace(character.scenario),
-                  ),
-                  const SizedBox(height: 8),
-                  LorebookSection(character: character),
-                  SidebarSection(
-                    title: 'Description',
-                    content: replace(character.description),
-                  ),
-                  const SizedBox(height: 16),
-                  Consumer<ChatService>(
-                    builder: (context, chat, _) => ChaosModeSection(
-                      chat: chat,
-                      onSpinRequested: () => _showChanceTimeOverlay(context),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SummarySection(chatService: chatService),
-                ],
-              ],
+            child: SidebarBody(
+              chatService: chatService,
+              focused: focused,
+              onSpinRequested: () => _showChanceTimeOverlay(context),
+              onEvolveNow: () => _runEvolutionWithDialog(context, chatService),
+              onJumpToMessage: _jumpToMessage,
+              resolveCharImage: _resolveCharImage,
             ),
           ),
         ],

@@ -158,6 +158,15 @@ class ChatFacade {
         'busy': _chat.isGuestBusy,
       },
       'pendingDetection': _chat.pendingGuestDetection?.name,
+      // Chance Time (chaos) park state. While `pending` is true the engine is
+      // frozen waiting for the user to accept their fate — the web reveal modal
+      // reads this on (re)connect (a phone that slept through the live
+      // `chance_time` WS event still recovers). `event` is pre-resolved
+      // ({{char}} substituted); the desktop shows its own spinning wheel.
+      'chanceTime': {
+        'pending': _chat.isAwaitingChanceTime,
+        'event': ?_chat.webChanceTimeDisplay,
+      },
     };
   }
 
@@ -283,6 +292,13 @@ class ChatFacade {
 
   void stop() {
     _chat.stopGeneration();
+    _notify();
+  }
+
+  /// Web "Accept Your Fate": resolves a parked Chance Time (chaos) event so the
+  /// paused send can continue and stream its reply. No-op if nothing is parked.
+  Future<void> acceptChanceTime() async {
+    await _chat.acceptPendingChanceTime();
     _notify();
   }
 

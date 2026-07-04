@@ -720,35 +720,33 @@ void main() {
     // real account: Argon2id password + optional TOTP). No PIN setting to test.
   });
 
-  // ─── Summary Settings ─────────────────────────────────────────────
+  // ─── Journal Settings ─────────────────────────────────────────────
 
-  group('Summary settings persistence', () {
-    test('setSummaryEnabled persists to SharedPreferences', () async {
+  group('Journal settings persistence', () {
+    test('journalEnabled defaults to true', () async {
       final svc = await createStorageService();
-      await svc.setSummaryEnabled(true);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('summary_enabled'), true);
+      expect(svc.journalEnabled, true);
     });
 
-    test('setSummaryInterval clamps and persists', () async {
+    test('setJournalEnabled persists to SharedPreferences', () async {
       final svc = await createStorageService();
-      await svc.setSummaryInterval(1); // should clamp to 3
+      await svc.setJournalEnabled(false);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('summary_interval'), 3);
+      expect(prefs.getBool('journal_enabled'), false);
     });
 
-    test('setSummaryMaxWords clamps and persists', () async {
+    test('setJournalInterval clamps and persists', () async {
       final svc = await createStorageService();
-      await svc.setSummaryMaxWords(2000); // should clamp to 1000
+      await svc.setJournalInterval(1); // should clamp to 3
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('summary_max_words'), 1000);
+      expect(prefs.getInt('journal_interval'), 3);
     });
 
-    test('setSummaryPrompt persists to SharedPreferences', () async {
+    test('setJournalMaxCards clamps and persists', () async {
       final svc = await createStorageService();
-      await svc.setSummaryPrompt('Custom summary prompt');
+      await svc.setJournalMaxCards(5000); // should clamp to 1000
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('summary_prompt'), 'Custom summary prompt');
+      expect(prefs.getInt('journal_max_cards'), 1000);
     });
   });
 
@@ -806,24 +804,6 @@ void main() {
       await svc.setRagEmbeddingModel('custom-embed');
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('rag_embedding_model'), 'custom-embed');
-    });
-  });
-
-  // ─── Auto-Persona Settings ────────────────────────────────────────
-
-  group('Auto-persona settings persistence', () {
-    test('setAutoPersonaEnabled persists to SharedPreferences', () async {
-      final svc = await createStorageService();
-      await svc.setAutoPersonaEnabled(true);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('auto_persona_enabled'), true);
-    });
-
-    test('setAutoPersonaInterval clamps and persists', () async {
-      final svc = await createStorageService();
-      await svc.setAutoPersonaInterval(100); // should clamp to 50
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('auto_persona_interval'), 50);
     });
   });
 

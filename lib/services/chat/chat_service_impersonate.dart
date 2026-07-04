@@ -220,7 +220,6 @@ extension ChatServiceImpersonate on ChatService {
       final macroCtx = MacroContext(
         userName: userName,
         characterName: speakingCharacter.name,
-        summaryMaxWords: _storageService.memorySettings.summaryMaxWords,
         chatId: _currentSessionId,
         characterId: speakingCharacter.dbId,
       );
@@ -334,6 +333,9 @@ extension ChatServiceImpersonate on ChatService {
         maxLength: g.resolveMaxLength(_storageService),
         minLength: g.resolveMinLength(_storageService),
         minP: g.resolveMinP(_storageService),
+        topP: g.resolveTopP(_storageService),
+        topK: g.resolveTopK(_storageService),
+        dryMultiplier: g.resolveDryMultiplier(_storageService),
         temperature: g.resolveTemperature(_storageService),
         repeatPenalty: g.resolveRepeatPenalty(_storageService),
         repPenTokens: g.resolveRepeatPenaltyTokens(_storageService),

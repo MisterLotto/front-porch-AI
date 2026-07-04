@@ -8,6 +8,7 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -48,19 +49,33 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  StreamSubscription<StoopCardStats>? _statsSub;
 
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    _statsSub = StoopMessageSocket.onCardStats.listen(_applyCardStats);
     _loadAll();
   }
 
   @override
   void dispose() {
+    _statsSub?.cancel();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  // Someone voted on or downloaded a card somewhere on The Stoop — tick the
+  // counters on any tile currently showing it (grid, rows, and the hero, which
+  // derives from these lists).
+  void _applyCardStats(StoopCardStats s) {
+    var changed = false;
+    for (final cards in [_grid, _picks, _following, _groups]) {
+      changed = s.applyTo(cards) || changed;
+    }
+    if (changed && mounted) setState(() {});
   }
 
   String? get _token => context.read<AuthState>().accessToken;

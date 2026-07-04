@@ -134,6 +134,24 @@ class PseudoRemoteService extends LLMService {
     }
   }
 
+  // Same KoboldCpp server as the managed local backend — same tool door
+  // (capable models like the Qwen3 family call tools; the rest yield no
+  // calls and the Journal's negotiation falls back to its XML transport).
+  @override
+  Future<LlmToolResponse?> generateWithTools(
+    GenerationParams params,
+    List<Map<String, dynamic>> tools,
+  ) async {
+    if (!isReady) return null;
+    return postOpenAiChatWithTools(
+      _baseUrl,
+      params,
+      tools,
+      registerClient: (client) => _activeClient = client,
+      onDone: () => _activeClient = null,
+    );
+  }
+
   @override
   Stream<String> generateStream(GenerationParams params) async* {
     if (!isReady) {

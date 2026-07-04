@@ -42,6 +42,7 @@ import 'package:front_porch_ai/ui/settings/dialogs/model_search_dialog.dart';
 import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
 
 import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
+import 'package:front_porch_ai/ui/settings/widgets/web_login_section.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).
 // Only the discoverable on/off switch was re-surfaced in the Voice & Media tab via
@@ -2008,10 +2009,25 @@ class _SettingsPageState extends State<SettingsPage> {
                           onChanged: (val) async {
                             await storage.setWebServerEnabled(val);
                             if (val) {
-                              await webServer.start(storage.webServerPort);
-                              // Guide the user through how they'll reach it.
-                              if (context.mounted) {
+                              // startSafely reverts + disables on failure so a
+                              // bad start can never leave the app in a launch
+                              // crash loop.
+                              final ok = await webServer.startSafely(
+                                storage.webServerPort,
+                              );
+                              if (!context.mounted) return;
+                              if (ok) {
+                                // Guide the user through how they'll reach it.
                                 await WebAccessSetupDialog.show(context);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Web server failed to start and was '
+                                      'turned off.',
+                                    ),
+                                  ),
+                                );
                               }
                             } else {
                               await webServer.stop();
@@ -2066,24 +2082,17 @@ class _SettingsPageState extends State<SettingsPage> {
                               ],
                             ),
                           ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Login', style: theme.textTheme.bodySmall),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Account + optional 2FA\n(create it in the browser)',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      Text('Login', style: theme.textTheme.bodySmall),
+                      const SizedBox(height: 4),
+                      if (webServer.auth case final auth?)
+                        WebLoginSection(
+                          // Rebuild after a reset from the web side too.
+                          key: ValueKey(webServer.isRunning),
+                          auth: auth,
+                        ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -3809,6 +3818,28 @@ class _SettingsPageState extends State<SettingsPage> {
             decimalPlaces: 2,
           ),
           _buildSlider(
+            'Top-P',
+            storage.topP,
+            0.1,
+            1.0,
+            (val) => storage.setTopP(val),
+            context,
+            divisions: 90,
+            showInput: true,
+            decimalPlaces: 2,
+          ),
+          _buildSlider(
+            'Top-K',
+            storage.topK.toDouble(),
+            0,
+            200,
+            (val) => storage.setTopK(val.toInt()),
+            context,
+            divisions: 200,
+            showInput: true,
+            isInteger: true,
+          ),
+          _buildSlider(
             'Repeat Penalty',
             storage.generationSettings.repeatPenalty,
             1.0,
@@ -3849,6 +3880,17 @@ class _SettingsPageState extends State<SettingsPage> {
             (val) => storage.setXtcProbability(val),
             context,
             divisions: 20,
+            showInput: true,
+            decimalPlaces: 2,
+          ),
+          _buildSlider(
+            'DRY Strength (local models)',
+            storage.dryMultiplier,
+            0.0,
+            3.0,
+            (val) => storage.setDryMultiplier(val),
+            context,
+            divisions: 60,
             showInput: true,
             decimalPlaces: 2,
           ),

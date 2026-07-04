@@ -35,9 +35,6 @@ extension ChatServiceObjectives on ChatService {
           false; // explicit secondary zero for _summaryPaused (symmetric; _loadActiveObjectives empty hygiene)
       _isSummaryGenerating =
           false; // secondary zero in _loadActiveObjectives empty (0-session hygiene for summary flag)
-      _userMessagesSinceLastPeriodicEval = 0;
-      _isExtractingFacts =
-          false; // secondary fact flag + counter zero in _loadActiveObjectives empty (0-session hygiene; fact_extraction)
       _isEvolvingCharacter = false;
       _evolutionStatus = '';
       _evolutionError =

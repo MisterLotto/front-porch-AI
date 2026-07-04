@@ -40,6 +40,13 @@ class GenerationParams {
   final int? reasoningMaxTokens;
   final List<String>? bannedPhrases;
 
+  /// Top-K cutoff; 0 disables it (KoboldCpp and remote APIs both treat 0 as
+  /// off, so it's only serialized when > 0).
+  final int topK;
+
+  /// DRY anti-repetition strength (KoboldCpp only; 0 = off).
+  final double dryMultiplier;
+
   /// Optional system prompt for chat APIs. When provided, OpenRouter/LM Studio
   /// will send this as a proper 'system' role message instead of lumping
   /// everything into a single 'user' message. KoboldCPP ignores this field.
@@ -67,10 +74,12 @@ class GenerationParams {
     this.repeatPenalty = 1.1,
     this.topP = 0.9,
     this.minP = 0.0,
+    this.topK = 0,
+    this.dryMultiplier = 0.0,
     this.repPenTokens = 64,
     this.dynatempRange,
     this.xtcThreshold = 0.1,
-    this.xtcProbability = 0.5,
+    this.xtcProbability = 0.0, // 0 = off (samplers are delivered now)
     this.stopSequences,
     this.reasoningEnabled = false,
     this.reasoningEffort = 'medium',
@@ -83,10 +92,39 @@ class GenerationParams {
   });
 }
 
+/// One tool invocation from a tool-calling response (OpenAI `tool_calls`
+/// entry, arguments already JSON-decoded; malformed arguments decode to {}).
+class LlmToolCall {
+  final String name;
+  final Map<String, dynamic> arguments;
+
+  const LlmToolCall({required this.name, required this.arguments});
+}
+
+/// Result of a tool-enabled, non-streaming generation: the tool calls the
+/// model made (possibly none) plus any plain assistant text it also wrote.
+class LlmToolResponse {
+  final List<LlmToolCall> calls;
+  final String text;
+
+  const LlmToolResponse({required this.calls, required this.text});
+}
+
 /// Abstract interface for all LLM backends (local KoboldCPP, OpenRouter, etc).
 abstract class LLMService extends ChangeNotifier {
   /// Stream tokens one at a time for real-time display.
   Stream<String> generateStream(GenerationParams params);
+
+  /// Non-streaming generation with OpenAI-style tool calling. Returns null
+  /// when this backend can't speak the tools protocol — callers fall back to
+  /// their text transport (the Journal falls back to its XML tags). Every
+  /// real backend implements it (remote APIs and local KoboldCpp alike —
+  /// Qwen3-class local models call tools well); a model that can't simply
+  /// produces no calls and the caller's negotiation handles the rest.
+  Future<LlmToolResponse?> generateWithTools(
+    GenerationParams params,
+    List<Map<String, dynamic>> tools,
+  ) async => null;
 
   /// Abort the current in-flight generation request (closes the HTTP client).
   void abortGeneration() {}

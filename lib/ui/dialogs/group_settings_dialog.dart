@@ -1470,7 +1470,10 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
     setState(() {
       _passageOfTimeEnabled = value;
     });
-    widget.chatService.timeService.setPassageOfTimeEnabled(value);
+    // Through the ChatService wrapper (saves + notifies) — the raw
+    // TimeService setter is side-effect-free, so the old direct call never
+    // persisted the toggle beyond this dialog's local state.
+    widget.chatService.setPassageOfTimeEnabled(value);
   }
 
   void _updateChaosMode(bool value) {

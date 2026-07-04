@@ -25,6 +25,9 @@ export type WsEvent = {
   progress?: number;
   status?: string;
   generating?: boolean;
+  // `chance_time` event (chaos): whether a Chance Time is now parked awaiting the
+  // user's "accept your fate". `data` carries the pre-resolved event text.
+  pending?: boolean;
 };
 
 export class ChatSocket {

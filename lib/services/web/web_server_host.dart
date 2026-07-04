@@ -44,7 +44,13 @@ import 'package:front_porch_ai/services/web/server_bootstrap.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
 import 'package:front_porch_ai/services/web/tunnels/tunnel_manager.dart';
+import 'package:front_porch_ai/services/web/tunnels/lan_ip.dart';
+import 'package:front_porch_ai/services/web/tunnels/remote_setup_result.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
+
+// Re-export the extracted RemoteSetupResult so existing consumers importing
+// this host file are unaffected.
+export 'package:front_porch_ai/services/web/tunnels/remote_setup_result.dart';
 
 /// Lifecycle owner for the web server (the ChangeNotifier that `main.dart` and
 /// the settings UI talk to). It only bootstraps + binds; all request behavior
@@ -82,6 +88,7 @@ class WebServerHost extends ChangeNotifier {
   // we can detach it on stop().
   VoidCallback? _realismListener;
   bool _wasEvaluatingRealism = false;
+  bool _wasAwaitingChanceTime = false;
 
   // Near-instant library live-sync: one debounced listener attached to the
   // CharacterRepository, FolderService and GroupChatRepository (all
@@ -152,8 +159,14 @@ class WebServerHost extends ChangeNotifier {
       _storyPipelineService = service;
 
   /// The auth service (lazily built once a database is available) — exposed so
-  /// settings UI can surface account/2FA state.
-  AuthService? get auth => _auth;
+  /// the desktop settings UI can surface the account and offer the local
+  /// recovery actions (sign out all devices / reset web login) even while the
+  /// server itself is stopped. `start()` reuses the same instance.
+  AuthService? get auth {
+    final db = _db;
+    if (db == null) return null;
+    return _auth ??= AuthService(db);
+  }
 
   /// Remote-access orchestrator (null until the server is running). Exposed so
   /// the Flutter settings UI can read tunnel state directly.
@@ -184,7 +197,7 @@ class WebServerHost extends ChangeNotifier {
         (settings.webServerAutoRemote && tsRunning);
     final bindAddress = exposeAll ? InternetAddress.anyIPv4 : '127.0.0.1';
 
-    final auth = _auth = AuthService(db);
+    final auth = _auth ??= AuthService(db);
     await auth.sessions.sweep();
 
     final chatService = _chatService;
@@ -216,6 +229,27 @@ class WebServerHost extends ChangeNotifier {
           streamHub.broadcast({'event': 'processing', 'active': false});
         }
         _wasEvaluatingRealism = active;
+
+        // Chance Time: chaos parks sendMessage on a completer until the user
+        // accepts their fate. Desktop pops its wheel from a ChangeNotifier flag;
+        // web clients have no such hook, so announce the park (and its release)
+        // here so the reveal modal can open/close. `data` carries the
+        // pre-resolved event for an instant reveal; /api/chat/state.chanceTime
+        // is the reconnect fallback. Edge-triggered — a couple of cheap reads on
+        // every other notify.
+        final awaitingChance = chatService.isAwaitingChanceTime;
+        if (awaitingChance != _wasAwaitingChanceTime) {
+          streamHub.broadcast(
+            awaitingChance
+                ? {
+                    'event': 'chance_time',
+                    'pending': true,
+                    'data': ?chatService.webChanceTimeDisplay,
+                  }
+                : {'event': 'chance_time', 'pending': false},
+          );
+          _wasAwaitingChanceTime = awaitingChance;
+        }
       }
 
       _realismListener = onProcessing;
@@ -283,6 +317,16 @@ class WebServerHost extends ChangeNotifier {
         ? SettingsFacade(_storage, _llmProvider!)
         : null;
 
+    // The Stoop relay. The web client keeps its own Stoop session (tokens in
+    // browser localStorage, sent per-request); the facade only relays calls
+    // and runs the local import chain on downloads.
+    final stoopFacade = StoopFacade(
+      _storage,
+      db,
+      characters: _characterRepository,
+      groups: _groupChatRepository,
+    );
+
     final worldFacade = _worldRepository != null
         ? WorldFacade(_worldRepository!, _characterRepository)
         : null;
@@ -348,6 +392,7 @@ class WebServerHost extends ChangeNotifier {
       chatToolsFacade: chatToolsFacade,
       groupFacade: groupFacade,
       settingsFacade: settingsFacade,
+      stoopFacade: stoopFacade,
       worldFacade: worldFacade,
       backendFacade: backendFacade,
       imageFacade: imageFacade,
@@ -365,7 +410,7 @@ class WebServerHost extends ChangeNotifier {
     _server = await shelf_io.serve(buildWebHandler(deps), bindAddress, bindPort)
       ..autoCompress = true;
 
-    if (exposeAll) _lanIp = await _detectLanIp();
+    if (exposeAll) _lanIp = await detectPrivateLanIp();
     debugPrint(
       '[WebServerHost] Listening on http://${exposeAll ? (_lanIp ?? '0.0.0.0') : 'localhost'}:${_server!.port}',
     );
@@ -376,6 +421,42 @@ class WebServerHost extends ChangeNotifier {
       await tunnelManager.enableTailscale();
     }
     notifyListeners();
+  }
+
+  /// Crash-loop-safe entry point for starting the server, used by launch-time
+  /// auto-start (main.dart) and the Settings toggle. A hung or crashing [start]
+  /// must never lock the user out, since "enabled" is already persisted and
+  /// would re-crash every launch. So a persisted "starting" breadcrumb is set
+  /// before the risky bind and cleared on success — if [isAutoStart] still sees
+  /// it set on a later launch, the previous start never finished, so we disable
+  /// the server and open cleanly. The start is also time-boxed, and any
+  /// error/timeout disables it and tears down the half-started state. Returns
+  /// whether the server ended up running.
+  Future<bool> startSafely(int port, {bool isAutoStart = false}) async {
+    final settings = _storage.webServerSettings;
+    if (isAutoStart && settings.webServerStarting) {
+      debugPrint(
+        '[WebServerHost] Previous start did not finish — disabling the web '
+        'server so the app launches cleanly (re-enable it in Settings).',
+      );
+      await settings.setWebServerStarting(false);
+      await settings.setWebServerEnabled(false);
+      return false;
+    }
+    try {
+      await settings.setWebServerStarting(true);
+      await start(port).timeout(const Duration(seconds: 25));
+      await settings.setWebServerStarting(false);
+      return isRunning;
+    } catch (e) {
+      debugPrint('[WebServerHost] Web server start failed: $e — disabling.');
+      await settings.setWebServerStarting(false);
+      await settings.setWebServerEnabled(false);
+      try {
+        await stop();
+      } catch (_) {}
+      return false;
+    }
   }
 
   Future<void> stop() async {
@@ -444,56 +525,4 @@ class WebServerHost extends ChangeNotifier {
     );
   }
 
-  Future<String?> _detectLanIp() async {
-    try {
-      final interfaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-        includeLoopback: false,
-      );
-      for (final iface in interfaces) {
-        for (final addr in iface.addresses) {
-          final ip = addr.address;
-          if (ip.startsWith('192.168.') ||
-              ip.startsWith('10.') ||
-              _is172Private(ip)) {
-            return ip;
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  bool _is172Private(String ip) {
-    if (!ip.startsWith('172.')) return false;
-    final second = int.tryParse(ip.split('.')[1]) ?? 0;
-    return second >= 16 && second <= 31;
-  }
-}
-
-/// Outcome of [WebServerHost.setupRemoteAccess] — drives the tutorial's final
-/// "you're live / enable HTTPS / not yet" state.
-class RemoteSetupResult {
-  const RemoteSetupResult({
-    required this.outcome,
-    this.httpsUrl,
-    this.portUrl,
-    this.reachable = false,
-  });
-
-  /// How the Tailscale HTTPS serve resolved (ok / needs the admin toggle / …).
-  final TailscaleServeOutcome outcome;
-
-  /// Clean no-port `https://<magicdns>` address — null unless [outcome] is ok.
-  final String? httpsUrl;
-
-  /// `http://<magicdns>:<port>` fallback — works whenever Tailscale is up, even
-  /// before HTTPS certs are enabled.
-  final String? portUrl;
-
-  /// Whether the best available address was just verified to route back here.
-  final bool reachable;
-
-  /// The address to surface first: HTTPS when available, else the port URL.
-  String? get primaryUrl => httpsUrl ?? portUrl;
 }

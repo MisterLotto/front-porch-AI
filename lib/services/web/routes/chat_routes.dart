@@ -39,6 +39,7 @@ class WebChatRoutes {
     router.post('/api/chat/select', _select);
     router.post('/api/chat/select-group', _selectGroup);
     router.post('/api/chat/send', _send);
+    router.post('/api/chat/chance-time/accept', _acceptChanceTime);
     router.post('/api/chat/stop', _stop);
     router.post('/api/chat/regenerate', _regenerate);
     router.post('/api/chat/cancel-realism', _cancelRealism);
@@ -143,6 +144,14 @@ class WebChatRoutes {
       return JsonResponse.badRequest('text is required');
     }
     _facade.send(text);
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  /// Resolve a parked Chance Time (chaos) event — the web counterpart of the
+  /// desktop wheel's "Accept Your Fate". Bodyless: the server already holds the
+  /// pre-picked pending event, so the client just says "go".
+  Future<shelf.Response> _acceptChanceTime(shelf.Request request) async {
+    await _facade.acceptChanceTime();
     return JsonResponse.ok({'status': 'ok'});
   }
 

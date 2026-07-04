@@ -33,6 +33,17 @@ void main() {
       expect(await store.validate(token), isNull);
     });
 
+    test('revokeOthers keeps only the given session alive', () async {
+      final store = SessionStore(db);
+      final phone = await store.create('local', userAgent: 'phone');
+      final laptop = await store.create('local', userAgent: 'laptop');
+      final current = await store.create('local', userAgent: 'desktop');
+      await store.revokeOthers('local', current);
+      expect(await store.validate(current), 'local');
+      expect(await store.validate(phone), isNull);
+      expect(await store.validate(laptop), isNull);
+    });
+
     test('an expired session is rejected and pruned', () async {
       var now = 1700000000000;
       final issuer = SessionStore(db, nowMs: () => now);

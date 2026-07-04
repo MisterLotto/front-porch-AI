@@ -19,7 +19,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -77,8 +76,11 @@ import 'package:front_porch_ai/services/chat/llm_eval_engine.dart';
 import 'package:front_porch_ai/services/chat/realism_evals.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
 import 'package:front_porch_ai/services/chat/objective_proposal.dart';
-import 'package:front_porch_ai/services/chat/summary_service.dart';
-import 'package:front_porch_ai/services/chat/fact_extraction.dart';
+import 'package:front_porch_ai/services/chat/journal_store.dart';
+import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
+import 'package:front_porch_ai/services/chat/journal_physics.dart';
+import 'package:front_porch_ai/services/chat/journal_review.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
 import 'package:front_porch_ai/services/chat/evolution_service.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
@@ -710,9 +712,8 @@ class ChatService extends ChangeNotifier {
   /// constant so the eval is infrequent and turns stay cheap.
   static const int _castScanInterval = 4;
 
-  /// Primary turns since the last cast-detection scan (sibling to the facts
-  /// counter [_userMessagesSinceLastPeriodicEval]; zeroed at the same Scene
-  /// Guest reset sites alongside `_pendingGuestDeparture = null`).
+  /// Primary turns since the last cast-detection scan (zeroed at the same
+  /// Scene Guest reset sites alongside `_pendingGuestDeparture = null`).
   int _userMessagesSinceLastCastScan = 0;
 
   /// A detected candidate awaiting the user's accept/ignore choice. Surfaced to
@@ -1464,6 +1465,12 @@ class ChatService extends ChangeNotifier {
   _pendingChanceTimeEvent; // set when wheel lands; cleared after UI reads it
   bool _chanceTimePendingTrigger =
       false; // true for one cycle to pop the overlay
+  // The single event the web/mobile "reveal your fate" modal shows + accepts
+  // while sendMessage is parked on the completer below. The desktop samples its
+  // own spinning wheel; a phone has no room for one, so we pre-pick one event
+  // from the same pool. Lives only during the park (set at the gate, cleared on
+  // resume) — see [isAwaitingChanceTime] / [acceptPendingChanceTime].
+  String? _webChanceTimeEvent;
 
   // ── Sims/Needs Simulation (extracted) + Needs Impact Evaluator ──
   // Straight decay ticks in _needsSimulation; model deltas (+ optional Director review when authority) in _needsImpactEvaluator.
@@ -1839,7 +1846,7 @@ class ChatService extends ChangeNotifier {
   // on* dead post step11 objective move, cleaned).
   // 0 @Deprecated shims. 0 new god private _ methods beyond the required thin delegates (_fireLLMEval, _stripThinkBlocks, _extractJson*, evaluateNeedsImpactCall; the 5 _evaluate*Call thins now point to realism_evals; generate/check thins now to objective_proposal; the void _ count grep stayed 15; +1 late final only; thins/calls/late final only per plan). (cross-ref setActiveCharacter:1572 etc)
   // Stateless/prompt-only: no reset calls needed. Reset hygiene comments list full set + llm_eval_engine (stateless or prompt-only;
-  // no reset calls needed; incomplete zeroing... now complete (see CLAUDE.md)) + realism_evals (stateless or prompt-only; no reset calls needed) + objective_proposal (stateless or prompt-only; no reset calls needed) + summary_service (stateless or prompt-only; no reset calls needed) + cross-refs (e.g. setActiveCharacter:1572). Both startNew branches explicit.
+  // no reset calls needed; incomplete zeroing... now complete (see CLAUDE.md)) + realism_evals (stateless or prompt-only; no reset calls needed) + objective_proposal (stateless or prompt-only; no reset calls needed) + journal_maintenance (stateless or prompt-only; no reset calls needed) + cross-refs (e.g. setActiveCharacter:1572). Both startNew branches explicit.
   // 1:1 vs group + oneShot vs normal dispatch/parity preserved exactly (cbs + impersonation temp re-load; qualified).
   // aug exercising only passive/qualified (no llm-eval-specific aug file edits; resets/loads/greetings/post hit by pre-existing
   // startNew/setActive/_loadLast/group in key suites; full eval/JSON/strip + needs impact only in dedicated + manual;
@@ -2065,135 +2072,119 @@ class ChatService extends ChangeNotifier {
     getIsCheckingCompletion: () => _isCheckingCompletion,
     setIsCheckingCompletion: (v) => _isCheckingCompletion = v,
     onNotify: notifyListeners,
+    // The completion check runs pre-generation; the flag is consumed by
+    // _maybeRunJournalPass post-generation (event-triggered journal pass).
+    onObjectiveCompleted: () => _journalMaintenance.eventKickPending = true,
   );
 
-  // ── Chat Summary (step 12: _generateSummaryInBackground + _maybeUpdateSummary + force + prompt/RAG/strip/update) ──
-  // Plain leaf sibling to LlmEvalEngine / realism_evals / objective_proposal.
-  // Owns the full generate (prompt template macros {{words}}/{{user}}/{{char}}, history
-  // condensation skipping director, previousSummaryBlock, RAG grounding via getMemorySourceIds +
-  // getAllContentForCharacters, genParams max=words*3 / temp 0.3 / no-reasoning / stops, stream
-  // accumulate, strip think completed+unclosed + numbered analysis preamble skip + trailing
-  // sentence trim, result update via cbs + save/notify).
-  // Cadence (user msg count since lastIndex >= storage.interval), pause, force, enabled,
-  // flag _isSummaryGenerating, scalars _summary/_lastIndex/_paused, save/load in session,
-  // reset zeros stay thin/coordinated in god per plan ("thin delegation here; full summary
-  // in step 12"). God thins at every prior call site + post-gen call site (full excision
-  // of old _generate body).
-  // 0 @Deprecated. 0 new god private _ methods (thins as public surface; void _ count
-  // grep stays 15 after every edit + final; +1 late final + thins/calls + reset comment
-  // syncs only per plan).
-  // Stateless/prompt-only: no reset calls needed on leaf. See expanded "keep reset blocks
-  // in sync" at *all* ~15+ sites (full prior+current list + summary_service (stateless or
-  // prompt-only; no reset calls needed) + "incomplete zeroing of secondary config on
-  // group/0-session/new-chat now complete"; both startNew branches explicit; cross-refs
-  // e.g. setActiveCharacter:1572).
-  // 1:1 vs group parity for summary text/lastIndex/paused/generating/force/pause/cadence
-  // (dispatch preserved via cbs; summary per-chat, context names/RAG correct at trigger).
-  // aug exercising only passive/qualified (no summary-specific aug file edits; full in
-  // dedicated summary_service_test + manual; exercised via god thins _maybeUpdateSummary/
-  // force/generate ; qualified notes only in dedicated header + god + MD per precedent).
-  // Anti-accumulation: explicit dead audit (no new _Summary/*Summary privates in god);
-  // deletion of moved bodies as part of task.
-  // Barrel not added (internal to ChatService; per "unless 3+ locations").
-  late final _summaryService = SummaryService(
-    getMacroResolver: () => _macroResolver,
-    getLlmService: () =>
-        testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService,
-    getSummaryEnabled: () => _storageService.memorySettings.summaryEnabled,
-    getSummaryInterval: () => _storageService.memorySettings.summaryInterval,
-    getSummaryPrompt: () => _storageService.memorySettings.summaryPrompt,
-    getSummaryMaxWords: () => _storageService.memorySettings.summaryMaxWords,
+  // ── The Journal (docs/design/journal-memory.md) ──
+  // Per-chat, per-character memory cards + "Where we are" recap. One periodic
+  // maintenance pass (journal_maintenance leaf) replaces the old summary +
+  // fact-extraction jobs; the recap reuses the _summary/_summaryLastIndex/
+  // _isSummaryGenerating scalars (and their persistence + reset hygiene) so
+  // no new god state is introduced. Cards live in the journal_memories table
+  // via journal_store; the injection builder renders the speaker's pinned +
+  // hot cards into the prompt. Strictly session-scoped — no memory ever
+  // crosses chats. 1:1 ↔ group parity by construction (same owner loop).
+  late final _journalStore = JournalStore(
+    getDb: () => _db,
+    // Availability-guarded single-text embedder; null when RAG is off or the
+    // sidecar is down, which just disables cold-card recall (no-RAG floor).
+    embedText: (text) async => await _memoryService?.embedText(text),
+  );
+
+  // Review-first parking + the ONE proposal applier (both modes go through
+  // it). Public via [journalReview] for the sidebar banner + review dialog.
+  late final _journalReview = JournalReview(
+    store: _journalStore,
+    getSessionId: () => _currentSessionId,
+    setRecap: (t) => _summary = t,
+    setCursor: (i) => _summaryLastIndex = i,
+    onSaveChat: _saveChat,
+    onNotify: notifyListeners,
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+  );
+
+  JournalReview get journalReview => _journalReview;
+
+  late final _journalMaintenance = JournalMaintenance(
+    store: _journalStore,
+    review: _journalReview,
+    fireLLMEval: (p) => _fireLLMEval(p),
+    // Tool-calling door (§4.3): same eval posture as _fireLLMEval (low temp,
+    // reasoning off). All backends probe — local KoboldCpp included (Qwen3
+    // etc. call tools fine); incapable models fall back to the XML floor.
+    fireToolEval: (prompt, tools) {
+      final service =
+          testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+      return service.generateWithTools(
+        GenerationParams(
+          prompt: prompt,
+          maxLength: 4000,
+          temperature: 0.1,
+          repeatPenalty: 1.15,
+          topP: 0.5,
+          xtcProbability: 0.0,
+          reasoningEnabled: false,
+          stopSequences: const [],
+        ),
+        tools,
+      );
+    },
+    getReviewFirst: () => _storageService.memorySettings.journalReviewFirst,
+    getBackendIdentity: () {
+      final service =
+          testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+      // Remote model name AND local model path both ride the key, so
+      // switching either re-probes tool support (capability is per model).
+      return '${service.backendName}|${_storageService.remoteModelName}'
+          '|${_storageService.lastUsedModelPath ?? ''}';
+    },
+    stripThinkBlocks: _stripThinkBlocks,
+    getSessionId: () => _currentSessionId,
     getActiveCharacter: () => _activeCharacter,
     getActiveGroup: () => _activeGroup,
-    getUserName: () => _userPersonaService.persona.name,
+    getGroupCharacters: () => _groupCharacters,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
     getMessages: () => _messages,
-    getCurrentSummary: () => _summary,
+    getUserName: () => _userPersonaService.persona.name,
+    getCursor: () => _summaryLastIndex,
+    setCursor: (i) => _summaryLastIndex = i,
+    getRecap: () => _summary,
+    setRecap: (t) => _summary = t,
+    getIsPassRunning: () => _isSummaryGenerating,
+    setIsPassRunning: (v) => _isSummaryGenerating = v,
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
     onNotify: notifyListeners,
     onSaveChat: _saveChat,
-    getIsSummaryGenerating: () => _isSummaryGenerating,
-    setIsSummaryGenerating: (v) => _isSummaryGenerating = v,
-    updateSummary: (t) => _summary = t,
-    updateSummaryLastIndex: (i) => _summaryLastIndex = i,
-    isMemoryOperational: () =>
-        _memoryService != null && _memoryService!.isOperational,
-    getMemorySourceIds: _getMemorySourceIds,
-    getAllContentForCharacters: (ids) =>
-        _memoryService!.getAllContentForCharacters(ids),
   );
 
-  // ── Fact Extraction (step 13: _extractFactsInBackground full + _consolidate + _isValidFact + quality gate + RP-aware prompt + consolidate) ──
-  // Plain leaf sibling to LlmEvalEngine / realism_evals / objective_proposal / summary_service.
-  // Owns the full extract (early guard + set flag via cb, recent user msgs filter skip __director__ + last 10,
-  // existingFacts block + userName, displayText, charNames list from active+group for exclusion + charNamesStr,
-  // long strict RP-aware extractionPrompt with CRITICAL RULES (only universal timeless context-free real-person facts,
-  // ignore all RP/* / in-char / fictional / relationship / character names / scene-specific), GOOD/BAD examples,
-  // isThinkingModel (local + koboldThinking/reasoningEnabled), GenerationParams (1024/0.2/1.15, stop ] or ]\n,
-  // banEos/trim for local thinking), stream generate with early break if after strip ends with ']', accumulate,
-  // post-stream strip think (use central), trim, debug raw, ```json codeblock extraction, RegExp \[.*\] dotAll parse
-  // + jsonDecode to List<String>, if empty or parse fail debug+return, cleanFacts=where(_isValidFact), log rejected,
-  // if empty after gate return, log accepted, await addLearnedFacts(clean + embed if avail), currentCount > max →
-  // await _consolidate, debug saved) + consolidate (facts copy, <=max return, consolidationPrompt (merge related dense
-  // preserving ALL specific details, ex cat+name+color, remove redundant, drop vague, target ~max or fewer, ONLY JSON array),
-  // raw = await fireLLMEval, null→fallback truncate+update+return, text=strip, codeblock strip, arrayMatch, no match fallback,
-  // try { consolidated=jsonDecode, cleaned=where _isValid, debug before→after, update with cleaned } catch fallback truncate).
-  // Cadence/flag/counter/periodic orchestration / enabled / sequence / call sites / load/save of transients stay thin
-  // in god per plan ("thin delegation here; full fact extraction in step 13").
-  // The facts cadence now uses its dedicated _userMessagesSinceLastPeriodicEval vs autoPersonaInterval
-  // (god thin coordinator decides; leaf has no cadence logic).
-  // God late final (after _summaryService) + thins/delegates at *every* prior call site (the one in
-  // _runPeriodicEvalsInSequence and the guard/flag use) with *full excision* of the moved bodies from god.
-  // 0 @Deprecated shims. 0 new god private _ methods (thins as the public surface; live `grep -c '^\s*void _[a-zA-Z]' lib/services/chat_service.dart` *must stay exactly 15* after *every* edit + final; +1 late final + thins/calls + reset comment syncs only).
-  // Stateless/prompt-only (no owned reset/seed/load state for processing — god owns the scalars/flags/cadence; no reset calls needed on leaf).
-  // God reset "keep blocks in sync" comments expanded at *all* ~15+ documented sites (full prior+current list + fact_extraction (stateless or prompt-only; no reset calls needed) + evolution_service (stateless or prompt-only; no reset calls needed) + realism_verification (stateless or prompt-only; no reset calls needed) + "incomplete zeroing... now complete (see CLAUDE.md)"; both startNew branches explicit; cross-refs e.g. setActiveCharacter:1572).
-  // The facts cadence counter (_userMessagesSinceLastPeriodicEval) is zeroed at every one of these sites (in addition to the flags) to keep its schedule in sync after chat switches / 0-session / group entry ("incomplete zeroing of secondary config on group/0-session/new-chat now complete (see CLAUDE.md)"). Character-evolution cadence is driven separately by _characterEvolutionCount vs evolutionInterval (no side-counter), so it needs no zeroing here.
-  // 1:1 vs group parity for fact extraction (rejection of current+group char names must work identically; dispatch preserved via cbs; facts are user-global but context for extraction/rejection is chat-specific).
-  // aug/integration tests receive *only* qualified passive notes in headers/comments (exact precedent phrasing from step 12: "aug exercising only passive/qualified (no fact-extraction-specific aug file edits; full in dedicated + manual; exercised via god thins _maybeRunPeriodicEvals/_runPeriodicEvalsInSequence/_extractFactsInBackground ; qualified notes only in dedicated header + god + MD per precedent)"); no leaf-specific logic edits.
-  // Anti-accumulation/dead-code audit (explicit greps of affected methods in god; no new _Fact/*Fact/ExtractFact privates in god; deletion of moved + any dead/vestigial as part of task).
-  // Barrel not added (internal to ChatService only; per "unless 3+ locations").
-  late final _factExtraction = FactExtraction(
-    getLlmService: () =>
-        testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService,
-    fireLLMEval: (p) => _fireLLMEval(p),
-    stripThinkBlocks: _stripThinkBlocks,
-    getIsLocal: () => testLlmServiceOverride != null
-        ? testIsLocalOverride
-        : (_llmProvider?.isLocal ?? false),
-    getKoboldThinkingModel: () =>
-        _storageService.backendSettings.koboldThinkingModel,
-    getReasoningEnabled: () => _storageService.backendSettings.reasoningEnabled,
-    getUserName: () => _userPersonaService.persona.name,
-    getLearnedFacts: () => _userPersonaService.persona.learnedFacts,
-    addLearnedFacts: (facts, {embedService}) =>
-        _userPersonaService.addLearnedFacts(facts, embedService: embedService),
-    updateLearnedFacts: (facts) async {
-      final p = _userPersonaService.persona;
-      await _userPersonaService.updatePersona(p.copyWith(learnedFacts: facts));
-    },
-    getActiveCharacter: () => _activeCharacter,
-    getGroupCharacters: () => _groupCharacters,
-    getMessages: () => _messages,
-    getIsExtractingFacts: () => _isExtractingFacts,
-    setIsExtractingFacts: (v) => _isExtractingFacts = v,
-    isMemoryOperational: () =>
-        _memoryService != null && _memoryService!.isOperational,
-    getEmbeddingService: () => _memoryService?.embeddingService,
-  );
+  /// Public door for the Journal UI (phase 3): the sidebar panel and the
+  /// diary dialog read/mutate cards directly on the store (scoped by
+  /// [currentSessionId] + the participant's stable id); the injection builder
+  /// re-reads the DB every turn, so UI edits reach the prompt with no extra
+  /// plumbing. Instance getter (not extension) so FakeChatService can
+  /// override it via `implements` (see characterEvolutionCount precedent).
+  JournalStore get journalStore => _journalStore;
 
-  // Thin delegation (full _extractFactsInBackground + consolidate + quality gate + prompt/LLM/stream/JSON/_isValidFact
-  // in fact_extraction step 13; cadence/flag/counter/periodic orchestration / enabled / sequence / call sites stay thin
-  // in god per plan; "thin delegation here; full fact extraction in step 13").
-  Future<void> _extractFactsInBackground() =>
-      _factExtraction.extractFactsInBackground();
+  late final _journalInjection = JournalInjection(
+    store: _journalStore,
+    getSessionId: () => _currentSessionId,
+    // Same scalar EmotionInjection reads — in group non-obs the pre-gen
+    // load-into-scalars dance has set it to the upcoming speaker's emotion
+    // by assembly time, so mood-congruent recall is per-speaker (parity).
+    getCurrentEmotion: () => _realismEnabled ? _characterEmotion : '',
+  );
 
   // ── Character Evolution (step 14) wiring ──
-  // Plain leaf sibling to fact_extraction / summary_service / llm_eval_engine etc.
+  // Plain leaf sibling to journal_maintenance / llm_eval_engine etc.
   // owns the full evolution trigger/extract/reset + effective personality/scenario layering
   // + group per-char counts + LLM for traits + status/error.
   // Periodic coordination / enabled / trigger call sites / load/save of evolved scalars/maps
   // stay thin in god ("thin delegation here; full character evolution in step 14").
   // Cadence decision (live chat user-message count vs persisted _characterEvolutionCount + evolutionInterval) lives
-  // in the god _maybeRunPeriodicEvals thin coordinator (plus the run sequence thin); evolution
-  // leaf is purely trigger/extract/LLM/persist/layering. God late final (after _factExtraction) + thins/delegates at *every* prior call site for
+  // in the god _maybeRunPeriodicEvals thin coordinator; evolution
+  // leaf is purely trigger/extract/LLM/persist/layering. God late final + thins/delegates at *every* prior call site for
   // trigger/manual/getEffective* (full excision of moved bodies), 0 @Deprecated shims,
   // 0 new god private _ methods (thins as the public surface; live `grep -c '^\s*void _[a-zA-Z]'
   // lib/services/chat_service.dart` *must stay exactly 15* after *every* edit + final;
@@ -2204,9 +2195,8 @@ class ChatService extends ChangeNotifier {
   // (see CLAUDE.md full list + incomplete zeroing hygiene; buffer removal complete)
   // + "incomplete zeroing... now complete (see CLAUDE.md)"
   // + *both* startNewChat branches explicit + cross-refs e.g. setActiveCharacter:1572).
-  // Explicit _isEvolvingCharacter=false + _evolutionStatus='' + _evolutionError='' (modeled on _isExtractingFacts) added at 10+ sites + decl + startNew both + common in fix round to make "now complete" hold in *code* (not just comments); maps/counts were already present.
+  // Explicit _isEvolvingCharacter=false + _evolutionStatus='' + _evolutionError='' added at 10+ sites + decl + startNew both + common in fix round to make "now complete" hold in *code* (not just comments); maps/counts were already present.
   // Evolution cadence decision uses live chat user-message count + persisted _characterEvolutionCount vs evolutionInterval (robust; no side-counter).
-  // The facts cadence counter (_userMessagesSinceLastPeriodicEval) is still zeroed on the hygiene sites to keep its schedule in sync after context switches.
   // 1:1 vs group parity for evolution (per-char counts, effective personality/scenario layering,
   // trigger behavior must be identical whether 1:1 or group per-speaker; dispatch preserved
   // via cbs + god's impersonation dance where needed for target).
@@ -2726,6 +2716,40 @@ class ChatService extends ChangeNotifier {
   /// Called by the overlay once it has opened. Clears the auto-trigger flag.
   void consumeChanceTimeTrigger() => _chanceTimePendingTrigger = false;
 
+  // ── Web/mobile Chance Time surface ──────────────────────────────────────
+  // The desktop pops its wheel from the one-shot [chanceTimePendingTrigger] via
+  // a ChangeNotifier. Web clients (which drive the same shared ChatService over
+  // HTTP/WS) have no such hook and no spinning wheel, so they observe the park
+  // through these accessors and resolve it with [acceptPendingChanceTime]. All
+  // of this is UI-coordination glue for the completer above — the simulation is
+  // untouched, so 1:1/group parity is unaffected.
+
+  /// True from the moment a Chance Time parks [sendMessage] until it is
+  /// accepted. The durable signal the web surface uses to show — and, after a
+  /// phone wakes and reconnects, re-show — the reveal modal.
+  bool get isAwaitingChanceTime =>
+      _chanceTimeCompleter != null && !_chanceTimeCompleter!.isCompleted;
+
+  /// The speaker a Chance Time event is attributed to: the upcoming group
+  /// speaker, else the 1:1 host. Shared by the desktop wheel overlay and the
+  /// web accept path so both attribute the event identically.
+  String get chanceTimeSpeakerName =>
+      nextCharacter?.name ?? activeCharacter?.name ?? 'Character';
+
+  /// The pre-picked pending event with `{{char}}` resolved, for the web reveal
+  /// modal. Null when nothing is parked.
+  String? get webChanceTimeDisplay =>
+      _webChanceTimeEvent?.replaceAll('{{char}}', chanceTimeSpeakerName);
+
+  /// Web/mobile "Accept Your Fate": applies the pre-picked pending event using
+  /// the same attribution the desktop wheel uses, then lets generation resume.
+  /// No-op if nothing is parked (e.g. the desktop already accepted).
+  Future<void> acceptPendingChanceTime() async {
+    final raw = _webChanceTimeEvent;
+    if (raw == null) return;
+    await applyChanceTimeResult(raw, chanceTimeSpeakerName);
+  }
+
   // (nsfw/relationship long list of @Dep shims excised in final cleanup; use nsfwService / relationshipService)
 
   /// Human-readable mood label containing exact emotion string and valence direction.
@@ -2802,31 +2826,13 @@ class ChatService extends ChangeNotifier {
   }
 
   /// Build the user persona block for the generation prompt.
-  /// Layered: user's self-description is ground truth, learned facts are additive.
-  /// When the embedding service is available, selects only the most relevant facts
-  /// for the current conversation context instead of injecting all facts.
+  /// The user's self-description is ground truth. (What the character has
+  /// *learned* about the user now lives in her per-chat Journal cards —
+  /// injected separately via journal_injection — not here.)
   Future<String> _buildUserPersonaBlock(String userName) async {
     final persona = _userPersonaService.persona;
     final personaText = persona.persona.trim();
-    final allFacts = persona.learnedFacts;
     final safeUserName = userName.replaceAll(RegExp(r'[\n\r"]'), ' ').trim();
-
-    // Select relevant facts using embeddings if available
-    List<String> facts;
-    if (allFacts.length > 15 && _memoryService != null) {
-      // Build context from last few messages
-      final recentContext = _messages.reversed
-          .take(3)
-          .map((m) => '${m.sender}: ${m.displayText}')
-          .join('\n');
-      facts = await _userPersonaService.getRelevantFacts(
-        conversationContext: recentContext,
-        embedService: _memoryService!.embeddingService,
-        maxFacts: 15,
-      );
-    } else {
-      facts = List<String>.from(allFacts);
-    }
 
     final buf = StringBuffer();
     // ALWAYS establish the user's identity by NAME — even with no persona text.
@@ -2840,17 +2846,6 @@ class ChatService extends ChangeNotifier {
       buf.writeln("$safeUserName's Persona: $safePersonaText");
     } else {
       buf.writeln('$safeUserName is the human you are talking with.');
-    }
-
-    if (facts.isNotEmpty) {
-      buf.writeln(
-        '[Discovered traits — observations learned from conversation. '
-        'The user\'s self-description above takes priority if there is a conflict.]',
-      );
-      for (final fact in facts) {
-        final safeFact = fact.replaceAll(RegExp(r'[\n\r"]'), ' ').trim();
-        buf.writeln('- $safeFact');
-      }
     }
     // The model HAS the name above — nudge it to actually use it instead of
     // reaching for a generic epithet for the human.
@@ -3314,10 +3309,17 @@ class ChatService extends ChangeNotifier {
         // Create a completer so sendMessage pauses here until the wheel resolves
         _chanceTimeCompleter = Completer<void>();
         _chanceTimePendingTrigger = true;
+        // Pre-pick the one event the web/mobile reveal modal shows + accepts
+        // (the desktop spins its own wheel instead — same pool, same accept).
+        final webWheel = _chaosModeService.spinWheelEvents();
+        _webChanceTimeEvent = webWheel.isNotEmpty
+            ? webWheel.first
+            : 'Fate intervenes in an unexpected way.';
         notifyListeners(); // UI observes this to show the wheel
         // Wait for the user to spin + accept fate (completes in applyChanceTimeResult)
         await _chanceTimeCompleter!.future;
         _chanceTimeCompleter = null;
+        _webChanceTimeEvent = null;
       }
     }
 
@@ -3693,48 +3695,65 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  // ── Summary System ──────────────────────────────────────────────────
+  // ── The Journal recap ("Where we are") ──────────────────────────────
+  // The recap reuses the _summary scalar + Sessions.summary persistence the
+  // old summary system used, so the public surface below (sidebar, web
+  // facade, EvolutionService's getSummary cb) is unchanged. The generator is
+  // the Journal maintenance pass (journal_maintenance leaf), which also
+  // produces the per-character memory cards in the same LLM call.
 
-  /// Manually set the summary text.
+  /// Manually set the recap text.
   void setSummary(String text) {
     _summary = text;
     _saveChat();
     notifyListeners();
   }
 
-  /// Pause or resume automatic summary updates.
+  /// Pause or resume the automatic Journal maintenance pass.
   void setSummaryPaused(bool paused) {
     _summaryPaused = paused;
     notifyListeners();
   }
 
-  /// Force an immediate summary regeneration.
-  // Thin delegation / coord (full generate in summary_service step 12; flag/cadence
-  // /paused/enabled stay thin in god per plan; "thin delegation here; full summary in step 12").
+  /// Force an immediate Journal maintenance pass (cards + recap), bypassing
+  /// the interval. Backs the sidebar/web "Regenerate" button (name kept for
+  /// the existing public surface).
   Future<void> forceSummaryUpdate() async {
     if (_isSummaryGenerating) return;
-    await _generateSummaryInBackground();
+    await _journalMaintenance.runMaintenancePass(force: true);
   }
 
-  /// Check if a summary update is needed and trigger it non-blockingly.
-  // Thin delegation / coord (cadence count + guards here; full _generate + prompt/RAG/strip
-  // in summary_service step 12; "thin delegation here; full summary in step 12").
-  void _maybeUpdateSummary() {
-    if (!_storageService.memorySettings.summaryEnabled) return;
+  /// Check if a Journal maintenance pass is due and trigger it non-blockingly.
+  /// Cadence (design §4.2): user messages since the _summaryLastIndex cursor
+  /// vs the journalInterval setting, PLUS an immediate pass when the window
+  /// holds a significant engine-stamped event (big bond/trust swing, trust
+  /// repair, Chance Time) or an objective completed (the eventKickPending
+  /// flag, set pre-generation, consumed here post-generation so the pass
+  /// never competes with the main LLM call). Guards mirror the old summary
+  /// coordinator.
+  void _maybeRunJournalPass() {
+    if (!_storageService.memorySettings.journalEnabled) return;
     if (_summaryPaused) return;
     if (_isSummaryGenerating) return;
     if (_llmProvider == null) return;
 
-    // Count user messages since last summary update
-    int userMessagesSinceSummary = 0;
-    for (int i = _summaryLastIndex; i < _messages.length; i++) {
-      if (_messages[i].isUser) userMessagesSinceSummary++;
+    final windowStart = _summaryLastIndex.clamp(0, _messages.length);
+    int userMessagesSincePass = 0;
+    for (int i = windowStart; i < _messages.length; i++) {
+      if (_messages[i].isUser) userMessagesSincePass++;
     }
+    if (userMessagesSincePass == 0) return;
 
-    if (userMessagesSinceSummary >=
-        _storageService.memorySettings.summaryInterval) {
+    final due =
+        userMessagesSincePass >= _storageService.memorySettings.journalInterval;
+    final eventKick =
+        _journalMaintenance.eventKickPending ||
+        JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
+
+    if (due || eventKick) {
+      _journalMaintenance.eventKickPending = false;
       // Fire and forget — don't await
-      _generateSummaryInBackground();
+      _journalMaintenance.runMaintenancePass();
     }
   }
 
@@ -3779,36 +3798,22 @@ class ChatService extends ChangeNotifier {
   }
 
 
-  // Two god-owned "since last" counters for the independent periodic features.
-  // Facts/auto-persona uses the first (tied to autoPersonaInterval).
-  // Character evolution uses its own (tied to evolutionInterval) so the UI slider
-  // and setting actually control when evolution fires.
-  // Both must be zeroed on *all* the same reset/new-chat/group/load paths as the
-  // flags (see every "keep reset blocks in sync" + "incomplete zeroing... now complete"
-  // + explicit sites below and in the evolution/fact wiring sections).
-  int _userMessagesSinceLastPeriodicEval = 0; // facts / auto-persona cadence
-  bool _isExtractingFacts =
-      false; // secondary runtime flag (transient guard for fact extraction leaf); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths to prevent leak of in-flight state across contexts (see CLAUDE.md "keep reset blocks in sync" + "incomplete zeroing..." (leaves incl fact/evo/verif + needs_impact etc)). The facts counter must likewise be zeroed on those paths (prevents stale/early trigger after context switch). Character-evolution cadence is driven separately by _characterEvolutionCount vs evolutionInterval (no side-counter), so only this facts counter needs zeroing on those paths.
-
-  /// Coordinator for the two independent periodic background evals (fact extraction + character evolution).
-  /// Facts uses its dedicated counter.
+  /// Coordinator for the periodic background evals (character evolution +
+  /// cast detection). User-fact extraction and chat summaries were replaced
+  /// by the Journal maintenance pass (_maybeRunJournalPass, journal_maintenance
+  /// leaf), which has its own cadence via the _summaryLastIndex cursor.
   /// Evolution decides due using live user message count in the chat vs the persisted per-char evolution count.
   /// This makes the "Evolve every X messages" setting (slider) reliably control the schedule, even after
   /// loads, switches, or enabling mid-chat. (Replaces fragile side-counter for evolution cadence.)
-  // Thin delegation / coord (per-feature cadence counts + per-feature guards + enabled/Interval checks
-  // + call to sequence or direct thins here; full work in the step 13/14 leaves;
-  // "thin delegation here; full fact extraction in step 13"; "thin delegation here; full character evolution in step 14").
-  // 0 new god private _ methods (only edits to these two existing coordinators + thins).
   void _maybeRunPeriodicEvals() {
-    // Scene Guest cast detection (1:1 only; independent of the facts/evolution
+    // Scene Guest cast detection (1:1 only; independent of the evolution
     // settings below). Runs on its own cadence and fires-and-forget so it never
     // blocks the turn. See _maybeRunCastDetection.
     _maybeRunCastDetection();
 
-    final autoPersona = _storageService.memorySettings.autoPersonaEnabled;
     final autoEvolution =
         _storageService.memorySettings.characterEvolutionEnabled;
-    if (!autoPersona && !autoEvolution) return;
+    if (!autoEvolution) return;
     if (_llmProvider == null) return;
 
     // Note: this path is *not* gated on !_observerMode.
@@ -3816,21 +3821,9 @@ class ChatService extends ChangeNotifier {
     // _triggerCharacterEvolution for rationale). Realism/Needs simulation is
     // the only system that pauses in Director Mode.
 
-    // Per-feature advance + due checks. Use the *specific* busy flag so one feature
-    // can make progress even if the other is currently running (independent schedules).
-    bool factsDue = false;
     bool evoDue = false;
 
-    if (autoPersona && !_isExtractingFacts) {
-      _userMessagesSinceLastPeriodicEval++;
-      if (_userMessagesSinceLastPeriodicEval >=
-          _storageService.memorySettings.autoPersonaInterval) {
-        _userMessagesSinceLastPeriodicEval = 0;
-        factsDue = true;
-      }
-    }
-
-    if (autoEvolution && !_isEvolvingCharacter) {
+    if (!_isEvolvingCharacter) {
       // Cadence is "evolve every N turns vs the persisted evolution count" — robust
       // across loads/reloads (no fragile side-counter). In a GROUP this counts the
       // speaker's OWN turns + their OWN evolution count, so each character evolves
@@ -3857,23 +3850,12 @@ class ChatService extends ChangeNotifier {
       }
     }
 
-    if (!factsDue && !evoDue) return;
+    if (!evoDue) return;
 
-    if (factsDue && evoDue) {
-      debugPrint(
-        '[Periodic] ▶ Triggering periodic evals (facts every ${_storageService.memorySettings.autoPersonaInterval}, evolution every ${_storageService.memorySettings.evolutionInterval} user messages)',
-      );
-    } else if (factsDue) {
-      debugPrint(
-        '[Periodic] ▶ Triggering fact extraction (every ${_storageService.memorySettings.autoPersonaInterval} user messages)',
-      );
-    } else {
-      debugPrint(
-        '[Periodic] ▶ Triggering character evolution (every ${_storageService.memorySettings.evolutionInterval} user messages)',
-      );
-    }
-
-    _runPeriodicEvalsInSequence(runFacts: factsDue, runEvolution: evoDue);
+    debugPrint(
+      '[Periodic] ▶ Triggering character evolution (every ${_storageService.memorySettings.evolutionInterval} user messages)',
+    );
+    _triggerCharacterEvolution();
   }
 
   /// Cadence + trigger for Scene Guest cast detection (1:1 only). Advances the
@@ -3941,31 +3923,6 @@ class ChatService extends ChangeNotifier {
     return detected;
   }
 
-  /// Run the due steps (facts then evolution when both due) to preserve sequencing
-  /// on coincident turns while allowing independent cadences.
-  // Thin delegation / coord (the if(enabled) + await + thin calls here;
-  // full extract in fact leaf step 13; full trigger/extract/LLM/persist/layering in evolution leaf step 14).
-  Future<void> _runPeriodicEvalsInSequence({
-    bool runFacts = false,
-    bool runEvolution = false,
-  }) async {
-    if (runFacts && _storageService.memorySettings.autoPersonaEnabled) {
-      debugPrint('[Periodic] Step: Extracting user facts...');
-      await _extractFactsInBackground();
-    }
-    if (runEvolution &&
-        _storageService.memorySettings.characterEvolutionEnabled) {
-      debugPrint('[Periodic] Step: Evolving character...');
-      _triggerCharacterEvolution();
-    }
-  }
-
-  // Fact extraction + consolidate + _isValidFact + static patterns + quality gate moved to
-  // fact_extraction.dart (step 13 leaf); thin delegate + late final above; full excision
-  // as part of task (deletion part of). See _factExtraction + _extractFactsInBackground thin.
-  // Character evolution moved to evolution_service.dart (step 14 leaf); thins + late final
-  // above; full excision of block + related as part of task (deletion part of).
-
   // ── Character Evolution (moved to evolution_service.dart step 14 leaf) ──
   // Full trigger/extract/LLM/prompt/parse/persist/effective layering/group per-char
   // owned in leaf; thins + late final above (after fact); "thin delegation here;
@@ -3977,7 +3934,7 @@ class ChatService extends ChangeNotifier {
   // reliably schedules evolution on the configured interval (no mutable side-counter).
 
   bool _isEvolvingCharacter =
-      false; // secondary runtime flag (transient guard for evolution_service leaf); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths to prevent leak of in-flight state across contexts (see every "keep reset blocks in sync" + "incomplete zeroing... now complete (see CLAUDE.md)" + evolution_service (stateless or prompt-only; no reset calls needed) + fact_extraction (stateless or prompt-only; no reset calls needed)). The _evolutionStatus / _evolutionError must likewise be zeroed on those paths (prevents stale UI status/error bleed after context switch). Evolution cadence itself uses _characterEvolutionCount vs evolutionInterval (no side-counter to zero).
+      false; // secondary runtime flag (transient guard for evolution_service leaf); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths to prevent leak of in-flight state across contexts (see every "keep reset blocks in sync" + "incomplete zeroing... now complete (see CLAUDE.md)" + evolution_service (stateless or prompt-only; no reset calls needed)). The _evolutionStatus / _evolutionError must likewise be zeroed on those paths (prevents stale UI status/error bleed after context switch). Evolution cadence itself uses _characterEvolutionCount vs evolutionInterval (no side-counter to zero).
   // Explicit zero sites for evolution flag/status/error (12+ documented; part of "all ~15+" hygiene with briefing lists at 17+ / 31 phrase matches):
   // - startNewChat both branches (fresh + load path)
   // - setActiveCharacter main + empty session
@@ -3988,7 +3945,7 @@ class ChatService extends ChangeNotifier {
   // - deleteSession / fork paths
   // - decl init + common reset blocks
   // - _maybeRunPeriodicEvals early guard
-  // The facts cadence counter (_userMessagesSinceLastPeriodicEval) is zeroed at *exactly* these same sites so its schedule doesn't leak stale "due soon" state after context switch. Evolution cadence uses _characterEvolutionCount vs evolutionInterval (no side-counter). Cross-refs e.g. setActiveCharacter ~1572 (precedent; lines may shift post edits -- verified live at doc time).
+  // Evolution cadence uses _characterEvolutionCount vs evolutionInterval (no side-counter). Cross-refs e.g. setActiveCharacter ~1572 (precedent; lines may shift post edits -- verified live at doc time).
   String _evolutionStatus = '';
   String _evolutionError = '';
 
@@ -4047,13 +4004,6 @@ class ChatService extends ChangeNotifier {
 
     return sourceIds;
   }
-
-  // Thin delegation (full generateSummaryInBackground + prompt macros + history/RAG +
-  // 0.3 temp + max=words*3 + central strip think+analysis + update via cbs + save/notify
-  // in summary_service step 12; cadence/paused/enabled/flag/scalars/save-load/reset
-  // coordination stayed thin in god per plan; "thin delegation here; full summary in step 12").
-  Future<void> _generateSummaryInBackground() =>
-      _summaryService.generateSummaryInBackground();
 
   /// Cancel an in-progress Realism evaluation stream (if any).
   ///
@@ -4298,11 +4248,19 @@ class ChatService extends ChangeNotifier {
   /// Thin wrapper: compute display ({{char}} replace), set UI flag, delegate core
   /// (pressure/injection/metadata/save/notify) to service, then complete completer.
   Future<void> applyChanceTimeResult(String event, String charName) async {
+    // One shared ChatService serves both the desktop wheel and any web clients,
+    // so either surface may resolve the same parked completer. Whoever lands
+    // first wins; a late second accept is a no-op instead of completing an
+    // already-completed completer (which would throw a StateError).
+    final completer = _chanceTimeCompleter;
+    if (completer == null || completer.isCompleted) return;
     final display = event.replaceAll('{{char}}', charName);
     _pendingChanceTimeEvent = display;
     await _chaosModeService.applyPreparedEvent(display);
-    // Resume the paused sendMessage flow (UI coordination stays in god)
-    _chanceTimeCompleter?.complete();
+    // Resume the paused sendMessage flow (UI coordination stays in god).
+    // Re-check: applyPreparedEvent awaited above, so the other surface could
+    // have completed it in the gap.
+    if (!completer.isCompleted) completer.complete();
   }
 
   /// Per-turn auto-trigger check. Delegates to service (verbatim roll/pressure logic).

@@ -47,28 +47,29 @@ void main() {
       expect((s['time'] as Map)['dayCount'], 3);
       expect((s['objectives'] as Map)['primary'], isNull);
       expect((s['objectives'] as Map)['secondary'], isEmpty);
-      // Memory + summary blocks are present with defaults from StorageService.
+      // Memory + recap blocks are present with defaults from StorageService.
       expect((s['memory'] as Map).containsKey('ragEnabled'), isTrue);
-      expect((s['summary'] as Map).containsKey('interval'), isTrue);
+      expect((s['memory'] as Map).containsKey('journalEnabled'), isTrue);
+      expect((s['summary'] as Map).containsKey('text'), isTrue);
     });
 
     test('applySettings only writes keys that are present', () async {
       final beforeWindow = storage.ragWindowSize;
       await facade.applySettings({
         'ragEnabled': true,
-        'summaryInterval': 9,
+        'journalInterval': 9,
         'unknownKey': 'ignored',
       });
       expect(storage.ragEnabled, isTrue);
-      expect(storage.summaryInterval, 9);
+      expect(storage.journalInterval, 9);
       // A setting we never passed must stay untouched.
       expect(storage.ragWindowSize, beforeWindow);
     });
 
     test('applySettings ignores wrong-typed values', () async {
-      final before = storage.summaryMaxWords;
-      await facade.applySettings({'summaryMaxWords': 'not-an-int'});
-      expect(storage.summaryMaxWords, before);
+      final before = storage.journalInterval;
+      await facade.applySettings({'journalInterval': 'not-an-int'});
+      expect(storage.journalInterval, before);
     });
 
     test('objective task ops return false when the id is unknown', () async {

@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Opt out of Flutter's experimental "merged platform/UI thread" (default ON
+	     in the 3.41.x engine). Left on, the app process launches but the window
+	     never presents on a Finder/dock (LaunchServices) launch — it only renders
+	     via `open`/`flutter run`. The stable separate-thread model renders
+	     reliably in all launch paths. -->
+	<key>FLTEnableMergedPlatformUIThread</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

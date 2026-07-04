@@ -362,12 +362,13 @@ class MessageEmbeddings extends Table {
   IntColumn get dimensions => integer()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
-  /// 'message' for normal RAG windows (default), 'needs_event' for long-term
-  /// salient Needs simulation events (high-magnitude pleasure/embarrassment etc.).
+  /// 'message' for normal RAG windows (default). DORMANT: the 'needs_event'
+  /// type (and its writer/reader in MemoryService) was removed with the
+  /// Journal work — column kept for additive-migration safety.
   TextColumn get memoryType => text().withDefault(const Constant('message'))();
 
-  /// Optional JSON blob for event details (e.g. {"category":"pleasure","magnitude":8,"..."}).
-  /// Null for ordinary message embeddings.
+  /// Optional JSON blob for event details. DORMANT (see memoryType) —
+  /// null for ordinary message embeddings.
   TextColumn get metadata => text().nullable()();
 
   @override
@@ -395,6 +396,49 @@ class DataBankEntries extends Table {
       blob().nullable()(); // pre-computed embedding vector
   IntColumn get dimensions => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The Journal — per-chat, per-character memory cards
+/// (design: docs/design/journal-memory.md).
+/// Strictly session-scoped: cards never cross chats. Phase-2 columns (heat,
+/// accessCount, embedding) are present from day one so no second migration
+/// is needed when the emotional-physics layer lands.
+@TableIndex(
+  name: 'journal_memories_session_character',
+  columns: {#sessionId, #characterId},
+)
+@DataClassName('JournalMemoryData')
+class JournalMemories extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get sessionId => text()(); // scoping key — cards never cross chats
+  TextColumn get characterId => text()(); // diary owner (stableGroupId)
+
+  /// JSON array of int message POSITIONS (not DB ids — message UUIDs are
+  /// regenerated on every save, so positions are the stable receipt, same
+  /// trade-off MessageEmbeddings.positionStart/End already makes).
+  TextColumn get sourceMessageIds => text().nullable()();
+  TextColumn get content => text()(); // the memory, first person
+  TextColumn get category =>
+      text().withDefault(const Constant('moment'))(); // about_user/about_us/moment/promise
+  TextColumn get emotionLabel => text().nullable()(); // current feeling
+  TextColumn get emotionIntensity =>
+      text().nullable()(); // mild/moderate/strong
+  TextColumn get originalEmotionLabel =>
+      text().nullable()(); // set only when the feeling was later revised
+  RealColumn get heat => real().withDefault(const Constant(1.0))(); // phase 2
+  IntColumn get accessCount =>
+      integer().withDefault(const Constant(0))(); // phase 2
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+  BlobColumn get embedding => blob().nullable()(); // phase 2
+  IntColumn get dimensions => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastAccessedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  TextColumn get metadata => text().nullable()(); // JSON pouch (additive future)
 
   @override
   Set<Column> get primaryKey => {id};
@@ -566,6 +610,7 @@ class WebAuthSessions extends Table {
     Worlds,
     MessageEmbeddings,
     DataBankEntries,
+    JournalMemories, // v35 — The Journal: per-chat, per-character memory cards
     Objectives,
     StoryProjects,
     SyncMeta,
@@ -990,7 +1035,16 @@ class AppDatabase extends _$AppDatabase {
 
   /// For testing: create a temporary database backed by a real file.
   /// Uses a system temp directory so the background isolate can access it.
-  factory AppDatabase.forTesting() {
+  ///
+  /// [sameIsolate] runs SQLite on the calling isolate (in-memory) instead of
+  /// the background one. Required inside `testWidgets`: the fake-async test
+  /// zone never yields to the real event loop, so a cross-isolate database
+  /// response can never be delivered and the first awaited query deadlocks
+  /// the whole run at 0% CPU. Plain `test()` bodies keep the default.
+  factory AppDatabase.forTesting({bool sameIsolate = false}) {
+    if (sameIsolate) {
+      return AppDatabase._internal(NativeDatabase.memory());
+    }
     final tmpDir = Directory.systemTemp.createTempSync('fpai_test_');
     final file = File('${tmpDir.path}/test.db');
     return AppDatabase._internal(
@@ -1012,7 +1066,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1583,6 +1637,38 @@ class AppDatabase extends _$AppDatabase {
           await customStatement('ALTER TABLE groups ADD COLUMN stable_id TEXT');
         } catch (_) {}
       }
+      if (from < 35) {
+        // v34→v35: The Journal — per-chat, per-character memory cards
+        // (docs/design/journal-memory.md). NEW table + index, additive only,
+        // outside the Character Card Forge external-writer set, so this
+        // cannot break it. Strictly session-scoped: cards never cross chats.
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS journal_memories (
+            id TEXT NOT NULL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            character_id TEXT NOT NULL,
+            source_message_ids TEXT,
+            content TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'moment',
+            emotion_label TEXT,
+            emotion_intensity TEXT,
+            original_emotion_label TEXT,
+            heat REAL NOT NULL DEFAULT 1.0,
+            access_count INTEGER NOT NULL DEFAULT 0,
+            pinned INTEGER NOT NULL DEFAULT 0,
+            embedding BLOB,
+            dimensions INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            last_accessed_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            metadata TEXT
+          )
+        ''');
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS journal_memories_session_character '
+          'ON journal_memories (session_id, character_id)',
+        );
+      }
     },
   );
 
@@ -2109,8 +2195,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteSessionById(String id) async {
-    // Hard delete: also delete all messages in this session
+    // Hard delete: also delete all messages + journal cards in this session.
+    // (Journal cards are strictly session-scoped, so they die with the chat.)
     await (delete(messages)..where((m) => m.sessionId.equals(id))).go();
+    await (delete(journalMemories)..where((j) => j.sessionId.equals(id))).go();
     final count = await (delete(sessions)..where((s) => s.id.equals(id))).go();
     await bumpSyncVersion();
     return count;
@@ -2417,6 +2505,56 @@ class AppDatabase extends _$AppDatabase {
   Future<int> countEmbeddings() async {
     final result = await customSelect(
       'SELECT COUNT(*) AS cnt FROM message_embeddings',
+    ).getSingle();
+    return result.read<int>('cnt');
+  }
+
+  // ── Journal Queries ────────────────────────────────────────────────
+  // The Journal: per-chat, per-character memory cards. No bumpSyncVersion,
+  // matching the MessageEmbeddings precedent (derived, session-local data).
+
+  /// All cards for one diary owner in one chat — pinned first, then oldest
+  /// first (stable reading order for prompt handles and the UI).
+  Future<List<JournalMemoryData>> getJournalCards(
+    String sessionId,
+    String characterId,
+  ) =>
+      (select(journalMemories)
+            ..where(
+              (j) =>
+                  j.sessionId.equals(sessionId) &
+                  j.characterId.equals(characterId),
+            )
+            ..orderBy([
+              (j) => OrderingTerm.desc(j.pinned),
+              (j) => OrderingTerm.asc(j.createdAt),
+            ]))
+          .get();
+
+  Future<void> insertJournalCard(JournalMemoriesCompanion card) async {
+    if (!card.id.present) {
+      card = card.copyWith(id: Value(_uuid.v4()));
+    }
+    await into(journalMemories).insert(card);
+  }
+
+  /// Write-by-id partial update (mirrors [updateMessage] style).
+  Future<void> updateJournalCard(String id, JournalMemoriesCompanion card) =>
+      (update(journalMemories)..where((j) => j.id.equals(id))).write(card);
+
+  Future<int> deleteJournalCard(String id) =>
+      (delete(journalMemories)..where((j) => j.id.equals(id))).go();
+
+  /// Cascading cleanup (also invoked inline by [deleteSessionById]).
+  Future<int> deleteJournalCardsForSession(String sessionId) => (delete(
+    journalMemories,
+  )..where((j) => j.sessionId.equals(sessionId))).go();
+
+  Future<int> countJournalCards(String sessionId, String characterId) async {
+    final result = await customSelect(
+      'SELECT COUNT(*) AS cnt FROM journal_memories '
+      'WHERE session_id = ? AND character_id = ?',
+      variables: [Variable.withString(sessionId), Variable.withString(characterId)],
     ).getSingle();
     return result.read<int>('cnt');
   }
