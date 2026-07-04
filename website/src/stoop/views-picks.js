@@ -7,16 +7,6 @@
   var S = window.Stoop;
   var el, ui, Api;
 
-  function heroArt(assetId) {
-    var wrap = el('div', { class: 'hub-pickhero-art' });
-    if (assetId) {
-      Api.avatarUrl(assetId).then(function (url) {
-        if (url) wrap.style.backgroundImage = 'url("' + url + '")';
-      });
-    }
-    return wrap;
-  }
-
   function hero(card) {
     var dlBtn = el('button', { class: 'btn btn-amber', type: 'button' }, '⤓ Download');
     dlBtn.addEventListener('click', function (e) {
@@ -24,23 +14,42 @@
       e.stopPropagation();
       ui.downloadCard(card, dlBtn);
     });
+
+    // Blurred, darkened cover-fill of the same art backs a SHARP portrait shown
+    // at its true 3:4 aspect — so portrait card art is never cropped across the
+    // wide banner (mirrors the desktop app's spotlight).
+    var bg = el('div', { class: 'hub-pickhero-bg' });
+    var portraitImg = el('img', { class: 'hub-pickhero-portrait-img', alt: card.name, loading: 'lazy' });
+    portraitImg.style.opacity = '0';
+    if (card.primaryAssetId) {
+      Api.avatarUrl(card.primaryAssetId).then(function (url) {
+        if (!url) return;
+        bg.style.backgroundImage = 'url("' + url + '")';
+        portraitImg.src = url;
+        portraitImg.style.opacity = '';
+      });
+    }
+
     return el('a', { class: 'hub-pickhero', href: '#/card/' + card.id }, [
-      heroArt(card.primaryAssetId),
+      bg,
       el('div', { class: 'hub-pickhero-scrim' }),
-      el('div', { class: 'hub-pickhero-body' }, [
-        el('div', { class: 'hub-pickhero-badges' }, [
-          el('span', { class: 'hub-badge hub-badge-pick' }, '★ Mod’s Pick'),
-          card.type === 'GROUP' ? el('span', { class: 'hub-badge hub-badge-group' }, '👥 Group cast') : null,
-          card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
-        ]),
-        el('h2', { class: 'hub-pickhero-name' }, card.name),
-        card.creator ? el('div', { class: 'hub-pickhero-creator' }, 'by ' + card.creator.displayName) : null,
-        el('p', { class: 'hub-pickhero-summary' }, card.summary || ''),
-        el('div', { class: 'hub-pickhero-foot' }, [
-          ui.statsSpan(card),
-          el('span', { class: 'hub-pickhero-cta' }, [
-            el('span', { class: 'btn btn-ghost hub-pickhero-view' }, 'View card'),
-            dlBtn,
+      el('div', { class: 'hub-pickhero-inner' }, [
+        el('div', { class: 'hub-pickhero-portrait' }, [portraitImg]),
+        el('div', { class: 'hub-pickhero-body' }, [
+          el('div', { class: 'hub-pickhero-badges' }, [
+            el('span', { class: 'hub-badge hub-badge-pick' }, '★ Mod’s Pick'),
+            card.type === 'GROUP' ? el('span', { class: 'hub-badge hub-badge-group' }, '👥 Group cast') : null,
+            card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
+          ]),
+          el('h2', { class: 'hub-pickhero-name' }, card.name),
+          card.creator ? el('div', { class: 'hub-pickhero-creator' }, 'by ' + card.creator.displayName) : null,
+          el('p', { class: 'hub-pickhero-summary' }, card.summary || ''),
+          el('div', { class: 'hub-pickhero-foot' }, [
+            ui.statsSpan(card),
+            el('span', { class: 'hub-pickhero-cta' }, [
+              el('span', { class: 'btn btn-ghost hub-pickhero-view' }, 'View card'),
+              dlBtn,
+            ]),
           ]),
         ]),
       ]),

@@ -194,19 +194,30 @@
 .hub-pickhero {
   position: relative; display: block; overflow: hidden; color: inherit;
   border-radius: var(--radius); border: 1px solid rgba(245, 166, 35, 0.3);
-  min-height: 300px; box-shadow: var(--shadow-card), 0 0 44px rgba(245, 166, 35, 0.06);
+  height: 300px; box-shadow: var(--shadow-card), 0 0 44px rgba(245, 166, 35, 0.06);
 }
 .hub-pickhero:hover { color: inherit; border-color: var(--amber-deep); }
-.hub-pickhero-art {
-  position: absolute; inset: 0; background-size: cover; background-position: center 28%;
-  background-color: var(--bg-2); transition: transform 0.4s ease;
+/* Blurred, zoomed cover-fill of the art (scale beats the blur's transparent edge). */
+.hub-pickhero-bg {
+  position: absolute; inset: 0; background-size: cover; background-position: center;
+  background-color: var(--bg-2); filter: blur(28px); transform: scale(1.18);
 }
-.hub-pickhero:hover .hub-pickhero-art { transform: scale(1.03); }
 .hub-pickhero-scrim {
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(10, 8, 5, 0.15) 0%, rgba(10, 8, 5, 0.55) 55%, rgba(10, 8, 5, 0.94) 100%);
+  background: linear-gradient(90deg, rgba(10, 8, 5, 0.35), rgba(10, 8, 5, 0.72));
 }
-.hub-pickhero-body { position: relative; padding: 30px 30px 26px; margin-top: 150px; }
+.hub-pickhero-inner {
+  position: relative; height: 100%; display: flex; align-items: center; gap: 22px;
+  padding: 18px 26px 18px 18px;
+}
+/* Sharp portrait at true 3:4 — the character's face is never cropped away. */
+.hub-pickhero-portrait {
+  flex: 0 0 auto; height: 100%; aspect-ratio: 3 / 4;
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-1);
+  border: 1px solid var(--border-hi); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.hub-pickhero-portrait-img { width: 100%; height: 100%; object-fit: cover; object-position: center top; transition: opacity 0.3s; }
+.hub-pickhero-body { flex: 1; min-width: 0; }
 .hub-pickhero-badges { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .hub-pickhero-name { color: var(--cream); font-size: clamp(1.5rem, 3vw, 2.1rem); margin-bottom: 4px; }
 .hub-pickhero-creator { color: var(--cream-2); font-size: 0.9rem; margin-bottom: 8px; }
@@ -217,6 +228,13 @@
 .hub-pickhero-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .hub-pickhero-cta { display: inline-flex; gap: 10px; align-items: center; }
 .hub-pickhero-view { padding: 9px 18px; font-size: 0.9rem; }
+/* Phones: drop the side portrait, let the text sit over the blurred fill. */
+@media (max-width: 620px) {
+  .hub-pickhero { height: auto; min-height: 240px; }
+  .hub-pickhero-portrait { display: none; }
+  .hub-pickhero-inner { padding: 22px; }
+  .hub-pickhero-scrim { background: linear-gradient(180deg, rgba(10, 8, 5, 0.3), rgba(10, 8, 5, 0.75)); }
+}
 
 .hub-pickrow {
   display: flex; gap: 14px; margin-top: 14px; padding-bottom: 8px;
