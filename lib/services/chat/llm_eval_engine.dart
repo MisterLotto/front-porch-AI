@@ -284,6 +284,12 @@ class LlmEvalEngine {
       topP: 0.5,
       xtcProbability: 0.0,
       reasoningEnabled: false,
+      // Force thinking OFF on remote ":thinking" models (Kimi K2.6, DeepSeek
+      // hybrids, etc.): the reasoning-disable block is only sent when a
+      // reasoning field is set, so evals must set this or the model reasons
+      // through every eval — slow, costly, and a source of flaky/empty
+      // structured replies. 0 → {enabled:false, max_tokens:0, exclude:true}.
+      reasoningMaxTokens: 0,
       stopSequences: const [],
     );
 

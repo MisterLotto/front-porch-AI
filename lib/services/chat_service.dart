@@ -2121,6 +2121,14 @@ class ChatService extends ChangeNotifier {
           topP: 0.5,
           xtcProbability: 0.0,
           reasoningEnabled: false,
+          // Explicit thinking-off: Nano-GPT/OpenRouter only receive the
+          // disable signal when the reasoning block is present, and it is
+          // only emitted when a reasoning field is set. Without this a
+          // ":thinking" model (e.g. Kimi K2.6) keeps reasoning during the
+          // journal tool call, which returns tool calls only intermittently
+          // (the "had to regen twice" symptom). 0 → {enabled:false,
+          // max_tokens:0, exclude:true}, the strongest disable signal.
+          reasoningMaxTokens: 0,
           stopSequences: const [],
         ),
         tools,

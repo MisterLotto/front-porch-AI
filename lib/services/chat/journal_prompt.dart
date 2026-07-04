@@ -88,9 +88,12 @@ String buildJournalPrompt({
     'entry as a new one — revise it instead.',
   );
   b.writeln(
-    '- Only add durable memories: promises made, things learned about '
-    '$userName, relationship shifts, moments that mattered. The annotated '
-    'lines above are the significant ones. Skip small talk.',
+    '- Capture what mattered: add a memory for each promise made, thing '
+    'learned about $userName, relationship shift, or moment that stood out. '
+    'The annotated lines above are the significant beats — when any line is '
+    'annotated, write at least one memory for it. Skip idle small talk, but '
+    'do not finish a pass with no new memory when something worth '
+    'remembering happened.',
   );
   b.writeln(
     '- Each memory is one sentence, first person, at most 40 words. '
@@ -110,9 +113,9 @@ String buildJournalPrompt({
     b.writeln();
     if (includeRecap) {
       b.writeln(
-        'Finish with exactly one write_recap call: where things stand now — '
-        'present tense, your voice, at most '
-        '$kRecapMaxWords words.',
+        'Add your memories first with add_memory, then finish with exactly '
+        'one write_recap call: where things stand now — present tense, your '
+        'voice, at most $kRecapMaxWords words.',
       );
     } else {
       b.writeln('Do not call write_recap.');
@@ -137,7 +140,8 @@ String buildJournalPrompt({
         '$kRecapMaxWords words.</recap>',
       );
       b.writeln();
-      b.writeln('End with exactly one <recap> tag.');
+      b.writeln('Write your <memory> tags first, then end with exactly one '
+          '<recap> tag.');
     } else {
       b.writeln();
       b.writeln('Do not write a <recap> tag.');
