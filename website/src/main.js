@@ -66,7 +66,7 @@
     var ua = navigator.userAgent;
     var msg = '';
     if (/Windows/i.test(ua)) msg = 'Looks like you’re on Windows — grab the .exe installer.';
-    else if (/Macintosh|Mac OS X/i.test(ua)) msg = 'Looks like you’re on a Mac — grab the .dmg.';
+    else if (/Macintosh|Mac OS X/i.test(ua)) msg = 'Looks like you’re on a Mac — grab the .pkg installer (signed & Apple-notarized, no Gatekeeper warnings).';
     else if (/Linux/i.test(ua) && !/Android/i.test(ua)) msg = '🐧 On Linux? The one-line install below is the easy way.';
     if (msg) {
       hint.textContent = msg;

@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_notifications_tab.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Open the user's inbox — their single thread with the moderation team. Shares
@@ -35,15 +36,24 @@ class StoopInboxPage extends StatefulWidget {
   State<StoopInboxPage> createState() => _StoopInboxPageState();
 }
 
-class _StoopInboxPageState extends State<StoopInboxPage> {
+class _StoopInboxPageState extends State<StoopInboxPage>
+    with SingleTickerProviderStateMixin {
   final _api = BackporchApi();
   final _reply = TextEditingController();
   final _scroll = ScrollController();
+  late final TabController _tabs = TabController(length: 2, vsync: this);
   List<StoopMessage> _messages = const [];
   bool _loading = true;
   bool _sending = false;
   bool _modTyping = false;
   String? _error;
+
+  // The one thread, split like the web hub: automated decision notices under
+  // Notifications, the human conversation under Moderator chat.
+  List<StoopMessage> get _notices =>
+      _messages.where((m) => m.isSystem).toList();
+  List<StoopMessage> get _chat =>
+      _messages.where((m) => !m.isSystem).toList();
 
   StreamSubscription<StoopMessage>? _msgSub;
   StreamSubscription<bool>? _typingSub;
@@ -66,6 +76,7 @@ class _StoopInboxPageState extends State<StoopInboxPage> {
     _typingHide?.cancel();
     _typingDebounce?.cancel();
     if (_sentTyping) widget.socket.sendTyping(false);
+    _tabs.dispose();
     _reply.dispose();
     _scroll.dispose();
     super.dispose();
@@ -97,16 +108,18 @@ class _StoopInboxPageState extends State<StoopInboxPage> {
     }
   }
 
-  // A message pushed over the socket (a mod reply, or the echo of our own send).
+  // A message pushed over the socket (a mod reply, a decision notice, or the
+  // echo of our own send). SYSTEM notices land on the Notifications tab, so
+  // only chat messages scroll the thread.
   void _onIncoming(StoopMessage m) {
     if (!mounted) return;
     if (_messages.any((x) => x.id == m.id)) return; // already shown
     setState(() {
       _messages = [..._messages, m];
-      if (m.fromMod) _modTyping = false; // a message ends the typing state
+      if (m.fromMod && !m.isSystem) _modTyping = false; // a reply ends typing
     });
     if (m.fromMod) _api.markMessagesRead(_token); // keep the badge clear
-    _jumpToBottom();
+    if (!m.isSystem) _jumpToBottom();
   }
 
   void _onModTyping(bool isTyping) {
@@ -186,34 +199,52 @@ class _StoopInboxPageState extends State<StoopInboxPage> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = stoopAccent(context);
     return Scaffold(
       backgroundColor: AppColors.backgroundOf(context),
       appBar: AppBar(
         backgroundColor: AppColors.surfaceOf(context),
         foregroundColor: AppColors.textPrimary(context),
-        title: const Text('Messages'),
+        title: const Text('Inbox'),
+        bottom: TabBar(
+          controller: _tabs,
+          labelColor: accent,
+          unselectedLabelColor: AppColors.textTertiary(context),
+          indicatorColor: accent,
+          tabs: const [
+            Tab(text: 'Notifications'),
+            Tab(text: 'Moderator chat'),
+          ],
+        ),
       ),
-      body: Column(
-        children: [
-          Expanded(child: _body()),
-          if (_modTyping) _typingIndicator(),
-          _composer(),
-        ],
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Text(
+                _error!,
+                style: TextStyle(color: AppColors.textTertiary(context)),
+              ),
+            )
+          : TabBarView(
+              controller: _tabs,
+              children: [
+                StoopNotificationsTab(notices: _notices),
+                Column(
+                  children: [
+                    Expanded(child: _chatBody()),
+                    if (_modTyping) _typingIndicator(),
+                    _composer(),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 
-  Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Text(
-          _error!,
-          style: TextStyle(color: AppColors.textTertiary(context)),
-        ),
-      );
-    }
-    if (_messages.isEmpty) {
+  Widget _chatBody() {
+    final chat = _chat;
+    if (chat.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -236,8 +267,8 @@ class _StoopInboxPageState extends State<StoopInboxPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Moderators will message you here about your shared characters — '
-                'for example if one needs changes. You can reply right here.',
+                'Questions about a review or the rules? The moderation team '
+                'reads this thread — you can write to them right here.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textTertiary(context)),
               ),
@@ -249,8 +280,8 @@ class _StoopInboxPageState extends State<StoopInboxPage> {
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.all(16),
-      itemCount: _messages.length,
-      itemBuilder: (_, i) => _bubble(_messages[i]),
+      itemCount: chat.length,
+      itemBuilder: (_, i) => _bubble(chat[i]),
     );
   }
 

@@ -294,11 +294,11 @@ Log out and back in, then re-run hardware detection in Settings. If ROCm won't c
 
 ### macOS: "damaged" warning, and Intel Macs
 
-- **"App is damaged and can't be opened":** macOS quarantines downloaded apps. Clear it:
+- **"App is damaged and can't be opened":** you shouldn't see this on current releases — Front Porch AI is code-signed and **notarized by Apple**, so Gatekeeper opens it cleanly. If it appears you're probably on an old build: grab the current `.pkg` installer from the [Releases page](https://github.com/linux4life1/front-porch-AI/releases). As a last resort you can clear the quarantine flag:
   ```bash
   xattr -cr "/Applications/FrontPorchAI.app"
   ```
-  (Adjust the app name/path to match yours.) Recent releases are signed and notarized, so this should be rare.
+  (Adjust the app name/path to match yours.)
 - **Intel Macs:** local AI models aren't supported (Apple Silicon's Metal acceleration is required) — the app runs fine in **Remote API mode** with OpenRouter or similar.
 - **Apple Silicon tips:** Metal acceleration is automatic. Memory is shared between CPU and GPU, so close heavy apps when running larger models, and prefer Q4/Q5 versions.
 

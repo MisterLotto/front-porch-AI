@@ -67,7 +67,7 @@ Front Porch AI runs on a wide range of hardware. A gaming PC is great; a modest 
 The short version:
 
 1. Go to the [Releases page](https://github.com/linux4life1/front-porch-AI/releases).
-2. Download the latest **stable** build — `.exe` installer for Windows, `.dmg` for macOS, `.AppImage` / `.deb` / `.rpm` for Linux.
+2. Download the latest **stable** build — `.exe` installer for Windows, `.pkg` installer for macOS (signed & Apple-notarized, so Gatekeeper opens it without a fuss), `.AppImage` / `.deb` / `.rpm` for Linux.
 3. Install and launch it.
 
 On Linux you can also install through your package manager (recommended — updates arrive automatically). Full instructions for every platform, including package-manager setup, are in the **[Installation Guide](install.md)**.

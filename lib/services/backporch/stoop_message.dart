@@ -25,6 +25,10 @@ class StoopMessageCard {
 class StoopMessage {
   final String id;
   final bool fromMod;
+
+  /// 'SYSTEM' = an automated decision notice (card approved/denied); 'CHAT' =
+  /// typed by a human. Older servers omit the field — treated as chat.
+  final String kind;
   final String body;
   final StoopMessageCard? character;
   final DateTime createdAt;
@@ -32,14 +36,19 @@ class StoopMessage {
   const StoopMessage({
     required this.id,
     required this.fromMod,
+    this.kind = 'CHAT',
     required this.body,
     required this.character,
     required this.createdAt,
   });
 
+  /// True for automated decision notices — shown under Notifications, not chat.
+  bool get isSystem => kind == 'SYSTEM';
+
   factory StoopMessage.fromJson(Map<String, dynamic> j) => StoopMessage(
     id: (j['id'] ?? '') as String,
     fromMod: j['fromMod'] == true,
+    kind: (j['kind'] as String?) ?? 'CHAT',
     body: (j['body'] ?? '') as String,
     character: j['character'] is Map<String, dynamic>
         ? StoopMessageCard.fromJson(j['character'] as Map<String, dynamic>)

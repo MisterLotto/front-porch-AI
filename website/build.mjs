@@ -21,8 +21,12 @@ const REPO = path.resolve(ROOT, '..');
 const DOCS_DIR = path.join(REPO, 'docs');
 const SRC = path.join(ROOT, 'src');
 const DIST = path.join(ROOT, 'dist');
+// The Stoop hub is a separate origin (its own Caddy site block), so it builds
+// into its own self-contained tree: rsync dist-hub/ → the hub's web root.
+const DIST_HUB = path.join(ROOT, 'dist-hub');
 
 const SITE = 'https://frontporchai.app';
+const HUB = 'https://hub.frontporchai.app';
 const STABLE_VERSION = 'v0.9.9.1.3';
 
 /** The docs that make up the site, in reading order. */
@@ -42,8 +46,8 @@ const MD_TO_SLUG = Object.fromEntries(DOCS.map((d) => [d.file, d.slug]));
 /* ---------------------------------------------------------------- utils */
 
 const read = (p) => fs.readFileSync(p, 'utf8');
-const out = (rel, html) => {
-  const p = path.join(DIST, rel);
+const out = (rel, html, base = DIST) => {
+  const p = path.join(base, rel);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, html);
 };
@@ -143,7 +147,7 @@ const NAV = `
   <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
   <div class="links">
     <a href="/docs/getting-started/" data-nav="docs">Docs</a>
-    <a href="/#stoop">The Stoop</a>
+    <a href="${HUB}/" data-nav="stoop">The Stoop</a>
     <a href="https://github.com/linux4life1/front-porch-AI" target="_blank" rel="noopener">GitHub</a>
     <a href="https://discord.gg/e4tET6rpdv" target="_blank" rel="noopener">Discord</a>
     <a href="/#get" class="cta">Download</a>
@@ -166,7 +170,7 @@ const FOOTER = `
   Your characters, your chats, your machine — nothing leaves it unless you say so.</p>
 </footer>`;
 
-function shell({ title, desc, canonical, body, extraHead = '', bodyClass = '' }) {
+function shell({ title, desc, canonical, body, extraHead = '', bodyClass = '', nav = NAV, footer = FOOTER, origin = SITE }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -179,7 +183,7 @@ function shell({ title, desc, canonical, body, extraHead = '', bodyClass = '' })
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="${canonical}">
-<meta property="og:image" content="${SITE}/assets/images/front_porch_ai_icon.png">
+<meta property="og:image" content="${origin}/assets/images/front_porch_ai_icon.png">
 <link rel="icon" type="image/png" href="/assets/images/front_porch_ai_icon.png">
 <link rel="apple-touch-icon" href="/assets/images/front_porch_ai_icon.png">
 <link rel="stylesheet" href="/assets/site.css">
@@ -187,9 +191,9 @@ ${extraHead}
 </head>
 <body${bodyClass ? ` class="${bodyClass}"` : ''}>
 <div class="sky"></div><div class="flies" aria-hidden="true"></div>
-${NAV}
+${nav}
 ${body}
-${FOOTER}
+${footer}
 <script src="/assets/main.js" defer></script>
 </body>
 </html>`;
@@ -340,6 +344,69 @@ function build404() {
   );
 }
 
+/* -------------------------------------------------- The Stoop hub (dist-hub) */
+
+/** The hub lives on its own subdomain, so shared chrome links point back at
+ *  the apex site while /assets/ stays local (the hub tree carries its own
+ *  copy of every asset — no cross-origin requests for CSS/fonts). */
+function absolutizeChrome(html) {
+  return html.replaceAll('href="/', `href="${SITE}/`);
+}
+
+function buildHub() {
+  const STOOP_SRC = path.join(SRC, 'stoop');
+  const hubNav = absolutizeChrome(NAV).replace('data-nav="stoop"', 'data-nav="stoop" class="active"');
+  const hubFooter = absolutizeChrome(FOOTER);
+  const scripts = ['png.js', 'api.js', 'ui.js', 'views-auth.js', 'views-browse.js', 'views-my.js', 'views-inbox.js', 'app.js'];
+
+  // self-contained asset tree
+  fs.mkdirSync(path.join(DIST_HUB, 'assets/fonts'), { recursive: true });
+  fs.mkdirSync(path.join(DIST_HUB, 'assets/images'), { recursive: true });
+  fs.mkdirSync(path.join(DIST_HUB, 'assets/stoop'), { recursive: true });
+  fs.copyFileSync(path.join(SRC, 'site.css'), path.join(DIST_HUB, 'assets/site.css'));
+  fs.copyFileSync(path.join(SRC, 'main.js'), path.join(DIST_HUB, 'assets/main.js'));
+  fs.copyFileSync(path.join(STOOP_SRC, 'stoop.css'), path.join(DIST_HUB, 'assets/stoop.css'));
+  for (const f of fs.readdirSync(path.join(SRC, 'fonts'))) {
+    fs.copyFileSync(path.join(SRC, 'fonts', f), path.join(DIST_HUB, 'assets/fonts', f));
+  }
+  fs.copyFileSync(
+    path.join(DOCS_DIR, 'assets/images/front_porch_ai_icon.png'),
+    path.join(DIST_HUB, 'assets/images/front_porch_ai_icon.png'),
+  );
+  for (const s of scripts) {
+    fs.copyFileSync(path.join(STOOP_SRC, s), path.join(DIST_HUB, 'assets/stoop', s));
+  }
+
+  out(
+    'index.html',
+    shell({
+      title: 'The Stoop — Front Porch AI Community Character Hub',
+      desc: 'Browse, share, vote on, and download AI character cards from The Stoop — the Front Porch AI community hub. Live in your browser, strictly 18+, one account works everywhere.',
+      canonical: `${HUB}/`,
+      body: read(path.join(STOOP_SRC, 'index.html')),
+      bodyClass: 'stoop-hub',
+      nav: hubNav,
+      footer: hubFooter,
+      origin: HUB,
+      extraHead: [
+        '<link rel="stylesheet" href="/assets/stoop.css">',
+        ...scripts.map((s) => `<script src="/assets/stoop/${s}" defer></script>`),
+      ].join('\n'),
+    }),
+    DIST_HUB,
+  );
+  // The hub is auth-walled; keep crawlers on the marketing site.
+  out('robots.txt', `User-agent: *\nDisallow: /\n`, DIST_HUB);
+
+  // Courtesy redirect: frontporchai.app/stoop/ → the hub subdomain.
+  out(
+    'stoop/index.html',
+    `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>The Stoop</title>
+<meta http-equiv="refresh" content="0; url=${HUB}/"><link rel="canonical" href="${HUB}/">
+</head><body><p>The Stoop moved to <a href="${HUB}/">${HUB.replace('https://', '')}</a>.</p></body></html>`,
+  );
+}
+
 /* ------------------------------------------------------------ assets */
 
 function copyAssets() {
@@ -387,15 +454,19 @@ function buildMeta() {
 
 fs.rmSync(DIST, { recursive: true, force: true });
 fs.mkdirSync(DIST, { recursive: true });
+fs.rmSync(DIST_HUB, { recursive: true, force: true });
+fs.mkdirSync(DIST_HUB, { recursive: true });
 
 copyAssets();
 convertScreenshots();
 buildLanding();
 buildPrivacy();
 build404();
+buildHub();
 const problems = buildDocs();
 buildMeta();
 
 const count = fs.readdirSync(DIST, { recursive: true }).length;
-console.log(`✓ built ${count} files → dist/`);
+const hubCount = fs.readdirSync(DIST_HUB, { recursive: true }).length;
+console.log(`✓ built ${count} files → dist/ + ${hubCount} → dist-hub/`);
 if (problems.length) process.exitCode = 1;
