@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -24,6 +23,7 @@ import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/utils/world_colors.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -247,8 +247,12 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                 children: [
                   IconButton(
                     icon: const Icon(Icons.download, color: Colors.cyanAccent),
-                    tooltip: 'Import World JSON',
-                    onPressed: () => _importWorld(context, repo),
+                    tooltip: 'Import Lorebook',
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ImportLorebookPage(),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
@@ -612,28 +616,6 @@ class _WorldManagementPageState extends State<WorldManagementPage>
     );
   }
 
-  Future<void> _importWorld(BuildContext context, WorldRepository repo) async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
-    if (result != null && result.files.single.path != null) {
-      try {
-        await repo.importWorld(File(result.files.single.path!));
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('World imported successfully!')),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
-        }
-      }
-    }
-  }
 
   Future<void> _exportWorld(
     BuildContext context,
