@@ -503,7 +503,6 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           listen: false,
         ).updateCharacter(
           widget.character,
-          worldRepo: Provider.of<WorldRepository>(context, listen: false),
         );
 
         // Refresh the "Enjoys low hygiene" flag in any active chat so that

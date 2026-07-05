@@ -310,7 +310,6 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
         listen: false,
       ).updateCharacter(
         widget.character,
-        worldRepo: Provider.of<WorldRepository>(context, listen: false),
       );
       if (mounted) {
         Navigator.pop(context, true);

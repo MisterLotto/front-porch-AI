@@ -81,13 +81,8 @@ extension _HomePageCharOps on _HomePageState {
         var done = 0;
         if (pngs.isNotEmpty) {
           final repo = Provider.of<CharacterRepository>(context, listen: false);
-          final worldRepo = Provider.of<WorldRepository>(
-            context,
-            listen: false,
-          );
           await repo.importCharacters(
             pngs,
-            worldRepo: worldRepo,
             isCancelled: isCancelled,
             onProgress: (current, _, name, error) =>
                 onProgress(done + current, total, name, error),
@@ -236,10 +231,8 @@ extension _HomePageCharOps on _HomePageState {
       totalCount: files.length,
       runImport: ({required onProgress, required isCancelled}) async {
         final repo = Provider.of<CharacterRepository>(context, listen: false);
-        final worldRepo = Provider.of<WorldRepository>(context, listen: false);
         await repo.importCharacters(
           files,
-          worldRepo: worldRepo,
           isCancelled: isCancelled,
           onProgress: onProgress,
         );

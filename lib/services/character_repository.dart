@@ -24,7 +24,6 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/world.dart' as world_model;
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -383,10 +382,7 @@ class CharacterRepository extends ChangeNotifier {
     }
   }
 
-  Future<CharacterCard?> importCharacter(
-    File file, {
-    WorldRepository? worldRepo,
-  }) async {
+  Future<CharacterCard?> importCharacter(File file) async {
     _isLoading = true;
     notifyListeners();
     try {
@@ -412,7 +408,6 @@ class CharacterRepository extends ChangeNotifier {
         card,
         // JSON has no image to copy; persist synthesizes a placeholder instead.
         sourceFileForCopy: isJson ? null : file,
-        worldRepo: worldRepo,
       );
     } catch (e) {
       rethrow;
@@ -435,7 +430,6 @@ class CharacterRepository extends ChangeNotifier {
   Future<CharacterCard?> _persistImportedCharacterCard(
     CharacterCard card, {
     File? sourceFileForCopy,
-    WorldRepository? worldRepo,
   }) async {
     final charDir = _storage.charactersDir;
     if (!await charDir.exists()) {
@@ -598,18 +592,10 @@ class CharacterRepository extends ChangeNotifier {
       _characters.add(card);
     }
 
-    if (card.lorebook != null &&
-        card.lorebook!.entries.isNotEmpty &&
-        worldRepo != null) {
-      final world = world_model.World(
-        avatarPath: card.imagePath,
-        name: "${card.name}'s world lore",
-        description: 'Auto-imported from character card: ${card.name}',
-        lorebook: Lorebook(entries: List.from(card.lorebook!.entries)),
-        linkedCharacterName: card.name,
-      );
-      await worldRepo.saveWorld(world);
-    }
+    // (Until Phase 4 of the lorebook overhaul, an imported card's book was
+    // ALSO copied into an auto-created "X's world lore" World — two sources
+    // of truth kept in sync by string matching. New imports keep lore on the
+    // card only; existing auto-created worlds remain as ordinary worlds.)
 
     // Note: list management (add or replace) happens inside the target/!target branches above
     // so that we reuse dbId for matches without duplication.
@@ -621,7 +607,6 @@ class CharacterRepository extends ChangeNotifier {
   /// Returns a summary map: `{imported: int, failed: int, errors: List<String>}`.
   Future<Map<String, dynamic>> importCharacters(
     List<File> files, {
-    WorldRepository? worldRepo,
     void Function(int current, int total, String name, String? error)?
     onProgress,
     bool Function()? isCancelled,
@@ -637,7 +622,7 @@ class CharacterRepository extends ChangeNotifier {
       final file = files[i];
       final fileName = file.path.split(Platform.pathSeparator).last;
       try {
-        final card = await importCharacter(file, worldRepo: worldRepo);
+        final card = await importCharacter(file);
         if (card != null) {
           imported++;
           onProgress?.call(i + 1, files.length, card.name, null);
@@ -658,10 +643,7 @@ class CharacterRepository extends ChangeNotifier {
     return {'imported': imported, 'failed': failed, 'errors': errors};
   }
 
-  Future<void> updateCharacter(
-    CharacterCard card, {
-    WorldRepository? worldRepo,
-  }) async {
+  Future<void> updateCharacter(CharacterCard card) async {
     if (card.imagePath == null) return;
 
     _isLoading = true;
@@ -718,21 +700,6 @@ class CharacterRepository extends ChangeNotifier {
             updatedAt: Value(DateTime.now()),
           ),
         );
-      }
-
-      // Sync lorebook to linked world if it exists
-      if (worldRepo != null &&
-          card.lorebook != null &&
-          card.lorebook!.entries.isNotEmpty) {
-        final linkedWorld = worldRepo.worlds
-            .where((w) => w.linkedCharacterName == card.name)
-            .firstOrNull;
-        if (linkedWorld != null) {
-          linkedWorld.lorebook = Lorebook(
-            entries: List.from(card.lorebook!.entries),
-          );
-          await worldRepo.saveWorld(linkedWorld);
-        }
       }
 
       // Update the list entry

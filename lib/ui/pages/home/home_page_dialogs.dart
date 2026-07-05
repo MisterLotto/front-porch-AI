@@ -143,9 +143,8 @@ extension _HomePageDialogs on _HomePageState {
         }
 
         // Normal character card
-        final worldRepo = Provider.of<WorldRepository>(context, listen: false);
         final repo = Provider.of<CharacterRepository>(context, listen: false);
-        final card = await repo.importCharacter(file, worldRepo: worldRepo);
+        final card = await repo.importCharacter(file);
         if (context.mounted && card != null) {
           // Show tag dialog
           final tags = await TagDialog.show(context, card);
@@ -231,10 +230,8 @@ extension _HomePageDialogs on _HomePageState {
 
       // Import via CharacterRepository (reads PNG metadata + inserts into DB)
       final repo = Provider.of<CharacterRepository>(context, listen: false);
-      final worldRepo = Provider.of<WorldRepository>(context, listen: false);
       final importedCard = await repo.importCharacter(
         File(pngPath),
-        worldRepo: worldRepo,
       );
 
       // Import chat history if requested
@@ -373,7 +370,6 @@ extension _HomePageDialogs on _HomePageState {
     final byafService = ByafService();
     final v2Service = V2CardService();
     final repo = Provider.of<CharacterRepository>(context, listen: false);
-    final worldRepo = Provider.of<WorldRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
 
     for (int i = 0; i < paths.length; i++) {
@@ -393,7 +389,6 @@ extension _HomePageDialogs on _HomePageState {
         );
         final imported = await repo.importCharacter(
           File(pngPath),
-          worldRepo: worldRepo,
         );
         if (importChats && preview.messages.isNotEmpty && imported != null) {
           final db = await AppDatabase.instance();

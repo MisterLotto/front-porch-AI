@@ -539,6 +539,43 @@ void main() {
     );
 
     test(
+      'importing a card with a lorebook does NOT auto-create a linked World '
+      '(Phase 4: single source of truth — lore lives on the card)',
+      () async {
+        _setupPathProviderMock();
+        SharedPreferences.setMockInitialValues({});
+        final storage = StorageService();
+        await storage.initialized;
+
+        final card = CharacterCard(
+          name: 'LoreCarrier',
+          description: 'carries lore',
+          lorebook: Lorebook(
+            entries: [LorebookEntry(key: 'vale', content: 'The Vale.')],
+          ),
+        );
+        final v2 = V2CardService();
+        final tmpDir = Directory.systemTemp.createTempSync('no_autoworld_');
+        final png = '${tmpDir.path}/lore.png';
+        await v2.saveCardAsPng(card, png, null);
+
+        final imported = await repo.importCharacter(File(png));
+        expect(imported != null, true);
+        expect(imported!.lorebook != null, true);
+        expect(imported.lorebook!.entries.single.keys, ['vale']);
+
+        // The old behavior wrote a "<name>'s world lore" row into worlds.
+        final worldRows = await db.select(db.worlds).get();
+        expect(
+          worldRows.where((w) => w.name.contains('LoreCarrier')),
+          isEmpty,
+        );
+
+        await tmpDir.delete(recursive: true);
+      },
+    );
+
+    test(
       'legacy name-only import (no stable) still works, ensure injects on touch',
       () async {
         _setupPathProviderMock();
