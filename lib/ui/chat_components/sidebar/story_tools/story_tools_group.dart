@@ -87,7 +87,10 @@ class StoryToolsGroup extends StatelessWidget {
           if (isGroup)
             GroupLorebookSection(chatService: chatService)
           else if (character != null)
-            LorebookSection(character: character!),
+            LorebookSection(
+              character: character!,
+              activeLore: chatService.currentlyActiveLoreEntries(),
+            ),
         ],
       ),
     );

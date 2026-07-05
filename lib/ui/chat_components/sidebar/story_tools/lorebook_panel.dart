@@ -23,12 +23,14 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../sidebar_tokens.dart';
 
-/// Trigger-state dot color: red = enabled but inactive, blue = constant
-/// (always injected), green = keyword-triggered.
-Color _loreDotColor(BuildContext context, LorebookEntry entry) {
+/// Trigger-state dot color: red = enabled but inactive (or an inclusion-group
+/// loser this turn), blue = constant (always injected), green =
+/// keyword-triggered. [injected] is the post-group-filter truth from
+/// ChatService.currentlyActiveLoreEntries().
+Color _loreDotColor(BuildContext context, LorebookEntry entry, bool injected) {
+  if (!injected) return AppColors.negativeAccentOf(context);
   if (entry.constant) return AppColors.bondMidOf(context);
-  if (entry.isTriggered) return AppColors.bondHighOf(context);
-  return AppColors.negativeAccentOf(context);
+  return AppColors.bondHighOf(context);
 }
 
 /// One lorebook entry row (dot + name) — shared by the 1:1 and group panels.
@@ -36,11 +38,13 @@ class _LoreEntryRow extends StatelessWidget {
   final LorebookEntry entry;
   final String label;
   final double verticalPadding;
+  final bool injected;
 
   const _LoreEntryRow({
     required this.entry,
     required this.label,
     required this.verticalPadding,
+    required this.injected,
   });
 
   @override
@@ -53,7 +57,7 @@ class _LoreEntryRow extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: _loreDotColor(context, entry),
+              color: _loreDotColor(context, entry, injected),
               shape: BoxShape.circle,
             ),
           ),
@@ -62,7 +66,7 @@ class _LoreEntryRow extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: (entry.isTriggered || entry.constant)
+                color: injected
                     ? AppColors.textPrimary(context)
                     : AppColors.textSecondary(context),
                 fontSize: 12,
@@ -81,7 +85,15 @@ class _LoreEntryRow extends StatelessWidget {
 /// accordion, entries list always visible.
 class LorebookSection extends StatelessWidget {
   final CharacterCard character;
-  const LorebookSection({super.key, required this.character});
+
+  /// Post-group-filter injected set (ChatService.currentlyActiveLoreEntries).
+  final Set<LorebookEntry> activeLore;
+
+  const LorebookSection({
+    super.key,
+    required this.character,
+    required this.activeLore,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +141,7 @@ class LorebookSection extends StatelessWidget {
                             ? 'Always Active'
                             : entry.displayName,
                         verticalPadding: 4,
+                        injected: activeLore.contains(entry),
                       ),
                   ],
                 ),
@@ -196,6 +209,7 @@ class GroupLorebookSection extends StatelessWidget {
                         entry: entry,
                         label: entry.displayName,
                         verticalPadding: 3,
+                        injected: true,
                       ),
                   ],
                 ),

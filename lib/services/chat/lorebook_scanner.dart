@@ -258,6 +258,8 @@ class LorebookScanner {
     final newlyTriggered = !entry.isTriggered;
     entry.isTriggered = true;
     entry.remainingDepth = entry.stickyDepth;
+    entry.lastMatchScore = entry.keys.where(matches).length +
+        entry.secondaryKeys.where(matches).length;
     return newlyTriggered;
   }
 

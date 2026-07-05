@@ -137,19 +137,27 @@ extension ChatServiceGeneration on ChatService {
             '\n\n[Voice Call Mode] ${_storageService.sttSettings.callSystemPrompt}';
       }
 
-      // Build Lorebook content via the shared enumerator (group book + group
-      // worlds + member/1:1 books + worlds, honoring the inherit flag).
-      String loreContent = '';
-      final activeLoreStrings = <String>{}; // Set for deduplication
-      for (final ref in _collectLoreRefs()) {
-        final e = ref.entry;
-        if (e.enabled && (e.isTriggered || e.constant)) {
-          activeLoreStrings.add(e.injectableContent);
-        }
+      // Lorebook injection: positioned buckets from the injector (group
+      // winners → budget fill → per-position ordering). Pure read — the
+      // scanner already updated trigger state for this turn.
+      final loreInjection = _lorebookInjector.buildInjection(
+        sessionSeed: _currentSessionId ?? '',
+        contextSize: _sessionGenSettings.resolveContextSize(_storageService),
+      );
+      _lastLoreOverflow = loreInjection.overflowDropped;
+      if (loreInjection.overflowDropped.isNotEmpty) {
+        debugPrint(
+          '[Lorebook] ⚠ budget overflow — dropped: '
+          '${loreInjection.overflowDropped.join(', ')}',
+        );
       }
-      if (activeLoreStrings.isNotEmpty) {
-        loreContent = "Context Info:\n${activeLoreStrings.join('\n')}\n";
-      }
+      String loreBefore = loreInjection.beforeChar;
+      String loreAfter = loreInjection.afterChar;
+      String loreAnTop = loreInjection.authorNoteTop;
+      String loreAnBottom = loreInjection.authorNoteBottom;
+      String loreExTop = loreInjection.examplesTop;
+      String loreExBottom = loreInjection.examplesBottom;
+      List<LoreDepthEntry> loreDepth = loreInjection.depthEntries;
 
       // Build persona block(s)
       String personaBlock;
@@ -374,13 +382,25 @@ extension ChatServiceGeneration on ChatService {
         macroCtx,
         section: 'systemPrompt',
       );
-      if (loreContent.isNotEmpty) {
-        loreContent = _macroResolver.resolve(
-          loreContent,
-          macroCtx,
-          section: 'lore',
-        );
-      }
+      // Lore buckets are macro-resolved individually (same 'lore' section
+      // seeding the old single block used).
+      String loreMacro(String s) =>
+          s.isEmpty ? s : _macroResolver.resolve(s, macroCtx, section: 'lore');
+      loreBefore = loreMacro(loreBefore);
+      loreAfter = loreMacro(loreAfter);
+      loreAnTop = loreMacro(loreAnTop);
+      loreAnBottom = loreMacro(loreAnBottom);
+      loreExTop = loreMacro(loreExTop);
+      loreExBottom = loreMacro(loreExBottom);
+      loreDepth = [
+        for (final d in loreDepth)
+          LoreDepthEntry(
+            depth: d.depth,
+            role: d.role,
+            content: loreMacro(d.content),
+          ),
+      ];
+      final loreDepthJoined = loreDepth.map((d) => d.content).join('\n');
       // personaBlock and group-mode examples are resolved per-character above
       scenario = _macroResolver.resolve(
         scenario,
@@ -412,7 +432,7 @@ extension ChatServiceGeneration on ChatService {
 
       // Ensure the popped message is always restored, even if prompt assembly throws
       try {
-        history = _buildChatHistory();
+        history = _buildChatHistory(depthLore: loreDepth);
 
         // ── Context Shift: budget-aware history trimming ──
 
@@ -450,19 +470,28 @@ extension ChatServiceGeneration on ChatService {
           _needsSimulation.consumePendingCatastrophe();
         }
 
-        // Calculate token cost of all fixed sections to determine chat history budget
+        // Calculate token cost of all fixed sections to determine chat history budget.
+        // Every lore bucket is counted here — including @depth entries, which
+        // are spliced into history later WITHOUT re-counting, so the context
+        // math stays exact.
         final fixedContent =
             "$systemPrompt\n"
-            "$loreContent"
+            "$loreBefore"
             "$personaBlock\n"
+            "$loreAfter"
             "$userPersonaBlock"
             "Scenario: $scenario\n"
+            "$loreExTop"
             "$mesExampleBlock"
+            "$loreExBottom"
             "<START>\n"
             "$summaryBlock"
             "$journalBlock"
             "$postHistoryBlock"
+            "$loreAnTop"
             "$authorNoteBlock"
+            "$loreAnBottom"
+            "$loreDepthJoined"
             "$objectiveBlock"
             "$realismBlock"
             "$needsCatastropheBlock"
@@ -478,7 +507,10 @@ extension ChatServiceGeneration on ChatService {
         final historyBudget = contextBudget - fixedTokens - generationReserve;
 
         if (historyBudget > 0) {
-          final result = await _buildChatHistoryWithBudget(historyBudget);
+          final result = await _buildChatHistoryWithBudget(
+            historyBudget,
+            depthLore: loreDepth,
+          );
           history = result.history;
           droppedMessages = result.droppedCount;
         }
@@ -614,8 +646,8 @@ extension ChatServiceGeneration on ChatService {
       // proper 'system' role message and the transcript as the 'user' message —
       // the server applies the model's instruct template server-side.
       final chatSystemPrompt =
-          "$systemPrompt\n$loreContent$personaBlock\n$userPersonaBlock"
-          "Scenario: $scenario\n$mesExampleBlock";
+          "$systemPrompt\n$loreBefore$personaBlock\n$loreAfter$userPersonaBlock"
+          "Scenario: $scenario\n$loreExTop$mesExampleBlock$loreExBottom";
 
       final prompt =
           "<START>\n"
@@ -624,7 +656,9 @@ extension ChatServiceGeneration on ChatService {
           "$memoriesBlock"
           "$history"
           "$postHistoryBlock"
+          "$loreAnTop"
           "$authorNoteBlock"
+          "$loreAnBottom"
           "$objectiveBlock"
           "$realismBlock"
           "$needsCatastropheBlock"
@@ -636,7 +670,15 @@ extension ChatServiceGeneration on ChatService {
       _lastAssembledPrompt = '$chatSystemPrompt\n$prompt';
       _lastPromptBudget = {
         'System Prompt': (systemPrompt.length / 4).ceil(),
-        'Lorebook': (loreContent.length / 4).ceil(),
+        'Lorebook': ((loreBefore.length +
+                    loreAfter.length +
+                    loreAnTop.length +
+                    loreAnBottom.length +
+                    loreExTop.length +
+                    loreExBottom.length +
+                    loreDepthJoined.length) /
+                4)
+            .ceil(),
         'Persona': (personaBlock.length / 4).ceil(),
         'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
         'Examples': (mesExampleBlock.length / 4).ceil(),

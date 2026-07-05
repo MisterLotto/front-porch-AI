@@ -69,6 +69,10 @@ class ChatFacade {
     }).toList();
 
     final lorebook = <Map<String, dynamic>>[];
+    // Post-group-filter truth: what actually injects this turn (an
+    // inclusion-group loser stays isTriggered but must not read as active
+    // in the web UI either — same source the desktop sidebar dots use).
+    final injectedLore = _chat.currentlyActiveLoreEntries();
     void addEntries(Iterable<dynamic> entries, String prefix) {
       for (final entry in entries) {
         if (!entry.enabled) continue;
@@ -77,7 +81,7 @@ class ChatFacade {
           'name': prefix.isEmpty
               ? entry.displayName
               : '$prefix: ${entry.displayName}',
-          'isTriggered': entry.isTriggered,
+          'isTriggered': injectedLore.contains(entry) && !entry.constant,
           'constant': entry.constant,
           'remainingDepth': entry.remainingDepth,
         });

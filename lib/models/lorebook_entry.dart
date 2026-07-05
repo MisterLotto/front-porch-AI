@@ -95,6 +95,10 @@ class LorebookEntry {
   bool isTriggered; // Runtime state for UI indication
   int remainingDepth; // Runtime counter
 
+  /// Runtime: how many keys (primary + secondary) matched on the last
+  /// successful scan — inclusion-group scoring reads it. Never serialized.
+  int lastMatchScore = 0;
+
   LorebookEntry({
     String? key,
     List<String>? keys,

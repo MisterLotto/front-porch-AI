@@ -16,11 +16,31 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
 import 'package:front_porch_ai/models/lorebook_entry.dart';
 
 /// Pure key-matching functions with SillyTavern-identical semantics, shared
 /// by the scanner (and by tests directly). Not exported via the services
 /// barrel — direct-import only, like other chat/ leaves.
+
+/// FNV-1a 32-bit. Dart's Object.hash/String.hashCode are not stable across
+/// runs, so persisted identities (timed-effect keys) and deterministic seeds
+/// (inclusion-group winners) need a hand-rolled hash.
+int fnv1a32(String input) {
+  var hash = 0x811c9dc5;
+  for (final byte in utf8.encode(input)) {
+    hash ^= byte;
+    hash = (hash * 0x01000193) & 0xFFFFFFFF;
+  }
+  return hash;
+}
+
+/// Stable identity for a lorebook entry: hash of name + keys + content.
+/// Editing any of those intentionally changes the identity (ST behavior:
+/// an edited entry drops its timed-effect state).
+int loreEntryHash(LorebookEntry e) =>
+    fnv1a32('${e.name}\x00${e.keys.join(',')}\x00${e.content}');
 
 final RegExp _regexKeyShape = RegExp(r'^/(.+)/([gimsuy]*)$');
 

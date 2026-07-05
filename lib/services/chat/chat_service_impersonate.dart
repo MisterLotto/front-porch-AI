@@ -77,20 +77,20 @@ extension ChatServiceImpersonate on ChatService {
         }
       }
 
-      // Lorebook via the shared enumerator (group book + group worlds +
-      // member/1:1 books + worlds, honoring the inherit flag). Read-only:
-      // impersonation never scans or mutates trigger state.
-      String loreContent = '';
-      final activeLoreStrings = <String>{}; // Set for deduplication
-      for (final ref in _collectLoreRefs()) {
-        final e = ref.entry;
-        if (e.enabled && (e.isTriggered || e.constant)) {
-          activeLoreStrings.add(e.injectableContent);
-        }
-      }
-      if (activeLoreStrings.isNotEmpty) {
-        loreContent = "Context Info:\n${activeLoreStrings.join('\n')}\n";
-      }
+      // Lorebook via the shared injector — the same positioned buckets the
+      // main generation path uses. Read-only: impersonation never scans or
+      // mutates trigger state.
+      final loreInjection = _lorebookInjector.buildInjection(
+        sessionSeed: _currentSessionId ?? '',
+        contextSize: _sessionGenSettings.resolveContextSize(_storageService),
+      );
+      String loreBefore = loreInjection.beforeChar;
+      String loreAfter = loreInjection.afterChar;
+      String loreAnTop = loreInjection.authorNoteTop;
+      String loreAnBottom = loreInjection.authorNoteBottom;
+      String loreExTop = loreInjection.examplesTop;
+      String loreExBottom = loreInjection.examplesBottom;
+      List<LoreDepthEntry> loreDepth = loreInjection.depthEntries;
 
       // Persona & scenario
       // Use evolved versions if character evolution is enabled and available
@@ -180,13 +180,23 @@ extension ChatServiceImpersonate on ChatService {
         macroCtx,
         section: 'systemPrompt',
       );
-      if (loreContent.isNotEmpty) {
-        loreContent = _macroResolver.resolve(
-          loreContent,
-          macroCtx,
-          section: 'lore',
-        );
-      }
+      String loreMacro(String s) =>
+          s.isEmpty ? s : _macroResolver.resolve(s, macroCtx, section: 'lore');
+      loreBefore = loreMacro(loreBefore);
+      loreAfter = loreMacro(loreAfter);
+      loreAnTop = loreMacro(loreAnTop);
+      loreAnBottom = loreMacro(loreAnBottom);
+      loreExTop = loreMacro(loreExTop);
+      loreExBottom = loreMacro(loreExBottom);
+      loreDepth = [
+        for (final d in loreDepth)
+          LoreDepthEntry(
+            depth: d.depth,
+            role: d.role,
+            content: loreMacro(d.content),
+          ),
+      ];
+      final loreDepthJoined = loreDepth.map((d) => d.content).join('\n');
       scenario = _macroResolver.resolve(
         scenario,
         macroCtx,
@@ -219,14 +229,20 @@ extension ChatServiceImpersonate on ChatService {
       // ── Context Shift: budget-aware history trimming ──
       final fixedContent =
           "$systemPrompt\n"
-          "$loreContent"
+          "$loreBefore"
           "$personaBlock\n"
+          "$loreAfter"
           "$userPersonaBlock"
           "Scenario: $scenario\n"
+          "$loreExTop"
           "$mesExampleBlock"
+          "$loreExBottom"
           "<START>\n"
           "$postHistoryBlock"
+          "$loreAnTop"
           "$authorNoteBlock"
+          "$loreAnBottom"
+          "$loreDepthJoined"
           "$impersonateInstruction"
           "$suffix";
       final fixedTokens = await _countTokens(fixedContent);
@@ -238,7 +254,10 @@ extension ChatServiceImpersonate on ChatService {
       final historyBudget = contextBudget - fixedTokens - generationReserve;
 
       if (historyBudget > 0) {
-        final result = await _buildChatHistoryWithBudget(historyBudget);
+        final result = await _buildChatHistoryWithBudget(
+          historyBudget,
+          depthLore: loreDepth,
+        );
         history = result.history;
       } else if (_messages.isNotEmpty) {
         final lastMsg = _messages.last;
@@ -251,14 +270,16 @@ extension ChatServiceImpersonate on ChatService {
       // its /v1/chat/completions door), so always send the system content as a
       // proper 'system' role message and the transcript as the 'user' message.
       final chatSystemPrompt =
-          "$systemPrompt\n$loreContent$personaBlock\n$userPersonaBlock"
-          "Scenario: $scenario\n$mesExampleBlock";
+          "$systemPrompt\n$loreBefore$personaBlock\n$loreAfter$userPersonaBlock"
+          "Scenario: $scenario\n$loreExTop$mesExampleBlock$loreExBottom";
 
       final prompt =
           "<START>\n"
           "$history"
           "$postHistoryBlock"
+          "$loreAnTop"
           "$authorNoteBlock"
+          "$loreAnBottom"
           "$impersonateInstruction"
           "$suffix";
 

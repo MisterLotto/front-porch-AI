@@ -264,7 +264,10 @@ void main() {
     );
     await expectThemedGoldens(
       tester,
-      child: SizedBox(width: 340, child: LorebookSection(character: character)),
+      child: SizedBox(
+        width: 340,
+        child: LorebookSection(character: character, activeLore: const {}),
+      ),
       group: 'sidebar',
       name: 'lorebook',
       surface: const Size(380, 420),

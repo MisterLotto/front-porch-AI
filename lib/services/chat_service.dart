@@ -63,6 +63,7 @@ import 'package:front_porch_ai/services/chat/expression_classifier.dart'; // lea
 import 'package:front_porch_ai/services/chat/time_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
 import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
+import 'package:front_porch_ai/services/chat/lorebook_injector.dart';
 import 'package:front_porch_ai/services/chat/lorebook_scanner.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/author_note_builder.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
@@ -1330,14 +1331,14 @@ class ChatService extends ChangeNotifier {
   /// This is intended for UI display (e.g. sidebar) to show what lore is currently "in play".
   List<LorebookEntry> getActiveGroupLoreEntries() {
     if (_activeGroup == null) return const [];
-    // Deduplicate by content to avoid showing the exact same lore text twice.
+    // Post-group-filter truth (what actually injects), deduplicated by
+    // content to avoid showing the exact same lore text twice.
     final seen = <String>{};
     return [
-      for (final ref in _collectLoreRefs())
-        if (ref.entry.enabled &&
-            (ref.entry.isTriggered || ref.entry.constant) &&
-            seen.add(ref.entry.content))
-          ref.entry,
+      for (final e in _lorebookInjector.activeEntries(
+        sessionSeed: _currentSessionId ?? '',
+      ))
+        if (seen.add(e.content)) e,
     ];
   }
 
@@ -1518,6 +1519,26 @@ class ChatService extends ChangeNotifier {
     getMaxRecursionSteps: () =>
         _storageService.lorebookSettings.maxRecursionSteps,
   );
+
+  // Pure-read injection engine (positions, ordering, budget, inclusion
+  // groups). Consumes the same enumerator as the scanner but honors the
+  // group's inherit flag (injection semantics).
+  late final _lorebookInjector = LorebookInjector(
+    getEntryRefs: () => _collectLoreRefs(),
+    getSettings: () => _storageService.lorebookSettings,
+  );
+
+  /// Names of lore entries dropped by the token budget on the last
+  /// generation — plumbing for the Phase 4 overflow meter/toast.
+  List<String> _lastLoreOverflow = const [];
+  List<String> get lastLoreOverflow => _lastLoreOverflow;
+
+  /// The post-group-filter active lore set — what is ACTUALLY injected this
+  /// turn. Sidebar dots and the web facade read this so they never show an
+  /// inclusion-group loser as active.
+  Set<LorebookEntry> currentlyActiveLoreEntries() => _lorebookInjector
+      .activeEntries(sessionSeed: _currentSessionId ?? '')
+      .toSet();
 
   // The group lorebook is stored as a JSON string on the group row. Parse it
   // ONCE and keep the live instance — the scanner writes trigger state onto
