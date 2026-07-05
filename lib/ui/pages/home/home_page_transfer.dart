@@ -124,8 +124,8 @@ extension _HomePageTransfer on _HomePageState {
       SnackBar(
         content: Text(msg),
         backgroundColor: result.failCount > 0
-            ? Colors.orange.shade700
-            : Colors.purpleAccent.shade700,
+            ? AppColors.porchAmberOf(context)
+            : AppColors.surfaceContainerOf(context),
       ),
     );
   }
@@ -176,7 +176,10 @@ extension _HomePageTransfer on _HomePageState {
           ? 'Extracted 1 character as an individual.'
           : 'Extracted $extracted characters as individuals.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.teal.shade700),
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: AppColors.surfaceContainerOf(context),
+        ),
       );
     }
   }

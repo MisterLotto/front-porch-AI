@@ -64,8 +64,8 @@ class HomeGridSearchBar extends StatelessWidget {
                                 ? Icons.search
                                 : Icons.folder_open,
                             color: searchScope == SearchScope.allCharacters
-                                ? Colors.blueAccent
-                                : Colors.amberAccent,
+                                ? AppColors.porchHoneyOf(context)
+                                : AppColors.porchAmberOf(context),
                             size: 20,
                           ),
                           tooltip: 'Search scope',
@@ -81,7 +81,7 @@ class HomeGridSearchBar extends StatelessWidget {
                                     size: 18,
                                     color:
                                         searchScope == SearchScope.currentFolder
-                                        ? Colors.amberAccent
+                                        ? AppColors.porchAmberOf(context)
                                         : AppColors.iconSecondary(context),
                                   ),
                                   const SizedBox(width: 8),
@@ -91,7 +91,7 @@ class HomeGridSearchBar extends StatelessWidget {
                                       color:
                                           searchScope ==
                                               SearchScope.currentFolder
-                                          ? Colors.amberAccent
+                                          ? AppColors.porchAmberOf(context)
                                           : AppColors.textSecondary(context),
                                       fontSize: 13,
                                     ),
@@ -109,7 +109,7 @@ class HomeGridSearchBar extends StatelessWidget {
                                     color:
                                         searchScope ==
                                             SearchScope.folderRecursive
-                                        ? Colors.amberAccent
+                                        ? AppColors.porchAmberOf(context)
                                         : AppColors.iconSecondary(context),
                                   ),
                                   const SizedBox(width: 8),
@@ -119,7 +119,7 @@ class HomeGridSearchBar extends StatelessWidget {
                                       color:
                                           searchScope ==
                                               SearchScope.folderRecursive
-                                          ? Colors.amberAccent
+                                          ? AppColors.porchAmberOf(context)
                                           : AppColors.textSecondary(context),
                                       fontSize: 13,
                                     ),
@@ -136,7 +136,7 @@ class HomeGridSearchBar extends StatelessWidget {
                                     size: 18,
                                     color:
                                         searchScope == SearchScope.allCharacters
-                                        ? Colors.blueAccent
+                                        ? AppColors.porchHoneyOf(context)
                                         : AppColors.iconSecondary(context),
                                   ),
                                   const SizedBox(width: 8),
@@ -146,7 +146,7 @@ class HomeGridSearchBar extends StatelessWidget {
                                       color:
                                           searchScope ==
                                               SearchScope.allCharacters
-                                          ? Colors.blueAccent
+                                          ? AppColors.porchHoneyOf(context)
                                           : AppColors.textSecondary(context),
                                       fontSize: 13,
                                     ),

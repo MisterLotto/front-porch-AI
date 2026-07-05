@@ -255,7 +255,6 @@ extension _HomePageDialogs on _HomePageState {
             content: Text(
               'Imported "${importedCard.name}" from Backyard AI$chatNote!',
             ),
-            backgroundColor: Colors.green.shade700,
           ),
         );
       }
@@ -281,17 +280,16 @@ extension _HomePageDialogs on _HomePageState {
         builder: (ctx, setLocal) => AlertDialog(
           backgroundColor: AppColors.surfaceOf(ctx),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: AppColors.porchHoneyOf(ctx).withValues(alpha: 0.5),
+            ),
           ),
           title: Row(
             children: [
               Icon(
                 Icons.library_add,
-                color: AppColors.resolve(
-                  ctx,
-                  Colors.blueAccent,
-                  Colors.blue.shade700,
-                ),
+                color: AppColors.porchHoneyOf(ctx),
               ),
               const SizedBox(width: 10),
               Expanded(

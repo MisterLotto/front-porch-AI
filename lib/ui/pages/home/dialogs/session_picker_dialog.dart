@@ -19,6 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// The "continue a chat / start new" session picker shown when a character has
 /// existing chats. Returns the picked session id, the sentinel `__new__` to
@@ -30,51 +31,26 @@ Future<String?> showSessionPickerDialog(
   List<Map<String, dynamic>> sessions,
   String characterName,
 ) {
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: AppColors.surfaceOf(context),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Colors.blueAccent, width: 0.5),
-      ),
-      title: Row(
-        children: [
-          const Icon(
-            Icons.chat_bubble_outline,
-            color: Colors.blueAccent,
-            size: 22,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Continue a chat with $characterName?',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary(context),
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 420,
-        height: 350,
-        child: Column(
+  return showWarmDialog<String>(
+    context,
+    title: 'Continue a chat with $characterName?',
+    icon: Icons.chat_bubble_outline,
+    accent: AppColors.porchHoneyOf(context),
+    width: 420,
+    content: SizedBox(
+      height: 350,
+      child: Column(
           children: [
             // New chat button
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(ctx).pop('__new__'),
+                onPressed: () => Navigator.of(context).pop('__new__'),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Start New Chat'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.greenAccent,
-                  side: BorderSide(color: Colors.greenAccent),
+                  foregroundColor: AppColors.porchTerracottaOf(context),
+                  side: BorderSide(color: AppColors.porchTerracottaOf(context)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -104,10 +80,10 @@ Future<String?> showSessionPickerDialog(
                     ),
                     child: ListTile(
                       leading: isBranch
-                          ? const Icon(
+                          ? Icon(
                               Icons.call_split,
                               size: 20,
-                              color: Colors.blueAccent,
+                              color: AppColors.porchHoneyOf(context),
                             )
                           : Icon(
                               Icons.chat,
@@ -158,14 +134,14 @@ Future<String?> showSessionPickerDialog(
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withValues(
-                                    alpha: 0.15,
-                                  ),
+                                  color: AppColors.porchHoneyOf(
+                                    context,
+                                  ).withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
-                                    color: Colors.blueAccent.withValues(
-                                      alpha: 0.3,
-                                    ),
+                                    color: AppColors.porchHoneyOf(
+                                      context,
+                                    ).withValues(alpha: 0.3),
                                     width: 0.5,
                                   ),
                                 ),
@@ -175,22 +151,14 @@ Future<String?> showSessionPickerDialog(
                                     Icon(
                                       Icons.forum,
                                       size: 10,
-                                      color: AppColors.resolve(
-                                        context,
-                                        Colors.blueAccent.shade200,
-                                        Colors.blueAccent.shade700,
-                                      ),
+                                      color: AppColors.porchHoneyOf(context),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '$messageCount total',
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color: AppColors.resolve(
-                                          context,
-                                          Colors.blueAccent.shade200,
-                                          Colors.blueAccent.shade700,
-                                        ),
+                                        color: AppColors.porchHoneyOf(context),
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -204,14 +172,14 @@ Future<String?> showSessionPickerDialog(
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.greenAccent.withValues(
-                                      alpha: 0.15,
-                                    ),
+                                    color: AppColors.porchTerracottaOf(
+                                      context,
+                                    ).withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
                                     border: Border.all(
-                                      color: Colors.greenAccent.withValues(
-                                        alpha: 0.3,
-                                      ),
+                                      color: AppColors.porchTerracottaOf(
+                                        context,
+                                      ).withValues(alpha: 0.3),
                                       width: 0.5,
                                     ),
                                   ),
@@ -221,10 +189,8 @@ Future<String?> showSessionPickerDialog(
                                       Icon(
                                         Icons.person,
                                         size: 10,
-                                        color: AppColors.resolve(
+                                        color: AppColors.porchTerracottaOf(
                                           context,
-                                          Colors.greenAccent.shade200,
-                                          Colors.greenAccent.shade700,
                                         ),
                                       ),
                                       const SizedBox(width: 4),
@@ -232,10 +198,8 @@ Future<String?> showSessionPickerDialog(
                                         '$userMessageCount user',
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: AppColors.resolve(
+                                          color: AppColors.porchTerracottaOf(
                                             context,
-                                            Colors.greenAccent.shade200,
-                                            Colors.greenAccent.shade700,
                                           ),
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -257,7 +221,7 @@ Future<String?> showSessionPickerDialog(
                           ],
                         ],
                       ),
-                      onTap: () => Navigator.of(ctx).pop(s['id']),
+                      onTap: () => Navigator.of(context).pop(s['id']),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -269,15 +233,6 @@ Future<String?> showSessionPickerDialog(
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(null),
-          child: Text(
-            'Cancel',
-            style: TextStyle(color: AppColors.textSecondary(context)),
-          ),
-        ),
-      ],
-    ),
+      actions: [warmDialogCancel(context)],
   );
 }

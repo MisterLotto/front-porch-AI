@@ -35,7 +35,7 @@ Future<T?> showWarmDialog<T>(
   BuildContext context, {
   required String title,
   required Widget content,
-  required List<Widget> actions,
+  List<Widget>? actions,
   IconData? icon,
   Color? accent,
   bool destructive = false,

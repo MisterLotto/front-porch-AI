@@ -90,17 +90,15 @@ class FolderGridCard extends StatelessWidget {
         final isHovering = candidateData.isNotEmpty;
         return Card(
           color: isHovering
-              ? AppColors.resolve(
-                  context,
-                  Colors.amber.shade900.withValues(alpha: 0.4),
-                  Colors.amber.withValues(alpha: 0.1),
-                )
+              ? AppColors.porchAmberOf(context).withValues(alpha: 0.15)
               : AppColors.cardOf(context),
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isHovering ? Colors.amber : AppColors.borderOf(context),
+              color: isHovering
+                  ? AppColors.porchAmberOf(context)
+                  : AppColors.borderOf(context),
               width: isHovering ? 2 : 1,
             ),
           ),
@@ -132,7 +130,7 @@ class FolderGridCard extends StatelessWidget {
                         Icons.folder,
                         size: iconSize,
                         color: isHovering
-                            ? Colors.amber
+                            ? AppColors.porchAmberOf(context)
                             : AppColors.iconSecondary(context),
                       )
                     else
@@ -181,9 +179,9 @@ class FolderGridCard extends StatelessWidget {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.delete,
-                              color: Colors.redAccent,
+                              color: AppColors.negativeAccentOf(context),
                               size: 18,
                             ),
                             tooltip: 'Delete folder',

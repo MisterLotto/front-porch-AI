@@ -64,20 +64,14 @@ extension _HomePageChrome on _HomePageState {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isActive
-              ? AppColors.resolve(
-                  context,
-                  Colors.amber.shade800.withValues(alpha: 0.25),
-                  Colors.amber.withValues(alpha: 0.15),
-                )
+              ? AppColors.porchAmberOf(context).withValues(alpha: 0.15)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: isActive
               ? Border.all(
-                  color: AppColors.resolve(
+                  color: AppColors.porchAmberOf(
                     context,
-                    Colors.amber.shade700.withValues(alpha: 0.5),
-                    Colors.amber.shade700.withValues(alpha: 0.4),
-                  ),
+                  ).withValues(alpha: 0.45),
                 )
               : null,
         ),
@@ -88,11 +82,7 @@ extension _HomePageChrome on _HomePageState {
               icon,
               size: 18,
               color: isActive
-                  ? AppColors.resolve(
-                      context,
-                      Colors.amber.shade400,
-                      Colors.amber.shade800,
-                    )
+                  ? AppColors.porchAmberOf(context)
                   : AppColors.iconSecondary(context),
             ),
             const SizedBox(width: 8),
@@ -147,13 +137,9 @@ extension _HomePageChrome on _HomePageState {
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   minHeight: 4,
-                  backgroundColor: AppColors.resolve(
-                    context,
-                    const Color(0xFF333333),
-                    AppColors.surfaceContainerLight,
-                  ),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Colors.greenAccent,
+                  backgroundColor: AppColors.surfaceContainerOf(context),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppColors.porchHoneyOf(context),
                   ),
                 ),
               ),

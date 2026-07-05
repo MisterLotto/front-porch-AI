@@ -108,8 +108,8 @@ class HomeGridToolbar extends StatelessWidget {
                             ?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: isOrganizing
-                                  ? Colors.blueAccent
-                                  : Colors.purpleAccent,
+                                  ? AppColors.porchHoneyOf(context)
+                                  : AppColors.porchTerracottaOf(context),
                             ),
                       ),
                     ),
@@ -204,14 +204,13 @@ class HomeGridToolbar extends StatelessWidget {
                                   overlayShape: const RoundSliderOverlayShape(
                                     overlayRadius: 12,
                                   ),
-                                  activeTrackColor: Colors.blueAccent
-                                      .withValues(alpha: 0.7),
-                                  inactiveTrackColor: AppColors.resolve(
+                                  activeTrackColor: AppColors.porchHoneyOf(
                                     context,
-                                    Colors.white.withValues(alpha: 0.12),
-                                    Colors.black.withValues(alpha: 0.12),
-                                  ),
-                                  thumbColor: Colors.blueAccent,
+                                  ).withValues(alpha: 0.7),
+                                  inactiveTrackColor: AppColors.borderOf(
+                                    context,
+                                  ).withValues(alpha: 0.4),
+                                  thumbColor: AppColors.porchHoneyOf(context),
                                 ),
                                 child: Slider(
                                   value: gridScale,
@@ -254,9 +253,9 @@ class HomeGridToolbar extends StatelessWidget {
                     ),
                     IconButton(
                       tooltip: 'Organize into folders',
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.drive_file_move_outlined,
-                        color: Colors.blueAccent,
+                        color: AppColors.porchHoneyOf(context),
                       ),
                       visualDensity: VisualDensity.compact,
                       onPressed: onToggleOrganizeMode,
@@ -272,9 +271,9 @@ class HomeGridToolbar extends StatelessWidget {
                     if (activeFolderId != null)
                       IconButton(
                         tooltip: 'New Subfolder',
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.create_new_folder_outlined,
-                          color: Colors.amberAccent,
+                          color: AppColors.porchAmberOf(context),
                         ),
                         visualDensity: VisualDensity.compact,
                         onPressed: () => onFolderDialogAction(

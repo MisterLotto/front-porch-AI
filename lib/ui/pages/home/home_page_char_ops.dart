@@ -119,11 +119,7 @@ extension _HomePageCharOps on _HomePageState {
     bool importPng = pngFiles.isNotEmpty;
     bool importByaf = byafFiles.isNotEmpty;
     bool importChats = true;
-    final accent = AppColors.resolve(
-      context,
-      Colors.blueAccent,
-      Colors.blue.shade700,
-    );
+    final accent = AppColors.porchHoneyOf(context);
     return showDialog<(bool, bool, bool)>(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
@@ -134,7 +130,8 @@ extension _HomePageCharOps on _HomePageState {
           return AlertDialog(
             backgroundColor: AppColors.surfaceOf(ctx),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: accent.withValues(alpha: 0.5)),
             ),
             title: Row(
               children: [
@@ -311,20 +308,26 @@ extension _HomePageCharOps on _HomePageState {
             final progress = totalCount > 0 ? currentCount / totalCount : 0.0;
 
             return AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: AppColors.surfaceOf(ctx),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 side: BorderSide(
-                  color: Colors.blueAccent.withValues(alpha: 0.5),
+                  color: AppColors.porchHoneyOf(ctx).withValues(alpha: 0.5),
                 ),
               ),
               title: Row(
                 children: [
-                  const Icon(Icons.library_add, color: Colors.blueAccent),
+                  Icon(
+                    Icons.library_add,
+                    color: AppColors.porchHoneyOf(ctx),
+                  ),
                   const SizedBox(width: 12),
                   Text(
                     title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary(ctx),
+                    ),
                   ),
                 ],
               ),
@@ -339,9 +342,9 @@ extension _HomePageCharOps on _HomePageState {
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 12,
-                        backgroundColor: Colors.white10,
-                        valueColor: const AlwaysStoppedAnimation(
-                          Colors.blueAccent,
+                        backgroundColor: AppColors.surfaceContainerOf(ctx),
+                        valueColor: AlwaysStoppedAnimation(
+                          AppColors.porchHoneyOf(ctx),
                         ),
                       ),
                     ),
@@ -351,8 +354,8 @@ extension _HomePageCharOps on _HomePageState {
                       currentCount == 0
                           ? 'Starting import...'
                           : 'Importing $currentCount of $totalCount...',
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: AppColors.textSecondary(ctx),
                         fontSize: 14,
                       ),
                     ),
@@ -361,8 +364,8 @@ extension _HomePageCharOps on _HomePageState {
                     if (currentName.isNotEmpty)
                       Text(
                         currentName,
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: AppColors.textTertiary(ctx),
                           fontSize: 12,
                         ),
                         maxLines: 1,
@@ -375,13 +378,13 @@ extension _HomePageCharOps on _HomePageState {
                       children: [
                         _bulkStatChip(
                           Icons.check_circle,
-                          Colors.green,
+                          AppColors.verifiedAccentOf(ctx),
                           '$importedCount imported',
                         ),
                         const SizedBox(width: 16),
                         _bulkStatChip(
                           Icons.error,
-                          Colors.redAccent,
+                          AppColors.negativeAccentOf(ctx),
                           '$failedCount failed',
                         ),
                       ],
@@ -397,7 +400,9 @@ extension _HomePageCharOps on _HomePageState {
                   child: Text(
                     cancelled ? 'Cancelling...' : 'Cancel',
                     style: TextStyle(
-                      color: cancelled ? Colors.white38 : Colors.redAccent,
+                      color: cancelled
+                          ? AppColors.textTertiary(ctx)
+                          : AppColors.negativeAccentOf(ctx),
                     ),
                   ),
                 ),
