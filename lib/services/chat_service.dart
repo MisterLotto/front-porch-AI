@@ -1533,10 +1533,21 @@ class ChatService extends ChangeNotifier {
     },
   );
 
-  /// Per-chat ST sticky/cooldown state — persisted inside the session's
-  /// groupRealismState blob (additive `lorebookTimers` key), hydrated on
-  /// session load, cleared at session boundaries via the scanner reset.
+  /// Per-chat lore session state (ST sticky/cooldown timers, macro locals,
+  /// chat-scoped lorebook) — persisted inside the session's groupRealismState
+  /// blob via additive keys, hydrated on session load, cleared at session
+  /// boundaries via the scanner reset.
   final _loreTimedEffects = LorebookTimedEffects();
+
+  /// The chat-scoped lorebook: lore that lives and dies with this one
+  /// conversation. The sidebar edits it directly (live instance) and calls
+  /// [commitChatLorebookEdit] to notify + persist.
+  Lorebook get chatLorebook => _loreTimedEffects.chatLorebook;
+
+  Future<void> commitChatLorebookEdit() async {
+    notifyListeners();
+    await _saveChat();
+  }
 
   // Pure-read injection engine (positions, ordering, budget, inclusion
   // groups). Consumes the same enumerator as the scanner but honors the
@@ -1599,6 +1610,7 @@ class ChatService extends ChangeNotifier {
           : (_activeCharacter != null
                 ? [_activeCharacter!]
                 : const <CharacterCard>[]),
+      chatLorebook: _loreTimedEffects.chatLorebook,
       groupLorebook: _activeGroupLorebook,
       groupWorldNames: _activeGroup?.worldIds ?? const [],
       resolveWorld: (name) =>

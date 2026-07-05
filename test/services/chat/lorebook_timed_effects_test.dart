@@ -118,6 +118,49 @@ void main() {
       expect(loreEntryHash(a), loreEntryHash(b));
     });
 
+    test('chat lorebook persists in the blob and clears on reset', () {
+      final t = LorebookTimedEffects();
+      t.chatLorebook.entries.add(
+        LorebookEntry(keys: const ['vale'], content: 'Chat-only lore.'),
+      );
+      final blob = jsonEncode({'chatLorebook': t.chatLorebookFragment()});
+
+      final restored = LorebookTimedEffects()..hydrate(blob);
+      expect(restored.chatLorebook.entries.single.keys, ['vale']);
+      expect(restored.chatLorebook.entries.single.content, 'Chat-only lore.');
+
+      restored.reset();
+      expect(restored.chatLorebook.entries, isEmpty);
+      expect(LorebookTimedEffects().chatLorebookFragment(), isNull);
+    });
+
+    test('chat book enumerates FIRST and its entries can trigger', () {
+      final t = LorebookTimedEffects();
+      final chatEntry =
+          LorebookEntry(keys: const ['pier'], content: 'chat lore');
+      t.chatLorebook.entries.add(chatEntry);
+      final ch = CharacterCard(
+        name: 'T',
+        lorebook: Lorebook(
+          entries: [LorebookEntry(keys: const ['pier'], content: 'char lore')],
+        ),
+      );
+      final refs = collectLoreEntryRefs(
+        characters: [ch],
+        chatLorebook: t.chatLorebook,
+        resolveWorld: (_) => null,
+      );
+      expect(refs.first.sourceLabel, 'chat');
+      expect(identical(refs.first.entry, chatEntry), isTrue);
+
+      final scanner = LorebookScanner(
+        onNotify: () {},
+        getEntryRefs: () => refs,
+      );
+      scanner.scanLorebook('User: down by the pier');
+      expect(chatEntry.isTriggered, isTrue);
+    });
+
     test('macro locals persist alongside timers and clear on reset', () {
       final t = LorebookTimedEffects();
       t.localMacroVars['mood'] = 'grim';

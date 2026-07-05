@@ -43,7 +43,7 @@ class LoreEntryRef {
 /// live in generation, impersonation, the sidebar getter, the pre-AI
 /// snapshot, and the scanner.
 ///
-/// Enumeration order (stable): group book → group worlds → per-character
+/// Enumeration order (stable): chat book → group book → group worlds → per-character
 /// inline book + attached worlds (members only when [inherit] is true or
 /// there is no group). No filtering happens here — callers apply their own
 /// active/enabled predicates so the scanner (which needs ALL enabled
@@ -54,12 +54,20 @@ class LoreEntryRef {
 /// lost between scan and injection (the pre-Phase-2 group lorebook bug).
 List<LoreEntryRef> collectLoreEntryRefs({
   required List<CharacterCard> characters,
+  Lorebook? chatLorebook,
   Lorebook? groupLorebook,
   List<String> groupWorldNames = const [],
   required World? Function(String name) resolveWorld,
   bool inherit = true,
 }) {
   final refs = <LoreEntryRef>[];
+
+  // Chat-scoped book scans and enumerates FIRST (ST order: chat book first).
+  if (chatLorebook != null) {
+    for (final e in chatLorebook.entries) {
+      refs.add(LoreEntryRef(entry: e, book: chatLorebook, sourceLabel: 'chat'));
+    }
+  }
 
   if (groupLorebook != null) {
     for (final e in groupLorebook.entries) {

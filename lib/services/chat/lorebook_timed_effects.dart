@@ -21,7 +21,11 @@ import 'dart:convert';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 
-/// Per-chat ST timed-effect state (sticky / cooldown), in MESSAGE counts.
+/// Per-chat lore session state: ST timed effects (sticky / cooldown, in
+/// MESSAGE counts), {{setvar}} macro locals, and the chat-scoped lorebook.
+/// Everything here shares one lifecycle — persisted in the session blob,
+/// hydrated on load, cleared at session boundaries — which is why it is
+/// co-located.
 /// Persisted as the additive `lorebookTimers` key inside the session's
 /// groupRealismState JSON blob (no schema change; dies with the session).
 ///
@@ -40,11 +44,14 @@ class LorebookTimedEffects {
   final Map<int, ({int start, int end})> _sticky = {};
   final Map<int, ({int start, int end, bool protected})> _cooldown = {};
 
-  /// Per-chat {{setvar}}/{{getvar}} macro variables. Co-located here because
-  /// this store already has the exact per-chat lifecycle macro locals need:
-  /// persisted in the session blob, hydrated on load, cleared at session
-  /// boundaries. Serialized under its own top-level `macroVars` key.
+  /// Per-chat {{setvar}}/{{getvar}} macro variables. Serialized under the
+  /// top-level `macroVars` key.
   final Map<String, String> localMacroVars = {};
+
+  /// The chat-scoped lorebook — lore that lives and dies with this one
+  /// conversation. Live instance (the scanner writes trigger state onto its
+  /// entries); serialized under the top-level `chatLorebook` key.
+  final Lorebook chatLorebook = Lorebook(entries: []);
 
   bool isStickyActive(LorebookEntry entry, int chatLength) {
     final s = _sticky[loreEntryHash(entry)];
@@ -105,6 +112,10 @@ class LorebookTimedEffects {
     );
   }
 
+  /// The `chatLorebook` JSON fragment, or null when empty.
+  Map<String, dynamic>? chatLorebookFragment() =>
+      chatLorebook.entries.isEmpty ? null : chatLorebook.toJson();
+
   /// The `macroVars` JSON fragment, or null when empty.
   Map<String, dynamic>? macroVarsFragment() =>
       localMacroVars.isEmpty ? null : Map<String, dynamic>.from(localMacroVars);
@@ -140,6 +151,13 @@ class LorebookTimedEffects {
         (decoded['macroVars'] as Map).forEach((k, v) {
           localMacroVars[k.toString()] = v.toString();
         });
+      }
+      if (decoded['chatLorebook'] is Map) {
+        chatLorebook.entries.addAll(
+          Lorebook.fromJson(
+            Map<String, dynamic>.from(decoded['chatLorebook'] as Map),
+          ).entries,
+        );
       }
       if (decoded['lorebookTimers'] is! Map) return;
       final timers = Map<String, dynamic>.from(decoded['lorebookTimers'] as Map);
@@ -180,5 +198,6 @@ class LorebookTimedEffects {
     _sticky.clear();
     _cooldown.clear();
     localMacroVars.clear();
+    chatLorebook.entries.clear();
   }
 }

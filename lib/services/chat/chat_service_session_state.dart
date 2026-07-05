@@ -298,10 +298,12 @@ extension ChatServiceSessionState on ChatService {
     // this stays the literal '{}' older app versions expect.
     final loreTimers = _loreTimedEffects.toJsonFragment();
     final macroVars = _loreTimedEffects.macroVarsFragment();
-    if (loreTimers != null || macroVars != null) {
+    final chatBook = _loreTimedEffects.chatLorebookFragment();
+    if (loreTimers != null || macroVars != null || chatBook != null) {
       final stateMap = jsonDecode(groupRealismJson) as Map<String, dynamic>;
       if (loreTimers != null) stateMap['lorebookTimers'] = loreTimers;
       if (macroVars != null) stateMap['macroVars'] = macroVars;
+      if (chatBook != null) stateMap['chatLorebook'] = chatBook;
       groupRealismJson = jsonEncode(stateMap);
     }
 
