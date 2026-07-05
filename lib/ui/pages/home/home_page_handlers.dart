@@ -25,48 +25,31 @@ part of '../home_page.dart';
 extension _HomePageHandlers on _HomePageState {
 
   void _confirmDeleteGroup(BuildContext context, GroupChat group) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1111),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        title: const Text(
-          'Delete Group',
-          style: TextStyle(
-            color: Colors.redAccent,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Delete group "${group.name}"?\n\nThe characters themselves will NOT be deleted.',
-          style: const TextStyle(color: Colors.white70, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final groupRepo = Provider.of<GroupChatRepository>(
-                context,
-                listen: false,
-              );
-              await groupRepo.delete(group.id);
-              // No post-delete snackbar for groups (character delete shows one via the outer context)
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+    showWarmDialog(
+      context,
+      title: 'Delete Group',
+      destructive: true,
+      content: WarmDialogText(
+        'Delete group "${group.name}"?\n\nThe characters themselves will NOT '
+        'be deleted.',
       ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Delete',
+          destructive: true,
+          onPressed: () async {
+            Navigator.of(context).pop();
+            final groupRepo = Provider.of<GroupChatRepository>(
+              context,
+              listen: false,
+            );
+            await groupRepo.delete(group.id);
+            // No post-delete snackbar for groups (character delete shows one via the outer context)
+          },
+        ),
+      ],
     );
   }
 
@@ -372,52 +355,35 @@ extension _HomePageHandlers on _HomePageState {
     CharacterFolder folder,
     FolderService folderService,
   ) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1111),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        title: const Text(
-          'Delete Folder',
-          style: TextStyle(
-            color: Colors.redAccent,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Delete "${folder.name}"?\n\nCharacters inside will NOT be deleted — they\'ll return to the top level.',
-          style: const TextStyle(color: Colors.white70, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
-              folderService.deleteFolder(folder.id);
-              Navigator.pop(ctx);
-              if (_activeFolderId == folder.id) {
-                applyState(() {
-                  if (_folderStack.isNotEmpty) {
-                    _activeFolderId = _folderStack.removeLast();
-                  } else {
-                    _activeFolderId = null;
-                  }
-                });
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+    showWarmDialog(
+      context,
+      title: 'Delete Folder',
+      destructive: true,
+      content: WarmDialogText(
+        'Delete "${folder.name}"?\n\nCharacters inside will NOT be deleted — '
+        'they\'ll return to the top level.',
       ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Delete',
+          destructive: true,
+          onPressed: () {
+            folderService.deleteFolder(folder.id);
+            Navigator.pop(context);
+            if (_activeFolderId == folder.id) {
+              applyState(() {
+                if (_folderStack.isNotEmpty) {
+                  _activeFolderId = _folderStack.removeLast();
+                } else {
+                  _activeFolderId = null;
+                }
+              });
+            }
+          },
+        ),
+      ],
     );
   }
 

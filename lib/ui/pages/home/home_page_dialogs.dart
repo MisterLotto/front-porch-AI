@@ -25,80 +25,51 @@ part of '../home_page.dart';
 extension _HomePageDialogs on _HomePageState {
 
   void _confirmDeleteCharacter(BuildContext context, CharacterCard character) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1111),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        title: const Row(
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              color: Colors.redAccent,
-              size: 28,
-            ),
-            SizedBox(width: 8),
-            Text(
-              'Delete Character',
-              style: TextStyle(
-                color: Colors.redAccent,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete "${character.name}"?\n\nThis will permanently remove the character card and its image file. This action cannot be undone.',
-          style: const TextStyle(color: Colors.white70, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              Navigator.of(context).pop();
-              final repo = Provider.of<CharacterRepository>(
-                context,
-                listen: false,
-              );
-              final worldRepo = Provider.of<WorldRepository>(
-                context,
-                listen: false,
-              );
-              final storageService = Provider.of<StorageService>(
-                context,
-                listen: false,
-              );
-              await repo.deleteCharacter(
-                character,
-                worldRepo: worldRepo,
-                chatsDir: storageService.chatsDir,
-              );
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${character.name} has been deleted.'),
-                    backgroundColor: Colors.red.shade800,
-                  ),
-                );
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+    showWarmDialog(
+      context,
+      title: 'Delete Character',
+      icon: Icons.warning_amber_rounded,
+      destructive: true,
+      content: WarmDialogText(
+        'Are you sure you want to delete "${character.name}"?\n\nThis will '
+        'permanently remove the character card and its image file. This action '
+        'cannot be undone.',
       ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Delete',
+          destructive: true,
+          onPressed: () async {
+            Navigator.of(context).pop();
+            final repo = Provider.of<CharacterRepository>(
+              context,
+              listen: false,
+            );
+            final worldRepo = Provider.of<WorldRepository>(
+              context,
+              listen: false,
+            );
+            final storageService = Provider.of<StorageService>(
+              context,
+              listen: false,
+            );
+            await repo.deleteCharacter(
+              character,
+              worldRepo: worldRepo,
+              chatsDir: storageService.chatsDir,
+            );
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${character.name} has been deleted.'),
+                ),
+              );
+            }
+          },
+        ),
+      ],
     );
   }
 
