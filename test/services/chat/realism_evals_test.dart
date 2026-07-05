@@ -27,6 +27,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/chat/realism_evals.dart';
+import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
@@ -57,6 +58,7 @@ RealismEvals createTestRealismEvals({
   String Function()? intensityFn,
   void Function(String)? setIntensityFn,
   bool Function()? expressionFn,
+  String Function(CharacterCard card)? dossierFn,
   Objective? Function()? primaryFn,
   List<Objective> Function()? objectivesFn,
   Future<void> Function(String, {bool isPrimary, bool autoGenerateTasks})?
@@ -168,6 +170,14 @@ RealismEvals createTestRealismEvals({
     nsfwService: nsfw_,
     timeService: time_,
     getExpressionEnabled: expressionFn ?? () => false,
+    // Default mirrors the god wiring (real builder over the card, no growth)
+    // so prompt-content tests exercise the production dossier path.
+    getCharacterDossier: dossierFn ??
+        (card) => RealismPromptBuilder.characterDossier(
+          name: card.name,
+          personality: card.personality,
+          description: card.description,
+        ),
     getPrimaryObjective: primaryFn ?? () => null,
     getActiveObjectives: objectivesFn ?? () => <Objective>[],
     setObjective:
@@ -543,6 +553,103 @@ void main() {
         );
         await svc.evaluatePhysicalStateCall(); // exercises group guard path
         expect(true, true);
+      },
+    );
+
+    // ── Personality-true judging (dossier + subjective rubric) regressions ──
+
+    test(
+      'relationship prompt carries the dossier from description when personality is empty, plus standing context',
+      () async {
+        String? captured;
+        final vera = CharacterCard(
+          name: 'Vera',
+          personality: '',
+          description:
+              'A dominant, sharp-tongued duelist who despises coddling and unearned familiarity.',
+        );
+        final svc = createTestRealismEvals(
+          activeCharFn: () => vera,
+          fireFn: (p, {onChunk}) async {
+            captured = p;
+            return '{"relationship_delta":0,"trust_delta":0}';
+          },
+          intFn: (t, k) => 0,
+        );
+        await svc.evaluateRelationshipCall();
+        expect(captured, isNotNull);
+        // The judge sees the description-borne identity (old code only ever
+        // passed the personality field, so an empty one meant a blind judge).
+        expect(captured!, contains('despises coddling'));
+        expect(captured!, contains('Who Vera is'));
+        // Relationship-stage context so premature intimacy can be judged as such.
+        expect(captured!, contains('Where things stand'));
+      },
+    );
+
+    test(
+      'judge prompts no longer contain the objective-morality gates or the trust floor',
+      () async {
+        final prompts = <String>[];
+        final svc = createTestRealismEvals(
+          fireFn: (p, {onChunk}) async {
+            prompts.add(p);
+            return '{"relationship_delta":0,"trust_delta":0}';
+          },
+          intFn: (t, k) => 0,
+        );
+        await svc.evaluateRelationshipCall();
+        await svc.evaluateOneShotCall();
+        for (final p in prompts) {
+          expect(p.contains('Only go negative if'), false);
+          expect(p.contains('Reserve negative scores ONLY'), false);
+          expect(p.contains('Trust that never moves is a bug'), false);
+          expect(p.contains('give it at least +1'), false);
+          // Subjective replacements present instead:
+          expect(p, contains('unearned familiarity or smothering'));
+          expect(p, contains('an angle being worked'));
+        }
+      },
+    );
+
+    test(
+      'one-shot and relationship prompts share the identical bond+trust rubric (parity by construction)',
+      () async {
+        final prompts = <String>[];
+        final svc = createTestRealismEvals(
+          fireFn: (p, {onChunk}) async {
+            prompts.add(p);
+            return '{"relationship_delta":0,"trust_delta":0}';
+          },
+          intFn: (t, k) => 0,
+        );
+        await svc.evaluateRelationshipCall();
+        await svc.evaluateOneShotCall();
+        expect(prompts.length, 2);
+        final rel = prompts[0];
+        final oneShot = prompts[1];
+        final start = rel.indexOf('- "relationship_delta"');
+        final end = rel.indexOf('\nRecent conversation:');
+        expect(start, greaterThanOrEqualTo(0));
+        expect(end, greaterThan(start));
+        final rubric = rel.substring(start, end);
+        expect(oneShot.contains(rubric), true);
+      },
+    );
+
+    test(
+      'narrative prompt includes the dossier so objectives/fixations stay in character',
+      () async {
+        String? captured;
+        final svc = createTestRealismEvals(
+          fireFn: (p, {onChunk}) async {
+            captured = p;
+            return '{"proposed_objective":"none","fixation_topic":"none"}';
+          },
+        );
+        await svc.evaluateNarrativeCall();
+        expect(captured, isNotNull);
+        expect(captured!, contains('Who TestChar is'));
       },
     );
   });

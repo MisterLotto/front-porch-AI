@@ -78,6 +78,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.da
 import 'package:front_porch_ai/services/chat/prompt_injection/realism_state_injection.dart';
 import 'package:front_porch_ai/services/chat/llm_eval_engine.dart';
 import 'package:front_porch_ai/services/chat/realism_evals.dart';
+import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
 import 'package:front_porch_ai/services/chat/objective_proposal.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
@@ -2120,6 +2121,18 @@ class ChatService extends ChangeNotifier {
     timeService: _timeService,
     getExpressionEnabled: () =>
         _storageService.expressionSettings.expressionEnabled,
+    // Judge dossier: same identity the generation sees (personality +
+    // description + evolution growth when enabled), budget-capped in the
+    // builder. Under group impersonation `card` is the current speaker, so
+    // per-speaker parity holds without extra dispatch here.
+    getCharacterDossier: (card) => RealismPromptBuilder.characterDossier(
+      name: card.name,
+      personality: card.personality,
+      description: card.description,
+      growth: _storageService.memorySettings.characterEvolutionEnabled
+          ? (getEvolvedPersonalityFor(card) ?? '')
+          : '',
+    ),
     getPrimaryObjective: () => primaryObjective,
     getActiveObjectives: () => _activeObjectives,
     setObjective: (text, {isPrimary = false, autoGenerateTasks = false}) =>

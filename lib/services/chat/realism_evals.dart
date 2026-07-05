@@ -28,21 +28,22 @@ import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
 import 'package:front_porch_ai/services/chat/time_service.dart';
+import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
 import 'package:front_porch_ai/utils/emotion_labels.dart';
 
-/// Per-eval delta limits for the realism LLM calls (relationship, emotional state,
-/// one-shot). These are the authoritative ranges for what each eval is allowed to
-/// contribute in a single turn. They are used both for .clamp() enforcement and
-/// interpolated into the prompt guidance text so the model instructions and the
-/// runtime guard cannot drift from each other (or between the multi-call paths and
-/// the fused one-shot path).
-const kMinRelationshipDelta = -15;
-const kMaxRelationshipDelta = 15;
-const kMinTrustDelta = -200;
-const kMaxTrustDelta = 50;
-const kMinArousalDelta = -25;
-const kMaxArousalDelta = 25;
+// The per-eval delta limit constants (kMin/kMaxRelationshipDelta etc.) live in
+// realism_prompt_builder.dart next to the prompt text that interpolates them.
+// Re-exported here so existing importers (realism_verification.dart, tests)
+// keep resolving them from this library.
+export 'package:front_porch_ai/services/chat/realism_prompt_builder.dart'
+    show
+        kMinRelationshipDelta,
+        kMaxRelationshipDelta,
+        kMinTrustDelta,
+        kMaxTrustDelta,
+        kMinArousalDelta,
+        kMaxArousalDelta;
 
 /// Plain (non-ChangeNotifier) leaf sibling to LlmEvalEngine owning the 5
 /// realism evaluation calls (relationship, emotional state, physical state,
@@ -355,6 +356,14 @@ class RealismEvals {
   // Expression enabled for the "MUST choose label from list" instruction in emotion prompts
   final bool Function() getExpressionEnabled;
 
+  // Character dossier for the judge prompts (personality + description +
+  // evolution growth, budget-capped via RealismPromptBuilder.characterDossier).
+  // Wired by god so group impersonation (card = current speaker) and the
+  // evolution-enabled flag are respected. This is what lets the evals judge
+  // through the character's full identity instead of the raw personality
+  // field alone (which many cards leave empty).
+  final String Function(CharacterCard card) getCharacterDossier;
+
   // Objective proposal (for narr/oneShot; thin cb to god per plan for coordination)
   final Objective? Function() getPrimaryObjective;
   final List<Objective> Function() getActiveObjectives;
@@ -387,6 +396,7 @@ class RealismEvals {
     required this.nsfwService,
     required this.timeService,
     required this.getExpressionEnabled,
+    required this.getCharacterDossier,
     required this.getPrimaryObjective,
     required this.getActiveObjectives,
     required this.setObjective,
@@ -583,52 +593,29 @@ class RealismEvals {
       // Group chat or other mode — relationship evals not supported in this path yet
       return;
     }
-    final charName = getActiveCharacter()!.name;
+    final char = getActiveCharacter()!;
+    final charName = char.name;
     final userName = getUserName();
 
-    String personalityInjection = '';
-    if (getActiveCharacter()!.personality.isNotEmpty) {
-      final p = getActiveCharacter()!.personality;
-      personalityInjection =
-          'Account for $charName\'s specific personality traits:\n"$p"\n\n';
-    }
+    final dossier = getCharacterDossier(char);
+    final standing = RealismPromptBuilder.standingContext(
+      charName: charName,
+      userName: userName,
+      shortTermTier: relationshipService.shortTermTierName,
+      longTermTier: relationshipService.longTermTierName,
+      trustTier: relationshipService.trustTierName,
+      trustLevel: relationshipService.trustLevel,
+      emotion: getCharacterEmotion(),
+      emotionIntensity: getEmotionIntensity(),
+    );
 
-    final prompt =
-        'You are a nuanced evaluator of relationship dynamics between $charName and $userName in a roleplay.\n\n'
-        '$personalityInjection'
-        'IMPORTANT: Reactions are entirely subjective based on $charName\'s personality. '
-        'Most normal interactions should score 0 or slightly positive. '
-        'Reserve negative scores ONLY for clear rudeness, hostility, manipulation, or betrayal.\n\n'
-        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? ('
-        "$kMinRelationshipDelta to +$kMaxRelationshipDelta"
-        ')\n'
-        '   +15: Life-changing — a moment that fundamentally redefines the relationship\n'
-        '   +10: Profoundly moving — raw vulnerability, sacrifice, or devotion that leaves $charName shaken\n'
-        '   +7: Deeply touched — a significant emotional breakthrough or act of genuine care\n'
-        '   +5: Meaningfully warmed — a moment that clearly strengthens the connection\n'
-        '   +3: Moved | +2: Warmed up | +1: Mildly pleasant\n'
-        '   -1: Slightly put off | -2: Annoyed | -3: Hurt — a clearly unkind or dismissive moment\n'
-        '   -5: Wounded — a significant emotional injury\n'
-        '   -8: Deeply hurt — a cruel or callous act that damages the bond\n'
-        '   -10: Devastated — a severe betrayal of emotional trust\n'
-        '   -15: Devastating betrayal — a relationship-destroying act\n'
-        '   ⚠ Default to 0 for normal conversation. Only go negative if $userName was clearly unkind, dismissive, or harmful.\n'
-        '2. "bond_reason": One brief in-character thought from $charName explaining the tension shift, e.g. "Their warmth made me feel safe." or "That dismissal stung." Use "none" if delta is 0.\n'
-        '3. "trust_delta": Did $userName — NOT $charName — do something that builds or erodes $charName\'s trust in $userName? ('
-        "$kMinTrustDelta to +$kMaxTrustDelta"
-        ')\n'
-        '   Trust is SUBJECTIVE to $charName\'s personality and what they value. It moves slower than warmth, but it SHOULD move whenever $userName is genuinely honest, consistent, caring, or present — small trust accrues over time. Examples:\n'
-        '   +30 to +50: EXTRAORDINARILY trustworthy — a selfless sacrifice, returning something precious, protecting $charName at real cost, or loyalty that CANNOT be faked\n'
-        '   +10 to +20: meaningfully trustworthy — kept a difficult promise, showed real vulnerability, stood firm under pressure in a way $charName respects\n'
-        '   +5: did exactly what $charName values most | +3: showed honesty, reliability, or care they clearly notice | +1 to +2: a small, genuine moment of consistency, attentiveness, or kindness\n'
-        '   0: ONLY a truly neutral or purely logistical exchange\n'
-        '   -2: a small letdown, evasiveness, or broken minor expectation | -5: something $charName finds personally untrustworthy given their personality | -30: deliberate deception or betrayal | -200: Unforgivable betrayal\n'
-        '   ⚠ Do NOT reflexively return 0 — if $userName was genuinely warm, honest, reliable, or emotionally present this turn, give it at least +1 to +2. Trust that never moves is a bug.\n'
-        '   ⚠ If $charName is the one acting (e.g. $charName lied, felt guilty, made a mistake): always 0. Only $userName\'s behavior moves this.\n'
-        '4. "trust_reason": One brief in-character thought from $charName explaining the trust shift, e.g. "They kept their promise." or "That felt like a lie." Use "none" if delta is 0.\n\n'
-        'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a flat JSON object containing "relationship_delta", "bond_reason", "trust_delta", and "trust_reason". '
-        'Do NOT use markdown code blocks — return raw JSON only.';
+    final prompt = RealismPromptBuilder.relationshipEvalPrompt(
+      charName: charName,
+      userName: userName,
+      dossier: dossier,
+      standing: standing,
+      recent: recent,
+    );
 
     try {
       debugPrint('[Realism] Evaluating relationship dynamic...');
@@ -646,7 +633,7 @@ class RealismEvals {
           'raw': text,
           'prompt': prompt,
           'scene': recent,
-          'injections': {'personality': personalityInjection},
+          'injections': {'personality': dossier, 'standing': standing},
         });
         // Defer verify + parse/apply (_parseAndApplyRelationshipDeltas for bond/trust/arousal chips) to the
         // god post-mains batch (getCollected + verifyBatch + applyBatchResults). Direct path does it inline.
@@ -658,7 +645,7 @@ class RealismEvals {
         textAfterStrip: text,
         promptUsed: prompt,
         sceneForContext: recent,
-        injections: {'personality': personalityInjection},
+        injections: {'personality': dossier, 'standing': standing},
       );
 
       // Unified parse/apply (also used by one-shot). The relationship path passes
@@ -695,55 +682,36 @@ class RealismEvals {
       // Group chat or other mode — relationship evals not supported in this path yet
       return;
     }
-    final charName = getActiveCharacter()!.name;
+    final char = getActiveCharacter()!;
+    final charName = char.name;
+    final userName = getUserName();
 
-    // ── Personality injection (same as relationship eval) ──
-    String personalityInjection = '';
-    if (getActiveCharacter()!.personality.isNotEmpty) {
-      final p = getActiveCharacter()!.personality;
-      personalityInjection =
-          '$charName\'s personality traits (evaluate emotion THROUGH these):\n"$p"\n\n';
-    }
+    final dossier = getCharacterDossier(char);
+    // Previous-turn mood rides the standing line so the judge names the new
+    // emotion with natural inertia instead of re-deciding from scratch.
+    final standing = RealismPromptBuilder.standingContext(
+      charName: charName,
+      userName: userName,
+      shortTermTier: relationshipService.shortTermTierName,
+      longTermTier: relationshipService.longTermTierName,
+      trustTier: relationshipService.trustTierName,
+      trustLevel: relationshipService.trustLevel,
+      emotion: getCharacterEmotion(),
+      emotionIntensity: getEmotionIntensity(),
+    );
+    final arousalEnabled = nsfwService.nsfwCooldownEnabled;
+    final labels = getExpressionEnabled() ? EmotionLabels.all : const <String>[];
 
-    // ── Relationship & trust context ──
-    final relationshipCtx =
-        'Current relationship tension: ${relationshipService.shortTermTierName} | Trust level: ${relationshipService.trustLevel}\n';
-
-    // ── Arousal instruction (enriched with current level + behavioral visibility) ──
-    final arousalField = nsfwService.nsfwCooldownEnabled
-        ? ", \"arousal_delta\": <number $kMinArousalDelta to +$kMaxArousalDelta>"
-        : '';
-    final arousalInstr = nsfwService.nsfwCooldownEnabled
-        ? '3. "arousal_delta": Physical arousal shift this turn. ('
-              "$kMinArousalDelta to +$kMaxArousalDelta"
-              ')\n'
-              '   Current arousal: ${nsfwService.arousalLevel}/100. '
-              'Arousal measures DESIRE and PHYSICAL RESPONSE, not progress toward orgasm.\n'
-              '   Be bold with arousal deltas — intimate moments should produce significant shifts (+10 to +20).\n'
-              '   High arousal = the character is intensely turned on, NOT that they are about to climax '
-              '— climax only happens during active sexual contact at high arousal.\n'
-              '   CRITICAL: Arousal MUST be VISIBLE in character behavior. At high levels (60+), '
-              'show heavy breathing, stuttering, flushed skin, inability to focus, desperate body language.\n'
-              '   Examples: whispered compliment = +3, passionate kiss = +10 to +15, '
-              'explicit sexual contact = +15 to +25, humiliating rejection = -15 to -25.\n'
-              '   ⚠ Default to 0. Non-sexual, platonic, or mundane content (food, work, errands, small talk, comfort) is 0 — NOT a small positive. Only move arousal when THIS turn is genuinely sexual, romantic, or sensual.\n'
-              '   ⚠ Arousal does NOT linger on its own. If current arousal is above 0 and this turn is not sexual or romantically charged, return a NEGATIVE delta (e.g. -5 to -10) so it cools back toward neutral.\n'
-        : '';
-
-    final prompt =
-        'You are a nuanced evaluator of $charName\'s emotional state in a roleplay.\n\n'
-        '$personalityInjection'
-        '$relationshipCtx'
-        'Reactions are subjective! Evaluate emotion THROUGH $charName\'s specific personality.\n\n'
-        '1. "emotion": $charName\'s overarching emotional state (one nuanced word).\n'
-        '   NOT generic ("happy"/"sad") — find the specific texture: wistful not sad, flustered not happy, prickly not angry.\n'
-        '   Filter through $charName\'s personality — a stoic character in deep pain shows "guarded", not "devastated".\n'
-        '${getExpressionEnabled() ? '   ⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.\n' : ''}'
-        '2. "emotion_intensity": mild, moderate, or strong\n'
-        '$arousalInstr'
-        'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a flat JSON object containing "emotion", "emotion_intensity"$arousalField. '
-        'Do NOT use markdown code blocks — return raw JSON only.';
+    final prompt = RealismPromptBuilder.emotionalEvalPrompt(
+      charName: charName,
+      userName: userName,
+      dossier: dossier,
+      standing: standing,
+      recent: recent,
+      arousalEnabled: arousalEnabled,
+      arousalLevel: nsfwService.arousalLevel,
+      allowedEmotionLabels: labels,
+    );
 
     try {
       debugPrint(
@@ -764,10 +732,11 @@ class RealismEvals {
           'prompt': prompt,
           'scene': recent,
           'injections': {
-            'personality': personalityInjection,
-            'relationship': relationshipCtx,
-            'arousal': arousalField,
-            if (getExpressionEnabled()) 'emotion_constraint': '⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.',
+            'personality': dossier,
+            'standing': standing,
+            if (labels.isNotEmpty)
+              'emotion_constraint':
+                  RealismPromptBuilder.emotionLabelConstraint(labels),
           },
         });
         return;
@@ -779,10 +748,11 @@ class RealismEvals {
         promptUsed: prompt,
         sceneForContext: recent,
         injections: {
-          'personality': personalityInjection,
-          'relationship': relationshipCtx,
-          'arousal': arousalField,
-          if (getExpressionEnabled()) 'emotion_constraint': '⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.',
+          'personality': dossier,
+          'standing': standing,
+          if (labels.isNotEmpty)
+            'emotion_constraint':
+                RealismPromptBuilder.emotionLabelConstraint(labels),
         },
       );
       text = effectiveText; // rebind (var allows)
@@ -854,21 +824,19 @@ class RealismEvals {
       // temporarily sets _activeCharacter before calling us for parity).
       return;
     }
-    final charName = getActiveCharacter()!.name;
+    final char = getActiveCharacter()!;
+    final charName = char.name;
     final userName = getUserName();
     final primary = getPrimaryObjective();
-    final oPrompt = primary != null
-        ? '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primary.objective}"). Must be a significant personal, social, or narrative goal triggered by a STRONG, specific event THIS turn. NOT a trivial step, and NOT a restatement of the primary quest.\n'
-              '   ⚠ Default to "none". 90% of turns should produce "none". Only propose one if $charName would literally lose sleep over it.\n'
-        : '1. "proposed_objective": An OVERARCHING goal $charName independently wants to pursue — a driving want big enough to span many scenes, which will become $charName\'s main quest and be broken into concrete steps. Think "get $userName to admit their greatest fear", "win $userName\'s heart", or a personal ambition $charName has been chasing — not a one-scene errand. Triggered by a strong specific event THIS turn. Default: "none".\n'
-              '   ⚠ Default to "none". 90% of turns should produce "none". Only propose one if $charName would literally lose sleep over it.\n';
-    final prompt =
-        'You are an autonomous story engine evaluating narrative progression for $charName.\n\n'
-        '$oPrompt'
-        '2. "fixation_topic": A persistent thought or concern that colors $charName\'s perspective — could be a hope, worry, ambition, or memory. Not a temporary reaction, but something that lingers across scenes. Default: "none".\n\n'
-        'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a flat JSON object containing "proposed_objective", and "fixation_topic". '
-        'Do NOT use markdown code blocks — return raw JSON only.';
+
+    final dossier = getCharacterDossier(char);
+    final prompt = RealismPromptBuilder.narrativeEvalPrompt(
+      charName: charName,
+      userName: userName,
+      dossier: dossier,
+      recent: recent,
+      primaryObjective: primary?.objective,
+    );
 
     try {
       final raw = await fireLLMEval(prompt, onChunk: onChunk);
@@ -880,7 +848,7 @@ class RealismEvals {
           'raw': text,
           'prompt': prompt,
           'scene': recent,
-          'injections': {'objective_proposal': oPrompt},
+          'injections': {'personality': dossier},
         });
         return;
       }
@@ -890,7 +858,7 @@ class RealismEvals {
         textAfterStrip: text,
         promptUsed: prompt,
         sceneForContext: recent,
-        injections: {'objective_proposal': oPrompt},
+        injections: {'personality': dossier},
       );
       text = effectiveText; // rebind for downstream (no other code change)
 
@@ -929,103 +897,39 @@ class RealismEvals {
       // Group chat or other mode — relationship evals not supported in this path yet
       return;
     }
-    final charName = getActiveCharacter()!.name;
+    final char = getActiveCharacter()!;
+    final charName = char.name;
     final userName = getUserName();
 
-    String personalityInjection = '';
-    if (getActiveCharacter()!.personality.isNotEmpty) {
-      final p = getActiveCharacter()!.personality;
-      personalityInjection =
-          'Account for $charName\'s specific personality traits:\n"$p"\n\n';
-    }
-
-    // ── Relationship & trust context ──
-    final curEmotion = getCharacterEmotion();
-    final curIntensity = getEmotionIntensity();
-    final emotionCtx = curEmotion.isNotEmpty
-        ? 'Current emotional state: $curEmotion ($curIntensity). '
-        : '';
-    final postureCtx = relationshipService.spatialStance.isNotEmpty
-        ? 'Recent position reference: $charName was "${relationshipService.spatialStance}". '
-        : '';
-    final relationshipCtx =
-        '$emotionCtx${postureCtx}Current relationship tension: ${relationshipService.shortTermTierName} | Trust level: ${relationshipService.trustLevel}\n\n';
-
-    final arousalField = nsfwService.nsfwCooldownEnabled
-        ? ", \"arousal_delta\": <number $kMinArousalDelta to +$kMaxArousalDelta>"
-        : '';
-    // Arousal is field 8 (after posture), objective is 9, fixation 10, reason 11
-    final arousalInstr = nsfwService.nsfwCooldownEnabled
-        ? '8. "arousal_delta": Physical arousal shift this turn. ('
-              "$kMinArousalDelta to +$kMaxArousalDelta"
-              ')\n'
-              '   Current arousal: ${nsfwService.arousalLevel}/100. '
-              'Arousal = DESIRE and PHYSICAL RESPONSE, not progress toward orgasm.\n'
-              '   Be bold — intimate moments should produce significant shifts (+10 to +20).\n'
-              '   CRITICAL: Arousal MUST be VISIBLE in character behavior. At 60+, show heavy breathing, stuttering, flushed skin, desperate body language.\n'
-              '   High arousal = intensely turned on, NOT about to climax — climax only during active sexual contact at peak arousal.\n'
-              '   Examples: whispered compliment = +3, passionate kiss = +10 to +15, explicit contact = +15 to +25.\n'
-              '   ⚠ Default to 0. Non-sexual, platonic, or mundane content (food, work, errands, small talk, comfort) is 0 — NOT a small positive. Only move arousal when THIS turn is genuinely sexual, romantic, or sensual.\n'
-              '   ⚠ Arousal does NOT linger on its own. If current arousal is above 0 and this turn is not sexual or romantically charged, return a NEGATIVE delta (e.g. -5 to -10) so it cools back toward neutral.\n'
-        : '';
-
-    // Determine the next field number after arousal (or after posture if arousal disabled)
-    final objNum = nsfwService.nsfwCooldownEnabled ? 9 : 8;
-    final fixNum = objNum + 1;
-    final reasonNum = fixNum + 1;
-
+    final dossier = getCharacterDossier(char);
+    final standing = RealismPromptBuilder.standingContext(
+      charName: charName,
+      userName: userName,
+      shortTermTier: relationshipService.shortTermTierName,
+      longTermTier: relationshipService.longTermTierName,
+      trustTier: relationshipService.trustTierName,
+      trustLevel: relationshipService.trustLevel,
+      emotion: getCharacterEmotion(),
+      emotionIntensity: getEmotionIntensity(),
+      posture: relationshipService.spatialStance,
+    );
+    final arousalEnabled = nsfwService.nsfwCooldownEnabled;
+    final labels = getExpressionEnabled() ? EmotionLabels.all : const <String>[];
     final primary = getPrimaryObjective();
-    final prompt =
-        'You are evaluating the current state of a roleplay scene involving $charName.\n\n'
-        '$personalityInjection'
-        '$relationshipCtx'
-        'Reactions are subjective! Evaluate ALL changes through $charName\'s specific personality.\n\n'
-        'Evaluate ALL of the following at once:\n'
-        '1. "relationship_delta": How did this exchange shift $charName\'s warmth toward $userName? ('
-        "$kMinRelationshipDelta to +$kMaxRelationshipDelta"
-        ')\n'
-        '   +15: Life-changing — a moment that fundamentally redefines the relationship\n'
-        '   +10: Profoundly moving — raw vulnerability, sacrifice, or devotion that leaves $charName shaken\n'
-        '   +7: Deeply touched — a significant emotional breakthrough or act of genuine care\n'
-        '   +5: Meaningfully warmed — a moment that clearly strengthens the connection\n'
-        '   +3: Moved | +2: Warmed up | +1: Mildly pleasant\n'
-        '   -1: Slightly put off | -2: Annoyed | -3: Hurt — a clearly unkind or dismissive moment\n'
-        '   -5: Wounded — a significant emotional injury\n'
-        '   -8: Deeply hurt — a cruel or callous act that damages the bond\n'
-        '   -10: Devastated — a severe betrayal of emotional trust\n'
-        '   -15: Devastating betrayal — a relationship-destroying act\n'
-        '   ⚠ Default to 0 for normal conversation. Only go negative if $userName was clearly unkind, dismissive, or harmful.\n'
-        '2. "trust_delta": Did $userName — NOT $charName — do something that builds or erodes $charName\'s trust in $userName? ('
-        "$kMinTrustDelta to +$kMaxTrustDelta"
-        ')\n'
-        '   Trust is SUBJECTIVE to $charName\'s personality and what they value. It moves slower than warmth, but it SHOULD move whenever $userName is genuinely honest, consistent, caring, or present — small trust accrues over time. Examples:\n'
-        '   +30 to +50: EXTRAORDINARILY trustworthy — a selfless sacrifice, returning something precious, protecting $charName at real cost, or loyalty that CANNOT be faked\n'
-        '   +10 to +20: meaningfully trustworthy — kept a difficult promise, showed real vulnerability, stood firm under pressure in a way $charName respects\n'
-        '   +5: did exactly what $charName values most | +3: showed honesty, reliability, or care they clearly notice | +1 to +2: a small, genuine moment of consistency, attentiveness, or kindness\n'
-        '   0: ONLY a truly neutral or purely logistical exchange\n'
-        '   -2: a small letdown, evasiveness, or broken minor expectation | -5: something $charName finds personally untrustworthy given their personality | -30: deliberate deception or betrayal | -200: Unforgivable betrayal\n'
-        '   ⚠ Do NOT reflexively return 0 — if $userName was genuinely warm, honest, reliable, or emotionally present this turn, give it at least +1 to +2. Trust that never moves is a bug.\n'
-        '   ⚠ If $charName is the one acting (e.g. $charName lied, felt guilty, made a mistake): always 0. Only $userName\'s behavior moves this.\n'
-        '3. "trust_reason": One brief in-character thought from $charName explaining the trust shift in $userName, or "none" if delta is 0.\n'
-        '4. "emotion": $charName\'s overarching emotional state (one nuanced word).\n'
-        '   NOT generic ("happy"/"sad") — find the specific texture: wistful not sad, flustered not happy, prickly not angry.\n'
-        '   Filter through $charName\'s personality — a stoic character in deep pain shows "guarded", not "devastated".\n'
-        '${getExpressionEnabled() ? '   ⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.\n' : ''}'
-        '5. "emotion_intensity": mild, moderate, or strong\n'
-        '6. "bond_reason": One brief in-character thought from $charName explaining the relationship shift, or "none" if delta is 0.\n'
-        '7. "posture": $charName\'s current physical position and location (brief grounded phrase), or "none".\n'
-        '   - Match the posture to the current scene context and emotional state.\n'
-        '   - If the conversation implies a location or activity change, update accordingly.\n'
-        '   - Within the same scene, maintain natural continuity (don\'t jump locations).\n'
-        '   - Across scene breaks or time jumps, update to the new context.\n'
-        '   - If time advanced significantly or a new day started, characters naturally shift positions.\n'
-        '$arousalInstr'
-        '${primary != null ? '$objNum. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primary.objective}"). Triggered by a STRONG event THIS turn.\n   ⚠ Default to "none". 90% of turns should produce "none".\n' : '$objNum. "proposed_objective": An OVERARCHING goal $charName independently wants to pursue — a driving want big enough to span many scenes (e.g. "get $userName to admit their greatest fear"), which will become $charName\'s main quest. Triggered by a strong event THIS turn. Default: "none". 90% of turns should produce "none".\n'}'
-        '$fixNum. "fixation_topic": An *intrusive* thought $charName cannot stop returning to — haunts them across scenes, not a temporary reaction. Default: "none".\n'
-        '$reasonNum. "reason": One brief sentence explaining the key relationship change, or "none"\n\n'
-        'Recent conversation:\n$recent\n\n'
-        'Respond with ONLY a JSON object containing all fields above$arousalField. '
-        'Do NOT use markdown code blocks — return raw JSON only.';
+
+    // Same shared fragments as the multi-call path (strict one-shot vs normal
+    // parity by construction — the rubric text cannot drift between paths).
+    final prompt = RealismPromptBuilder.oneShotEvalPrompt(
+      charName: charName,
+      userName: userName,
+      dossier: dossier,
+      standing: standing,
+      recent: recent,
+      arousalEnabled: arousalEnabled,
+      arousalLevel: nsfwService.arousalLevel,
+      allowedEmotionLabels: labels,
+      primaryObjective: primary?.objective,
+    );
 
     try {
       debugPrint('[Realism:OneShot] Evaluating (fused call)...');
@@ -1042,10 +946,11 @@ class RealismEvals {
           'prompt': prompt,
           'scene': recent,
           'injections': {
-            'arousal': arousalInstr,
-            'objective': (primary != null ? '$objNum. ...' : '$objNum. ...'),
-            'fixation': '$fixNum. ...',
-            if (getExpressionEnabled()) 'emotion_constraint': '⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.',
+            'personality': dossier,
+            'standing': standing,
+            if (labels.isNotEmpty)
+              'emotion_constraint':
+                  RealismPromptBuilder.emotionLabelConstraint(labels),
           },
         });
         return;
@@ -1057,10 +962,11 @@ class RealismEvals {
         promptUsed: prompt,
         sceneForContext: recent,
         injections: {
-          'arousal': arousalInstr,
-          'objective': (primary != null ? '$objNum. ...' : '$objNum. ...'),
-          'fixation': '$fixNum. ...',
-          if (getExpressionEnabled()) 'emotion_constraint': '⚠ YOU MUST choose EXACTLY ONE of these labels: ${EmotionLabels.all.join(", ")}. No other words allowed.',
+          'personality': dossier,
+          'standing': standing,
+          if (labels.isNotEmpty)
+            'emotion_constraint':
+                RealismPromptBuilder.emotionLabelConstraint(labels),
         },
       );
       final textForOneShot = effectiveText; // rebind

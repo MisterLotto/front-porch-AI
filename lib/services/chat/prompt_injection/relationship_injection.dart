@@ -94,6 +94,15 @@ class RelationshipInjection {
   String buildRelationshipInjection() {
     if (!getRealismEnabled()) return '';
 
+    // Keeps tier warmth in-voice: the meter says HOW MUCH the character has
+    // warmed, the persona says WHAT that looks like. Without this line, high
+    // tiers read as an instruction to become generically sweet, which erased
+    // tsundere/dominant/abrasive characters' texture as bonds grew.
+    const voiceNote =
+        'Express this through the character\'s own personality and voice — warmth from a harsh, '
+        'guarded, or dominant character surfaces in THEIR fashion (grudging, teasing, subtle acts '
+        'of care), never as generic sweetness that erases who they are.';
+
     // Group mode (non-director): use the current speaker's stored values
     if (getIsGroupNonObserverMode()) {
       final id = getCurrentSpeakerIdForRealism();
@@ -143,7 +152,7 @@ class RelationshipInjection {
               'Short-Term Tension is neutral to slightly distant.';
       }
 
-      return '[Relationship Context for $name]\n$bondGuidance\n$tensionGuidance]\n';
+      return '[Relationship Context for $name:\n$bondGuidance\n$tensionGuidance\n$voiceNote]\n';
     }
 
     // 1:1 / Director path (original scalar logic)
@@ -252,7 +261,8 @@ class RelationshipInjection {
         ' Short-Term Tension: ${getShortTermTierName()}\n'
         ' Current Mood: ${getMoodLabel()}\n'
         '$bondGuidance\n'
-        '$tensionGuidance\n]';
+        '$tensionGuidance\n'
+        '$voiceNote\n]';
   }
 
   /// Phase 2: Invisible inter-character relationship injection.
