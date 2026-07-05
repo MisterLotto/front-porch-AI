@@ -79,18 +79,10 @@ class CharacterGridCard extends StatelessWidget {
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
                     errorBuilder: (_, _, _) => Container(
-                      color: AppColors.resolve(
-                        context,
-                        Colors.black26,
-                        Colors.black12,
-                      ),
+                      color: AppColors.surfaceContainerOf(context),
                       child: Icon(
                         Icons.person,
-                        color: AppColors.resolve(
-                          context,
-                          Colors.white24,
-                          Colors.black45,
-                        ),
+                        color: AppColors.iconSecondary(context),
                         size: 48,
                       ),
                     ),
@@ -98,11 +90,7 @@ class CharacterGridCard extends StatelessWidget {
                 : Icon(
                     Icons.person,
                     size: 64,
-                    color: AppColors.resolve(
-                      context,
-                      Colors.white24,
-                      Colors.black45,
-                    ),
+                    color: AppColors.iconSecondary(context),
                   ),
           ),
         ),
@@ -159,7 +147,7 @@ class CharacterGridCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
           color: isSelectedCard
-              ? Colors.purpleAccent
+              ? AppColors.porchTerracottaOf(context)
               : AppColors.borderOf(context).withValues(alpha: 0.3),
           width: isSelectedCard ? 2.5 : 1,
         ),
@@ -189,36 +177,20 @@ class CharacterGridCard extends StatelessWidget {
                               fit: BoxFit.cover,
                               alignment: Alignment.topCenter,
                               errorBuilder: (_, _, _) => Container(
-                                color: AppColors.resolve(
-                                  context,
-                                  Colors.grey.shade800,
-                                  Colors.grey.shade200,
-                                ),
+                                color: AppColors.surfaceContainerOf(context),
                                 child: Icon(
                                   Icons.person,
                                   size: 32,
-                                  color: AppColors.resolve(
-                                    context,
-                                    Colors.white24,
-                                    Colors.black45,
-                                  ),
+                                  color: AppColors.iconSecondary(context),
                                 ),
                               ),
                             )
                           : Container(
-                              color: AppColors.resolve(
-                                context,
-                                Colors.grey.shade800,
-                                Colors.grey.shade200,
-                              ),
+                              color: AppColors.surfaceContainerOf(context),
                               child: Icon(
                                 Icons.person,
                                 size: 32,
-                                color: AppColors.resolve(
-                                  context,
-                                  Colors.white24,
-                                  Colors.black45,
-                                ),
+                                color: AppColors.iconSecondary(context),
                               ),
                             ),
                       Positioned(
@@ -271,36 +243,20 @@ class CharacterGridCard extends StatelessWidget {
                               fit: BoxFit.cover,
                               alignment: Alignment.topCenter,
                               errorBuilder: (_, _, _) => Container(
-                                color: AppColors.resolve(
-                                  context,
-                                  Colors.grey.shade800,
-                                  Colors.grey.shade200,
-                                ),
+                                color: AppColors.surfaceContainerOf(context),
                                 child: Icon(
                                   Icons.person,
                                   size: isCompact ? 32 : 64,
-                                  color: AppColors.resolve(
-                                    context,
-                                    Colors.white24,
-                                    Colors.black45,
-                                  ),
+                                  color: AppColors.iconSecondary(context),
                                 ),
                               ),
                             )
                           : Container(
-                              color: AppColors.resolve(
-                                context,
-                                Colors.grey.shade800,
-                                Colors.grey.shade200,
-                              ),
+                              color: AppColors.surfaceContainerOf(context),
                               child: Icon(
                                 Icons.person,
                                 size: isCompact ? 32 : 64,
-                                color: AppColors.resolve(
-                                  context,
-                                  Colors.white24,
-                                  Colors.black45,
-                                ),
+                                color: AppColors.iconSecondary(context),
                               ),
                             ),
                     ),
@@ -366,22 +322,13 @@ class CharacterGridCard extends StatelessWidget {
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: AppColors.resolve(
+                                              color: AppColors.porchAmberOf(
                                                 context,
-                                                Colors.amber.withValues(
-                                                  alpha: 0.22,
-                                                ),
-                                                const Color(0xFFFFF8E1),
-                                              ),
+                                              ).withValues(alpha: 0.18),
                                               border: Border.all(
-                                                color: AppColors.resolve(
+                                                color: AppColors.porchAmberOf(
                                                   context,
-                                                  Colors.amber.withValues(
-                                                    alpha: 0.45,
-                                                  ),
-                                                  Colors.amber.shade600
-                                                      .withValues(alpha: 0.35),
-                                                ),
+                                                ).withValues(alpha: 0.4),
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(4),
@@ -389,10 +336,8 @@ class CharacterGridCard extends StatelessWidget {
                                             child: Text(
                                               tag,
                                               style: TextStyle(
-                                                color: AppColors.resolve(
+                                                color: AppColors.porchAmberOf(
                                                   context,
-                                                  Colors.amber.shade200,
-                                                  Colors.amber.shade800,
                                                 ),
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w500,
@@ -433,7 +378,9 @@ class CharacterGridCard extends StatelessWidget {
                 height: 28,
                 decoration: BoxDecoration(
                   color: isSelectedCard
-                      ? (isOrganizing ? Colors.blueAccent : Colors.purpleAccent)
+                      ? (isOrganizing
+                            ? AppColors.porchHoneyOf(context)
+                            : AppColors.porchTerracottaOf(context))
                       : AppColors.resolve(
                           context,
                           Colors.black54,
@@ -443,8 +390,8 @@ class CharacterGridCard extends StatelessWidget {
                   border: Border.all(
                     color: isSelectedCard
                         ? (isOrganizing
-                              ? Colors.blueAccent
-                              : Colors.purpleAccent)
+                              ? AppColors.porchHoneyOf(context)
+                              : AppColors.porchTerracottaOf(context))
                         : AppColors.resolve(
                             context,
                             Colors.white38,
@@ -550,33 +497,37 @@ class CharacterGridCard extends StatelessWidget {
                         ),
                       ),
                       if (activeFolderId != null)
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'remove_folder',
                           child: ListTile(
                             leading: Icon(
                               Icons.folder_off,
-                              color: Colors.amber,
+                              color: AppColors.porchAmberOf(context),
                               size: 20,
                             ),
                             title: Text(
                               'Remove from Folder',
-                              style: TextStyle(color: Colors.amber),
+                              style: TextStyle(
+                                color: AppColors.porchAmberOf(context),
+                              ),
                             ),
                             dense: true,
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'delete',
                         child: ListTile(
                           leading: Icon(
                             Icons.delete,
-                            color: Colors.redAccent,
+                            color: AppColors.negativeAccentOf(context),
                             size: 20,
                           ),
                           title: Text(
                             'Delete',
-                            style: TextStyle(color: Colors.redAccent),
+                            style: TextStyle(
+                              color: AppColors.negativeAccentOf(context),
+                            ),
                           ),
                           dense: true,
                           contentPadding: EdgeInsets.zero,

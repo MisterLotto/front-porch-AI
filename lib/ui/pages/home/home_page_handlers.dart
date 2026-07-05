@@ -25,48 +25,31 @@ part of '../home_page.dart';
 extension _HomePageHandlers on _HomePageState {
 
   void _confirmDeleteGroup(BuildContext context, GroupChat group) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1111),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        title: const Text(
-          'Delete Group',
-          style: TextStyle(
-            color: Colors.redAccent,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Delete group "${group.name}"?\n\nThe characters themselves will NOT be deleted.',
-          style: const TextStyle(color: Colors.white70, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final groupRepo = Provider.of<GroupChatRepository>(
-                context,
-                listen: false,
-              );
-              await groupRepo.delete(group.id);
-              // No post-delete snackbar for groups (character delete shows one via the outer context)
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+    showWarmDialog(
+      context,
+      title: 'Delete Group',
+      destructive: true,
+      content: WarmDialogText(
+        'Delete group "${group.name}"?\n\nThe characters themselves will NOT '
+        'be deleted.',
       ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Delete',
+          destructive: true,
+          onPressed: () async {
+            Navigator.of(context).pop();
+            final groupRepo = Provider.of<GroupChatRepository>(
+              context,
+              listen: false,
+            );
+            await groupRepo.delete(group.id);
+            // No post-delete snackbar for groups (character delete shows one via the outer context)
+          },
+        ),
+      ],
     );
   }
 
@@ -84,148 +67,113 @@ extension _HomePageHandlers on _HomePageState {
         return pathA.compareTo(pathB);
       });
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.blueAccent, width: 0.5),
-        ),
-        title: Row(
+    showWarmDialog(
+      context,
+      title:
+          'Move ${_selectedCharacterIds.length} character${_selectedCharacterIds.length == 1 ? '' : 's'} to folder',
+      icon: Icons.drive_file_move,
+      accent: AppColors.porchHoneyOf(context),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.drive_file_move, color: Colors.blueAccent),
-            const SizedBox(width: 12),
-            Text(
-              'Move ${_selectedCharacterIds.length} character${_selectedCharacterIds.length == 1 ? '' : 's'} to folder',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            if (folders.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No folders yet. Create one below.',
+                  style: TextStyle(color: AppColors.textTertiary(context)),
+                ),
+              ),
+            ...folders.map((folder) {
+              final folderPath = folderService.getFolderPath(folder.id);
+              final isSubfolder = folder.parentId != null;
+              return ListTile(
+                leading: Icon(
+                  isSubfolder ? Icons.subdirectory_arrow_right : Icons.folder,
+                  color: AppColors.porchAmberOf(context),
+                ),
+                title: Text(
+                  folderPath,
+                  style: TextStyle(color: AppColors.textPrimary(context)),
+                ),
+                subtitle: Text(
+                  '${folder.characterPaths.length} characters',
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 12,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _moveSelectedToFolder(
+                    context,
+                    folder.id,
+                    repo,
+                    folderService,
+                  );
+                },
+              );
+            }),
+            Divider(color: AppColors.borderOf(context).withValues(alpha: 0.5)),
+            ListTile(
+              leading: Icon(
+                Icons.create_new_folder,
+                color: AppColors.porchHoneyOf(context),
+              ),
+              title: Text(
+                'New Folder',
+                style: TextStyle(color: AppColors.porchHoneyOf(context)),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final name = await _promptFolderName(context);
+                if (name != null && name.isNotEmpty && context.mounted) {
+                  final folder = await folderService.createFolder(name);
+                  await _moveSelectedToFolder(
+                    context,
+                    folder.id,
+                    repo,
+                    folderService,
+                  );
+                }
+              },
             ),
           ],
         ),
-        content: SizedBox(
-          width: 320,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (folders.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'No folders yet. Create one below.',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                ...folders.map((folder) {
-                  final folderPath = folderService.getFolderPath(folder.id);
-                  final isSubfolder = folder.parentId != null;
-                  return ListTile(
-                    leading: Icon(
-                      isSubfolder
-                          ? Icons.subdirectory_arrow_right
-                          : Icons.folder,
-                      color: Colors.amberAccent,
-                    ),
-                    title: Text(
-                      folderPath,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    subtitle: Text(
-                      '${folder.characterPaths.length} characters',
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 12,
-                      ),
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    hoverColor: Colors.white10,
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      await _moveSelectedToFolder(
-                        context,
-                        folder.id,
-                        repo,
-                        folderService,
-                      );
-                    },
-                  );
-                }),
-                const Divider(color: Colors.white12),
-                ListTile(
-                  leading: const Icon(
-                    Icons.create_new_folder,
-                    color: Colors.greenAccent,
-                  ),
-                  title: const Text(
-                    'New Folder',
-                    style: TextStyle(color: Colors.greenAccent),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  hoverColor: Colors.white10,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final name = await _promptFolderName(context);
-                    if (name != null && name.isNotEmpty && context.mounted) {
-                      final folder = await folderService.createFolder(name);
-                      await _moveSelectedToFolder(
-                        context,
-                        folder.id,
-                        repo,
-                        folderService,
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-        ],
       ),
+      actions: [warmDialogCancel(context)],
     );
   }
 
   Future<String?> _promptFolderName(BuildContext context) async {
     final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('New Folder'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Folder name'),
-          onSubmitted: (val) => Navigator.pop(ctx, val),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            child: const Text('Create'),
-          ),
-        ],
+    return showWarmDialog<String>(
+      context,
+      title: 'New Folder',
+      icon: Icons.create_new_folder,
+      accent: AppColors.porchAmberOf(context),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        style: TextStyle(color: AppColors.textPrimary(context)),
+        decoration: const InputDecoration(hintText: 'Folder name'),
+        onSubmitted: (val) => Navigator.pop(context, val),
       ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Create',
+          onPressed: () => Navigator.pop(context, controller.text),
+        ),
+      ],
     );
   }
 
@@ -266,54 +214,42 @@ extension _HomePageHandlers on _HomePageState {
     String? parentId,
   }) {
     final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F2937),
-        title: Text(
-          parentId != null ? 'New Subfolder' : 'New Folder',
-          style: const TextStyle(color: Colors.white),
+    showWarmDialog(
+      context,
+      title: parentId != null ? 'New Subfolder' : 'New Folder',
+      icon: Icons.create_new_folder,
+      accent: AppColors.porchAmberOf(context),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        style: TextStyle(color: AppColors.textPrimary(context)),
+        decoration: InputDecoration(
+          hintText: 'Folder name...',
+          hintStyle: TextStyle(color: AppColors.textTertiary(context)),
         ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Folder name...',
-            hintStyle: TextStyle(color: Colors.white38),
-          ),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              folderService.createFolder(value.trim(), parentId: parentId);
-              Navigator.pop(ctx);
+        onSubmitted: (value) {
+          if (value.trim().isNotEmpty) {
+            folderService.createFolder(value.trim(), parentId: parentId);
+            Navigator.pop(context);
+          }
+        },
+      ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Create',
+          onPressed: () {
+            if (controller.text.trim().isNotEmpty) {
+              folderService.createFolder(
+                controller.text.trim(),
+                parentId: parentId,
+              );
+              Navigator.pop(context);
             }
           },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                folderService.createFolder(
-                  controller.text.trim(),
-                  parentId: parentId,
-                );
-                Navigator.pop(ctx);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber.shade700,
-            ),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -323,47 +259,35 @@ extension _HomePageHandlers on _HomePageState {
     FolderService folderService,
   ) {
     final controller = TextEditingController(text: folder.name);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F2937),
-        title: const Text(
-          'Rename Folder',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              folderService.renameFolder(folder.id, value.trim());
-              Navigator.pop(ctx);
+    showWarmDialog(
+      context,
+      title: 'Rename Folder',
+      icon: Icons.drive_file_rename_outline,
+      accent: AppColors.porchAmberOf(context),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        style: TextStyle(color: AppColors.textPrimary(context)),
+        onSubmitted: (value) {
+          if (value.trim().isNotEmpty) {
+            folderService.renameFolder(folder.id, value.trim());
+            Navigator.pop(context);
+          }
+        },
+      ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Rename',
+          onPressed: () {
+            if (controller.text.trim().isNotEmpty) {
+              folderService.renameFolder(folder.id, controller.text.trim());
+              Navigator.pop(context);
             }
           },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                folderService.renameFolder(folder.id, controller.text.trim());
-                Navigator.pop(ctx);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber.shade700,
-            ),
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -372,52 +296,35 @@ extension _HomePageHandlers on _HomePageState {
     CharacterFolder folder,
     FolderService folderService,
   ) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2D1111),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.redAccent, width: 2),
-        ),
-        title: const Text(
-          'Delete Folder',
-          style: TextStyle(
-            color: Colors.redAccent,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'Delete "${folder.name}"?\n\nCharacters inside will NOT be deleted — they\'ll return to the top level.',
-          style: const TextStyle(color: Colors.white70, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
-              folderService.deleteFolder(folder.id);
-              Navigator.pop(ctx);
-              if (_activeFolderId == folder.id) {
-                applyState(() {
-                  if (_folderStack.isNotEmpty) {
-                    _activeFolderId = _folderStack.removeLast();
-                  } else {
-                    _activeFolderId = null;
-                  }
-                });
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
+    showWarmDialog(
+      context,
+      title: 'Delete Folder',
+      destructive: true,
+      content: WarmDialogText(
+        'Delete "${folder.name}"?\n\nCharacters inside will NOT be deleted — '
+        'they\'ll return to the top level.',
       ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Delete',
+          destructive: true,
+          onPressed: () {
+            folderService.deleteFolder(folder.id);
+            Navigator.pop(context);
+            if (_activeFolderId == folder.id) {
+              applyState(() {
+                if (_folderStack.isNotEmpty) {
+                  _activeFolderId = _folderStack.removeLast();
+                } else {
+                  _activeFolderId = null;
+                }
+              });
+            }
+          },
+        ),
+      ],
     );
   }
 

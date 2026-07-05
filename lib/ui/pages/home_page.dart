@@ -149,7 +149,11 @@ class _HomePageState extends State<HomePage> {
           SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
+                Icon(
+                  Icons.check_circle,
+                  color: AppColors.verifiedAccentOf(context),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 const Text('Model loaded and ready!'),
               ],
@@ -328,7 +332,7 @@ class _HomePageState extends State<HomePage> {
                       icon: const Icon(Icons.auto_awesome),
                       label: const Text('AI Create'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amber.shade800,
+                        backgroundColor: AppColors.porchAmberOf(context),
                         foregroundColor: Colors.white,
                       ),
                     ),

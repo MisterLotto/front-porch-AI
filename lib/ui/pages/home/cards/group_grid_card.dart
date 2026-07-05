@@ -62,7 +62,9 @@ class GroupGridCard extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+            side: BorderSide(
+              color: AppColors.porchTerracottaOf(context).withValues(alpha: 0.3),
+            ),
           ),
           child: InkWell(
             onTap: () async {
@@ -132,7 +134,9 @@ class GroupGridCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.purpleAccent.withValues(alpha: 0.15),
+                            color: AppColors.porchTerracottaOf(
+                              context,
+                            ).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -140,7 +144,7 @@ class GroupGridCard extends StatelessWidget {
                                 ? 'Round Robin'
                                 : 'Random',
                             style: TextStyle(
-                              color: Colors.purpleAccent.withValues(alpha: 0.8),
+                              color: AppColors.porchTerracottaOf(context),
                               fontSize: badgeFontSize,
                             ),
                           ),
@@ -233,7 +237,7 @@ class GroupGridCard extends StatelessWidget {
                               child: ListTile(
                                 leading: Icon(
                                   Icons.call_split,
-                                  color: Colors.tealAccent,
+                                  color: AppColors.journalAccentOf(context),
                                   size: 20,
                                 ),
                                 title: Text(
@@ -251,12 +255,14 @@ class GroupGridCard extends StatelessWidget {
                               child: ListTile(
                                 leading: Icon(
                                   Icons.delete,
-                                  color: Colors.redAccent,
+                                  color: AppColors.negativeAccentOf(context),
                                   size: 20,
                                 ),
                                 title: Text(
                                   'Delete',
-                                  style: TextStyle(color: Colors.redAccent),
+                                  style: TextStyle(
+                                    color: AppColors.negativeAccentOf(context),
+                                  ),
                                 ),
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
