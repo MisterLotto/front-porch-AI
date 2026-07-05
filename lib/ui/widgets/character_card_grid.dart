@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/pages/home/cards/character_grid_card.dart';
 import 'package:front_porch_ai/ui/pages/home/cards/folder_grid_card.dart';
 import 'package:front_porch_ai/ui/pages/home/cards/group_grid_card.dart';
+import 'package:front_porch_ai/ui/pages/home/widgets/home_grid_search_bar.dart';
+import 'package:front_porch_ai/ui/pages/home/widgets/home_grid_toolbar.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
@@ -112,13 +114,6 @@ class CharacterCardGrid extends StatelessWidget {
   /// Mirrors the existing `onContextMenuAction` pattern used for CharacterCard.
   final void Function(String action, GroupChat group)? onGroupContextMenuAction;
 
-  String _getActiveFolderName() {
-    if (activeFolderId == null) return 'My Characters';
-    final folder = folderService.folders
-        .where((f) => f.id == activeFolderId)
-        .firstOrNull;
-    return folder?.name ?? 'Folder';
-  }
 
   List<CharacterCard> _getFilteredCharacters() {
     List<CharacterCard> characters;
@@ -181,376 +176,33 @@ class CharacterCardGrid extends StatelessWidget {
       children: [
         Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
-                vertical: 16.0,
-              ),
-              child: Row(
-                children: [
-                  if (isSelecting || isOrganizing) ...[
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Cancel selection',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onCancelSelection,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        '${selectedCharacterIds.length} selected',
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: isOrganizing
-                                  ? Colors.blueAccent
-                                  : Colors.purpleAccent,
-                            ),
-                      ),
-                    ),
-                  ] else if (activeFolderId != null) ...[
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      tooltip: 'Back to all characters',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onFolderNavigateBack,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        _getActiveFolderName(),
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ] else
-                    modeToggle,
-                  const SizedBox(width: 12),
-                  if (!isSelecting && !isOrganizing)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerOf(context),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.borderOf(context)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: sortMode,
-                          icon: Icon(
-                            Icons.sort,
-                            size: 18,
-                            color: AppColors.iconSecondary(context),
-                          ),
-                          dropdownColor: AppColors.surfaceContainerOf(context),
-                          style: TextStyle(
-                            color: AppColors.textSecondary(context),
-                            fontSize: 13,
-                          ),
-                          isDense: true,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'name',
-                              child: Text('Name (A\u2192Z)'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'recent',
-                              child: Text('Recent Activity'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'importDate',
-                              child: Text('Import Date'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'messages',
-                              child: Text('Messages Sent'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) onSortChanged(value);
-                          },
-                        ),
-                      ),
-                    ),
-                  if (!isSelecting && !isOrganizing)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: SizedBox(
-                        width: 100,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.grid_view,
-                              size: 16,
-                              color: AppColors.iconSecondary(context),
-                            ),
-                            Expanded(
-                              child: SliderTheme(
-                                data: SliderThemeData(
-                                  trackHeight: 3,
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 6,
-                                  ),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 12,
-                                  ),
-                                  activeTrackColor: Colors.blueAccent
-                                      .withValues(alpha: 0.7),
-                                  inactiveTrackColor: AppColors.resolve(
-                                    context,
-                                    Colors.white.withValues(alpha: 0.12),
-                                    Colors.black.withValues(alpha: 0.12),
-                                  ),
-                                  thumbColor: Colors.blueAccent,
-                                ),
-                                child: Slider(
-                                  value: gridScale,
-                                  min: 150,
-                                  max: 450,
-                                  onChanged: (v) => onGridScaleChanged(v),
-                                  onChangeEnd: (v) =>
-                                      onGridScaleChangeEnd?.call(v),
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              Icons.view_module,
-                              size: 16,
-                              color: AppColors.iconSecondary(context),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const Spacer(),
-                  if (!isSelecting && !isOrganizing) ...[
-                    // Full reload via loadCharacters() (DB re-query + fresh PNG extensions/avatars)
-                    // so external direct writers (Character Card Forge, web imports, etc.) are
-                    // picked up immediately without app restart. Matches the established pattern
-                    // used by cloud sync, the web server, and main.dart startup.
-                    IconButton(
-                      tooltip:
-                          'Refresh character list (pick up external changes, e.g. Character Card Forge)',
-                      icon: const Icon(Icons.refresh),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => repo.loadCharacters(),
-                    ),
-                    IconButton(
-                      tooltip:
-                          'Multi-select characters (for organizing, moving, etc.)',
-                      icon: const Icon(Icons.check_box_outlined),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onToggleSelectMode,
-                    ),
-                    IconButton(
-                      tooltip: 'Organize into folders',
-                      icon: const Icon(
-                        Icons.drive_file_move_outlined,
-                        color: Colors.blueAccent,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onToggleOrganizeMode,
-                    ),
-                    if (activeFolderId == null)
-                      IconButton(
-                        tooltip: 'New Folder',
-                        icon: const Icon(Icons.create_new_folder_outlined),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () =>
-                            onFolderDialogAction(FolderDialogAction.create),
-                      ),
-                    if (activeFolderId != null)
-                      IconButton(
-                        tooltip: 'New Subfolder',
-                        icon: const Icon(
-                          Icons.create_new_folder_outlined,
-                          color: Colors.amberAccent,
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onFolderDialogAction(
-                          FolderDialogAction.create,
-                          parentId: activeFolderId,
-                        ),
-                      ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Import or discover characters',
-                      icon: const Icon(Icons.download),
-                      onSelected: onImport,
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(
-                          value: 'cards',
-                          child: ListTile(
-                            leading: Icon(Icons.download),
-                            title: Text('Import Cards'),
-                            dense: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'folder',
-                          child: ListTile(
-                            leading: Icon(Icons.library_add),
-                            title: Text('Import Folder'),
-                            dense: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'byaf',
-                          child: ListTile(
-                            leading: Icon(Icons.archive_outlined),
-                            title: Text('Import Backyard AI (.byaf)'),
-                            dense: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
+            HomeGridToolbar(
+              isSelecting: isSelecting,
+              isOrganizing: isOrganizing,
+              activeFolderId: activeFolderId,
+              selectedCharacterIds: selectedCharacterIds,
+              sortMode: sortMode,
+              gridScale: gridScale,
+              modeToggle: modeToggle,
+              repo: repo,
+              folderService: folderService,
+              onCancelSelection: onCancelSelection,
+              onFolderNavigateBack: onFolderNavigateBack,
+              onSortChanged: onSortChanged,
+              onGridScaleChanged: onGridScaleChanged,
+              onGridScaleChangeEnd: onGridScaleChangeEnd,
+              onToggleSelectMode: onToggleSelectMode,
+              onToggleOrganizeMode: onToggleOrganizeMode,
+              onFolderDialogAction: onFolderDialogAction,
+              onImport: onImport,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: TextField(
-                controller: searchController,
-                style: TextStyle(color: AppColors.textPrimary(context)),
-                decoration: InputDecoration(
-                  hintText:
-                      activeFolderId != null &&
-                          searchScope != SearchScope.allCharacters
-                      ? 'Search this folder...'
-                      : 'Search by name or tag...',
-                  hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-                  prefixIcon: activeFolderId != null
-                      ? PopupMenuButton<SearchScope>(
-                          icon: Icon(
-                            searchScope == SearchScope.allCharacters
-                                ? Icons.search
-                                : Icons.folder_open,
-                            color: searchScope == SearchScope.allCharacters
-                                ? Colors.blueAccent
-                                : Colors.amberAccent,
-                            size: 20,
-                          ),
-                          tooltip: 'Search scope',
-                          color: AppColors.surfaceContainerOf(context),
-                          onSelected: onSearchScopeChanged,
-                          itemBuilder: (_) => [
-                            PopupMenuItem(
-                              value: SearchScope.currentFolder,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.folder,
-                                    size: 18,
-                                    color:
-                                        searchScope == SearchScope.currentFolder
-                                        ? Colors.amberAccent
-                                        : AppColors.iconSecondary(context),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'This Folder Only',
-                                    style: TextStyle(
-                                      color:
-                                          searchScope ==
-                                              SearchScope.currentFolder
-                                          ? Colors.amberAccent
-                                          : AppColors.textSecondary(context),
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: SearchScope.folderRecursive,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.snippet_folder,
-                                    size: 18,
-                                    color:
-                                        searchScope ==
-                                            SearchScope.folderRecursive
-                                        ? Colors.amberAccent
-                                        : AppColors.iconSecondary(context),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Folder & Subfolders',
-                                    style: TextStyle(
-                                      color:
-                                          searchScope ==
-                                              SearchScope.folderRecursive
-                                          ? Colors.amberAccent
-                                          : AppColors.textSecondary(context),
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: SearchScope.allCharacters,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.search,
-                                    size: 18,
-                                    color:
-                                        searchScope == SearchScope.allCharacters
-                                        ? Colors.blueAccent
-                                        : AppColors.iconSecondary(context),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'All Characters',
-                                    style: TextStyle(
-                                      color:
-                                          searchScope ==
-                                              SearchScope.allCharacters
-                                          ? Colors.blueAccent
-                                          : AppColors.textSecondary(context),
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
-                      : Icon(
-                          Icons.search,
-                          color: AppColors.iconSecondary(context),
-                        ),
-                  suffixIcon: searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(
-                            Icons.clear,
-                            color: AppColors.iconSecondary(context),
-                          ),
-                          onPressed: () {
-                            searchController.clear();
-                            onSearchQueryChanged('');
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: AppColors.surfaceContainerOf(context),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onChanged: onSearchQueryChanged,
-              ),
+            HomeGridSearchBar(
+              searchController: searchController,
+              searchQuery: searchQuery,
+              searchScope: searchScope,
+              activeFolderId: activeFolderId,
+              onSearchScopeChanged: onSearchScopeChanged,
+              onSearchQueryChanged: onSearchQueryChanged,
             ),
             const SizedBox(height: 12),
             Expanded(child: _buildGrid(context, filteredCharacters)),
