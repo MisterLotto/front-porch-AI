@@ -68,6 +68,7 @@ class CharacterFacade {
   }) async {
     var characters = await _db.getAllCharacters();
     final msgCounts = await _db.getMessageCountsPerCharacter();
+    final lastActivity = await _db.getLastActivityPerCharacter();
     final term = search?.toLowerCase();
 
     if (_folders != null && scope != 'allCharacters') {
@@ -103,25 +104,41 @@ class CharacterFacade {
       }).toList();
     }
 
+    // Case-insensitive name comparison, reused as a stable tiebreak so equal
+    // keys (no activity, no messages, no import date) keep a deterministic
+    // order instead of jittering. Kept 1:1 with the desktop sort helper
+    // (lib/utils/character_sort.dart).
+    int byName(Character a, Character b) =>
+        a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    final epochZero = DateTime.fromMillisecondsSinceEpoch(0);
     switch (sort) {
       case 'recent':
-        characters = characters.reversed.toList();
+        // Most recent turn first — by real per-character activity, not a bare
+        // reversal of insertion order (which ignored activity entirely).
+        characters.sort((a, b) {
+          final at = lastActivity[a.id] ?? epochZero;
+          final bt = lastActivity[b.id] ?? epochZero;
+          final c = bt.compareTo(at);
+          return c != 0 ? c : byName(a, b);
+        });
         break;
       case 'messages':
-        characters.sort(
-          (a, b) => (msgCounts[b.id] ?? 0).compareTo(msgCounts[a.id] ?? 0),
-        );
+        characters.sort((a, b) {
+          final c = (msgCounts[b.id] ?? 0).compareTo(msgCounts[a.id] ?? 0);
+          return c != 0 ? c : byName(a, b);
+        });
         break;
       case 'importDate':
-        // Newest import first, by the trailing epoch in the PNG basename
-        // (`Name_<millis>.png`) — mirrors the desktop _extractImportEpoch.
-        characters.sort((a, b) => _importEpoch(b).compareTo(_importEpoch(a)));
+        // Newest first by the real DB createdAt (not the fragile filename
+        // epoch, which was 0 for JSON/Chub/renamed cards).
+        characters.sort((a, b) {
+          final c = b.createdAt.compareTo(a.createdAt);
+          return c != 0 ? c : byName(a, b);
+        });
         break;
       case 'name':
       default:
-        characters.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+        characters.sort(byName);
     }
 
     return characters
@@ -414,18 +431,6 @@ class CharacterFacade {
     } catch (_) {
       return null;
     }
-  }
-
-  /// The trailing import epoch encoded in a character's PNG basename
-  /// (`Name_<millisecondsSinceEpoch>.png`), or 0 when absent — used by the
-  /// `importDate` sort. Mirrors the desktop `_extractImportEpoch`.
-  int _importEpoch(Character c) {
-    final imagePath = c.imagePath;
-    if (imagePath == null || imagePath.isEmpty) return 0;
-    final base = p.basenameWithoutExtension(imagePath);
-    final i = base.lastIndexOf('_');
-    if (i == -1) return 0;
-    return int.tryParse(base.substring(i + 1)) ?? 0;
   }
 
   List<dynamic> _jsonList(String raw) {

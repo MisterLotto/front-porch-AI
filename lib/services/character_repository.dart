@@ -284,6 +284,11 @@ class CharacterRepository extends ChangeNotifier {
     );
     // Store DB id for lookups
     card.dbId = c.id;
+    // Library "date added" — used by the home-screen "Import Date" sort. Reading
+    // the real DB column (instead of parsing a timestamp out of the image
+    // filename) means cards without the legacy `<name>_<epoch>.png` naming
+    // (JSON imports, Chub downloads, renamed files) still sort correctly.
+    card.createdAt = c.createdAt;
     card.primeAvatarIndex = c.primeAvatarIndex;
     return card;
   }

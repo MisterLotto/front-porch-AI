@@ -2132,10 +2132,16 @@ class AppDatabase extends _$AppDatabase {
     return map;
   }
 
-  /// Get the most recent session update time per character.
+  /// Get the most recent activity time per character (drives the home-screen
+  /// "Recent Activity" sort).
+  ///
+  /// Uses `updated_at`, which `_doSaveChat` bumps to now on every turn — not
+  /// `created_at`, which is fixed when the chat is first started. Reading
+  /// `created_at` meant "recent" ordered by when each chat was *opened*, so a
+  /// character you talked to today inside an older session sank to the bottom.
   Future<Map<String, DateTime>> getLastActivityPerCharacter() async {
     final result = await customSelect(
-      'SELECT character_id, MAX(created_at) AS last_at '
+      'SELECT character_id, MAX(updated_at) AS last_at '
       'FROM sessions '
       'WHERE character_id IS NOT NULL AND deleted_at IS NULL '
       'GROUP BY character_id',

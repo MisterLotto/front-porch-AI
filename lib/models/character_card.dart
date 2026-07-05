@@ -458,6 +458,7 @@ class CharacterCard {
   /// The UI now prevents (and warns about) cross-engine assignments.
   String? ttsVoice;
   String? dbId; // UUID primary key (runtime only, not serialized)
+  DateTime? createdAt; // library "date added" from DB (runtime only, not serialized)
   FrontPorchExtensions? frontPorchExtensions; // V2.5 Realism Engine defaults
   Map<String, dynamic>?
   rawExtensions; // Preserve unknown third-party extension keys
