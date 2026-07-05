@@ -1,0 +1,444 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+part of '../home_page.dart';
+
+/// Folder + delete confirmation dialogs and the move-to-folder flow.
+///
+/// Split out of the _HomePageState god file as a private extension
+/// (part of the same library, so it keeps full access to page state).
+extension _HomePageDialogs on _HomePageState {
+
+  void _confirmDeleteCharacter(BuildContext context, CharacterCard character) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D1111),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 2),
+        ),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.redAccent,
+              size: 28,
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Delete Character',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete "${character.name}"?\n\nThis will permanently remove the character card and its image file. This action cannot be undone.',
+          style: const TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              final repo = Provider.of<CharacterRepository>(
+                context,
+                listen: false,
+              );
+              final worldRepo = Provider.of<WorldRepository>(
+                context,
+                listen: false,
+              );
+              final storageService = Provider.of<StorageService>(
+                context,
+                listen: false,
+              );
+              await repo.deleteCharacter(
+                character,
+                worldRepo: worldRepo,
+                chatsDir: storageService.chatsDir,
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${character.name} has been deleted.'),
+                    backgroundColor: Colors.red.shade800,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editCharacter(
+    BuildContext context,
+    CharacterCard character,
+  ) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditCharacterPage(character: character),
+      ),
+    );
+    // No loadCharacters() needed here — updateCharacter() already updates the
+    // in-memory list and calls notifyListeners(). Calling loadCharacters() was
+    // re-reading outdated in-memory extensions from the cache and overwriting
+    // the freshly-saved values.
+  }
+
+  Future<void> _duplicateCharacter(
+    BuildContext context,
+    CharacterCard character,
+  ) async {
+    try {
+      await Provider.of<CharacterRepository>(
+        context,
+        listen: false,
+      ).duplicateCharacter(character);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Character duplicated successfully.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to duplicate: $e')));
+      }
+    }
+  }
+
+  Future<void> _importCharacter(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'json'],
+      allowMultiple: true,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+    if (!context.mounted) return;
+
+    final files = result.files
+        .where((f) => f.path != null)
+        .map((f) => File(f.path!))
+        .toList();
+
+    if (files.isEmpty) return;
+
+    // Single file: check if this is a Front Porch Group Card first (novel format)
+    if (files.length == 1) {
+      final file = files.first;
+      try {
+        final groupService = GroupCardService();
+        final groupCard = await groupService.readGroupCard(file.path);
+
+        if (groupCard != null) {
+          // This is a Group Card PNG — do the special group import
+          await _importGroupCard(context, file, groupCard);
+          return;
+        }
+
+        // Normal character card
+        final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+        final repo = Provider.of<CharacterRepository>(context, listen: false);
+        final card = await repo.importCharacter(file, worldRepo: worldRepo);
+        if (context.mounted && card != null) {
+          // Show tag dialog
+          final tags = await TagDialog.show(context, card);
+          if (tags != null && context.mounted) {
+            card.tags = List.from(tags);
+            await repo.updateCharacter(card);
+          }
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Character imported successfully!')),
+            );
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+        }
+      }
+      return;
+    }
+
+    // Multiple files: use bulk import with progress dialog
+    _runBulkImport(context, files);
+  }
+
+  Future<void> _importByaf(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['byaf'],
+      allowMultiple: true,
+    );
+
+    if (result == null || result.files.isEmpty) return;
+    final paths = result.files
+        .where((f) => f.path != null)
+        .map((f) => f.path!)
+        .toList();
+    if (paths.isEmpty || !context.mounted) return;
+
+    // Multiple files → bulk import with a progress dialog (no per-file preview),
+    // mirroring the bulk V2 PNG importer. A single file keeps the rich preview
+    // dialog below.
+    if (paths.length > 1) {
+      await _runBulkByafImport(context, paths);
+      return;
+    }
+
+    final filePath = paths.first;
+    final byafService = ByafService();
+
+    try {
+      // Parse the .byaf archive
+      final preview = await byafService.parseByaf(filePath);
+
+      if (!context.mounted) return;
+
+      // Show preview dialog
+      final result2 = await showDialog<ByafImportResult>(
+        context: context,
+        builder: (context) => ByafImportDialog(preview: preview),
+      );
+
+      if (result2 == null || !result2.confirmed || !context.mounted) return;
+
+      // Convert to CharacterCard
+      final card = byafService.toCharacterCard(preview);
+
+      // Save as PNG (with image if available)
+      final storageService = Provider.of<StorageService>(
+        context,
+        listen: false,
+      );
+      final pngPath = await byafService.saveCharacterPng(
+        card,
+        charactersDirPath: storageService.charactersDir.path,
+      );
+
+      // Now use V2CardService to embed character data into the PNG
+      final v2Service = V2CardService();
+      await v2Service.saveCardAsPng(card, pngPath, preview.extractedImagePath);
+
+      // Import via CharacterRepository (reads PNG metadata + inserts into DB)
+      final repo = Provider.of<CharacterRepository>(context, listen: false);
+      final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+      final importedCard = await repo.importCharacter(
+        File(pngPath),
+        worldRepo: worldRepo,
+      );
+
+      // Import chat history if requested
+      if (result2.importChatHistory &&
+          preview.messages.isNotEmpty &&
+          importedCard != null) {
+        final db = await AppDatabase.instance();
+        await byafService.importChatHistory(db, preview, importedCard);
+      }
+
+      if (context.mounted && importedCard != null) {
+        final chatNote =
+            result2.importChatHistory && preview.messages.isNotEmpty
+            ? ' with ${preview.messages.length} chat messages'
+            : '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported "${importedCard.name}" from Backyard AI$chatNote!',
+            ),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to import .byaf: $e')));
+      }
+    }
+  }
+
+  /// Mass BYAF import: confirm once (with a chat-history choice for the whole
+  /// batch), then drive the shared bulk-progress dialog over the files.
+  Future<void> _runBulkByafImport(
+    BuildContext context,
+    List<String> paths,
+  ) async {
+    bool importChats = true;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: AppColors.surfaceOf(ctx),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.library_add,
+                color: AppColors.resolve(
+                  ctx,
+                  Colors.blueAccent,
+                  Colors.blue.shade700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Import ${paths.length} Backyard AI characters?',
+                  style: TextStyle(color: AppColors.textPrimary(ctx)),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Each .byaf will be imported as a character card. (No per-file '
+                'preview is shown for batch imports.)',
+                style: TextStyle(
+                  color: AppColors.textSecondary(ctx),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: importChats,
+                onChanged: (v) => setLocal(() => importChats = v ?? true),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
+                  'Also import chat history',
+                  style: TextStyle(color: AppColors.textPrimary(ctx)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: AppColors.textTertiary(ctx)),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Import ${paths.length}'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    _runBulkProgressImport(
+      context,
+      title: 'Import Backyard AI',
+      totalCount: paths.length,
+      runImport: ({required onProgress, required isCancelled}) =>
+          _importByafFiles(
+            context,
+            paths,
+            importChats,
+            onProgress: onProgress,
+            isCancelled: isCancelled,
+          ),
+    );
+  }
+
+  /// Per-file BYAF import loop used by the bulk progress dialog. Mirrors the
+  /// single-file `_importByaf` pipeline (parse → convert → embed V2 PNG →
+  /// import → optional chat history) and reports progress per file.
+  Future<void> _importByafFiles(
+    BuildContext context,
+    List<String> paths,
+    bool importChats, {
+    required void Function(int current, int total, String name, String? error)
+    onProgress,
+    required bool Function() isCancelled,
+  }) async {
+    final byafService = ByafService();
+    final v2Service = V2CardService();
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+
+    for (int i = 0; i < paths.length; i++) {
+      if (isCancelled()) break;
+      final name = paths[i].split(Platform.pathSeparator).last;
+      try {
+        final preview = await byafService.parseByaf(paths[i]);
+        final card = byafService.toCharacterCard(preview);
+        final pngPath = await byafService.saveCharacterPng(
+          card,
+          charactersDirPath: storage.charactersDir.path,
+        );
+        await v2Service.saveCardAsPng(
+          card,
+          pngPath,
+          preview.extractedImagePath,
+        );
+        final imported = await repo.importCharacter(
+          File(pngPath),
+          worldRepo: worldRepo,
+        );
+        if (importChats && preview.messages.isNotEmpty && imported != null) {
+          final db = await AppDatabase.instance();
+          await byafService.importChatHistory(db, preview, imported);
+        }
+        onProgress(
+          i + 1,
+          paths.length,
+          imported?.name ?? name,
+          imported == null ? 'Import returned no character' : null,
+        );
+      } catch (e) {
+        onProgress(i + 1, paths.length, name, '$e');
+      }
+    }
+  }
+}
