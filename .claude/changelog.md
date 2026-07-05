@@ -3600,3 +3600,9 @@ Brief reason: Addressed the confirmed correctness/cleanup findings from the revi
 - **Reason:** Owner reported (a) attribution input invisible on the live hub (stale cache) and (b) the sweep missed their Xara cross-post (discovery blindness, not scoring — engine scored it 0.999 when handed the URL).
 - **Verified:** hub rebuilt + redeployed with ?v= params (live check: views-my.js?v=837cacdf); backend moderation docs rsynced; probes confirmed wyvern/jannyai/risu/character-tavern expose no public search APIs (WebSearch is the path).
 - **Commit:** app (this commit) · backend 954b425
+
+## 2026-07-05 (UTC) — Stale-website fix: instant deploys for hub + apex
+- **Files changed:** website/build.mjs (stamp() moved to module scope with memo; site.css + main.js URLs now content-hashed in shell() for every page on BOTH sites — previously only the hub's stoop js/css were stamped). Droplet (not in repo): /etc/caddy/Caddyfile — added `@html not path /assets/*` → `Cache-Control: no-cache` to OUR two site blocks only (frontporchai.app incl. /screenshots/* exclusion, hub.frontporchai.app); backup Caddyfile.bak.<ts> taken; validated + reloaded; matrix/apt/api verified 200 after.
+- **Reason:** Owner asked how to stop hub.frontporchai.app serving old versions (suspected DNS TTL — unrelated; DNS only caches the IP). Root cause: our Caddy blocks send max-age=604800 for /assets and no Cache-Control for HTML (browser heuristics then cache HTML too). Now: HTML always revalidates (ETag 304 = 0 bytes, verified live), and every css/js URL changes when its content changes, so the 7-day asset cache can never pin stale code.
+- **Verified:** hub HTML `cache-control: no-cache` + 304 on If-None-Match revisit; stamped asset URLs live (site.css?v=a06ff37d, main.js?v=6bd9e6c2); apex same; neighbors untouched.
+- **Commit:** (this commit)

@@ -28,6 +28,17 @@ const DIST_HUB = path.join(ROOT, 'dist-hub');
 
 const SITE = 'https://frontporchai.app';
 const HUB = 'https://hub.frontporchai.app';
+
+// Cache-buster: Caddy serves /assets with a 7-day max-age, so every css/js URL
+// carries a short content hash — the URL changes exactly when the file's bytes
+// change, and a plain page load picks up new code immediately after a deploy.
+const stampCache = new Map();
+function stamp(file) {
+  if (!stampCache.has(file)) {
+    stampCache.set(file, createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 8));
+  }
+  return stampCache.get(file);
+}
 const STABLE_VERSION = 'v0.9.9.1.3';
 
 /** The docs that make up the site, in reading order. */
@@ -187,7 +198,7 @@ function shell({ title, desc, canonical, body, extraHead = '', bodyClass = '', n
 <meta property="og:image" content="${origin}/assets/images/front_porch_ai_icon.png">
 <link rel="icon" type="image/png" href="/assets/images/front_porch_ai_icon.png">
 <link rel="apple-touch-icon" href="/assets/images/front_porch_ai_icon.png">
-<link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/site.css?v=${stamp(path.join(SRC, 'site.css'))}">
 ${extraHead}
 </head>
 <body${bodyClass ? ` class="${bodyClass}"` : ''}>
@@ -195,7 +206,7 @@ ${extraHead}
 ${nav}
 ${body}
 ${footer}
-<script src="/assets/main.js" defer></script>
+<script src="/assets/main.js?v=${stamp(path.join(SRC, 'main.js'))}" defer></script>
 </body>
 </html>`;
 }
@@ -359,11 +370,6 @@ function buildHub() {
   const hubNav = absolutizeChrome(NAV).replace('data-nav="stoop"', 'data-nav="stoop" class="active"');
   const hubFooter = absolutizeChrome(FOOTER);
   const scripts = ['png.js', 'api.js', 'ui.js', 'views-auth.js', 'views-picks.js', 'views-browse.js', 'views-my.js', 'views-inbox.js', 'app.js'];
-  // Cache-buster: Caddy serves hub assets with a 7-day max-age, so stamp each
-  // stoop asset URL with a short content hash — the URL changes exactly when
-  // the file's bytes change, and a plain page reload picks up new code.
-  const stamp = (file) =>
-    createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 8);
 
   // self-contained asset tree
   fs.mkdirSync(path.join(DIST_HUB, 'assets/fonts'), { recursive: true });
