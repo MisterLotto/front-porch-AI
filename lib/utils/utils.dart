@@ -26,6 +26,7 @@
 //
 // Direct imports of individual utility files remain fully supported.
 
+export 'character_sort.dart';
 export 'emotion_labels.dart';
 export 'gguf_parser.dart';
 export 'character_id.dart';

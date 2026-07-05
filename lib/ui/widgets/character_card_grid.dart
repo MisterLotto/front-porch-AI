@@ -115,14 +115,6 @@ class CharacterCardGrid extends StatelessWidget {
   /// See [StableGroupId.stableGroupId] in lib/utils/character_id.dart
   String _getCharacterIdFromCard(CharacterCard card) => card.stableGroupId;
 
-  int _extractImportEpoch(CharacterCard card) {
-    if (card.imagePath == null) return 0;
-    final basename = path.basenameWithoutExtension(card.imagePath!);
-    final lastUnderscore = basename.lastIndexOf('_');
-    if (lastUnderscore == -1) return 0;
-    return int.tryParse(basename.substring(lastUnderscore + 1)) ?? 0;
-  }
-
   String _getActiveFolderName() {
     if (activeFolderId == null) return 'My Characters';
     final folder = folderService.folders
@@ -176,40 +168,12 @@ class CharacterCardGrid extends StatelessWidget {
       }).toList();
     }
 
-    switch (sortMode) {
-      case 'name':
-        characters.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
-        break;
-      case 'recent':
-        characters.sort((a, b) {
-          final aId = _getCharacterIdFromCard(a);
-          final bId = _getCharacterIdFromCard(b);
-          final aTime = lastActivityCache[aId] ?? DateTime(1970);
-          final bTime = lastActivityCache[bId] ?? DateTime(1970);
-          return bTime.compareTo(aTime);
-        });
-        break;
-      case 'importDate':
-        characters.sort((a, b) {
-          final aEpoch = _extractImportEpoch(a);
-          final bEpoch = _extractImportEpoch(b);
-          return bEpoch.compareTo(aEpoch);
-        });
-        break;
-    }
-    if (sortMode == 'messages') {
-      characters.sort((a, b) {
-        final aId = _getCharacterIdFromCard(a);
-        final bId = _getCharacterIdFromCard(b);
-        final aCount = messageCountCache[aId] ?? 0;
-        final bCount = messageCountCache[bId] ?? 0;
-        return bCount.compareTo(aCount);
-      });
-    }
-
-    return characters;
+    return sortCharacters(
+      characters,
+      CharacterSortMode.fromKey(sortMode),
+      lastActivity: lastActivityCache,
+      messageCount: messageCountCache,
+    );
   }
 
   @override
