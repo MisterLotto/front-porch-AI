@@ -6,6 +6,8 @@
 // file-size cap. Section order mirrors the desktop sidebar.
 
 import { useEffect, useState } from 'react';
+import { api } from '../api/client';
+import { ChatLorebookModal } from './ChatLorebookModal';
 import { ChatTools } from './ChatTools';
 import { type CastMember } from './CastBar';
 import { Portrait } from './ChatAvatar';
@@ -44,6 +46,10 @@ export function ChatInsight({
   onCommand,
   cast,
   onFocus,
+  loreTokens,
+  loreBudget,
+  loreOverflow,
+  draft,
 }: {
   realism: Realism;
   lorebook?: LoreEntry[];
@@ -61,8 +67,30 @@ export function ChatInsight({
   onCommand: (cmd: string) => void;
   cast?: CastMember[];
   onFocus?: (id: string) => void;
+  loreTokens?: number;
+  loreBudget?: number;
+  loreOverflow?: string[];
+  /** Live composer draft — powers the "would trigger next" preview. */
+  draft?: string;
 }) {
   const [note, setNote] = useState(authorNote);
+  // "Would trigger next": mutation-free dry-run against the draft, debounced.
+  const [wouldTrigger, setWouldTrigger] = useState<string[]>([]);
+  useEffect(() => {
+    const text = (draft ?? '').trim();
+    if (!text) {
+      setWouldTrigger([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .post<{ matches: string[] }>('/api/chat/lore-preview', { draft: text })
+        .then((r) => setWouldTrigger(r.matches ?? []))
+        .catch(() => setWouldTrigger([]));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [draft]);
+  const [showChatBook, setShowChatBook] = useState(false);
   useEffect(() => setNote(authorNote), [authorNote]);
   // Author's Note strength (injection depth/weight, 1–10) — desktop parity.
   const [strength, setStrength] = useState(authorNoteDepth);
@@ -150,19 +178,60 @@ export function ChatInsight({
 
       <ChatTools reloadKey={toolsKey} focusedId={focusedId} groupId={groupId} onCommand={onCommand} />
 
-      {lorebook && lorebook.length > 0 && (
-        <>
-          <h4 className="section-label">Lorebook</h4>
-          <ul className="lore-list">
-            {lorebook.map((e, i) => (
-              <li key={i} className={e.isTriggered ? 'lore on' : 'lore'}>
-                <span className="lore-dot" />
-                <span>{e.name}{e.constant ? ' · always' : ''}</span>
-              </li>
-            ))}
-          </ul>
-        </>
+      <h4 className="section-label">Lorebook</h4>
+      {typeof loreBudget === 'number' && loreBudget > 0 && (
+        <div className={`lore-meter${(loreOverflow?.length ?? 0) > 0 ? ' over' : ''}`}>
+          <div className="lore-meter-bar">
+            <div
+              style={{
+                width: `${Math.min(100, Math.round(((loreTokens ?? 0) / loreBudget) * 100))}%`,
+              }}
+            />
+          </div>
+          <span>
+            lore in prompt: {loreTokens ?? 0} / {loreBudget} tokens
+            {(loreOverflow?.length ?? 0) > 0 ? ` — ${loreOverflow!.length} dropped` : ''}
+          </span>
+        </div>
       )}
+      {lorebook && lorebook.length > 0 ? (
+        <ul className="lore-list">
+          {lorebook.map((e, i) => (
+            <li
+              key={i}
+              className={`lore${e.isTriggered ? ' on' : ''}${e.constant ? ' const' : ''}`}
+            >
+              <span className="lore-dot" />
+              <span>{e.name}{e.constant ? ' · always' : ''}</span>
+              {(e.stickyLeft ?? 0) > 0 && (
+                <span className="lore-pill ok">sticky {e.stickyLeft}</span>
+              )}
+              {(e.stickyLeft ?? 0) === 0 && (e.cooldownLeft ?? 0) > 0 && (
+                <span className="lore-pill honey">cooldown {e.cooldownLeft}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted small">No lorebook entries.</p>
+      )}
+      {wouldTrigger.length > 0 && (
+        <div className="lore-preview">
+          <span className="lore-preview-title">Would trigger next</span>
+          <div className="lore-preview-chips">
+            {wouldTrigger.slice(0, 6).map((n) => (
+              <span key={n} className="lore-pill honey">{n}</span>
+            ))}
+            {wouldTrigger.length > 6 && (
+              <span className="lore-pill honey">+{wouldTrigger.length - 6} more</span>
+            )}
+          </div>
+        </div>
+      )}
+      <button className="ghost lore-chat-btn" onClick={() => setShowChatBook(true)}>
+        Manage this chat's lore…
+      </button>
+      {showChatBook && <ChatLorebookModal onClose={() => setShowChatBook(false)} />}
     </div>
   );
 }

@@ -8,8 +8,9 @@
 // stats dashboard + color-coded WorldCard grid mirroring the desktop world
 // management page.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
+import { ImportLorebookWizard } from '../components/ImportLorebookWizard';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
 import { WorldCard, type WorldSummary } from '../components/WorldCard';
 import '../styles/ws-g.css';
@@ -37,7 +38,6 @@ export function WorldsPage() {
   const [edit, setEdit] = useState<EditState>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = () =>
     api.get<{ worlds: WorldSummary[] }>('/api/worlds').then((r) => setWorlds(r.worlds)).catch(() => {});
@@ -78,17 +78,8 @@ export function WorldsPage() {
     );
   };
 
-  const importFile = async (file: File) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(await file.text());
-    } catch {
-      setError('That file is not valid JSON.');
-      return;
-    }
-    apply(api.post('/api/worlds/import', parsed));
-  };
-
+  const [showImport, setShowImport] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const totalEntries = worlds.reduce((s, w) => s + w.entryCount, 0);
   const linkedCount = worlds.filter((w) => w.linkedCharacterName).length;
 
@@ -97,8 +88,8 @@ export function WorldsPage() {
       <div className="page-head">
         <h2>Worlds</h2>
         <div className="row-actions">
-          <button className="ghost" disabled={busy} onClick={() => fileRef.current?.click()}>
-            ⬆ Import World
+          <button className="ghost" disabled={busy} onClick={() => setShowImport(true)}>
+            ⬆ Import Lorebook
           </button>
           <button
             className="primary"
@@ -108,17 +99,6 @@ export function WorldsPage() {
           </button>
         </div>
       </div>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".json,application/json"
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void importFile(f);
-          e.target.value = '';
-        }}
-      />
       <p className="muted small">A world is a named lorebook you can reuse across characters and groups.</p>
 
       {worlds.length > 0 && (
@@ -189,6 +169,17 @@ export function WorldsPage() {
         </div>
       )}
 
+      {showImport && (
+        <ImportLorebookWizard
+          onClose={() => setShowImport(false)}
+          onImported={(msg) => {
+            setToast(msg);
+            void load();
+          }}
+        />
+      )}
+
+      {toast && <p className="muted small">{toast}</p>}
       {error && <p className="error">{error}</p>}
     </div>
   );

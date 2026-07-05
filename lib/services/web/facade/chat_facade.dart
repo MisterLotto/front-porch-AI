@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/web/facade/chat_realism_read.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
+import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
 
 /// Thin adapter over [ChatService] for the rewritten web server. Mirrors the
 /// legacy chat handlers' JSON contract and pushes a `chat_updated` signal over
@@ -73,6 +74,7 @@ class ChatFacade {
     // inclusion-group loser stays isTriggered but must not read as active
     // in the web UI either — same source the desktop sidebar dots use).
     final injectedLore = _chat.currentlyActiveLoreEntries();
+    final chatLen = _chat.messages.length;
     void addEntries(Iterable<dynamic> entries, String prefix) {
       for (final entry in entries) {
         if (!entry.enabled) continue;
@@ -84,10 +86,17 @@ class ChatFacade {
           'isTriggered': injectedLore.contains(entry) && !entry.constant,
           'constant': entry.constant,
           'remainingDepth': entry.remainingDepth,
+          // ST timed effects — the web timer pills (desktop sidebar parity).
+          'stickyLeft':
+              _chat.loreTimedEffects.stickyRemaining(entry, chatLen),
+          'cooldownLeft':
+              _chat.loreTimedEffects.cooldownRemaining(entry, chatLen),
         });
       }
     }
 
+    // Chat-scoped book first (matches its scan priority), then char/members.
+    addEntries(_chat.chatLorebook.entries, 'This chat');
     if (activeChar?.lorebook != null) {
       addEntries(activeChar!.lorebook!.entries, '');
     }
@@ -146,6 +155,11 @@ class ChatFacade {
       'totalGreetings': activeChar?.allGreetings.length ?? 1,
       'userPersonaName': _personas?.persona.name ?? 'User',
       'lorebook': lorebook,
+      // Lore token meter (desktop sidebar parity): last generation's lore
+      // share of the budget + anything dropped for space. Additive fields.
+      'loreTokens': _chat.lastLoreTokens,
+      'loreBudget': _chat.lastLoreBudget,
+      'loreOverflow': _chat.lastLoreOverflow,
       'realism': _realism.snapshot(),
       // Active expression label (mood) so the web client can cache-bust the
       // expression portrait and only refetch when the mood actually changes.
@@ -501,6 +515,30 @@ class ChatFacade {
   }
 
   String? get currentSessionId => _chat.currentSessionId;
+
+  /// The chat-scoped lorebook as web editor rows (full-fidelity via `ext`).
+  Map<String, dynamic> chatLorebookRows() => {
+        'entries': lorebookEntriesToJson(_chat.chatLorebook),
+      };
+
+  /// Replace the chat-scoped lorebook from web editor rows. An empty/absent
+  /// list clears it. Returns false when no session is active.
+  Future<bool> setChatLorebook(dynamic rowsJson) async {
+    if (_chat.currentSessionId == null) return false;
+    final built = buildLorebookFromJson(rowsJson);
+    _chat.chatLorebook.entries
+      ..clear()
+      ..addAll(built?.entries ?? const []);
+    await _chat.commitChatLorebookEdit();
+    _notify();
+    return true;
+  }
+
+  /// Mutation-free "would trigger next" preview for a composer draft —
+  /// display names of idle entries the draft would wake up.
+  List<String> lorePreview(String draft) => [
+        for (final e in _chat.previewLoreTriggers(draft)) e.displayName,
+      ];
 
   void _notify() => _hub?.broadcastChatUpdate();
 }

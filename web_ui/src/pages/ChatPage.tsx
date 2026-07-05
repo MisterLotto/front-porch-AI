@@ -32,6 +32,9 @@ interface ChatState {
   groupId?: string | null;
   realism?: Realism;
   lorebook?: LoreEntry[];
+  loreTokens?: number;
+  loreBudget?: number;
+  loreOverflow?: string[];
   authorNote?: string;
   authorNoteDepth?: number;
   greetingIndex?: number;
@@ -49,6 +52,8 @@ export function ChatPage() {
   const navigate = useNavigate();
   const [state, setState] = useState<ChatState | null>(null);
   const [streaming, setStreaming] = useState('');
+  // Composer draft mirror — powers the lorebook "would trigger next" preview.
+  const [draft, setDraft] = useState('');
   // Chaos "Chance Time" reveal modal. Opened by the `chance_time` WS event (or a
   // reconnect that finds the engine still parked); `revealed` is the pure-UI
   // flip from the teaser to the event card. Null = no modal.
@@ -352,6 +357,10 @@ export function ChatPage() {
     <ChatInsight
       realism={realismForPanel}
       lorebook={state.lorebook}
+      loreTokens={state.loreTokens}
+      loreBudget={state.loreBudget}
+      loreOverflow={state.loreOverflow}
+      draft={draft}
       authorNote={state.authorNote ?? ''}
       authorNoteDepth={state.authorNoteDepth ?? 4}
       onSaveAuthorNote={saveAuthorNote}
@@ -454,6 +463,7 @@ export function ChatPage() {
           onStop={stop}
           isGenerating={state.isGenerating}
           canMic={canMic}
+          onDraftChange={setDraft}
         />
       </div>
 

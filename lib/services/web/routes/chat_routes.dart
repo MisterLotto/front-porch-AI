@@ -51,6 +51,9 @@ class WebChatRoutes {
     router.post('/api/chat/reprocess-needs', _reprocessNeeds);
     router.post('/api/chat/revert-needs-reprocess', _revertNeedsReprocess);
     router.post('/api/chat/author-note', _authorNote);
+    router.get('/api/chat/lorebook', _chatLorebook);
+    router.post('/api/chat/lorebook', _setChatLorebook);
+    router.post('/api/chat/lore-preview', _lorePreview);
     router.post('/api/chat/session', _session);
   }
 
@@ -58,6 +61,26 @@ class WebChatRoutes {
 
   shelf.Response _state(shelf.Request request) =>
       JsonResponse.ok(_facade.state());
+
+  /// The chat-scoped lorebook (full-fidelity rows) — desktop "This Chat"
+  /// sidebar section parity.
+  shelf.Response _chatLorebook(shelf.Request request) =>
+      JsonResponse.ok(_facade.chatLorebookRows());
+
+  Future<shelf.Response> _setChatLorebook(shelf.Request request) async {
+    final body = await _json(request);
+    final ok = await _facade.setChatLorebook(body['entries']);
+    if (!ok) return JsonResponse.error(409, 'No active chat session');
+    return JsonResponse.ok({'ok': true});
+  }
+
+  /// Mutation-free "would trigger next" dry-run against a composer draft.
+  Future<shelf.Response> _lorePreview(shelf.Request request) async {
+    final body = await _json(request);
+    return JsonResponse.ok({
+      'matches': _facade.lorePreview(body['draft']?.toString() ?? ''),
+    });
+  }
 
   /// Realism for one cast participant (focus-scoped sidebar in the unified UI).
   shelf.Response _participantRealism(shelf.Request request, String id) {

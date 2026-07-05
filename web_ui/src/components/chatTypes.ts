@@ -52,6 +52,11 @@ export interface LoreEntry {
   name: string;
   isTriggered: boolean;
   constant: boolean;
+  /** Legacy sticky-turns countdown (turns the entry stays active). */
+  remainingDepth?: number;
+  /** ST timed effects — messages of sticky/cooldown remaining (timer pills). */
+  stickyLeft?: number;
+  cooldownLeft?: number;
 }
 
 export const NEED_LABELS: Record<string, string> = {

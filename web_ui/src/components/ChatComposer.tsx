@@ -31,13 +31,23 @@ export function ChatComposer({
   onStop,
   isGenerating,
   canMic,
+  onDraftChange,
 }: {
   onSend: (text: string) => void;
   onStop: () => void;
   isGenerating: boolean;
   canMic: boolean;
+  /** Live draft mirror for the lorebook "would trigger next" preview. */
+  onDraftChange?: (text: string) => void;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
+  const setDraft = (v: string | ((d: string) => string)) => {
+    setDraftState((prev) => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      onDraftChange?.(next);
+      return next;
+    });
+  };
   const [slashDismissed, setSlashDismissed] = useState(false);
   const showSlash = draft.trimStart().startsWith('/') && !slashDismissed;
 

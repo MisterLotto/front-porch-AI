@@ -7,7 +7,7 @@
 // flag, and a sticky-depth (how many turns an activated entry lingers). A JSON
 // import button bulk-loads SillyTavern / Chub / Front Porch lorebooks.
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { MacroField } from './MacroField';
 
 export interface LoreEntry {
@@ -21,10 +21,60 @@ export interface LoreEntry {
   probability?: number;
   /** ST position 0-6 (Simple-level placement preset). */
   position?: number;
+  // ── Advanced tier (present-key-only overrides; absent = keep ext value) ──
+  secondaryKeys?: string;
+  selectiveLogic?: number;
+  useRegex?: boolean;
+  order?: number;
+  depth?: number;
+  role?: number;
+  sticky?: number;
+  cooldown?: number;
+  delay?: number;
+  scanDepth?: number | null;
+  caseSensitive?: boolean | null;
+  matchWholeWords?: boolean | null;
+  excludeRecursion?: boolean;
+  preventRecursion?: boolean;
+  delayUntilRecursion?: number;
+  group?: string;
+  groupWeight?: number;
+  groupOverride?: boolean;
+  useGroupScoring?: boolean | null;
+  ignoreBudget?: boolean;
   /** Opaque full-fidelity entry blob from the server (advanced/imported ST
    *  fields). Never edited here — round-tripped untouched so saving from the
    *  web can't strip metadata the desktop model carries. */
   ext?: unknown;
+}
+
+export const LORE_LOGIC: Record<number, string> = {
+  0: 'AND any of them',
+  1: 'NOT all of them',
+  2: 'NOT any of them',
+  3: 'AND all of them',
+};
+
+/** Tri-state (Use global / On / Off) select for nullable boolean overrides. */
+function TriSelect({
+  value,
+  onChange,
+}: {
+  value: boolean | null | undefined;
+  onChange: (v: boolean | null) => void;
+}) {
+  return (
+    <select
+      value={value == null ? 'global' : value ? 'on' : 'off'}
+      onChange={(e) =>
+        onChange(e.target.value === 'global' ? null : e.target.value === 'on')
+      }
+    >
+      <option value="global">Use global</option>
+      <option value="on">On</option>
+      <option value="off">Off</option>
+    </select>
+  );
 }
 
 export const LORE_POSITIONS: Record<number, string> = {
@@ -45,6 +95,7 @@ export function LoreEntriesEditor({
   onChange: (entries: LoreEntry[]) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [advancedOpen, setAdvancedOpen] = useState<Record<number, boolean>>({});
 
   const add = () =>
     onChange([...entries, { name: '', key: '', content: '', enabled: true, constant: false, stickyDepth: 1 }]);
@@ -165,7 +216,194 @@ export function LoreEntriesEditor({
             <button className="ghost" onClick={() => remove(i)}>
               Remove
             </button>
+            <button
+              className="ghost"
+              onClick={() => setAdvancedOpen((o) => ({ ...o, [i]: !o[i] }))}
+            >
+              {advancedOpen[i] ? 'Advanced ▾' : 'Advanced ▸'}
+            </button>
           </div>
+          {advancedOpen[i] && (
+            <div className="lore-advanced">
+              <label className="lore-adv-wide">
+                <span>Secondary keywords (comma separated)</span>
+                <input
+                  value={entry.secondaryKeys ?? ''}
+                  onChange={(e) => update(i, { secondaryKeys: e.target.value })}
+                />
+              </label>
+              <label>
+                <span>Secondary logic</span>
+                <select
+                  value={entry.selectiveLogic ?? 0}
+                  onChange={(e) => update(i, { selectiveLogic: parseInt(e.target.value, 10) })}
+                >
+                  {Object.entries(LORE_LOGIC).map(([v, label]) => (
+                    <option key={v} value={v}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="tool-toggle">
+                <span>Keywords are regex</span>
+                <input
+                  type="checkbox"
+                  checked={entry.useRegex ?? false}
+                  onChange={(e) => update(i, { useRegex: e.target.checked })}
+                />
+              </label>
+              <label>
+                <span>Order</span>
+                <input
+                  type="number"
+                  value={entry.order ?? 100}
+                  onChange={(e) => update(i, { order: parseInt(e.target.value, 10) || 100 })}
+                />
+              </label>
+              {(entry.position ?? 0) === 4 && (
+                <>
+                  <label>
+                    <span>Depth</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={entry.depth ?? 4}
+                      onChange={(e) => update(i, { depth: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                    />
+                  </label>
+                  <label>
+                    <span>Speak as</span>
+                    <select
+                      value={entry.role ?? 0}
+                      onChange={(e) => update(i, { role: parseInt(e.target.value, 10) })}
+                    >
+                      <option value={0}>System</option>
+                      <option value={1}>User</option>
+                      <option value={2}>Assistant</option>
+                    </select>
+                  </label>
+                </>
+              )}
+              <label>
+                <span>Sticky (msgs)</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.sticky ?? 0}
+                  onChange={(e) => update(i, { sticky: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                />
+              </label>
+              <label>
+                <span>Cooldown</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.cooldown ?? 0}
+                  onChange={(e) => update(i, { cooldown: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                />
+              </label>
+              <label>
+                <span>Delay</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.delay ?? 0}
+                  onChange={(e) => update(i, { delay: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                />
+              </label>
+              <label>
+                <span>Scan depth (empty = global)</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={entry.scanDepth ?? ''}
+                  onChange={(e) =>
+                    update(i, {
+                      scanDepth: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                <span>Case sensitive</span>
+                <TriSelect
+                  value={entry.caseSensitive}
+                  onChange={(v) => update(i, { caseSensitive: v })}
+                />
+              </label>
+              <label>
+                <span>Whole words</span>
+                <TriSelect
+                  value={entry.matchWholeWords}
+                  onChange={(v) => update(i, { matchWholeWords: v })}
+                />
+              </label>
+              <label className="tool-toggle">
+                <span>Can be chained by lore</span>
+                <input
+                  type="checkbox"
+                  checked={!(entry.excludeRecursion ?? false)}
+                  onChange={(e) => update(i, { excludeRecursion: !e.target.checked })}
+                />
+              </label>
+              <label className="tool-toggle">
+                <span>Can chain other lore</span>
+                <input
+                  type="checkbox"
+                  checked={!(entry.preventRecursion ?? false)}
+                  onChange={(e) => update(i, { preventRecursion: !e.target.checked })}
+                />
+              </label>
+              <label>
+                <span>Only via chaining, level</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={entry.delayUntilRecursion ?? 0}
+                  onChange={(e) => update(i, { delayUntilRecursion: Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0)) })}
+                />
+              </label>
+              <label>
+                <span>Variety group</span>
+                <input
+                  value={entry.group ?? ''}
+                  onChange={(e) => update(i, { group: e.target.value })}
+                />
+              </label>
+              <label>
+                <span>Group weight</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={entry.groupWeight ?? 100}
+                  onChange={(e) => update(i, { groupWeight: Math.max(1, parseInt(e.target.value, 10) || 100) })}
+                />
+              </label>
+              <label className="tool-toggle">
+                <span>Prioritize in group</span>
+                <input
+                  type="checkbox"
+                  checked={entry.groupOverride ?? false}
+                  onChange={(e) => update(i, { groupOverride: e.target.checked })}
+                />
+              </label>
+              <label>
+                <span>Score by matched keys</span>
+                <TriSelect
+                  value={entry.useGroupScoring}
+                  onChange={(v) => update(i, { useGroupScoring: v })}
+                />
+              </label>
+              <label className="tool-toggle">
+                <span>Ignore token budget</span>
+                <input
+                  type="checkbox"
+                  checked={entry.ignoreBudget ?? false}
+                  onChange={(e) => update(i, { ignoreBudget: e.target.checked })}
+                />
+              </label>
+            </div>
+          )}
         </div>
       ))}
     </>

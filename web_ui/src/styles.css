@@ -1,8 +1,10 @@
 /* Copyright (C) 2026 Front Porch AI — SPDX-License-Identifier: AGPL-3.0-or-later */
 
-/* Palette mirrors the Flutter app's AppColors (lib/ui/theme/app_colors.dart):
-   background #0F172A, surface #1F2937, card #1E293B, surfaceContainer #374151,
-   border #334155, primary/user-bubble blue #3B82F6, ai-bubble #374151. */
+/* Palette mirrors the Flutter app's AppColors (lib/ui/theme/app_colors.dart)
+   AFTER the warm-porch overhaul: slate grounds (#0F172A/#1F2937/#1E293B) with
+   the warm accent family — terracotta #E29578, honey #E9C46A, amber #F4A259 —
+   replacing the old neon blue/purple chrome. Chat bubbles and bond semantics
+   keep their desktop constants (user bubble stays #3B82F6, bondMid #448AFF). */
 :root {
   --bg: #0f172a;
   --surface: #1f2937;
@@ -12,8 +14,16 @@
   --text: #ffffff;
   --muted: rgba(255, 255, 255, 0.7);
   --faint: rgba(255, 255, 255, 0.38);
-  --accent: #3b82f6;
+  /* Warm-porch accent family (AppColors.porchTerracotta/Honey/Amber). */
+  --porch-terracotta: #e29578;
+  --porch-honey: #e9c46a;
+  --porch-amber: #f4a259;
+  /* Primary chrome accent: porch amber (was neon blue #3b82f6). */
+  --accent: var(--porch-amber);
   --accent-ink: #ffffff;
+  /* Desktop AppColors.userBubble is still blue — chat bubbles are their own
+     system, deliberately unchanged by the warm-porch chrome restyle. */
+  --user-bubble: #3b82f6;
   --ai-bubble: #374151;
   --danger: #ff6b6b;
   --ok: #69f0ae;
@@ -28,21 +38,22 @@
   --dialogue: #ffd54f;
   --action: #90caf9;
   /* Customizable chat bubble colors (default to the base tokens). */
-  --chat-user-bubble: var(--accent);
+  --chat-user-bubble: var(--user-bubble);
   --chat-user-text: var(--accent-ink);
   --chat-ai-bubble: var(--surface-2);
   --chat-ai-text: var(--text);
-  /* Tag pills (amber). */
-  --tag-bg: rgba(255, 193, 7, 0.22);
-  --tag-border: rgba(255, 193, 7, 0.45);
-  --tag-text: #ffe082;
-  /* Group / purple accents. */
-  --group-accent: #7c3aed;
-  --group-accent-bright: #e040fb;
-  --group-border: rgba(124, 58, 237, 0.3);
-  --group-pill-bg: rgba(224, 64, 251, 0.15);
-  --group-pill-text: rgba(224, 64, 251, 0.85);
-  /* Relationship / bond semantics. */
+  /* Tag pills (honey). */
+  --tag-bg: rgba(233, 196, 106, 0.2);
+  --tag-border: rgba(233, 196, 106, 0.45);
+  --tag-text: #f0d492;
+  /* Group accents — terracotta family (the purple rings died with the
+     warm-porch Home restyle on desktop). */
+  --group-accent: var(--porch-terracotta);
+  --group-accent-bright: #f0b195;
+  --group-border: rgba(226, 149, 120, 0.35);
+  --group-pill-bg: rgba(226, 149, 120, 0.15);
+  --group-pill-text: rgba(240, 177, 149, 0.9);
+  /* Relationship / bond semantics (desktop constants, unchanged). */
   --bond-high: #69f0ae;
   --bond-mid: #448aff;
   --bond-low: #ffab40;
@@ -382,8 +393,8 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .needs-reprocess-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .btn-reprocess, .btn-revert {
   font-size: 0.68rem; font-weight: 600; padding: 3px 10px; border-radius: 999px;
-  cursor: pointer; background: var(--group-pill-bg, rgba(124, 58, 237, 0.15));
-  color: var(--group-accent-bright, #e040fb);
+  cursor: pointer; background: var(--group-pill-bg, var(--group-pill-bg));
+  color: var(--group-accent-bright, #f0b195);
   border: 1px solid var(--group-border, rgba(124, 58, 237, 0.3));
 }
 .btn-revert { background: rgba(255, 255, 255, 0.06); color: var(--muted); border-color: var(--border); }
@@ -466,6 +477,73 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .lore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
 .lore.on { color: var(--text); }
 .lore.on .lore-dot { background: var(--ok); }
+/* Constant (always-injected) entries: blue dot — desktop sidebar parity. */
+.lore.const .lore-dot { background: var(--bond-mid); }
+.lore.const { color: var(--text); }
+
+/* Lore token meter (desktop sidebar parity). */
+.lore-meter { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 8px; }
+.lore-meter-bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.lore-meter-bar > div { height: 100%; border-radius: 999px; background: var(--porch-honey); }
+.lore-meter.over .lore-meter-bar > div { background: var(--porch-amber); }
+.lore-meter span { font-size: 0.7rem; color: var(--faint); }
+.lore-meter.over span { color: var(--porch-amber); }
+
+/* Sticky / cooldown countdown pills + preview chips. */
+.lore-pill {
+  font-size: 0.65rem; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface-2); color: var(--muted); border: none; white-space: nowrap;
+}
+.lore-pill.ok { background: rgba(105, 240, 174, 0.14); color: var(--ok); }
+.lore-pill.honey { background: rgba(233, 196, 106, 0.14); color: var(--porch-honey); }
+
+/* "Would trigger next" live preview strip. */
+.lore-preview {
+  margin-top: 8px; padding: 8px; border-radius: 8px;
+  border: 1px dashed rgba(233, 196, 106, 0.45);
+}
+.lore-preview-title {
+  display: block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--porch-honey); margin-bottom: 5px;
+}
+.lore-preview-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.lore-chat-btn { margin-top: 8px; font-size: 0.78rem; }
+
+/* Per-chat lorebook modal + editor Advanced grid. */
+.lore-chat-modal { max-width: 560px; width: min(94vw, 560px); max-height: 86vh; overflow-y: auto; }
+.lore-advanced {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+  padding: 10px; margin-top: 6px; border-radius: 8px; background: var(--surface);
+  border: 1px solid var(--border);
+}
+.lore-advanced label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--muted); }
+.lore-advanced label.tool-toggle { flex-direction: row; align-items: center; justify-content: space-between; }
+.lore-advanced input, .lore-advanced select {
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; font-size: 0.8rem;
+}
+.lore-adv-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) { .lore-advanced { grid-template-columns: 1fr; } }
+
+/* Import Lorebook wizard. */
+.lore-import-modal { max-width: 520px; width: min(94vw, 520px); max-height: 86vh; overflow-y: auto; }
+.lore-wiz-steps { display: flex; gap: 10px; margin: 6px 0 14px; flex-wrap: wrap; }
+.lore-wiz-step { font-size: 0.75rem; color: var(--faint); }
+.lore-wiz-step.on { color: var(--porch-amber); font-weight: 700; }
+.lore-wiz-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px; border: 2px dashed rgba(244, 162, 89, 0.5); border-radius: 10px; }
+.lore-wiz-review p { margin: 6px 0; }
+.lore-wiz-warning { color: var(--porch-honey); margin: 6px 0 0; }
+.lore-wiz-dest { display: flex; flex-direction: column; gap: 8px; }
+.lore-dest {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px;
+  border-radius: 10px; border: 1.5px solid var(--border); background: var(--card); cursor: pointer;
+}
+.lore-dest.sel { border-color: var(--porch-amber); }
+.lore-dest input[type='radio'] { margin-top: 3px; accent-color: var(--porch-amber); }
+.lore-dest > div { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.lore-dest > div > input { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 0.85rem; }
+.small { font-size: 0.78rem; }
+.danger.small { color: var(--danger); }
 .chat-messages { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .bubble {
   max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap;
@@ -1067,7 +1145,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .proc-stages { display: flex; flex-wrap: wrap; gap: 6px; }
 .proc-pill {
   font-size: 0.66rem; padding: 2px 8px; border-radius: 999px;
-  background: rgba(124, 58, 237, 0.15); color: var(--group-accent-bright, #e040fb);
+  background: var(--group-pill-bg); color: var(--group-accent-bright, #f0b195);
   border: 1px solid var(--group-border, rgba(124, 58, 237, 0.3));
 }
 .proc-stream { display: flex; flex-direction: column; gap: 4px; }
@@ -1109,7 +1187,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 }
 .chance-title {
   font-weight: 800; font-size: 1.15rem; letter-spacing: 0.02em;
-  color: var(--group-accent-bright, #e040fb);
+  color: var(--group-accent-bright, #f0b195);
 }
 .chance-sub { margin: 0; line-height: 1.4; color: var(--muted); }
 .chance-event {

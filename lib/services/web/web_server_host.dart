@@ -328,7 +328,12 @@ class WebServerHost extends ChangeNotifier {
     );
 
     final worldFacade = _worldRepository != null
-        ? WorldFacade(_worldRepository!, _characterRepository)
+        ? WorldFacade(
+            _worldRepository!,
+            _characterRepository,
+            chatService,
+            _groupChatRepository,
+          )
         : null;
 
     final backendFacade = (_llmProvider != null && _modelManager != null)

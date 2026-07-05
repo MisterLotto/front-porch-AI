@@ -31,6 +31,7 @@ class WebWorldRoutes {
     // Static suffix; register before the '<name>' captures so 'import' is never
     // swallowed as a world name.
     router.post('/api/worlds/import', _import);
+    router.post('/api/lorebook/import', _importLorebook);
     // Encode the name in the path; names can contain spaces (URL-encoded).
     router.get('/api/worlds/<name>/detail', _detail);
     router.get('/api/worlds/<name>/export', _export);
@@ -102,5 +103,32 @@ class WebWorldRoutes {
         'Content-Disposition': 'attachment; filename="$filename.json"',
       },
     );
+  }
+
+  /// Import-with-destination (the web Import Lorebook wizard backend).
+  Future<shelf.Response> _importLorebook(shelf.Request request) async {
+    final Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid JSON body');
+    }
+    if (body['json'] is! Map) {
+      return JsonResponse.badRequest('json object is required');
+    }
+    final result = await _facade.importLorebook(
+      Map<String, dynamic>.from(body['json'] as Map),
+      dryRun: body['dryRun'] == true,
+      destination: body['destination']?.toString() ?? 'world',
+      name: body['name']?.toString(),
+      description: body['description']?.toString(),
+      characterIds: body['characterIds'] is List
+          ? [for (final id in body['characterIds'] as List) id.toString()]
+          : const [],
+    );
+    if (result == null) {
+      return JsonResponse.badRequest('Could not import to that destination');
+    }
+    return JsonResponse.ok(result);
   }
 }
