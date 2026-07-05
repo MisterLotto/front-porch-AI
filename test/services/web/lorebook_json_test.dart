@@ -38,6 +38,45 @@ void main() {
       expect(e.extensions['chub_thing'], true);
     });
 
+    test('probability + position ride the row additively', () {
+      final book = Lorebook(entries: [
+        LorebookEntry.fromJson({
+          'keys': ['queen'],
+          'content': 'x',
+          'probability': 40,
+          'position': 4,
+        }),
+      ]);
+      final rows = lorebookEntriesToJson(book);
+      expect(rows.single['probability'], 40);
+      expect(rows.single['position'], 4);
+
+      rows.single['probability'] = 65;
+      rows.single['position'] = 2;
+      final rebuilt = buildLorebookFromJson(rows)!.entries.single;
+      expect(rebuilt.probability, 65);
+      expect(rebuilt.position, 2);
+    });
+
+    test('rows omitting the new keys leave ext-decoded values untouched', () {
+      final book = Lorebook(entries: [
+        LorebookEntry.fromJson({
+          'keys': ['queen'],
+          'content': 'x',
+          'probability': 40,
+          'position': 4,
+        }),
+      ]);
+      final rows = lorebookEntriesToJson(book)
+          .map((r) => Map<String, dynamic>.from(r)
+            ..remove('probability')
+            ..remove('position'))
+          .toList();
+      final rebuilt = buildLorebookFromJson(rows)!.entries.single;
+      expect(rebuilt.probability, 40); // from ext
+      expect(rebuilt.position, 4);
+    });
+
     test('rows without ext still build (fresh web-authored entries)', () {
       final rebuilt = buildLorebookFromJson([
         {

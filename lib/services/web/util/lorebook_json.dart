@@ -47,6 +47,14 @@ Lorebook? buildLorebookFromJson(dynamic raw) {
     entry.enabled = e['enabled'] != false;
     entry.constant = e['constant'] == true;
     entry.stickyDepth = e['stickyDepth'] is int ? e['stickyDepth'] as int : 1;
+    // Additive Simple-level fields (older web UIs simply omit them).
+    if (e['probability'] is int) {
+      entry.probability = (e['probability'] as int).clamp(0, 100);
+      entry.useProbability = true;
+    }
+    if (e['position'] is int) {
+      entry.position = (e['position'] as int).clamp(0, 6);
+    }
     entries.add(entry);
   }
   return entries.isEmpty ? null : Lorebook(entries: entries);
@@ -64,6 +72,8 @@ List<Map<String, dynamic>> lorebookEntriesToJson(Lorebook? lorebook) {
             'enabled': e.enabled,
             'constant': e.constant,
             'stickyDepth': e.stickyDepth,
+            'probability': e.probability,
+            'position': e.position,
             'ext': e.toJson(),
           })
       .toList();

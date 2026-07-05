@@ -192,7 +192,17 @@ context → pass-through, never silent blanks. Deliberately out: {{input}},
   idle_duration, datetimeformat/timeDiff, trim, group macros, card-field macros.
 - Substitute macros in keys pre-match. Keep unknown-macro passthrough.
 
-### Phase 4 — UX overhaul
+### Phase 4 — UX overhaul ✅ SHIPPED 2026-07-05
+*(Live: Simple/Advanced entry editor (ONE editor everywhere — fixed two
+metadata-stripping edit paths + the group-settings tab that never saved),
+Import Lorebook wizard (format detection, review, four destinations incl.
+the new per-chat book), per-chat lorebook (session blob, chat-first scan
+order), no more auto-created "X's world lore" duplicates, rename-safe worlds
+(row updated by id + attachments follow), sidebar upgrades (gray idle dots,
+timer pills, token meter, would-trigger preview, This Chat section), web
+editor chance+placement. Deferred: vectorized entries, web Advanced grid,
+optional cleanup prompt for legacy auto-created worlds. Golden note:
+sidebar/lorebook.* pngs need CI regen.)*
 - **One import entry point** ("Import Lorebook") that detects the format, shows a preview
   (entry count, features used, sample entries, anything unsupported), then asks the destination:
   standalone World, attach to character(s), attach to group, or this chat only.

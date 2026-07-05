@@ -17,11 +17,25 @@ export interface LoreEntry {
   enabled: boolean;
   constant: boolean;
   stickyDepth: number;
+  /** Chance to trigger, 0-100 (Simple-level ST field). */
+  probability?: number;
+  /** ST position 0-6 (Simple-level placement preset). */
+  position?: number;
   /** Opaque full-fidelity entry blob from the server (advanced/imported ST
    *  fields). Never edited here — round-tripped untouched so saving from the
    *  web can't strip metadata the desktop model carries. */
   ext?: unknown;
 }
+
+export const LORE_POSITIONS: Record<number, string> = {
+  0: 'With character info',
+  1: 'After character info',
+  2: "Author's Note — top",
+  3: "Author's Note — bottom",
+  4: 'In recent chat (@depth)',
+  5: 'Examples — top',
+  6: 'Examples — bottom',
+};
 
 export function LoreEntriesEditor({
   entries,
@@ -121,6 +135,33 @@ export function LoreEntriesEditor({
                 onChange={(e) => update(i, { stickyDepth: Math.max(1, parseInt(e.target.value, 10) || 1) })}
               />
             </label>
+            <label className="tool-num">
+              <span>Chance %</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={entry.probability ?? 100}
+                onChange={(e) =>
+                  update(i, {
+                    probability: Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)),
+                  })
+                }
+              />
+            </label>
+            <label className="tool-num">
+              <span>Placement</span>
+              <select
+                value={entry.position ?? 0}
+                onChange={(e) => update(i, { position: parseInt(e.target.value, 10) })}
+              >
+                {Object.entries(LORE_POSITIONS).map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button className="ghost" onClick={() => remove(i)}>
               Remove
             </button>
@@ -156,6 +197,14 @@ function parseLorebookJson(text: string): LoreEntry[] {
       content,
       enabled: e.enabled !== false && e.disable !== true,
       constant: e.constant === true,
+      probability:
+        typeof e.probability === 'number'
+          ? Math.min(100, Math.max(0, e.probability))
+          : undefined,
+      position:
+        typeof e.position === 'number' && e.position >= 0 && e.position <= 6
+          ? e.position
+          : undefined,
       // Carry the raw source entry so the server-side tolerant decoder keeps
       // every ST/Chub field (secondary keys, probability, position, …).
       ext: e,
