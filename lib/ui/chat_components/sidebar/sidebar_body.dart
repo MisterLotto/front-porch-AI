@@ -18,6 +18,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -53,6 +54,9 @@ class SidebarBody extends StatelessWidget {
 
   final File? Function(String path) resolveCharImage;
 
+  /// Composer draft for the lorebook "would trigger next" preview.
+  final ValueListenable<TextEditingValue>? draft;
+
   const SidebarBody({
     super.key,
     required this.chatService,
@@ -61,6 +65,7 @@ class SidebarBody extends StatelessWidget {
     required this.onEvolveNow,
     required this.onJumpToMessage,
     required this.resolveCharImage,
+    this.draft,
   });
 
   @override
@@ -130,6 +135,7 @@ class SidebarBody extends StatelessWidget {
               onEvolveNow: onEvolveNow,
             ),
             StoryToolsGroup(
+              draft: draft,
               chatService: chat,
               isGroup: isGroup,
               isLite: isLite,

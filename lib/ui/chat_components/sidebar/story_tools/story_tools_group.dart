@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,6 +26,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../porch_accordion.dart';
 import 'afk_panel.dart';
 import 'chaos_panel.dart';
+import 'lorebook_chat_book.dart';
 import 'lorebook_panel.dart';
 import 'objective_panel.dart';
 
@@ -43,6 +45,10 @@ class StoryToolsGroup extends StatelessWidget {
   final VoidCallback onSpinRequested;
   final CharacterCard? character;
 
+  /// The composer draft (chat_page's input controller) — powers the
+  /// lorebook "would trigger next" preview.
+  final ValueListenable<TextEditingValue>? draft;
+
   const StoryToolsGroup({
     super.key,
     required this.chatService,
@@ -52,6 +58,7 @@ class StoryToolsGroup extends StatelessWidget {
     this.onExpansionChanged,
     required this.onSpinRequested,
     this.character,
+    this.draft,
   });
 
   @override
@@ -85,12 +92,16 @@ class StoryToolsGroup extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           if (isGroup)
-            GroupLorebookSection(chatService: chatService)
+            GroupLorebookSection(chatService: chatService, draft: draft)
           else if (character != null)
             LorebookSection(
               character: character!,
               activeLore: chatService.currentlyActiveLoreEntries(),
+              chatService: chatService,
+              draft: draft,
             ),
+          const SizedBox(height: 12),
+          ChatLorebookSection(chatService: chatService),
         ],
       ),
     );

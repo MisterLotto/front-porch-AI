@@ -3484,6 +3484,7 @@ class _ChatPageState extends State<ChatPage> {
               onEvolveNow: () => _runEvolutionWithDialog(context, chatService),
               onJumpToMessage: _jumpToMessage,
               resolveCharImage: _resolveCharImage,
+              draft: _controller,
             ),
           ),
         ],
