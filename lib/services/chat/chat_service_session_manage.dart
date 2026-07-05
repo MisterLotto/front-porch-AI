@@ -473,7 +473,7 @@ extension ChatServiceSessionManage on ChatService {
             characterId: greetingCharId,
           ),
         );
-        _lorebookScanner.scanLorebook(_messages.last.text);
+        _lorebookScanner.scanLatest();
       }
       _groupManager?.resetTurnState();
     } else if (_activeCharacter != null) {
@@ -486,7 +486,7 @@ extension ChatServiceSessionManage on ChatService {
             isUser: false,
           ),
         );
-        _lorebookScanner.scanLorebook(_messages.last.text);
+        _lorebookScanner.scanLatest();
       }
     }
 

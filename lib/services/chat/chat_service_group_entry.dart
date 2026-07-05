@@ -278,7 +278,7 @@ extension ChatServiceGroupEntry on ChatService {
           ),
         );
         // Thin delegation to scanner (group greeting scan).
-        _lorebookScanner.scanLorebook(_messages.last.text);
+        _lorebookScanner.scanLatest();
       }
       _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
       await _saveChat();

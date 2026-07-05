@@ -45,6 +45,10 @@ LorebookScanner createTestLorebookScanner({
   List<CharacterCard>? characters,
   Map<String, World>? worldsByName,
   Lorebook? groupLorebook,
+  List<String> Function(int count)? getRecentMessages,
+  int globalScanDepth = 1,
+  bool recursiveScan = false,
+  int maxRecursionSteps = 0,
   Random? rng,
 }) {
   final chars = characters ?? <CharacterCard>[];
@@ -59,9 +63,20 @@ LorebookScanner createTestLorebookScanner({
       groupLorebook: groupLorebook,
       resolveWorld: (name) => worlds[name],
     ),
+    getRecentMessages: getRecentMessages ?? (count) => const [],
+    getGlobalScanDepth: () => globalScanDepth,
+    getRecursiveScan: () => recursiveScan,
+    getMaxRecursionSteps: () => maxRecursionSteps,
     rng: rng,
   );
 }
+
+/// Window helper: newest-first list semantics match ChatService's cb —
+/// returns the LAST [count] of [messages] in chronological order.
+List<String> Function(int) windowOf(List<String> messages) =>
+    (count) => messages.length > count
+        ? messages.sublist(messages.length - count)
+        : List.of(messages);
 
 void main() {
   group('LorebookScanner (extracted leaf)', () {
@@ -589,6 +604,196 @@ void main() {
       expect(ge.isTriggered, isTrue);
       svc.resetLorebookTriggerState();
       expect(ge.isTriggered, isFalse);
+    });
+
+    test('scanLatest with depth 1 sees only the newest message', () {
+      final e = LorebookEntry(keys: const ['dragon'], content: 'x');
+      final svc = createTestLorebookScanner(
+        characters: [CharacterCard(name: 'T', lorebook: Lorebook(entries: [e]))],
+        getRecentMessages:
+            windowOf(['User: the dragon roared', 'T: something else']),
+      );
+      svc.scanLatest();
+      expect(e.isTriggered, isFalse); // dragon is one message back
+
+      final e2 = LorebookEntry(keys: const ['dragon'], content: 'x');
+      final svc2 = createTestLorebookScanner(
+        characters: [
+          CharacterCard(name: 'T', lorebook: Lorebook(entries: [e2]))
+        ],
+        getRecentMessages:
+            windowOf(['T: something else', 'User: the dragon roared']),
+      );
+      svc2.scanLatest();
+      expect(e2.isTriggered, isTrue);
+    });
+
+    test('per-entry scanDepth widens the window; 0 disables chat scanning',
+        () {
+      final deep = LorebookEntry(keys: const ['dragon'], scanDepth: 3, content: 'x');
+      final never = LorebookEntry(keys: const ['roared'], scanDepth: 0, content: 'y');
+      final svc = createTestLorebookScanner(
+        characters: [
+          CharacterCard(
+            name: 'T',
+            lorebook: Lorebook(entries: [deep, never]),
+          ),
+        ],
+        getRecentMessages: windowOf([
+          'User: the dragon roared',
+          'T: it flew away',
+          'User: what was that?',
+        ]),
+      );
+      svc.scanLatest();
+      expect(deep.isTriggered, isTrue); // window of 3 reaches the dragon
+      expect(never.isTriggered, isFalse); // scanDepth 0 never scans chat
+    });
+
+    test('book-level scanDepth applies when the entry has none', () {
+      final e = LorebookEntry(keys: const ['dragon'], content: 'x');
+      final book = Lorebook(entries: [e], scanDepth: 2);
+      final svc = createTestLorebookScanner(
+        characters: [CharacterCard(name: 'T', lorebook: book)],
+        getRecentMessages:
+            windowOf(['User: the dragon roared', 'T: it flew away']),
+      );
+      svc.scanLatest();
+      expect(e.isTriggered, isTrue);
+    });
+
+    test('recursion: activated lore triggers other lore across sweeps', () {
+      final a = LorebookEntry(
+        keys: const ['dragon'],
+        content: 'The dragon guards the Ember Crown.',
+      );
+      final b = LorebookEntry(
+        keys: const ['ember crown'],
+        content: 'The Crown was forged in the Old War.',
+      );
+      final c = LorebookEntry(keys: const ['old war'], content: 'War lore.');
+      final svc = createTestLorebookScanner(
+        characters: [
+          CharacterCard(name: 'T', lorebook: Lorebook(entries: [a, b, c])),
+        ],
+        getRecentMessages: windowOf(['User: a dragon lands']),
+        recursiveScan: true,
+      );
+      svc.scanLatest();
+      expect(a.isTriggered, isTrue);
+      expect(b.isTriggered, isTrue); // via a's content
+      expect(c.isTriggered, isTrue); // via b's content, second sweep
+    });
+
+    test('preventRecursion content cannot trigger others; excludeRecursion '
+        'cannot be triggered', () {
+      final a = LorebookEntry(
+        keys: const ['dragon'],
+        content: 'It guards the Ember Crown.',
+        preventRecursion: true,
+      );
+      final b = LorebookEntry(keys: const ['ember crown'], content: 'x');
+      final c = LorebookEntry(
+        keys: const ['dragon'],
+        content: 'y',
+        excludeRecursion: true,
+        scanDepth: 0, // only reachable via recursion — which is forbidden
+      );
+      final svc = createTestLorebookScanner(
+        characters: [
+          CharacterCard(name: 'T', lorebook: Lorebook(entries: [a, b, c])),
+        ],
+        getRecentMessages: windowOf(['User: a dragon lands']),
+        recursiveScan: true,
+      );
+      svc.scanLatest();
+      expect(a.isTriggered, isTrue);
+      expect(b.isTriggered, isFalse); // a's content is walled off
+      expect(c.isTriggered, isFalse);
+    });
+
+    test('delayUntilRecursion: never in normal scan, unlocks by level', () {
+      final normal = LorebookEntry(
+        keys: const ['dragon'],
+        content: 'Dragon lore mentions the caldera.',
+      );
+      final lvl1 = LorebookEntry(
+        keys: const ['caldera'],
+        content: 'The caldera hides a shrine.',
+        delayUntilRecursion: 1,
+      );
+      final lvl2 = LorebookEntry(
+        keys: const ['shrine'],
+        content: 'z',
+        delayUntilRecursion: 2,
+      );
+      final direct = LorebookEntry(
+        keys: const ['dragon'],
+        content: 'w',
+        delayUntilRecursion: 1,
+      );
+      final svc = createTestLorebookScanner(
+        characters: [
+          CharacterCard(
+            name: 'T',
+            lorebook: Lorebook(entries: [normal, lvl1, lvl2, direct]),
+          ),
+        ],
+        getRecentMessages: windowOf(['User: a dragon lands']),
+        recursiveScan: true,
+      );
+      svc.scanLatest();
+      expect(normal.isTriggered, isTrue);
+      expect(direct.isTriggered, isTrue); // keyed on chat but only via recursion
+      expect(lvl1.isTriggered, isTrue);
+      expect(lvl2.isTriggered, isTrue); // unlocked after level-1 dries up
+    });
+
+    test('maxRecursionSteps caps chains', () {
+      final a = LorebookEntry(keys: const ['one'], content: 'two');
+      final b = LorebookEntry(keys: const ['two'], content: 'three');
+      final c = LorebookEntry(keys: const ['three'], content: 'x');
+      final svc = createTestLorebookScanner(
+        characters: [
+          CharacterCard(name: 'T', lorebook: Lorebook(entries: [a, b, c])),
+        ],
+        getRecentMessages: windowOf(['User: one']),
+        recursiveScan: true,
+        maxRecursionSteps: 1,
+      );
+      svc.scanLatest();
+      expect(a.isTriggered, isTrue);
+      expect(b.isTriggered, isTrue); // sweep 1
+      expect(c.isTriggered, isFalse); // sweep 2 never runs
+    });
+
+    test('recursion sweeps never re-roll a failed probability', () {
+      // 'omen' fails its 0% roll in the normal pass; the recursion sweep
+      // (buffer mentions omen again) must not give it a second chance.
+      final feeder = LorebookEntry(
+        keys: const ['dragon'],
+        content: 'An omen appears.',
+      );
+      final gated = LorebookEntry(
+        keys: const ['omen'],
+        probability: 0,
+        content: 'x',
+        scanDepth: 3,
+      );
+      final svc = createTestLorebookScanner(
+        characters: [
+          CharacterCard(
+            name: 'T',
+            lorebook: Lorebook(entries: [feeder, gated]),
+          ),
+        ],
+        getRecentMessages: windowOf(['User: omen of the dragon']),
+        recursiveScan: true,
+        rng: Random(7),
+      );
+      svc.scanLatest();
+      expect(feeder.isTriggered, isTrue);
+      expect(gated.isTriggered, isFalse);
     });
 
     test('same world reachable twice rolls probability at most once', () {

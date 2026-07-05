@@ -51,62 +51,214 @@ import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 class LorebookScanner {
   final VoidCallback onNotify;
   final List<LoreEntryRef> Function() getEntryRefs;
+
+  /// Most recent chat messages, oldest-first, already formatted (with or
+  /// without "Name: " prefixes per the include-names setting). Used by
+  /// [scanLatest] to build per-entry scan windows.
+  final List<String> Function(int count) getRecentMessages;
+
+  /// Global scan depth (messages). Per-entry `scanDepth` and book-level
+  /// `Lorebook.scanDepth` override it.
+  final int Function() getGlobalScanDepth;
+
+  /// Global recursive-scan switch. Book-level `recursiveScanning` can force
+  /// recursion for entries of that book even when the global is off.
+  final bool Function() getRecursiveScan;
+
+  /// Max recursion sweeps; 0 = unlimited (internal safety cap still applies).
+  final int Function() getMaxRecursionSteps;
+
+  /// Runaway guard when max steps is "unlimited".
+  static const int _kRecursionHardCap = 10;
+
   final Random _rng;
 
   LorebookScanner({
     required this.onNotify,
     required this.getEntryRefs,
+    this.getRecentMessages = _noMessages,
+    this.getGlobalScanDepth = _defaultScanDepth,
+    this.getRecursiveScan = _falseFn,
+    this.getMaxRecursionSteps = _zeroFn,
     Random? rng,
   }) : _rng = rng ?? Random();
 
-  /// Distinct live entries in the current context. A world attached both at
-  /// group level and by a member yields the same live objects twice —
+  static List<String> _noMessages(int count) => const [];
+  static int _defaultScanDepth() => 1;
+  static bool _falseFn() => false;
+  static int _zeroFn() => 0;
+
+  /// Distinct live entry refs in the current context. A world attached both
+  /// at group level and by a member yields the same live objects twice —
   /// identity-dedup so a probability gate can never roll twice per scan.
-  Iterable<LorebookEntry> _distinctEntries() {
+  /// The first ref wins, keeping its source book for book-level overrides.
+  List<LoreEntryRef> _distinctRefs() {
     final seen = <LorebookEntry>{};
     return [
       for (final ref in getEntryRefs())
-        if (seen.add(ref.entry)) ref.entry,
+        if (seen.add(ref.entry)) ref,
     ];
   }
 
-  /// Scan the given text against every lorebook in the current context.
-  /// On a hit that passes the secondary-logic and probability gates:
-  /// isTriggered=true, remainingDepth=stickyDepth. Notifies on any change.
-  void scanLorebook(String text) {
+  /// Production scan entry point: evaluates every entry against its own
+  /// window of recent messages (entry.scanDepth ?? book.scanDepth ?? global),
+  /// then runs recursion sweeps so activated lore can trigger other lore.
+  /// An entry depth of 0 means "never scans chat" (ST semantics — such
+  /// entries activate only via constant or recursion).
+  void scanLatest() {
+    // Windows memoized per distinct depth — in practice depths cluster at
+    // one or two values, so this stays a couple of joins per scan.
+    final buffers = <int, String>{};
+    String bufferFor(int depth) => buffers.putIfAbsent(
+          depth,
+          () => getRecentMessages(depth).join('\n'),
+        );
+
+    final refs = _distinctRefs();
+    // Probability failures are remembered for this whole scan (incl. the
+    // recursion sweeps below) — ST's per-scan failed-roll memory.
+    final failedRolls = <LorebookEntry>{};
+
     bool changed = false;
-    for (final entry in _distinctEntries()) {
-      if (!entry.enabled) continue;
-
-      bool matches(String key) => keyMatchesText(
-            key,
-            text,
-            caseSensitive: entry.caseSensitive ?? false,
-            matchWholeWords: entry.matchWholeWords,
-            forceRegex: entry.useRegex,
-          );
-
-      if (!entry.keys.any(matches)) continue;
-      if (!secondaryLogicSatisfied(entry, matches)) continue;
-
-      // Probability gate: rolled only when the entry is not already
-      // active — an active (sticky) entry refreshes without re-rolling.
-      if (!entry.isTriggered &&
-          entry.useProbability &&
-          entry.probability < 100) {
-        if (_rng.nextInt(100) >= entry.probability) continue;
-      }
-
-      if (!entry.isTriggered) {
-        entry.isTriggered = true;
+    for (final ref in refs) {
+      final entry = ref.entry;
+      final depth = entry.scanDepth ?? ref.book.scanDepth ?? getGlobalScanDepth();
+      if (depth <= 0) continue;
+      if (_scanEntryAgainst(entry, bufferFor(depth.clamp(1, 100)),
+          failedRolls: failedRolls)) {
         changed = true;
       }
-      entry.remainingDepth = entry.stickyDepth;
     }
+
+    if (_runRecursionSweeps(refs, failedRolls)) changed = true;
 
     if (changed) {
       onNotify();
     }
+  }
+
+  /// Recursion: content of active entries (minus preventRecursion) forms a
+  /// buffer that can activate further entries. `excludeRecursion` entries
+  /// never activate here; `delayUntilRecursion` level-N entries only become
+  /// eligible once lower levels stop producing activations (ST semantics).
+  /// Returns whether anything activated.
+  bool _runRecursionSweeps(
+    List<LoreEntryRef> refs,
+    Set<LorebookEntry> failedRolls,
+  ) {
+    final globalOn = getRecursiveScan();
+    bool eligibleBook(LoreEntryRef ref) =>
+        globalOn || (ref.book.recursiveScanning ?? false);
+    if (!refs.any(eligibleBook)) return false;
+
+    final maxSteps = getMaxRecursionSteps();
+    final cap = maxSteps <= 0
+        ? _kRecursionHardCap
+        : (maxSteps > _kRecursionHardCap ? _kRecursionHardCap : maxSteps);
+
+    final delayedLevels = refs
+        .map((r) => r.entry.delayUntilRecursion)
+        .where((l) => l > 0)
+        .toSet()
+        .toList()
+      ..sort();
+
+    bool anyActivated = false;
+    var level = 1;
+    for (var step = 0; step < cap; step++) {
+      final buffer = [
+        for (final ref in refs)
+          if (ref.entry.enabled &&
+              (ref.entry.isTriggered || ref.entry.constant) &&
+              !ref.entry.preventRecursion)
+            ref.entry.injectableContent,
+      ].join('\n');
+      if (buffer.isEmpty) break;
+
+      bool sweepActivated = false;
+      for (final ref in refs) {
+        final e = ref.entry;
+        if (!eligibleBook(ref)) continue;
+        if (e.isTriggered || e.constant) continue;
+        if (e.excludeRecursion) continue;
+        if (e.delayUntilRecursion > level) continue;
+        if (_scanEntryAgainst(e, buffer,
+            failedRolls: failedRolls, recursionLevel: level)) {
+          sweepActivated = true;
+        }
+      }
+
+      if (sweepActivated) {
+        anyActivated = true;
+        continue;
+      }
+      // Dry sweep: unlock the next delayed level, or stop.
+      final next =
+          delayedLevels.where((l) => l > level).fold<int>(0, (a, l) => a == 0 ? l : a);
+      if (next == 0) break;
+      level = next;
+    }
+    return anyActivated;
+  }
+
+  /// Scan one explicit buffer against every entry, ignoring scan windows and
+  /// recursion. Kept for tests and for callers that already hold the exact
+  /// text.
+  void scanLorebook(String text) {
+    bool changed = false;
+    final failedRolls = <LorebookEntry>{};
+    for (final ref in _distinctRefs()) {
+      if (_scanEntryAgainst(ref.entry, text, failedRolls: failedRolls)) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      onNotify();
+    }
+  }
+
+  /// Evaluate one entry against [text] through the gate chain (enabled →
+  /// delay-until-recursion → keys → secondary logic → probability with
+  /// per-scan failure memory). On success: isTriggered=true,
+  /// remainingDepth=stickyDepth. Returns whether the entry NEWLY triggered.
+  bool _scanEntryAgainst(
+    LorebookEntry entry,
+    String text, {
+    required Set<LorebookEntry> failedRolls,
+    int recursionLevel = 0,
+  }) {
+    if (!entry.enabled) return false;
+    // Delayed-until-recursion entries never activate in a normal scan.
+    if (entry.delayUntilRecursion > 0 && recursionLevel == 0) return false;
+
+    bool matches(String key) => keyMatchesText(
+          key,
+          text,
+          caseSensitive: entry.caseSensitive ?? false,
+          matchWholeWords: entry.matchWholeWords,
+          forceRegex: entry.useRegex,
+        );
+
+    if (!entry.keys.any(matches)) return false;
+    if (!secondaryLogicSatisfied(entry, matches)) return false;
+
+    // Probability gate: rolled only when the entry is not already active —
+    // an active (sticky) entry refreshes without re-rolling — and at most
+    // once per scan (recursion sweeps never re-roll a failed entry).
+    if (!entry.isTriggered &&
+        entry.useProbability &&
+        entry.probability < 100) {
+      if (failedRolls.contains(entry)) return false;
+      if (_rng.nextInt(100) >= entry.probability) {
+        failedRolls.add(entry);
+        return false;
+      }
+    }
+
+    final newlyTriggered = !entry.isTriggered;
+    entry.isTriggered = true;
+    entry.remainingDepth = entry.stickyDepth;
+    return newlyTriggered;
   }
 
   /// Public exposure of the single-key matcher for tests and direct callers.
@@ -142,10 +294,10 @@ class LorebookScanner {
   /// character books). Constant entries are skipped (always active if
   /// enabled). No notify — callers drive subsequent UI updates.
   void resetLorebookTriggerState() {
-    for (final entry in _distinctEntries()) {
-      if (!entry.constant) {
-        entry.isTriggered = false;
-        entry.remainingDepth = 0;
+    for (final ref in _distinctRefs()) {
+      if (!ref.entry.constant) {
+        ref.entry.isTriggered = false;
+        ref.entry.remainingDepth = 0;
       }
     }
   }

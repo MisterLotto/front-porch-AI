@@ -251,7 +251,7 @@ extension ChatServiceSessionLoad on ChatService {
       }
 
       if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLorebook(_messages.last.text);
+        _lorebookScanner.scanLatest();
       }
     } catch (e) {
       print('Error loading chat session: $e');
@@ -537,7 +537,7 @@ extension ChatServiceSessionLoad on ChatService {
       }
 
       if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLorebook(_messages.last.text);
+        _lorebookScanner.scanLatest();
       }
       notifyListeners();
     } catch (e) {

@@ -1166,7 +1166,8 @@ extension ChatServiceGeneration on ChatService {
         };
 
         if (finalResponse.isNotEmpty) {
-          _lorebookScanner.scanLorebook(finalResponse);
+          // The streamed message is already _messages.last with this text.
+          _lorebookScanner.scanLatest();
         }
 
         // Decrement only entries that were active before the AI response.

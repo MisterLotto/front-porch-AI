@@ -250,7 +250,7 @@ extension ChatServiceChatEntry on ChatService {
             ),
           );
           // Scan first message for lore (thin delegation to extracted scanner).
-          _lorebookScanner.scanLorebook(_messages.last.text);
+          _lorebookScanner.scanLatest();
         }
         // Note: for the direct 0-session setActiveCharacter path (fresh import via home grid <=1 session),
         // _greetingEvalPending is left false here. The post-greeting baseline eval is scheduled only

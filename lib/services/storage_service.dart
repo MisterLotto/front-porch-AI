@@ -37,6 +37,7 @@ import 'storage/settings/expression_settings.dart';
 import 'storage/settings/web_server_settings.dart';
 import 'storage/settings/realism_settings.dart';
 import 'storage/settings/memory_settings.dart';
+import 'storage/settings/lorebook_settings.dart';
 import 'storage/settings/preset_settings.dart';
 
 class StorageService extends ChangeNotifier {
@@ -60,6 +61,7 @@ class StorageService extends ChangeNotifier {
   late final RealismSettings _realismSettings = RealismSettings();
   late final MemorySettings _memorySettings = MemorySettings();
   late final PresetSettings _presetSettings = PresetSettings();
+  late final LorebookSettings _lorebookSettings = LorebookSettings();
 
   // Directories lifted to directories.dart (Stage 7); thin god owns root state for setRootPath.
   // Getter ensures live values after setRootPath / setCustomModelsPath.
@@ -106,6 +108,7 @@ class StorageService extends ChangeNotifier {
   RealismSettings get realismSettings => _realismSettings;
   MemorySettings get memorySettings => _memorySettings;
   PresetSettings get presetSettings => _presetSettings;
+  LorebookSettings get lorebookSettings => _lorebookSettings;
 
   // --- COMPATIBILITY FLAT ACCESSORS (corrective bridge after incomplete "final shim migration" in 29bbf59d) ---
   // The excision of flat shims happened before all call sites across lib/ (settings tabs, dialogs, model_settings,
@@ -632,6 +635,7 @@ class StorageService extends ChangeNotifier {
     _realismSettings.initializeBase(_prefs, notifyListeners);
     _memorySettings.initializeBase(_prefs, notifyListeners);
     _presetSettings.initializeBase(_prefs, notifyListeners);
+    _lorebookSettings.initializeBase(_prefs, notifyListeners);
 
     _generationSettings.load();
     _backendSettings.load();
@@ -644,6 +648,7 @@ class StorageService extends ChangeNotifier {
     _realismSettings.load();
     _memorySettings.load();
     _presetSettings.load();
+    _lorebookSettings.load();
 
     // Ensure default immersive prompt (was in god init; now on preset)
     if (!_presetSettings.savedPrompts.any(

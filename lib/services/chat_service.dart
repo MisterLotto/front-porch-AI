@@ -1503,6 +1503,20 @@ class ChatService extends ChangeNotifier {
   late final _lorebookScanner = LorebookScanner(
     onNotify: notifyListeners,
     getEntryRefs: () => _collectLoreRefs(inheritOverride: true),
+    getRecentMessages: (count) {
+      final includeNames = _storageService.lorebookSettings.includeNames;
+      final start = _messages.length > count ? _messages.length - count : 0;
+      return [
+        for (final m in _messages.sublist(start))
+          m.characterId == '__director__'
+              ? '[Director: ${m.text}]'
+              : (includeNames ? '${m.sender}: ${m.text}' : m.text),
+      ];
+    },
+    getGlobalScanDepth: () => _storageService.lorebookSettings.scanDepth,
+    getRecursiveScan: () => _storageService.lorebookSettings.recursiveScan,
+    getMaxRecursionSteps: () =>
+        _storageService.lorebookSettings.maxRecursionSteps,
   );
 
   // The group lorebook is stored as a JSON string on the group row. Parse it
@@ -3284,8 +3298,9 @@ class ChatService extends ChangeNotifier {
       debugPrint('[sendMessage] Cleared new chat flag, memories now allowed');
     }
 
-    // Scan user input for lore keywords (thin to scanner).
-    _lorebookScanner.scanLorebook(text);
+    // Scan for lore keywords (thin to scanner; the user message is already
+    // in _messages, so the scanner windows over recent history from there).
+    _lorebookScanner.scanLatest();
 
     // ── Clear consumed chaos event from the previous turn ───────────────
     // Only clear if the event was already delivered in a response.
@@ -3475,7 +3490,7 @@ class ChatService extends ChangeNotifier {
     await _saveChat();
     notifyListeners();
 
-    _lorebookScanner.scanLorebook(text);
+    _lorebookScanner.scanLatest();
     // Note: depth decrement happens after AI response completes inside _generateResponse.
     // Director-triggered lore is visible for the current generate.
 
