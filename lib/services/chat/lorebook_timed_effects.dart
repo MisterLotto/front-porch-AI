@@ -40,6 +40,12 @@ class LorebookTimedEffects {
   final Map<int, ({int start, int end})> _sticky = {};
   final Map<int, ({int start, int end, bool protected})> _cooldown = {};
 
+  /// Per-chat {{setvar}}/{{getvar}} macro variables. Co-located here because
+  /// this store already has the exact per-chat lifecycle macro locals need:
+  /// persisted in the session blob, hydrated on load, cleared at session
+  /// boundaries. Serialized under its own top-level `macroVars` key.
+  final Map<String, String> localMacroVars = {};
+
   bool isStickyActive(LorebookEntry entry, int chatLength) {
     final s = _sticky[loreEntryHash(entry)];
     return s != null && chatLength >= s.start && chatLength < s.end;
@@ -99,6 +105,10 @@ class LorebookTimedEffects {
     );
   }
 
+  /// The `macroVars` JSON fragment, or null when empty.
+  Map<String, dynamic>? macroVarsFragment() =>
+      localMacroVars.isEmpty ? null : Map<String, dynamic>.from(localMacroVars);
+
   /// The `lorebookTimers` JSON fragment, or null when there is nothing to
   /// persist (keeps plain sessions at the literal '{}' old versions expect).
   Map<String, dynamic>? toJsonFragment() {
@@ -125,7 +135,13 @@ class LorebookTimedEffects {
     if (raw == null || raw.isEmpty || raw == '{}') return;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! Map || decoded['lorebookTimers'] is! Map) return;
+      if (decoded is! Map) return;
+      if (decoded['macroVars'] is Map) {
+        (decoded['macroVars'] as Map).forEach((k, v) {
+          localMacroVars[k.toString()] = v.toString();
+        });
+      }
+      if (decoded['lorebookTimers'] is! Map) return;
       final timers = Map<String, dynamic>.from(decoded['lorebookTimers'] as Map);
       final sticky = timers['sticky'];
       if (sticky is Map) {
@@ -163,5 +179,6 @@ class LorebookTimedEffects {
   void reset() {
     _sticky.clear();
     _cooldown.clear();
+    localMacroVars.clear();
   }
 }

@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
 import 'settings_base.dart';
 
 /// Global lorebook engine settings (SillyTavern "World Info" globals).
@@ -49,12 +51,24 @@ class LorebookSettings with SettingsBase {
   /// Absolute token cap applied after the percentage. 0 = off.
   int _budgetCap = 0;
 
+  /// App-wide {{setglobalvar}}/{{getglobalvar}} macro variables (ST keeps
+  /// these in settings too). Persisted as one JSON map.
+  final Map<String, String> _globalMacroVars = {};
+
   int get scanDepth => _scanDepth;
   bool get includeNames => _includeNames;
   bool get recursiveScan => _recursiveScan;
   int get maxRecursionSteps => _maxRecursionSteps;
   int get budgetPercent => _budgetPercent;
   int get budgetCap => _budgetCap;
+
+  String? getGlobalMacroVar(String name) => _globalMacroVars[name];
+
+  void setGlobalMacroVar(String name, String value) {
+    _globalMacroVars[name] = value;
+    // Fire-and-forget persist; no notify (prompt-build internals, not UI).
+    prefs?.setString(k('macro_global_vars'), jsonEncode(_globalMacroVars));
+  }
 
   void load() {
     _scanDepth = prefs?.getInt(k('lorebook_scan_depth')) ?? 1;
@@ -63,6 +77,15 @@ class LorebookSettings with SettingsBase {
     _maxRecursionSteps = prefs?.getInt(k('lorebook_max_recursion_steps')) ?? 0;
     _budgetPercent = prefs?.getInt(k('lorebook_budget_percent')) ?? 25;
     _budgetCap = prefs?.getInt(k('lorebook_budget_cap')) ?? 0;
+    _globalMacroVars.clear();
+    final rawVars = prefs?.getString(k('macro_global_vars'));
+    if (rawVars != null && rawVars.isNotEmpty) {
+      try {
+        (jsonDecode(rawVars) as Map).forEach((key, v) {
+          _globalMacroVars[key.toString()] = v.toString();
+        });
+      } catch (_) {}
+    }
   }
 
   Future<void> setScanDepth(int v) async {

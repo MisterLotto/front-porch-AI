@@ -169,11 +169,10 @@ extension ChatServiceImpersonate on ChatService {
       }
 
       // ── Macro resolution pass ──
-      final macroCtx = MacroContext(
-        userName: userName,
-        characterName: speakingCharacter.name,
-        chatId: _currentSessionId,
-        characterId: speakingCharacter.dbId,
+      // Same full chat context the main generation path uses.
+      final macroCtx = _buildChatMacroContext(
+        speakingCharacter,
+        scenario: scenario,
       );
       systemPrompt = _macroResolver.resolve(
         systemPrompt,

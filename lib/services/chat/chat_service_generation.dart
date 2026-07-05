@@ -371,11 +371,11 @@ extension ChatServiceGeneration on ChatService {
       }
 
       // ── Macro resolution pass ──
-      final macroCtx = MacroContext(
-        userName: userName,
-        characterName: speakingCharacter.name,
-        chatId: _currentSessionId,
-        characterId: speakingCharacter.dbId,
+      // Full chat context: card fields, group roster, last messages, idle
+      // clock, and the {{setvar}}/{{getvar}} stores.
+      final macroCtx = _buildChatMacroContext(
+        speakingCharacter,
+        scenario: scenario,
       );
       systemPrompt = _macroResolver.resolve(
         systemPrompt,

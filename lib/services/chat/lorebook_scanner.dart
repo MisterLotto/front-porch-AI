@@ -76,6 +76,10 @@ class LorebookScanner {
   /// Current chat length in messages — the clock timed effects run on.
   final int Function() getChatLength;
 
+  /// Macro substitution for trigger KEYS before matching (ST substitutes
+  /// params in keys — e.g. a key of `{{user}}`). Null = keys match as-is.
+  final String Function(String key)? resolveKeyMacros;
+
   /// Runaway guard when max steps is "unlimited".
   static const int _kRecursionHardCap = 10;
 
@@ -90,6 +94,7 @@ class LorebookScanner {
     this.getMaxRecursionSteps = _zeroFn,
     this.timedEffects,
     this.getChatLength = _zeroFn,
+    this.resolveKeyMacros,
     Random? rng,
   }) : _rng = rng ?? Random();
 
@@ -274,13 +279,18 @@ class LorebookScanner {
     // Delayed-until-recursion entries never activate in a normal scan.
     if (entry.delayUntilRecursion > 0 && recursionLevel == 0) return false;
 
-    bool matches(String key) => keyMatchesText(
-          key,
-          text,
-          caseSensitive: entry.caseSensitive ?? false,
-          matchWholeWords: entry.matchWholeWords,
-          forceRegex: entry.useRegex,
-        );
+    bool matches(String rawKey) {
+      final key = (resolveKeyMacros != null && rawKey.contains('{{'))
+          ? resolveKeyMacros!(rawKey)
+          : rawKey;
+      return keyMatchesText(
+        key,
+        text,
+        caseSensitive: entry.caseSensitive ?? false,
+        matchWholeWords: entry.matchWholeWords,
+        forceRegex: entry.useRegex,
+      );
+    }
 
     if (!entry.keys.any(matches)) return false;
     if (!secondaryLogicSatisfied(entry, matches)) return false;

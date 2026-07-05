@@ -175,7 +175,18 @@ storage/settings/lorebook_settings.dart.)*
 - **Parity discipline**: identical behavior 1:1 vs group (scanner already runs per the
   character-list callback; keep it that way), and the sidebar/web facade read the same state.
 
-### Phase 3 — Macro parity
+### Phase 3 — Macro parity ✅ SHIPPED 2026-07-05
+*(Live: chat variables {{setvar/getvar/addvar/incvar/decvar}} + global twins
+(locals persisted per chat in the session blob's `macroVars` key, globals in
+prefs), {{lastMessage}}/{{lastUserMessage}}/{{lastCharMessage}},
+{{idle_duration}} (in-memory clock), card-field macros
+({{description}}/{{personality}}/{{scenario}}/{{persona}}), group roster
+macros ({{group}}/{{groupNotMuted}}/{{notChar}}/{{charIfNotGroup}}),
+{{time::UTC±N}} + legacy {{time_UTC±N}}, {{datetimeformat}} (moment→ICU token
+map), {{timeDiff}}, {{trim}}, {{reverse}}, {{banned}} (stripped — sampler-list
+wiring deferred), and macro substitution inside trigger KEYS. Unavailable
+context → pass-through, never silent blanks. Deliberately out: {{input}},
+{{original}}, {{mesExamples}}, nesting/{{if}} (ST's new engine), {{outlet}}.)*
 - Accept `:` and `::` separators + comma lists + `\,` escapes; roll shorthands.
 - Add: setvar/getvar/addvar/incvar/decvar (per-chat, persisted in session), lastMessage family,
   idle_duration, datetimeformat/timeDiff, trim, group macros, card-field macros.

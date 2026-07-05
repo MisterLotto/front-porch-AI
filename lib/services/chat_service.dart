@@ -1521,6 +1521,16 @@ class ChatService extends ChangeNotifier {
         _storageService.lorebookSettings.maxRecursionSteps,
     timedEffects: _loreTimedEffects,
     getChatLength: () => _messages.length,
+    resolveKeyMacros: (key) {
+      final ch = _activeCharacter ??
+          (_groupCharacters.isNotEmpty ? _groupCharacters.first : null);
+      if (ch == null) return key;
+      return _macroResolver.resolve(
+        key,
+        _buildChatMacroContext(ch),
+        section: 'lorekeys',
+      );
+    },
   );
 
   /// Per-chat ST sticky/cooldown state — persisted inside the session's
@@ -1600,6 +1610,51 @@ class ChatService extends ChangeNotifier {
 
   /// Central macro resolver for prompt template expansion.
   late final _macroResolver = MacroResolver();
+
+  /// In-memory clock for {{idle_duration}} — set on each user send; null
+  /// after a restart (the macro passes through untouched then).
+  DateTime? _lastUserMessageAt;
+
+  /// Full chat-context MacroContext for prompt builds: card fields, group
+  /// roster, last messages, idle clock, and the macro variable stores
+  /// (locals ride _loreTimedEffects per chat; globals live in settings).
+  /// Shared by generation, impersonation, and lore-key resolution.
+  MacroContext _buildChatMacroContext(
+    CharacterCard speaking, {
+    String? scenario,
+  }) {
+    ChatMessage? lastUser;
+    ChatMessage? lastChar;
+    for (final m in _messages.reversed) {
+      if (m.characterId == '__director__') continue;
+      lastUser ??= m.isUser ? m : null;
+      lastChar ??= !m.isUser ? m : null;
+      if (lastUser != null && lastChar != null) break;
+    }
+    return MacroContext(
+      userName: _userPersonaService.persona.name,
+      characterName: speaking.name,
+      chatId: _currentSessionId,
+      characterId: speaking.dbId,
+      description: speaking.description,
+      personality: _getEffectivePersonality(speaking),
+      scenario: scenario ?? speaking.scenario,
+      userPersona: _userPersonaService.persona.persona,
+      groupMemberNames: _activeGroup != null
+          ? [for (final c in _groupCharacters) c.name]
+          : null,
+      lastMessage: _messages.isNotEmpty ? _messages.last.displayText : null,
+      lastUserMessage: lastUser?.displayText,
+      lastCharMessage: lastChar?.displayText,
+      idleDuration: _lastUserMessageAt == null
+          ? null
+          : DateTime.now().difference(_lastUserMessageAt!),
+      getLocalVar: (n) => _loreTimedEffects.localMacroVars[n],
+      setLocalVar: (n, v) => _loreTimedEffects.localMacroVars[n] = v,
+      getGlobalVar: _storageService.lorebookSettings.getGlobalMacroVar,
+      setGlobalVar: _storageService.lorebookSettings.setGlobalMacroVar,
+    );
+  }
 
   /// Regex matching any `{{macro}}` or `{{macro::args}}` pattern.
   /// Used to detect stray unresolved macros in chat history.
@@ -3328,6 +3383,9 @@ class ChatService extends ChangeNotifier {
       _isNewChat = false;
       debugPrint('[sendMessage] Cleared new chat flag, memories now allowed');
     }
+
+    // {{idle_duration}} clock: the user just spoke.
+    _lastUserMessageAt = DateTime.now();
 
     // Scan for lore keywords (thin to scanner; the user message is already
     // in _messages, so the scanner windows over recent history from there).

@@ -117,6 +117,17 @@ void main() {
       final b = LorebookEntry(keys: const ['x', 'y'], content: 'c', name: 'n');
       expect(loreEntryHash(a), loreEntryHash(b));
     });
+
+    test('macro locals persist alongside timers and clear on reset', () {
+      final t = LorebookTimedEffects();
+      t.localMacroVars['mood'] = 'grim';
+      final blob = jsonEncode({'macroVars': t.macroVarsFragment()});
+      final restored = LorebookTimedEffects()..hydrate(blob);
+      expect(restored.localMacroVars['mood'], 'grim');
+      restored.reset();
+      expect(restored.localMacroVars, isEmpty);
+      expect(LorebookTimedEffects().macroVarsFragment(), isNull);
+    });
   });
 
   group('scanner integration', () {

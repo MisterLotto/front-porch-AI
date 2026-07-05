@@ -293,13 +293,15 @@ extension ChatServiceSessionState on ChatService {
       });
     }
 
-    // Merge the lorebook timed-effect fragment into whatever state map the
-    // branches above produced. When both are empty this stays the literal
-    // '{}' older app versions expect.
+    // Merge the lorebook timed-effect + macro-variable fragments into
+    // whatever state map the branches above produced. When all are empty
+    // this stays the literal '{}' older app versions expect.
     final loreTimers = _loreTimedEffects.toJsonFragment();
-    if (loreTimers != null) {
+    final macroVars = _loreTimedEffects.macroVarsFragment();
+    if (loreTimers != null || macroVars != null) {
       final stateMap = jsonDecode(groupRealismJson) as Map<String, dynamic>;
-      stateMap['lorebookTimers'] = loreTimers;
+      if (loreTimers != null) stateMap['lorebookTimers'] = loreTimers;
+      if (macroVars != null) stateMap['macroVars'] = macroVars;
       groupRealismJson = jsonEncode(stateMap);
     }
 

@@ -6,17 +6,62 @@ import 'dart:math';
 import 'package:intl/intl.dart';
 
 /// Context passed to every macro resolver function.
+///
+/// Only [userName]/[characterName] are universal. The chat-context fields
+/// (card fields, group roster, last messages, idle time) and the variable
+/// store callbacks are supplied by ChatService's prompt build; contexts that
+/// don't provide them (Stoop previews, image prompts) leave the dependent
+/// macros untouched (pass-through), never silently blank.
 class MacroContext {
   final String? userName;
   final String? characterName;
   final String? chatId;
   final String? characterId;
 
+  // Card fields of the speaking character ('' is valid; null = unavailable).
+  final String? description;
+  final String? personality;
+  final String? scenario;
+
+  /// The user persona's description text.
+  final String? userPersona;
+
+  /// All group member names (group mode); null in 1:1 / non-chat contexts.
+  final List<String>? groupMemberNames;
+
+  final String? lastMessage;
+  final String? lastUserMessage;
+  final String? lastCharMessage;
+
+  /// Time since the user's last message (in-memory clock; null after a
+  /// restart or outside chat).
+  final Duration? idleDuration;
+
+  // Variable store — local = per-chat (persisted with the session),
+  // global = app-wide. Null callbacks leave var macros untouched.
+  final String? Function(String name)? getLocalVar;
+  final void Function(String name, String value)? setLocalVar;
+  final String? Function(String name)? getGlobalVar;
+  final void Function(String name, String value)? setGlobalVar;
+
   const MacroContext({
     this.userName,
     this.characterName,
     this.chatId,
     this.characterId,
+    this.description,
+    this.personality,
+    this.scenario,
+    this.userPersona,
+    this.groupMemberNames,
+    this.lastMessage,
+    this.lastUserMessage,
+    this.lastCharMessage,
+    this.idleDuration,
+    this.getLocalVar,
+    this.setLocalVar,
+    this.getGlobalVar,
+    this.setGlobalVar,
   });
 }
 
@@ -43,6 +88,16 @@ class MacroResolver {
   static final _rollMacroPattern =
       RegExp(r'\{\{roll[\s:]+([^}]+)\}\}', caseSensitive: false);
   static final _rollPattern = RegExp(r'^(\d+)d(\d+)([+-]\d+)?$');
+  // Legacy ST {{time_UTC±N}} form (the modern {{time::UTC±N}} rides the
+  // generic pattern; this one's +N suffix does not).
+  static final _timeUtcPattern =
+      RegExp(r'\{\{time_UTC([+-]\d+)\}\}', caseSensitive: false);
+  // {{trim}} eats surrounding whitespace/newlines — applied after the macro
+  // pass so macros around it resolve first.
+  static final _trimPattern = RegExp(
+    r'[ \t]*\n?[ \t]*\{\{trim\}\}[ \t]*\n?[ \t]*',
+    caseSensitive: false,
+  );
   // Comma not preceded by a backslash (the \, escape ST supports in lists).
   static final _unescapedComma = RegExp(r'(?<!\\),');
   static final _rng = Random();
@@ -75,7 +130,42 @@ class MacroResolver {
       return args[_rng.nextInt(args.length)];
     });
     // roll handled in resolve() for pass-through of invalid notation
-    register('time', (args, ctx) => DateFormat('HH:mm').format(DateTime.now()));
+    register('time', (args, ctx) {
+      // {{time}} or {{time::UTC±N}} (ST timezone form).
+      if (args.isNotEmpty) {
+        final m = RegExp(r'^UTC([+-]\d+)$', caseSensitive: false)
+            .firstMatch(args[0].trim());
+        if (m != null) {
+          final offset = int.tryParse(m.group(1)!) ?? 0;
+          return DateFormat('HH:mm')
+              .format(DateTime.now().toUtc().add(Duration(hours: offset)));
+        }
+      }
+      return DateFormat('HH:mm').format(DateTime.now());
+    });
+    register('reverse', (args, ctx) {
+      final text = args.join('::');
+      return String.fromCharCodes(text.runes.toList().reversed);
+    });
+    // Partial support: ST adds the word to the banned-words sampler list;
+    // we strip it from the prompt so the model never sees the directive.
+    register('banned', (args, ctx) => '');
+    register('datetimeformat', (args, ctx) {
+      if (args.isEmpty) return '';
+      final fmt = _momentToIcu(args.join('::'));
+      try {
+        return DateFormat(fmt).format(DateTime.now());
+      } catch (_) {
+        return '';
+      }
+    });
+    register('timediff', (args, ctx) {
+      if (args.length < 2) return '';
+      final a = DateTime.tryParse(args[0].trim());
+      final b = DateTime.tryParse(args[1].trim());
+      if (a == null || b == null) return '';
+      return _humanizeDuration(a.difference(b).abs());
+    });
     register('date', (args, ctx) => DateFormat('yyyy-MM-dd').format(DateTime.now()));
     register('weekday', (args, ctx) => DateFormat('EEEE').format(DateTime.now()));
     register('isotime', (args, ctx) {
@@ -159,15 +249,143 @@ class MacroResolver {
         return args.isEmpty ? '' : args[h % args.length];
       }
 
+      final varResult = _varMacro(name, args, context);
+      if (varResult != null) return varResult;
+
+      final ctxResult = _contextMacro(name, context);
+      if (ctxResult != null) return ctxResult;
+
       final entry = _registry[name];
       if (entry != null) return entry.fn(args, context);
       return m.group(0)!; // unknown macro → pass through
     });
 
-    // 6. Unescape sentinel back to {{
+    // 6. Legacy {{time_UTC±N}} + {{trim}} post-passes
+    result = result.replaceAllMapped(_timeUtcPattern, (m) {
+      final offset = int.tryParse(m.group(1)!) ?? 0;
+      return DateFormat('HH:mm')
+          .format(DateTime.now().toUtc().add(Duration(hours: offset)));
+    });
+    result = result.replaceAll(_trimPattern, '');
+
+    // 7. Unescape sentinel back to {{
     result = result.replaceAll('\x00', '{{');
 
     return result;
+  }
+
+  /// ST chat-variable macros. Returns null when [name] is not a var macro OR
+  /// the context has no store (→ pass through, visible rather than silent).
+  /// Accepts both `{{setvar::k::v}}` and `{{setvar:k:v}}` (single-colon args
+  /// arrive as one string and are split at the first colon).
+  String? _varMacro(String name, List<String> args, MacroContext ctx) {
+    final isGlobal = name.startsWith('setglobal') ||
+        name.startsWith('getglobal') ||
+        name.startsWith('addglobal') ||
+        name.startsWith('incglobal') ||
+        name.startsWith('decglobal');
+    final op = isGlobal ? name.replaceFirst('global', '') : name;
+    if (!{'setvar', 'getvar', 'addvar', 'incvar', 'decvar'}.contains(op)) {
+      return null;
+    }
+
+    final get = isGlobal ? ctx.getGlobalVar : ctx.getLocalVar;
+    final set = isGlobal ? ctx.setGlobalVar : ctx.setLocalVar;
+    if (get == null || set == null || args.isEmpty) return null;
+
+    String key = args[0];
+    String value = args.length > 1 ? args.sublist(1).join('::') : '';
+    if (args.length == 1 && key.contains(':') && op != 'getvar' &&
+        op != 'incvar' && op != 'decvar') {
+      final i = key.indexOf(':');
+      value = key.substring(i + 1);
+      key = key.substring(0, i);
+    }
+    key = key.trim();
+    if (key.isEmpty) return null;
+
+    switch (op) {
+      case 'setvar':
+        set(key, value);
+        return '';
+      case 'getvar':
+        return get(key) ?? '';
+      case 'addvar':
+        final current = get(key) ?? '';
+        final a = num.tryParse(current);
+        final b = num.tryParse(value);
+        set(key, a != null && b != null ? _numStr(a + b) : '$current$value');
+        return '';
+      case 'incvar':
+      case 'decvar':
+        final current = num.tryParse(get(key) ?? '') ?? 0;
+        final next = op == 'incvar' ? current + 1 : current - 1;
+        set(key, _numStr(next));
+        return _numStr(next);
+    }
+    return null;
+  }
+
+  static String _numStr(num n) =>
+      n == n.truncate() ? n.truncate().toString() : n.toString();
+
+  /// Chat-context macros. Returns the substitution, or null when [name]
+  /// isn't one of them or its data is unavailable (→ pass through).
+  String? _contextMacro(String name, MacroContext ctx) {
+    switch (name) {
+      case 'description':
+        return ctx.description;
+      case 'personality':
+        return ctx.personality;
+      case 'scenario':
+        return ctx.scenario;
+      case 'persona':
+        return ctx.userPersona;
+      case 'lastmessage':
+        return ctx.lastMessage;
+      case 'lastusermessage':
+        return ctx.lastUserMessage;
+      case 'lastcharmessage':
+        return ctx.lastCharMessage;
+      case 'idle_duration':
+      case 'idleduration':
+        final d = ctx.idleDuration;
+        return d == null ? null : _humanizeDuration(d);
+      case 'group':
+      case 'groupnotmuted':
+        // No mute concept in FPAI — both list the full roster.
+        return ctx.groupMemberNames?.join(', ') ?? ctx.characterName;
+      case 'charifnotgroup':
+        if (ctx.groupMemberNames != null) return '';
+        return ctx.characterName;
+      case 'notchar':
+        final members = ctx.groupMemberNames;
+        if (members == null) return null;
+        return members.where((n) => n != ctx.characterName).join(', ');
+    }
+    return null;
+  }
+
+  static String _humanizeDuration(Duration d) {
+    if (d.inMinutes < 1) return 'less than a minute';
+    if (d.inMinutes < 60) {
+      return '${d.inMinutes} minute${d.inMinutes == 1 ? '' : 's'}';
+    }
+    if (d.inHours < 24) return '${d.inHours} hour${d.inHours == 1 ? '' : 's'}';
+    return '${d.inDays} day${d.inDays == 1 ? '' : 's'}';
+  }
+
+  /// Best-effort moment.js → ICU DateFormat token mapping for the common
+  /// tokens ST cards actually use ({{datetimeformat::DD.MM.YYYY HH:mm}}…).
+  static String _momentToIcu(String fmt) {
+    return fmt
+        .replaceAll('YYYY', 'yyyy')
+        .replaceAll('YY', 'yy')
+        .replaceAll('dddd', 'EEEE')
+        .replaceAll('ddd', 'EEE')
+        .replaceAll('DD', 'dd')
+        .replaceAll('D', 'd')
+        .replaceAll('A', 'a');
   }
 
   /// ST arg-splitting: `::` always splits on `::`; the single-colon form

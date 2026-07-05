@@ -592,6 +592,21 @@ void main() {
     });
   });
 
+  group('key macro substitution', () {
+    test('{{user}} in a trigger key matches the user name', () {
+      final e = LorebookEntry(keys: const ['{{user}}'], content: 'x');
+      final ch = CharacterCard(name: 'Luna', lorebook: Lorebook(entries: [e]));
+      final scanner = LorebookScanner(
+        onNotify: () {},
+        getEntryRefs: () =>
+            collectLoreEntryRefs(characters: [ch], resolveWorld: (_) => null),
+        resolveKeyMacros: (key) => key.replaceAll('{{user}}', 'Alex'),
+      );
+      scanner.scanLorebook('Luna: I saw Alex by the pier');
+      expect(e.isTriggered, isTrue);
+    });
+  });
+
   group('shared collector (group book + dedup)', () {
     test('group lorebook entries are scanned and can trigger (bug fix)', () {
       final ge = LorebookEntry(keys: const ['heirloom'], content: 'g');
