@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
 import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
+import 'package:front_porch_ai/services/chat/lorebook_timed_effects.dart';
 
 /// Plain (non-ChangeNotifier) domain service owning lorebook keyword scanning,
 /// trigger/depth state mutation on the live LorebookEntry objects, depth
@@ -68,6 +69,13 @@ class LorebookScanner {
   /// Max recursion sweeps; 0 = unlimited (internal safety cap still applies).
   final int Function() getMaxRecursionSteps;
 
+  /// Per-chat ST timed effects (sticky/cooldown). Null in tests that don't
+  /// exercise them; delay needs no store and is always honored.
+  final LorebookTimedEffects? timedEffects;
+
+  /// Current chat length in messages — the clock timed effects run on.
+  final int Function() getChatLength;
+
   /// Runaway guard when max steps is "unlimited".
   static const int _kRecursionHardCap = 10;
 
@@ -80,6 +88,8 @@ class LorebookScanner {
     this.getGlobalScanDepth = _defaultScanDepth,
     this.getRecursiveScan = _falseFn,
     this.getMaxRecursionSteps = _zeroFn,
+    this.timedEffects,
+    this.getChatLength = _zeroFn,
     Random? rng,
   }) : _rng = rng ?? Random();
 
@@ -115,6 +125,11 @@ class LorebookScanner {
         );
 
     final refs = _distinctRefs();
+    final chatLength = getChatLength();
+    // Timed-effect bookkeeping first: expire stickies (starting their
+    // protected cooldowns), drop finished/rewound effects.
+    timedEffects?.tick(chatLength, [for (final r in refs) r.entry]);
+
     // Probability failures are remembered for this whole scan (incl. the
     // recursion sweeps below) — ST's per-scan failed-roll memory.
     final failedRolls = <LorebookEntry>{};
@@ -122,10 +137,25 @@ class LorebookScanner {
     bool changed = false;
     for (final ref in refs) {
       final entry = ref.entry;
+
+      // Sticky-active: force-refresh with no key match and no roll.
+      if (entry.enabled &&
+          timedEffects != null &&
+          timedEffects!.isStickyActive(entry, chatLength)) {
+        if (!entry.isTriggered) {
+          entry.isTriggered = true;
+          changed = true;
+        }
+        if (entry.remainingDepth < entry.stickyDepth) {
+          entry.remainingDepth = entry.stickyDepth;
+        }
+        continue;
+      }
+
       final depth = entry.scanDepth ?? ref.book.scanDepth ?? getGlobalScanDepth();
       if (depth <= 0) continue;
       if (_scanEntryAgainst(entry, bufferFor(depth.clamp(1, 100)),
-          failedRolls: failedRolls)) {
+          failedRolls: failedRolls, chatLength: chatLength)) {
         changed = true;
       }
     }
@@ -176,6 +206,7 @@ class LorebookScanner {
       if (buffer.isEmpty) break;
 
       bool sweepActivated = false;
+      final chatLength = getChatLength();
       for (final ref in refs) {
         final e = ref.entry;
         if (!eligibleBook(ref)) continue;
@@ -183,7 +214,9 @@ class LorebookScanner {
         if (e.excludeRecursion) continue;
         if (e.delayUntilRecursion > level) continue;
         if (_scanEntryAgainst(e, buffer,
-            failedRolls: failedRolls, recursionLevel: level)) {
+            failedRolls: failedRolls,
+            recursionLevel: level,
+            chatLength: chatLength)) {
           sweepActivated = true;
         }
       }
@@ -218,16 +251,26 @@ class LorebookScanner {
   }
 
   /// Evaluate one entry against [text] through the gate chain (enabled →
-  /// delay-until-recursion → keys → secondary logic → probability with
-  /// per-scan failure memory). On success: isTriggered=true,
-  /// remainingDepth=stickyDepth. Returns whether the entry NEWLY triggered.
+  /// delay → cooldown → delay-until-recursion → keys → secondary logic →
+  /// probability with per-scan failure memory). On success:
+  /// isTriggered=true, remainingDepth=stickyDepth, timed effects recorded.
+  /// Returns whether the entry NEWLY triggered.
   bool _scanEntryAgainst(
     LorebookEntry entry,
     String text, {
     required Set<LorebookEntry> failedRolls,
     int recursionLevel = 0,
+    int chatLength = 0,
   }) {
     if (!entry.enabled) return false;
+    // ST delay: suppressed until the chat is at least N messages long.
+    if (entry.delay > 0 && chatLength < entry.delay) return false;
+    // ST cooldown: cannot re-activate while cooling down (sticky-active
+    // entries never reach here — they refresh before the gate chain).
+    if (timedEffects != null &&
+        timedEffects!.isOnCooldown(entry, chatLength)) {
+      return false;
+    }
     // Delayed-until-recursion entries never activate in a normal scan.
     if (entry.delayUntilRecursion > 0 && recursionLevel == 0) return false;
 
@@ -260,6 +303,9 @@ class LorebookScanner {
     entry.remainingDepth = entry.stickyDepth;
     entry.lastMatchScore = entry.keys.where(matches).length +
         entry.secondaryKeys.where(matches).length;
+    if (newlyTriggered) {
+      timedEffects?.recordActivation(entry, chatLength);
+    }
     return newlyTriggered;
   }
 
@@ -295,7 +341,11 @@ class LorebookScanner {
   /// all non-constant entries in the current context (group book + worlds +
   /// character books). Constant entries are skipped (always active if
   /// enabled). No notify — callers drive subsequent UI updates.
+  /// Every caller of this reset is a session boundary (startNewChat,
+  /// setActive*, 0-session loads) — never regen/swipe — so per-chat timed
+  /// effects clear here too; loading a real session re-hydrates its own.
   void resetLorebookTriggerState() {
+    timedEffects?.reset();
     for (final ref in _distinctRefs()) {
       if (!ref.entry.constant) {
         ref.entry.isTriggered = false;

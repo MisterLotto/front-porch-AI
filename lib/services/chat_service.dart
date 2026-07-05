@@ -65,6 +65,7 @@ import 'package:front_porch_ai/services/chat/nsfw_service.dart';
 import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
 import 'package:front_porch_ai/services/chat/lorebook_injector.dart';
 import 'package:front_porch_ai/services/chat/lorebook_scanner.dart';
+import 'package:front_porch_ai/services/chat/lorebook_timed_effects.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/author_note_builder.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
@@ -1518,7 +1519,14 @@ class ChatService extends ChangeNotifier {
     getRecursiveScan: () => _storageService.lorebookSettings.recursiveScan,
     getMaxRecursionSteps: () =>
         _storageService.lorebookSettings.maxRecursionSteps,
+    timedEffects: _loreTimedEffects,
+    getChatLength: () => _messages.length,
   );
+
+  /// Per-chat ST sticky/cooldown state — persisted inside the session's
+  /// groupRealismState blob (additive `lorebookTimers` key), hydrated on
+  /// session load, cleared at session boundaries via the scanner reset.
+  final _loreTimedEffects = LorebookTimedEffects();
 
   // Pure-read injection engine (positions, ordering, budget, inclusion
   // groups). Consumes the same enumerator as the scanner but honors the
@@ -1526,6 +1534,8 @@ class ChatService extends ChangeNotifier {
   late final _lorebookInjector = LorebookInjector(
     getEntryRefs: () => _collectLoreRefs(),
     getSettings: () => _storageService.lorebookSettings,
+    isStickyActive: (e) =>
+        _loreTimedEffects.isStickyActive(e, _messages.length),
   );
 
   /// Names of lore entries dropped by the token budget on the last

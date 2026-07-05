@@ -35,6 +35,9 @@ extension ChatServiceSessionState on ChatService {
     _sceneGuestIds.clear();
     _sceneGuestCards.clear();
     final stateJson = session?.groupRealismState;
+    // Timed lorebook effects ride the same blob — hydrate (resets first, so
+    // a null/empty session clears any prior chat's timers).
+    _loreTimedEffects.hydrate(stateJson);
     if (stateJson == null || stateJson.isEmpty || stateJson == '{}') return;
     try {
       final decoded = jsonDecode(stateJson);
@@ -72,6 +75,10 @@ extension ChatServiceSessionState on ChatService {
     if (_activeGroup == null) return;
 
     String? stateJson = session?.groupRealismState;
+
+    // Timed lorebook effects ride the SESSION blob only (never the group's
+    // default-member-state fallback below — defaults carry no chat timers).
+    _loreTimedEffects.hydrate(stateJson);
 
     // Fall back to group definition defaults (crucial for imported Group Cards and split-to-solo)
     if (stateJson == null || stateJson.isEmpty || stateJson == '{}') {
@@ -229,6 +236,8 @@ extension ChatServiceSessionState on ChatService {
 
     // v30: For group chats, serialize current per-character realism state into the
     // new group_realism_state column (clean replacement for hidden checkpoint).
+    // The lorebook timed-effect fragment rides the same blob additively at the
+    // end (any mode); old app versions ignore the unknown key.
     String groupRealismJson = '{}';
     if (_activeGroup != null) {
       // Include per-char objectives so each group member carries independent tasks.
@@ -282,6 +291,16 @@ extension ChatServiceSessionState on ChatService {
         'sceneGuests': _sceneGuestIds,
         if (guestEvolution.isNotEmpty) 'guestEvolution': guestEvolution,
       });
+    }
+
+    // Merge the lorebook timed-effect fragment into whatever state map the
+    // branches above produced. When both are empty this stays the literal
+    // '{}' older app versions expect.
+    final loreTimers = _loreTimedEffects.toJsonFragment();
+    if (loreTimers != null) {
+      final stateMap = jsonDecode(groupRealismJson) as Map<String, dynamic>;
+      stateMap['lorebookTimers'] = loreTimers;
+      groupRealismJson = jsonEncode(stateMap);
     }
 
     // Snapshot messages at the start so async gaps can't see a mutated list.
