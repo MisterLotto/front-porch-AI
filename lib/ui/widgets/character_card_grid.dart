@@ -43,7 +43,6 @@ class CharacterCardGrid extends StatelessWidget {
     this.onToggleOrganizeMode,
     required this.onContextMenuAction,
     required this.onImport,
-    required this.onOpenBrowser,
     required this.onAcceptFolderDrop,
     required this.onFolderDialogAction,
     required this.onFolderTap,
@@ -86,7 +85,6 @@ class CharacterCardGrid extends StatelessWidget {
   final void Function(String action, CharacterCard character)
   onContextMenuAction;
   final void Function(String source) onImport;
-  final void Function(String site) onOpenBrowser;
   final void Function(CharacterCard character, CharacterFolder folder)
   onAcceptFolderDrop;
   final void Function(
@@ -423,15 +421,7 @@ class CharacterCardGrid extends StatelessWidget {
                     PopupMenuButton<String>(
                       tooltip: 'Import or discover characters',
                       icon: const Icon(Icons.download),
-                      onSelected: (value) {
-                        if (value == 'browse_aicc') {
-                          onOpenBrowser('aicc');
-                        } else if (value == 'browse_chub') {
-                          onOpenBrowser('chub');
-                        } else {
-                          onImport(value);
-                        }
-                      },
+                      onSelected: onImport,
                       itemBuilder: (_) => [
                         const PopupMenuItem(
                           value: 'cards',
@@ -454,29 +444,6 @@ class CharacterCardGrid extends StatelessWidget {
                           child: ListTile(
                             leading: Icon(Icons.archive_outlined),
                             title: Text('Import Backyard AI (.byaf)'),
-                            dense: true,
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'browse_aicc',
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.public,
-                              color: Colors.blueAccent,
-                            ),
-                            title: Text('Browse AI Character Cards'),
-                            dense: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'browse_chub',
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.redAccent,
-                            ),
-                            title: Text('Chub.ai (Caution)'),
                             dense: true,
                           ),
                         ),

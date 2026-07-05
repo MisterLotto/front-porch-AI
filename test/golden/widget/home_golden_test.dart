@@ -100,7 +100,6 @@ Widget _grid({
       onToggleSelect: (_) {},
       onContextMenuAction: (_, _) {},
       onImport: (_) {},
-      onOpenBrowser: (_) {},
       onAcceptFolderDrop: (_, _) {},
       onFolderDialogAction: (FolderDialogAction _, {folder, parentId}) {},
       onFolderTap: (_) {},
