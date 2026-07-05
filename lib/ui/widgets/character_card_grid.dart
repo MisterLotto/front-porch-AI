@@ -5,11 +5,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
+import 'package:front_porch_ai/ui/pages/home/cards/folder_grid_card.dart';
 import 'package:front_porch_ai/ui/pages/home/cards/group_grid_card.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/utils/utils.dart';
@@ -751,7 +750,13 @@ class CharacterCardGrid extends StatelessWidget {
         itemCount: totalItems,
         itemBuilder: (context, index) {
           if (index < folders.length) {
-            return _buildFolderCard(context, folders[index]);
+            return FolderGridCard(
+              folder: folders[index],
+              onAcceptFolderDrop: onAcceptFolderDrop,
+              onFolderTap: onFolderTap,
+              onFolderDialogAction: onFolderDialogAction,
+              onResolveCharImage: onResolveCharImage,
+            );
           }
           final groupOffset = index - folders.length;
           if (groupOffset < groups.length) {
@@ -774,154 +779,6 @@ class CharacterCardGrid extends StatelessWidget {
   /// Resolves up to [max] avatar image Files for the first characters in
   /// [folder]. The folder stores filename references, so map each to the
   /// matching library card to recover its real (possibly subdir'd) image path.
-  List<File> _folderPreviewImages(
-    BuildContext context,
-    CharacterFolder folder,
-    int max,
-  ) {
-    if (folder.characterPaths.isEmpty) return const [];
-    final repo = Provider.of<CharacterRepository>(context, listen: false);
-    final byFilename = <String, String>{};
-    for (final c in repo.characters) {
-      final p = c.imagePath;
-      if (p != null) byFilename.putIfAbsent(path.basename(p), () => p);
-    }
-    final files = <File>[];
-    for (final ref in folder.characterPaths) {
-      final full = byFilename[path.basename(ref)];
-      if (full != null) {
-        files.add(onResolveCharImage(full));
-        if (files.length >= max) break;
-      }
-    }
-    return files;
-  }
-
-  Widget _buildFolderCard(BuildContext context, CharacterFolder folder) {
-    final charCount = folder.characterPaths.length;
-
-    return DragTarget<CharacterCard>(
-      onAcceptWithDetails: (details) {
-        onAcceptFolderDrop(details.data, folder);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return Card(
-          color: isHovering
-              ? AppColors.resolve(
-                  context,
-                  Colors.amber.shade900.withValues(alpha: 0.4),
-                  Colors.amber.withValues(alpha: 0.1),
-                )
-              : AppColors.cardOf(context),
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: isHovering ? Colors.amber : AppColors.borderOf(context),
-              width: isHovering ? 2 : 1,
-            ),
-          ),
-          child: InkWell(
-            onTap: () => onFolderTap(folder),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isSmall = constraints.maxHeight < 200;
-                final isTiny = constraints.maxHeight < 140;
-                final iconSize = isTiny ? 32.0 : (isSmall ? 48.0 : 72.0);
-                // Scale the preview to the card width so it fills a real chunk
-                // of the card (and scales with the grid size) rather than a
-                // fixed thumbnail that looks tiny on larger cards.
-                final previewSide = (constraints.maxWidth * 0.78).clamp(
-                  64.0,
-                  220.0,
-                );
-                final fontSize = isTiny ? 11.0 : (isSmall ? 13.0 : 16.0);
-
-                // Preview the first few characters inside the folder (2x2).
-                // Empty folders fall back to the plain folder icon.
-                final previews = _folderPreviewImages(context, folder, 4);
-
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (previews.isEmpty)
-                      Icon(
-                        Icons.folder,
-                        size: iconSize,
-                        color: isHovering
-                            ? Colors.amber
-                            : AppColors.iconSecondary(context),
-                      )
-                    else
-                      GroupAvatarMontage(images: previews, side: previewSide),
-                    SizedBox(height: isTiny ? 4 : (isSmall ? 8 : 16)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        folder.name,
-                        style: TextStyle(
-                          color: AppColors.textPrimary(context),
-                          fontWeight: FontWeight.bold,
-                          fontSize: fontSize,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: isTiny ? 1 : 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (!isTiny) ...[
-                      SizedBox(height: isSmall ? 4 : 8),
-                      Text(
-                        '$charCount character${charCount == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: isSmall ? 11 : 13,
-                        ),
-                      ),
-                    ],
-                    if (!isSmall) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.edit,
-                              color: AppColors.iconSecondary(context),
-                              size: 18,
-                            ),
-                            tooltip: 'Rename',
-                            onPressed: () => onFolderDialogAction(
-                              FolderDialogAction.rename,
-                              folder: folder,
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.delete,
-                              color: Colors.redAccent,
-                              size: 18,
-                            ),
-                            tooltip: 'Delete folder',
-                            onPressed: () => onFolderDialogAction(
-                              FolderDialogAction.delete,
-                              folder: folder,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildCharacterCard(BuildContext context, CharacterCard character) {
     return LongPressDraggable<CharacterCard>(
