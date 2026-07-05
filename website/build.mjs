@@ -12,6 +12,7 @@
  */
 import { marked } from 'marked';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -358,6 +359,11 @@ function buildHub() {
   const hubNav = absolutizeChrome(NAV).replace('data-nav="stoop"', 'data-nav="stoop" class="active"');
   const hubFooter = absolutizeChrome(FOOTER);
   const scripts = ['png.js', 'api.js', 'ui.js', 'views-auth.js', 'views-picks.js', 'views-browse.js', 'views-my.js', 'views-inbox.js', 'app.js'];
+  // Cache-buster: Caddy serves hub assets with a 7-day max-age, so stamp each
+  // stoop asset URL with a short content hash — the URL changes exactly when
+  // the file's bytes change, and a plain page reload picks up new code.
+  const stamp = (file) =>
+    createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 8);
 
   // self-contained asset tree
   fs.mkdirSync(path.join(DIST_HUB, 'assets/fonts'), { recursive: true });
@@ -389,8 +395,10 @@ function buildHub() {
       footer: hubFooter,
       origin: HUB,
       extraHead: [
-        '<link rel="stylesheet" href="/assets/stoop.css">',
-        ...scripts.map((s) => `<script src="/assets/stoop/${s}" defer></script>`),
+        `<link rel="stylesheet" href="/assets/stoop.css?v=${stamp(path.join(STOOP_SRC, 'stoop.css'))}">`,
+        ...scripts.map(
+          (s) => `<script src="/assets/stoop/${s}?v=${stamp(path.join(STOOP_SRC, s))}" defer></script>`,
+        ),
       ].join('\n'),
     }),
     DIST_HUB,
