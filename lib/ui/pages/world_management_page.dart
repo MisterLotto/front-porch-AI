@@ -676,19 +676,11 @@ class _WorldManagementPageState extends State<WorldManagementPage>
     );
 
     // Create a copy of the lorebook entries for editing
+    // Full clones — the old 6-field copy stripped imported ST metadata
+    // (secondary keys, probability, timers, ...) every time a world was
+    // opened for editing and saved.
     final List<LorebookEntry> editingEntries = world != null
-        ? world.lorebook.entries
-              .map(
-                (e) => LorebookEntry(
-                  name: e.name,
-                  key: e.key,
-                  content: e.content,
-                  enabled: e.enabled,
-                  constant: e.constant,
-                  stickyDepth: e.stickyDepth,
-                ),
-              )
-              .toList()
+        ? world.lorebook.entries.map((e) => e.clone()).toList()
         : <LorebookEntry>[];
 
     showDialog(

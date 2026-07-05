@@ -15,6 +15,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
 
@@ -3819,238 +3820,38 @@ class _LorebookWorldsTabState extends State<_LorebookWorldsTab> {
     setState(() {});
   }
 
+  /// Write the tab's state back onto the LIVE group object after every
+  /// mutation. Without this, the dialog-level Save persisted a group this
+  /// tab never touched — lorebook/world edits made here were silently lost.
+  void _syncToGroup() {
+    final g = widget.chatService.activeGroup;
+    if (g == null) return;
+    g.inheritCharacterLorebooks = _inheritCharacterLorebooks;
+    g.worldIds = List<String>.from(_worldIds);
+    g.groupLorebook = _groupLoreEntries.isEmpty
+        ? ''
+        : jsonEncode(Lorebook(entries: _groupLoreEntries).toJson());
+  }
+
   Future<void> _showEntryEditor({LorebookEntry? existing, int? index}) async {
-    final keyCtrl = TextEditingController(text: existing?.key ?? '');
-    final contentCtrl = TextEditingController(text: existing?.content ?? '');
-
-    bool enabled = existing?.enabled ?? true;
-    bool constant = existing?.constant ?? false;
-    int stickyDepth = existing?.stickyDepth ?? 1;
-
-    final result = await showDialog<bool>(
+    // The shared Simple/Advanced editor (clone-preserving). The old bespoke
+    // 5-field dialog here rebuilt entries from scratch, destroying imported
+    // ST metadata (secondary keys, probability, timers, ...) on every edit.
+    final result = await showLorebookEntryDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceOf(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(existing == null ? 'Add Lore Entry' : 'Edit Lore Entry'),
-        content: StatefulBuilder(
-          builder: (innerCtx, setInnerState) {
-            return SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!constant) ...[
-                    AppTextField(
-                      controller: keyCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Trigger Keys (comma separated)',
-                      ),
-                      style: TextStyle(color: AppColors.textPrimary(context)),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  AppTextField(
-                    controller: contentCtrl,
-                    maxLines: 6,
-                    decoration: const InputDecoration(
-                      labelText: 'Content (injected when triggered)',
-                    ),
-                    style: TextStyle(color: AppColors.textPrimary(context)),
-                  ),
-                  const SizedBox(height: 16),
-
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardOf(context),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.borderOf(context)),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Enabled',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary(context),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'This entry can be injected when its keys match',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary(context),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: enabled,
-                              onChanged: (v) =>
-                                  setInnerState(() => enabled = v),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Divider(color: AppColors.borderOf(context), height: 1),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Constant',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary(context),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Always considered active (ignores trigger keys)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary(context),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: constant,
-                              onChanged: (v) =>
-                                  setInnerState(() => constant = v),
-                            ),
-                          ],
-                        ),
-                        if (!constant) ...[
-                          const SizedBox(height: 12),
-                          Divider(
-                            color: AppColors.borderOf(context),
-                            height: 1,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Sticky Depth — clean slider presentation
-                          // (hidden when Constant is on, since constant entries never decay)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    'Sticky Depth',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary(context),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceContainerOf(
-                                        context,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      '$stickyDepth',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary(context),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'How many turns the entry stays active after triggering',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary(context),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              SliderTheme(
-                                data: SliderThemeData(
-                                  activeTrackColor: Colors.tealAccent,
-                                  inactiveTrackColor: AppColors.borderOf(
-                                    context,
-                                  ).withValues(alpha: 0.4),
-                                  thumbColor: Colors.tealAccent,
-                                  trackHeight: 3,
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 7,
-                                  ),
-                                ),
-                                child: Slider(
-                                  value: stickyDepth.toDouble().clamp(0, 12),
-                                  min: 0,
-                                  max: 12,
-                                  divisions: 12,
-                                  label: stickyDepth.toString(),
-                                  onChanged: (v) => setInnerState(
-                                    () => stickyDepth = v.round(),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      existing: existing,
+      showEnabled: true,
     );
-
-    if (result != true) return;
-
-    final newEntry = LorebookEntry(
-      key: keyCtrl.text.trim(),
-      content: contentCtrl.text.trim(),
-      enabled: enabled,
-      constant: constant,
-      stickyDepth: stickyDepth,
-    );
+    if (result == null) return;
 
     setState(() {
       if (index != null && index >= 0 && index < _groupLoreEntries.length) {
-        _groupLoreEntries[index] = newEntry;
+        _groupLoreEntries[index] = result;
       } else {
-        _groupLoreEntries.add(newEntry);
+        _groupLoreEntries.add(result);
       }
     });
+    _syncToGroup();
   }
 
   Future<void> _importGroupLorebookJson() async {
@@ -4083,6 +3884,7 @@ class _LorebookWorldsTabState extends State<_LorebookWorldsTab> {
       setState(() {
         _groupLoreEntries.addAll(imported.entries);
       });
+      _syncToGroup();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4104,6 +3906,7 @@ class _LorebookWorldsTabState extends State<_LorebookWorldsTab> {
     setState(() {
       _groupLoreEntries.removeAt(index);
     });
+    _syncToGroup();
   }
 
   void _toggleWorld(String worldId) {
@@ -4114,6 +3917,7 @@ class _LorebookWorldsTabState extends State<_LorebookWorldsTab> {
         _worldIds.add(worldId);
       }
     });
+    _syncToGroup();
   }
 
   @override
@@ -4142,6 +3946,7 @@ class _LorebookWorldsTabState extends State<_LorebookWorldsTab> {
                     setState(() {
                       _inheritCharacterLorebooks = v;
                     });
+                    _syncToGroup();
                   },
                   activeThumbColor: Colors.orangeAccent,
                 ),

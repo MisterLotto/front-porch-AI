@@ -240,5 +240,104 @@ void main() {
       expect(result!.selectiveLogic, SelectiveLogic.andAll);
       expect(result!.extensions['chub_thing'], true);
     });
+
+    testWidgets('Simple tab exposes chance + placement and writes them',
+        (tester) async {
+      LorebookEntry? result;
+      await tester.pumpWidget(_buildApp(onResult: (r) => result = r));
+      await tester.tap(find.text('Open Lorebook Dialog'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Chance to trigger'), findsOneWidget);
+      expect(find.text('Placement'), findsOneWidget);
+
+      // Change placement via the dropdown.
+      await tester.ensureVisible(find.text('With character info'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('With character info'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('In recent chat (@depth)').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(AppTextField).at(1), 'key');
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(result, isNotNull);
+      expect(result!.position, 4);
+    });
+
+    testWidgets('Advanced tab edits secondary keys, logic, and tri-states',
+        (tester) async {
+      final existing = LorebookEntry(
+        keys: const ['queen'],
+        content: 'Original',
+        name: 'Queen',
+      );
+      LorebookEntry? result;
+      await tester.pumpWidget(
+        _buildApp(existing: existing, onResult: (r) => result = r),
+      );
+      await tester.tap(find.text('Open Lorebook Dialog'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+
+      // Secondary keywords text field (first field on the Advanced tab).
+      await tester.enterText(
+        find.widgetWithText(AppTextField, '').first,
+        'court, throne',
+      );
+      await tester.pumpAndSettle();
+
+      // Secondary logic dropdown → AND all of them.
+      await tester.ensureVisible(find.text('AND any of them'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AND any of them'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AND all of them').last);
+      await tester.pumpAndSettle();
+
+      // Case-sensitive tri-state → On.
+      await tester.ensureVisible(find.text('Case sensitive'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use global').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('On').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(result, isNotNull);
+      expect(result!.secondaryKeys, ['court', 'throne']);
+      expect(result!.selectiveLogic, SelectiveLogic.andAll);
+      expect(result!.caseSensitive, true);
+      expect(result!.content, 'Original'); // untouched Simple field survives
+    });
+
+    testWidgets('Cancel discards Advanced edits (clone isolation)',
+        (tester) async {
+      final existing = LorebookEntry(
+        keys: const ['queen'],
+        content: 'Original',
+        probability: 80,
+      );
+      await tester.pumpWidget(_buildApp(existing: existing, onResult: (_) {}));
+      await tester.tap(find.text('Open Lorebook Dialog'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Advanced'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Prioritize in group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Prioritize in group'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(existing.groupOverride, false); // original untouched
+      expect(existing.probability, 80);
+    });
   });
 }
