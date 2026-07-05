@@ -44,12 +44,17 @@ class StoopUploadPage extends StatefulWidget {
   /// The posted card's current NSFW flag, so update mode preserves it by default.
   final bool initialNsfw;
 
+  /// The posted card's current "Original creator" credit, so update mode
+  /// preserves it by default (clearing the field on update removes the credit).
+  final String? initialOriginalCreator;
+
   const StoopUploadPage({
     super.key,
     this.updateCharacter,
     this.updateGroup,
     this.updateStoopId,
     this.initialNsfw = false,
+    this.initialOriginalCreator,
   });
 
   bool get isUpdate =>
@@ -72,6 +77,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   GroupChat? _selectedGroup; // set instead of _selected when sharing a group
   final _name = TextEditingController();
   final _summary = TextEditingController();
+  final _originalCreator = TextEditingController();
   final _tagInput = TextEditingController();
   final _pickSearch = TextEditingController();
 
@@ -92,6 +98,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   void dispose() {
     _name.dispose();
     _summary.dispose();
+    _originalCreator.dispose();
     _tagInput.dispose();
     _pickSearch.dispose();
     super.dispose();
@@ -141,6 +148,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       _nsfw = widget.initialNsfw;
       _currentStep = 1;
     }
+    _originalCreator.text = widget.initialOriginalCreator ?? '';
   }
 
   void _select(CharacterCard card) {
@@ -209,6 +217,8 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         'tags': _tags,
         'card': card.toJson(),
         'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
+        // Attribution ('' = own work; on update, '' clears an old credit).
+        'originalCreator': _originalCreator.text.trim(),
       };
       if (widget.isUpdate) {
         // In-place new version of the existing post (keeps id/downloads/score).
@@ -283,6 +293,8 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         'tags': _tags,
         'card': groupCard.toJson(),
         'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
+        // Attribution ('' = own work; on update, '' clears an old credit).
+        'originalCreator': _originalCreator.text.trim(),
       };
       if (widget.isUpdate) {
         // In-place new version of the existing group post (keeps id/downloads/
@@ -693,6 +705,26 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           style: TextStyle(color: AppColors.textPrimary(context)),
           decoration: _input('A one-line hook shown on the card'),
         ),
+        const SizedBox(height: 18),
+        _label('Original creator (optional)'),
+        TextField(
+          controller: _originalCreator,
+          maxLength: 120,
+          onChanged: (_) => setState(() {}),
+          style: TextStyle(color: AppColors.textPrimary(context)),
+          decoration: _input('Leave blank if this is your own work').copyWith(
+            counterText: '',
+            helperText:
+                'Sharing someone else’s character? Credit them here — the '
+                'card will show “created by …”. The AUP requires this for '
+                'reposts; they don’t need a Stoop account.',
+            helperMaxLines: 3,
+            helperStyle: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 12,
+            ),
+          ),
+        ),
         const SizedBox(height: 8),
         StoopTagSelector(
           pool: _tagPool,
@@ -837,6 +869,17 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                     _summary.text.trim(),
                     style: TextStyle(color: AppColors.textSecondary(context)),
                   ),
+                  if (_originalCreator.text.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'created by ${_originalCreator.text.trim()}',
+                      style: TextStyle(
+                        color: AppColors.textTertiary(context),
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
                   if (_nsfw) ...[
                     const SizedBox(height: 8),
                     Container(

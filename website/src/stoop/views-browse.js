@@ -294,7 +294,8 @@
               c.modPick ? el('span', { class: 'hub-badge hub-badge-pick' }, '★ Mod’s Pick') : null,
             ]),
             el('h2', { class: 'hub-detail-name' }, c.name),
-            c.creator ? el('a', { class: 'hub-detail-creator', href: '#/creator/' + c.creator.id }, 'by ' + c.creator.displayName + ' →') : null,
+            c.creator ? el('a', { class: 'hub-detail-creator', href: '#/creator/' + c.creator.id }, (c.originalCreator ? 'uploaded by ' : 'by ') + c.creator.displayName + ' →') : null,
+            c.originalCreator ? el('div', { class: 'hub-detail-origcreator' }, 'created by ' + c.originalCreator) : null,
             el('p', { class: 'hub-detail-summary' }, c.summary || ''),
             (c.tags && c.tags.length)
               ? el('div', { class: 'hub-tags' }, c.tags.map(function (t) {

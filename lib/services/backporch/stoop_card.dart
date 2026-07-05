@@ -35,6 +35,11 @@ class StoopCard {
   final int downloadCount;
   final bool modPick;
   final StoopCreatorRef? creator;
+
+  /// Attribution: who originally made this character, when the uploader isn't
+  /// the author (free text — the creator needn't have a Stoop account).
+  /// Null/empty = the uploader's own work.
+  final String? originalCreator;
   final String? primaryAssetId;
 
   /// Approximate Llama token count of the card's content (server-computed), so
@@ -52,6 +57,7 @@ class StoopCard {
     required this.downloadCount,
     required this.modPick,
     required this.creator,
+    this.originalCreator,
     required this.primaryAssetId,
     this.tokenCount,
   });
@@ -70,6 +76,7 @@ class StoopCard {
         downloadCount: downloadCount,
         modPick: modPick,
         creator: creator,
+        originalCreator: originalCreator,
         primaryAssetId: primaryAssetId,
         tokenCount: tokenCount,
       );
@@ -85,6 +92,10 @@ class StoopCard {
     modPick: j['modPick'] as bool? ?? false,
     creator: j['creator'] is Map<String, dynamic>
         ? StoopCreatorRef.fromJson(j['creator'] as Map<String, dynamic>)
+        : null,
+    originalCreator: (j['originalCreator'] as String?)?.trim().isNotEmpty ==
+            true
+        ? (j['originalCreator'] as String).trim()
         : null,
     primaryAssetId: j['primaryAssetId'] as String?,
     tokenCount: (j['tokenCount'] as num?)?.toInt(),
@@ -162,6 +173,10 @@ class StoopCardDetail {
   final int? tokenCount;
   final StoopCreatorRef? creator;
 
+  /// Attribution: who originally made this character, when the uploader isn't
+  /// the author. Null = the uploader's own work.
+  final String? originalCreator;
+
   /// The V2/V2.5 card payload (description, personality, scenario, first_mes,
   /// alternate_greetings, mes_example, character_book, etc.).
   final Map<String, dynamic> card;
@@ -182,6 +197,7 @@ class StoopCardDetail {
     required this.version,
     this.tokenCount,
     required this.creator,
+    this.originalCreator,
     required this.card,
     required this.tags,
     required this.primaryAssetId,
@@ -202,6 +218,10 @@ class StoopCardDetail {
     tokenCount: (j['tokenCount'] as num?)?.toInt(),
     creator: j['creator'] is Map<String, dynamic>
         ? StoopCreatorRef.fromJson(j['creator'] as Map<String, dynamic>)
+        : null,
+    originalCreator: (j['originalCreator'] as String?)?.trim().isNotEmpty ==
+            true
+        ? (j['originalCreator'] as String).trim()
         : null,
     card: (j['card'] as Map<String, dynamic>?) ?? const {},
     tags: ((j['tags'] as List?) ?? const []).map((e) => e.toString()).toList(),

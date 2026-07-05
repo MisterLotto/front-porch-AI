@@ -17,7 +17,7 @@ library;
 
 /// The policy revision this bundled text corresponds to. Shown to the user for
 /// reference; acceptance is recorded against the server's live version.
-const String kStoopAupId = '1.2';
+const String kStoopAupId = '1.3';
 
 /// One titled block of the policy, rendered as a header + body paragraph(s).
 class StoopPolicySection {
@@ -75,6 +75,20 @@ const List<StoopPolicySection> kStoopAupSections = [
         'formatting, unless it’s an intentionally structured JSON/code card. '
         'Low-effort or “slop” cards that add nothing beyond a one-line prompt '
         'may be rejected or removed.',
+  ),
+  StoopPolicySection(
+    'Credit where credit’s due',
+    'Upload your own work. Sharing a character someone else made (or a close '
+        'derivative of one) is allowed only with proper attribution: fill in '
+        'the “Original creator” field when you upload, so the card shows who '
+        'actually made it — the original creator doesn’t need a Stoop account '
+        'to be credited. Reposting someone else’s card without that credit is '
+        'a warnable offense: each incident earns a formal warning in your '
+        'inbox, and three warnings result in a ban. Deliberately passing '
+        'someone else’s work off as your own can be an immediate ban. '
+        'Submissions are checked against the well-known character '
+        'repositories, and uncredited matches are held for a human moderator '
+        'to review.',
   ),
   StoopPolicySection(
     'Your data & privacy',

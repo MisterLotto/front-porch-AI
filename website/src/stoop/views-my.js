@@ -84,6 +84,7 @@
     var nameIn = el('input', { type: 'text', maxlength: '80', placeholder: 'Card name' });
     var summaryIn = el('textarea', { class: 'hub-textarea', rows: '2', maxlength: '280', placeholder: 'One or two lines that sell the character (required)' });
     var tagsIn = el('input', { type: 'text', placeholder: 'Comma-separated tags, e.g. fantasy, slow-burn' });
+    var creatorIn = el('input', { type: 'text', maxlength: '120', placeholder: 'Leave blank if this is your own work' });
     var nsfwIn = el('input', { type: 'checkbox' });
     var changelogIn = el('textarea', { class: 'hub-textarea', rows: '2', maxlength: '500', placeholder: updateId ? 'What changed in this version?' : 'Anything reviewers should know? (optional)' });
     var errBox = el('p', { class: 'hub-form-err', role: 'alert' });
@@ -107,6 +108,13 @@
         parsed = res;
         var card = res.card || {};
         if (!nameIn.value) nameIn.value = card.name || '';
+        // Card files often carry the author in their V2 `creator` field —
+        // prefill the credit when it isn't the signed-in user's own handle.
+        var embedded = typeof card.creator === 'string' ? card.creator.trim() : '';
+        var myName = (Api.state.user && Api.state.user.displayName) || '';
+        if (!creatorIn.value && embedded && embedded.toLowerCase() !== myName.toLowerCase()) {
+          creatorIn.value = embedded;
+        }
         fileInfo.textContent = f.name + ' · ' + (res.type === 'GROUP' ? 'Group cast ('
           + ((card.raw_member_data || card.members || []).length) + ' members)' : 'Solo character');
         preview.replaceChildren();
@@ -156,6 +164,8 @@
         tags: tags,
         card: parsed.card,
         changelog: changelogIn.value.trim() || (updateId ? 'Updated' : 'Initial upload'),
+        // Attribution ('' = own work; on update, '' clears an old credit).
+        originalCreator: creatorIn.value.trim(),
       };
       setError('');
       submitBtn.disabled = true;
@@ -212,12 +222,26 @@
         el('label', { class: 'hub-field' }, [el('span', null, 'Name'), nameIn]),
         el('label', { class: 'hub-field' }, [el('span', null, 'Summary'), summaryIn]),
         el('label', { class: 'hub-field' }, [el('span', null, 'Tags'), tagsIn]),
+        el('label', { class: 'hub-field' }, [
+          el('span', null, 'Original creator (optional)'),
+          creatorIn,
+          el('span', { class: 'hub-dim hub-small' },
+            'Sharing someone else\u2019s character? Credit them here \u2014 the card will show \u201ccreated by \u2026\u201d. The AUP requires this for reposts.'),
+        ]),
         el('label', { class: 'hub-aup-check' }, [nsfwIn, el('span', null, 'This card is NSFW (mislabeling is an AUP violation)')]),
         el('label', { class: 'hub-field' }, [el('span', null, updateId ? 'Changelog' : 'Note to reviewers'), changelogIn]),
         errBox,
         submitBtn,
       ]),
     ]));
+
+    // Update mode: pull the post's current credit so re-publishing keeps it
+    // unless the field is deliberately cleared.
+    if (updateId) {
+      Api.cardDetail(updateId).then(function (d) {
+        if (!creatorIn.value && d && d.originalCreator) creatorIn.value = d.originalCreator;
+      }).catch(function () { /* prefill only — the form still works without it */ });
+    }
   }
 
   window.Stoop.viewsMy = {

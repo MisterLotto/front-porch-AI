@@ -343,6 +343,7 @@
 .hub-detail-badges { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .hub-detail-name { color: var(--cream); font-size: clamp(1.6rem, 3vw, 2.2rem); margin-bottom: 4px; }
 .hub-detail-creator { display: inline-block; color: var(--teal-hi); font-size: 0.94rem; margin-bottom: 12px; }
+.hub-detail-origcreator { font-style: italic; color: var(--faint); font-size: 0.9rem; margin: -8px 0 12px; }
 .hub-detail-summary { color: var(--cream-2); margin-bottom: 14px; }
 .hub-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .hub-tag {

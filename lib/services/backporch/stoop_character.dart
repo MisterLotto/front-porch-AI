@@ -24,6 +24,11 @@ class StoopCharacter {
   /// The moderator's note when [status] is `REJECTED`/`TAKEN_DOWN`.
   final String? rejectionNote;
   final String summary;
+
+  /// Attribution: who originally made this character, when the uploader isn't
+  /// the author. Null = the uploader's own work. Prefilled into the update
+  /// flow so re-publishing never silently drops the credit.
+  final String? originalCreator;
   final int version;
   final int downloadCount;
   final String? primaryAssetId;
@@ -40,6 +45,7 @@ class StoopCharacter {
     required this.status,
     required this.rejectionNote,
     required this.summary,
+    this.originalCreator,
     required this.version,
     required this.downloadCount,
     required this.primaryAssetId,
@@ -58,6 +64,10 @@ class StoopCharacter {
     status: json['status'] as String? ?? 'PENDING',
     rejectionNote: json['rejectionNote'] as String?,
     summary: json['summary'] as String? ?? '',
+    originalCreator:
+        (json['originalCreator'] as String?)?.trim().isNotEmpty == true
+        ? (json['originalCreator'] as String).trim()
+        : null,
     version: (json['version'] as num?)?.toInt() ?? 1,
     downloadCount: (json['downloadCount'] as num?)?.toInt() ?? 0,
     primaryAssetId: json['primaryAssetId'] as String?,

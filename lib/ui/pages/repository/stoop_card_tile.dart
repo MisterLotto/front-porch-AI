@@ -104,9 +104,14 @@ class _StoopCardTileState extends State<StoopCardTile> {
                           children: [
                             Expanded(
                               child: Text(
-                                card.creator != null
-                                    ? '@${card.creator!.displayName}'
-                                    : '',
+                                // Uploader, plus the credited original author
+                                // when the card is an attributed repost.
+                                [
+                                  if (card.creator != null)
+                                    '@${card.creator!.displayName}',
+                                  if (card.originalCreator != null)
+                                    '✎ ${card.originalCreator}',
+                                ].join(' · '),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(

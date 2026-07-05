@@ -162,6 +162,7 @@ class _StoopHomeViewState extends State<StoopHomeView> {
           updateCharacter: saved,
           updateStoopId: c.id,
           initialNsfw: c.nsfw,
+          initialOriginalCreator: c.originalCreator,
         ),
       ),
     );
@@ -231,6 +232,7 @@ class _StoopHomeViewState extends State<StoopHomeView> {
           updateGroup: saved,
           updateStoopId: c.id,
           initialNsfw: c.nsfw,
+          initialOriginalCreator: c.originalCreator,
         ),
       ),
     );

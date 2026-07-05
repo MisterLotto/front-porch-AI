@@ -1402,6 +1402,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .stoop-detail-art { width: 140px; flex: none; }
 .stoop-detail-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .stoop-detail-info h3 { margin: 0; }
+.stoop-original-creator { font-style: italic; font-size: 13px; }
 .stoop-detail-meta { display: flex; gap: 12px; font-size: 13px; }
 .stoop-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 .stoop-vote { display: inline-flex; align-items: center; gap: 6px; }

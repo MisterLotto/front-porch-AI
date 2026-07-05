@@ -445,6 +445,24 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                           ),
                         ),
                       ),
+                    // Attribution: uploader ≠ author ("@handle · created by X").
+                    if (d.originalCreator != null)
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: Text(
+                            '${d.creator != null ? '· ' : ''}created by '
+                            '${d.originalCreator}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontStyle: FontStyle.italic,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
                     const SizedBox(width: 12),
                     Icon(
                       Icons.download_rounded,

@@ -42,7 +42,9 @@
             card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
           ]),
           el('h2', { class: 'hub-pickhero-name' }, card.name),
-          card.creator ? el('div', { class: 'hub-pickhero-creator' }, 'by ' + card.creator.displayName) : null,
+          (card.creator || card.originalCreator) ? el('div', { class: 'hub-pickhero-creator' },
+            (card.creator ? 'by ' + card.creator.displayName : '')
+            + (card.originalCreator ? (card.creator ? ' · ' : '') + 'created by ' + card.originalCreator : '')) : null,
           el('p', { class: 'hub-pickhero-summary' }, card.summary || ''),
           el('div', { class: 'hub-pickhero-foot' }, [
             ui.statsSpan(card),

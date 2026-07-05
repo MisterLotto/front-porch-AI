@@ -108,6 +108,11 @@ export function StoopCardPage() {
               by {detail.creator.displayName}
             </Link>
           )}
+          {detail.originalCreator && (
+            <span className="muted stoop-original-creator">
+              {detail.creator ? ' · ' : ''}created by {detail.originalCreator}
+            </span>
+          )}
           <p className="muted">{detail.summary}</p>
           <div className="stoop-detail-meta muted">
             <span>⬇ {detail.downloadCount}</span>

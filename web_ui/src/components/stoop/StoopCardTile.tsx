@@ -68,6 +68,11 @@ export function StoopCardTile({ card }: { card: StoopCard }) {
             <span title="Score">▲ {card.score}</span>
             <span title="Downloads">⬇ {card.downloadCount}</span>
             {card.creator && <span className="muted">{card.creator.displayName}</span>}
+            {card.originalCreator && (
+              <span className="muted" title="Original creator (credited repost)">
+                ✎ {card.originalCreator}
+              </span>
+            )}
           </div>
         </div>
       </button>

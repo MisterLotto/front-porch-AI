@@ -31,6 +31,11 @@ export interface StoopCard {
   downloadCount: number;
   modPick: boolean;
   creator: StoopCreatorRef | null;
+  /**
+   * Attribution: who originally made this character, when the uploader isn't
+   * the author. Null/absent = the uploader's own work.
+   */
+  originalCreator?: string | null;
   primaryAssetId: string | null;
   tokenCount: number | null;
 }

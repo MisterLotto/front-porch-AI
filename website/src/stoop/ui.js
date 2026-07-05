@@ -163,7 +163,9 @@
       el('div', { class: 'hub-tile-art' }, [avatarImg(card.primaryAssetId, card.name, 'hub-tile-img'), badges]),
       el('div', { class: 'hub-tile-body' }, [
         el('div', { class: 'hub-tile-name' }, card.name),
-        el('div', { class: 'hub-tile-creator' }, card.creator ? 'by ' + card.creator.displayName : ''),
+        el('div', { class: 'hub-tile-creator' },
+        (card.creator ? 'by ' + card.creator.displayName : '')
+        + (card.originalCreator ? (card.creator ? ' · ' : '') + '✎ ' + card.originalCreator : '')),
         el('p', { class: 'hub-tile-summary' }, card.summary || ''),
         el('div', { class: 'hub-tile-foot' }, [
           statsSpan(card),
