@@ -20,9 +20,8 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
 import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 
 /// Plain (non-ChangeNotifier) domain service owning lorebook keyword scanning,
@@ -38,78 +37,72 @@ import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 /// effects are stored on the model but engine support is a later phase.
 ///
 /// The scanner mutates entries in-place; it owns no separate trigger map.
-/// Cross-state (group vs 1:1 characters, world lookup) is supplied via the
-/// three callbacks at construction, which keeps the service testable in
+/// The entry universe (group book + group worlds + member/1:1 books +
+/// attached worlds) comes from the shared [collectLoreEntryRefs] enumerator
+/// via the [getEntryRefs] callback, which keeps the service testable in
 /// isolation and preserves exact 1:1/group parity: scan/reset always process
-/// whatever characters the callback provides (all group members in group
-/// mode, the single active character in 1:1).
+/// whatever the callback yields. The callback MUST yield live instances
+/// (ChatService's cached group book, live World objects) — trigger state on
+/// a fresh parse is invisible to injection.
 ///
 /// The "keep reset blocks in sync" call sites in ChatService (startNewChat,
 /// setActive*, _loadLastSession, setActiveGroup, ext-seed, delete, fork,
 /// regen/swipe) all route through [resetLorebookTriggerState].
 class LorebookScanner {
   final VoidCallback onNotify;
-  final List<CharacterCard> Function() getLoreCharacters;
-  final World? Function(String name) resolveWorld;
+  final List<LoreEntryRef> Function() getEntryRefs;
   final Random _rng;
 
   LorebookScanner({
     required this.onNotify,
-    required this.getLoreCharacters,
-    required this.resolveWorld,
+    required this.getEntryRefs,
     Random? rng,
   }) : _rng = rng ?? Random();
 
-  /// Run [visit] over every lorebook entry list in the current context:
-  /// each character's inline lorebook plus each of their attached worlds.
-  void _forEachEntryList(void Function(List<LorebookEntry> entries) visit) {
-    for (final ch in getLoreCharacters()) {
-      if (ch.lorebook != null) visit(ch.lorebook!.entries);
-      for (final worldName in ch.worldNames) {
-        final world = resolveWorld(worldName);
-        if (world != null) visit(world.lorebook.entries);
-      }
-    }
+  /// Distinct live entries in the current context. A world attached both at
+  /// group level and by a member yields the same live objects twice —
+  /// identity-dedup so a probability gate can never roll twice per scan.
+  Iterable<LorebookEntry> _distinctEntries() {
+    final seen = <LorebookEntry>{};
+    return [
+      for (final ref in getEntryRefs())
+        if (seen.add(ref.entry)) ref.entry,
+    ];
   }
 
-  /// Scan the given text against relevant lorebooks for current context
-  /// (group members or the active 1:1 char + their attached worlds).
+  /// Scan the given text against every lorebook in the current context.
   /// On a hit that passes the secondary-logic and probability gates:
   /// isTriggered=true, remainingDepth=stickyDepth. Notifies on any change.
   void scanLorebook(String text) {
-    if (getLoreCharacters().isEmpty) return;
-
     bool changed = false;
-    _forEachEntryList((entries) {
-      for (final entry in entries) {
-        if (!entry.enabled) continue;
+    for (final entry in _distinctEntries()) {
+      if (!entry.enabled) continue;
 
-        bool matches(String key) => keyMatchesText(
-              key,
-              text,
-              caseSensitive: entry.caseSensitive ?? false,
-              matchWholeWords: entry.matchWholeWords,
-              forceRegex: entry.useRegex,
-            );
+      bool matches(String key) => keyMatchesText(
+            key,
+            text,
+            caseSensitive: entry.caseSensitive ?? false,
+            matchWholeWords: entry.matchWholeWords,
+            forceRegex: entry.useRegex,
+          );
 
-        if (!entry.keys.any(matches)) continue;
-        if (!secondaryLogicSatisfied(entry, matches)) continue;
+      if (!entry.keys.any(matches)) continue;
+      if (!secondaryLogicSatisfied(entry, matches)) continue;
 
-        // Probability gate: rolled only when the entry is not already
-        // active — an active (sticky) entry refreshes without re-rolling.
-        if (!entry.isTriggered &&
-            entry.useProbability &&
-            entry.probability < 100) {
-          if (_rng.nextInt(100) >= entry.probability) continue;
-        }
-
-        if (!entry.isTriggered) {
-          entry.isTriggered = true;
-          changed = true;
-        }
-        entry.remainingDepth = entry.stickyDepth;
+      // Probability gate: rolled only when the entry is not already
+      // active — an active (sticky) entry refreshes without re-rolling.
+      if (!entry.isTriggered &&
+          entry.useProbability &&
+          entry.probability < 100) {
+        if (_rng.nextInt(100) >= entry.probability) continue;
       }
-    });
+
+      if (!entry.isTriggered) {
+        entry.isTriggered = true;
+        changed = true;
+      }
+      entry.remainingDepth = entry.stickyDepth;
+    }
 
     if (changed) {
       onNotify();
@@ -145,17 +138,15 @@ class LorebookScanner {
   }
 
   /// Reset lorebook trigger state (isTriggered=false + remainingDepth=0) for
-  /// all non-constant entries on the current characters + their attached
-  /// world lorebooks. Constant entries are skipped (always active if
+  /// all non-constant entries in the current context (group book + worlds +
+  /// character books). Constant entries are skipped (always active if
   /// enabled). No notify — callers drive subsequent UI updates.
   void resetLorebookTriggerState() {
-    _forEachEntryList((entries) {
-      for (final entry in entries) {
-        if (!entry.constant) {
-          entry.isTriggered = false;
-          entry.remainingDepth = 0;
-        }
+    for (final entry in _distinctEntries()) {
+      if (!entry.constant) {
+        entry.isTriggered = false;
+        entry.remainingDepth = 0;
       }
-    });
+    }
   }
 }

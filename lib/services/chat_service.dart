@@ -62,6 +62,7 @@ import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/chat/expression_classifier.dart'; // leaf for ExpressionService (post-extraction)
 import 'package:front_porch_ai/services/chat/time_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
+import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
 import 'package:front_porch_ai/services/chat/lorebook_scanner.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/author_note_builder.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
@@ -1328,64 +1329,16 @@ class ChatService extends ChangeNotifier {
   ///
   /// This is intended for UI display (e.g. sidebar) to show what lore is currently "in play".
   List<LorebookEntry> getActiveGroupLoreEntries() {
-    final result = <LorebookEntry>[];
-    if (_activeGroup == null) return result;
-
-    final inherit = _activeGroup!.inheritCharacterLorebooks;
-
-    // 1. Group-level lorebook
-    if (_activeGroup!.groupLorebook.isNotEmpty) {
-      try {
-        final json = jsonDecode(_activeGroup!.groupLorebook);
-        final gl = Lorebook.fromJson(json as Map<String, dynamic>);
-        result.addAll(
-          gl.entries.where((e) => e.enabled && (e.isTriggered || e.constant)),
-        );
-      } catch (_) {}
-    }
-
-    // 2. Group-attached worlds
-    for (final wid in _activeGroup!.worldIds) {
-      final world = _worldRepository.worlds
-          .where((w) => w.name == wid)
-          .firstOrNull;
-      if (world != null) {
-        result.addAll(
-          world.lorebook.entries.where(
-            (e) => e.enabled && (e.isTriggered || e.constant),
-          ),
-        );
-      }
-    }
-
-    // 3. Per-character (and their worlds) if inheriting
-    if (inherit) {
-      for (final ch in _groupCharacters) {
-        if (ch.lorebook != null) {
-          result.addAll(
-            ch.lorebook!.entries.where(
-              (e) => e.enabled && (e.isTriggered || e.constant),
-            ),
-          );
-        }
-        for (final wName in ch.worldNames) {
-          final world = _worldRepository.worlds
-              .where((w) => w.name == wName)
-              .firstOrNull;
-          if (world != null) {
-            result.addAll(
-              world.lorebook.entries.where(
-                (e) => e.enabled && (e.isTriggered || e.constant),
-              ),
-            );
-          }
-        }
-      }
-    }
-
-    // Deduplicate by content to avoid showing the exact same lore text multiple times
+    if (_activeGroup == null) return const [];
+    // Deduplicate by content to avoid showing the exact same lore text twice.
     final seen = <String>{};
-    return result.where((e) => seen.add(e.content)).toList();
+    return [
+      for (final ref in _collectLoreRefs())
+        if (ref.entry.enabled &&
+            (ref.entry.isTriggered || ref.entry.constant) &&
+            seen.add(ref.entry.content))
+          ref.entry,
+    ];
   }
 
   // RAG settings for the active group (stored in the hidden checkpoint, no DB schema change)
@@ -1534,33 +1487,71 @@ class ChatService extends ChangeNotifier {
   );
 
   // ── Lorebook scanner (extracted to LorebookScanner) ────────────────────────
-  // Keyword match (_matchKeyword with raw+concat fix), scan (per-char + worlds,
-  // set isTriggered + remaining=sticky), decrement (post-AI pre-set only),
-  // reset of non-const trigger state live in _lorebookScanner (plain class).
-  // ChatService owns via late final + thin delegations at *all* call sites.
-  // getActiveGroupLoreEntries + _buildLorebookContext (injection text) + preAi
-  // snapshot stay in god (per plan; lorebook injection text / full context
-  // building kept thin/stayed in god for step8).
-  // 0 new god private _ methods.
-  // 3 granular cbs (onNotify + getLoreCharacters for group/1:1 cards + resolveWorld)
-  // to access live _groupCharacters/_activeCharacter and _worldRepository without
-  // whole-parent or cycles (mirrors nsfw group scalars precedent; testable via
-  // live closures in createTestLorebookScanner; aug only passive/qualified).
-  // 1:1 vs group parity: scanner processes whatever chars cb provides (all group
-  // members + their worlds for group; single for 1:1); depth per-entry.
-  // Reset hygiene: resetLorebookTriggerState() called from every keep-sync site
-  // (startNewChat 1:1+group/ext+non-ext, setActive*, _load empty/0-session, setActiveGroup defensive+post, etc);
-  // (see CLAUDE.md keep-sync + incomplete zeroing + buffer removal complete; aug only qualified passive).
+  // Keyword scan (set isTriggered + remaining=sticky), decrement (post-AI
+  // pre-set only), and reset of non-const trigger state live in
+  // _lorebookScanner (plain class). ChatService owns via late final + thin
+  // delegations at *all* call sites.
+  // The entry universe comes from ONE enumerator: _collectLoreRefs →
+  // collectLoreEntryRefs (group book + group worlds + member/1:1 books +
+  // attached worlds). Scanning always covers everything (inherit=true);
+  // the group's inheritCharacterLorebooks flag only filters injection and
+  // the sidebar (getActiveGroupLoreEntries), matching prior behavior.
+  // 1:1 vs group parity: scanner processes whatever the enumerator yields.
+  // Reset hygiene: resetLorebookTriggerState() called from every keep-sync
+  // site (startNewChat 1:1+group/ext+non-ext, setActive*, _load empty/
+  // 0-session, setActiveGroup defensive+post, etc).
   late final _lorebookScanner = LorebookScanner(
     onNotify: notifyListeners,
-    getLoreCharacters: () => _activeGroup != null
-        ? _groupCharacters
-        : (_activeCharacter != null
-              ? [_activeCharacter!]
-              : const <CharacterCard>[]),
-    resolveWorld: (name) =>
-        _worldRepository.worlds.where((w) => w.name == name).firstOrNull,
+    getEntryRefs: () => _collectLoreRefs(inheritOverride: true),
   );
+
+  // The group lorebook is stored as a JSON string on the group row. Parse it
+  // ONCE and keep the live instance — the scanner writes trigger state onto
+  // these entry objects, so a fresh parse per read (the pre-Phase-2 behavior)
+  // silently discarded every keyword trigger and left group books constant-only.
+  // String-compare invalidation: editing the book in group settings replaces
+  // the JSON string, which re-parses (and intentionally clears trigger state,
+  // same as editing semantics elsewhere).
+  Lorebook? _cachedGroupBook;
+  String? _cachedGroupBookJson;
+  Lorebook? get _activeGroupLorebook {
+    final raw = _activeGroup?.groupLorebook ?? '';
+    if (raw.isEmpty) {
+      _cachedGroupBook = null;
+      _cachedGroupBookJson = null;
+      return null;
+    }
+    if (_cachedGroupBookJson != raw) {
+      try {
+        _cachedGroupBook =
+            Lorebook.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      } catch (_) {
+        _cachedGroupBook = Lorebook(entries: []);
+      }
+      _cachedGroupBookJson = raw;
+    }
+    return _cachedGroupBook;
+  }
+
+  /// The ONE lore-entry enumerator (replaces the five duplicated collection
+  /// loops in generation/impersonate/sidebar/pre-AI-snapshot/scanner).
+  /// [inheritOverride] forces member books in for scanning/reset; injection
+  /// and sidebar pass null to honor the group's inherit flag.
+  List<LoreEntryRef> _collectLoreRefs({bool? inheritOverride}) {
+    return collectLoreEntryRefs(
+      characters: _activeGroup != null
+          ? _groupCharacters
+          : (_activeCharacter != null
+                ? [_activeCharacter!]
+                : const <CharacterCard>[]),
+      groupLorebook: _activeGroupLorebook,
+      groupWorldNames: _activeGroup?.worldIds ?? const [],
+      resolveWorld: (name) =>
+          _worldRepository.worlds.where((w) => w.name == name).firstOrNull,
+      inherit:
+          inheritOverride ?? (_activeGroup?.inheritCharacterLorebooks ?? true),
+    );
+  }
 
   /// Central macro resolver for prompt template expansion.
   late final _macroResolver = MacroResolver();

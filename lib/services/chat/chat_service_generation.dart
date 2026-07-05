@@ -137,63 +137,16 @@ extension ChatServiceGeneration on ChatService {
             '\n\n[Voice Call Mode] ${_storageService.sttSettings.callSystemPrompt}';
       }
 
-      // Build Lorebook content (group + per-character, respecting inherit + group worlds)
+      // Build Lorebook content via the shared enumerator (group book + group
+      // worlds + member/1:1 books + worlds, honoring the inherit flag).
       String loreContent = '';
       final activeLoreStrings = <String>{}; // Set for deduplication
-
-      final inherit = _activeGroup?.inheritCharacterLorebooks ?? true;
-
-      // Group-level lorebook (highest priority)
-      if (_activeGroup != null && _activeGroup!.groupLorebook.isNotEmpty) {
-        try {
-          final json = jsonDecode(_activeGroup!.groupLorebook);
-          final gl = Lorebook.fromJson(json as Map<String, dynamic>);
-          final active = gl.entries.where(
-            (e) => e.enabled && (e.isTriggered || e.constant),
-          );
-          activeLoreStrings.addAll(active.map((e) => e.injectableContent));
-        } catch (_) {}
-      }
-
-      // Group-level attached worlds
-      if (_activeGroup != null) {
-        for (final wid in _activeGroup!.worldIds) {
-          final world = _worldRepository.worlds
-              .where((w) => w.name == wid)
-              .firstOrNull;
-          if (world == null) continue;
-          final active = world.lorebook.entries.where(
-            (e) => e.enabled && (e.isTriggered || e.constant),
-          );
-          activeLoreStrings.addAll(active.map((e) => e.injectableContent));
+      for (final ref in _collectLoreRefs()) {
+        final e = ref.entry;
+        if (e.enabled && (e.isTriggered || e.constant)) {
+          activeLoreStrings.add(e.injectableContent);
         }
       }
-
-      // Per-character (only if inheriting or no group)
-      if (inherit || _activeGroup == null) {
-        final loreCharacters = _activeGroup != null
-            ? _groupCharacters
-            : [_activeCharacter!];
-        for (final ch in loreCharacters) {
-          if (ch.lorebook != null) {
-            final activeEntries = ch.lorebook!.entries.where(
-              (e) => e.enabled && (e.isTriggered || e.constant),
-            );
-            activeLoreStrings.addAll(activeEntries.map((e) => e.injectableContent));
-          }
-          for (final worldName in ch.worldNames) {
-            final world = _worldRepository.worlds
-                .where((w) => w.name == worldName)
-                .firstOrNull;
-            if (world == null) continue;
-            final activeWorldEntries = world.lorebook.entries.where(
-              (e) => e.enabled && (e.isTriggered || e.constant),
-            );
-            activeLoreStrings.addAll(activeWorldEntries.map((e) => e.injectableContent));
-          }
-        }
-      }
-
       if (activeLoreStrings.isNotEmpty) {
         loreContent = "Context Info:\n${activeLoreStrings.join('\n')}\n";
       }
@@ -1206,28 +1159,11 @@ extension ChatServiceGeneration on ChatService {
         // Snapshot which entries were already triggered before scanning the AI response.
         // We will only decrement those — newly AI-triggered entries must keep their
         // full depth budget so they are visible on the next user turn.
-        final preAiTriggered = <LorebookEntry>{};
-        final charactersForSnapshot = _activeGroup != null
-            ? _groupCharacters
-            : (_activeCharacter != null
-                  ? [_activeCharacter!]
-                  : <CharacterCard>[]);
-        for (final ch in charactersForSnapshot) {
-          if (ch.lorebook != null) {
-            for (final e in ch.lorebook!.entries) {
-              if (e.isTriggered && !e.constant) preAiTriggered.add(e);
-            }
-          }
-          for (final worldName in ch.worldNames) {
-            final world = _worldRepository.worlds
-                .where((w) => w.name == worldName)
-                .firstOrNull;
-            if (world == null) continue;
-            for (final e in world.lorebook.entries) {
-              if (e.isTriggered && !e.constant) preAiTriggered.add(e);
-            }
-          }
-        }
+        // Covers the full scanned universe (incl. group book + group worlds).
+        final preAiTriggered = <LorebookEntry>{
+          for (final ref in _collectLoreRefs(inheritOverride: true))
+            if (ref.entry.isTriggered && !ref.entry.constant) ref.entry,
+        };
 
         if (finalResponse.isNotEmpty) {
           _lorebookScanner.scanLorebook(finalResponse);

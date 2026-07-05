@@ -77,65 +77,17 @@ extension ChatServiceImpersonate on ChatService {
         }
       }
 
-      // Lorebook (group + per-character, respecting inherit flag and group worlds)
+      // Lorebook via the shared enumerator (group book + group worlds +
+      // member/1:1 books + worlds, honoring the inherit flag). Read-only:
+      // impersonation never scans or mutates trigger state.
       String loreContent = '';
       final activeLoreStrings = <String>{}; // Set for deduplication
-
-      final inherit = _activeGroup?.inheritCharacterLorebooks ?? true;
-
-      // Group-level lorebook (highest priority when present)
-      if (_activeGroup != null && _activeGroup!.groupLorebook.isNotEmpty) {
-        try {
-          final json = jsonDecode(_activeGroup!.groupLorebook);
-          final gl = Lorebook.fromJson(json as Map<String, dynamic>);
-          final active = gl.entries.where(
-            (e) => e.enabled && (e.isTriggered || e.constant),
-          );
-          activeLoreStrings.addAll(active.map((e) => e.injectableContent));
-        } catch (_) {}
-      }
-
-      // Group-level worlds (always included if attached to the group)
-      if (_activeGroup != null) {
-        for (final wid in _activeGroup!.worldIds) {
-          final world = _worldRepository.worlds
-              .where((w) => w.name == wid)
-              .firstOrNull;
-          if (world == null) continue;
-          final active = world.lorebook.entries.where(
-            (e) => e.enabled && (e.isTriggered || e.constant),
-          );
-          activeLoreStrings.addAll(active.map((e) => e.injectableContent));
+      for (final ref in _collectLoreRefs()) {
+        final e = ref.entry;
+        if (e.enabled && (e.isTriggered || e.constant)) {
+          activeLoreStrings.add(e.injectableContent);
         }
       }
-
-      // Per-character lore and their worlds (only if inherit is true or no group)
-      if (inherit || _activeGroup == null) {
-        final loreCharacters = _activeGroup != null
-            ? _groupCharacters
-            : (_activeCharacter != null
-                  ? [_activeCharacter!]
-                  : <CharacterCard>[]);
-        for (final ch in loreCharacters) {
-          if (ch.lorebook != null) {
-            final activeEntries = ch.lorebook!.entries.where(
-              (e) => e.enabled && (e.isTriggered || e.constant),
-            );
-            activeLoreStrings.addAll(activeEntries.map((e) => e.injectableContent));
-          }
-          for (final worldName in ch.worldNames) {
-            final world = _worldRepository.worlds
-                .where((w) => w.name == worldName)
-                .firstOrNull;
-            if (world == null) continue;
-            final activeWorldEntries = world.lorebook.entries.where(
-              (e) => e.enabled && (e.isTriggered || e.constant),
-            );
-            activeLoreStrings.addAll(activeWorldEntries.map((e) => e.injectableContent));
-          }
-        }
-      }
-
       if (activeLoreStrings.isNotEmpty) {
         loreContent = "Context Info:\n${activeLoreStrings.join('\n')}\n";
       }
