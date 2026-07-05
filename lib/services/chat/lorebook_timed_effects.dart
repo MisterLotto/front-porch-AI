@@ -63,6 +63,20 @@ class LorebookTimedEffects {
     return c != null && chatLength >= c.start && chatLength < c.end;
   }
 
+  /// Messages of sticky remaining (0 when not sticky-active) — sidebar pill.
+  int stickyRemaining(LorebookEntry entry, int chatLength) {
+    final s = _sticky[loreEntryHash(entry)];
+    if (s == null || chatLength < s.start || chatLength >= s.end) return 0;
+    return s.end - chatLength;
+  }
+
+  /// Messages of cooldown remaining (0 when not cooling) — sidebar pill.
+  int cooldownRemaining(LorebookEntry entry, int chatLength) {
+    final c = _cooldown[loreEntryHash(entry)];
+    if (c == null || chatLength < c.start || chatLength >= c.end) return 0;
+    return c.end - chatLength;
+  }
+
   /// Record effects for a NEWLY activated entry. Re-matches never refresh a
   /// running sticky timer (ST rule — the `putIfAbsent`-style guard).
   void recordActivation(LorebookEntry entry, int chatLength) {

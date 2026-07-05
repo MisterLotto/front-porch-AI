@@ -145,6 +145,8 @@ extension ChatServiceGeneration on ChatService {
         contextSize: _sessionGenSettings.resolveContextSize(_storageService),
       );
       _lastLoreOverflow = loreInjection.overflowDropped;
+      _lastLoreTokens = loreInjection.approxTokens;
+      _lastLoreBudget = loreInjection.budgetTokens;
       if (loreInjection.overflowDropped.isNotEmpty) {
         debugPrint(
           '[Lorebook] ⚠ budget overflow — dropped: '

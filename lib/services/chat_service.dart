@@ -1560,9 +1560,20 @@ class ChatService extends ChangeNotifier {
   );
 
   /// Names of lore entries dropped by the token budget on the last
-  /// generation — plumbing for the Phase 4 overflow meter/toast.
+  /// generation, plus the meter numbers the sidebar shows.
   List<String> _lastLoreOverflow = const [];
   List<String> get lastLoreOverflow => _lastLoreOverflow;
+  int _lastLoreTokens = 0;
+  int _lastLoreBudget = 0;
+  int get lastLoreTokens => _lastLoreTokens;
+  int get lastLoreBudget => _lastLoreBudget;
+
+  /// Read surface for the sidebar's sticky/cooldown countdown pills.
+  LorebookTimedEffects get loreTimedEffects => _loreTimedEffects;
+
+  /// Mutation-free "would trigger next" preview for the composer draft.
+  Set<LorebookEntry> previewLoreTriggers(String draft) =>
+      _lorebookScanner.previewTriggers(draft);
 
   /// The post-group-filter active lore set — what is ACTUALLY injected this
   /// turn. Sidebar dots and the web facade read this so they never show an

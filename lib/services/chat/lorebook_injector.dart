@@ -48,9 +48,12 @@ class LoreInjectionResult {
   final String examplesBottom;
   final List<LoreDepthEntry> depthEntries;
 
-  /// Display names of entries dropped by the token budget (debug now, the
-  /// Phase 4 overflow toast/meter later).
+  /// Display names of entries dropped by the token budget.
   final List<String> overflowDropped;
+
+  /// The effective lore budget (min of percent-of-context and the cap) this
+  /// result was built under — the sidebar meter's denominator.
+  final int budgetTokens;
 
   const LoreInjectionResult({
     this.beforeChar = '',
@@ -61,6 +64,7 @@ class LoreInjectionResult {
     this.examplesBottom = '',
     this.depthEntries = const [],
     this.overflowDropped = const [],
+    this.budgetTokens = 0,
   });
 
   /// Sync chars/4 estimate over every bucket (matches _lastPromptBudget's
@@ -215,8 +219,14 @@ class LorebookInjector {
     required int contextSize,
   }) {
     final settings = getSettings();
+    final pctBudgetEarly = (contextSize * settings.budgetPercent / 100).round();
+    final effectiveBudget = settings.budgetCap > 0
+        ? min(pctBudgetEarly, settings.budgetCap)
+        : pctBudgetEarly;
     final filtered = _groupFiltered(_activeRefs(), sessionSeed);
-    if (filtered.isEmpty) return const LoreInjectionResult();
+    if (filtered.isEmpty) {
+      return LoreInjectionResult(budgetTokens: effectiveBudget);
+    }
 
     // Fill order: sticky-active first, then by descending order — that is
     // the survival priority when the budget runs out.
@@ -228,10 +238,7 @@ class LorebookInjector {
         return b.entry.order.compareTo(a.entry.order);
       });
 
-    final pctBudget = (contextSize * settings.budgetPercent / 100).round();
-    final budget = settings.budgetCap > 0
-        ? min(pctBudget, settings.budgetCap)
-        : pctBudget;
+    final budget = effectiveBudget;
 
     final included = <LoreEntryRef>[];
     final overflow = <String>[];
@@ -302,6 +309,7 @@ class LorebookInjector {
           ),
       ],
       overflowDropped: overflow,
+      budgetTokens: effectiveBudget,
     );
   }
 }

@@ -239,6 +239,36 @@ class LorebookScanner {
     return anyActivated;
   }
 
+  /// Mutation-free dry-run: which enabled entries WOULD trigger on [draft]?
+  /// Key + secondary-logic gates only — no probability rolls, no trigger
+  /// writes, no timed-effect ticks. Powers the sidebar's live preview.
+  Set<LorebookEntry> previewTriggers(String draft) {
+    final hits = <LorebookEntry>{};
+    if (draft.trim().isEmpty) return hits;
+    for (final ref in _distinctRefs()) {
+      final entry = ref.entry;
+      if (!entry.enabled || entry.constant || entry.isTriggered) continue;
+      if (entry.delayUntilRecursion > 0) continue;
+      bool matches(String rawKey) {
+        final key = (resolveKeyMacros != null && rawKey.contains('{{'))
+            ? resolveKeyMacros!(rawKey)
+            : rawKey;
+        return keyMatchesText(
+          key,
+          draft,
+          caseSensitive: entry.caseSensitive ?? false,
+          matchWholeWords: entry.matchWholeWords,
+          forceRegex: entry.useRegex,
+        );
+      }
+
+      if (entry.keys.any(matches) && secondaryLogicSatisfied(entry, matches)) {
+        hits.add(entry);
+      }
+    }
+    return hits;
+  }
+
   /// Scan one explicit buffer against every entry, ignoring scan windows and
   /// recursion. Kept for tests and for callers that already hold the exact
   /// text.

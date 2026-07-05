@@ -241,6 +241,42 @@ void main() {
       expect(e.isTriggered, isTrue); // revived by sticky, no roll
     });
 
+    test('remaining counters feed the sidebar pills', () {
+      final e = LorebookEntry(
+        keys: const ['omen'],
+        content: 'x',
+        sticky: 3,
+        cooldown: 2,
+      );
+      final t = LorebookTimedEffects();
+      t.recordActivation(e, 5);
+      expect(t.stickyRemaining(e, 6), 2);
+      expect(t.cooldownRemaining(e, 6), 0);
+      t.tick(8, [e]); // sticky over → protected cooldown 8..10
+      expect(t.stickyRemaining(e, 8), 0);
+      expect(t.cooldownRemaining(e, 9), 1);
+    });
+
+    test('previewTriggers is a pure dry-run (no state writes)', () {
+      final e = LorebookEntry(
+        keys: const ['omen'],
+        secondaryKeys: const ['dark'],
+        content: 'x',
+      );
+      final gated = LorebookEntry(
+        keys: const ['omen'],
+        probability: 0, // preview ignores probability entirely
+        content: 'y',
+      );
+      final s = timedScannerFor([e, gated]);
+      final hits = s.scanner.previewTriggers('a dark omen rises');
+      expect(hits, containsAll([e, gated]));
+      expect(e.isTriggered, isFalse); // nothing was mutated
+      expect(gated.isTriggered, isFalse);
+      expect(s.scanner.previewTriggers('an omen'), isNot(contains(e)));
+      expect(s.scanner.previewTriggers(''), isEmpty);
+    });
+
     test('session-boundary reset clears timers', () {
       final e = LorebookEntry(keys: const ['omen'], content: 'x', sticky: 5);
       final s = timedScannerFor([e]);
