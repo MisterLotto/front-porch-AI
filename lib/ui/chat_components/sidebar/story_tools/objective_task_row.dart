@@ -18,6 +18,8 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/database/database.dart' show Objective;
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// A single objective task row — checkbox, inline-editable description,
@@ -204,22 +206,34 @@ class EditableTaskRowState extends State<EditableTaskRow> {
   }
 }
 
-/// A secondary objective ("side quest") row — text + set-as-primary and clear
-/// buttons. Extracted from the old ObjectiveSection body.
-class SecondaryObjectiveRow extends StatelessWidget {
-  final String objective;
-  final VoidCallback onPromote;
-  final VoidCallback onClear;
+/// A secondary objective ("side quest") row — goal text, task progress badge,
+/// promote / clear buttons, and an expandable task list. AI-proposed side
+/// quests come with auto-generated subtasks that drive the story, so the row
+/// surfaces them (with the same editable task rows the primary quest uses)
+/// instead of hiding them behind a bare text line.
+class SecondaryObjectiveRow extends StatefulWidget {
+  final ChatService chatService;
+  final Objective objective;
 
   const SecondaryObjectiveRow({
     super.key,
+    required this.chatService,
     required this.objective,
-    required this.onPromote,
-    required this.onClear,
   });
 
   @override
+  State<SecondaryObjectiveRow> createState() => _SecondaryObjectiveRowState();
+}
+
+class _SecondaryObjectiveRowState extends State<SecondaryObjectiveRow> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final obj = widget.objective;
+    final tasks = widget.chatService.tasksForObjective(obj);
+    final completedCount = tasks.where((t) => t['completed'] == true).length;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(6),
@@ -227,45 +241,91 @@ class SecondaryObjectiveRow extends StatelessWidget {
         color: AppColors.surfaceContainerOf(context),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.circle_outlined,
-            size: 10,
-            color: AppColors.iconSecondary(context),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              objective,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.textPrimary(context),
-              ),
-            ),
-          ),
           InkWell(
-            onTap: onPromote,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Icon(
-                Icons.keyboard_double_arrow_up,
-                size: 14,
-                color: AppColors.taskAccentOf(context),
-              ),
+            onTap: tasks.isEmpty
+                ? null
+                : () => setState(() => _expanded = !_expanded),
+            child: Row(
+              children: [
+                Icon(
+                  tasks.isEmpty
+                      ? Icons.circle_outlined
+                      : _expanded
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_right,
+                  size: tasks.isEmpty ? 10 : 14,
+                  color: AppColors.iconSecondary(context),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    obj.objective,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                ),
+                if (tasks.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      '$completedCount/${tasks.length}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textTertiary(context),
+                      ),
+                    ),
+                  ),
+                InkWell(
+                  onTap: () => widget.chatService.promoteObjective(obj),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.keyboard_double_arrow_up,
+                      size: 14,
+                      color: AppColors.taskAccentOf(context),
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => widget.chatService.clearObjective(obj),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.close,
+                      size: 14,
+                      color: AppColors.negativeAccentOf(context),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          InkWell(
-            onTap: onClear,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Icon(
-                Icons.close,
-                size: 14,
-                color: AppColors.negativeAccentOf(context),
-              ),
-            ),
-          ),
+          if (_expanded && tasks.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...tasks.asMap().entries.map((entry) {
+              final i = entry.key;
+              final task = entry.value;
+              final completed = task['completed'] == true;
+              final isCurrent =
+                  !completed &&
+                  tasks.take(i).every((t) => t['completed'] == true);
+              return EditableTaskRow(
+                key: ValueKey('side_task_${obj.id}_$i'),
+                description: task['description'] as String,
+                completed: completed,
+                isCurrent: isCurrent,
+                onToggle: () => widget.chatService.toggleTask(obj, i),
+                onDelete: () => widget.chatService.removeTask(obj, i),
+                onEdit: (newText) =>
+                    widget.chatService.updateTask(obj, i, newText),
+              );
+            }),
+          ],
         ],
       ),
     );

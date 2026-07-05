@@ -382,6 +382,13 @@ class ChatToolsFacade {
     return _withObjective(id, (o) => _chat.clearObjective(o));
   }
 
+  /// Promote a side quest to the primary quest in place (same
+  /// [ChatService.promoteObjective] the desktop sidebar uses — keeps tasks,
+  /// demotes any existing primary).
+  Future<bool> promoteObjective(String id) {
+    return _withObjective(id, (o) => _chat.promoteObjective(o));
+  }
+
   void checkCompletion() {
     _chat.forceCheckCompletion();
     _notify();

@@ -716,6 +716,13 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .task-item input { width: auto; }
 .task-item span { flex: 1; }
 .task-item span.done { text-decoration: line-through; color: var(--muted); }
+/* Side quests (secondary/autonomous objectives) under the primary quest. */
+.side-quest-label { margin-top: 8px; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.7rem; }
+.side-quest {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; margin-top: 6px;
+}
+.side-quest .tool-row button { font-size: 0.8rem; padding: 4px 8px; }
 
 /* ── Creation wizard (step indicator + body + nav) ────────────── */
 .wizard { display: flex; flex-direction: column; }

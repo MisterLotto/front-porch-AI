@@ -79,7 +79,9 @@ extension ChatServiceObjectives on ChatService {
   /// Autonomous objectives proposed by the character (via the realism "proposed_objective"
   /// evals) pass true so that the character's self-generated goals come with concrete
   /// sequential tasks. This makes the AI-driven objectives feel organic and like something
-  /// the character is actively striving to accomplish.
+  /// the character is actively striving to accomplish. The evals also claim the
+  /// main-quest slot (isPrimary: true) when the character has no primary yet, so an
+  /// autonomous goal becomes a real overarching quest instead of an ambient side goal.
   Future<void> setObjective(
     String goal, {
     bool isPrimary = true,
@@ -168,7 +170,8 @@ extension ChatServiceObjectives on ChatService {
           unawaited(
             generateObjectiveTasks(
               addedObj,
-              taskCount: 3,
+              // A main quest gets a full arc; a side quest stays a short beat.
+              taskCount: isPrimary ? 5 : 3,
               nsfw: false,
             ), // step 11 thin (full in objective_proposal)
           );
@@ -178,6 +181,36 @@ extension ChatServiceObjectives on ChatService {
         // User can always tap "Generate Tasks" manually.
       }
     }
+  }
+
+  /// Promote an existing side quest to the primary quest IN PLACE, demoting any
+  /// current primary to a side quest. Unlike calling [setObjective] with the same
+  /// text (the old promote pattern), this keeps the objective's id and its
+  /// generated task progress, and cannot leave a duplicate copy of the goal
+  /// behind as a still-active side quest.
+  Future<void> promoteObjective(Objective obj) async {
+    if (_currentSessionId == null) return;
+    final existing = await _db.getObjectivesForCharacter(
+      obj.characterId,
+      chatId: _currentSessionId,
+    );
+    for (final o in existing) {
+      if (o.active && o.isPrimary && o.id != obj.id) {
+        await _db.updateObjective(
+          ObjectivesCompanion(
+            id: drift.Value(o.id),
+            isPrimary: const drift.Value(false),
+          ),
+        );
+      }
+    }
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(obj.id),
+        isPrimary: const drift.Value(true),
+      ),
+    );
+    await _loadActiveObjectives();
   }
 
   /// Generate subtasks for the current objective using the LLM.

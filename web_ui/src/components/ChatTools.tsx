@@ -215,7 +215,7 @@ export function ChatTools({
 
       <details className="tool-section" open={checking}>
         <summary>
-          Objectives{obj ? '' : ' (none)'}
+          Objectives{obj || t.objectives.secondary.length > 0 ? '' : ' (none)'}
           {checking && <span className="obj-checking-tag"> · checking…</span>}
         </summary>
         <div className="tool-body">
@@ -267,6 +267,45 @@ export function ChatTools({
                 Set
               </button>
             </div>
+          )}
+          {t.objectives.secondary.length > 0 && (
+            <>
+              <div className="muted small side-quest-label">Side quests</div>
+              {t.objectives.secondary.map((sq) => {
+                const doneCount = sq.tasks.filter((x) => x.completed).length;
+                return (
+                  <div className="side-quest" key={sq.id}>
+                    <div className="stat-line">
+                      <strong>{sq.objective}</strong>
+                      {sq.tasks.length > 0 && <span className="muted">{doneCount}/{sq.tasks.length}</span>}
+                    </div>
+                    {sq.tasks.length > 0 && (
+                      <ul className="task-list">
+                        {sq.tasks.map((task, i) => (
+                          <li key={i}>
+                            <label className="task-item">
+                              <input
+                                type="checkbox"
+                                checked={task.completed}
+                                onChange={() => apply(api.post<ToolsState>(`/api/chat/tools/task${q}`, { action: 'toggle', id: sq.id, taskIndex: i }))}
+                              />
+                              <span className={task.completed ? 'done' : ''}>{task.description}</span>
+                              <button className="icon-btn" title="Remove" onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/task${q}`, { action: 'remove', id: sq.id, taskIndex: i }))}>🗑</button>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="tool-row">
+                      <button onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/objective${q}`, { action: 'promote', id: sq.id }))}>
+                        Make primary
+                      </button>
+                      <button onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/objective${q}`, { action: 'clear', id: sq.id }))}>Clear</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </details>

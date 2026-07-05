@@ -156,6 +156,12 @@ class WebChatToolsRoutes {
         if (!await _facade.clearObjective(id)) {
           return JsonResponse.error(404, 'Objective not found');
         }
+      case 'promote':
+        final id = body['id']?.toString();
+        if (id == null) return JsonResponse.badRequest('id is required');
+        if (!await _facade.promoteObjective(id)) {
+          return JsonResponse.error(404, 'Objective not found');
+        }
       default:
         return JsonResponse.badRequest('Unknown objective action: $action');
     }

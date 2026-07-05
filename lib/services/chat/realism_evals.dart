@@ -310,8 +310,14 @@ class RealismEvals {
         (o) => o.objective.toLowerCase() == objectiveRaw.toLowerCase(),
       );
       if (!isDuplicate) {
+        // Claim the main-quest slot when it's free: the character's self-initiated
+        // goal becomes their driving primary quest with a full task arc. When a
+        // primary already exists (user-set or an earlier autonomous quest), the
+        // proposal stays a side quest — never displace an existing main quest.
+        final becomesPrimary = getPrimaryObjective() == null;
         debugPrint(
-          '[Realism:Narrative] Autonomous objective proposed: $objectiveRaw',
+          '[Realism:Narrative] Autonomous objective proposed: $objectiveRaw '
+          '(${becomesPrimary ? "primary — main-quest slot free" : "secondary — primary exists"})',
         );
         // Pass autoGenerateTasks:true so the character's self-initiated goal gets
         // concrete subtasks (making autonomous objectives feel like real pursuits
@@ -319,7 +325,7 @@ class RealismEvals {
         // (thin delegation to god setObjective per plan for step9; full proposal logic here)
         await setObjective(
           objectiveRaw,
-          isPrimary: false,
+          isPrimary: becomesPrimary,
           autoGenerateTasks: true,
         );
       }
@@ -849,11 +855,12 @@ class RealismEvals {
       return;
     }
     final charName = getActiveCharacter()!.name;
+    final userName = getUserName();
     final primary = getPrimaryObjective();
     final oPrompt = primary != null
         ? '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primary.objective}"). Must be a significant personal, social, or narrative goal triggered by a STRONG, specific event THIS turn. NOT a trivial step, and NOT a restatement of the primary quest.\n'
               '   ⚠ Default to "none". 90% of turns should produce "none". Only propose one if $charName would literally lose sleep over it.\n'
-        : '1. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue, triggered by a strong specific event THIS turn — could be emotional (confess feelings), practical (plan a surprise), or personal (achieve something they\'ve been working toward). Default: "none".\n'
+        : '1. "proposed_objective": An OVERARCHING goal $charName independently wants to pursue — a driving want big enough to span many scenes, which will become $charName\'s main quest and be broken into concrete steps. Think "get $userName to admit their greatest fear", "win $userName\'s heart", or a personal ambition $charName has been chasing — not a one-scene errand. Triggered by a strong specific event THIS turn. Default: "none".\n'
               '   ⚠ Default to "none". 90% of turns should produce "none". Only propose one if $charName would literally lose sleep over it.\n';
     final prompt =
         'You are an autonomous story engine evaluating narrative progression for $charName.\n\n'
@@ -1013,7 +1020,7 @@ class RealismEvals {
         '   - Across scene breaks or time jumps, update to the new context.\n'
         '   - If time advanced significantly or a new day started, characters naturally shift positions.\n'
         '$arousalInstr'
-        '${primary != null ? '$objNum. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primary.objective}"). Triggered by a STRONG event THIS turn.\n   ⚠ Default to "none". 90% of turns should produce "none".\n' : '$objNum. "proposed_objective": A meaningful, emotionally-driven goal triggered by a strong event THIS turn. Default: "none". 90% of turns should produce "none".\n'}'
+        '${primary != null ? '$objNum. "proposed_objective": A meaningful, emotionally-driven goal $charName independently wants to pursue — something DISTINCT from the current Primary Quest ("${primary.objective}"). Triggered by a STRONG event THIS turn.\n   ⚠ Default to "none". 90% of turns should produce "none".\n' : '$objNum. "proposed_objective": An OVERARCHING goal $charName independently wants to pursue — a driving want big enough to span many scenes (e.g. "get $userName to admit their greatest fear"), which will become $charName\'s main quest. Triggered by a strong event THIS turn. Default: "none". 90% of turns should produce "none".\n'}'
         '$fixNum. "fixation_topic": An *intrusive* thought $charName cannot stop returning to — haunts them across scenes, not a temporary reaction. Default: "none".\n'
         '$reasonNum. "reason": One brief sentence explaining the key relationship change, or "none"\n\n'
         'Recent conversation:\n$recent\n\n'
@@ -1074,17 +1081,21 @@ class RealismEvals {
             (o) => o.objective.toLowerCase() == newObj.toLowerCase(),
           );
           if (!isDuplicate) {
+            // Same decision as the narrative path (strict oneShot vs normal parity):
+            // claim the main-quest slot when it's free, stay a side quest when a
+            // primary already exists — never displace an existing main quest.
+            final becomesPrimary = getPrimaryObjective() == null;
             debugPrint(
-              '[Realism:OneShot] Autonomous objective proposed: $newObj',
+              '[Realism:OneShot] Autonomous objective proposed: $newObj '
+              '(${becomesPrimary ? "primary — main-quest slot free" : "secondary — primary exists"})',
             );
-            // Auto objectives are strictly secondary (isPrimary = false).
             // Pass autoGenerateTasks:true so the character's self-initiated goal gets
             // concrete subtasks (making autonomous objectives feel like real pursuits
             // with steps the character can accomplish).
             // (thin delegation to god setObjective per plan for step9)
             await setObjective(
               newObj,
-              isPrimary: false,
+              isPrimary: becomesPrimary,
               autoGenerateTasks: true,
             );
           }

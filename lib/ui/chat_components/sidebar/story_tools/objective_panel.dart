@@ -430,10 +430,9 @@ class _ObjectivePanelState extends State<ObjectivePanel> {
               const SizedBox(height: 4),
               for (final sObj in secondaries)
                 SecondaryObjectiveRow(
-                  objective: sObj.objective,
-                  onPromote: () =>
-                      chatService.setObjective(sObj.objective, isPrimary: true),
-                  onClear: () => chatService.clearObjective(sObj),
+                  key: ValueKey(sObj.id),
+                  chatService: chatService,
+                  objective: sObj,
                 ),
             ],
 

@@ -404,6 +404,72 @@ void main() {
       expect(called, false);
     });
 
+    test(
+      'proposed objective claims the main-quest slot (isPrimary) when no primary exists, with auto tasks',
+      () async {
+        bool? lastIsPrimary;
+        bool? lastAutoGen;
+        final svc = createTestRealismEvals(
+          primaryFn: () => null,
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+            lastIsPrimary = isPrimary;
+            lastAutoGen = autoGenerateTasks;
+          },
+          fireFn: (p, {onChunk}) async =>
+              '{"proposed_objective":"get User to admit their greatest fear","fixation_topic":"none"}',
+        );
+        await svc.evaluateNarrativeCall();
+        expect(lastIsPrimary, true);
+        expect(lastAutoGen, true);
+      },
+    );
+
+    test(
+      'proposed objective stays a side quest when a primary already exists (never displaces)',
+      () async {
+        bool? lastIsPrimary;
+        final primary = Objective(
+          id: 'p1',
+          characterId: 'c1',
+          objective: 'existing main quest',
+          chatId: null,
+          active: true,
+          isPrimary: true,
+          injectionDepth: 3,
+          checkFrequency: 1,
+          tasks: '[]',
+          createdAt: DateTime.now(),
+        );
+        final svc = createTestRealismEvals(
+          primaryFn: () => primary,
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+            lastIsPrimary = isPrimary;
+          },
+          fireFn: (p, {onChunk}) async =>
+              '{"proposed_objective":"confess feelings","fixation_topic":"none"}',
+        );
+        await svc.evaluateNarrativeCall();
+        expect(lastIsPrimary, false);
+      },
+    );
+
+    test(
+      'oneShot proposal parity: claims the main-quest slot when free (same decision as narrative)',
+      () async {
+        bool? lastIsPrimary;
+        final svc = createTestRealismEvals(
+          primaryFn: () => null,
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+            lastIsPrimary = isPrimary;
+          },
+          fireFn: (p, {onChunk}) async =>
+              '{"relationship_delta":0,"trust_delta":0,"emotion":"neutral","emotion_intensity":"mild","posture":"none","proposed_objective":"win their trust","fixation_topic":"none","reason":"none"}',
+        );
+        await svc.evaluateOneShotCall();
+        expect(lastIsPrimary, true);
+      },
+    );
+
     test('arousal only when nsfwCooldownEnabled (in rel/emotion)', () async {
       final nsfw = NsfwService(
         getGroupInt: (_, _) => 0,
