@@ -3574,3 +3574,8 @@ Brief reason: Addressed the confirmed correctness/cleanup findings from the revi
 - **Reason:** Phase 4 of docs/design/lorebook-parity.md. Also fixes 4 found bugs: group-settings lorebook tab never persisted; two editors stripped imported ST metadata; world rename duplicated rows and orphaned attachments.
 - **Goldens:** sidebar/lorebook.dark|light.png need CI (Linux) regen — commit a8cec94 tagged [update-goldens].
 - **Commits:** 6d961cb, cd55337, 41ab380, 85b7fbb, 67002c9, 242fc0d, a8cec94, + slice 8/docs (next)
+
+## 2026-07-05 (UTC) — WebUI lorebook parity + warm-porch theming
+- **Files:** web_ui/src/styles.css (warm-porch token swap), chatTypes.ts, ChatComposer.tsx (onDraftChange), ChatPage.tsx, ChatInsight.tsx (meter/pills/preview/chat-book), NEW ChatLorebookModal.tsx + ImportLorebookWizard.tsx, LoreEntriesEditor.tsx (Advanced tier + TriSelect), WorldsPage.tsx (wizard launch, dead import helper removed); Dart: chat_facade (lore meter fields + stickyLeft/cooldownLeft + chat book in list + chatLorebookRows/setChatLorebook/lorePreview), chat_routes (3 new), world_facade.importLorebook (dryRun + 4 destinations), world_routes (/api/lorebook/import), web_server_host wiring, lorebook_json bridge (Advanced keys both ways). Rebuilt assets/web_app bundle.
+- **Reason:** WebUI ↔ Desktop parity mandate (CLAUDE.md, 2026-07-05). All additive API; /api/worlds/import untouched.
+- **Commit:** e5dc18f
