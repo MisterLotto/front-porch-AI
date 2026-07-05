@@ -1104,6 +1104,33 @@ class VoiceMediaTab extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      // Emoji burst toggle
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.celebration,
+                            size: 16,
+                            color: AppColors.textSecondary(context),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Expression Emoji Burst',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary(context),
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: storage.expressionEmojiBurst,
+                            onChanged: (val) =>
+                                storage.setExpressionEmojiBurst(val),
+                            activeTrackColor: AppColors.presetColors[4],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       // Fallback dropdown
                       Row(
                         children: [

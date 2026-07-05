@@ -27,12 +27,14 @@ class ExpressionSettings with SettingsBase {
   String _expressionDisplayMode = 'sidebar'; // 'sidebar', 'background', 'both'
   bool _expressionRerollSame = false;
   String _expressionFallback = 'neutral'; // 'neutral', 'prime', 'none', 'emoji'
+  bool _expressionEmojiBurst = false;
 
   bool get expressionEnabled => _expressionEnabled;
   String get expressionClassificationMode => _expressionClassificationMode;
   String get expressionDisplayMode => _expressionDisplayMode;
   bool get expressionRerollSame => _expressionRerollSame;
   String get expressionFallback => _expressionFallback;
+  bool get expressionEmojiBurst => _expressionEmojiBurst;
 
   void load() {
     _expressionEnabled = prefs?.getBool(k('expression_enabled')) ?? false;
@@ -44,6 +46,8 @@ class ExpressionSettings with SettingsBase {
         prefs?.getBool(k('expression_reroll_same')) ?? false;
     _expressionFallback =
         prefs?.getString(k('expression_fallback')) ?? 'neutral';
+    _expressionEmojiBurst =
+        prefs?.getBool(k('expression_emoji_burst')) ?? false;
   }
 
   Future<void> setExpressionEnabled(bool value) async {
@@ -73,6 +77,12 @@ class ExpressionSettings with SettingsBase {
   Future<void> setExpressionFallback(String value) async {
     _expressionFallback = value;
     await prefs?.setString(k('expression_fallback'), value);
+    notify();
+  }
+
+  Future<void> setExpressionEmojiBurst(bool value) async {
+    _expressionEmojiBurst = value;
+    await prefs?.setBool(k('expression_emoji_burst'), value);
     notify();
   }
 }
