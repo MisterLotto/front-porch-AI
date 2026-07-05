@@ -456,6 +456,16 @@ extension ChatServiceReprocess on ChatService {
               lastMsg.activeMetadata!['realism_state']['time_nudged'] == true;
         }
 
+        // Did we restore needs from the rejected message's OWN needs_pre_turn_vector
+        // just below? That is the accurate "needs right before this turn" baseline
+        // (always stamped: 1:1 in sendMessage pre-tick, group in the realism dance).
+        // If so, the previous-accepted-message baseline restore further down must NOT
+        // overwrite it — that snapshot's needs vector is the PREVIOUS turn's PRE-impact
+        // needs, and clobbering with it silently reverted the last accepted turn's needs
+        // deltas (e.g. a bath's +Hygiene snapping back to 0). The realism_state needs
+        // snapshot stays a fallback only for messages with no needs_pre_turn_vector.
+        bool restoredNeedsFromPreTurn = false;
+
         if (lastMsg.activeMetadata != null) {
           final bondDelta = lastMsg.activeMetadata!['bond_delta'] as int? ?? 0;
           final moodDelta = lastMsg.activeMetadata!['mood_delta'] as int? ?? 0;
@@ -506,6 +516,7 @@ extension ChatServiceReprocess on ChatService {
             _needsSimulation.restoreFromSnapshot({
               'vector': Map<String, int>.from(preTurnNeeds),
             });
+            restoredNeedsFromPreTurn = true;
             debugPrint(
               '[Realism:Regen] Restored needs vector from pre-turn snapshot on rejected message',
             );
@@ -536,7 +547,12 @@ extension ChatServiceReprocess on ChatService {
 
           // Needs simulation snapshot (clean port)
           // Guard + no enabled override: prevents stale resurrection on regen after toggle-off.
-          if (previousMessageState.containsKey('needs') &&
+          // Only fall back to the previous accepted message's realism_state needs
+          // vector when step 1 above found no needs_pre_turn_vector on the rejected
+          // message. Otherwise this would clobber the accurate pre-turn baseline with
+          // the previous turn's PRE-impact needs (the "Hygiene reverts on regen" bug).
+          if (!restoredNeedsFromPreTurn &&
+              previousMessageState.containsKey('needs') &&
               previousMessageState['needs'] is Map &&
               _needsSimEnabled) {
             final needsData = previousMessageState['needs'] as Map;
