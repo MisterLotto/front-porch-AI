@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/utils/world_colors.dart';
@@ -1222,21 +1223,46 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                       ),
                       const SizedBox(width: 12),
                       ElevatedButton.icon(
-                        onPressed: () {
+                        onPressed: () async {
                           final newWorld =
                               world ??
                               World(
                                 name: '',
                                 lorebook: Lorebook(entries: []),
                               );
-                          newWorld.name = nameController.text.trim();
+                          final newName = nameController.text.trim();
+                          // Renames must go through renameWorld so the row is
+                          // updated in place (no duplicate) and every
+                          // character/group attachment follows the new name.
+                          if (world != null && newName != world.name) {
+                            try {
+                              await repo.renameWorld(
+                                world,
+                                newName,
+                                groupRepo: Provider.of<GroupChatRepository>(
+                                  context,
+                                  listen: false,
+                                ),
+                              );
+                            } on StateError catch (e) {
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(e.message)),
+                                );
+                              }
+                              return;
+                            }
+                          } else {
+                            newWorld.name = newName;
+                          }
                           newWorld.description = descController.text.trim();
 
                           // Update lorebook entries
                           newWorld.lorebook.entries.clear();
                           newWorld.lorebook.entries.addAll(editingEntries);
 
-                          repo.saveWorld(newWorld);
+                          await repo.saveWorld(newWorld);
+                          if (!ctx.mounted) return;
                           Navigator.pop(ctx);
 
                           if (context.mounted) {
