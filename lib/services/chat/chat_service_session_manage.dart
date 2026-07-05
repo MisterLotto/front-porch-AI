@@ -301,6 +301,18 @@ extension ChatServiceSessionManage on ChatService {
       // See relationship_service.dart (seedFromCardV2OrExt + public migrate docs) + expanded
       // "keep reset blocks in sync" + "incomplete zeroing... now complete (see CLAUDE.md)"
       // (see CLAUDE.md full list + incomplete zeroing hygiene; buffer removal complete)
+      // Clear ALL per-chat relationship registers first, THEN re-seed bond/trust
+      // from the card. seedFromCardV2OrExt only sets affection/long-term/trust +
+      // their tiers — it deliberately does NOT touch the active fixation, spatial
+      // stance, the pending trust-repair flag, or the long-term/decay counters.
+      // Without this reset those registers survived from the previous conversation
+      // into the fresh chat and were then persisted into the new session's row, so
+      // the in-chat "New Chat" button leaked a fixation "Background Thought" (and
+      // spatial stance) across chats with the SAME character. resetForFreshChat
+      // zeroes every register; the seed below restores bond/trust. This mirrors
+      // setActiveCharacter's reset-before-load ordering and the group _groupRealism
+      // baseline reset in the else branch (1:1 ↔ group fresh-chat parity).
+      _relationshipService.resetForFreshChat();
       _relationshipService.seedFromCardV2OrExt(
         shortTermBond: extSeed.shortTermBond,
         longTermBond: extSeed.longTermBond,
@@ -410,6 +422,23 @@ extension ChatServiceSessionManage on ChatService {
         _enjoysLowHygiene = false;
         _needsSimulation.clearVector();
         _needsSimulation.resetBuffers();
+        // Fresh group chat: reset each member's per-character realism (bond/trust/
+        // emotion/needs/FIXATION) back to the group's default member baselines so
+        // the previous session's evolved state — most visibly an active fixation
+        // "Background Thought" — does not bleed into the new chat. The scalar
+        // resetForFreshChat() above only clears the 1:1 registers; per-speaker group
+        // state lives in _groupRealism, which startNewChat never reset (the leak).
+        // This mirrors the 1:1 branch's resetForFreshChat + card re-seed (parity).
+        // Only _groupRealism is reset — group config (per-char system prompts, RAG
+        // priorities, author notes, decay rates) is intentionally preserved, which
+        // is why we do NOT route through _loadGroupRealismStateFromSession(null):
+        // defaultMemberRealismState is perChar-only, so that path would wipe those
+        // config maps. parseGroupRealismSeeds pulls just the perChar baselines.
+        if (_activeGroup != null) {
+          _groupRealism = parseGroupRealismSeeds(
+            _activeGroup!.defaultMemberRealismState,
+          );
+        }
         _activeObjectives = [];
         _messagesSinceLastCheck = 0;
         _isCheckingCompletion =

@@ -50,6 +50,7 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
 import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/services/chat/cast_detector.dart';
