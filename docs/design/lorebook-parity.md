@@ -146,7 +146,19 @@ Missing / broken, in rough order of real-world frequency in Chub/ST content:
 - Migration shim for existing FPAI books: current `stickyDepth` semantics preserved for
   already-created entries (map to ST `sticky` timer or keep as legacy field honored by the engine).
 
-### Phase 2 — Matching & injection engine parity
+### Phase 2 — Matching & injection engine parity ✅ SHIPPED 2026-07-05
+*(Everything below is live: shared enumerator + cached group book — fixing the
+latent bug where group-book keyed entries could never trigger — scan windows
+with book/entry overrides, recursion with prevent/exclude/delay levels,
+positions incl. @depth splice into history, per-bucket ordering, token budget
+with per-book caps + ignoreBudget + overflow plumbing (`lastLoreOverflow`),
+inclusion groups with deterministic seeded winners, and sticky/cooldown/delay
+timed effects persisted per-chat in the session's groupRealismState blob.
+Deliberate deviations: global scan depth defaults to 1 (FPAI cadence; setting
+exists), @depth `role` carried but not rendered in the text transcript, and
+vectorized entries deferred. New engine files: chat/lorebook_collection.dart,
+chat/lorebook_injector.dart, chat/lorebook_timed_effects.dart,
+storage/settings/lorebook_settings.dart.)*
 - Scan buffer over last N messages (global scan depth + per-entry override, include-names).
 - Secondary-key logic (all 4 modes), regex keys (`/…/flags` detection identical to ST),
   macro substitution of keys, per-entry case/whole-word (ST's `\W` boundary + substring for
