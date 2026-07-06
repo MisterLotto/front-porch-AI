@@ -46,6 +46,10 @@ class _StoopInboxBellState extends State<StoopInboxBell> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('New message from a moderator'),
+            // Without persist:false, Flutter keeps action snackbars up forever
+            // (persist defaults to `action != null`); this notice should fade
+            // on its own after the default duration.
+            persist: false,
             action: SnackBarAction(label: 'View', onPressed: _open),
           ),
         );

@@ -261,6 +261,11 @@ class _ChatPageState extends State<ChatPage> {
           SnackBar(
             content: Text('$exitUndoName left the scene'),
             duration: const Duration(seconds: 8),
+            // Flutter's SnackBar.persist defaults to `action != null`, so an
+            // action snackbar silently ignores its duration and stays forever
+            // (the auto-dismiss timer fires but early-returns on persist). We
+            // want it to disappear after 8s, so opt out explicitly.
+            persist: false,
             action: SnackBarAction(
               label: 'UNDO',
               onPressed: () => _chatService?.undoLastExit(),
@@ -383,6 +388,9 @@ class _ChatPageState extends State<ChatPage> {
           backgroundColor: const Color(0xFFB91C1C),
           duration: const Duration(seconds: 6),
           behavior: SnackBarBehavior.floating,
+          // Opt out of Flutter's persist-when-action default so the 6s duration
+          // is honored (otherwise this error toast never leaves the screen).
+          persist: false,
           action: SnackBarAction(
             label: 'OK',
             textColor: Colors.white70,
