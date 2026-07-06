@@ -34,43 +34,31 @@ If you use it, a star would mean a lot to the developer.
 
 ## 🆕 What's New on Rawhide (vs main)
 
-These are the user-facing changes and improvements that have landed on the Rawhide branch since it diverged from `main`. Many originated on the dedicated refactor workstream and were promoted here; others are targeted fixes and polish.
+The user-facing highlights that have landed on Rawhide since it diverged from `main`. See `docs/Rawhide.md` for the running, concise list that feeds the in-app update dialog.
 
-- 🏡 **The Stoop — a built-in community character repository** *(headline feature)* — Browse, share, and **download character & group cards from right inside the app**. No browser, no separate website, no fragile copy-paste imports — a real character hub, built in. Featured & mod-picked cards, follow the creators you like, upvote/downvote, and one-tap download straight into your library. Full **group cards** round-trip losslessly: members, avatars, lorebooks, **and** pre-seeded realism, needs baselines, and intra-group dynamics all survive the trip. It's **opt-in, account-gated, and strictly 18+** (NSFW hidden by default), with optional **two-factor auth** and an **opt-out** anonymous device-stats ping; the rest of the app stays 100% local. In-app character hubs aren't unheard of (Backyard AI, RisuAI have them), but The Stoop is the **open-source (AGPL-3.0), local-first** one that round-trips full **group casts** — with realism/needs engine state intact — while the closed, for-profit hubs drift toward paywalled SaaS (Backyard killed its desktop app to do exactly that). See **[The Stoop](#-the-stoop--built-in-community-character-hub)** below for the full breakdown.
+- 🏡 **The Stoop — a built-in community character hub** *(headline)* — Browse, share, and **download character & group cards from right inside the app** — no browser, no separate website. Featured & mod-picked cards, follow creators, upvote, one-tap download. Full **group casts** round-trip losslessly: members, avatars, lorebooks, **and** the pre-seeded Realism/Needs state. **Now also on the web** at **[hub.frontporchai.app](https://hub.frontporchai.app)** (browse as a guest, no install), with first-class **creator credits** for shared cards. Opt-in, account-gated, strictly 18+, open-source (AGPL-3.0) — the rest of the app stays 100% local. See **[The Stoop](#-the-stoop--built-in-community-character-hub)** below.
 
-- 🎭 **One chat, a cast that changes** — 1:1 and group chats are now the same thing: a 1:1 is a cast of one, a group is the same chat with more characters. Turn a solo chat into a group **in place** with `/join --full` (no more fork-and-duplicate), bring a character in or out with `/join` / `/exit` (goodbye narration + one-tap **undo**), force a turn with `/speak`, and set the speaking order — including your own slot — with `/turnorder`. Collapsing back to one character returns a clean 1:1 with the **original** library character (no orphan copies). Realism, needs, RAG memory, evolution, objectives, author notes, and expressions all carry across the conversion **both ways**. This round also fixes a batch of group bugs: needs-delta chips now show under *every* speaker's message (not just the first), each character reacts to **their own** needs/relationship instead of a castmate's, members inherit their **expression images** in groups, the shared scenario no longer drifts per character, and Character Evolution cadence is configurable per character.
+- 📔 **The Journal — a living memory that replaces summaries & fact-lists** — Characters now keep a real, per-chat **diary**: the promises made, what they learned about you, the moments that mattered — each stamped with the emotion behind it. Memories carry *heat* (strong ones barely fade, faint ones cool and resurface only when the moment calls them back), so recall feels emotional, not mechanical. **Memory never leaks between chats** — a new conversation truly starts fresh. You can read, edit, and pin entries, and tap a memory's receipt to jump to the exact line it came from.
 
-- 💾 **Cloud Sync deprecated → smarter local backups** — Cloud Sync (Google Drive / WebDAV) is now **deprecated** (still present, with an in-app notice) because it could occasionally resurrect deleted data across devices. The replacement is a stronger local backup system: **two-tier rolling backups** — frequent 30-minute snapshots *plus* one per day for the last 7 days — so whether you need to undo something from this afternoon or roll back to yesterday, there's a restore point waiting, with old ones pruned automatically. Manage and restore on the Backups screen.
+- 🧭 **Lorebooks got a real engine — full SillyTavern-grade behavior** — Import any lorebook (SillyTavern, Chub, NovelAI, AgnAI, RisuAI) through a proper preview wizard, drop a book into **one chat only**, and edit every setting the engine actually runs — conditional triggers, regex keys, placement, sticky/cooldown timers, chaining, variety groups, and a token budget. Plus a grown-up **macro toolbox** (`{{setvar}}`/`{{getvar}}`, `{{random:…}}`, `{{roll:d20}}`, conversation + time macros) so interactive, stateful cards work the way their authors wrote them.
 
-- 🏗️ **God File Modularization (Stages 1–7 complete)** — The largest god files (`chat_service.dart`, `storage_service.dart`, key UI pages like settings/character creator/chat, and supporting services) have been decomposed into focused, single-responsibility, testable modules. Full behavioral parity for 1:1 chats, group chats, Realism Engine (bond/trust/emotion/arousal/fixation), Needs simulation, objectives, character evolution, fact extraction, summaries, prompt injection, RAG, creators, and everything else. The entire test suite is now reliably green with a strong new baseline (+1126 tests). This is a major internal restructuring that makes future features and fixes faster and safer — you should see no functional differences, just a more solid app.
+- 🎭 **One chat, a cast that changes** — 1:1 and group are now the same thing. Turn a solo chat into a group **in place** with `/join --full`, bring characters in/out with `/join` / `/exit` (goodbye narration + one-tap **undo**), force a turn with `/speak`, and set the order with `/turnorder`. Collapse back to a clean 1:1 with the **original** character — no orphan copies. Realism, needs, memory, evolution, objectives, and expressions carry across the conversion **both ways**.
 
-- 🎯 **Autonomous character objectives now reliably generate subtasks** — When the Realism Engine proposes a personal goal for a character ("proposed_objective"), the system now consistently auto-generates 3 concrete sequential tasks the character can pursue. This was previously unreliable (especially under group impersonation and per-speaker evaluation paths). User-created objectives (typed in the UI) correctly do *not* auto-generate tasks; you remain in full control and can still press Generate Tasks manually when you want them.
+- 🛋️ **The warm-porch redesign** — The sidebar and home screen were rebuilt around one cozy, consistent design language (terracotta/honey/amber instead of the old neon accents), every bar and card unified, and **light mode finally looks right everywhere**. The chat sidebar's nine bolted-on sections became three tidy groups: 🎭 Character State, 📖 Journal & Memory, and 🎲 Story Tools.
 
-- 🧠 **Thinking / reasoning models get proper breathing room for objectives & tasks** — Subtask generation and objective/task completion checks raised from 600/1024 tokens to 2000. `<think>...</think>` stripping (using the central robust helper that also handles unclosed tags) now runs after the full stream. Models that reason for hundreds of tokens before emitting the final numbered list or YES/NO now work reliably. Autonomous proposals already had generous limits; the subtask paths now match.
+- ☕ **Your character keeps living while you're away (AFK)** — Turn on Dynamic Responses and, once you step away, your character quietly gets on with their day — a meal, a nap, a shower — on a timer you set. Time drifts forward and their Needs move to match what they actually did. Type `/afk` to trigger it on demand.
 
-- 🔏 **macOS nightly build quality** — Switched CI to .pkg packaging (with deep PyInstaller code signing for frameworks inside sidecars), proper notarize-before-DMG / notarize-and-staple flows, and removal of problematic --deep signing. Rawhide nightlies now pass Apple's notary service cleanly and produce better-behaved macOS installs with fewer Gatekeeper / "damaged or incomplete" issues.
+- 🎯 **Self-chosen goals become real quests — with steps** — When the Realism Engine decides a character genuinely wants something, that goal becomes a proper main quest with a 5-step plan they actively pursue, scene by scene (instead of a bare, invisible side goal).
 
-- 🐛 **Realism Engine, Needs, Group chat & state reliability fixes** (multiple rounds):
-  - Sidebar bond/trust (short + long form) now correctly reflect eval results and stay in sync with chips.
-  - Group chats: per-speaker needs vectors, scene impact rewards (fun/social/hygiene etc. from activities), decay, and sidebar/cards now persist and display correctly. Pre-turn snapshots, post-gen save of scalars into group state, and impersonation dance for checks are all hardened.
-  - Zero-delta needs chips are now skipped (no more clutter rows of "X 0").
-  - Climax / sexual / daily post-gen checks no longer risk double-firing for the same response.
-  - Fixed duplicate user/character messages appearing on session load (racy delete+insert in save path).
-  - Fresh starts, forks, new chats, and imported characters no longer bleed needs/fixation/relationship/parent-session state from previous contexts.
-  - Fixation and baseline bleed prevention on new chats and character imports.
-  - Various other polish to needs delta computation, chip reasons, group member cards, and "keep blocks in sync" reset hygiene across 1:1 vs group paths.
+- 🎛️ **Your sampler settings actually reach the model now** — Min-P, Repeat Penalty, XTC, and Dynamic Temperature were being silently dropped on the way to the model; every slider now arrives for real, on local and remote backends alike — plus new **Top-P**, **Top-K**, and **DRY** (modern anti-repetition) controls.
 
-- ✨ **Home screen & import UX** — Added a refresh button next to the multi-select controls so you can re-scan for external character imports without leaving the page.
+- 💾 **Cloud Sync deprecated → smarter local backups** — Cloud Sync is deprecated (it could occasionally resurrect deleted data). The replacement is two-tier rolling local backups — 30-minute snapshots **plus** one per day for 7 days — with one-click restore.
 
-- 🛠️ **Database Cleanup Tool** (infrastructure landed; UI currently gated behind verification) — New utility to detect and optionally purge orphaned records (data left behind by deleted characters, stray group sessions, etc.). The core + dialog landed via community PR and was integrated during the refactor window.
+- 🧹 **Removed the built-in Chub / AI Character Cards browser** — It leaned on a heavy embedded-webview that misbehaved on some systems and opened an unmoderated pipe into the app. Import any card PNG/JSON with the **Import** button, or use **The Stoop** for moderated community cards. (This also slims the app and drops a large dependency.)
 
-- 📦 **Build / CI / packaging polish for nightlies** — Distinct Rawhide app naming on Windows/macOS so nightlies don't collide with stable installs, ML cache cleanup in workflows, improved artifact handling, and many small reliability wins in the release/nightly pipelines.
+- 🐛 **Deep reliability work across Realism, Needs & Group chat** — per-speaker needs chips under *every* message, characters reacting to their *own* state (not a castmate's), no cross-chat bleed of fixation/needs/relationship on new chats, no double-firing climax/daily checks, and full 1:1↔group parity throughout. Plus a large internal modularization of the historic "god files" into focused, tested modules — no behavior change, just a faster and safer codebase.
 
-- 🔧 **Lint & test hygiene** — Literal zero remaining info-level lints on the active ruleset. Full test suite stabilized post-refactor as the new baseline.
-
-See `docs/Rawhide.md` for the concise version that feeds the in-app update dialog, and `docs/refactoring-guide.md` + `docs/refactor-god-file-modularization.md` for the technical record of the modularization work.
-
-> **Note for contributors & AI agents**: User-facing notes for the update dialog live in `docs/Rawhide.md`. Update it for any user-visible work.
+> **Note for contributors & AI agents:** user-facing notes for the update dialog live in `docs/Rawhide.md` — update it for any user-visible work.
 
 ---
 
@@ -129,14 +117,15 @@ A stoop is where the neighbourhood meets — the front step where people swap st
 - **Relationship & Trust system** — earn a character's trust over time; it shifts how open and vulnerable they allow themselves to be
 - **Autonomous time progression** — scene time advances deterministically every 6 turns; OOC time-skips (`(OOC: we drive for several hours)`) are auto-detected and applied
 - **Manual time nudge** — step time forward or back with sidebar chevrons
-- **Character Objectives** — autonomous goals the character pursues independently based on story events
+- **Character Objectives** — self-chosen goals become real main quests with concrete, sequential steps the character actively pursues
 - **Fixation Engine** — active emotional obsessions that subtly color every response
 - **Character Evolution** — characters organically develop new traits as your story progresses
+- **The Journal** — a living, per-chat memory: characters keep a real diary of what mattered (each entry stamped with its emotion), memories carry *heat* so strong ones linger and faint ones resurface only when relevant, and nothing ever leaks between chats
 - **RAG Memory** — local semantic memory powered by a lightweight ONNX embedding engine; the AI recalls past conversations without any cloud
 
 ### 🎭 Character Management
 - **V2 spec support** — fully compatible with the V2 character card specification (PNG & JSON)
-- **One-click import** from `aicharactercards.com` and `chub.ai` via a built-in browser
+- **One-click import** — any V2 character card PNG/JSON, or grab community cards straight from **The Stoop** (the built-in hub) — no browser needed
 - **Backyard AI (.byaf) importer** — rescue your characters from the archive format Backyard AI left behind when they killed their desktop app
 - **Folder organization**, global search, tag editor, bulk PNG import
 - **One-click duplication** — clone any character card for risk-free experiments
@@ -196,19 +185,19 @@ A stoop is where the neighbourhood meets — the front step where people swap st
 
 **Debian / Ubuntu / Mint / Pop!_OS**
 ```bash
-curl -fsSL https://apt.dreamersai.art/install.sh | bash
+curl -fsSL https://apt.frontporchai.app/install.sh | bash
 sudo apt install front-porch-ai
 ```
 Or manually:
 ```bash
-curl -fsSL https://apt.dreamersai.art/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
-echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.dreamersai.art stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
+curl -fsSL https://apt.frontporchai.app/front-porch-ai.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/front-porch-ai.gpg
+echo "deb [signed-by=/etc/apt/keyrings/front-porch-ai.gpg] https://apt.frontporchai.app stable main" | sudo tee /etc/apt/sources.list.d/front-porch-ai.list
 sudo apt update && sudo apt install front-porch-ai
 ```
 
 **Fedora / RHEL / openSUSE**
 ```bash
-sudo dnf config-manager --add-repo https://rpm.dreamersai.art/front-porch-ai.repo
+sudo dnf config-manager --add-repo https://rpm.frontporchai.app/front-porch-ai.repo
 sudo dnf install front-porch-ai
 ```
 
@@ -400,20 +389,18 @@ The app is **local-first**: using it offline collects nothing and sends us nothi
 
 **Ubuntu/Debian**
 ```bash
-sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libwpewebkit-1.0-dev
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
 ```
 
 **Arch Linux**
 ```bash
-sudo pacman -S clang cmake ninja pkgconf gtk3 xz wpewebkit
+sudo pacman -S clang cmake ninja pkgconf gtk3 xz
 ```
 
 **Fedora**
 ```bash
-sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel wpewebkit-devel
+sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel
 ```
-
-> `wpewebkit` is required for the built-in browser (Chub.ai / aicharactercards.com import). Pre-built AppImages bundle it automatically.
 
 ### Build & Run
 
