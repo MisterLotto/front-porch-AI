@@ -556,6 +556,34 @@ void main() {
       expect(txt, contains('Physical State'));
     });
 
+    test(
+      'nsfw: peak arousal permits autonomous climax during active sex (no OOC '
+      'needed) but still guards spontaneous orgasm when untouched',
+      () {
+        final n = NsfwService(
+          getGroupInt: (_, _) => 0,
+          getGroupValue: (_, _) => null,
+          setGroupValue: (_, _, _) {},
+        );
+        n.setNsfwCooldownEnabled(true);
+        n.setArousalLevel(95); // > 80 → peak arousal tier
+        final b = createTestNsfw(
+          nsfwSvc: n,
+          realism: true,
+          activeChar: CharacterCard(name: 'Ada'),
+        );
+        final txt = b.buildNsfwCooldownInjection();
+        // The old hard prohibition that made characters edge forever is gone.
+        expect(txt, isNot(contains('Do NOT write orgasm')));
+        expect(txt, isNot(contains('not past it')));
+        // Autonomous release is now explicitly allowed during active stimulation.
+        expect(txt, contains('tip over into climax'));
+        expect(txt, contains('Do NOT hold them back'));
+        // …but the desire≠climax guard survives for the untouched case.
+        expect(txt, contains('do NOT orgasm out of nowhere'));
+      },
+    );
+
     test('chaos: pending event text + mark delivered', () {
       final c = ChaosModeService(
         onNotify: () {},

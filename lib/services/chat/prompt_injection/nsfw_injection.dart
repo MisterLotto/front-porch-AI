@@ -143,16 +143,25 @@ class NsfwInjection {
             'at the absolute peak of physical arousal — consumed by need, unable to think straight. '
             'Every nerve is on fire, breathing ragged, body trembling and hypersensitive to the slightest contact. '
             'They are desperate, vocal, and completely unable to hide how badly they want {{user}}';
-        // NOTE: We do NOT instruct climax here. The arousal number describes the
-        // character's state of DESIRE, not progress toward orgasm. Climax happens
-        // organically in the scene — _checkClimaxInResponse evaluates afterward.
+        // Arousal is a DESIRE meter, not a climax countdown. Peak desire on its
+        // own (aching, untouched) must not spontaneously produce an orgasm — but
+        // when the scene IS physically sexual, a character pinned at the top has
+        // to be allowed to actually finish on their own. Otherwise they edge
+        // forever and the user is forced to OOC-order the climax (immersion
+        // break), and arousal stays stuck at max because the post-gen climax
+        // check (needs-impact `is_climax`) only fires when the reply itself
+        // depicts release. So gate autonomous climax on active stimulation
+        // instead of forbidding it outright.
         statePrompt +=
             ' $charName is currently $arousalDesc.\n'
-            ' IMPORTANT: Arousal at maximum means $charName is overwhelmed with desire — '
-            'it does NOT mean they are climaxing or have climaxed. Do NOT write orgasm or '
-            'post-orgasm behavior unless the physical activity in the scene has naturally '
-            "built to that point through {{user}}'s direct actions. $charName is desperate "
-            'and aching but still in the moment, not past it.\n';
+            ' If the scene is physically sexual right now and the stimulation '
+            "keeps up, $charName is right at the very edge and should be allowed "
+            'to tip over into climax naturally — in their own voice, of their own '
+            'accord. Do NOT hold them back waiting for an explicit command or '
+            'permission to finish; let release happen when the moment carries them '
+            'there. If NOTHING physical is actually happening (they are only aching '
+            'with desire, untouched), they do NOT orgasm out of nowhere — arousal '
+            'this high is how badly they want it, not proof it has already happened.\n';
       }
       if (nsfwService.arousalTier < 9 && nsfwService.arousalLevel <= 80) {
         statePrompt += ' $charName is currently $arousalDesc.\n';
