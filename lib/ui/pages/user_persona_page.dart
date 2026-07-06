@@ -19,12 +19,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/utils/persona_colors.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/export_persona_dialog.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class UserPersonaPage extends StatefulWidget {
   const UserPersonaPage({super.key});
@@ -95,7 +95,8 @@ class _UserPersonaPageState extends State<UserPersonaPage>
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
       type: FileType.image,
       allowMultiple: false,
     );
@@ -156,7 +157,8 @@ class _UserPersonaPageState extends State<UserPersonaPage>
   }
 
   Future<void> _importPersona() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
@@ -222,7 +224,8 @@ class _UserPersonaPageState extends State<UserPersonaPage>
   }
 
   Future<void> _exportPersona(UserPersona persona) async {
-    String? outputFile = await FilePicker.platform.saveFile(
+    String? outputFile = await PickerPrefs.saveFile(
+      category: PickerPrefs.catExport,
       dialogTitle: 'Export Persona',
       fileName:
           '${persona.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_')}_FPAIpersona.json',

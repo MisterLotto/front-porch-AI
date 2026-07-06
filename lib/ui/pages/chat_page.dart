@@ -22,7 +22,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 
 // Barrel imports for high-frequency services, models, utils, and widgets
 import 'package:front_porch_ai/models/models.dart';
@@ -50,6 +49,7 @@ import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/kobold_log_dialog.dart';
 // Stage 3 Image Studio (replaces old image_gen_dialog completely)
 import 'package:front_porch_ai/ui/image_studio/image_studio.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -151,6 +151,10 @@ class _ChatPageState extends State<ChatPage> {
     return (img, null);
   }
 
+  /// Platform-appropriate label for the regenerate shortcut (#86), surfaced in
+  /// the Generate-reply button tooltip so keyboard users can discover it.
+  String get _regenShortcutLabel => Platform.isMacOS ? '⌘R' : 'Ctrl+R';
+
   @override
   void initState() {
     super.initState();
@@ -171,6 +175,21 @@ class _ChatPageState extends State<ChatPage> {
             WidgetsBinding.instance.addPostFrameCallback(
               (_) => _scrollToBottom(),
             );
+          }
+          return KeyEventResult.handled;
+        }
+        // ⌘R (macOS) / Ctrl+R — (re)generate the last AI reply. If the previous
+        // reply was deleted, regenerateLastMessage() generates a fresh one from
+        // the trailing user prompt instead (it handles both). Mirrors the
+        // Generate-reply toolbar button / bubble regen for keyboard users.
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.keyR &&
+            (Platform.isMacOS
+                ? HardwareKeyboard.instance.isMetaPressed
+                : HardwareKeyboard.instance.isControlPressed)) {
+          final chatService = Provider.of<ChatService>(context, listen: false);
+          if (!chatService.isGenerating && !chatService.isGuestBusy) {
+            chatService.regenerateLastMessage();
           }
           return KeyEventResult.handled;
         }
@@ -1075,7 +1094,8 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _importChat() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await PickerPrefs.pickFiles(
+        category: PickerPrefs.catImport,
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
@@ -1141,7 +1161,8 @@ class _ChatPageState extends State<ChatPage> {
           .first;
       final fileName = '${characterName}_$timestamp.json';
 
-      final path = await FilePicker.platform.saveFile(
+      final path = await PickerPrefs.saveFile(
+        category: PickerPrefs.catExport,
         dialogTitle: 'Export Chat',
         fileName: fileName,
         type: FileType.custom,
@@ -2961,6 +2982,26 @@ class _ChatPageState extends State<ChatPage> {
                           color: Colors.purpleAccent,
                         ),
                         onPressed: () => chatService.triggerNextCharacter(),
+                      ),
+                    ),
+                  // Generate reply button (1:1 only) — shown when the AI is
+                  // "up next", i.e. the last message is the user's (e.g. the
+                  // previous reply was deleted). Gives a visible way to
+                  // (re)generate without retyping. Group mode already covers
+                  // this via the Next Character button above.
+                  if (!chatService.isGroupMode &&
+                      !chatService.isGenerating &&
+                      !chatService.autoPlayActive &&
+                      chatService.messages.isNotEmpty &&
+                      chatService.messages.last.isUser)
+                    Tooltip(
+                      message: 'Generate reply ($_regenShortcutLabel)',
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: Colors.orangeAccent,
+                        ),
+                        onPressed: () => chatService.regenerateLastMessage(),
                       ),
                     ),
                   chatService.isGenerating

@@ -20,7 +20,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
@@ -36,6 +35,7 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  DESIGN TOKENS — Slate / Indigo dark theme
@@ -309,7 +309,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
       type: FileType.image,
       allowMultiple: false,
     );
@@ -589,7 +590,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   }
 
   Future<void> _importLorebookJson() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['json'],
     );

@@ -21,7 +21,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:front_porch_ai/ui/widgets/custom_page_flip.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
@@ -29,6 +28,7 @@ import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/services/story_narration_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// A book-like reader for completed Porch Stories with paper aesthetic
 /// and page-by-page navigation.
@@ -787,7 +787,8 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
         '${project.title.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_')}.txt';
 
     try {
-      final outputPath = await FilePicker.platform.saveFile(
+      final outputPath = await PickerPrefs.saveFile(
+        category: PickerPrefs.catExport,
         dialogTitle: 'Export Story',
         fileName: fileName,
         type: FileType.custom,

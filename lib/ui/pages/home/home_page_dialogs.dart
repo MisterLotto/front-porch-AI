@@ -113,7 +113,8 @@ extension _HomePageDialogs on _HomePageState {
   }
 
   Future<void> _importCharacter(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['png', 'json'],
       allowMultiple: true,
@@ -173,7 +174,8 @@ extension _HomePageDialogs on _HomePageState {
   }
 
   Future<void> _importByaf(BuildContext context) async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['byaf'],
       allowMultiple: true,

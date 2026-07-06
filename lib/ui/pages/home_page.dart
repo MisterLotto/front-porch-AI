@@ -19,7 +19,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:front_porch_ai/database/database.dart';
@@ -43,6 +42,7 @@ import 'package:front_porch_ai/ui/pages/story_home_view.dart';
 import 'package:front_porch_ai/ui/dialogs/byaf_import_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 // _HomePageState is split across these part files (each a private extension on
 // the State) to keep every file under the 500-line cap while preserving full

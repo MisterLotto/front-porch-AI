@@ -22,12 +22,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// Dialog for managing Data Bank entries (per-character knowledge base).
 /// Supports manual text entry and file import (txt, md, json, csv, pdf).
@@ -207,7 +207,8 @@ class _DataBankDialogState extends State<DataBankDialog> {
 
   /// Pick a file and import its contents as Data Bank entries.
   Future<void> _importFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: [..._textExtensions, ..._pdfExtensions],
       allowMultiple: false,

@@ -765,6 +765,13 @@ extension ChatServiceReprocess on ChatService {
           _groupManager?.advanceAfterRegeneration(originalSpeaker);
         }
       }
+    } else if (_messages.last.isUser) {
+      // The last message is the user's prompt (e.g. the AI reply was deleted),
+      // so there is no swipe to add — generate a fresh response from it. Mirrors
+      // triggerNextCharacter()/the normal send path (_generateResponse consumes
+      // no new user turn, so needs decay is NOT re-ticked — that already ran
+      // when the user turn was first sent). Applies identically to 1:1 and group.
+      await _generateResponse(GenerationMode.normal);
     }
   }
 }

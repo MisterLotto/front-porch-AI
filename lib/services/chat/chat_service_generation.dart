@@ -577,6 +577,13 @@ extension ChatServiceGeneration on ChatService {
           final sourceIds = await _getMemorySourceIds(guest: guestSpeaker);
           debugPrint('[RAG:Chat] Memory source IDs: $sourceIds');
 
+          // Session isolation: only the speaker's OWN id (always sourceIds.first)
+          // is session-scoped, so a prior chat with this same character can no
+          // longer bleed its locations/storyline into this one. Any explicit
+          // cross-character sources that follow keep their intended cross-session
+          // reach. Applies identically to 1:1 and group (same retrieve() path).
+          final selfSourceId = sourceIds.isNotEmpty ? sourceIds.first : '';
+
           final memories = await _memoryService!.retrieve(
             queryText: queryMessages,
             sourceCharacterIds: sourceIds,
@@ -585,6 +592,9 @@ extension ChatServiceGeneration on ChatService {
                 droppedMessages, // only search messages that are out of context
             limit: groupRetrievalCount == 0 ? 9999 : groupRetrievalCount,
             characterPriorities: currentGroupRAGPriorities,
+            sessionScopedCharacterIds: selfSourceId.isEmpty
+                ? const {}
+                : {selfSourceId},
           );
 
           if (memories.isNotEmpty) {

@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class BackgroundSettingsDialog extends StatelessWidget {
   const BackgroundSettingsDialog({super.key});
@@ -426,7 +426,8 @@ class BackgroundSettingsDialog extends StatelessWidget {
                     onPressed: isUploading
                         ? null
                         : () async {
-                            final result = await FilePicker.platform.pickFiles(
+                            final result = await PickerPrefs.pickFiles(
+                              category: PickerPrefs.catImage,
                               type: FileType.image,
                             );
                             if (result != null &&

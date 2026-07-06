@@ -18,7 +18,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
@@ -27,6 +26,7 @@ import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/utils/world_colors.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class WorldManagementPage extends StatefulWidget {
   const WorldManagementPage({super.key});
@@ -622,7 +622,8 @@ class _WorldManagementPageState extends State<WorldManagementPage>
     WorldRepository repo,
     World world,
   ) async {
-    String? outputFile = await FilePicker.platform.saveFile(
+    String? outputFile = await PickerPrefs.saveFile(
+      category: PickerPrefs.catExport,
       dialogTitle: 'Export World JSON',
       fileName: '${world.name}.json',
       type: FileType.custom,

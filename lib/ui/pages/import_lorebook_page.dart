@@ -19,7 +19,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -32,6 +31,7 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/warm_card.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 import 'import_lorebook/import_destination_step.dart';
 import 'import_lorebook/import_review_step.dart';
 
@@ -68,7 +68,8 @@ class _ImportLorebookPageState extends State<ImportLorebookPage> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['json'],
     );

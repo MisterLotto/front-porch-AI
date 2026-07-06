@@ -10,8 +10,12 @@
 import type { ReactNode } from 'react';
 
 // Order matters: **bold** before *action* so the double-star wins. Dialogue
-// matches both straight "…" and curly “…” quotes (cards/LLMs often use curly).
-const INLINE_RE = /(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|("[^"\n]+"|“[^”\n]+”)/g;
+// matches straight "…", curly “…”, German/Polish „…“ / „…”, Nordic ”…”,
+// guillemets «…» / »…« and CJK 「…」 — kept in sync with the desktop
+// kDialogueQuotePairs (styled_text_controller.dart) so highlighting is
+// identical on both surfaces.
+const INLINE_RE =
+  /(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|("[^"\n]+"|“[^”\n]+”|„[^“”\n]+[“”]|”[^”\n]+”|«[^»\n]+»|»[^«\n]+«|「[^」\n]+」)/g;
 
 /**
  * Color dialogue / *action* / **emphasis** inside a plain text segment.

@@ -19,7 +19,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
 import 'package:front_porch_ai/services/epub_generator_service.dart';
@@ -28,6 +27,7 @@ import 'package:front_porch_ai/ui/pages/story_setup_page.dart';
 import 'package:front_porch_ai/ui/pages/story_dashboard_page.dart';
 import 'package:front_porch_ai/ui/pages/story_reader_page.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// The "Porch Stories" home view — shows all story projects with create/delete.
 class StoryHomeView extends StatefulWidget {
@@ -488,7 +488,8 @@ class _StoryHomeViewState extends State<StoryHomeView> {
     try {
       final audiobook = await service.generateAudiobook(project);
       if (audiobook != null && mounted) {
-        final String? outputFile = await FilePicker.platform.saveFile(
+        final String? outputFile = await PickerPrefs.saveFile(
+          category: PickerPrefs.catExport,
           dialogTitle: 'Save Audiobook',
           fileName: 'audiobook_${project.title.replaceAll(' ', '_')}.wav',
           type: FileType.custom,
@@ -522,7 +523,8 @@ class _StoryHomeViewState extends State<StoryHomeView> {
     try {
       final epub = await EpubGeneratorService.generateEpub(project);
       if (epub != null && mounted) {
-        final String? outputFile = await FilePicker.platform.saveFile(
+        final String? outputFile = await PickerPrefs.saveFile(
+          category: PickerPrefs.catExport,
           dialogTitle: 'Save eBook',
           fileName: '${project.title.replaceAll(' ', '_')}.epub',
           type: FileType.custom,

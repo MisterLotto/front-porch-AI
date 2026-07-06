@@ -25,7 +25,8 @@ part of '../home_page.dart';
 extension _HomePageCharOps on _HomePageState {
 
   Future<void> _folderImportCharacters(BuildContext context) async {
-    final dirPath = await FilePicker.platform.getDirectoryPath(
+    final dirPath = await PickerPrefs.getDirectoryPath(
+      category: PickerPrefs.catDirectory,
       dialogTitle: 'Select folder containing character files',
     );
 

@@ -239,6 +239,16 @@ class MemoryService extends ChangeNotifier {
   /// the vector store for similar message windows. Only searches embeddings
   /// from the specified [sourceCharacterIds] and excludes any from the
   /// [currentSessionId] that fall within the [inContextPositions] range.
+  ///
+  /// **Session isolation** — characters listed in [sessionScopedCharacterIds]
+  /// (i.e. the current speaker/self) only ever contribute memories from the
+  /// current session. This is what stops a brand-new chat from surfacing stale
+  /// locations and storylines that belong to a *different* chat with the same
+  /// character — matching the Journal's strict per-chat guarantee. Characters
+  /// NOT in that set (explicit cross-character memory sources) are deliberately
+  /// left unscoped, so the opt-in "let X remember things about Y" feature still
+  /// reaches across sessions. Data Bank entries are a separate, intentional
+  /// cross-session knowledge source and are never scoped here.
   Future<List<RetrievedMemory>> retrieve({
     required String queryText,
     required List<String> sourceCharacterIds,
@@ -247,6 +257,7 @@ class MemoryService extends ChangeNotifier {
     int limit = 5,
     double minScore = 0.3,
     Map<String, double>? characterPriorities,
+    Set<String> sessionScopedCharacterIds = const {},
   }) async {
     // Lazy availability check — run once on first use
     if (!_availabilityChecked) {
@@ -323,9 +334,22 @@ class MemoryService extends ChangeNotifier {
       // Score each candidate against the query
       final scored = <RetrievedMemory>[];
       int skippedInContext = 0;
+      int skippedCrossSession = 0;
       int belowThreshold = 0;
 
       for (final candidate in candidates) {
+        // Session isolation: the speaker's OWN memories must never cross chats.
+        // For a session-scoped character (self/current speaker), only
+        // current-session embeddings are eligible — this is the fix for stale
+        // locations/storylines leaking in from a previous chat with the same
+        // character. Explicit cross-character sources are intentionally NOT in
+        // this set, so their opt-in cross-session recall still works.
+        if (sessionScopedCharacterIds.contains(candidate.characterId) &&
+            candidate.sessionId != currentSessionId) {
+          skippedCrossSession++;
+          continue;
+        }
+
         // Skip embeddings from the current session that are still in context
         if (candidate.sessionId == currentSessionId &&
             candidate.positionStart >= inContextStart) {
@@ -387,7 +411,7 @@ class MemoryService extends ChangeNotifier {
       }
 
       debugPrint(
-        '[RAG:Memory] Scoring: ${scored.length} above threshold, $belowThreshold below, $skippedInContext skipped (in-context)',
+        '[RAG:Memory] Scoring: ${scored.length} above threshold, $belowThreshold below, $skippedInContext skipped (in-context), $skippedCrossSession skipped (cross-session)',
       );
 
       // Sort by score descending and take top N

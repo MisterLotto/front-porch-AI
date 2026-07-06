@@ -22,7 +22,6 @@ import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/models/story_project.dart';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/ui/pages/story_structure_page.dart';
 import 'package:front_porch_ai/ui/pages/story_reader_page.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
@@ -30,6 +29,7 @@ import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/services/epub_generator_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// Dashboard page — story bible overview: concept, themes, cast, threads, lore.
 class StoryDashboardPage extends StatefulWidget {
@@ -197,7 +197,8 @@ class _StoryDashboardPageState extends State<StoryDashboardPage> {
       final audiobook = await service.generateAudiobook(project);
       if (audiobook != null && mounted) {
         // Save file dialog
-        final String? outputFile = await FilePicker.platform.saveFile(
+        final String? outputFile = await PickerPrefs.saveFile(
+          category: PickerPrefs.catExport,
           dialogTitle: 'Save Audiobook',
           fileName: 'audiobook_${project.title.replaceAll(' ', '_')}.wav',
           type: FileType.custom,
@@ -231,7 +232,8 @@ class _StoryDashboardPageState extends State<StoryDashboardPage> {
     try {
       final epub = await EpubGeneratorService.generateEpub(project);
       if (epub != null && mounted) {
-        final String? outputFile = await FilePicker.platform.saveFile(
+        final String? outputFile = await PickerPrefs.saveFile(
+          category: PickerPrefs.catExport,
           dialogTitle: 'Save eBook',
           fileName: '${project.title.replaceAll(' ', '_')}.epub',
           type: FileType.custom,

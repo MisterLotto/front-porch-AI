@@ -49,6 +49,13 @@ export function MessageActions({
           <button className="icon-btn" title="Continue" disabled={busy} onClick={onContinue}>⏩</button>
         </>
       )}
+      {/* When the last message is the user's (e.g. the AI reply was deleted),
+          offer a Generate-reply button — same backend regenerate() call, which
+          now generates a fresh response from the trailing prompt. Desktop parity
+          for #85. */}
+      {m.isUser && isLast && (
+        <button className="icon-btn" title="Generate reply" disabled={busy} onClick={onRegenerate}>⟳</button>
+      )}
       {canSpeak && !m.isUser && m.text.trim() !== '' && <SpeakButton text={m.text} />}
       <button className="icon-btn" title="Edit" disabled={busy} onClick={onEdit}>✎</button>
       <button className="icon-btn" title="Delete" disabled={busy} onClick={onDelete}>🗑</button>

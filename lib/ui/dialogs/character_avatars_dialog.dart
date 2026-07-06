@@ -19,13 +19,13 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:archive/archive_io.dart';
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// Dialog for managing character expression images.
 /// Glassmorphic UI matching SillyTavern expression drawer aesthetic.
@@ -97,7 +97,8 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
       return;
     }
 
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
       type: FileType.image,
       allowMultiple: false,
     );
@@ -182,7 +183,8 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
   Future<void> _importSpritePack() async {
     if (_avatars.length >= _maxAvatars) return;
 
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['zip'],
       allowMultiple: false,

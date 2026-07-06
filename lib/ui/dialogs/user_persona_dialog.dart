@@ -19,9 +19,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/utils/persona_colors.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class UserPersonaDialog extends StatefulWidget {
   const UserPersonaDialog({super.key});
@@ -79,7 +79,8 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
       type: FileType.image,
       allowMultiple: false,
     );

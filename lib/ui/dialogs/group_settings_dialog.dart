@@ -4,7 +4,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -18,6 +17,7 @@ import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// Main settings dialog for a Group Chat.
 /// This is the central place for all per-group and per-character configuration.
@@ -3855,7 +3855,8 @@ class _LorebookWorldsTabState extends State<_LorebookWorldsTab> {
   }
 
   Future<void> _importGroupLorebookJson() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['json'],
     );

@@ -20,7 +20,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/character_card.dart';
@@ -36,6 +35,7 @@ import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// Manual character creator — 6-step wizard.
 ///
@@ -628,7 +628,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
+      type: FileType.image,
+    );
     if (result == null || result.files.isEmpty) return;
 
     final bytes = await File(result.files.single.path!).readAsBytes();
@@ -1512,7 +1515,8 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
 
   /// Pick a file for expression image.
   Future<void> _pickExpressionImage() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
       type: FileType.image,
       allowMultiple: false,
     );
@@ -1538,7 +1542,8 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
 
   /// Import a ZIP file containing expression images.
   Future<void> _importExpressionZip() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['zip'],
       allowMultiple: false,

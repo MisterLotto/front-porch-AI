@@ -19,7 +19,6 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 
@@ -43,6 +42,7 @@ import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
 
 import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
 import 'package:front_porch_ai/ui/settings/widgets/web_login_section.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).
 // Only the discoverable on/off switch was re-surfaced in the Voice & Media tab via
@@ -303,7 +303,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickStoragePath() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    String? selectedDirectory = await PickerPrefs.getDirectoryPath(
+      category: PickerPrefs.catDirectory,
+    );
     if (selectedDirectory != null) {
       if (mounted) {
         // Close the current database so the file can be moved

@@ -21,7 +21,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 // Barrel imports
@@ -34,6 +33,7 @@ import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class EditCharacterDialog extends StatefulWidget {
   final CharacterCard character;
@@ -200,7 +200,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
 
   Future<void> _pickAvatar() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await PickerPrefs.pickFiles(
+        category: PickerPrefs.catImage,
         type: FileType.image,
         allowMultiple: false,
       );
@@ -339,7 +340,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
   }
 
   Future<void> _importLorebookJson() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImport,
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
