@@ -32,8 +32,9 @@ import 'package:front_porch_ai/services/llm_service.dart';
 /// autoGenerateTasks:true *only* for autonomous + correct target even under group
 /// impersonation via god's dance), generateObjectiveTasks (uses 2000 budget +
 /// central stripThinkBlocks cb for thinking models), _checkTaskCompletionInBackground
-/// (uses 2000 + strip; task vs taskless completion) + closely related prompt/strip/
-/// parse sites inside them.
+/// (uses 2000 + strip; task vs taskless completion; all-tasks-done quests are
+/// retired via deact so the primary slot frees up for the next autonomous main
+/// quest) + closely related prompt/strip/parse sites inside them.
 ///
 /// Per extraction order (step 11 after llm_eval_engine step 9 + realism_evals step 10
 /// per docs/refactoring-guide.md table and CLAUDE.md Critical Services / Path Map).
@@ -71,9 +72,9 @@ import 'package:front_porch_ai/services/llm_service.dart';
 ///
 /// Dedicated test: test/services/chat/objective_proposal_test.dart using factory
 /// (createTestObjectiveProposal) with *live* closures over group maps + cbs (real
-/// dispatch exercised without forcing god internals); 15 `test()` bodies via
+/// dispatch exercised without forcing god internals); 16 `test()` bodies via
 /// live `grep -c '^\s*test('` *post mandatory dead noop/placeholder/vestigial/
-/// factory-setup deletion as part of task* (see objective_proposal_test header + round 3 for !ready guard+restore coverage + mark no-op/error paths; previous rounds for dels/strengthens).
+/// factory-setup deletion as part of task* (see objective_proposal_test header + round 3 for !ready guard+restore coverage + mark no-op/error paths; previous rounds for dels/strengthens; quest-retirement fix added all-tasks-done deact coverage).
 ///
 /// aug/integration tests (llm_eval_engine_test, realism_engine_test,
 /// group_realism_test, chat_service_session_test etc.) receive *only* qualified
@@ -342,7 +343,19 @@ class ObjectiveProposal {
             .firstOrNull;
 
         if (currentTask == null && tasks.isNotEmpty) {
-          continue; // All tasks finished but objective not manually resolved
+          // Every task is already done — the quest itself is complete. Retire
+          // it: a lingering completed primary blocked the character from ever
+          // proposing their next main quest (proposals only claim the primary
+          // slot when none is active) and its finished task list cluttered the
+          // panel. Also self-heals quests stuck in this state from before the
+          // fix existed.
+          anyCompleted = true;
+          await deactivateObjective(obj.id);
+          await loadActiveObjectives();
+          debugPrint(
+            '[Objective] All tasks complete — quest retired: ${obj.objective}',
+          );
+          continue;
         }
 
         final evalTarget = currentTask != null
@@ -385,6 +398,15 @@ class ObjectiveProposal {
           if (currentTask != null) {
             // Use thin cb (god impl) for best-effort task mutation (find uncompleted by desc, set completed:true, json+db update + load). Matches god toggleTask pattern exactly. Task vs taskless now both have side effects covered (taskless deact cb).
             await markTaskCompleted(obj, currentTask);
+            // currentTask was the only open task left → the whole quest is
+            // finished. Retire it now so the primary slot frees up this turn
+            // instead of waiting for the next check pass.
+            if (tasks.where((t) => t['completed'] != true).length <= 1) {
+              await deactivateObjective(obj.id);
+              debugPrint(
+                '[Objective] Final task done — quest retired: ${obj.objective}',
+              );
+            }
             await loadActiveObjectives();
             debugPrint(
               '[Objective] Task completed (via god thin mark): $currentTask',

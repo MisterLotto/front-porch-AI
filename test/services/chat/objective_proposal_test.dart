@@ -9,8 +9,9 @@
 // Factory with live closures over group maps + cbs so real dispatch exercised (no god internals forced).
 // Edges, group vs 1:1 via cbs (impersonation for correct proposal target in gen prompt),
 // error/!ready/parse fail, strip integration, 2000 budget, group impersonation target prompt capture/assert (note: unit cb direct; prod gen prompt read best-effort may race god restore in group non-obs as qualified in leaf/god), task mark mutation, !ready guard+restore, mark no-op/error/no-match paths.
-// 15 test() bodies via live `grep -c '^\s*test('` confirmed post mandatory dead noop/placeholder/vestigial/
+// 16 test() bodies via live `grep -c '^\s*test('` confirmed post mandatory dead noop/placeholder/vestigial/
 // factory-setup deletion *as part of task* (weak smokes with expect(true,isTrue) or no specific asserts on gen/check/strip/dedup/restore/impersonation/mark/deact vs load excised or strengthened to real side-effect asserts e.g. saved json, marks contains, prompt contains charName, notifies, deacts).
+// (+1 test for the quest-retirement fix: all-tasks-done objectives are deactivated so the primary slot frees up; last-open-task YES retires in the same pass.)
 // onNotify unexercised by design in some (passive factory); exercised in prod + key suites.
 // aug (llm_eval_engine_test, realism_engine_test, group_realism_test, chat_service_session_test etc.)
 // receive *only* qualified passive notes in headers/comments (no objective-proposal-specific aug file
@@ -275,9 +276,11 @@ void main() {
     );
 
     test(
-      'markTaskCompleted no-op for no-match or already-completed (via cb surface)',
+      'all tasks already completed → quest retired (deact, no mark, journal event)',
       () async {
         final calls = <String>[];
+        final deacts = <String>[];
+        var completedEvents = 0;
         final p = createTestObjectiveProposal(
           getLlmJson: () => 'YES',
           actives: [_mkObj('oNo', 'g')],
@@ -287,10 +290,66 @@ void main() {
           markTaskCompletedCb: (o, d) async {
             calls.add(d);
           },
+          deactObj: (id) async {
+            deacts.add(id);
+          },
+          onObjectiveCompleted: () => completedEvents++,
         );
         await p.checkTaskCompletionInBackground();
-        // leaf finds no currentTask (all completed), no mark call; god mark would no-op on no-match
+        // All tasks done means the quest itself is complete: retired via deact
+        // (frees the primary slot for the next autonomous main quest — the old
+        // `continue` left it active forever), no task mark, and the journal
+        // event kick fires once. Also the self-heal path for old stuck chats.
         expect(calls, isEmpty);
+        expect(deacts, contains('oNo'));
+        expect(completedEvents, 1);
+      },
+    );
+
+    test(
+      'task YES retires quest only when it was the last open task',
+      () async {
+        // Two open tasks → mark the first, quest stays active (no deact).
+        final marks1 = <String>[];
+        final deacts1 = <String>[];
+        final p1 = createTestObjectiveProposal(
+          getLlmJson: () => 'YES',
+          actives: [_mkObj('oMid', 'g', primary: true)],
+          tasksFor: (o) => [
+            {'description': 'first', 'completed': false},
+            {'description': 'second', 'completed': false},
+          ],
+          markTaskCompletedCb: (o, d) async {
+            marks1.add('${o.id}:$d');
+          },
+          deactObj: (id) async {
+            deacts1.add(id);
+          },
+        );
+        await p1.checkTaskCompletionInBackground();
+        expect(marks1, contains('oMid:first'));
+        expect(deacts1, isEmpty);
+
+        // Single remaining open task → mark + retire in the same pass.
+        final marks2 = <String>[];
+        final deacts2 = <String>[];
+        final p2 = createTestObjectiveProposal(
+          getLlmJson: () => 'YES',
+          actives: [_mkObj('oLast', 'g', primary: true)],
+          tasksFor: (o) => [
+            {'description': 'done already', 'completed': true},
+            {'description': 'last one', 'completed': false},
+          ],
+          markTaskCompletedCb: (o, d) async {
+            marks2.add('${o.id}:$d');
+          },
+          deactObj: (id) async {
+            deacts2.add(id);
+          },
+        );
+        await p2.checkTaskCompletionInBackground();
+        expect(marks2, contains('oLast:last one'));
+        expect(deacts2, contains('oLast'));
       },
     );
 
