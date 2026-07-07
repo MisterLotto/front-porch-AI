@@ -19,6 +19,8 @@ export interface LibChar {
   description: string;
   tags: string[];
   hasAvatar: boolean;
+  /** Avatar file mtime — cache-busts the thumbnail URL when the picture changes. */
+  avatarVersion?: number;
   messageCount: number;
   folderId: string;
 }
@@ -31,6 +33,8 @@ export interface LibGroupMember {
   id: string;
   name: string;
   hasAvatar: boolean;
+  /** Avatar file mtime — cache-busts the thumbnail URL when the picture changes. */
+  avatarVersion?: number;
 }
 export interface LibGroup {
   id: string;

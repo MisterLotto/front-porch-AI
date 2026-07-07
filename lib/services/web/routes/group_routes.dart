@@ -20,6 +20,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
 import 'package:front_porch_ai/services/web/facade/group_facade.dart';
+import 'package:front_porch_ai/services/web/util/image_thumbnails.dart';
 import 'package:front_porch_ai/services/web/util/json_response.dart';
 import 'package:front_porch_ai/services/web/util/request_body.dart';
 
@@ -28,7 +29,11 @@ import 'package:front_porch_ai/services/web/util/request_body.dart';
 /// not an upfront wizard — so there are no create/edit endpoints here. Opening a
 /// group is handled by the chat routes (`/api/chat/select-group`).
 class WebGroupRoutes {
-  WebGroupRoutes(this._facade, Router router) {
+  WebGroupRoutes(
+    this._facade,
+    Router router, {
+    required ThumbnailCache thumbnails,
+  }) : _thumbs = thumbnails {
     router.get('/api/groups', _list);
     router.post('/api/groups', _create);
     router.get('/api/groups/<id>/members/<memberId>/avatar', _avatar);
@@ -39,6 +44,7 @@ class WebGroupRoutes {
   }
 
   final GroupFacade _facade;
+  final ThumbnailCache _thumbs;
 
   Future<shelf.Response> _list(shelf.Request request) async =>
       JsonResponse.ok({'groups': await _facade.list()});
@@ -104,19 +110,13 @@ class WebGroupRoutes {
     return JsonResponse.ok({'extracted': extracted});
   }
 
+  /// Serve a group member's avatar. Like the character route, a `?w=<px>` query
+  /// returns a cached downscaled thumbnail (the group tile in the grid asks for
+  /// one) and an ETag rides along for cheap 304 revalidation.
   Future<shelf.Response> _avatar(
     shelf.Request request,
     String id,
     String memberId,
-  ) async {
-    final file = await _facade.memberAvatarFile(id, memberId);
-    if (file == null) return shelf.Response.notFound('No avatar');
-    return shelf.Response.ok(
-      file.readAsBytesSync(),
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=3600',
-      },
-    );
-  }
+  ) async =>
+      _thumbs.serve(request, await _facade.memberAvatarFile(id, memberId));
 }

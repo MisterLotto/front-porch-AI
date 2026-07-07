@@ -92,6 +92,9 @@ class StorageService extends ChangeNotifier {
 
   Directory get customBackgroundDir => directories.customBackgroundDir;
 
+  /// Cache directory for downscaled web-UI avatar thumbnails (derived data).
+  Directory get webThumbnailCacheDir => directories.webThumbnailCacheDir;
+
   // Public accessors to extracted domain settings (post-Stage 7 final shim migration).
   // Callers now use direct e.g. storage.generationSettings.systemPrompt or .setTemperature(v)
   // instead of the old flat shims. Storage owns the instances (for _prefs init, beta _k,

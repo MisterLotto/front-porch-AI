@@ -71,7 +71,7 @@ export function AvatarManager({ characterId }: { characterId: string }) {
       <div className="avatar-grid">
         {avatars.map((a) => (
           <div key={a.id} className={`avatar-tile${a.isPrime ? ' prime' : ''}`}>
-            <img src={`/api/characters/${characterId}/avatars/${a.id}/image`} alt={a.label} />
+            <img src={`/api/characters/${characterId}/avatars/${a.id}/image?w=256`} alt={a.label} />
             {a.label && <span className="avatar-label">{a.label}</span>}
             {a.isPrime && <span className="avatar-badge">Prime</span>}
             <div className="avatar-actions">

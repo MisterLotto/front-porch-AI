@@ -38,6 +38,7 @@ import 'package:front_porch_ai/services/web/routes/story_routes.dart';
 import 'package:front_porch_ai/services/web/routes/stream_routes.dart';
 import 'package:front_porch_ai/services/web/routes/voice_routes.dart';
 import 'package:front_porch_ai/services/web/routes/world_routes.dart';
+import 'package:front_porch_ai/services/web/util/image_thumbnails.dart';
 import 'package:front_porch_ai/services/web/util/json_response.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
@@ -48,6 +49,10 @@ import 'package:front_porch_ai/services/web/web_server_deps.dart';
 /// to this builder in Phase 3 and the WebSocket upgrade in Phase 2.
 shelf.Handler buildWebHandler(WebServerDeps deps) {
   final staticRoutes = StaticRoutes();
+
+  // Shared avatar/card thumbnail cache — lets the library grid pull tiny
+  // downscaled images instead of full-resolution card PNGs (see ThumbnailCache).
+  final thumbnails = ThumbnailCache(deps.storage.webThumbnailCacheDir);
 
   // Unmatched routes: JSON 404 for the API surface, SPA fallback for everything
   // else (client-side routing).
@@ -66,6 +71,7 @@ shelf.Handler buildWebHandler(WebServerDeps deps) {
     WebCharacterRoutes(
       deps.characterFacade!,
       router,
+      thumbnails: thumbnails,
       authoring: deps.characterAuthoringFacade,
       library: deps.characterLibraryFacade,
     );
@@ -75,7 +81,9 @@ shelf.Handler buildWebHandler(WebServerDeps deps) {
   if (deps.chatToolsFacade != null) {
     WebChatToolsRoutes(deps.chatToolsFacade!, router);
   }
-  if (deps.groupFacade != null) WebGroupRoutes(deps.groupFacade!, router);
+  if (deps.groupFacade != null) {
+    WebGroupRoutes(deps.groupFacade!, router, thumbnails: thumbnails);
+  }
   if (deps.settingsFacade != null) {
     WebSettingsRoutes(deps.settingsFacade!, router);
   }

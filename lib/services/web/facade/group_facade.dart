@@ -70,12 +70,30 @@ class GroupFacade {
                 'name': m.name,
                 'hasAvatar':
                     m.avatarFilename != null && m.avatarFilename!.isNotEmpty,
+                'avatarVersion': _memberAvatarVersion(g.id, m.avatarFilename),
               },
             )
             .toList(),
       });
     }
     return result;
+  }
+
+  /// The member avatar file's modified-time (ms), used by the web UI as a
+  /// cache-busting version token in the thumbnail URL — see the character
+  /// facade's equivalent. 0 when there's no avatar or it can't be stat'd.
+  int _memberAvatarVersion(String groupId, String? filename) {
+    if (filename == null || filename.isEmpty) return 0;
+    try {
+      final f = File(
+        p.join(_storage.groupsDir.path, groupId, 'avatars', filename),
+      );
+      return f.existsSync()
+          ? f.statSync().modified.millisecondsSinceEpoch
+          : 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
   /// Create a new group from library character ids (their dbIds) + a name + a

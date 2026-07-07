@@ -16,6 +16,7 @@ interface LibChar {
   id: string;
   name: string;
   hasAvatar: boolean;
+  avatarVersion?: number;
 }
 
 const STEPS = ['Members', 'Details'];
@@ -102,7 +103,11 @@ export function CreateGroupChatPage() {
                   onClick={() => toggle(c.id)}
                 >
                   {c.hasAvatar ? (
-                    <img src={`/api/characters/${c.id}/avatar`} alt={c.name} loading="lazy" />
+                    <img
+                      src={api.avatarUrl(`/api/characters/${c.id}/avatar`, 256, c.avatarVersion)}
+                      alt={c.name}
+                      loading="lazy"
+                    />
                   ) : (
                     <span className="grp-initial">{c.name.charAt(0).toUpperCase()}</span>
                   )}

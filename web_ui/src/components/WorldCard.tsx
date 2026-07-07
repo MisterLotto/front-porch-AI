@@ -54,7 +54,7 @@ export function WorldCard({
           <span>{initial}</span>
           {world.linkedCharacterId && (
             <img
-              src={`/api/characters/${world.linkedCharacterId}/avatar`}
+              src={`/api/characters/${world.linkedCharacterId}/avatar?w=256`}
               alt=""
               loading="lazy"
               onError={(e) => {

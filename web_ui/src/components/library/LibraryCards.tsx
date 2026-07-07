@@ -6,6 +6,7 @@
 // menu always routes through the page's single CardMenu via [onMenu].
 
 import { useState, type MouseEvent } from 'react';
+import { api } from '../../api/client';
 import type { LibChar, LibFolder, LibGroup } from '../../hooks/useLibrary';
 
 export function CharacterCard({
@@ -45,7 +46,7 @@ export function CharacterCard({
         <div className="lib-art">
           {char.hasAvatar ? (
             <img
-              src={`/api/characters/${char.id}/avatar`}
+              src={api.avatarUrl(`/api/characters/${char.id}/avatar`, 400, char.avatarVersion)}
               alt=""
               loading="lazy"
               onError={(e) => {
@@ -168,7 +169,11 @@ export function GroupCard({
             m.hasAvatar ? (
               <img
                 key={m.id}
-                src={`/api/groups/${group.id}/members/${m.id}/avatar`}
+                src={api.avatarUrl(
+                  `/api/groups/${group.id}/members/${m.id}/avatar`,
+                  256,
+                  m.avatarVersion,
+                )}
                 alt=""
                 loading="lazy"
                 onError={(e) => {

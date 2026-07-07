@@ -12,6 +12,7 @@ interface PickChar {
   id: string;
   name: string;
   hasAvatar: boolean;
+  avatarVersion?: number;
 }
 
 export function CharacterPicker({
@@ -57,7 +58,11 @@ export function CharacterPicker({
             <button key={c.id} className="char-card" onClick={() => onPick(c.name, full)}>
               <div className="char-avatar">
                 {c.hasAvatar ? (
-                  <img src={`/api/characters/${c.id}/avatar`} alt="" loading="lazy" />
+                  <img
+                    src={api.avatarUrl(`/api/characters/${c.id}/avatar`, 256, c.avatarVersion)}
+                    alt=""
+                    loading="lazy"
+                  />
                 ) : (
                   <span className="char-initial">{c.name.charAt(0).toUpperCase()}</span>
                 )}

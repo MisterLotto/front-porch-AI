@@ -30,7 +30,33 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: 'index.html',
+        // The API is same-origin but must never be swallowed by the SPA
+        // navigation fallback (that would hand an HTML page to a fetch()).
+        navigateFallbackDenylist: [/^\/api\//],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        runtimeCaching: [
+          {
+            // Downscaled avatar thumbnails — the `?w=` image requests the
+            // library grids make. Where the picture is mutable (a character's
+            // primary avatar) the URL also carries `&v=<mtime>`, so a swapped
+            // picture is a *different* URL: CacheFirst is safe AND costs zero
+            // network on a repeat visit — the whole point over a slow uplink.
+            // Matches `/…/avatar?…w=…` and `/…/image?…w=…`; the mood-driven
+            // `/api/chat/expression-avatar` (no `/avatar` segment, no `w=`) is
+            // deliberately excluded so it always reflects the live expression.
+            urlPattern: /\/api\/.*\/(avatar|image)\?.*w=\d+/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'fpa-avatar-thumbs',
+              expiration: {
+                maxEntries: 600,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],

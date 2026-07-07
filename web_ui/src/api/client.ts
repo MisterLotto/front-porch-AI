@@ -99,4 +99,11 @@ export const api = {
   },
   /** Absolute URL for an asset/image endpoint (cookie auth applies). */
   url: (path: string) => path,
+  /** Build a cache-friendly avatar thumbnail URL: a display [w]idth plus an
+   *  optional content [v]ersion. Where the picture is mutable (a character's
+   *  primary avatar) [v] is the file's modified-time, so swapping the picture
+   *  yields a new URL — letting the service worker cache thumbnails as
+   *  effectively immutable and reload them only when they actually change. */
+  avatarUrl: (path: string, w: number, v?: number) =>
+    `${path}?w=${w}${v ? `&v=${v}` : ''}`,
 };

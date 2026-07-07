@@ -22,6 +22,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:front_porch_ai/services/web/facade/character_authoring_facade.dart';
 import 'package:front_porch_ai/services/web/facade/character_facade.dart';
 import 'package:front_porch_ai/services/web/facade/character_library_facade.dart';
+import 'package:front_porch_ai/services/web/util/image_thumbnails.dart';
 import 'package:front_porch_ai/services/web/util/json_response.dart';
 import 'package:front_porch_ai/services/web/util/request_body.dart';
 
@@ -31,9 +32,11 @@ class WebCharacterRoutes {
   WebCharacterRoutes(
     this._facade,
     Router router, {
+    required ThumbnailCache thumbnails,
     CharacterAuthoringFacade? authoring,
     CharacterLibraryFacade? library,
-  }) : _authoring = authoring,
+  }) : _thumbs = thumbnails,
+       _authoring = authoring,
        _library = library {
     router.get('/api/characters', _list);
     router.get('/api/folders', _folders);
@@ -70,6 +73,7 @@ class WebCharacterRoutes {
   }
 
   final CharacterFacade _facade;
+  final ThumbnailCache _thumbs;
   final CharacterAuthoringFacade? _authoring;
   final CharacterLibraryFacade? _library;
 
@@ -261,17 +265,11 @@ class WebCharacterRoutes {
     );
   }
 
-  Future<shelf.Response> _avatar(shelf.Request request, String id) async {
-    final file = await _facade.avatarFile(id);
-    if (file == null) return shelf.Response.notFound('No avatar');
-    return shelf.Response.ok(
-      file.readAsBytesSync(),
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=3600',
-      },
-    );
-  }
+  /// Serve the character's primary avatar. A `?w=<px>` query returns a cached
+  /// downscaled thumbnail (the library grid asks for one); without it the full
+  /// card PNG. Either way an ETag rides along for cheap 304 revalidation.
+  Future<shelf.Response> _avatar(shelf.Request request, String id) async =>
+      _thumbs.serve(request, await _facade.avatarFile(id));
 
   Future<shelf.Response> _detail(shelf.Request request, String id) async {
     final detail = await _facade.detail(id);
@@ -337,15 +335,7 @@ class WebCharacterRoutes {
   ) async {
     final auth = _authoring;
     if (auth == null) return shelf.Response.notFound('Unavailable');
-    final file = await auth.avatarFile(id, avatarId);
-    if (file == null) return shelf.Response.notFound('No avatar');
-    return shelf.Response.ok(
-      file.readAsBytesSync(),
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=3600',
-      },
-    );
+    return _thumbs.serve(request, await auth.avatarFile(id, avatarId));
   }
 
   Future<shelf.Response> _setPrime(

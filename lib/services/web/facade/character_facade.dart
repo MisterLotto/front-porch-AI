@@ -151,11 +151,32 @@ class CharacterFacade {
             'personality': c.personality,
             'tags': _jsonList(c.tags),
             'hasAvatar': c.imagePath != null && c.imagePath!.isNotEmpty,
+            'avatarVersion': _avatarVersion(c.imagePath),
             'folderId': c.folderId ?? '',
             'messageCount': msgCounts[c.id] ?? 0,
           },
         )
         .toList();
+  }
+
+  /// The avatar file's modified-time (ms) — used by the web UI as a cache-
+  /// busting version token in the thumbnail URL (`?w=…&v=<version>`), so a
+  /// character whose picture is swapped gets a *new* URL and both the browser
+  /// and service-worker caches fetch it fresh instead of serving the old one.
+  /// Returns 0 when there's no avatar or it can't be stat'd (the client then
+  /// simply omits `v`, which is still correct — just uncached-by-version).
+  int _avatarVersion(String? imagePath) {
+    if (imagePath == null || imagePath.isEmpty) return 0;
+    try {
+      final f = File(
+        p.join(_storage.charactersDir.path, p.basename(imagePath)),
+      );
+      return f.existsSync()
+          ? f.statSync().modified.millisecondsSinceEpoch
+          : 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
   /// The character folder tree (id, name, parentId) so the web library can show
