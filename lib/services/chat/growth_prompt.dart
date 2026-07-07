@@ -191,7 +191,7 @@ String buildGrowthInjection({
         'personality above.]\n${legacyBlob.trim()}';
   }
   if (activeRings.isEmpty) return '';
-  final shown = activeRings.take(GrowthPhysics.kInjectedRings);
+  final shown = GrowthPhysics.injectionSelection(activeRings);
   final lines = shown.map(
     (r) => '- ${GrowthPhysics.injectionLine(r, charName: charName)}',
   );

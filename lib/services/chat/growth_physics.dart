@@ -62,6 +62,14 @@ class GrowthPhysics {
   /// How many rings the [Character Growth] injection block renders.
   static const int kInjectedRings = 8;
 
+  /// Of [kInjectedRings], up to this many slots are reserved for the
+  /// strongest still-in-progress (non-established) rings. Established rings
+  /// never fade and strength ties rank the older ring first, so without a
+  /// reserve a cast of 8+ permanent rings would crowd new growth out of the
+  /// prompt forever — the character would keep growing on record while
+  /// visibly freezing in the story.
+  static const int kReservedFreshSlots = 2;
+
   /// Max stored length of a ring sentence (model-written rings; the archive
   /// entry written by code is exempt).
   static const int kRingMaxChars = 200;
@@ -103,6 +111,29 @@ class GrowthPhysics {
       if (weakest == null || ring.strength < weakest.strength) weakest = ring;
     }
     return weakest;
+  }
+
+  /// The rings the injection block renders: the top [kInjectedRings] of
+  /// [activeRings] (already strongest-first), except that up to
+  /// [kReservedFreshSlots] are held for the strongest non-established rings
+  /// so in-progress growth always keeps a prompt voice. Relative strength
+  /// order is preserved; when 8 or fewer rings are active — or the fresh
+  /// rings already rank inside the top 8 — this matches a plain top-8 take.
+  static List<GrowthRingData> injectionSelection(
+    List<GrowthRingData> activeRings,
+  ) {
+    if (activeRings.length <= kInjectedRings) return activeRings;
+    final reserved = activeRings
+        .where((r) => !isEstablished(r))
+        .take(kReservedFreshSlots)
+        .toList();
+    final chosen = {
+      ...reserved,
+      ...activeRings
+          .where((r) => !reserved.contains(r))
+          .take(kInjectedRings - reserved.length),
+    };
+    return activeRings.where(chosen.contains).toList();
   }
 
   /// Deterministic injection prefix by tier — settled facts read plainly,

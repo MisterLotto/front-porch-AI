@@ -112,7 +112,10 @@ Ops mirror `journal_ops.dart`, tiny outputs, local-model floor:
 - `<ring category="stance" src="#12,#14">has started guarding {{user}}'s sleep</ring>` — add
 - `<ring id="3" action="reinforce" src="#18"/>` — strengthen + append receipts
 - `<ring id="3" action="revise">reworded text</ring>`
-- `<ring id="3" action="retire"/>` — contradicted / outgrown → Past
+- `<ring id="3" action="retire"/>` — contradicted / outgrown → Past. Retire
+  ops targeting a user-pinned ring are dropped at resolution (2026-07-07):
+  pinned means permanent, so only the diary UI may retire those; reinforce
+  and revise on pinned rings stay allowed.
 - Tool-calling variant (`kGrowthTools`) mirrors `kJournalTools`; the
   tools-vs-XML probe memory (`_xmlOnlyBackends`) is LIFTED from
   JournalMaintenance into shared plumbing so both passes learn a backend's
@@ -156,9 +159,21 @@ base (description + personality) + a compact block:
 - Lately, <emerging ring>
 ```
 
-Top `kInjectedRings = 8` by (tier, strength). Bounded, no echo, a fraction of
-the old blob cost. Rings never need embeddings — always-few, always-ranked
-(no-RAG floor is trivially satisfied).
+Top `kInjectedRings = 8` by (tier, strength) — except up to
+`kReservedFreshSlots = 2` of those slots are reserved for the strongest
+non-established rings (`GrowthPhysics.injectionSelection`, added 2026-07-07).
+Established rings never fade and strength ties rank the older ring first, so
+without the reserve a cast of 8+ permanent rings would crowd new growth out
+of the prompt forever — the character would keep growing on record while
+visibly freezing in the story. With ≤ 8 active rings (or when the fresh rings
+already rank inside the top 8) the selection is identical to a plain top-8
+take. Bounded, no echo, a fraction of the old blob cost. Rings never need
+embeddings — always-few, always-ranked (no-RAG floor is trivially satisfied).
+
+Known, accepted limit: with more than 8 *established* rings, the weakest
+established ones fall out of the prompt (only their strength ordering
+decides). Raising the injected count costs tokens every turn; 9+ established
+rings is deep-marathon territory, so this is deliberate.
 
 ### 4.6 Groups — parity by construction
 

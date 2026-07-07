@@ -171,11 +171,9 @@ class GrowthService {
     final session = getSessionId();
     final legacy = store.legacyBlobFor(session, charId);
     if (legacy != null && legacy.$1.isNotEmpty) return legacy.$1;
-    return store
-        .activeRingsFor(session, charId)
-        .take(GrowthPhysics.kInjectedRings)
-        .map((r) => GrowthPhysics.injectionLine(r, charName: card.name))
-        .join('\n');
+    return GrowthPhysics.injectionSelection(
+      store.activeRingsFor(session, charId),
+    ).map((r) => GrowthPhysics.injectionLine(r, charName: card.name)).join('\n');
   }
 
   // ── The growth pass (§4.2) ───────────────────────────────────────────
@@ -424,6 +422,9 @@ class GrowthService {
             continue;
           }
           final ring = activeRings[handle - 1];
+          // User-pinned rings are permanent: the pass may reinforce or
+          // reword them, but only the diary UI may retire them.
+          if (op.action == GrowthOpAction.retire && ring.pinned) continue;
           resolved.add(
             GrowthProposedOp(
               action: op.action,

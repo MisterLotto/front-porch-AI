@@ -84,6 +84,36 @@ void main() {
       );
     });
 
+    test('injectionSelection reserves prompt slots for in-progress growth', () {
+      // 8 or fewer active rings: everything injects, no reserve needed.
+      final few = [for (var i = 0; i < 5; i++) _ring(id: 'r$i', strength: 0.9)];
+      expect(GrowthPhysics.injectionSelection(few), few);
+
+      // A settled cast (10 established) + 2 in-progress: the fresh pair takes
+      // the reserved slots instead of being crowded out forever (established
+      // rings never fade, so without the reserve the prompt would freeze).
+      final est = [for (var i = 0; i < 10; i++) _ring(id: 'e$i', strength: 1.0)];
+      final fresh = [
+        _ring(id: 'dev', strength: 0.5),
+        _ring(id: 'new', strength: 0.3),
+      ];
+      final selected = GrowthPhysics.injectionSelection([...est, ...fresh]);
+      expect(selected, hasLength(GrowthPhysics.kInjectedRings));
+      expect(selected.map((r) => r.id), containsAll(['dev', 'new']));
+      // Strength ordering is preserved: established first, freshest last.
+      expect(selected.take(6).map((r) => r.id), ['e0', 'e1', 'e2', 'e3', 'e4', 'e5']);
+      expect(selected.last.id, 'new');
+
+      // Overflow with no in-progress rings at all: plain top-8 take.
+      final all = [
+        for (var i = 0; i < 12; i++) _ring(id: 'a$i', strength: 1.0 - i * 0.01),
+      ];
+      expect(
+        GrowthPhysics.injectionSelection(all).map((r) => r.id),
+        [for (var i = 0; i < 8; i++) 'a$i'],
+      );
+    });
+
     test('injection lines get deterministic tier prefixes; names keep their capital', () {
       expect(
         GrowthPhysics.injectionLine(_ring(strength: 0.9)),
@@ -550,6 +580,21 @@ Some prose the model wrote.
       // +0.20 reinforce, no -0.05 fade (engaged rings are exempt).
       expect(ring.strength, closeTo(0.7, 1e-9));
       expect(GrowthStore.receiptsOf(ring), [3]);
+    });
+
+    test('retire op is refused for user-pinned rings', () async {
+      await store.addRing(
+        sessionId: 's1',
+        characterId: 'mira',
+        content: 'pinned ring',
+        category: 'trait',
+        strength: 0.5,
+        pinned: true,
+      );
+      xmlReply = '<ring action="retire" id="1"/>';
+      await makeService(messages: chatty).runGrowthPass();
+      final ring = (await store.ringsFor('s1', 'mira')).single;
+      expect(ring.retired, isFalse); // pinned = permanent; diary UI only
     });
 
     test('LLM failure leaves cursor unmoved (auto-retry semantics)', () async {
