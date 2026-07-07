@@ -11,7 +11,8 @@ Three related fixes to the "enjoys low hygiene" (prefers-being-dirty) feature.
 
 - **How fixed:** (1) `getInjectionEffectiveStep` takes an optional per-character override; both per-turn injections resolve the flag from the SPEAKER card they already look up, never the shared pointer. (2) The `enjoysLowHygiene` getter returns `false` in group mode instead of consulting the 1:1 scalar, closing the leak at the source (no reset-site churn). (3) A dedicated `hygieneSteppedTextWhenEnjoysLow` list describes too-clean distress (scrubbed raw, craving her musk back), and the hygiene line is annotated "this character LIKES being unwashed — a HIGH number is unwelcome" so the model reads the inverted polarity correctly. 1:1 behavior for non-filthy characters is byte-identical (passes null → global). Engine-side only, no DB change, so desktop/web parity holds by construction. The autonomous away-cue's `getLowNeedsForInjection` was left as-is (renders raw values, can't produce the contradiction).
 - **Verification:** flutter analyze (3 lib + 1 test) — No issues. dart fix — nothing. New leak-regression test fails on old code via the CATASTROPHIC assertion; new filthy-lover test asserts inverted wording. Full chat-service suite 495/495; needs_sim goldens pass.
-- **Commit:** (pending)
+- **Follow-up (data, not code):** the same group's Iris genuinely has `enjoys_low_hygiene = true` on her own library card (verified in the card PNG's `chara` metadata); `_createGroupMember` copies extensions verbatim, so her group copy inherited it and her hygiene inverting is correct behavior for her card — a user-toggle choice, not a leak.
+- **Commit:** 7822052
 
 ## 2026-07-07 — Growth Rings: reserved injection slots for in-progress growth + pinned rings survive LLM retire ops
 
