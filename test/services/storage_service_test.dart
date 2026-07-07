@@ -820,11 +820,13 @@ void main() {
       },
     );
 
-    test('setEvolutionInterval clamps and persists', () async {
+    test('setGrowthInterval clamps and persists', () async {
       final svc = await createStorageService();
-      await svc.setEvolutionInterval(5); // should clamp to 10
+      await svc.setGrowthInterval(1); // should clamp to 2 (growth-rings §6)
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getInt('evolution_interval'), 10);
+      expect(prefs.getInt('growth_interval'), 2);
+      await svc.setGrowthInterval(50); // and down to 20
+      expect(prefs.getInt('growth_interval'), 20);
     });
   });
 

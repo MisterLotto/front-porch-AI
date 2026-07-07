@@ -7,7 +7,7 @@
 // aug exercising only passive/qualified (no journal-specific aug file edits;
 // full in dedicated journal tests + manual; exercised via god thins
 // _maybeRunJournalPass/forceSummaryUpdate ; qualified notes per precedent).
-// aug exercising only passive/qualified (no evolution-specific aug file edits; full in dedicated + manual; exercised via god thins _maybeRunPeriodicEvals/_triggerCharacterEvolution ; qualified notes only in dedicated header + god + MD per precedent).
+// aug exercising only passive/qualified (no evolution-specific aug file edits; full in dedicated + manual; exercised via god thins _maybeRunPeriodicEvals/_maybeRunGrowthPass ; qualified notes only in dedicated header + god + MD per precedent).
 // aug exercising only passive/qualified (no realism-verification-specific aug file edits; full in dedicated + manual; exercised via god thins + leaf verify cb ; qualified notes only in dedicated header + god + MD per precedent).
 
 import 'package:flutter_test/flutter_test.dart';

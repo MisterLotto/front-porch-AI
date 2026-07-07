@@ -54,7 +54,6 @@ extension ChatServiceGroupEntry on ChatService {
     _groupCharacterRAGPriorities = {};
 
     // Scene Guests are 1:1-only — clear them when entering a group.
-    _clearSceneGuestEvolution(); // Phase 3: keep guest-evolution reset in sync.
     _sceneGuestIds.clear();
     _sceneGuestCards.clear();
     _pendingGuestDeparture = null;
@@ -227,10 +226,8 @@ extension ChatServiceGroupEntry on ChatService {
         false; // explicit secondary zero for _summaryPaused (symmetric; group fresh entry zero)
     _isSummaryGenerating =
         false; // secondary flag zero for the journal recap state (stateless/prompt-only; see incomplete zeroing ... now complete + keep-sync lists)
-    _isEvolvingCharacter = false;
-    _evolutionStatus = '';
-    _evolutionError =
-        ''; // explicit evo flag/status/error zero on group fresh entry (incomplete zeroing ... now complete; evolution_service (stateless or prompt-only; no reset calls needed); cross-ref setActiveCharacter:1572)
+    _isGrowthPassRunning =
+        false; // growth-pass flag zero on group fresh entry (transient guard; keep reset blocks in sync)
 
     // Try to load last session for this group
     await _loadLastSession();
@@ -284,8 +281,9 @@ extension ChatServiceGroupEntry on ChatService {
       await _saveChat();
     }
 
-    // Load evolved fields for all group characters
-    _loadGroupEvolvedFields();
+    // Cache growth rings (and any not-yet-distilled legacy evolved blobs)
+    // for all group characters so the injection layer can read them sync.
+    await _refreshGrowthCache();
 
     _isLoadingSession = false;
     notifyListeners();

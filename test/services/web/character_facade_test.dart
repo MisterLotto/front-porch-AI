@@ -78,7 +78,9 @@ void main() {
       expect(d!['name'], 'Alice');
       expect(d['description'], 'A friendly guide');
       expect(d['tags'], ['mentor', 'kind']);
-      expect(d['evolutionCount'], 0); // no chat injected
+      // Growth replaced evolution: rings are served per-participant by
+      // /api/chat/tools/growth, so the card payload carries no evolved fields.
+      expect(d.containsKey('evolutionCount'), isFalse);
     });
 
     test('detail returns null for an unknown id', () async {

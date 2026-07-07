@@ -57,10 +57,9 @@ extension ChatServiceSessionLoad on ChatService {
           false; // explicit secondary zero for _summaryPaused (symmetric; _loadLast empty early return 0-session)
       _isSummaryGenerating =
           false; // secondary zero in _loadLast empty (0-session for summary flag)
-      _isEvolvingCharacter = false;
-      _evolutionStatus = '';
-      _evolutionError =
-          ''; // explicit evo flag/status/error zero in _loadLast empty early return (0-session path hygiene; evolution_service (stateless or prompt-only; no reset calls needed))
+      _isGrowthPassRunning =
+          false; // growth-pass flag zero in _loadLast empty early return (0-session path hygiene; keep reset blocks in sync)
+      _growthStore.invalidate(); // no session — nothing to inject
       return;
     }
 
@@ -173,14 +172,10 @@ extension ChatServiceSessionLoad on ChatService {
       _loadSceneGuestsFromSession(lastSession);
     }
 
-    // Load per-session evolution (1:1 mode only — group is handled by _loadGroupEvolvedFields)
-    if (_activeCharacter != null) {
-      final charId = _getCharacterIdFromCard(_activeCharacter!);
-      _evolvedPersonalities[charId] = lastSession.evolvedPersonality;
-      _evolvedScenarios[charId] = lastSession.evolvedScenario;
-      _characterEvolutionCount = lastSession.evolutionCount;
-      _groupEvolutionCounts[charId] = lastSession.evolutionCount;
-    }
+    // Cache growth rings (and any not-yet-distilled legacy evolved blobs) for
+    // this session so the injection layer can read them synchronously —
+    // scoped to the session, not the character (1:1 + group both).
+    await _refreshGrowthCache();
 
     // Load messages
     // Zero secondary objective flags in loaded path of _loadLast (before callers do _loadActiveObjectives / _loadObjectivesForCurrentSpeaker); incomplete zeroing hygiene.
@@ -191,10 +186,8 @@ extension ChatServiceSessionLoad on ChatService {
         false; // explicit secondary zero for _summaryPaused (symmetric; _loadLast empty/loaded hygiene)
     _isSummaryGenerating =
         false; // secondary flag zero for the journal recap state (stateless/prompt-only; incomplete zeroing ... now complete)
-    _isEvolvingCharacter = false;
-    _evolutionStatus = '';
-    _evolutionError =
-        ''; // explicit evo flag/status/error zero in _loadLast loaded path (incomplete zeroing ... now complete; evolution_service (stateless or prompt-only; no reset calls needed))
+    _isGrowthPassRunning =
+        false; // growth-pass flag zero in _loadLast loaded path (transient guard; keep reset blocks in sync)
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
       debugPrint(
@@ -441,10 +434,9 @@ extension ChatServiceSessionLoad on ChatService {
           false; // explicit secondary zero for _summaryPaused on loadSession loaded path (incomplete zeroing ... now complete; see keep-sync + journal_maintenance)
       _isSummaryGenerating =
           false; // secondary zero for flag on loadSession loaded (symmetric)
-      _isEvolvingCharacter = false;
-      _evolutionStatus = '';
-      _evolutionError =
-          ''; // explicit evo flag/status/error zero on loadSession loaded (symmetric; incomplete zeroing ... now complete; evolution_service (stateless or prompt-only; no reset calls needed))
+      _isGrowthPassRunning =
+          false; // growth-pass flag zero on loadSession loaded (transient guard; keep reset blocks in sync)
+      await _refreshGrowthCache(); // ring cache scoped to the newly loaded session
       _sessionName = session.name;
       _sessionDescription = session.description;
       _parentSessionId = session.parentSession;
@@ -510,14 +502,8 @@ extension ChatServiceSessionLoad on ChatService {
       _needsSimulation.resetBuffers();
       // trust/fixation etc already via _relationshipService.loadScalars above.
 
-      // Load per-session evolution (1:1 mode only — group handled by _loadGroupEvolvedFields)
-      if (_activeCharacter != null) {
-        final charId = _getCharacterIdFromCard(_activeCharacter!);
-        _evolvedPersonalities[charId] = session.evolvedPersonality;
-        _evolvedScenarios[charId] = session.evolvedScenario;
-        _characterEvolutionCount = session.evolutionCount;
-        _groupEvolutionCounts[charId] = session.evolutionCount;
-      }
+      // (Growth rings + legacy blobs were cached by the _refreshGrowthCache
+      // call above — session-scoped, both 1:1 and group.)
 
       // Per-session generation parameter overrides (v22) — loaded via raw SQL
       // so this works even before build_runner regenerates database.g.dart.

@@ -1345,15 +1345,18 @@ extension ChatServiceGeneration on ChatService {
           // in group non-obs (same caveat the old summary had).
           _maybeRunJournalPass();
 
+          // Growth pass if due (fire-and-forget): ring ops per owner —
+          // members AND 1:1 scene guests who spoke in the window (guest
+          // growth rides this shared pass; there is no per-guest trigger).
+          // Cursor-based like the journal, so it is naturally regen-safe.
+          _maybeRunGrowthPass();
+
           // Embed messages for RAG memory (fire-and-forget)
           _maybeEmbedMessages();
 
-          // Periodic evaluations coordinator (facts + character evolution + cast
-          // detection). These are NEW-TURN work — only on a normal generation,
-          // never on regen/continue (which replay or extend an existing turn).
-          // Re-running on regen double-fired character evolution (inflating the
-          // count and amplifying the model's own baked-in motifs every turn) and
-          // re-extracted facts. Each respects its own interval inside.
+          // Periodic evaluations coordinator (Scene Guest cast detection).
+          // NEW-TURN work — only on a normal generation, never on
+          // regen/continue (which replay or extend an existing turn).
           if (mode == GenerationMode.normal) {
             _maybeRunPeriodicEvals();
           }

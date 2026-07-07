@@ -35,10 +35,8 @@ extension ChatServiceObjectives on ChatService {
           false; // explicit secondary zero for _summaryPaused (symmetric; _loadActiveObjectives empty hygiene)
       _isSummaryGenerating =
           false; // secondary zero in _loadActiveObjectives empty (0-session hygiene for summary flag)
-      _isEvolvingCharacter = false;
-      _evolutionStatus = '';
-      _evolutionError =
-          ''; // explicit evo flag/status/error zero in _loadActiveObjectives empty (0-session hygiene; evolution_service (stateless or prompt-only; no reset calls needed))
+      _isGrowthPassRunning =
+          false; // growth-pass flag zero in _loadActiveObjectives empty (0-session hygiene; keep reset blocks in sync)
       return;
     }
     final charId = _getCharacterIdFromCard(_activeCharacter!);

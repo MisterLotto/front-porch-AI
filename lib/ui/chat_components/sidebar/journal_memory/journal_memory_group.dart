@@ -22,7 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../porch_accordion.dart';
-import 'evolution_panel.dart';
+import 'growth_panel.dart';
 import 'journal_panel.dart';
 import 'memory_panel.dart';
 import 'summary_section.dart';
@@ -30,27 +30,27 @@ import 'summary_section.dart';
 /// 📖 Journal & Memory accordion — groups the "Where we are" recap
 /// (SummarySection), the Journal card peek (JournalPanel — the focused
 /// participant's diary, per-member in groups), the Memory (RAG) panel, and
-/// the Character Evolution panel under one collapsible card.
+/// the Growth Rings timeline (GrowthPanel — also per focused participant)
+/// under one collapsible card.
 ///
-/// Branch gating matches the old chat_page sidebar: Memory (RAG) and
-/// Evolution are 1:1 full chats only; the Journal shows everywhere except
-/// for lite scene guests (guests never journal).
+/// Branch gating: Memory (RAG) is 1:1 full chats only; the Journal and
+/// Growth show everywhere except for lite scene guests (guests never
+/// journal; their rings grow in the background and surface if promoted).
 class JournalMemoryGroup extends StatelessWidget {
   final ChatService chatService;
   final bool isGroup;
   final bool isLite;
 
-  /// The focused participant whose diary the JournalPanel shows
-  /// (ChatParticipant.id — the same stable id the cards are keyed by).
+  /// The focused participant whose diary + growth the panels show
+  /// (ChatParticipant.id — the same stable id cards and rings are keyed by).
   final String diaryOwnerId;
   final String diaryOwnerName;
 
-  /// Journal receipts tap-to-jump (threaded down to the diary dialog).
+  /// Receipts tap-to-jump (journal dialog + growth ring receipts).
   final ValueChanged<int> onJumpToMessage;
 
   final bool initiallyExpanded;
   final ValueChanged<bool>? onExpansionChanged;
-  final VoidCallback onEvolveNow;
 
   const JournalMemoryGroup({
     super.key,
@@ -62,7 +62,6 @@ class JournalMemoryGroup extends StatelessWidget {
     required this.onJumpToMessage,
     required this.initiallyExpanded,
     this.onExpansionChanged,
-    required this.onEvolveNow,
   });
 
   @override
@@ -97,8 +96,15 @@ class JournalMemoryGroup extends StatelessWidget {
           if (showMemory) ...[
             const SizedBox(height: 12),
             MemoryPanel(chatService: chatService),
+          ],
+          if (!isLite) ...[
             const SizedBox(height: 12),
-            EvolutionPanel(chatService: chatService, onEvolveNow: onEvolveNow),
+            GrowthPanel(
+              chatService: chatService,
+              characterId: diaryOwnerId,
+              characterName: diaryOwnerName,
+              onJumpToMessage: onJumpToMessage,
+            ),
           ],
         ],
       ),

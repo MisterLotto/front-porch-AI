@@ -23,6 +23,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
@@ -154,6 +156,18 @@ class LlmEvalEngine {
   // Messages for recent context in evals + gen/check
   final List<ChatMessage> Function() getMessages;
 
+  // Tools transport for the needs-impact eval (nullable — tests and any
+  // host without the tools door stay on the text path; the god wires the
+  // same _fireToolEval/_toolProbe/_evalBackendIdentity the Journal, Growth,
+  // and realism evals share, so the probe answers once per run app-wide).
+  final Future<LlmToolResponse?> Function(
+    String prompt,
+    List<Map<String, dynamic>> tools,
+  )?
+  fireToolEval;
+  final ToolTransportProbe? probe;
+  final String Function()? getBackendIdentity;
+
   // LLM readiness + cancel (honors test overrides via live closure in god)
   final LLMService Function() getLlmService;
   final bool Function() getIsLocal;
@@ -192,6 +206,9 @@ class LlmEvalEngine {
     required this.getUserName,
     required this.getRealismEnabled,
     required this.getMessages,
+    this.fireToolEval,
+    this.probe,
+    this.getBackendIdentity,
     required this.getLlmService,
     required this.getIsLocal,
     required this.getKoboldThinkingModel,
@@ -475,22 +492,31 @@ class LlmEvalEngine {
                 'do not subtract any baseline drift.\n\n')
         : '';
 
-    final String prompt;
-    if (decayTurns != null) {
-      // ── AFK auto-response simplified prompt ──────────────────────────
-      // The normal evaluator prompt (~2000 chars) is too complex for
-      // local models, causing them to return small negative defaults
-      // instead of proper restorative deltas. This stripped-down version
-      // only lists restorative activities with positive deltas.
-      prompt =
-          'Evaluate how this daily scene affects $charName\'s needs.\n\n'
+    String buildPrompt({required bool toolsMode}) {
+      // The format sections below are the ONLY difference between the tools
+      // and text transports — every guideline/magnitude line is shared, so
+      // the two paths can never drift in what the model is told.
+      final flatJsonAsk = toolsMode
+          ? 'Report the result by calling the $kNeedsImpactTool tool. '
+                'Use ONLY the tool — no plain-text reply.\n'
+          : 'Respond with ONLY a flat JSON object. Do NOT use markdown code blocks — return raw JSON only:\n'
+                '{"activities": ["sexual", "self_touch", "messy", "dominance" or similar], '
+                '"intensity": 1-10, '
+                '"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, "fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, "comfort_delta": <int>, ';
+      if (decayTurns != null) {
+        // ── AFK auto-response simplified prompt ──────────────────────────
+        // The normal evaluator prompt (~2000 chars) is too complex for
+        // local models, causing them to return small negative defaults
+        // instead of proper restorative deltas. This stripped-down version
+        // only lists restorative activities with positive deltas.
+        return 'Evaluate how this daily scene affects $charName\'s needs.\n\n'
           '$needsStateStr'
           'Scene:\n$responseText\n\n'
-          'Return ONLY raw JSON with all seven _delta fields and a reason. '
-          'Do not use markdown code blocks. No other text.\n'
-          '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, '
-          '"fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, '
-          '"comfort_delta": <int>, "reason": "<brief reason>"}\n\n'
+          '${toolsMode ? 'Report the effects by calling the $kNeedsImpactTool tool with all seven _delta fields and a reason.\n\n' : 'Return ONLY raw JSON with all seven _delta fields and a reason. '
+              'Do not use markdown code blocks. No other text.\n'
+              '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, '
+              '"fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, '
+              '"comfort_delta": <int>, "reason": "<brief reason>"}\n\n'}'
           'Guidelines (at ${strength}x scale \u2014 scale these baselines by $strength):\n'
           '  • Eating food or a meal \u2192 hunger +15 to +70\n'
           '  • Using toilet or bathroom \u2192 bladder +30 to +90\n'
@@ -508,12 +534,11 @@ class LlmEvalEngine {
           '  • Drinking any beverage \u2192 energy +5 to +10\n'
           '  • Cooking or preparing food \u2192 comfort +5\n\n'
           'Only report positive gains. Do NOT subtract anything.\n'
-          'Return raw JSON with no markdown, no explanation.';
-    } else if (userCritique != null && userCritique.trim().isNotEmpty) {
-      // B: unified rich correction prompt (no duplication of context logic)
-      final prev = jsonEncode(previousDeltas ?? {});
-      prompt =
-          'You are the Realism Director correcting the previous Needs deltas for a roleplay scene.\n\n'
+          '${toolsMode ? 'Use ONLY the tool — no plain-text reply.' : 'Return raw JSON with no markdown, no explanation.'}';
+      } else if (userCritique != null && userCritique.trim().isNotEmpty) {
+        // B: unified rich correction prompt (no duplication of context logic)
+        final prev = jsonEncode(previousDeltas ?? {});
+        return 'You are the Realism Director correcting the previous Needs deltas for a roleplay scene.\n\n'
           '$personalityInjection'
           '$currentStance'
           'RESPONSE (the scene that just happened):\n$responseText\n\n'
@@ -533,15 +558,13 @@ class LlmEvalEngine {
           '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact", "is_climax": false, "refractory_turns": 0}\n'
           '{"hunger_delta": 0, "energy_delta": -12, "hygiene_delta": -10, "fun_delta": 25, "social_delta": 10, "bladder_delta": 0, "comfort_delta": 8, "reason": "$charName climaxed during sex", "is_climax": true, "refractory_turns": 6}\n\n' +
           climaxGuidance +
-          'Respond with ONLY a flat JSON object. Do NOT use markdown code blocks — return raw JSON only:\n'
-          '{"activities": ["sexual", "self_touch", "messy", "dominance" or similar], '
-          '"intensity": 1-10, '
-          '"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, "fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, "comfort_delta": <int>, '
-          '"reason": "<brief grounded reason for the deltas incorporating the critique>", '
-          '"is_climax": true/false, "refractory_turns": <int 3-7 when is_climax is true, else 0> }';
-    } else {
-      prompt =
-          'You are evaluating the effects of a roleplay scene on $charName\'s needs.\n\n'
+          flatJsonAsk +
+          (toolsMode
+              ? ''
+              : '"reason": "<brief grounded reason for the deltas incorporating the critique>", '
+                  '"is_climax": true/false, "refractory_turns": <int 3-7 when is_climax is true, else 0> }');
+      } else {
+        return 'You are evaluating the effects of a roleplay scene on $charName\'s needs.\n\n'
               '$personalityInjection'
               '$currentStance'
               'RESPONSE (the scene that just happened):\n$responseText\n\n'
@@ -565,15 +588,15 @@ class LlmEvalEngine {
               '  • A thorough wash, shower, or bath → hygiene +50 to +90\n'
               '  • Deep, fulfilling social connection, cuddling, or play → social / fun +20 to +50; comfort +10 to +25\n'
               'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
-          climaxGuidance +
-          'Respond with ONLY a flat JSON object. Do NOT use markdown code blocks — return raw JSON only:\n'
-              '{"activities": ["sexual", "self_touch", "messy", "dominance" or similar], '
-              '"intensity": 1-10, '
-              '"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, "fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, "comfort_delta": <int>, '
-              '"reason": "<brief grounded reason for the deltas>", '
-              '"is_climax": true/false, "refractory_turns": <int 3-7 when is_climax is true, else 0> }\n'
-              'Example when $charName climaxes: {"activities": ["sexual"], "intensity": 9, "hunger_delta": 0, "energy_delta": -12, "hygiene_delta": -10, "fun_delta": 25, "social_delta": 10, "bladder_delta": 0, "comfort_delta": 8, "reason": "$charName came hard during sex", "is_climax": true, "refractory_turns": 6}\n'
-              'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.';
+            climaxGuidance +
+            flatJsonAsk +
+            (toolsMode
+                ? 'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.'
+                : '"reason": "<brief grounded reason for the deltas>", '
+                      '"is_climax": true/false, "refractory_turns": <int 3-7 when is_climax is true, else 0> }\n'
+                      'Example when $charName climaxes: {"activities": ["sexual"], "intensity": 9, "hunger_delta": 0, "energy_delta": -12, "hygiene_delta": -10, "fun_delta": 25, "social_delta": 10, "bladder_delta": 0, "comfort_delta": 8, "reason": "$charName came hard during sex", "is_climax": true, "refractory_turns": 6}\n'
+                      'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.');
+      }
     }
 
     try {
@@ -582,7 +605,25 @@ class LlmEvalEngine {
             ? '[Realism:Needs] Running manual reprocess impact eval (via engine)...'
             : '[Realism:Needs] Running consolidated impact eval (via engine)...',
       );
-      final raw = await fireLLMEval(prompt, onChunk: onChunk);
+      // Tools transport when wired (the shared negotiation — one probe per
+      // backend identity per run, shared app-wide); plain text path otherwise
+      // (tests / hosts without the tools door).
+      final raw = fireToolEval != null && probe != null
+          ? await fireStructuredEval(
+              probe: probe!,
+              backendIdentity: getBackendIdentity?.call() ?? '',
+              debugLabel: kNeedsImpactTool,
+              tools: kNeedsImpactEvalTools,
+              buildPrompt: buildPrompt,
+              callToText: (resp) =>
+                  realismToolCallToJson(kNeedsImpactTool, resp.calls),
+              fireToolEval: fireToolEval!,
+              fireTextEval: fireLLMEval,
+              isCancelled: () =>
+                  getIsCancellingRealismEval() || getRealismEvalCancelled(),
+              onChunk: onChunk,
+            )
+          : await fireLLMEval(buildPrompt(toolsMode: false), onChunk: onChunk);
       if (raw == null) return null;
       final searchText = stripThinkBlocks(raw);
       if (searchText.trim().isEmpty) return null;

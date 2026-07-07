@@ -31,7 +31,7 @@ import 'memory_sources_list.dart';
 /// Memory (RAG) sidebar panel — enable toggle (with first-run consent flow),
 /// embedding engine status, retrieval settings, cross-character source picker,
 /// and the Data Bank. The RAG half of the old MemorySection; the Character
-/// Evolution half lives in EvolutionPanel.
+/// Growth half lives in GrowthPanel.
 class MemoryPanel extends StatefulWidget {
   final ChatService chatService;
   const MemoryPanel({super.key, required this.chatService});

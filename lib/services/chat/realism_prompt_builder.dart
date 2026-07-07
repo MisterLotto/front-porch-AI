@@ -295,6 +295,13 @@ class RealismPromptBuilder {
       'Respond with ONLY a flat JSON object containing ${keys.map((k) => '"$k"').join(', ')}. '
       'Do NOT use markdown code blocks — return raw JSON only.';
 
+  /// Tools-mode closing section (the journal_prompt pattern: everything above
+  /// the format instruction is byte-identical between transports, so the two
+  /// paths can never drift in what the model is told).
+  static String _toolInstruction(String toolName) =>
+      'Report your evaluation by calling the $toolName tool with the fields '
+      'described above. Use ONLY the tool — no plain-text reply.';
+
   // ── Full prompts (multi-call path + fused one-shot, parity by construction) ─
 
   static String relationshipEvalPrompt({
@@ -303,6 +310,7 @@ class RealismPromptBuilder {
     required String dossier,
     required String standing,
     required String recent,
+    bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
       'exchange truly landed for them.\n\n'
@@ -314,7 +322,7 @@ class RealismPromptBuilder {
       '${_trustSection(charName, userName)}'
       '\n'
       '${_recentBlock(recent)}'
-      '${_jsonInstruction(const ['relationship_delta', 'bond_reason', 'trust_delta', 'trust_reason'])}';
+      '${toolsMode ? _toolInstruction('report_relationship') : _jsonInstruction(const ['relationship_delta', 'bond_reason', 'trust_delta', 'trust_reason'])}';
 
   static String emotionalEvalPrompt({
     required String charName,
@@ -325,6 +333,7 @@ class RealismPromptBuilder {
     required bool arousalEnabled,
     required int arousalLevel,
     List<String> allowedEmotionLabels = const [],
+    bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, naming what they '
       'truly feel right now.\n\n'
@@ -336,7 +345,7 @@ class RealismPromptBuilder {
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel) : ''}'
       '\n'
       '${_recentBlock(recent)}'
-      '${_jsonInstruction(['emotion', 'emotion_intensity', if (arousalEnabled) 'arousal_delta'])}';
+      '${toolsMode ? _toolInstruction('report_emotional_state') : _jsonInstruction(['emotion', 'emotion_intensity', if (arousalEnabled) 'arousal_delta'])}';
 
   static String narrativeEvalPrompt({
     required String charName,
@@ -344,6 +353,7 @@ class RealismPromptBuilder {
     required String dossier,
     required String recent,
     String? primaryObjective,
+    bool toolsMode = false,
   }) =>
       'You are the autonomous story engine inside $charName\'s head, judging what they now want and '
       'what lingers with them. Both must fit who $charName is — their ambitions, wounds, and style — '
@@ -354,7 +364,7 @@ class RealismPromptBuilder {
       '${_fixationSection(charName)}'
       '\n'
       '${_recentBlock(recent)}'
-      '${_jsonInstruction(const ['proposed_objective', 'fixation_topic'])}';
+      '${toolsMode ? _toolInstruction('report_narrative') : _jsonInstruction(const ['proposed_objective', 'fixation_topic'])}';
 
   static String oneShotEvalPrompt({
     required String charName,
@@ -366,6 +376,7 @@ class RealismPromptBuilder {
     required int arousalLevel,
     List<String> allowedEmotionLabels = const [],
     String? primaryObjective,
+    bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
       'exchange truly landed for them across every dimension below.\n\n'
@@ -383,7 +394,7 @@ class RealismPromptBuilder {
       '${_reasonSection()}'
       '\n'
       '${_recentBlock(recent)}'
-      '${_jsonInstruction([
+      '${toolsMode ? _toolInstruction('report_realism') : _jsonInstruction([
         'relationship_delta',
         'bond_reason',
         'trust_delta',

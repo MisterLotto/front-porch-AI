@@ -112,10 +112,8 @@ extension ChatServiceSessionManage on ChatService {
         false; // explicit secondary zero for _summaryPaused (symmetric to generating; fork hygiene + incomplete zeroing now complete)
     _isSummaryGenerating =
         false; // zero secondary flag on fork (new branch hygiene, matches summary scalar reset)
-    _isEvolvingCharacter = false;
-    _evolutionStatus = '';
-    _evolutionError =
-        ''; // explicit evo flag/status/error zero on fork (new branch hygiene + incomplete zeroing now complete; evolution_service (stateless or prompt-only; no reset calls needed))
+    _isGrowthPassRunning =
+        false; // growth-pass flag zero on fork (new branch hygiene; keep reset blocks in sync)
 
     // Time-Travel Restoration
     if (_messages.isNotEmpty) {
@@ -123,6 +121,15 @@ extension ChatServiceSessionManage on ChatService {
     }
 
     await _saveChat();
+    // Growth rings carry into the fork like the rest of the character's
+    // history (the old evolved text carried the same way). Runs after
+    // _saveChat so the new session row exists for the legacy-blob copy.
+    await _growthStore.copySessionTo(
+      oldSessionId,
+      _currentSessionId!,
+      cursor: _messages.length,
+    );
+    await _refreshGrowthCache();
     notifyListeners();
   }
 
@@ -219,7 +226,6 @@ extension ChatServiceSessionManage on ChatService {
     _messages.clear();
     _greetingIndex = 0;
     // A fresh chat starts with no Scene Guests (they don't carry across sessions).
-    _clearSceneGuestEvolution(); // Phase 3: keep guest-evolution reset in sync.
     _sceneGuestIds.clear();
     _sceneGuestCards.clear();
     _pendingGuestDeparture = null;
@@ -261,10 +267,8 @@ extension ChatServiceSessionManage on ChatService {
     _messagesSinceLastCheck = 0;
     _isCheckingCompletion =
         false; // see decl + keep reset blocks (incomplete zeroing... now complete (see CLAUDE.md); explicit in both startNew branches)
-    _isEvolvingCharacter = false;
-    _evolutionStatus = '';
-    _evolutionError =
-        ''; // explicit evo flag/status/error zero in startNew 1:1/ext-seed branch (both startNew explicit + incomplete zeroing ... now complete; evolution_service (stateless or prompt-only; no reset calls needed))
+    _isGrowthPassRunning =
+        false; // growth-pass flag zero in startNew 1:1/ext-seed branch (both startNew explicit; keep reset blocks in sync)
 
     // Create new session ID for the new chat
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -447,26 +451,17 @@ extension ChatServiceSessionManage on ChatService {
             false; // explicit secondary zero for _summaryPaused (symmetric to generating; non-ext/group/0-session startNew path + now complete)
         _isSummaryGenerating =
             false; // explicit secondary zero in startNew non-ext/group/0-session path (both branches + now complete for summary flag too)
-        _isEvolvingCharacter = false;
-        _evolutionStatus = '';
-        _evolutionError =
-            ''; // explicit evo flag/status/error zero in startNew non-ext/group/0-session path (both branches + now complete for evo flag; evolution_service (stateless or prompt-only; no reset calls needed) + " )") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)"
+        _isGrowthPassRunning =
+            false; // growth-pass flag zero in startNew non-ext/group/0-session path (both branches; keep reset blocks in sync)
       }
     }
 
-    // Explicit flag + cadence counter zero for evolution (in addition to per-branch) to keep "incomplete zeroing... now complete (see CLAUDE.md)" + both startNew explicit; evolution_service (stateless or prompt-only; no reset calls needed) + " ; no god scalar zero needed -- live ext read; see also setActiveCharacter + group 0-session paths)" + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)".
-    // Also zero the facts counter here for symmetric hygiene on the two periodic cadence counters.
-    _isEvolvingCharacter = false;
-    _evolutionStatus = '';
-    _evolutionError = '';
-
-    // Clear the in-memory evolution cache so the new session starts with
-    // the original (unevolved) personality/scenario. The previous session's
-    // evolved data was still live in this map. (Flags zeroed explicitly in branches + here for hygiene; see preceding comment.)
-    _evolvedPersonalities.clear();
-    _evolvedScenarios.clear();
-    _groupEvolutionCounts.clear();
-    _characterEvolutionCount = 0;
+    // Drop the previous session's growth cache so the new chat starts with
+    // the original (ungrown) personality. A fresh session has no rings and
+    // no legacy blob, so an empty cache IS the correct state — the next
+    // _refreshGrowthCache (session load / first growth pass) re-scopes it.
+    _isGrowthPassRunning = false;
+    _growthStore.invalidate();
 
     if (_activeGroup != null && _groupCharacters.isNotEmpty) {
       // Group mode: respect explicit group.firstMessage (custom group greeting set

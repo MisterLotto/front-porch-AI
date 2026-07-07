@@ -7727,12 +7727,13 @@ class MessageEmbedding extends DataClass
   final int dimensions;
   final DateTime createdAt;
 
-  /// 'message' for normal RAG windows (default), 'needs_event' for long-term
-  /// salient Needs simulation events (high-magnitude pleasure/embarrassment etc.).
+  /// 'message' for normal RAG windows (default). DORMANT: the 'needs_event'
+  /// type (and its writer/reader in MemoryService) was removed with the
+  /// Journal work — column kept for additive-migration safety.
   final String memoryType;
 
-  /// Optional JSON blob for event details (e.g. {"category":"pleasure","magnitude":8,"..."}).
-  /// Null for ordinary message embeddings.
+  /// Optional JSON blob for event details. DORMANT (see memoryType) —
+  /// null for ordinary message embeddings.
   final String? metadata;
   const MessageEmbedding({
     required this.id,
@@ -9589,6 +9590,984 @@ class JournalMemoriesCompanion extends UpdateCompanion<JournalMemoryData> {
           ..write('lastAccessedAt: $lastAccessedAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('metadata: $metadata, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GrowthRingsTable extends GrowthRings
+    with TableInfo<$GrowthRingsTable, GrowthRingData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GrowthRingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<String> characterId = GeneratedColumn<String>(
+    'character_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('trait'),
+  );
+  static const VerificationMeta _strengthMeta = const VerificationMeta(
+    'strength',
+  );
+  @override
+  late final GeneratedColumn<double> strength = GeneratedColumn<double>(
+    'strength',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.3),
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _retiredMeta = const VerificationMeta(
+    'retired',
+  );
+  @override
+  late final GeneratedColumn<bool> retired = GeneratedColumn<bool>(
+    'retired',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("retired" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _sourceMessageIdsMeta = const VerificationMeta(
+    'sourceMessageIds',
+  );
+  @override
+  late final GeneratedColumn<String> sourceMessageIds = GeneratedColumn<String>(
+    'source_message_ids',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastReinforcedAtMeta = const VerificationMeta(
+    'lastReinforcedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastReinforcedAt =
+      GeneratedColumn<DateTime>(
+        'last_reinforced_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _metadataMeta = const VerificationMeta(
+    'metadata',
+  );
+  @override
+  late final GeneratedColumn<String> metadata = GeneratedColumn<String>(
+    'metadata',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    characterId,
+    content,
+    category,
+    strength,
+    pinned,
+    retired,
+    sourceMessageIds,
+    createdAt,
+    lastReinforcedAt,
+    updatedAt,
+    metadata,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'growth_rings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GrowthRingData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_characterIdMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('strength')) {
+      context.handle(
+        _strengthMeta,
+        strength.isAcceptableOrUnknown(data['strength']!, _strengthMeta),
+      );
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('retired')) {
+      context.handle(
+        _retiredMeta,
+        retired.isAcceptableOrUnknown(data['retired']!, _retiredMeta),
+      );
+    }
+    if (data.containsKey('source_message_ids')) {
+      context.handle(
+        _sourceMessageIdsMeta,
+        sourceMessageIds.isAcceptableOrUnknown(
+          data['source_message_ids']!,
+          _sourceMessageIdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_reinforced_at')) {
+      context.handle(
+        _lastReinforcedAtMeta,
+        lastReinforcedAt.isAcceptableOrUnknown(
+          data['last_reinforced_at']!,
+          _lastReinforcedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('metadata')) {
+      context.handle(
+        _metadataMeta,
+        metadata.isAcceptableOrUnknown(data['metadata']!, _metadataMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GrowthRingData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GrowthRingData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}character_id'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      strength: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}strength'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      retired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}retired'],
+      )!,
+      sourceMessageIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_message_ids'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastReinforcedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_reinforced_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      metadata: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}metadata'],
+      ),
+    );
+  }
+
+  @override
+  $GrowthRingsTable createAlias(String alias) {
+    return $GrowthRingsTable(attachedDatabase, alias);
+  }
+}
+
+class GrowthRingData extends DataClass implements Insertable<GrowthRingData> {
+  final String id;
+  final String sessionId;
+  final String characterId;
+  final String content;
+  final String category;
+  final double strength;
+  final bool pinned;
+  final bool retired;
+
+  /// JSON array of int message POSITIONS (receipts; reinforcement appends).
+  /// Positions, not DB ids — same trade-off as JournalMemories.
+  final String? sourceMessageIds;
+  final DateTime createdAt;
+  final DateTime lastReinforcedAt;
+  final DateTime updatedAt;
+  final String? metadata;
+  const GrowthRingData({
+    required this.id,
+    required this.sessionId,
+    required this.characterId,
+    required this.content,
+    required this.category,
+    required this.strength,
+    required this.pinned,
+    required this.retired,
+    this.sourceMessageIds,
+    required this.createdAt,
+    required this.lastReinforcedAt,
+    required this.updatedAt,
+    this.metadata,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['character_id'] = Variable<String>(characterId);
+    map['content'] = Variable<String>(content);
+    map['category'] = Variable<String>(category);
+    map['strength'] = Variable<double>(strength);
+    map['pinned'] = Variable<bool>(pinned);
+    map['retired'] = Variable<bool>(retired);
+    if (!nullToAbsent || sourceMessageIds != null) {
+      map['source_message_ids'] = Variable<String>(sourceMessageIds);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_reinforced_at'] = Variable<DateTime>(lastReinforcedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || metadata != null) {
+      map['metadata'] = Variable<String>(metadata);
+    }
+    return map;
+  }
+
+  GrowthRingsCompanion toCompanion(bool nullToAbsent) {
+    return GrowthRingsCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      characterId: Value(characterId),
+      content: Value(content),
+      category: Value(category),
+      strength: Value(strength),
+      pinned: Value(pinned),
+      retired: Value(retired),
+      sourceMessageIds: sourceMessageIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceMessageIds),
+      createdAt: Value(createdAt),
+      lastReinforcedAt: Value(lastReinforcedAt),
+      updatedAt: Value(updatedAt),
+      metadata: metadata == null && nullToAbsent
+          ? const Value.absent()
+          : Value(metadata),
+    );
+  }
+
+  factory GrowthRingData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GrowthRingData(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      characterId: serializer.fromJson<String>(json['characterId']),
+      content: serializer.fromJson<String>(json['content']),
+      category: serializer.fromJson<String>(json['category']),
+      strength: serializer.fromJson<double>(json['strength']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      retired: serializer.fromJson<bool>(json['retired']),
+      sourceMessageIds: serializer.fromJson<String?>(json['sourceMessageIds']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastReinforcedAt: serializer.fromJson<DateTime>(json['lastReinforcedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      metadata: serializer.fromJson<String?>(json['metadata']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'characterId': serializer.toJson<String>(characterId),
+      'content': serializer.toJson<String>(content),
+      'category': serializer.toJson<String>(category),
+      'strength': serializer.toJson<double>(strength),
+      'pinned': serializer.toJson<bool>(pinned),
+      'retired': serializer.toJson<bool>(retired),
+      'sourceMessageIds': serializer.toJson<String?>(sourceMessageIds),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastReinforcedAt': serializer.toJson<DateTime>(lastReinforcedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'metadata': serializer.toJson<String?>(metadata),
+    };
+  }
+
+  GrowthRingData copyWith({
+    String? id,
+    String? sessionId,
+    String? characterId,
+    String? content,
+    String? category,
+    double? strength,
+    bool? pinned,
+    bool? retired,
+    Value<String?> sourceMessageIds = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastReinforcedAt,
+    DateTime? updatedAt,
+    Value<String?> metadata = const Value.absent(),
+  }) => GrowthRingData(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    characterId: characterId ?? this.characterId,
+    content: content ?? this.content,
+    category: category ?? this.category,
+    strength: strength ?? this.strength,
+    pinned: pinned ?? this.pinned,
+    retired: retired ?? this.retired,
+    sourceMessageIds: sourceMessageIds.present
+        ? sourceMessageIds.value
+        : this.sourceMessageIds,
+    createdAt: createdAt ?? this.createdAt,
+    lastReinforcedAt: lastReinforcedAt ?? this.lastReinforcedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    metadata: metadata.present ? metadata.value : this.metadata,
+  );
+  GrowthRingData copyWithCompanion(GrowthRingsCompanion data) {
+    return GrowthRingData(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
+      content: data.content.present ? data.content.value : this.content,
+      category: data.category.present ? data.category.value : this.category,
+      strength: data.strength.present ? data.strength.value : this.strength,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      retired: data.retired.present ? data.retired.value : this.retired,
+      sourceMessageIds: data.sourceMessageIds.present
+          ? data.sourceMessageIds.value
+          : this.sourceMessageIds,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastReinforcedAt: data.lastReinforcedAt.present
+          ? data.lastReinforcedAt.value
+          : this.lastReinforcedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      metadata: data.metadata.present ? data.metadata.value : this.metadata,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GrowthRingData(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('characterId: $characterId, ')
+          ..write('content: $content, ')
+          ..write('category: $category, ')
+          ..write('strength: $strength, ')
+          ..write('pinned: $pinned, ')
+          ..write('retired: $retired, ')
+          ..write('sourceMessageIds: $sourceMessageIds, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastReinforcedAt: $lastReinforcedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('metadata: $metadata')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    characterId,
+    content,
+    category,
+    strength,
+    pinned,
+    retired,
+    sourceMessageIds,
+    createdAt,
+    lastReinforcedAt,
+    updatedAt,
+    metadata,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GrowthRingData &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.characterId == this.characterId &&
+          other.content == this.content &&
+          other.category == this.category &&
+          other.strength == this.strength &&
+          other.pinned == this.pinned &&
+          other.retired == this.retired &&
+          other.sourceMessageIds == this.sourceMessageIds &&
+          other.createdAt == this.createdAt &&
+          other.lastReinforcedAt == this.lastReinforcedAt &&
+          other.updatedAt == this.updatedAt &&
+          other.metadata == this.metadata);
+}
+
+class GrowthRingsCompanion extends UpdateCompanion<GrowthRingData> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<String> characterId;
+  final Value<String> content;
+  final Value<String> category;
+  final Value<double> strength;
+  final Value<bool> pinned;
+  final Value<bool> retired;
+  final Value<String?> sourceMessageIds;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastReinforcedAt;
+  final Value<DateTime> updatedAt;
+  final Value<String?> metadata;
+  final Value<int> rowid;
+  const GrowthRingsCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.characterId = const Value.absent(),
+    this.content = const Value.absent(),
+    this.category = const Value.absent(),
+    this.strength = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.retired = const Value.absent(),
+    this.sourceMessageIds = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastReinforcedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GrowthRingsCompanion.insert({
+    required String id,
+    required String sessionId,
+    required String characterId,
+    required String content,
+    this.category = const Value.absent(),
+    this.strength = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.retired = const Value.absent(),
+    this.sourceMessageIds = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastReinforcedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       characterId = Value(characterId),
+       content = Value(content);
+  static Insertable<GrowthRingData> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<String>? characterId,
+    Expression<String>? content,
+    Expression<String>? category,
+    Expression<double>? strength,
+    Expression<bool>? pinned,
+    Expression<bool>? retired,
+    Expression<String>? sourceMessageIds,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastReinforcedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<String>? metadata,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (characterId != null) 'character_id': characterId,
+      if (content != null) 'content': content,
+      if (category != null) 'category': category,
+      if (strength != null) 'strength': strength,
+      if (pinned != null) 'pinned': pinned,
+      if (retired != null) 'retired': retired,
+      if (sourceMessageIds != null) 'source_message_ids': sourceMessageIds,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastReinforcedAt != null) 'last_reinforced_at': lastReinforcedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (metadata != null) 'metadata': metadata,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GrowthRingsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<String>? characterId,
+    Value<String>? content,
+    Value<String>? category,
+    Value<double>? strength,
+    Value<bool>? pinned,
+    Value<bool>? retired,
+    Value<String?>? sourceMessageIds,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastReinforcedAt,
+    Value<DateTime>? updatedAt,
+    Value<String?>? metadata,
+    Value<int>? rowid,
+  }) {
+    return GrowthRingsCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      characterId: characterId ?? this.characterId,
+      content: content ?? this.content,
+      category: category ?? this.category,
+      strength: strength ?? this.strength,
+      pinned: pinned ?? this.pinned,
+      retired: retired ?? this.retired,
+      sourceMessageIds: sourceMessageIds ?? this.sourceMessageIds,
+      createdAt: createdAt ?? this.createdAt,
+      lastReinforcedAt: lastReinforcedAt ?? this.lastReinforcedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      metadata: metadata ?? this.metadata,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<String>(characterId.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (strength.present) {
+      map['strength'] = Variable<double>(strength.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (retired.present) {
+      map['retired'] = Variable<bool>(retired.value);
+    }
+    if (sourceMessageIds.present) {
+      map['source_message_ids'] = Variable<String>(sourceMessageIds.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastReinforcedAt.present) {
+      map['last_reinforced_at'] = Variable<DateTime>(lastReinforcedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (metadata.present) {
+      map['metadata'] = Variable<String>(metadata.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GrowthRingsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('characterId: $characterId, ')
+          ..write('content: $content, ')
+          ..write('category: $category, ')
+          ..write('strength: $strength, ')
+          ..write('pinned: $pinned, ')
+          ..write('retired: $retired, ')
+          ..write('sourceMessageIds: $sourceMessageIds, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastReinforcedAt: $lastReinforcedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('metadata: $metadata, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $GrowthStateTable extends GrowthState
+    with TableInfo<$GrowthStateTable, GrowthStateData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GrowthStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cursorMeta = const VerificationMeta('cursor');
+  @override
+  late final GeneratedColumn<int> cursor = GeneratedColumn<int>(
+    'cursor',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [sessionId, cursor];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'growth_state';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GrowthStateData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('cursor')) {
+      context.handle(
+        _cursorMeta,
+        cursor.isAcceptableOrUnknown(data['cursor']!, _cursorMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {sessionId};
+  @override
+  GrowthStateData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GrowthStateData(
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      cursor: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cursor'],
+      )!,
+    );
+  }
+
+  @override
+  $GrowthStateTable createAlias(String alias) {
+    return $GrowthStateTable(attachedDatabase, alias);
+  }
+}
+
+class GrowthStateData extends DataClass implements Insertable<GrowthStateData> {
+  final String sessionId;
+  final int cursor;
+  const GrowthStateData({required this.sessionId, required this.cursor});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['session_id'] = Variable<String>(sessionId);
+    map['cursor'] = Variable<int>(cursor);
+    return map;
+  }
+
+  GrowthStateCompanion toCompanion(bool nullToAbsent) {
+    return GrowthStateCompanion(
+      sessionId: Value(sessionId),
+      cursor: Value(cursor),
+    );
+  }
+
+  factory GrowthStateData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GrowthStateData(
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      cursor: serializer.fromJson<int>(json['cursor']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sessionId': serializer.toJson<String>(sessionId),
+      'cursor': serializer.toJson<int>(cursor),
+    };
+  }
+
+  GrowthStateData copyWith({String? sessionId, int? cursor}) => GrowthStateData(
+    sessionId: sessionId ?? this.sessionId,
+    cursor: cursor ?? this.cursor,
+  );
+  GrowthStateData copyWithCompanion(GrowthStateCompanion data) {
+    return GrowthStateData(
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      cursor: data.cursor.present ? data.cursor.value : this.cursor,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GrowthStateData(')
+          ..write('sessionId: $sessionId, ')
+          ..write('cursor: $cursor')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(sessionId, cursor);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GrowthStateData &&
+          other.sessionId == this.sessionId &&
+          other.cursor == this.cursor);
+}
+
+class GrowthStateCompanion extends UpdateCompanion<GrowthStateData> {
+  final Value<String> sessionId;
+  final Value<int> cursor;
+  final Value<int> rowid;
+  const GrowthStateCompanion({
+    this.sessionId = const Value.absent(),
+    this.cursor = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GrowthStateCompanion.insert({
+    required String sessionId,
+    this.cursor = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : sessionId = Value(sessionId);
+  static Insertable<GrowthStateData> custom({
+    Expression<String>? sessionId,
+    Expression<int>? cursor,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (sessionId != null) 'session_id': sessionId,
+      if (cursor != null) 'cursor': cursor,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GrowthStateCompanion copyWith({
+    Value<String>? sessionId,
+    Value<int>? cursor,
+    Value<int>? rowid,
+  }) {
+    return GrowthStateCompanion(
+      sessionId: sessionId ?? this.sessionId,
+      cursor: cursor ?? this.cursor,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (cursor.present) {
+      map['cursor'] = Variable<int>(cursor.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GrowthStateCompanion(')
+          ..write('sessionId: $sessionId, ')
+          ..write('cursor: $cursor, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -13531,6 +14510,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $JournalMemoriesTable journalMemories = $JournalMemoriesTable(
     this,
   );
+  late final $GrowthRingsTable growthRings = $GrowthRingsTable(this);
+  late final $GrowthStateTable growthState = $GrowthStateTable(this);
   late final $ObjectivesTable objectives = $ObjectivesTable(this);
   late final $StoryProjectsTable storyProjects = $StoryProjectsTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
@@ -13544,6 +14525,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index journalMemoriesSessionCharacter = Index(
     'journal_memories_session_character',
     'CREATE INDEX journal_memories_session_character ON journal_memories (session_id, character_id)',
+  );
+  late final Index growthRingsSessionCharacter = Index(
+    'growth_rings_session_character',
+    'CREATE INDEX growth_rings_session_character ON growth_rings (session_id, character_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -13560,6 +14545,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     messageEmbeddings,
     dataBankEntries,
     journalMemories,
+    growthRings,
+    growthState,
     objectives,
     storyProjects,
     syncMeta,
@@ -13568,6 +14555,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     webAuthCredentials,
     webAuthSessions,
     journalMemoriesSessionCharacter,
+    growthRingsSessionCharacter,
   ];
 }
 
@@ -17895,6 +18883,507 @@ typedef $$JournalMemoriesTableProcessedTableManager =
       JournalMemoryData,
       PrefetchHooks Function()
     >;
+typedef $$GrowthRingsTableCreateCompanionBuilder =
+    GrowthRingsCompanion Function({
+      required String id,
+      required String sessionId,
+      required String characterId,
+      required String content,
+      Value<String> category,
+      Value<double> strength,
+      Value<bool> pinned,
+      Value<bool> retired,
+      Value<String?> sourceMessageIds,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastReinforcedAt,
+      Value<DateTime> updatedAt,
+      Value<String?> metadata,
+      Value<int> rowid,
+    });
+typedef $$GrowthRingsTableUpdateCompanionBuilder =
+    GrowthRingsCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<String> characterId,
+      Value<String> content,
+      Value<String> category,
+      Value<double> strength,
+      Value<bool> pinned,
+      Value<bool> retired,
+      Value<String?> sourceMessageIds,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastReinforcedAt,
+      Value<DateTime> updatedAt,
+      Value<String?> metadata,
+      Value<int> rowid,
+    });
+
+class $$GrowthRingsTableFilterComposer
+    extends Composer<_$AppDatabase, $GrowthRingsTable> {
+  $$GrowthRingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get strength => $composableBuilder(
+    column: $table.strength,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get retired => $composableBuilder(
+    column: $table.retired,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceMessageIds => $composableBuilder(
+    column: $table.sourceMessageIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastReinforcedAt => $composableBuilder(
+    column: $table.lastReinforcedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get metadata => $composableBuilder(
+    column: $table.metadata,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GrowthRingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $GrowthRingsTable> {
+  $$GrowthRingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get strength => $composableBuilder(
+    column: $table.strength,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get retired => $composableBuilder(
+    column: $table.retired,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceMessageIds => $composableBuilder(
+    column: $table.sourceMessageIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastReinforcedAt => $composableBuilder(
+    column: $table.lastReinforcedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get metadata => $composableBuilder(
+    column: $table.metadata,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GrowthRingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GrowthRingsTable> {
+  $$GrowthRingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<String> get characterId => $composableBuilder(
+    column: $table.characterId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<double> get strength =>
+      $composableBuilder(column: $table.strength, builder: (column) => column);
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get retired =>
+      $composableBuilder(column: $table.retired, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceMessageIds => $composableBuilder(
+    column: $table.sourceMessageIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastReinforcedAt => $composableBuilder(
+    column: $table.lastReinforcedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get metadata =>
+      $composableBuilder(column: $table.metadata, builder: (column) => column);
+}
+
+class $$GrowthRingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GrowthRingsTable,
+          GrowthRingData,
+          $$GrowthRingsTableFilterComposer,
+          $$GrowthRingsTableOrderingComposer,
+          $$GrowthRingsTableAnnotationComposer,
+          $$GrowthRingsTableCreateCompanionBuilder,
+          $$GrowthRingsTableUpdateCompanionBuilder,
+          (
+            GrowthRingData,
+            BaseReferences<_$AppDatabase, $GrowthRingsTable, GrowthRingData>,
+          ),
+          GrowthRingData,
+          PrefetchHooks Function()
+        > {
+  $$GrowthRingsTableTableManager(_$AppDatabase db, $GrowthRingsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GrowthRingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GrowthRingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GrowthRingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<String> characterId = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<double> strength = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> retired = const Value.absent(),
+                Value<String?> sourceMessageIds = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastReinforcedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> metadata = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GrowthRingsCompanion(
+                id: id,
+                sessionId: sessionId,
+                characterId: characterId,
+                content: content,
+                category: category,
+                strength: strength,
+                pinned: pinned,
+                retired: retired,
+                sourceMessageIds: sourceMessageIds,
+                createdAt: createdAt,
+                lastReinforcedAt: lastReinforcedAt,
+                updatedAt: updatedAt,
+                metadata: metadata,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required String characterId,
+                required String content,
+                Value<String> category = const Value.absent(),
+                Value<double> strength = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> retired = const Value.absent(),
+                Value<String?> sourceMessageIds = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastReinforcedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> metadata = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GrowthRingsCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                characterId: characterId,
+                content: content,
+                category: category,
+                strength: strength,
+                pinned: pinned,
+                retired: retired,
+                sourceMessageIds: sourceMessageIds,
+                createdAt: createdAt,
+                lastReinforcedAt: lastReinforcedAt,
+                updatedAt: updatedAt,
+                metadata: metadata,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GrowthRingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GrowthRingsTable,
+      GrowthRingData,
+      $$GrowthRingsTableFilterComposer,
+      $$GrowthRingsTableOrderingComposer,
+      $$GrowthRingsTableAnnotationComposer,
+      $$GrowthRingsTableCreateCompanionBuilder,
+      $$GrowthRingsTableUpdateCompanionBuilder,
+      (
+        GrowthRingData,
+        BaseReferences<_$AppDatabase, $GrowthRingsTable, GrowthRingData>,
+      ),
+      GrowthRingData,
+      PrefetchHooks Function()
+    >;
+typedef $$GrowthStateTableCreateCompanionBuilder =
+    GrowthStateCompanion Function({
+      required String sessionId,
+      Value<int> cursor,
+      Value<int> rowid,
+    });
+typedef $$GrowthStateTableUpdateCompanionBuilder =
+    GrowthStateCompanion Function({
+      Value<String> sessionId,
+      Value<int> cursor,
+      Value<int> rowid,
+    });
+
+class $$GrowthStateTableFilterComposer
+    extends Composer<_$AppDatabase, $GrowthStateTable> {
+  $$GrowthStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cursor => $composableBuilder(
+    column: $table.cursor,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GrowthStateTableOrderingComposer
+    extends Composer<_$AppDatabase, $GrowthStateTable> {
+  $$GrowthStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cursor => $composableBuilder(
+    column: $table.cursor,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GrowthStateTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GrowthStateTable> {
+  $$GrowthStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<int> get cursor =>
+      $composableBuilder(column: $table.cursor, builder: (column) => column);
+}
+
+class $$GrowthStateTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GrowthStateTable,
+          GrowthStateData,
+          $$GrowthStateTableFilterComposer,
+          $$GrowthStateTableOrderingComposer,
+          $$GrowthStateTableAnnotationComposer,
+          $$GrowthStateTableCreateCompanionBuilder,
+          $$GrowthStateTableUpdateCompanionBuilder,
+          (
+            GrowthStateData,
+            BaseReferences<_$AppDatabase, $GrowthStateTable, GrowthStateData>,
+          ),
+          GrowthStateData,
+          PrefetchHooks Function()
+        > {
+  $$GrowthStateTableTableManager(_$AppDatabase db, $GrowthStateTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GrowthStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GrowthStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GrowthStateTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> sessionId = const Value.absent(),
+                Value<int> cursor = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GrowthStateCompanion(
+                sessionId: sessionId,
+                cursor: cursor,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sessionId,
+                Value<int> cursor = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GrowthStateCompanion.insert(
+                sessionId: sessionId,
+                cursor: cursor,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GrowthStateTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GrowthStateTable,
+      GrowthStateData,
+      $$GrowthStateTableFilterComposer,
+      $$GrowthStateTableOrderingComposer,
+      $$GrowthStateTableAnnotationComposer,
+      $$GrowthStateTableCreateCompanionBuilder,
+      $$GrowthStateTableUpdateCompanionBuilder,
+      (
+        GrowthStateData,
+        BaseReferences<_$AppDatabase, $GrowthStateTable, GrowthStateData>,
+      ),
+      GrowthStateData,
+      PrefetchHooks Function()
+    >;
 typedef $$ObjectivesTableCreateCompanionBuilder =
     ObjectivesCompanion Function({
       required String id,
@@ -19888,6 +21377,10 @@ class $AppDatabaseManager {
       $$DataBankEntriesTableTableManager(_db, _db.dataBankEntries);
   $$JournalMemoriesTableTableManager get journalMemories =>
       $$JournalMemoriesTableTableManager(_db, _db.journalMemories);
+  $$GrowthRingsTableTableManager get growthRings =>
+      $$GrowthRingsTableTableManager(_db, _db.growthRings);
+  $$GrowthStateTableTableManager get growthState =>
+      $$GrowthStateTableTableManager(_db, _db.growthState);
   $$ObjectivesTableTableManager get objectives =>
       $$ObjectivesTableTableManager(_db, _db.objectives);
   $$StoryProjectsTableTableManager get storyProjects =>

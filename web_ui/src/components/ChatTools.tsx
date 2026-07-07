@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
-import { EvolutionReviewModal } from './EvolutionReviewModal';
+import { GrowthPanel } from './GrowthPanel';
 
 interface ObjectiveTask {
   description: string;
@@ -35,9 +35,9 @@ interface ToolsState {
     ragWindowSize: number;
     journalEnabled: boolean;
     journalInterval: number;
-    evolutionEnabled: boolean;
-    evolutionInterval: number;
-    evolutionCount: number;
+    growthEnabled: boolean;
+    growthInterval: number;
+    growthReviewFirst: boolean;
   };
   // The Journal's per-chat recap ("Where we are") — key kept as `summary`
   // to match the facade block name.
@@ -119,7 +119,6 @@ export function ChatTools({
 }) {
   const [t, setT] = useState<ToolsState | null>(null);
   const [goal, setGoal] = useState('');
-  const [showEvo, setShowEvo] = useState(false);
 
   // Scope every tools call to the focused cast participant so objectives/arousal
   // (and the snapshot returned by mutations) follow the focus.
@@ -173,7 +172,7 @@ export function ChatTools({
 
 
       <details className="tool-section">
-        <summary>Memory &amp; evolution</summary>
+        <summary>Memory</summary>
         <div className="tool-body">
           <Toggle label="Use memory (RAG)" value={t.memory.ragEnabled} onChange={(v) => settings({ ragEnabled: v })} />
           {t.memory.ragEnabled && (
@@ -186,15 +185,28 @@ export function ChatTools({
           {t.memory.journalEnabled && (
             <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
           )}
-          <Toggle label="Character evolution" value={t.memory.evolutionEnabled} onChange={(v) => settings({ evolutionEnabled: v })} />
-          {t.memory.evolutionEnabled && (
+        </div>
+      </details>
+
+      <details className="tool-section">
+        <summary>Growth 🌱</summary>
+        <div className="tool-body">
+          <Toggle label="Character growth" value={t.memory.growthEnabled} onChange={(v) => settings({ growthEnabled: v })} />
+          {!t.memory.growthEnabled && (
+            <p className="muted small">
+              Characters grow small, evidence-backed &quot;rings&quot; as you chat — the
+              original card is always preserved.
+            </p>
+          )}
+          {t.memory.growthEnabled && (
             <>
-              <NumField label="Every (msgs)" value={t.memory.evolutionInterval} onCommit={(v) => settings({ evolutionInterval: v })} />
-              <div className="stat-line">
-                <span>Evolutions</span>
-                <span className="muted">{t.memory.evolutionCount}</span>
-              </div>
-              <button className="small" onClick={() => setShowEvo(true)}>Review / reset evolution</button>
+              <NumField label="Check every (msgs)" value={t.memory.growthInterval} onCommit={(v) => settings({ growthInterval: v })} />
+              <Toggle
+                label="Review growth before it applies"
+                value={t.memory.growthReviewFirst}
+                onChange={(v) => settings({ growthReviewFirst: v })}
+              />
+              <GrowthPanel focusedId={focusedId} reloadKey={reloadKey} />
             </>
           )}
         </div>
@@ -380,13 +392,6 @@ export function ChatTools({
         />
       )}
 
-      {showEvo && (
-        <EvolutionReviewModal
-          focusedId={focusedId}
-          onClose={() => setShowEvo(false)}
-          onSaved={load}
-        />
-      )}
     </div>
   );
 }

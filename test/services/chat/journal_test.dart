@@ -20,6 +20,7 @@ import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_ops.dart';
 import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/llm_service.dart'
     show LlmToolCall, LlmToolResponse;
 
@@ -345,6 +346,7 @@ void main() {
       final session = getSessionId ?? () => 's1';
       return JournalMaintenance(
         store: store,
+        probe: ToolTransportProbe(),
         review:
             review ??
             JournalReview(
@@ -491,6 +493,7 @@ void main() {
       var running = false;
       final m = JournalMaintenance(
         store: store,
+        probe: ToolTransportProbe(),
         review: JournalReview(
           store: store,
           getSessionId: () => session,

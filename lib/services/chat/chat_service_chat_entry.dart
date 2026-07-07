@@ -57,7 +57,6 @@ extension ChatServiceChatEntry on ChatService {
 
     // Reset Scene Guests for the new 1:1 context (repopulated by _loadLastSession
     // if the loaded session persisted any). _pendingGuestDeparture is one-shot.
-    _clearSceneGuestEvolution(); // Phase 3: keep guest-evolution reset in sync.
     _sceneGuestIds.clear();
     _sceneGuestCards.clear();
     _pendingGuestDeparture = null;
@@ -96,8 +95,8 @@ extension ChatServiceChatEntry on ChatService {
       }
     }
 
-    // Note: evolved personality/scenario are now loaded inside _loadLastSession()
-    // (which runs below) so they are scoped to the session, not the character.
+    // Note: growth rings are cached inside _loadLastSession() (which runs
+    // below) so they are scoped to the session, not the character.
     debugPrint(
       '[ChatService] 🟡 setActiveCharacter: clearing messages '
       '(had ${_messages.length}) for ${character?.name}, loading session...',
@@ -160,10 +159,8 @@ extension ChatServiceChatEntry on ChatService {
       _messagesSinceLastCheck = 0;
       _isCheckingCompletion =
           false; // secondary objective flag zero on setActiveCharacter main path (incomplete zeroing hygiene; keep reset blocks)
-      _isEvolvingCharacter = false;
-      _evolutionStatus = '';
-      _evolutionError =
-          ''; // explicit evo flag/status/error zero on setActiveCharacter main path (incomplete zeroing... now complete (see CLAUDE.md); evolution_service (stateless or prompt-only; no reset calls needed); cross-ref setActiveCharacter:1572 + full keep-sync lists + " ; no extra zero code, live read; now complete for this secondary config too)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)"; evolution cadence is driven by _characterEvolutionCount vs evolutionInterval (no side-counter to zero here)
+      _isGrowthPassRunning =
+          false; // explicit growth-pass flag zero on setActiveCharacter main path (transient guard; keep reset blocks in sync — growth cache itself is session-scoped and re-cached by _refreshGrowthCache in _loadLastSession)
       debugPrint(
         '[ChatService] setActiveCharacter: Reset realism state (baseline + runtime transients cleared; was: arousal=$prevArousal, fixation=$prevFixation/$prevFixationLife)',
       );
@@ -267,10 +264,9 @@ extension ChatServiceChatEntry on ChatService {
             false; // zero secondary in empty session subpath of setActiveCharacter (per incomplete zeroing fix)
         _isSummaryGenerating =
             false; // secondary zero in empty subpath of setActiveCharacter (incomplete zeroing... now complete (see CLAUDE.md))
-        _isEvolvingCharacter = false;
-        _evolutionStatus = '';
-        _evolutionError =
-            ''; // explicit evo flag/status/error zero in empty subpath of setActiveCharacter (incomplete zeroing... now complete (see CLAUDE.md); evolution_service (stateless or prompt-only; no reset calls needed); cross-ref setActiveCharacter:1572 + " ) + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)"
+        _isGrowthPassRunning =
+            false; // growth-pass flag zero in empty subpath of setActiveCharacter (transient guard; keep reset blocks in sync)
+        await _refreshGrowthCache(); // fresh session id → scope the injection cache to it
       }
       // Load active objectives for this session (must be after _loadLastSession
       // so _currentSessionId is set)

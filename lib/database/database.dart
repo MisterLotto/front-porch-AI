@@ -444,6 +444,54 @@ class JournalMemories extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Growth Rings — per-chat, per-character personality growth entries
+/// (design: docs/design/growth-rings.md). Replaces the monolithic evolved
+/// personality/scenario blobs. Strictly session-scoped: rings never cross
+/// chats and die with the chat (same invariant as JournalMemories).
+@TableIndex(
+  name: 'growth_rings_session_character',
+  columns: {#sessionId, #characterId},
+)
+@DataClassName('GrowthRingData')
+class GrowthRings extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get sessionId => text()(); // scoping key — rings never cross chats
+  TextColumn get characterId => text()(); // ring owner (stableGroupId)
+  TextColumn get content => text()(); // one sentence, {{char}}/{{user}} macros
+  TextColumn get category =>
+      text().withDefault(const Constant('trait'))(); // trait/stance/habit/skill/scar/archive
+  RealColumn get strength => real().withDefault(
+    const Constant(0.3),
+  )(); // 0..1; tiers derived in GrowthPhysics (emerging/developing/established)
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get retired => boolean().withDefault(
+    const Constant(false),
+  )(); // past growth — visible in history, never injected
+
+  /// JSON array of int message POSITIONS (receipts; reinforcement appends).
+  /// Positions, not DB ids — same trade-off as JournalMemories.
+  TextColumn get sourceMessageIds => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastReinforcedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  TextColumn get metadata => text().nullable()(); // JSON pouch (additive future)
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Growth Rings — per-session pass cursor (its own row instead of a Sessions
+/// column so the Character-Card-Forge-written tables stay untouched).
+@DataClassName('GrowthStateData')
+class GrowthState extends Table {
+  TextColumn get sessionId => text()();
+  IntColumn get cursor => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}
+
 /// Objectives — quest/task system for guided roleplay.
 class Objectives extends Table {
   TextColumn get id => text()();
@@ -611,6 +659,8 @@ class WebAuthSessions extends Table {
     MessageEmbeddings,
     DataBankEntries,
     JournalMemories, // v35 — The Journal: per-chat, per-character memory cards
+    GrowthRings, // v36 — Growth Rings: per-chat, per-character growth entries
+    GrowthState, // v36 — Growth Rings: per-session pass cursor
     Objectives,
     StoryProjects,
     SyncMeta,
@@ -1066,7 +1116,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1669,6 +1719,40 @@ class AppDatabase extends _$AppDatabase {
           'ON journal_memories (session_id, character_id)',
         );
       }
+      if (from < 36) {
+        // v35→v36: Growth Rings — per-chat, per-character growth entries +
+        // per-session pass cursor (docs/design/growth-rings.md §5). NEW
+        // tables only, additive, outside the Character Card Forge
+        // external-writer set. The old Sessions evolved* columns go dormant
+        // (content is distilled into rings by the first growth pass).
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS growth_rings (
+            id TEXT NOT NULL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            character_id TEXT NOT NULL,
+            content TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'trait',
+            strength REAL NOT NULL DEFAULT 0.3,
+            pinned INTEGER NOT NULL DEFAULT 0,
+            retired INTEGER NOT NULL DEFAULT 0,
+            source_message_ids TEXT,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            last_reinforced_at INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            metadata TEXT
+          )
+        ''');
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS growth_rings_session_character '
+          'ON growth_rings (session_id, character_id)',
+        );
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS growth_state (
+            session_id TEXT NOT NULL PRIMARY KEY,
+            cursor INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      }
     },
   );
 
@@ -2201,10 +2285,13 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteSessionById(String id) async {
-    // Hard delete: also delete all messages + journal cards in this session.
-    // (Journal cards are strictly session-scoped, so they die with the chat.)
+    // Hard delete: also delete all messages + journal cards + growth rings in
+    // this session. (Journal cards and growth rings are strictly
+    // session-scoped, so they die with the chat.)
     await (delete(messages)..where((m) => m.sessionId.equals(id))).go();
     await (delete(journalMemories)..where((j) => j.sessionId.equals(id))).go();
+    await (delete(growthRings)..where((g) => g.sessionId.equals(id))).go();
+    await (delete(growthState)..where((g) => g.sessionId.equals(id))).go();
     final count = await (delete(sessions)..where((s) => s.id.equals(id))).go();
     await bumpSyncVersion();
     return count;
@@ -2564,6 +2651,88 @@ class AppDatabase extends _$AppDatabase {
     ).getSingle();
     return result.read<int>('cnt');
   }
+
+  // ── Growth Ring Queries ────────────────────────────────────────────────
+  // Growth Rings: per-chat, per-character growth entries + per-session pass
+  // cursor (docs/design/growth-rings.md). No bumpSyncVersion, matching the
+  // JournalMemories precedent (derived, session-local data).
+
+  /// All rings (active AND retired) for one owner in one chat — active first
+  /// by strength descending, then retired by recency. This order is what the
+  /// growth prompt numbers its 1-based handles by (active rings only) and
+  /// what the timeline UI renders, so the surfaces always agree.
+  Future<List<GrowthRingData>> getGrowthRings(
+    String sessionId,
+    String characterId,
+  ) =>
+      (select(growthRings)
+            ..where(
+              (g) =>
+                  g.sessionId.equals(sessionId) &
+                  g.characterId.equals(characterId),
+            )
+            ..orderBy([
+              (g) => OrderingTerm.asc(g.retired),
+              (g) => OrderingTerm.desc(g.strength),
+              (g) => OrderingTerm.asc(g.createdAt),
+            ]))
+          .get();
+
+  Future<void> insertGrowthRing(GrowthRingsCompanion ring) async {
+    if (!ring.id.present) {
+      ring = ring.copyWith(id: Value(_uuid.v4()));
+    }
+    await into(growthRings).insert(ring);
+  }
+
+  /// Write-by-id partial update (mirrors [updateJournalCard] style).
+  Future<void> updateGrowthRing(String id, GrowthRingsCompanion ring) =>
+      (update(growthRings)..where((g) => g.id.equals(id))).write(ring);
+
+  Future<int> deleteGrowthRing(String id) =>
+      (delete(growthRings)..where((g) => g.id.equals(id))).go();
+
+  /// Every ring in one chat, all owners (fork carry-over).
+  Future<List<GrowthRingData>> getGrowthRingsForSession(String sessionId) =>
+      (select(
+        growthRings,
+      )..where((g) => g.sessionId.equals(sessionId))).get();
+
+  /// Re-key one owner's rings within a session (group⇄solo cast transitions —
+  /// mirrors [reassignObjectives]).
+  Future<int> reassignGrowthRings(
+    String fromCharacterId,
+    String toCharacterId, {
+    required String sessionId,
+  }) => (update(growthRings)..where(
+    (g) =>
+        g.sessionId.equals(sessionId) &
+        g.characterId.equals(fromCharacterId),
+  )).write(GrowthRingsCompanion(characterId: Value(toCharacterId)));
+
+  /// Delete one character's rings in one chat (hard cast-removal hygiene).
+  Future<int> deleteGrowthRingsForCharacter(
+    String sessionId,
+    String characterId,
+  ) => (delete(growthRings)..where(
+    (g) => g.sessionId.equals(sessionId) & g.characterId.equals(characterId),
+  )).go();
+
+  /// The growth pass cursor for a session (0 when no pass has run yet).
+  Future<int> getGrowthCursor(String sessionId) async {
+    final row = await (select(
+      growthState,
+    )..where((g) => g.sessionId.equals(sessionId))).getSingleOrNull();
+    return row?.cursor ?? 0;
+  }
+
+  Future<void> setGrowthCursor(String sessionId, int cursor) =>
+      into(growthState).insertOnConflictUpdate(
+        GrowthStateCompanion(
+          sessionId: Value(sessionId),
+          cursor: Value(cursor),
+        ),
+      );
 
   // ── Data Bank Queries ────────────────────────────────────────────────────────
 

@@ -31,7 +31,11 @@ import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/time_service.dart';
+import 'package:front_porch_ai/services/llm_service.dart'
+    show LlmToolCall, LlmToolResponse;
 
 /// Test factory (modeled on createTestEvaluator / createTestEngine).
 /// Live closures for group maps + cbs so real dispatch exercised.
@@ -64,6 +68,10 @@ RealismEvals createTestRealismEvals({
   Future<void> Function(String, {bool isPrimary, bool autoGenerateTasks})?
   setObjFn,
   Future<String?> Function(String, {void Function(String)? onChunk})? fireFn,
+  Future<LlmToolResponse?> Function(String, List<Map<String, dynamic>>)?
+  fireToolFn,
+  ToolTransportProbe? probe,
+  bool Function()? cancelledFn,
   String Function(String)? stripFn,
   int? Function(String, String)? intFn,
   bool? Function(String, String)? boolFn,
@@ -150,6 +158,13 @@ RealismEvals createTestRealismEvals({
           // default: return a safe "none" response for most; tests override for deltas
           return '{"relationship_delta":0,"trust_delta":0,"bond_reason":"none","trust_reason":"none","emotion":"neutral","emotion_intensity":"mild","arousal_delta":0,"posture":"none","proposed_objective":"none","fixation_topic":"none","reason":"none"}';
         },
+    // Tools transport: the default answers the probe with null ("backend
+    // can't do tools"), so every pre-existing test runs the text path
+    // unchanged; tools-specific tests pass fireToolFn/probe explicitly.
+    fireToolEval: fireToolFn ?? (p, t) async => null,
+    probe: probe ?? ToolTransportProbe(),
+    getBackendIdentity: () => 'test-backend',
+    isEvalCancelled: cancelledFn ?? () => false,
     stripThinkBlocks: stripFn ?? (t) => t,
     extractJsonInt: intFn ?? (t, k) => 0,
     extractJsonBool: boolFn ?? (t, k) => false,
@@ -652,5 +667,176 @@ void main() {
         expect(captured!, contains('Who TestChar is'));
       },
     );
+  });
+
+  group('RealismEvals tools transport (realism_tools)', () {
+    test('realismToolCallToJson: coercion + whitelist + unknown tool', () {
+      final json = realismToolCallToJson(kRelationshipTool, [
+        const LlmToolCall(name: 'report_relationship', arguments: {
+          'relationship_delta': '3', // numeric string coerces
+          'trust_delta': 2.6, // num rounds
+          'bond_reason': 'They actually listened.',
+          'invented_field': 'dropped',
+        }),
+      ]);
+      expect(json, isNotNull);
+      expect(json, contains('"relationship_delta":3'));
+      expect(json, contains('"trust_delta":3'));
+      expect(json, contains('They actually listened.'));
+      expect(json, isNot(contains('invented_field')));
+      // Unknown tool name / no usable args → null (caller falls back).
+      expect(realismToolCallToJson(kRelationshipTool, const []), isNull);
+      expect(
+        realismToolCallToJson(kRelationshipTool, [
+          const LlmToolCall(name: 'wrong_tool', arguments: {'x': 1}),
+        ]),
+        isNull,
+      );
+    });
+
+    test(
+      'tool call produces identical side effects to the text path (no text fire)',
+      () async {
+        String emotion = '';
+        String intensity = '';
+        var textFires = 0;
+        final probe = ToolTransportProbe();
+        final svc = createTestRealismEvals(
+          setEmotionFn: (v) => emotion = v,
+          setIntensityFn: (v) => intensity = v,
+          probe: probe,
+          fireToolFn: (prompt, tools) async {
+            // Tools-mode prompt carries the tool instruction, not the JSON one.
+            expect(prompt, contains('report_emotional_state'));
+            expect(prompt, isNot(contains('raw JSON only')));
+            return const LlmToolResponse(
+              calls: [
+                LlmToolCall(name: 'report_emotional_state', arguments: {
+                  'emotion': 'wistful',
+                  'emotion_intensity': 'moderate',
+                }),
+              ],
+              text: '',
+            );
+          },
+          fireFn: (p, {onChunk}) async {
+            textFires++;
+            return null;
+          },
+        );
+        await svc.evaluateEmotionalStateCall();
+        expect(emotion, 'wistful');
+        expect(intensity, 'moderate');
+        expect(textFires, 0); // tools lane handled it
+        expect(probe.isXmlOnly('test-backend'), isFalse);
+      },
+    );
+
+    test(
+      'probe fallback: null tools response marks backend and uses text; no re-probe',
+      () async {
+        var toolFires = 0;
+        var textFires = 0;
+        final probe = ToolTransportProbe();
+        final svc = createTestRealismEvals(
+          probe: probe,
+          fireToolFn: (p, t) async {
+            toolFires++;
+            return null; // backend can't speak tools
+          },
+          fireFn: (p, {onChunk}) async {
+            textFires++;
+            // Text-mode prompt carries the JSON instruction again.
+            expect(p, contains('raw JSON only'));
+            return '{"emotion":"neutral","emotion_intensity":"mild"}';
+          },
+        );
+        await svc.evaluateEmotionalStateCall();
+        await svc.evaluateEmotionalStateCall();
+        expect(toolFires, 1); // probed once, remembered
+        expect(textFires, 2);
+        expect(probe.isXmlOnly('test-backend'), isTrue);
+      },
+    );
+
+    test('text-only tools reply is salvaged through the normal parse', () async {
+      String emotion = '';
+      final svc = createTestRealismEvals(
+        setEmotionFn: (v) => emotion = v,
+        fireToolFn: (p, t) async => const LlmToolResponse(
+          calls: [],
+          text: '{"emotion":"prickly","emotion_intensity":"strong"}',
+        ),
+        fireFn: (p, {onChunk}) async {
+          fail('text path must not fire when the reply text was salvaged');
+        },
+      );
+      await svc.evaluateEmotionalStateCall();
+      expect(emotion, 'prickly');
+    });
+
+    test('converter: bool/array coercion + cast-detect no-name convention', () {
+      final needsJson = realismToolCallToJson(kNeedsImpactTool, [
+        const LlmToolCall(name: 'report_needs_impact', arguments: {
+          'activities': ['sexual', 'messy'],
+          'intensity': '7',
+          'hunger_delta': 0,
+          'energy_delta': -12,
+          'hygiene_delta': -10,
+          'fun_delta': 25,
+          'social_delta': 10,
+          'bladder_delta': 0,
+          'comfort_delta': 8,
+          'reason': 'climaxed during sex',
+          'is_climax': 'true', // string bool coerces
+          'refractory_turns': 6,
+        }),
+      ]);
+      expect(needsJson, isNotNull);
+      expect(needsJson, contains('"is_climax":true'));
+      expect(needsJson, contains('"activities":["sexual","messy"]'));
+      expect(needsJson, contains('"intensity":7'));
+      expect(needsJson, contains('"energy_delta":-12'));
+
+      // Cast detect: a matched call WITHOUT a name is the explicit
+      // "no detection" answer its parser expects — not a transport failure.
+      expect(
+        realismToolCallToJson(kCastDetectTool, [
+          const LlmToolCall(name: 'report_detected_character', arguments: {}),
+        ]),
+        '{"name":null}',
+      );
+      expect(
+        realismToolCallToJson(kCastDetectTool, [
+          const LlmToolCall(name: 'report_detected_character', arguments: {
+            'name': 'Mara',
+            'descriptor': "the host's sister",
+          }),
+        ]),
+        allOf(contains('"name":"Mara"'), contains("host's sister")),
+      );
+    });
+
+    test('cancel during the tools attempt never marks the backend xml-only',
+        () async {
+      var cancelled = false;
+      final probe = ToolTransportProbe();
+      String emotion = '';
+      final svc = createTestRealismEvals(
+        probe: probe,
+        cancelledFn: () => cancelled,
+        setEmotionFn: (v) => emotion = v,
+        fireToolFn: (p, t) async {
+          cancelled = true; // user hit cancel mid-request (request aborted)
+          return null;
+        },
+        fireFn: (p, {onChunk}) async {
+          fail('cancelled eval must not fall through to the text path');
+        },
+      );
+      await svc.evaluateEmotionalStateCall();
+      expect(emotion, isEmpty); // aborted quietly
+      expect(probe.isXmlOnly('test-backend'), isFalse); // capability unjudged
+    });
   });
 }

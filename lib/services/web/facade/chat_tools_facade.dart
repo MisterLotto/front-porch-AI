@@ -20,6 +20,8 @@ import 'package:front_porch_ai/database/database.dart' show Objective;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/chat/growth_physics.dart';
+import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 
@@ -61,9 +63,9 @@ class ChatToolsFacade {
         'ragWindowSize': _storage.ragWindowSize,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
-        'evolutionEnabled': _storage.characterEvolutionEnabled,
-        'evolutionInterval': _storage.evolutionInterval,
-        'evolutionCount': _chat.characterEvolutionCount,
+        'growthEnabled': _storage.characterEvolutionEnabled,
+        'growthInterval': _storage.growthInterval,
+        'growthReviewFirst': _storage.growthReviewFirst,
       },
       // Kept under the 'summary' key for the bundled web UI: this is the
       // Journal's per-chat recap ("Where we are") — same ChatService surface
@@ -202,59 +204,153 @@ class ChatToolsFacade {
     _notify();
   }
 
-  /// Character-evolution review payload for the focused participant. Group-aware
-  /// via the same per-card accessors the desktop dialog uses
-  /// ([ChatService.getEvolvedPersonalityFor]/[getEvolvedScenarioFor]/
-  /// [getEvolutionCountFor]), so a member's review in a group is identical to a
-  /// 1:1 review — never the host-only [getEffectivePersonality] getter (null for
-  /// members). Originals come straight from the focused card.
-  Map<String, dynamic> evolution(String? participantId) {
-    final card =
-        _focusedParticipant(participantId)?.card ?? _chat.activeCharacter;
-    if (card == null) {
-      return {
-        'name': '',
-        'originalPersonality': '',
-        'originalScenario': '',
-        'evolvedPersonality': '',
-        'evolvedScenario': '',
-        'count': 0,
-      };
+  /// Growth Rings payload for the focused participant (group-aware via the
+  /// same owner-id keying the desktop GrowthPanel uses; 1:1 falls back to the
+  /// host). Rings ship with derived tier + decoded receipts so the web
+  /// renders without re-implementing the physics.
+  Map<String, dynamic> growth(String? participantId) {
+    final owner = _growthOwner(participantId);
+    if (owner == null) {
+      return {'name': '', 'ownerId': '', 'rings': const [], 'passRunning': false};
     }
+    final rings = _chat.growthRingsForOwner(owner.id);
     return {
-      'name': card.name,
-      'originalPersonality': card.personality,
-      'originalScenario': card.scenario,
-      'evolvedPersonality': _chat.getEvolvedPersonalityFor(card) ?? '',
-      'evolvedScenario': _chat.getEvolvedScenarioFor(card) ?? '',
-      'count': _chat.getEvolutionCountFor(card),
+      'name': owner.name,
+      'ownerId': owner.id,
+      'passRunning': _chat.isGrowthPassRunning,
+      'hasLegacyBlob': _chat.hasLegacyGrowthBlobFor(owner.id),
+      'reviewPending': _chat.growthReview.hasPendingFor(_chat.currentSessionId)
+          ? _chat.growthReview.pending!.totalProposals
+          : 0,
+      'rings': [
+        for (final r in rings)
+          {
+            'id': r.id,
+            'content': r.content,
+            'category': r.category,
+            'tier': GrowthPhysics.tierOf(r),
+            'strength': r.strength,
+            'pinned': r.pinned,
+            'retired': r.retired,
+            'receipts': GrowthStore.receiptsOf(r),
+          },
+      ],
     };
   }
 
-  /// Save manually-edited evolved personality/scenario for the focused
-  /// participant. Always targets the resolved card so a group member is updated
-  /// per-character (1:1↔group parity).
-  Future<void> saveEvolution(
+  /// One growth mutation from the web timeline — same ChatService surface the
+  /// desktop panel uses, so behavior can't diverge. Unknown ids no-op.
+  Future<void> growthAction(
     String? participantId,
-    String personality,
-    String scenario,
+    String action,
+    Map<String, dynamic> body,
   ) async {
-    final card =
-        _focusedParticipant(participantId)?.card ?? _chat.activeCharacter;
-    if (card == null) return;
-    await _chat.updateEvolvedPersonality(personality, target: card);
-    await _chat.updateEvolvedScenario(scenario, target: card);
+    final owner = _growthOwner(participantId);
+    if (owner == null) return;
+    final ringId = body['ringId'] as String? ?? '';
+    final rings = _chat.growthRingsForOwner(owner.id);
+    final ring = rings.where((r) => r.id == ringId).firstOrNull;
+    switch (action) {
+      case 'plant':
+        await _chat.plantGrowthRingFor(
+          owner.id,
+          body['text'] as String? ?? '',
+          category: body['category'] as String? ?? 'trait',
+        );
+        break;
+      case 'edit':
+        if (ring == null) return;
+        await _chat.editGrowthRing(
+          ring,
+          text: body['text'] as String? ?? ring.content,
+          category: body['category'] as String?,
+        );
+        break;
+      case 'pin':
+        if (ring == null) return;
+        await _chat.setGrowthRingPinned(ring.id, !(ring.pinned));
+        break;
+      case 'retire':
+        if (ring == null) return;
+        await _chat.retireGrowthRing(ring.id);
+        break;
+      case 'restore':
+        if (ring == null) return;
+        await _chat.unretireGrowthRing(ring);
+        break;
+      case 'delete':
+        if (ring == null) return;
+        await _chat.deleteGrowthRing(ring.id);
+        break;
+      case 'reset':
+        await _chat.resetGrowthFor(owner.id);
+        break;
+      case 'check':
+        await _chat.forceGrowthPass();
+        break;
+    }
     _notify();
   }
 
-  /// Reset the focused participant's evolution back to the original card values
-  /// (and zero the count). Targets the resolved card so a group member resets
-  /// per-character — mirrors the desktop reset confirm.
-  Future<void> resetEvolution(String? participantId) async {
-    final card =
-        _focusedParticipant(participantId)?.card ?? _chat.activeCharacter;
-    await _chat.resetCharacterEvolution(target: card);
+  /// The parked growth-review batch (review-first mode, default OFF) in a
+  /// flat, index-addressed shape for the web modal.
+  Map<String, dynamic> growthReviewBatch() {
+    final batch = _chat.growthReview.pending;
+    if (batch == null || batch.sessionId != _chat.currentSessionId) {
+      return {'pending': false, 'owners': const []};
+    }
+    return {
+      'pending': true,
+      'owners': [
+        for (final owner in batch.owners)
+          {
+            'ownerName': owner.ownerName,
+            'ops': [
+              for (final op in owner.ops)
+                {
+                  'action': op.action.name,
+                  'text': op.text,
+                  'oldContent': op.oldContent ?? '',
+                },
+            ],
+          },
+      ],
+    };
+  }
+
+  /// Settle the parked batch: [rejected] is a list of "ownerIdx:opIdx" keys
+  /// to uncheck; the rest applies (or everything discards).
+  Future<void> settleGrowthReview({
+    required bool apply,
+    List<String> rejected = const [],
+  }) async {
+    final batch = _chat.growthReview.pending;
+    if (batch != null) {
+      for (var o = 0; o < batch.owners.length; o++) {
+        final ops = batch.owners[o].ops;
+        for (var i = 0; i < ops.length; i++) {
+          if (rejected.contains('$o:$i')) ops[i].accepted = false;
+        }
+      }
+    }
+    if (apply) {
+      await _chat.growthReview.apply();
+    } else {
+      await _chat.growthReview.discard();
+    }
     _notify();
+  }
+
+  /// The growth owner behind [participantId]: the focused participant, or the
+  /// host (1:1) / first member as fallback — mirrors the desktop's focused
+  /// default.
+  ChatParticipant? _growthOwner(String? participantId) {
+    final focused = _focusedParticipant(participantId);
+    if (focused != null) return focused;
+    for (final p in _chat.cast) {
+      if (p.isHost) return p;
+    }
+    return _chat.cast.firstOrNull;
   }
 
 
@@ -324,8 +420,9 @@ class ChatToolsFacade {
     await ifBool('journalEnabled', _storage.setJournalEnabled);
     await ifInt('journalInterval', _storage.setJournalInterval);
     await ifInt('journalMaxCards', _storage.setJournalMaxCards);
-    await ifBool('evolutionEnabled', _storage.setCharacterEvolutionEnabled);
-    await ifInt('evolutionInterval', _storage.setEvolutionInterval);
+    await ifBool('growthEnabled', _storage.setCharacterEvolutionEnabled);
+    await ifInt('growthInterval', _storage.setGrowthInterval);
+    await ifBool('growthReviewFirst', _storage.setGrowthReviewFirst);
     _notify();
   }
 

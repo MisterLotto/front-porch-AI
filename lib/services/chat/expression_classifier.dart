@@ -26,6 +26,8 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -124,6 +126,17 @@ class ExpressionService {
   bool _onnxClassifying = false;
   Timer? _onnxDebounce;
 
+  // Tools transport for the LLM reclassify (nullable — tests and tool-less
+  // hosts stay on the text path; the god wires the shared probe/door the
+  // other structured evals use).
+  final Future<LlmToolResponse?> Function(
+    String prompt,
+    List<Map<String, dynamic>> tools,
+  )?
+  fireToolEval;
+  final ToolTransportProbe? probe;
+  final String Function()? getBackendIdentity;
+
   ExpressionService({
     required this.onNotify,
     required this.onSaveChat,
@@ -138,6 +151,9 @@ class ExpressionService {
     required this.setRealismEvalCancelled,
     required this.setIsEvaluatingRealism,
     required this.onHandleRealismEvalCancelledDuringOnnx,
+    this.fireToolEval,
+    this.probe,
+    this.getBackendIdentity,
   });
 
   // ── Public surface (for @Deprecated shims in ChatService + direct test/UI callers) ──────
@@ -369,31 +385,50 @@ class ExpressionService {
 
     try {
       final labels = EmotionLabels.all.join(', ');
-      final prompt =
+      String buildPrompt({required bool toolsMode}) =>
           'Classify the emotion "$unknownEmotion" into exactly ONE of these labels: "$labels".\n'
-          'Return ONLY a JSON object with one key "label" containing your choice.\n'
-          'Example: {"label": "surprise"}\n'
-          'Response:';
-      debugPrint('[Expression] reclassify prompt: $prompt');
+          '${toolsMode ? 'Report by calling the $kExpressionTool tool with your choice as "label". Use ONLY the tool — no plain-text reply.' : 'Return ONLY a JSON object with one key "label" containing your choice.\n'
+                'Example: {"label": "surprise"}\n'
+                'Response:'}';
 
       // Determine if thinking model is in use (same logic as realism engine)
       final isThinkingModel = getIsThinkingModelForReclass();
 
-      final params = GenerationParams(
-        prompt: prompt,
-        maxLength: isThinkingModel ? 2048 : 32,
-        temperature: 0.1,
-        topP: 0.5,
-        repeatPenalty: 1.15,
-        reasoningEnabled: false,
-        stopSequences: isThinkingModel ? [] : ['}\n', '}'],
-      );
-
-      final StringBuffer sb = StringBuffer();
-      await for (final chunk in llmService.generateStream(params)) {
-        sb.write(chunk);
+      Future<String?> fireText(
+        String prompt, {
+        void Function(String)? onChunk,
+      }) async {
+        final params = GenerationParams(
+          prompt: prompt,
+          maxLength: isThinkingModel ? 2048 : 32,
+          temperature: 0.1,
+          topP: 0.5,
+          repeatPenalty: 1.15,
+          reasoningEnabled: false,
+          stopSequences: isThinkingModel ? [] : ['}\n', '}'],
+        );
+        final StringBuffer sb = StringBuffer();
+        await for (final chunk in llmService.generateStream(params)) {
+          sb.write(chunk);
+        }
+        return sb.toString().trim();
       }
-      String response = sb.toString().trim();
+
+      String response =
+          (fireToolEval != null && probe != null
+              ? await fireStructuredEval(
+                  probe: probe!,
+                  backendIdentity: getBackendIdentity?.call() ?? '',
+                  debugLabel: kExpressionTool,
+                  tools: kExpressionEvalTools,
+                  buildPrompt: buildPrompt,
+                  callToText: (resp) =>
+                      realismToolCallToJson(kExpressionTool, resp.calls),
+                  fireToolEval: fireToolEval!,
+                  fireTextEval: fireText,
+                )
+              : await fireText(buildPrompt(toolsMode: false))) ??
+          '';
       debugPrint('[Expression] reclassify raw response: "$response"');
 
       // Extract JSON from response (handles thinking model output with <think> blocks)

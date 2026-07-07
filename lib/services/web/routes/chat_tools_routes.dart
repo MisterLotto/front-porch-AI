@@ -34,8 +34,10 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
     router.post('/api/chat/tools/task', _task);
-    router.get('/api/chat/tools/evolution', _evolutionGet);
-    router.post('/api/chat/tools/evolution', _evolutionPost);
+    router.get('/api/chat/tools/growth', _growthGet);
+    router.post('/api/chat/tools/growth', _growthPost);
+    router.get('/api/chat/tools/growth/review', _growthReviewGet);
+    router.post('/api/chat/tools/growth/review', _growthReviewPost);
   }
 
   final ChatToolsFacade _facade;
@@ -204,34 +206,46 @@ class WebChatToolsRoutes {
     return JsonResponse.ok(_snapshot(request));
   }
 
-  /// Character-evolution review for the focused participant (`?participant=`).
-  /// Returns original + evolved personality/scenario + count (group-aware).
-  shelf.Response _evolutionGet(shelf.Request request) => JsonResponse.ok(
-    _facade.evolution(request.url.queryParameters['participant']),
+  /// Growth Rings timeline for the focused participant (`?participant=`) —
+  /// rings with derived tier/receipts, pass state, and pending-review count.
+  shelf.Response _growthGet(shelf.Request request) => JsonResponse.ok(
+    _facade.growth(request.url.queryParameters['participant']),
   );
 
-  /// Evolution mutation: `action: 'save'` (carries personality/scenario) or
-  /// `action: 'reset'`. Scoped to the focused participant. Returns the fresh
-  /// evolution block so the modal can reflect the new state.
-  Future<shelf.Response> _evolutionPost(shelf.Request request) async {
+  /// Growth mutation (`action`: plant/edit/pin/retire/restore/delete/reset/
+  /// check — same ChatService surface the desktop panel drives). Returns the
+  /// fresh growth block so the timeline can reflect the new state.
+  Future<shelf.Response> _growthPost(shelf.Request request) async {
     final body = await _json(request);
-    final action = body['action']?.toString();
+    final action = body['action']?.toString() ?? '';
     final participant =
         body['participant']?.toString() ??
         request.url.queryParameters['participant'];
-    switch (action) {
-      case 'save':
-        await _facade.saveEvolution(
-          participant,
-          body['personality']?.toString() ?? '',
-          body['scenario']?.toString() ?? '',
-        );
-      case 'reset':
-        await _facade.resetEvolution(participant);
-      default:
-        return JsonResponse.badRequest('Unknown evolution action: $action');
+    const known = {
+      'plant', 'edit', 'pin', 'retire', 'restore', 'delete', 'reset', 'check',
+    };
+    if (!known.contains(action)) {
+      return JsonResponse.badRequest('Unknown growth action: $action');
     }
-    return JsonResponse.ok(_facade.evolution(participant));
+    await _facade.growthAction(participant, action, body);
+    return JsonResponse.ok(_facade.growth(participant));
+  }
+
+  /// The parked growth-review batch (review-first mode, default OFF).
+  shelf.Response _growthReviewGet(shelf.Request request) =>
+      JsonResponse.ok(_facade.growthReviewBatch());
+
+  /// Settle the parked batch: `{apply: bool, rejected: ["o:i", ...]}`.
+  Future<shelf.Response> _growthReviewPost(shelf.Request request) async {
+    final body = await _json(request);
+    await _facade.settleGrowthReview(
+      apply: body['apply'] == true,
+      rejected: [
+        if (body['rejected'] is List)
+          for (final r in body['rejected'] as List) r.toString(),
+      ],
+    );
+    return JsonResponse.ok(_facade.growthReviewBatch());
   }
 
   Future<Map<String, dynamic>> _json(shelf.Request request) async {

@@ -49,7 +49,9 @@ class GroupMemberCard extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onTap; // promote to expanded / set next speaker
   final File? avatarFile; // pre-resolved for performance
-  final int evolutionCount;
+
+  /// Active Growth Rings count (🌱 badge; 0 hides it).
+  final int ringCount;
   final bool canRemove;
   final VoidCallback? onRemove;
   final VoidCallback? onOpenObjectives;
@@ -63,7 +65,7 @@ class GroupMemberCard extends StatefulWidget {
     required this.isExpanded,
     required this.onTap,
     this.avatarFile,
-    this.evolutionCount = 0,
+    this.ringCount = 0,
     this.canRemove = false,
     this.onRemove,
     this.onOpenObjectives,
@@ -273,31 +275,28 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                             ),
                           ),
                         ),
-                      if (widget.evolutionCount > 0) ...[
+                      if (widget.ringCount > 0) ...[
                         const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.resolve(
-                              context,
-                              AppColors.journalAccent.withValues(alpha: 0.15),
-                              AppColors.journalAccentLight.withValues(
-                                alpha: 0.15,
-                              ),
+                        Tooltip(
+                          message:
+                              '${widget.ringCount} growth ring'
+                              '${widget.ringCount == 1 ? '' : 's'}',
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
                             ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'E${widget.evolutionCount}',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: AppColors.resolve(
+                            decoration: BoxDecoration(
+                              color: AppColors.porchHoneyOf(
                                 context,
-                                AppColors.journalAccent,
-                                AppColors.journalAccentLight,
+                              ).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '🌱${widget.ringCount}',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: AppColors.porchHoneyOf(context),
                               ),
                             ),
                           ),

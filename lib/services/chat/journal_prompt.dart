@@ -20,7 +20,7 @@ import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/database/database.dart';
 
 /// Recap length instruction (words). The recap must stay plain prose —
-/// EvolutionService and the prompt summaryBlock consume it directly.
+/// the growth pass and the prompt summaryBlock consume it directly.
 const int kRecapMaxWords = 200;
 
 /// The Journal — maintenance-pass prompt building (extracted from
@@ -76,7 +76,7 @@ String buildJournalPrompt({
     final m = window[i];
     if (m.characterId == '__director__') continue;
     b.writeln('#${windowStart + i} ${m.sender}: ${m.displayText}');
-    final salience = _salienceLine(m);
+    final salience = salienceLineOf(m);
     if (salience != null) b.writeln('    ($salience)');
   }
   b.writeln();
@@ -165,7 +165,9 @@ String? journalIntensityOf(ChatMessage m) {
 
 /// Deterministic per-message salience annotation from the engine-stamped
 /// metadata that already exists (nothing here asks the model anything).
-String? _salienceLine(ChatMessage m) {
+/// Shared with the growth pass prompt (growth_prompt.dart) so both
+/// background passes annotate the window identically.
+String? salienceLineOf(ChatMessage m) {
   final meta = m.activeMetadata;
   if (meta == null) return null;
   final parts = <String>[];

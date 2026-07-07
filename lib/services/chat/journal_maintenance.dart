@@ -28,13 +28,14 @@ import 'journal_physics.dart';
 import 'journal_prompt.dart';
 import 'journal_review.dart';
 import 'journal_store.dart';
+import 'pass_support.dart';
 
 /// The Journal — the one periodic background job
 /// (docs/design/journal-memory.md §4.2). Replaces BOTH the old SummaryService
 /// and FactExtraction with a single eval call per diary owner per pass,
 /// producing (a) memory-card operations and (b) the per-chat "Where we are"
 /// recap (written into the same _summary slot the old summary used, so the
-/// injection plumbing, sidebar, web facade, and EvolutionService's summary
+/// injection plumbing, sidebar, web facade, and the growth pass's recap
 /// dependency keep working untouched).
 ///
 /// Plain leaf, callback-wired like its dead siblings. Reuses only existing
@@ -65,6 +66,10 @@ class JournalMaintenance {
 
   /// Review-first parking + the single proposal applier (both modes).
   final JournalReview review;
+
+  /// Tools-vs-XML probe memory, shared with the growth pass (pass_support) —
+  /// one probe per backend identity per run no matter which pass asks first.
+  final ToolTransportProbe probe;
 
   final Future<String?> Function(String prompt) fireLLMEval;
 
@@ -114,6 +119,7 @@ class JournalMaintenance {
   JournalMaintenance({
     required this.store,
     required this.review,
+    required this.probe,
     required this.fireLLMEval,
     required this.fireToolEval,
     required this.stripThinkBlocks,
@@ -147,10 +153,6 @@ class JournalMaintenance {
   /// never competes with the main LLM call for the backend.
   bool eventKickPending = false;
 
-  /// Backends that rejected or ignored the tool probe this run — they
-  /// journal over XML from then on (no repeated probe round trips).
-  final Set<String> _xmlOnlyBackends = {};
-
   Future<void> runMaintenancePass({bool force = false}) async {
     final sessionToken = getSessionId();
     if (sessionToken == null) return;
@@ -183,7 +185,15 @@ class JournalMaintenance {
       final window = messages.sublist(start);
       if (window.isEmpty) return;
 
-      final owners = _diaryOwners(window);
+      // Shared owner loop (pass_support). No guests passed — scene guests
+      // never journal (the guest parity guard).
+      final owners = resolvePassOwners(
+        window: window,
+        group: getActiveGroup(),
+        members: getGroupCharacters(),
+        active: getActiveCharacter(),
+        idOf: getCharacterIdFromCard,
+      );
       if (owners.isEmpty) return;
 
       final reviewMode = getReviewFirst();
@@ -291,7 +301,7 @@ class JournalMaintenance {
     );
 
     final backend = getBackendIdentity();
-    if (!_xmlOnlyBackends.contains(backend)) {
+    if (!probe.isXmlOnly(backend)) {
       final resp = await fireToolEval(prompt(toolsMode: true), kJournalTools);
       if (resp != null) {
         var (ops, recap) = parseJournalToolCalls(resp.calls);
@@ -303,7 +313,7 @@ class JournalMaintenance {
         }
         if (ops.isNotEmpty || recap != null) return (ops, recap);
       }
-      _xmlOnlyBackends.add(backend);
+      probe.markXmlOnly(backend);
       debugPrint('[Journal] Tools unavailable on $backend — using XML');
     }
 
@@ -358,38 +368,6 @@ class JournalMaintenance {
       }
     }
     return resolved;
-  }
-
-  /// Distinct diary owners appearing in the window. 1:1 = the active
-  /// character; group = every group member who spoke (order of first
-  /// appearance), falling back to the active character for user-only windows.
-  /// Ids that don't resolve to a group member (scene guests, director) are
-  /// skipped — guests never journal.
-  List<CharacterCard> _diaryOwners(List<ChatMessage> window) {
-    if (getActiveGroup() == null) {
-      final active = getActiveCharacter();
-      return active == null ? const [] : [active];
-    }
-    final members = getGroupCharacters();
-    final owners = <CharacterCard>[];
-    final seen = <String>{};
-    for (final m in window) {
-      if (m.isUser || m.characterId == '__director__') continue;
-      final id = m.characterId;
-      if (id == null || id.isEmpty || seen.contains(id)) continue;
-      for (final c in members) {
-        if (getCharacterIdFromCard(c) == id) {
-          owners.add(c);
-          seen.add(id);
-          break;
-        }
-      }
-    }
-    if (owners.isEmpty) {
-      final active = getActiveCharacter();
-      if (active != null && members.contains(active)) return [active];
-    }
-    return owners;
   }
 
   JournalMemoryData? _cardForHandle(List<JournalMemoryData> cards, int? handle) {

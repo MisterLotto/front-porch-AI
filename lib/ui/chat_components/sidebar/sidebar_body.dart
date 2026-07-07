@@ -39,17 +39,16 @@ import 'story_tools/story_tools_group.dart';
 /// · 🎲 Story Tools). ALL 1:1 / group / lite-NPC branching lives here —
 /// replacing the old three-branch ListView in chat_page.
 ///
-/// Composition-only: page-level concerns (chance-time overlay, the
-/// evolution-run dialog, avatar file resolution) arrive as callbacks;
-/// accordion expansion is persisted via StorageService.uiSettings.
+/// Composition-only: page-level concerns (chance-time overlay, avatar file
+/// resolution) arrive as callbacks; accordion expansion is persisted via
+/// StorageService.uiSettings.
 class SidebarBody extends StatelessWidget {
   final ChatService chatService;
   final ChatParticipant focused;
   final VoidCallback onSpinRequested;
-  final VoidCallback onEvolveNow;
 
-  /// Journal receipts tap-to-jump: scroll the chat to this message position
-  /// (chat_page owns the scroll controller and the seek).
+  /// Receipts tap-to-jump (journal + growth rings): scroll the chat to this
+  /// message position (chat_page owns the scroll controller and the seek).
   final ValueChanged<int> onJumpToMessage;
 
   final File? Function(String path) resolveCharImage;
@@ -62,7 +61,6 @@ class SidebarBody extends StatelessWidget {
     required this.chatService,
     required this.focused,
     required this.onSpinRequested,
-    required this.onEvolveNow,
     required this.onJumpToMessage,
     required this.resolveCharImage,
     this.draft,
@@ -132,7 +130,6 @@ class SidebarBody extends StatelessWidget {
               ),
               onExpansionChanged: (v) =>
                   ui.setSidebarGroupExpanded('journal_memory', v),
-              onEvolveNow: onEvolveNow,
             ),
             StoryToolsGroup(
               draft: draft,
@@ -173,7 +170,7 @@ class SidebarBody extends StatelessWidget {
       avatarFile: character.imagePath != null
           ? resolveCharImage(character.imagePath!)
           : null,
-      evolutionCount: chat.getEvolutionCountFor(character),
+      ringCount: chat.growthRingCountFor(character),
       // > 1 (not > 2): removing the second-to-last member is allowed and
       // auto-collapses the group back to a 1:1.
       canRemove: canRemove,

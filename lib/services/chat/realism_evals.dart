@@ -28,8 +28,11 @@ import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
 import 'package:front_porch_ai/services/chat/time_service.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
+import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
 import 'package:front_porch_ai/utils/emotion_labels.dart';
 
 // The per-eval delta limit constants (kMin/kMaxRelationshipDelta etc.) live in
@@ -131,6 +134,27 @@ class RealismEvals {
     void Function(String)? onChunk,
   })
   fireLLMEval;
+
+  // ── Tool-calling transport (realism_tools.dart) ──
+  // Tools are a reliable way to obtain the SAME JSON the evals have always
+  // parsed: a successful call is converted to canonical flat-JSON text and
+  // flows through the unchanged pipeline (batch collect → verifier → regex
+  // extractors → appliers), so one-shot/multi-call and 1:1/group parity hold
+  // by construction. Backends that fail the probe fall back to the streaming
+  // text path — probe memory is shared with the Journal + Growth passes.
+  final Future<LlmToolResponse?> Function(
+    String prompt,
+    List<Map<String, dynamic>> tools,
+  )
+  fireToolEval;
+  final ToolTransportProbe probe;
+  final String Function() getBackendIdentity;
+
+  /// Live cancel check for the (non-streaming) tools attempt: a user cancel
+  /// aborts the backend request, which must read as "cancelled", never as
+  /// "this backend can't do tools".
+  final bool Function() isEvalCancelled;
+
   final String Function(String) stripThinkBlocks;
   final int? Function(String, String) extractJsonInt;
   final bool? Function(String, String) extractJsonBool;
@@ -376,6 +400,10 @@ class RealismEvals {
 
   RealismEvals({
     required this.fireLLMEval,
+    required this.fireToolEval,
+    required this.probe,
+    required this.getBackendIdentity,
+    required this.isEvalCancelled,
     required this.stripThinkBlocks,
     required this.extractJsonInt,
     required this.extractJsonBool,
@@ -402,6 +430,28 @@ class RealismEvals {
     required this.setObjective,
     this.verifyRealismOutput,
   });
+
+  /// Pre-parse fire for the JSON evals — thin over the ONE shared
+  /// negotiation ([fireStructuredEval] in pass_support.dart): tools first
+  /// when the backend allows (canonical JSON synthesized from the call via
+  /// realism_tools), text-reply salvage, streaming text fallback otherwise.
+  Future<String?> _fireEval({
+    required String toolName,
+    required List<Map<String, dynamic>> tools,
+    required String Function({required bool toolsMode}) buildPrompt,
+    void Function(String)? onChunk,
+  }) => fireStructuredEval(
+    probe: probe,
+    backendIdentity: getBackendIdentity(),
+    debugLabel: toolName,
+    tools: tools,
+    buildPrompt: buildPrompt,
+    callToText: (resp) => realismToolCallToJson(toolName, resp.calls),
+    fireToolEval: fireToolEval,
+    fireTextEval: fireLLMEval,
+    isCancelled: isEvalCancelled,
+    onChunk: onChunk,
+  );
 
   /// Shared post-fire verifier wrapper (used by all 5 realism paths + oneShot).
   /// Assembles the rich latent bundle from what this leaf just used (prompt, pre via capture cb,
@@ -609,17 +659,27 @@ class RealismEvals {
       emotionIntensity: getEmotionIntensity(),
     );
 
-    final prompt = RealismPromptBuilder.relationshipEvalPrompt(
-      charName: charName,
-      userName: userName,
-      dossier: dossier,
-      standing: standing,
-      recent: recent,
-    );
+    String buildPrompt({required bool toolsMode}) =>
+        RealismPromptBuilder.relationshipEvalPrompt(
+          charName: charName,
+          userName: userName,
+          dossier: dossier,
+          standing: standing,
+          recent: recent,
+          toolsMode: toolsMode,
+        );
+    // Text-mode variant for the verifier/batch context (the format the
+    // downstream parse — and any Director re-fire — actually expects).
+    final prompt = buildPrompt(toolsMode: false);
 
     try {
       debugPrint('[Realism] Evaluating relationship dynamic...');
-      final raw = await fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireEval(
+        toolName: kRelationshipTool,
+        tools: kRelationshipEvalTools,
+        buildPrompt: buildPrompt,
+        onChunk: onChunk,
+      );
       if (raw == null) return;
 
       final searchText = stripThinkBlocks(raw);
@@ -702,16 +762,19 @@ class RealismEvals {
     final arousalEnabled = nsfwService.nsfwCooldownEnabled;
     final labels = getExpressionEnabled() ? EmotionLabels.all : const <String>[];
 
-    final prompt = RealismPromptBuilder.emotionalEvalPrompt(
-      charName: charName,
-      userName: userName,
-      dossier: dossier,
-      standing: standing,
-      recent: recent,
-      arousalEnabled: arousalEnabled,
-      arousalLevel: nsfwService.arousalLevel,
-      allowedEmotionLabels: labels,
-    );
+    String buildPrompt({required bool toolsMode}) =>
+        RealismPromptBuilder.emotionalEvalPrompt(
+          charName: charName,
+          userName: userName,
+          dossier: dossier,
+          standing: standing,
+          recent: recent,
+          arousalEnabled: arousalEnabled,
+          arousalLevel: nsfwService.arousalLevel,
+          allowedEmotionLabels: labels,
+          toolsMode: toolsMode,
+        );
+    final prompt = buildPrompt(toolsMode: false);
 
     try {
       debugPrint(
@@ -719,7 +782,12 @@ class RealismEvals {
         '(nsfwArousal=${nsfwService.nsfwCooldownEnabled}, '
         'arousalLevel=${nsfwService.arousalLevel})',
       );
-      final raw = await fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireEval(
+        toolName: kEmotionalTool,
+        tools: kEmotionalEvalTools,
+        buildPrompt: buildPrompt,
+        onChunk: onChunk,
+      );
       if (raw == null) return;
 
       final searchText = stripThinkBlocks(raw);
@@ -830,16 +898,24 @@ class RealismEvals {
     final primary = getPrimaryObjective();
 
     final dossier = getCharacterDossier(char);
-    final prompt = RealismPromptBuilder.narrativeEvalPrompt(
-      charName: charName,
-      userName: userName,
-      dossier: dossier,
-      recent: recent,
-      primaryObjective: primary?.objective,
-    );
+    String buildPrompt({required bool toolsMode}) =>
+        RealismPromptBuilder.narrativeEvalPrompt(
+          charName: charName,
+          userName: userName,
+          dossier: dossier,
+          recent: recent,
+          primaryObjective: primary?.objective,
+          toolsMode: toolsMode,
+        );
+    final prompt = buildPrompt(toolsMode: false);
 
     try {
-      final raw = await fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireEval(
+        toolName: kNarrativeTool,
+        tools: kNarrativeEvalTools,
+        buildPrompt: buildPrompt,
+        onChunk: onChunk,
+      );
       if (raw == null) return;
       var text = stripThinkBlocks(raw).isNotEmpty ? stripThinkBlocks(raw) : raw;
       if (_batchCollectActive) {
@@ -919,21 +995,29 @@ class RealismEvals {
 
     // Same shared fragments as the multi-call path (strict one-shot vs normal
     // parity by construction — the rubric text cannot drift between paths).
-    final prompt = RealismPromptBuilder.oneShotEvalPrompt(
-      charName: charName,
-      userName: userName,
-      dossier: dossier,
-      standing: standing,
-      recent: recent,
-      arousalEnabled: arousalEnabled,
-      arousalLevel: nsfwService.arousalLevel,
-      allowedEmotionLabels: labels,
-      primaryObjective: primary?.objective,
-    );
+    String buildPrompt({required bool toolsMode}) =>
+        RealismPromptBuilder.oneShotEvalPrompt(
+          charName: charName,
+          userName: userName,
+          dossier: dossier,
+          standing: standing,
+          recent: recent,
+          arousalEnabled: arousalEnabled,
+          arousalLevel: nsfwService.arousalLevel,
+          allowedEmotionLabels: labels,
+          primaryObjective: primary?.objective,
+          toolsMode: toolsMode,
+        );
+    final prompt = buildPrompt(toolsMode: false);
 
     try {
       debugPrint('[Realism:OneShot] Evaluating (fused call)...');
-      final raw = await fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireEval(
+        toolName: kOneShotTool,
+        tools: kOneShotEvalTools,
+        buildPrompt: buildPrompt,
+        onChunk: onChunk,
+      );
       if (raw == null) return;
 
       final searchText = stripThinkBlocks(raw);

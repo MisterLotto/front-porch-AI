@@ -447,9 +447,9 @@ class CharacterFacade {
         'ttsVoice': c.ttsVoice,
         'imagePath': c.imagePath,
         'realism': ext != null ? frontPorchToJson(ext) : null,
-        'evolvedPersonality': _chat?.getEffectivePersonality ?? '',
-        'evolvedScenario': _chat?.getEffectiveScenario ?? '',
-        'evolutionCount': _chat?.characterEvolutionCount ?? 0,
+        // (The old evolved*/evolutionCount fields are gone — growth is served
+        // per-participant by /api/chat/tools/growth; the bundled web UI ships
+        // in lockstep with this facade.)
       };
     } catch (_) {
       return null;

@@ -150,7 +150,7 @@ List<JournalOp> parseJournalOps(String raw) {
 
 /// Extract the `<recap>` paragraph — paired tag first, then the unclosed-tag
 /// fallback (mirrors the unclosed-`<think>` trick). Any stray tags inside are
-/// stripped so plain prose is guaranteed (EvolutionService and the prompt
+/// stripped so plain prose is guaranteed (the growth pass and the prompt
 /// summaryBlock consume this text directly).
 String? parseRecap(String raw) {
   var text = _recapTag.firstMatch(raw)?.group(1);

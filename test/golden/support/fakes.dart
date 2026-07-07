@@ -93,7 +93,7 @@ class FakeChatService extends ChangeNotifier implements ChatService {
     this.needsSimEnabled = true,
     this.characterEmotion = 'neutral',
     this.emotionIntensity = 'moderate',
-    this.characterEvolutionCount = 0,
+    this.isGrowthPassRunning = false,
     this.activeCharacter,
     List<ChatMessage> messages = const [],
     // Generation status bar surface.
@@ -234,7 +234,7 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   final String emotionIntensity;
   @override
-  final int characterEvolutionCount;
+  final bool isGrowthPassRunning;
   @override
   final CharacterCard? activeCharacter;
 

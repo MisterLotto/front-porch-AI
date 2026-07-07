@@ -18,6 +18,10 @@
 
 import 'package:flutter/foundation.dart';
 
+import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
+import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
+
 /// Plain (non-ChangeNotifier) domain service owning the chat-scoped passage-of-time
 /// state machine: deterministic 6-turn clock, automatic LLM-vetoable advances
 /// (hold_time / new_day / posture side-effect), manual nudge (chevrons), OOC
@@ -98,12 +102,51 @@ class TimeService {
   /// 6 turns ≈ a meaningful scene chunk without forcing constant time-skips.
   static const int turnsPerTimePeriod = 6;
 
+  // Tools transport for the scene-time/posture evals (nullable — tests and
+  // any host without the tools door stay on the text path; the god wires the
+  // same shared probe/door the other structured evals use).
+  final Future<LlmToolResponse?> Function(
+    String prompt,
+    List<Map<String, dynamic>> tools,
+  )?
+  fireToolEval;
+  final ToolTransportProbe? probe;
+  final String Function()? getBackendIdentity;
+
   TimeService({
     required this.onNotify,
     required this.onSaveChat,
     required this.onSetPendingRealismMetadata,
     required this.onNudgePatchLastMessageRealismState,
+    this.fireToolEval,
+    this.probe,
+    this.getBackendIdentity,
   });
+
+  /// Fire one scene-time/posture eval through the shared tools-vs-text
+  /// negotiation (or straight text when the tools door isn't wired).
+  Future<String?> _fireSceneTimeEval(
+    String Function({required bool toolsMode}) buildPrompt, {
+    required Future<String?> Function(
+      String prompt, {
+      void Function(String)? onChunk,
+    })
+    fireLLMEval,
+    void Function(String)? onChunk,
+  }) => fireToolEval != null && probe != null
+      ? fireStructuredEval(
+          probe: probe!,
+          backendIdentity: getBackendIdentity?.call() ?? '',
+          debugLabel: kSceneTimeTool,
+          tools: kSceneTimeEvalTools,
+          buildPrompt: buildPrompt,
+          callToText: (resp) =>
+              realismToolCallToJson(kSceneTimeTool, resp.calls),
+          fireToolEval: fireToolEval!,
+          fireTextEval: fireLLMEval,
+          onChunk: onChunk,
+        )
+      : fireLLMEval(buildPrompt(toolsMode: false), onChunk: onChunk);
 
   // ── Public surface (for @Deprecated shims in ChatService + direct test/UI callers) ──────
 
@@ -443,7 +486,7 @@ class TimeService {
       final currentPostureCtx = getCurrentSpatialStance().isNotEmpty
           ? 'Recent position reference: $charName was "${getCurrentSpatialStance()}". '
           : '';
-      final posturePrompt =
+      String buildPosturePrompt({required bool toolsMode}) =>
           '$currentPostureCtx'
           'Current time: $_timeOfDay.\n\n'
           'What is $charName\'s current physical position and stance? Use "none" if unclear.\n'
@@ -452,11 +495,15 @@ class TimeService {
           '- Within the same scene, maintain natural continuity (don\'t jump locations).\n'
           '- Across scene breaks or time jumps, update to the new context.\n\n'
           'Recent conversation:\n$recent\n\n'
-          'Respond with ONLY valid JSON. Do NOT use markdown code blocks — return raw JSON only.\n'
-          'Example: {"posture": "standing by the window"} or {"posture": "none"}';
+          '${toolsMode ? 'Report by calling the $kSceneTimeTool tool (only the "posture" field matters here). Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY valid JSON. Do NOT use markdown code blocks — return raw JSON only.\n'
+                'Example: {"posture": "standing by the window"} or {"posture": "none"}'}';
 
       try {
-        final raw = await fireLLMEval(posturePrompt, onChunk: onChunk);
+        final raw = await _fireSceneTimeEval(
+          buildPosturePrompt,
+          fireLLMEval: fireLLMEval,
+          onChunk: onChunk,
+        );
         if (raw != null) {
           final text = stripThinkBlocks(raw).isNotEmpty
               ? stripThinkBlocks(raw)
@@ -499,7 +546,7 @@ class TimeService {
       final currentPostureCtx = getCurrentSpatialStance().isNotEmpty
           ? 'Recent position reference: $charName was "${getCurrentSpatialStance()}".\n'
           : '';
-      final holdPrompt =
+      String buildHoldPrompt({required bool toolsMode}) =>
           'You are evaluating physical state for $charName.\n\n'
           '$currentPostureCtx'
           'Current time: $_timeOfDay (Day $_dayCount). Time is advancing to the next period.\n'
@@ -512,10 +559,14 @@ class TimeService {
           '   - Maintain continuity only within the SAME scene — do NOT anchor them to a position from a previous scene.\n'
           '   - Avoid sudden jumps without setup, but DO update when the narrative context clearly shifted.\n\n'
           'Recent conversation:\n$recent\n\n'
-          'Respond with ONLY a flat JSON object containing "hold_time", "new_day", and "posture". '
-          'Do NOT use markdown code blocks — return raw JSON only.';
+          '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "hold_time", "new_day", and "posture". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "hold_time", "new_day", and "posture". '
+                'Do NOT use markdown code blocks — return raw JSON only.'}';
       try {
-        final raw = await fireLLMEval(holdPrompt, onChunk: onChunk);
+        final raw = await _fireSceneTimeEval(
+          buildHoldPrompt,
+          fireLLMEval: fireLLMEval,
+          onChunk: onChunk,
+        );
         if (raw != null) {
           final text = stripThinkBlocks(raw).isNotEmpty
               ? stripThinkBlocks(raw)

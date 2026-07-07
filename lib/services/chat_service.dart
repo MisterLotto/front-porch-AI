@@ -86,7 +86,12 @@ import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
-import 'package:front_porch_ai/services/chat/evolution_service.dart';
+import 'package:front_porch_ai/services/chat/growth_ops.dart';
+import 'package:front_porch_ai/services/chat/growth_physics.dart';
+import 'package:front_porch_ai/services/chat/growth_review.dart';
+import 'package:front_porch_ai/services/chat/growth_service.dart';
+import 'package:front_porch_ai/services/chat/growth_store.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
 
@@ -95,7 +100,7 @@ import 'package:drift/drift.dart' as drift;
 // private members; behaviour is unchanged.
 part 'chat/chat_service_group_read.dart';
 part 'chat/chat_service_group_settings.dart';
-part 'chat/chat_service_evolution.dart';
+part 'chat/chat_service_growth.dart';
 part 'chat/chat_service_sillytavern.dart';
 part 'chat/chat_service_group_realism_helpers.dart';
 part 'chat/chat_service_history.dart';
@@ -215,16 +220,10 @@ class ChatService extends ChangeNotifier {
   final List<String> _sceneGuestIds = [];
   final List<CharacterCard> _sceneGuestCards = [];
 
-  // Phase 3 — per-guest Character Evolution (trait development). Keyed by the
-  // guest's stable charId (same key the EvolutionService uses). The evolved
-  // *text* lives in the shared `_evolvedPersonalities` / `_evolvedScenarios`
-  // maps (so the existing effective-personality layering applies on guest turns
-  // for free); only the per-guest evolution *count* is tracked separately so a
-  // guest evolves on its own participation cadence and we never perturb the
-  // active character's evolution count/state. Persisted alongside the guest ids
-  // in the 1:1 `groupRealismState` blob (no schema change). Carries ZERO
-  // Realism/Needs work — it is a sibling of the existing evolution trigger.
-  final Map<String, int> _guestEvolutionCounts = {};
+  // Scene Guests grow Growth Rings exactly like members do — rings are keyed
+  // by the guest's stable charId in the growth_rings table, so no per-guest
+  // evolution state lives here anymore (the growth pass includes 1:1 guests
+  // who spoke in the window via resolvePassOwners).
 
   /// A one-shot departure instruction consumed by the NEXT primary 1:1
   /// generation so the active character narrates the guest leaving. Set by
@@ -736,6 +735,10 @@ class ChatService extends ChangeNotifier {
   /// `LlmEvalEngine` fire/strip surface (no new LLM-firing path).
   CastDetector _ensureCastDetector() {
     return _castDetector ??= CastDetector(
+      // Shared tools transport (one probe per backend identity, app-wide).
+      fireToolEval: _fireToolEval,
+      probe: _toolProbe,
+      getBackendIdentity: () => _evalBackendIdentity,
       getRecentPrimaryTexts: () {
         // HOST narration only — exclude user, System, AND Scene Guest messages.
         // The detector prompt says "read <host>'s narration", so feeding it a
@@ -903,14 +906,6 @@ class ChatService extends ChangeNotifier {
   bool _resolvingSceneGuests = false;
   bool _sceneGuestsResolvePending = false;
 
-  /// True when [charId] (a stable charId from `_getCharacterIdFromCard`)
-  /// belongs to a current Scene Guest. Used to route per-guest evolution
-  /// persistence into the 1:1 guest blob instead of the active character's
-  /// session columns, and to clear only guest entries from the shared evolved
-  /// maps on reset.
-  bool _isSceneGuestCharId(String charId) =>
-      _sceneGuestCards.any((g) => _getCharacterIdFromCard(g) == charId);
-
   /// Resolve the Scene Guest card that authored message [m], or null when [m] is
   /// a host / group / system / user message. Used by regenerate + swipe so a
   /// guest message stays a parity-safe GUEST turn (no Realism/Needs, spoken as
@@ -944,30 +939,14 @@ class ChatService extends ChangeNotifier {
     return null; // authored by a guest who is no longer present
   }
 
-  /// Drop all per-guest Character Evolution state for the current 1:1 context so
-  /// it never leaks across chats/characters. Removes the guests' entries from
-  /// the SHARED evolved maps (keyed by the tracked participation-count keys) and
-  /// clears the participation counts. Mirrored at every `_sceneGuestIds.clear()`
-  /// reset site (keep reset blocks in sync).
-  void _clearSceneGuestEvolution() {
-    for (final charId in _guestEvolutionCounts.keys) {
-      _evolvedPersonalities.remove(charId);
-      _evolvedScenarios.remove(charId);
-    }
-    _guestEvolutionCounts.clear();
-  }
-
   /// Generate a turn spoken by a Scene Guest (Lite NPC) inside a 1:1 chat.
   ///
   /// Reuses the normal generation engine with the guest as the speaker. Carries
   /// NO Realism Engine / Needs work (the guest turn is parity-safe — see the
-  /// `guestSpeaker == null` guards in `_generateResponse`).
+  /// `guestSpeaker == null` guards in `_generateResponse`). Guest growth rides
+  /// the shared growth pass (resolvePassOwners includes 1:1 guests who spoke
+  /// in the window) — there is no per-guest trigger.
   ///
-  /// After the turn finalizes, runs the per-guest Character Evolution check
-  /// (Phase 3): the guest's participation count advances and, on the same
-  /// `evolutionInterval` cadence a normal character uses, the existing
-  /// EvolutionService evolves THIS guest (no Realism/Needs, no effect on the
-  /// active character's evolution state).
   /// Common Scene Guest "enter" tail: register the guest's dbId, re-resolve the
   /// resolved-card list, persist the session, then have the guest speak its
   /// entrance via the parity-safe guest-turn path. Shared by `/create`,
@@ -1153,7 +1132,8 @@ class ChatService extends ChangeNotifier {
 
   Future<void> generateGuestTurn(CharacterCard guest) async {
     await _generateResponse(GenerationMode.normal, guestSpeaker: guest);
-    _maybeEvolveGuest(guest);
+    // Guest growth rides the shared growth pass (resolvePassOwners includes
+    // 1:1 guests who spoke in the window) — no per-guest trigger needed.
     // Phase 4: give the guest EPISODIC MEMORY. The host's embed stays gated
     // behind `guestSpeaker == null` in `_generateResponse`; here we embed the
     // just-finished exchange under the GUEST's own id (the same id the guest
@@ -1161,37 +1141,6 @@ class ChatService extends ChangeNotifier {
     // Fire-and-forget; ZERO Realism/Needs. So a later guest turn — even in a
     // different chat — recalls what happened.
     _maybeEmbedMessages(characterIdOverride: _getCharacterIdFromCard(guest));
-  }
-
-  /// Per-guest evolution cadence + trigger (Phase 3). Mirrors the active-char
-  /// scheme in `_maybeRunPeriodicEvals` (count vs `evolutionInterval`) but keyed
-  /// on the guest's own participation count, and routes through the SAME
-  /// EvolutionService via `triggerCharacterEvolution(targetCharacter:)`. The
-  /// evolved text is written into the shared evolved maps (so it applies on the
-  /// guest's next turn through `_getEffectivePersonality`) and persisted into
-  /// the guest blob by the evolution persist callback. Fire-and-forget so it
-  /// never blocks the turn; does ZERO Realism/Needs work.
-  void _maybeEvolveGuest(CharacterCard guest) {
-    if (!_storageService.memorySettings.characterEvolutionEnabled) return;
-    // Shared busy guard — one evolution (host or guest) at a time.
-    if (_isEvolvingCharacter) return;
-    final charId = _getCharacterIdFromCard(guest);
-    final interval = _storageService.memorySettings.evolutionInterval;
-    if (interval <= 0) return;
-    final count = (_guestEvolutionCounts[charId] ?? 0) + 1;
-    _guestEvolutionCounts[charId] = count;
-    if (count % interval != 0) {
-      // Persist the bumped participation count now — on a non-evolving turn
-      // nothing else saves it, so on app close the guest's cadence would reset.
-      unawaited(_saveChat());
-      return; // not due yet on this cadence
-    }
-    debugPrint(
-      '[SceneGuest] ▶ Evolving guest ${guest.name} '
-      '(charId=$charId, participation=$count, every $interval)',
-    );
-    // Reuse the existing evolution service + persist/layering. No parallel path.
-    _evolutionService.triggerCharacterEvolution(targetCharacter: guest);
   }
 
   final List<ChatMessage> _messages = [];
@@ -1445,6 +1394,10 @@ class ChatService extends ChangeNotifier {
   late final _timeService = TimeService(
     onNotify: notifyListeners,
     onSaveChat: _saveChat,
+    // Shared tools transport (one probe per backend identity, app-wide).
+    fireToolEval: _fireToolEval,
+    probe: _toolProbe,
+    getBackendIdentity: () => _evalBackendIdentity,
     onSetPendingRealismMetadata: (key, value) {
       _pendingRealismMetadata ??= {};
       _pendingRealismMetadata![key] = value;
@@ -1795,6 +1748,10 @@ class ChatService extends ChangeNotifier {
   late final _expressionService = ExpressionService(
     onNotify: notifyListeners,
     onSaveChat: _saveChat,
+    // Shared tools transport (one probe per backend identity, app-wide).
+    fireToolEval: _fireToolEval,
+    probe: _toolProbe,
+    getBackendIdentity: () => _evalBackendIdentity,
     getIsEvaluatingRealism: () => _isEvaluatingRealism,
     getStorageService: () => _storageService,
     getLlmServiceForReclass: () =>
@@ -1969,6 +1926,11 @@ class ChatService extends ChangeNotifier {
     getUserName: () => _userPersonaService.persona.name,
     getRealismEnabled: () => _realismEnabled,
     getMessages: () => _messages,
+    // Shared tools transport for the needs-impact eval (one probe per
+    // backend identity, app-wide).
+    fireToolEval: _fireToolEval,
+    probe: _toolProbe,
+    getBackendIdentity: () => _evalBackendIdentity,
     getLlmService: () =>
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService,
     getIsLocal: () => testLlmServiceOverride != null
@@ -2100,6 +2062,13 @@ class ChatService extends ChangeNotifier {
 
   late final _realismEvals = RealismEvals(
     fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+    // Tools transport (realism_tools.dart): same door + probe memory the
+    // Journal and Growth passes use, so a backend answers the "can you speak
+    // tools?" question at most once per run across all three systems.
+    fireToolEval: _fireToolEval,
+    probe: _toolProbe,
+    getBackendIdentity: () => _evalBackendIdentity,
+    isEvalCancelled: () => _isCancellingRealismEval || _realismEvalCancelled,
     stripThinkBlocks: _stripThinkBlocks,
     extractJsonInt: _extractJsonInt,
     extractJsonBool: _extractJsonBool,
@@ -2122,16 +2091,14 @@ class ChatService extends ChangeNotifier {
     getExpressionEnabled: () =>
         _storageService.expressionSettings.expressionEnabled,
     // Judge dossier: same identity the generation sees (personality +
-    // description + evolution growth when enabled), budget-capped in the
+    // description + growth-ring lines when enabled), budget-capped in the
     // builder. Under group impersonation `card` is the current speaker, so
     // per-speaker parity holds without extra dispatch here.
     getCharacterDossier: (card) => RealismPromptBuilder.characterDossier(
       name: card.name,
       personality: card.personality,
       description: card.description,
-      growth: _storageService.memorySettings.characterEvolutionEnabled
-          ? (getEvolvedPersonalityFor(card) ?? '')
-          : '',
+      growth: _growthService.growthLinesFor(card),
     ),
     getPrimaryObjective: () => primaryObjective,
     getActiveObjectives: () => _activeObjectives,
@@ -2195,9 +2162,13 @@ class ChatService extends ChangeNotifier {
     getIsCheckingCompletion: () => _isCheckingCompletion,
     setIsCheckingCompletion: (v) => _isCheckingCompletion = v,
     onNotify: notifyListeners,
-    // The completion check runs pre-generation; the flag is consumed by
-    // _maybeRunJournalPass post-generation (event-triggered journal pass).
-    onObjectiveCompleted: () => _journalMaintenance.eventKickPending = true,
+    // The completion check runs pre-generation; the flags are consumed by
+    // _maybeRunJournalPass/_maybeRunGrowthPass post-generation (a finished
+    // quest is a story beat worth journaling AND a moment characters grow).
+    onObjectiveCompleted: () {
+      _journalMaintenance.eventKickPending = true;
+      _growthService.eventKickPending = true;
+    },
   );
 
   // ── The Journal (docs/design/journal-memory.md) ──
@@ -2230,47 +2201,61 @@ class ChatService extends ChangeNotifier {
 
   JournalReview get journalReview => _journalReview;
 
+  /// Tools-vs-XML probe memory shared by the Journal and Growth passes —
+  /// one probe per backend identity per run no matter which pass asks first.
+  final _toolProbe = ToolTransportProbe();
+
+  /// Tool-calling door shared by both background passes: same eval posture
+  /// as _fireLLMEval (low temp, reasoning off). All backends probe — local
+  /// KoboldCpp included (Qwen3 etc. call tools fine); incapable models fall
+  /// back to the XML floor.
+  Future<LlmToolResponse?> _fireToolEval(
+    String prompt,
+    List<Map<String, dynamic>> tools,
+  ) {
+    final service =
+        testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+    return service.generateWithTools(
+      GenerationParams(
+        prompt: prompt,
+        maxLength: 4000,
+        temperature: 0.1,
+        repeatPenalty: 1.15,
+        topP: 0.5,
+        xtcProbability: 0.0,
+        reasoningEnabled: false,
+        // Explicit thinking-off: Nano-GPT/OpenRouter only receive the
+        // disable signal when the reasoning block is present, and it is
+        // only emitted when a reasoning field is set. Without this a
+        // ":thinking" model (e.g. Kimi K2.6) keeps reasoning during the
+        // journal tool call, which returns tool calls only intermittently
+        // (the "had to regen twice" symptom). 0 → {enabled:false,
+        // max_tokens:0, exclude:true}, the strongest disable signal.
+        reasoningMaxTokens: 0,
+        stopSequences: const [],
+      ),
+      tools,
+    );
+  }
+
+  /// Backend+model identity key for the tools probe. Remote model name AND
+  /// local model path both ride the key, so switching either re-probes tool
+  /// support (capability is per model).
+  String get _evalBackendIdentity {
+    final service =
+        testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+    return '${service.backendName}|${_storageService.remoteModelName}'
+        '|${_storageService.lastUsedModelPath ?? ''}';
+  }
+
   late final _journalMaintenance = JournalMaintenance(
     store: _journalStore,
     review: _journalReview,
+    probe: _toolProbe,
     fireLLMEval: (p) => _fireLLMEval(p),
-    // Tool-calling door (§4.3): same eval posture as _fireLLMEval (low temp,
-    // reasoning off). All backends probe — local KoboldCpp included (Qwen3
-    // etc. call tools fine); incapable models fall back to the XML floor.
-    fireToolEval: (prompt, tools) {
-      final service =
-          testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
-      return service.generateWithTools(
-        GenerationParams(
-          prompt: prompt,
-          maxLength: 4000,
-          temperature: 0.1,
-          repeatPenalty: 1.15,
-          topP: 0.5,
-          xtcProbability: 0.0,
-          reasoningEnabled: false,
-          // Explicit thinking-off: Nano-GPT/OpenRouter only receive the
-          // disable signal when the reasoning block is present, and it is
-          // only emitted when a reasoning field is set. Without this a
-          // ":thinking" model (e.g. Kimi K2.6) keeps reasoning during the
-          // journal tool call, which returns tool calls only intermittently
-          // (the "had to regen twice" symptom). 0 → {enabled:false,
-          // max_tokens:0, exclude:true}, the strongest disable signal.
-          reasoningMaxTokens: 0,
-          stopSequences: const [],
-        ),
-        tools,
-      );
-    },
+    fireToolEval: _fireToolEval,
     getReviewFirst: () => _storageService.memorySettings.journalReviewFirst,
-    getBackendIdentity: () {
-      final service =
-          testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
-      // Remote model name AND local model path both ride the key, so
-      // switching either re-probes tool support (capability is per model).
-      return '${service.backendName}|${_storageService.remoteModelName}'
-          '|${_storageService.lastUsedModelPath ?? ''}';
-    },
+    getBackendIdentity: () => _evalBackendIdentity,
     stripThinkBlocks: _stripThinkBlocks,
     getSessionId: () => _currentSessionId,
     getActiveCharacter: () => _activeCharacter,
@@ -2295,7 +2280,7 @@ class ChatService extends ChangeNotifier {
   /// [currentSessionId] + the participant's stable id); the injection builder
   /// re-reads the DB every turn, so UI edits reach the prompt with no extra
   /// plumbing. Instance getter (not extension) so FakeChatService can
-  /// override it via `implements` (see characterEvolutionCount precedent).
+  /// override it via `implements` (see isGrowthPassRunning precedent).
   JournalStore get journalStore => _journalStore;
 
   late final _journalInjection = JournalInjection(
@@ -2307,170 +2292,96 @@ class ChatService extends ChangeNotifier {
     getCurrentEmotion: () => _realismEnabled ? _characterEmotion : '',
   );
 
-  // ── Character Evolution (step 14) wiring ──
-  // Plain leaf sibling to journal_maintenance / llm_eval_engine etc.
-  // owns the full evolution trigger/extract/reset + effective personality/scenario layering
-  // + group per-char counts + LLM for traits + status/error.
-  // Periodic coordination / enabled / trigger call sites / load/save of evolved scalars/maps
-  // stay thin in god ("thin delegation here; full character evolution in step 14").
-  // Cadence decision (live chat user-message count vs persisted _characterEvolutionCount + evolutionInterval) lives
-  // in the god _maybeRunPeriodicEvals thin coordinator; evolution
-  // leaf is purely trigger/extract/LLM/persist/layering. God late final + thins/delegates at *every* prior call site for
-  // trigger/manual/getEffective* (full excision of moved bodies), 0 @Deprecated shims,
-  // 0 new god private _ methods (thins as the public surface; live `grep -c '^\s*void _[a-zA-Z]'
-  // lib/services/chat_service.dart` *must stay exactly 15* after *every* edit + final;
-  // +1 late final + thins/calls + reset comment syncs only).
-  // Stateless/prompt-only (no owned reset/seed/load state for evolution processing —
-  // god owns the maps/scalars/flags/counts; no reset calls needed on leaf).
-  // God reset "keep blocks in sync" comments expanded at *all* ~15+ documented sites
-  // (see CLAUDE.md full list + incomplete zeroing hygiene; buffer removal complete)
-  // + "incomplete zeroing... now complete (see CLAUDE.md)"
-  // + *both* startNewChat branches explicit + cross-refs e.g. setActiveCharacter:1572).
-  // Explicit _isEvolvingCharacter=false + _evolutionStatus='' + _evolutionError='' added at 10+ sites + decl + startNew both + common in fix round to make "now complete" hold in *code* (not just comments); maps/counts were already present.
-  // Evolution cadence decision uses live chat user-message count + persisted _characterEvolutionCount vs evolutionInterval (robust; no side-counter).
-  // 1:1 vs group parity for evolution (per-char counts, effective personality/scenario layering,
-  // trigger behavior must be identical whether 1:1 or group per-speaker; dispatch preserved
-  // via cbs + god's impersonation dance where needed for target).
-  // aug/integration tests receive *only* qualified passive notes in headers/comments (exact
-  // precedent phrasing from step 13: "aug exercising only passive/qualified (no evolution-specific
-  // aug file edits; full in dedicated + manual; exercised via god thins _maybeRunPeriodicEvals/_runPeriodicEvalsInSequence/_triggerCharacterEvolution ;
-  // qualified notes only in dedicated header + god + MD per precedent)"); no leaf-specific logic edits.
-  // Anti-accumulation/dead-code audit (explicit greps of affected methods in god; no new
-  // _Evol/*Evol/Evolution privates in god; deletion of moved + any dead/vestigial as part of task).
-  // Barrel not added (internal to ChatService only; per "unless 3+ locations").
-  late final _evolutionService = EvolutionService(
-    getLlmService: () =>
-        testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService,
-    stripThinkBlocks: _stripThinkBlocks,
-    getUserName: () => _userPersonaService.persona.name,
-    getActiveCharacter: () => _activeCharacter,
-    getGroupCharacters: () => _groupCharacters,
-    getMessages: () => _messages,
-    getCharacterIdFromCard: _getCharacterIdFromCard,
-    getSummary: () => _summary,
-    getIsNewChat: () => _isNewChat,
-    fetchRecentMemoryChunksForEvolution: () async {
-      if (_memoryService == null ||
-          !_memoryService!.isOperational ||
-          _isNewChat) {
-        return <String>[];
-      }
-      try {
-        final sourceIds = await _getMemorySourceIds();
-        final chunks = await _memoryService!.getAllContentForCharacters(
-          sourceIds,
-        );
-        if (chunks.isNotEmpty) {
-          final recent = chunks.length > 10
-              ? chunks.sublist(chunks.length - 10)
-              : chunks;
-          return recent;
-        }
-      } catch (e) {
-        debugPrint('[Evolution] RAG retrieval failed (non-fatal via cb): $e');
-      }
-      return <String>[];
-    },
-    getCharacterEvolutionEnabled: () =>
-        _storageService.memorySettings.characterEvolutionEnabled,
-    getEvolvedPersonality: (charId) => _evolvedPersonalities[charId],
-    setEvolvedPersonality: (charId, v) => _evolvedPersonalities[charId] = v,
-    getEvolvedScenario: (charId) => _evolvedScenarios[charId],
-    setEvolvedScenario: (charId, v) => _evolvedScenarios[charId] = v,
-    getEvolutionCountFor: (charId) => _groupEvolutionCounts[charId] ?? 0,
-    setEvolutionCountFor: (charId, v) => _groupEvolutionCounts[charId] = v,
-    // Note (D qualify per re-review): count persistence for group is mem-only (_groupEvolutionCounts snapshot) per current thin god load/save (1:1 has dedicated DB column + mirror in persist). Effective layering / trigger target parity with 1:1 is preserved exactly (via cbs + leaf). Group count UI (cards/sidebar) uses the mem snapshot. This is pre-existing (public surface / load/save of evolved maps/counts stayed thin/coordinated in god per step 14 plan "public surface stay thin in god"; not regressed by extraction).
-    getIsEvolvingCharacter: () => _isEvolvingCharacter,
-    setIsEvolvingCharacter: (v) => _isEvolvingCharacter = v,
-    setEvolutionStatus: (s) {
-      _evolutionStatus = s;
-      notifyListeners();
-    },
-    setEvolutionError: (e) {
-      _evolutionError = e;
-      notifyListeners();
-    },
-    persistEvolvedForCharacter: (charId, pers, scen, count) async {
-      // Phase 3 — Scene Guest evolution. The target is a 1:1 guest, not the
-      // active character: store the evolved text in the shared maps (so the
-      // existing layering applies on the guest's next turn) + the per-guest
-      // count, then persist into the guest blob via _saveChat. We deliberately
-      // do NOT touch the active character's session columns or
-      // _characterEvolutionCount here (no perturbation of the host's state).
-      if (_isSceneGuestCharId(charId)) {
-        // `count` here is the EvolutionService's generation count (evolved N
-        // times). For guests we drive cadence off the participation counter in
-        // `_guestEvolutionCounts` (set in `_maybeEvolveGuest`), so we leave it
-        // untouched and only persist the evolved text + that participation
-        // count via the guest blob.
-        _evolvedPersonalities[charId] = pers;
-        _evolvedScenarios[charId] = scen;
-        notifyListeners();
-        await _saveChat();
-        return;
-      }
-      if (_currentSessionId != null) {
-        if (_activeGroup != null) {
-          // GROUP: only the PERSONALITY evolves per-character. The scenario is the
-          // ONE shared scene — evolving it per-character drifts the story (each
-          // member ends up in a slightly different scenario), so it is left to the
-          // group's single shared scenario and not written per-character here.
-          final session = await _db.getSessionById(_currentSessionId!);
-          if (session != null) {
-            final personalities = _tryParseJsonMap(
-              session.groupEvolvedPersonalities,
-            );
-            personalities[charId] = pers;
-            await _db.patchSession(
-              SessionsCompanion(
-                id: drift.Value(_currentSessionId!),
-                groupEvolvedPersonalities: drift.Value(
-                  jsonEncode(personalities),
-                ),
-              ),
-            );
-          }
-        } else {
-          await _db.patchSession(
-            SessionsCompanion(
-              id: drift.Value(_currentSessionId!),
-              evolvedPersonality: drift.Value(pers),
-              evolvedScenario: drift.Value(scen),
-              evolutionCount: drift.Value(count),
-            ),
-          );
-        }
-      }
-      _evolvedPersonalities[charId] = pers;
-      // In a group the scenario is shared (not per-character) — see the persist
-      // branch above; don't stamp a per-character evolved scenario that would
-      // drift the story. 1:1 keeps its evolved scenario.
-      if (_activeGroup == null) {
-        _evolvedScenarios[charId] = scen;
-      }
-      _groupEvolutionCounts[charId] = count;
+  // ── Growth Rings (docs/design/growth-rings.md) ──
+  // Per-chat, per-character growth entries — replaced EvolutionService's
+  // whole-personality rewrites (the evolved* session columns are dormant;
+  // their content is distilled into rings by the first growth pass). Rings
+  // live in the growth_rings table via growth_store, which also keeps the
+  // sync injection cache (_getEffectivePersonality runs inside synchronous
+  // prompt assembly). The pass is its own small background job with its own
+  // cursor (growth_state) — deliberately NOT a rider on the Journal pass,
+  // whose per-pass cooling is tuned to journalInterval. Scenario evolution
+  // is retired: the recap owns "where we are" (_getEffectiveScenario below).
+  // Trigger/cache/UI surface live in chat_service_growth.dart (part file).
+  late final _growthStore = GrowthStore(
+    getDb: () => _db,
+    // Ring text is stored with real names, never {{char}}/{{user}} macros
+    // (the timeline displays it verbatim on both surfaces). {{char}} maps to
+    // the ring OWNER's name — active char, group member, or scene guest by
+    // stable id; unknown owners (departed cast) keep the macro rather than
+    // guessing, and {{user}} always resolves to the persona.
+    resolveMacros: (charId, text) {
+      String? name;
       if (_activeCharacter != null &&
           _getCharacterIdFromCard(_activeCharacter!) == charId) {
-        _characterEvolutionCount = count;
+        name = _activeCharacter!.name;
       }
-      notifyListeners();
+      if (name == null) {
+        for (final c in _groupCharacters) {
+          if (_getCharacterIdFromCard(c) == charId) {
+            name = c.name;
+            break;
+          }
+        }
+      }
+      if (name == null) {
+        for (final g in _sceneGuestCards) {
+          if (_getCharacterIdFromCard(g) == charId) {
+            name = g.name;
+            break;
+          }
+        }
+      }
+      return resolveGrowthMacros(
+        text,
+        charName: name,
+        userName: _userPersonaService.persona.name,
+      );
     },
   );
 
-  // Thin delegation (full _trigger/_extract + effective layering + group per-char
-  // + LLM/prompt/parse/persist in evolution_service step 14; cadence/flag/periodic
-  // orchestration / enabled / sequence / call sites / load/save of evolved maps
-  // stay thin in god per plan; "thin delegation here; full character evolution in step 14").
-  void _triggerCharacterEvolution() =>
-      _evolutionService.triggerCharacterEvolution();
-  Future<bool> triggerEvolutionNow({CharacterCard? target}) =>
-      _evolutionService.triggerEvolutionNow(target: target);
+  late final _growthReview = GrowthReview(
+    store: _growthStore,
+    getSessionId: () => _currentSessionId,
+    getIsGroup: () => _activeGroup != null,
+    onApplied: () => _refreshGrowthCache(),
+    onNotify: notifyListeners,
+  );
 
-  // Effective getters now thin to leaf (layering owned in step 14 sibling).
+  late final _growthService = GrowthService(
+    store: _growthStore,
+    review: _growthReview,
+    probe: _toolProbe,
+    fireLLMEval: (p) => _fireLLMEval(p),
+    fireToolEval: _fireToolEval,
+    stripThinkBlocks: _stripThinkBlocks,
+    getBackendIdentity: () => _evalBackendIdentity,
+    getSessionId: () => _currentSessionId,
+    getActiveCharacter: () => _activeCharacter,
+    getActiveGroup: () => _activeGroup,
+    getGroupCharacters: () => _groupCharacters,
+    getSceneGuestCards: () => _sceneGuestCards,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
+    getMessages: () => _messages,
+    getUserName: () => _userPersonaService.persona.name,
+    getRecap: () => _summary,
+    getJournalCards: (sessionId, charId) =>
+        _journalStore.cardsFor(sessionId, charId),
+    getGrowthEnabled: () =>
+        _storageService.memorySettings.characterEvolutionEnabled,
+    getReviewFirst: () => _storageService.memorySettings.growthReviewFirst,
+    getIsPassRunning: () => _isGrowthPassRunning,
+    setIsPassRunning: (v) => _isGrowthPassRunning = v,
+    refreshCache: () => _refreshGrowthCache(),
+    onNotify: notifyListeners,
+  );
+
+  // Effective getters (all injection paths route through these).
   String _getEffectivePersonality(CharacterCard card) =>
-      _evolutionService.getEffectivePersonality(card);
-  String _getEffectiveScenario(CharacterCard card) =>
-      _evolutionService.getEffectiveScenario(card);
+      _growthService.effectivePersonality(card);
+  // Scenario evolution is retired (growth-rings design §3.2): the Journal
+  // recap owns "where we are", so every mode uses the card's own scenario.
+  String _getEffectiveScenario(CharacterCard card) => card.scenario;
 
   // Step 15 (refactor remaining `ChatService`): complete. God is now thin
   // coordinator/orchestrator + minimal god-owned state that per-plan stayed
@@ -3836,7 +3747,7 @@ class ChatService extends ChangeNotifier {
   // ── The Journal recap ("Where we are") ──────────────────────────────
   // The recap reuses the _summary scalar + Sessions.summary persistence the
   // old summary system used, so the public surface below (sidebar, web
-  // facade, EvolutionService's getSummary cb) is unchanged. The generator is
+  // facade, the growth pass's getRecap cb) is unchanged. The generator is
   // the Journal maintenance pass (journal_maintenance leaf), which also
   // produces the per-character memory cards in the same LLM call.
 
@@ -3936,64 +3847,15 @@ class ChatService extends ChangeNotifier {
   }
 
 
-  /// Coordinator for the periodic background evals (character evolution +
-  /// cast detection). User-fact extraction and chat summaries were replaced
-  /// by the Journal maintenance pass (_maybeRunJournalPass, journal_maintenance
-  /// leaf), which has its own cadence via the _summaryLastIndex cursor.
-  /// Evolution decides due using live user message count in the chat vs the persisted per-char evolution count.
-  /// This makes the "Evolve every X messages" setting (slider) reliably control the schedule, even after
-  /// loads, switches, or enabling mid-chat. (Replaces fragile side-counter for evolution cadence.)
+  /// Coordinator for the periodic background evals (now just Scene Guest cast
+  /// detection). User-fact extraction and chat summaries were replaced by the
+  /// Journal maintenance pass (_maybeRunJournalPass); character evolution was
+  /// replaced by the growth pass (_maybeRunGrowthPass in
+  /// chat_service_growth.dart), which has its own cursor-based cadence.
   void _maybeRunPeriodicEvals() {
-    // Scene Guest cast detection (1:1 only; independent of the evolution
-    // settings below). Runs on its own cadence and fires-and-forget so it never
-    // blocks the turn. See _maybeRunCastDetection.
+    // Scene Guest cast detection (1:1 only). Runs on its own cadence and
+    // fires-and-forget so it never blocks the turn. See _maybeRunCastDetection.
     _maybeRunCastDetection();
-
-    final autoEvolution =
-        _storageService.memorySettings.characterEvolutionEnabled;
-    if (!autoEvolution) return;
-    if (_llmProvider == null) return;
-
-    // Note: this path is *not* gated on !_observerMode.
-    // Character evolution is deliberately allowed in Director Mode (see
-    // _triggerCharacterEvolution for rationale). Realism/Needs simulation is
-    // the only system that pauses in Director Mode.
-
-    bool evoDue = false;
-
-    if (!_isEvolvingCharacter) {
-      // Cadence is "evolve every N turns vs the persisted evolution count" — robust
-      // across loads/reloads (no fragile side-counter). In a GROUP this counts the
-      // speaker's OWN turns + their OWN evolution count, so each character evolves
-      // every N of THEIR turns. (Previously a group counted TOTAL user messages, so
-      // a 2-character group evolved each character ~twice as fast, worse with more
-      // characters — see the user report.) 1:1 counts user messages as before.
-      final interval = _storageService.memorySettings.evolutionInterval;
-      if (interval > 0) {
-        if (_activeGroup != null && _activeCharacter != null) {
-          final sid = _getCharacterIdFromCard(_activeCharacter!);
-          final speakerTurns = _messages
-              .where((m) => !m.isUser && m.characterId == sid)
-              .length;
-          final speakerEvos = _groupEvolutionCounts[sid] ?? 0;
-          if (speakerTurns ~/ interval > speakerEvos) {
-            evoDue = true;
-          }
-        } else {
-          final userMsgCount = _messages.where((m) => m.isUser).length;
-          if (userMsgCount ~/ interval > _characterEvolutionCount) {
-            evoDue = true;
-          }
-        }
-      }
-    }
-
-    if (!evoDue) return;
-
-    debugPrint(
-      '[Periodic] ▶ Triggering character evolution (every ${_storageService.memorySettings.evolutionInterval} user messages)',
-    );
-    _triggerCharacterEvolution();
   }
 
   /// Cadence + trigger for Scene Guest cast detection (1:1 only). Advances the
@@ -4061,44 +3923,21 @@ class ChatService extends ChangeNotifier {
     return detected;
   }
 
-  // ── Character Evolution (moved to evolution_service.dart step 14 leaf) ──
-  // Full trigger/extract/LLM/prompt/parse/persist/effective layering/group per-char
-  // owned in leaf; thins + late final above (after fact); "thin delegation here;
-  // full character evolution in step 14". State (flags/maps/counts/status/error)
-  // + loadGroupEvolvedFields + session load/save + reset/update (user edit) + public
-  // surface coordination stay in god.
-  // Evolution cadence decision lives in _maybeRunPeriodicEvals and uses actual #user messages in _messages
-  // vs the persisted _characterEvolutionCount (or per-char in group). This ensures the UI slider
-  // reliably schedules evolution on the configured interval (no mutable side-counter).
+  // ── Growth Rings runtime state (full feature in growth_service.dart leaf
+  // + chat_service_growth.dart part; docs/design/growth-rings.md) ──
 
-  bool _isEvolvingCharacter =
-      false; // secondary runtime flag (transient guard for evolution_service leaf); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths to prevent leak of in-flight state across contexts (see every "keep reset blocks in sync" + "incomplete zeroing... now complete (see CLAUDE.md)" + evolution_service (stateless or prompt-only; no reset calls needed)). The _evolutionStatus / _evolutionError must likewise be zeroed on those paths (prevents stale UI status/error bleed after context switch). Evolution cadence itself uses _characterEvolutionCount vs evolutionInterval (no side-counter to zero).
-  // Explicit zero sites for evolution flag/status/error (12+ documented; part of "all ~15+" hygiene with briefing lists at 17+ / 31 phrase matches):
-  // - startNewChat both branches (fresh + load path)
-  // - setActiveCharacter main + empty session
-  // - setActiveGroup
-  // - _loadLastSession empty + loaded
-  // - _loadActiveObjectives empty (0-session)
-  // - _loadObjectivesForCurrentSpeaker no-speaker (group)
-  // - deleteSession / fork paths
-  // - decl init + common reset blocks
-  // - _maybeRunPeriodicEvals early guard
-  // Evolution cadence uses _characterEvolutionCount vs evolutionInterval (no side-counter). Cross-refs e.g. setActiveCharacter ~1572 (precedent; lines may shift post edits -- verified live at doc time).
-  String _evolutionStatus = '';
-  String _evolutionError = '';
+  /// Transient re-entrancy/spinner flag for the growth pass. Defensively
+  /// zeroed on all reset/new-chat/0-session/group/setActive/load/fork paths
+  /// (the same "keep reset blocks in sync" sites the old evolution flag
+  /// used). Ring/legacy data itself lives in the session-scoped GrowthStore
+  /// cache, invalidated/refreshed at the context-switch sites.
+  bool _isGrowthPassRunning = false;
 
-  /// Cached evolved fields (loaded from DB on character load)
-  final Map<String, String> _evolvedPersonalities = {};
-  final Map<String, String> _evolvedScenarios = {};
-  int _characterEvolutionCount = 0;
-
-  /// Kept as an instance getter (not moved to the evolution part) because test
-  /// fakes (`FakeChatService implements ChatService`) override it — extension
-  /// getters are statically dispatched and cannot be overridden via `implements`.
-  int get characterEvolutionCount => _characterEvolutionCount;
-
-  /// Per-character evolution counts (for group mode).
-  final Map<String, int> _groupEvolutionCounts = {};
+  /// Kept as an instance getter (not in the growth part) because test fakes
+  /// (`FakeChatService implements ChatService`) override it — extension
+  /// getters are statically dispatched and cannot be overridden via
+  /// `implements`.
+  bool get isGrowthPassRunning => _isGrowthPassRunning;
 
 
   /// Get the list of character IDs to search for RAG memory retrieval.

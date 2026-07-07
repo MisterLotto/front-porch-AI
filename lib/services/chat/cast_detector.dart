@@ -19,6 +19,10 @@
 import 'dart:convert';
 import 'dart:developer';
 
+import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
+import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
+
 /// A side character the primary (host) narrated into the scene who looks like a
 /// recurring, named participant the user might want to promote to a Scene Guest.
 class DetectedCharacter {
@@ -58,13 +62,23 @@ class CastDetector {
     required String Function() getUserName,
     required List<String> Function() getSceneGuestNames,
     required Set<String> Function() getOfferedOrIgnoredNames,
+    Future<LlmToolResponse?> Function(
+      String prompt,
+      List<Map<String, dynamic>> tools,
+    )?
+    fireToolEval,
+    ToolTransportProbe? probe,
+    String Function()? getBackendIdentity,
   }) : _getRecentPrimaryTexts = getRecentPrimaryTexts,
        _fireLLMEval = fireLLMEval,
        _stripThinkBlocks = stripThinkBlocks,
        _getHostName = getHostName,
        _getUserName = getUserName,
        _getSceneGuestNames = getSceneGuestNames,
-       _getOfferedOrIgnoredNames = getOfferedOrIgnoredNames;
+       _getOfferedOrIgnoredNames = getOfferedOrIgnoredNames,
+       _fireToolEval = fireToolEval,
+       _probe = probe,
+       _getBackendIdentity = getBackendIdentity;
 
   final List<String> Function() _getRecentPrimaryTexts;
   final Future<String?> Function(String prompt) _fireLLMEval;
@@ -73,6 +87,16 @@ class CastDetector {
   final String Function() _getUserName;
   final List<String> Function() _getSceneGuestNames;
   final Set<String> Function() _getOfferedOrIgnoredNames;
+
+  // Tools transport (nullable — tests and tool-less hosts stay on the text
+  // path; the god wires the shared probe/door the other evals use).
+  final Future<LlmToolResponse?> Function(
+    String prompt,
+    List<Map<String, dynamic>> tools,
+  )?
+  _fireToolEval;
+  final ToolTransportProbe? _probe;
+  final String Function()? _getBackendIdentity;
 
   /// Run one detection pass. Returns a fresh, filtered [DetectedCharacter] or
   /// `null` when there is nothing worth surfacing (no narration, empty/garbled
@@ -83,7 +107,20 @@ class CastDetector {
         .toList();
     if (texts.isEmpty) return null;
 
-    final raw = await _fireLLMEval(_buildPrompt(texts));
+    final raw = _fireToolEval != null && _probe != null
+        ? await fireStructuredEval(
+            probe: _probe,
+            backendIdentity: _getBackendIdentity?.call() ?? '',
+            debugLabel: kCastDetectTool,
+            tools: kCastDetectEvalTools,
+            buildPrompt: ({required toolsMode}) =>
+                _buildPrompt(texts, toolsMode: toolsMode),
+            callToText: (resp) =>
+                realismToolCallToJson(kCastDetectTool, resp.calls),
+            fireToolEval: _fireToolEval,
+            fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+          )
+        : await _fireLLMEval(_buildPrompt(texts, toolsMode: false));
     if (raw == null) return null; // empty / cancelled / backend down
     final text = _stripThinkBlocks(raw).trim();
     if (text.isEmpty) return null;
@@ -93,8 +130,9 @@ class CastDetector {
     return _accept(candidate) ? candidate : null;
   }
 
-  /// Tiny extraction prompt — the recent primary narration + strict JSON only.
-  String _buildPrompt(List<String> texts) {
+  /// Tiny extraction prompt — the recent primary narration + strict JSON (or
+  /// the tool ask; the body is byte-identical between transports).
+  String _buildPrompt(List<String> texts, {required bool toolsMode}) {
     final host = _getHostName();
     final user = _getUserName();
     final narration = texts.map((t) => '- ${_oneLine(t)}').join('\n');
@@ -104,11 +142,13 @@ class CastDetector {
         'scene (e.g. a sibling, friend, rival, or regular like a bartender) — '
         'NOT a one-off passing mention, NOT $host, NOT $user.\n\n'
         'Recent narration:\n$narration\n\n'
-        'If there is exactly one such recurring named character, respond with '
-        'ONLY this JSON: {"name": "<their name>", "descriptor": "<a short '
-        'phrase describing who they are>"}\n'
-        'If there is no such character (or only passing mentions), respond with '
-        'ONLY: {"name": null}';
+        '${toolsMode ? 'Report by calling the $kCastDetectTool tool: pass their name and a short '
+              'descriptor when there is exactly one such recurring named character, or call it '
+              'with no name when there is none. Use ONLY the tool — no plain-text reply.' : 'If there is exactly one such recurring named character, respond with '
+              'ONLY this JSON: {"name": "<their name>", "descriptor": "<a short '
+              'phrase describing who they are>"}\n'
+              'If there is no such character (or only passing mentions), respond with '
+              'ONLY: {"name": null}'}';
   }
 
   /// Parse the strict JSON reply into a candidate (pre-filter). Tolerant of

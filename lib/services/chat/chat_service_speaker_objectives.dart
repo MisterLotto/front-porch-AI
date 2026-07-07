@@ -116,10 +116,8 @@ extension ChatServiceSpeakerObjectives on ChatService {
           false; // explicit secondary zero for _summaryPaused (symmetric; _loadObjectivesForCurrentSpeaker no-speaker hygiene)
       _isSummaryGenerating =
           false; // secondary zero in _loadObjectivesForCurrentSpeaker no-speaker (group hygiene for summary flag)
-      _isEvolvingCharacter = false;
-      _evolutionStatus = '';
-      _evolutionError =
-          ''; // explicit evo flag/status/error zero in _loadObjectivesForCurrentSpeaker no-speaker (group hygiene; evolution_service (stateless or prompt-only; no reset calls needed))
+      _isGrowthPassRunning =
+          false; // growth-pass flag zero in _loadObjectivesForCurrentSpeaker no-speaker (group hygiene; keep reset blocks in sync)
       notifyListeners();
       return;
     }

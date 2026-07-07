@@ -31,7 +31,6 @@ extension ChatServiceSessionState on ChatService {
   /// group realism column, then resolve their cards. Tolerant of missing,
   /// empty, '{}', legacy group state, or malformed JSON (clears guests).
   void _loadSceneGuestsFromSession(Session? session) {
-    _clearSceneGuestEvolution();
     _sceneGuestIds.clear();
     _sceneGuestCards.clear();
     final stateJson = session?.groupRealismState;
@@ -47,20 +46,8 @@ extension ChatServiceSessionState on ChatService {
           if (s != null && s.isNotEmpty) _sceneGuestIds.add(s);
         }
       }
-      // Phase 3: restore per-guest evolution (participation count + evolved
-      // text) into the shared evolved maps so it applies on the guest's turns.
-      if (decoded is Map && decoded['guestEvolution'] is Map) {
-        final ge = Map<String, dynamic>.from(decoded['guestEvolution'] as Map);
-        ge.forEach((charId, v) {
-          if (v is! Map) return;
-          final m = Map<String, dynamic>.from(v);
-          _guestEvolutionCounts[charId] = (m['count'] as num?)?.toInt() ?? 0;
-          final pers = (m['personality'] as String?) ?? '';
-          final scen = (m['scenario'] as String?) ?? '';
-          if (pers.isNotEmpty) _evolvedPersonalities[charId] = pers;
-          if (scen.isNotEmpty) _evolvedScenarios[charId] = scen;
-        });
-      }
+      // (The old 'guestEvolution' key is no longer read — guest growth lives
+      // in the growth_rings table now, keyed by the guest's stable charId.)
     } catch (e) {
       debugPrint('[SceneGuest] Failed to parse sceneGuests from session: $e');
       return;
@@ -272,25 +259,8 @@ extension ChatServiceSessionState on ChatService {
     } else if (_activeGroup == null && _sceneGuestIds.isNotEmpty) {
       // 1:1 with Scene Guests (Lite NPCs): reuse the (otherwise '{}') group
       // realism column to persist the guest dbIds. No schema change needed.
-      // Phase 3: co-locate per-guest Character Evolution (participation count +
-      // evolved personality/scenario), keyed by the guest's stable charId.
-      final guestEvolution = <String, Map<String, dynamic>>{};
-      for (final guest in _sceneGuestCards) {
-        final charId = _getCharacterIdFromCard(guest);
-        final count = _guestEvolutionCounts[charId] ?? 0;
-        final pers = _evolvedPersonalities[charId] ?? '';
-        final scen = _evolvedScenarios[charId] ?? '';
-        if (count == 0 && pers.isEmpty && scen.isEmpty) continue;
-        guestEvolution[charId] = {
-          'count': count,
-          'personality': pers,
-          'scenario': scen,
-        };
-      }
-      groupRealismJson = jsonEncode({
-        'sceneGuests': _sceneGuestIds,
-        if (guestEvolution.isNotEmpty) 'guestEvolution': guestEvolution,
-      });
+      // (Guest growth lives in the growth_rings table — nothing co-located.)
+      groupRealismJson = jsonEncode({'sceneGuests': _sceneGuestIds});
     }
 
     // Merge the lorebook timed-effect + macro-variable fragments into

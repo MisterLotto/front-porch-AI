@@ -490,9 +490,11 @@ class StorageService extends ChangeNotifier {
       memorySettings.characterEvolutionEnabled;
   Future<void> setCharacterEvolutionEnabled(bool v) =>
       memorySettings.setCharacterEvolutionEnabled(v);
-  int get evolutionInterval => memorySettings.evolutionInterval;
-  Future<void> setEvolutionInterval(int v) =>
-      memorySettings.setEvolutionInterval(v);
+  int get growthInterval => memorySettings.growthInterval;
+  Future<void> setGrowthInterval(int v) => memorySettings.setGrowthInterval(v);
+  bool get growthReviewFirst => memorySettings.growthReviewFirst;
+  Future<void> setGrowthReviewFirst(bool v) =>
+      memorySettings.setGrowthReviewFirst(v);
   // The Journal (replaced the old summary + auto-persona settings)
   bool get journalEnabled => memorySettings.journalEnabled;
   Future<void> setJournalEnabled(bool v) => memorySettings.setJournalEnabled(v);

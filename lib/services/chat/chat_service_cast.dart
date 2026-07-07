@@ -135,11 +135,13 @@ extension ChatServiceCast on ChatService {
     _groupCharacterSystemPrompts.remove(charId);
     _groupCharacterRAGPriorities.remove(charId);
     _groupObjectives.remove(charId);
-    // Per-character evolution (trait development) — mirror resetCharacterEvolution
-    // so a removed member leaves no evolved-trait residue behind.
-    _evolvedPersonalities.remove(charId);
-    _evolvedScenarios.remove(charId);
-    _groupEvolutionCounts.remove(charId);
+    // Growth rings — a hard-removed member leaves no growth residue behind
+    // (mirrors the objectives/embeddings deletes above; charId is the unique
+    // member instance id, so this never touches another character's rings).
+    if (_currentSessionId != null) {
+      await _growthStore.deleteAllFor(_currentSessionId!, charId);
+      await _refreshGrowthCache();
+    }
   }
 
   /// Automatically collapse a group that has dropped to a SINGLE member back
@@ -230,9 +232,20 @@ extension ChatServiceCast on ChatService {
     final int soleChaosPressure = _chaosModeService.chaosPressure;
     final String soleAuthorNote = _groupAuthorNotes[soleId] ?? '';
     final int soleAuthorStrength = _groupAuthorNoteStrengths[soleId] ?? 4;
-    final String soleEvoPers = _evolvedPersonalities[soleId] ?? '';
-    final String soleEvoScen = _evolvedScenarios[soleId] ?? '';
-    final int soleEvoCount = _groupEvolutionCounts[soleId] ?? 0;
+    // Any undistilled legacy evolved text (pre-rings growth) moves from the
+    // group JSON maps to the 1:1 columns after re-home, so the distill
+    // migration still finds it. Rings themselves re-key in place below.
+    String soleLegacyPers = '';
+    String soleLegacyScen = '';
+    try {
+      final sessRow = await _db.getSessionById(sessionId);
+      if (sessRow != null) {
+        soleLegacyPers =
+            _tryParseJsonMap(sessRow.groupEvolvedPersonalities)[soleId] ?? '';
+        soleLegacyScen =
+            _tryParseJsonMap(sessRow.groupEvolvedScenarios)[soleId] ?? '';
+      }
+    } catch (_) {}
 
     // 2) Re-home the session to a 1:1 owned by the library character. Bump
     //    createdAt so setActiveCharacter's most-recent-session load lands on
@@ -268,6 +281,7 @@ extension ChatServiceCast on ChatService {
     // deleted. (Data-bank rows are rarely used and not re-keyed.)
     try {
       await _db.reassignObjectives(soleId, originId, chatId: sessionId);
+      await _db.reassignGrowthRings(soleId, originId, sessionId: sessionId);
       await _db.reassignEmbeddings(
         'group_${group.id}',
         originId,
@@ -327,23 +341,21 @@ extension ChatServiceCast on ChatService {
     _authorNote = soleAuthorNote;
     _authorNoteStrength = soleAuthorStrength;
 
-    // Character evolution -> the 1:1 evolved columns (not written by _doSaveChat,
-    // so persist explicitly via patchSession).
-    if (soleEvoPers.isNotEmpty) _evolvedPersonalities[originId] = soleEvoPers;
-    if (soleEvoScen.isNotEmpty) _evolvedScenarios[originId] = soleEvoScen;
-    _characterEvolutionCount = soleEvoCount;
-    _groupEvolutionCounts[originId] = soleEvoCount;
-    if (_currentSessionId != null &&
-        (soleEvoPers.isNotEmpty || soleEvoScen.isNotEmpty || soleEvoCount > 0)) {
+    // Growth rings were re-keyed in place above (soleId → originId, same
+    // session — rings are session-scoped, so the collapse costs nothing).
+    // Move any undistilled legacy evolved text to the 1:1 columns.
+    if (soleLegacyPers.isNotEmpty || soleLegacyScen.isNotEmpty) {
       await _db.patchSession(
         SessionsCompanion(
-          id: drift.Value(_currentSessionId!),
-          evolvedPersonality: drift.Value(soleEvoPers),
-          evolvedScenario: drift.Value(soleEvoScen),
-          evolutionCount: drift.Value(soleEvoCount),
+          id: drift.Value(sessionId),
+          evolvedPersonality: drift.Value(soleLegacyPers),
+          evolvedScenario: drift.Value(soleLegacyScen),
+          groupEvolvedPersonalities: const drift.Value('{}'),
+          groupEvolvedScenarios: const drift.Value('{}'),
         ),
       );
     }
+    await _refreshGrowthCache();
     await _saveChat();
     notifyListeners();
     debugPrint('[Cast] collapsed group "${group.name}" → 1:1 with ${origin.name}');
@@ -430,34 +442,22 @@ extension ChatServiceCast on ChatService {
           state['authorNoteStrength'] as int? ?? 4;
     }
 
-    // Character evolution -> the host member's group evolved entries, persisted
-    // to the group_evolved_* JSON columns (count is group-mem-only).
-    final evoPers = state['evolvedPersonality'] as String? ?? '';
-    final evoScen = state['evolvedScenario'] as String? ?? '';
-    if (evoPers.isNotEmpty) _evolvedPersonalities[hostId] = evoPers;
-    if (evoScen.isNotEmpty) _evolvedScenarios[hostId] = evoScen;
-    _groupEvolutionCounts[hostId] = state['evolutionCount'] as int? ?? 0;
-    if ((evoPers.isNotEmpty || evoScen.isNotEmpty) && _currentSessionId != null) {
-      final session = await _db.getSessionById(_currentSessionId!);
-      if (session != null) {
-        final persMap = _tryParseJsonMap(session.groupEvolvedPersonalities);
-        final scenMap = _tryParseJsonMap(session.groupEvolvedScenarios);
-        if (evoPers.isNotEmpty) persMap[hostId] = evoPers;
-        if (evoScen.isNotEmpty) scenMap[hostId] = evoScen;
-        await _db.patchSession(
-          SessionsCompanion(
-            id: drift.Value(_currentSessionId!),
-            groupEvolvedPersonalities: drift.Value(jsonEncode(persMap)),
-            groupEvolvedScenarios: drift.Value(jsonEncode(scenMap)),
-          ),
-        );
-      }
-    }
-
-    // COPY the host's 1:1 objectives + RAG memory onto the new group so nothing
-    // is lost on conversion (COPY, not move — the original 1:1 stays the revert
-    // snapshot; collapse re-keys these in place instead).
+    // COPY the host's 1:1 objectives + RAG memory + growth onto the new group
+    // so nothing is lost on conversion (COPY, not move — the original 1:1
+    // stays the revert snapshot; collapse re-keys these in place instead).
     if (hostSessionId != null && _currentSessionId != null) {
+      // Growth rings + any undistilled legacy evolved text -> the host MEMBER
+      // instance id in the new group session (the legacy blob lands in the
+      // group_evolved_* maps so the distill migration still finds it there).
+      await _growthStore.carryOwnerGrowth(
+        fromSessionId: hostSessionId,
+        fromCharId: originalCharId,
+        toSessionId: _currentSessionId!,
+        toCharId: hostId,
+        fromIsGroup: false,
+        toIsGroup: true,
+      );
+      await _refreshGrowthCache();
       // Objectives -> the host MEMBER instance id + new group session.
       final origObjs = await _db.getObjectivesForCharacter(
         originalCharId,

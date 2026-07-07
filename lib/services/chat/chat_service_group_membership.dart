@@ -47,15 +47,17 @@ extension ChatServiceGroupMembership on ChatService {
     // Capture the host's full live 1:1 state BEFORE the fork switches into group
     // mode (setActiveGroup, below, resets the working registers). It is carried
     // onto the host member after the switch so the converted group keeps the
-    // host's realism, the enable-flags, author note, and evolution intact —
-    // making 1:1->group lossless. Present lite guests carried no realism (by
-    // design) and become full members seeded with neutral defaults on first entry.
+    // host's realism, the enable-flags, and author note intact — making
+    // 1:1->group lossless. Growth rings are session-scoped DB rows and carry
+    // via _growthStore.carryOwnerGrowth in the fork carry (no capture needed).
+    // Present lite guests carried no realism (by design) and become full
+    // members seeded with neutral defaults on first entry.
     final String hostName = _activeCharacter!.name;
     final String? hostSessionId = _currentSessionId; // 1:1 session (objectives source)
-    // Capture UNCONDITIONALLY: the enable-flags, author note, evolution, and
-    // objectives must carry even when realism is OFF (a user can have quests, an
-    // author note, or evolution with realism disabled). Only the realism snapshot
-    // itself is realism-gated.
+    // Capture UNCONDITIONALLY: the enable-flags, author note, and objectives
+    // must carry even when realism is OFF (a user can have quests or an author
+    // note with realism disabled). Only the realism snapshot itself is
+    // realism-gated.
     final Map<String, dynamic> hostState = <String, dynamic>{
       'realismOn': _realismEnabled,
       if (_realismEnabled) ..._captureRealismState(),
@@ -66,9 +68,6 @@ extension ChatServiceGroupMembership on ChatService {
       'chaosPressure': _chaosModeService.chaosPressure,
       'authorNote': _authorNote,
       'authorNoteStrength': _authorNoteStrength,
-      'evolvedPersonality': _evolvedPersonalities[originalCharId] ?? '',
-      'evolvedScenario': _evolvedScenarios[originalCharId] ?? '',
-      'evolutionCount': _characterEvolutionCount,
     };
 
     // D5 — one instance per library character per chat. Drop any arrival that

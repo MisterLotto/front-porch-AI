@@ -37,9 +37,14 @@ class MemorySettings with SettingsBase {
   int _journalMaxCards = 200;
   bool _journalReviewFirst = false; // §4.3 review-first mode (phase 4)
 
-  // Character evolution
+  // Character Growth (Growth Rings — docs/design/growth-rings.md §6).
+  // The enable key is the old character_evolution_enabled pref so existing
+  // users keep their on/off choice; the interval is a NEW key because rings
+  // check far more often than the old whole-personality rewrites did (an
+  // inherited 10-50 value would be wrong for rings).
   bool _characterEvolutionEnabled = false;
-  int _evolutionInterval = 10;
+  int _growthInterval = 5;
+  bool _growthReviewFirst = false; // default OFF — autonomous growth
 
   bool get ragEnabled => _ragEnabled;
   int get ragRetrievalCount => _ragRetrievalCount;
@@ -53,7 +58,8 @@ class MemorySettings with SettingsBase {
   bool get journalReviewFirst => _journalReviewFirst;
 
   bool get characterEvolutionEnabled => _characterEvolutionEnabled;
-  int get evolutionInterval => _evolutionInterval;
+  int get growthInterval => _growthInterval;
+  bool get growthReviewFirst => _growthReviewFirst;
 
   void load() {
     _ragEnabled = prefs?.getBool(k('rag_enabled')) ?? false;
@@ -70,7 +76,8 @@ class MemorySettings with SettingsBase {
 
     _characterEvolutionEnabled =
         prefs?.getBool(k('character_evolution_enabled')) ?? false;
-    _evolutionInterval = prefs?.getInt(k('evolution_interval')) ?? 10;
+    _growthInterval = prefs?.getInt(k('growth_interval')) ?? 5;
+    _growthReviewFirst = prefs?.getBool(k('growth_review_first')) ?? false;
   }
 
   Future<void> setRagEnabled(bool value) async {
@@ -133,9 +140,15 @@ class MemorySettings with SettingsBase {
     notify();
   }
 
-  Future<void> setEvolutionInterval(int value) async {
-    _evolutionInterval = value.clamp(10, 50);
-    await prefs?.setInt(k('evolution_interval'), _evolutionInterval);
+  Future<void> setGrowthInterval(int value) async {
+    _growthInterval = value.clamp(2, 20);
+    await prefs?.setInt(k('growth_interval'), _growthInterval);
+    notify();
+  }
+
+  Future<void> setGrowthReviewFirst(bool value) async {
+    _growthReviewFirst = value;
+    await prefs?.setBool(k('growth_review_first'), value);
     notify();
   }
 }
