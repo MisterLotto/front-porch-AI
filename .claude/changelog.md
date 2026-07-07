@@ -6,7 +6,7 @@
 - **Reason:** Discord question about the 8-injected/12-active caps exposed two gaps. (1) Injection ranked purely by strength with ties favoring the OLDER ring, and established rings never fade — so once ~8 strong rings existed, new growth could never reach the prompt again: the character kept growing on record while visibly freezing in the story. (2) The retire op applier had no pinned guard, so one bad model output could delete a ring the user explicitly pinned ("permanent" per the design table).
 - **Fix:** GrowthPhysics.injectionSelection reserves up to 2 of the 8 slots for the strongest non-established rings (identical to a plain top-8 when ≤8 active or the fresh rings already rank inside). Both injection consumers (buildGrowthInjection + growthLinesFor/realism dossier) share it. Retire ops on pinned rings are dropped at resolution, so review-first users never even see the proposal; reinforce/revise on pinned stay allowed; diary-UI retire untouched. No DB change; engine-side only, so 1:1/group and desktop/web parity hold by construction.
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. Growth suite 23/23 (new: selection reserve/ordering/degenerate cases; pinned retire refusal). FULL suite 1730/1730.
-- **Commit:** 2a7583a
+- **Commit:** ed7683b
 
 ## 2026-07-06 — perf(web): progressive grid rendering + debounced live-sync refetch (Tier 4, final, of the slow-connection fix)
 - **Files:** web_ui/src/hooks/useProgressiveList.ts (NEW), web_ui/src/pages/CharactersPage.tsx (render the visible slice + a bottom sentinel), web_ui/src/hooks/useLibrary.ts (debounce the `library_changed` refetch), web_ui/src/styles.css (`.lib-load-more` sentinel row), assets/web_app/** (rebuilt).
