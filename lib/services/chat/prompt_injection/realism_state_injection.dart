@@ -114,10 +114,28 @@ class RealismStateInjection {
           ? _getGroupNeedsForSpeaker()
           : needsSimulation.vector;
       if (needsMap.isNotEmpty) {
+        // Resolve THIS speaker's own hygiene-preference flag. In group mode the
+        // shared active-character pointer is the previous speaker after the
+        // realism dance, so reading the global flag would invert every member's
+        // hygiene when any one member enjoys being filthy (the "hygiene 88 shows
+        // catastrophic" bleed). 1:1 uses the active/host card (same as global).
+        final speakerCard = getIsGroupNonObserverMode()
+            ? getGroupCharacters().firstWhere(
+                (c) =>
+                    getCharacterIdFromCard(c) == getCurrentSpeakerIdForRealism(),
+                orElse: () => getActiveCharacter() ?? CharacterCard(name: ''),
+              )
+            : getActiveCharacter();
+        final speakerEnjoysLowHygiene =
+            speakerCard?.frontPorchExtensions?.enjoysLowHygiene ?? false;
         buf.writeln('Needs (higher = more sated):');
         for (final key in NeedsSimulation.needKeys) {
           final v = needsMap[key] ?? NeedsSimulation.needDefaults[key] ?? 80;
-          final eff = needsSimulation.getInjectionEffectiveStep(key, v);
+          final eff = needsSimulation.getInjectionEffectiveStep(
+            key,
+            v,
+            enjoysLowHygieneOverride: speakerEnjoysLowHygiene,
+          );
           final status = eff >= 5 ? 'sated' : 'needs attention';
           buf.writeln('  $key: $v/100 ($status)');
         }

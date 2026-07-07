@@ -162,6 +162,22 @@ class NeedsSimulation {
     ],
   };
 
+  /// Hygiene descriptions for a character with "enjoys low hygiene" set. For
+  /// them the whole scale is inverted: being DIRTY is comfort, being CLEAN is
+  /// the aversive state. The normal [needSteppedText] is all phrased "dirty =
+  /// bad", so reusing it after the step inversion would describe a freshly-
+  /// scrubbed character as "feeling filthy" — the exact opposite of the truth.
+  /// This list is worst-first like the others (index 0 = scrubbed unbearably
+  /// clean → index 4 = only faintly too fresh), describing distress at being
+  /// too clean and a craving to get grubby/musky again.
+  static const List<String> hygieneSteppedTextWhenEnjoysLow = [
+    '''Scrubbed pink and reeking of soap, she feels stripped bare and wrong — her comforting musk scoured completely away. It is deeply unsettling to her; she is agitated and self-conscious, craving to sweat, get grimy, and smell like herself again as soon as possible.''',
+    '''She feels uncomfortably clean — too soft, too fragrant, her natural scent washed thin. It puts her on edge, and she keeps wanting to work up a real sweat or get properly dirty again.''',
+    '''A freshly-washed cleanness clings to her that she dislikes. She feels a little exposed without her usual musk and would happily get her hands dirty.''',
+    '''She is starting to feel a touch too clean and fussy, and part of her misses the comfortable grime.''',
+    '''A faint just-washed freshness lingers that she finds mildly unsatisfying.''',
+  ];
+
   static const Map<String, String> needCatastropheText = {
     'hunger': '''A violent stomach cramp drops her to her knees or against {{user}}. She hasn't eaten in far too long; her blood sugar crashes and she nearly faints or becomes too weak to stand. The hunger has turned into a real physical emergency.''',
     'bladder': '''She loses control completely. A sudden, hot, unstoppable rush — she is wetting herself right now, in the current scene, in front of {{user}} or anyone present. The fabric darkens, liquid runs down her legs, the smell fills the air, and her face is a mask of horror and humiliation. The accident is happening / has just happened.''',
@@ -354,9 +370,24 @@ class NeedsSimulation {
     return 5;
   }
 
-  int getInjectionEffectiveStep(String need, int value) {
+  /// Effective stepped urgency for prompt injection.
+  ///
+  /// [enjoysLowHygieneOverride] lets the caller supply the flag for the SPECIFIC
+  /// character whose need is being rendered. This is required in group chats:
+  /// the shared [getEnjoysLowHygiene] callback reads the chat's *active*
+  /// character, which — after the per-speaker realism dance restores the pointer
+  /// — is the PREVIOUS speaker, not the one this line belongs to. Passing the
+  /// speaker's own flag stops one filthy-loving member from inverting every
+  /// other member's hygiene (the "hygiene 88 shows CATASTROPHIC" bleed). The 1:1
+  /// path passes null and keeps using the global (active == host there).
+  int getInjectionEffectiveStep(
+    String need,
+    int value, {
+    bool? enjoysLowHygieneOverride,
+  }) {
     int step = getNeedStep(need, value);
-    if (getEnjoysLowHygiene() && need == 'hygiene') {
+    final enjoysLow = enjoysLowHygieneOverride ?? getEnjoysLowHygiene();
+    if (enjoysLow && need == 'hygiene') {
       step = (5 - step).clamp(0, 5);
     }
     return step;

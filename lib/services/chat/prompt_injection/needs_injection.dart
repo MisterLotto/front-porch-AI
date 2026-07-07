@@ -58,16 +58,39 @@ class NeedsInjection {
     if (!getNeedsSimEnabled() || !getRealismEnabled()) return '';
 
     // Helper to build a compact status line for one need.
-    String _needLine(String key, int value) {
-      final eff = needsSimulation.getInjectionEffectiveStep(key, value);
-      final steppedList = NeedsSimulation.needSteppedText[key] ?? const <String>[];
+    // [enjoysLowHygiene] is the flag for the character this line belongs to;
+    // in group mode it MUST be the speaker's own flag (not the shared active
+    // one) so a filthy-loving member can't invert everyone else's hygiene.
+    String _needLine(String key, int value, {bool? enjoysLowHygiene}) {
+      // Effective flag for THIS character (per-speaker in group, global in 1:1).
+      final effEnjoysLow = enjoysLowHygiene ?? getEnjoysLowHygiene();
+      final eff = needsSimulation.getInjectionEffectiveStep(
+        key,
+        value,
+        enjoysLowHygieneOverride: effEnjoysLow,
+      );
+      // For an "enjoys low hygiene" character the hygiene scale is inverted, so
+      // the normal filthy-phrased text would describe a freshly-scrubbed
+      // character as "feeling filthy". Use the dedicated too-clean-is-aversive
+      // text instead so the words match the (inverted) state.
+      final invertHygiene = key == 'hygiene' && effEnjoysLow;
+      final steppedList = invertHygiene
+          ? NeedsSimulation.hygieneSteppedTextWhenEnjoysLow
+          : NeedsSimulation.needSteppedText[key] ?? const <String>[];
       final desc = (eff <= 4 && steppedList.isNotEmpty)
           ? steppedList[eff.clamp(0, 4)]
-          : 'comfortable / no significant drive';
+          : (invertHygiene
+              ? 'content and at ease in her own grime and musk'
+              : 'comfortable / no significant drive');
       final tag = (eff >= 5)
           ? 'sated'
           : needsSimulation.getUrgencyPrefixForStep(eff).replaceAll(' — ', ' — ').replaceAll('this is ', '');
-      return '$key: $value/100 — $tag: $desc';
+      // Flag the inverted semantics explicitly so the model doesn't "correct"
+      // the apparent contradiction of a high number reading as distress.
+      final label = invertHygiene
+          ? 'hygiene: $value/100 (this character LIKES being unwashed — a HIGH number here is unwelcome to her, a LOW number is comfort)'
+          : '$key: $value/100';
+      return '$label — $tag: $desc';
     }
 
     // Group mode (non-director) — per-character needs. Now emits a grouped, explicit block
@@ -78,20 +101,23 @@ class NeedsInjection {
       final needs = getGroupNeeds(id);
       if (needs.isEmpty) return '';
 
-      final name = getGroupCharacters()
-          .firstWhere(
-            (c) => getCharacterIdFromCard(c) == id,
-            orElse: () => getGroupCharacters().isNotEmpty
-                ? getGroupCharacters().first
-                : CharacterCard(name: 'the character'),
-          )
-          .name;
+      final speakerCard = getGroupCharacters().firstWhere(
+        (c) => getCharacterIdFromCard(c) == id,
+        orElse: () => getGroupCharacters().isNotEmpty
+            ? getGroupCharacters().first
+            : CharacterCard(name: 'the character'),
+      );
+      final name = speakerCard.name;
+      // Read THIS speaker's own flag — never the shared active-character one,
+      // which after the realism dance points at the previous speaker.
+      final speakerEnjoysLowHygiene =
+          speakerCard.frontPorchExtensions?.enjoysLowHygiene ?? false;
 
       final buf = StringBuffer();
       buf.writeln('[Current Needs Status for $name — higher = more sated / less urgent (100=full, 0=critical)]');
       for (final key in NeedsSimulation.needKeys) {
         final v = needs[key] ?? NeedsSimulation.needDefaults[key] ?? 80;
-        buf.writeln(_needLine(key, v));
+        buf.writeln(_needLine(key, v, enjoysLowHygiene: speakerEnjoysLowHygiene));
       }
       buf.writeln('[Collate these exact values: the character\'s physical presentation, energy level, hunger sensations, focus, willingness to exert, posture, small behaviors, and any natural internal references or dialogue this turn must be consistent with the current numbers. Lower values should be more prominent right now.]');
       return buf.toString();

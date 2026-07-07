@@ -2728,6 +2728,14 @@ class ChatService extends ChangeNotifier {
   /// so that toggling the setting on the character immediately affects any
   /// already-loaded chats (no database change required).
   bool get enjoysLowHygiene {
+    // Group chats have no single "active character" hygiene preference — it is
+    // strictly per-speaker (the injection builders resolve it from each
+    // member's own card). Never fall through to the 1:1 scalar in a group, or a
+    // preference carried in from a previous 1:1 (e.g. a "enjoys being dirty"
+    // character) would stay stale and invert every group member's hygiene.
+    if (_activeGroup != null) {
+      return _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
+    }
     return _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ??
         _enjoysLowHygiene;
   }

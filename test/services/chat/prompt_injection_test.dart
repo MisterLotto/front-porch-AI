@@ -718,6 +718,102 @@ void main() {
       },
     );
 
+    test(
+      'group: one member\'s "enjoys low hygiene" does not invert another '
+      "member's hygiene (regression: hygiene 88 shown CATASTROPHIC)",
+      () {
+        // Speaker Seraphine has clean hygiene (88) and does NOT enjoy low
+        // hygiene. Iris (a previous speaker still sitting in the shared active
+        // pointer, simulated here via the global getEnjoysLowHygiene=true) DOES.
+        // The builder must read Seraphine's OWN flag, not the leaked global,
+        // so her 88 stays "sated" instead of inverting to step-0 catastrophic.
+        final seraphine = CharacterCard(
+          name: 'Seraphine',
+          frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: false),
+        );
+        final iris = CharacterCard(
+          name: 'Iris',
+          frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: true),
+        );
+        final gneeds = {
+          'Seraphine': {
+            'hunger': 54,
+            'bladder': 80,
+            'energy': 80,
+            'social': 65,
+            'fun': 45,
+            'hygiene': 88,
+            'comfort': 70,
+          },
+        };
+        final b = createTestNeeds(
+          isGroupNonObs: true,
+          speakerId: 'Seraphine',
+          groupChars: [seraphine, iris],
+          groupNeeds: gneeds,
+          enjoys: true, // the LEAKED global (Iris) — must be ignored
+        );
+        final txt = b.buildNeedsInjection();
+        // The hygiene line must reflect Seraphine's real (high) state.
+        final hygieneLine = txt
+            .split('\n')
+            .firstWhere((l) => l.startsWith('hygiene:'), orElse: () => '');
+        expect(hygieneLine, contains('88/100'));
+        expect(hygieneLine, contains('sated'));
+        expect(hygieneLine.toUpperCase(), isNot(contains('CATASTROPHIC')));
+        expect(hygieneLine.toLowerCase(), isNot(contains('filthy')));
+      },
+    );
+
+    test(
+      'enjoys-low-hygiene: a genuinely filthy-loving character reads a HIGH '
+      'hygiene as aversive with too-clean wording (not "feels filthy")',
+      () {
+        // Jenny truly enjoys being unwashed. At hygiene 88 (scrubbed clean) she
+        // should be described as distressed by being TOO CLEAN and craving her
+        // musk back — never with the normal "feels filthy / grime" text, and
+        // the line must flag that a HIGH number is unwelcome to her.
+        final jenny = CharacterCard(
+          name: 'Jenny',
+          frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: true),
+        );
+        final gneeds = {
+          'Jenny': {
+            'hunger': 80,
+            'bladder': 80,
+            'energy': 80,
+            'social': 65,
+            'fun': 65,
+            'hygiene': 88,
+            'comfort': 70,
+          },
+        };
+        final b = createTestNeeds(
+          isGroupNonObs: true,
+          speakerId: 'Jenny',
+          groupChars: [jenny],
+          groupNeeds: gneeds,
+          enjoys: false, // her OWN card flag is what matters, not the global
+        );
+        final line = b
+            .buildNeedsInjection()
+            .split('\n')
+            .firstWhere((l) => l.startsWith('hygiene:'), orElse: () => '');
+        expect(line, contains('88/100'));
+        // Inverted: high hygiene is a need to fix, never "sated" here.
+        expect(line, isNot(contains('sated')));
+        // Correct polarity: she is not described as "feeling filthy" (the
+        // normal text); the grime she references is one she CRAVES, not one
+        // she's suffering.
+        expect(line.toLowerCase(), isNot(contains('feels filthy')));
+        expect(line.toLowerCase(), contains('unwashed'));
+        expect(
+          line.toLowerCase(),
+          anyOf(contains('clean'), contains('soap'), contains('scrubbed')),
+        );
+      },
+    );
+
     test('edges: realism off returns empty for all', () {
       final rel = createTestRelationship(realism: false);
       expect(rel.buildRelationshipInjection(), isEmpty);
