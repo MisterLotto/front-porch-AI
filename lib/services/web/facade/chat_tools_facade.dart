@@ -83,7 +83,14 @@ class ChatToolsFacade {
         'hasPendingEvent': chaos.hasPendingChaosEvent,
       },
       'nsfw': {
-        'cooldownEnabled': nsfw.nsfwCooldownEnabled,
+        // NSFW Enhancements flag. In a group the live nsfwService scalar is
+        // per-speaker volatile (reloaded for whoever last evaluated), so read
+        // the stable per-member group flag instead — matching the desktop
+        // CharacterStateSettings split-brain. Write side (setNsfwCooldown)
+        // already propagates to every member, so this stays consistent.
+        'cooldownEnabled': _chat.activeGroup != null
+            ? _chat.isGroupNsfwEnabled
+            : nsfw.nsfwCooldownEnabled,
         'cooldownTurnsRemaining': nsfw.cooldownTurnsRemaining,
         // Arousal is per-character: scope to the focused member in a group;
         // the host scalar otherwise. (Tier name is only derivable for the host

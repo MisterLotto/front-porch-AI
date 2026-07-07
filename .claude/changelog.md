@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-07 — feat(group): surface the NSFW Enhancements toggle in Group Settings + fix its stale web read
+
+- **Files:** lib/ui/dialogs/group_settings_dialog.dart (new NSFW Enhancements toggle card in the Realism tab), lib/services/web/facade/chat_tools_facade.dart (read the stable group NSFW flag instead of the volatile scalar), web_ui/src/components/ChatTools.tsx (label parity), assets/web_app/** (rebuilt), docs/Rawhide.md.
+- **Reason:** A user couldn't find any way to enable NSFW mode in a group chat. The "NSFW Enhancements" toggle (arousal / Lust bar + post-climax cooldowns) existed only behind the sidebar Character State gear — the same place as 1:1 — but users reasonably look in **Group Settings** (where the Needs options live), and it wasn't there. Additionally, the group's realism master switch isn't in the sidebar header (it's in Group Settings), so the "turn realism on, then NSFW on" flow wasn't discoverable in one place.
+- **How fixed (desktop):** added an "NSFW Enhancements" toggle card to Group Settings → Realism tab, directly under the Realism Engine master toggle so the enable flow reads top-to-bottom. It reads `ChatService.isGroupNsfwEnabled` (the stable per-member flag) and writes `setNsfwCooldownEnabled` (which already propagates to every member), and shows an inline hint when NSFW is on but Realism is off. Matched the existing tab's local visual style (this dialog predates the AppColors migration; introducing helpers for one card would look inconsistent).
+- **How fixed (web parity):** the web ChatTools NSFW section already exposed this toggle for groups, but the facade reported `nsfw.nsfwCooldownEnabled` — the per-speaker VOLATILE scalar — so in a group the web switch showed whatever the last-evaluated speaker's flag was, not the group-wide state (the exact split-brain the desktop doc warns about). Now reads `isGroupNsfwEnabled` in group mode, matching desktop. Relabeled the web toggle "NSFW Enhancements (all members)" in groups for cross-surface naming consistency; rebuilt assets/web_app.
+- **Verification:** flutter analyze (2 lib files) — No issues. Web `tsc --noEmit` + vite build clean. chat_tools_facade_test 4/4. No dedicated facade group-branch test added: FakeChatService hardcodes `activeGroup = null` and is shared widely, and the branch mirrors the already-tested desktop CharacterStateSettings pattern; `isGroupNsfwEnabled` + `setNsfwCooldownEnabled` propagation are existing tested behavior.
+- **Commit:** (pending)
+
 ## 2026-07-07 — fix(needs): "enjoys low hygiene" leaked across a group AND described clean filthy-lovers backwards
 
 Three related fixes to the "enjoys low hygiene" (prefers-being-dirty) feature.

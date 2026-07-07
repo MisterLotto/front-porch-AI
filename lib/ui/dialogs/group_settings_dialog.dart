@@ -1131,6 +1131,7 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
   bool _passageOfTimeEnabled = true;
   bool _chaosModeEnabled = false;
   bool _chaosNsfwEnabled = false;
+  bool _nsfwEnhancementsEnabled = false;
 
   // Group-wide Time & Day.
   String _groupTimeOfDay = 'morning';
@@ -1179,6 +1180,10 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
     _passageOfTimeEnabled = cs.timeService.passageOfTimeEnabled;
     _chaosModeEnabled = cs.chaosModeService.chaosModeEnabled;
     _chaosNsfwEnabled = cs.chaosModeService.chaosNsfwEnabled;
+    // Group NSFW Enhancements (arousal/Lust + post-climax cooldowns). Uses the
+    // stable per-member group flag (the live nsfwService scalar is per-speaker
+    // volatile in groups); the write side propagates to every member.
+    _nsfwEnhancementsEnabled = cs.isGroupNsfwEnabled;
 
     // Group-wide Time & Day.
     final group = cs.activeGroup;
@@ -1491,6 +1496,15 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
     widget.chatService.chaosModeService.setNsfwEnabled(value);
   }
 
+  void _updateNsfwEnhancements(bool value) {
+    setState(() {
+      _nsfwEnhancementsEnabled = value;
+    });
+    // Same setter the sidebar gear uses; in a group it propagates the flag to
+    // every member's realism state (1:1 just sets the scalar).
+    widget.chatService.setNsfwCooldownEnabled(value);
+  }
+
   void _updateGroupTimeOfDay(String value) {
     setState(() {
       _groupTimeOfDay = value;
@@ -1680,6 +1694,65 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
                       padding: EdgeInsets.only(top: 6),
                       child: Text(
                         'Sub-features (Needs, etc.) have no effect while the master toggle is off.',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white38,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // NSFW Enhancements (arousal / Lust bar + post-climax cooldowns).
+            // Mirrors the sidebar Character State gear toggle so it's findable
+            // where users expect group-wide switches; applies to every member.
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('🔥', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'NSFW Enhancements',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Switch(
+                        value: _nsfwEnhancementsEnabled,
+                        activeThumbColor: const Color(0xFFFF6B9D),
+                        onChanged: _updateNsfwEnhancements,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Tracks arousal (the Lust bar) with post-climax refractory '
+                    'cooldowns for every character in this group. Only takes '
+                    'effect while the Realism Engine above is on.',
+                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                  ),
+                  if (_nsfwEnhancementsEnabled && !_realismEnabled)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Turn on the Realism Engine above for this to have any '
+                        'effect.',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.white38,
