@@ -146,9 +146,11 @@ class CharacterFacade {
           (c) => {
             'id': c.id,
             'name': c.name,
-            'description': c.description,
-            'scenario': c.scenario,
-            'personality': c.personality,
+            // The grid only needs name/tags/avatar/count — the heavy free-text
+            // fields (description/personality/scenario) are served by
+            // `/detail` for the editor, not here, so they're intentionally
+            // omitted to keep this list (which loads every character at once)
+            // small over a slow uplink.
             'tags': _jsonList(c.tags),
             'hasAvatar': c.imagePath != null && c.imagePath!.isNotEmpty,
             'avatarVersion': _avatarVersion(c.imagePath),

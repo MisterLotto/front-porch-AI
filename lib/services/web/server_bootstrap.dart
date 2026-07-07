@@ -21,6 +21,7 @@ import 'package:shelf_router/shelf_router.dart';
 
 import 'package:front_porch_ai/services/web/middleware/auth_middleware.dart';
 import 'package:front_porch_ai/services/web/middleware/cors_middleware.dart';
+import 'package:front_porch_ai/services/web/middleware/gzip_middleware.dart';
 import 'package:front_porch_ai/services/web/middleware/security_headers.dart';
 import 'package:front_porch_ai/services/web/routes/auth_routes.dart';
 import 'package:front_porch_ai/services/web/routes/backend_routes.dart';
@@ -109,5 +110,8 @@ shelf.Handler buildWebHandler(WebServerDeps deps) {
       .addMiddleware(const CorsMiddleware().middleware)
       .addMiddleware(SecurityHeaders(deps).middleware)
       .addMiddleware(WebAuthMiddleware(deps).middleware)
+      // Innermost: compress the handler's response (JSON/text) before the outer
+      // header middlewares annotate it. Skips WebSocket upgrades + binary.
+      .addMiddleware(const GzipMiddleware().middleware)
       .addHandler(router.call);
 }

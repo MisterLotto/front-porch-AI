@@ -16,7 +16,6 @@ import { ChatSocket } from '../api/ws';
 export interface LibChar {
   id: string;
   name: string;
-  description: string;
   tags: string[];
   hasAvatar: boolean;
   /** Avatar file mtime — cache-busts the thumbnail URL when the picture changes. */
@@ -143,13 +142,23 @@ export function useLibrary() {
 
   // Live sync: the server broadcasts `library_changed` whenever characters /
   // folders / groups change anywhere (the desktop app or another browser).
-  // Refetch on it so the library stays current without a manual reload.
+  // Refetch on it so the library stays current without a manual reload — but
+  // debounce, so a burst (e.g. a bulk import or folder reshuffle on the
+  // desktop) coalesces into a single refetch instead of hammering a slow uplink
+  // with a full 3-endpoint reload per event.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const socket = new ChatSocket((e) => {
-      if (e.event === 'library_changed') reload();
+      if (e.event === 'library_changed') {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(reload, 400);
+      }
     });
     socket.connect();
-    return () => socket.close();
+    return () => {
+      if (timer) clearTimeout(timer);
+      socket.close();
+    };
   }, [reload]);
 
   const subfolders = useMemo(

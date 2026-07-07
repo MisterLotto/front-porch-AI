@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { InstallHint } from '../components/InstallHint';
 import { useLayout } from '../hooks/useBreakpoint';
 import { useLibrary, type LibChar, type LibFolder, type LibGroup } from '../hooks/useLibrary';
+import { useProgressiveList } from '../hooks/useProgressiveList';
 import { CardMenu, type CardMenuItem, type MenuState } from '../components/library/CardMenu';
 import { CharacterCard, FolderCard, GroupCard } from '../components/library/LibraryCards';
 import { LibraryToolbar, SelectionBar } from '../components/library/LibraryToolbar';
@@ -110,6 +111,10 @@ export function CharactersPage() {
   const gridStyle = { ['--lib-card-min']: `${lib.gridMin}px` } as CSSProperties;
   const showGroups = !lib.searching && lib.folderId === null && lib.groups.length > 0;
   const showSubfolders = !lib.searching && lib.subfolders.length > 0;
+
+  // Reveal the character grid in chunks so a large library doesn't mount
+  // thousands of card nodes at once (folders/groups are bounded, so unwindowed).
+  const { visible: visibleChars, sentinelRef, hasMore } = useProgressiveList(lib.chars);
 
   return (
     <div className="page library">
@@ -226,21 +231,28 @@ export function CharactersPage() {
           {lib.chars.length === 0 ? (
             <p className="muted">No characters here.</p>
           ) : (
-            <div className="lib-grid" style={gridStyle}>
-              {lib.chars.map((c) => (
-                <CharacterCard
-                  key={c.id}
-                  char={c}
-                  selecting={lib.selecting}
-                  selected={lib.selectedIds.has(c.id)}
-                  onOpen={() => lib.openCharacter(c)}
-                  onToggleSelect={() => lib.toggleSelect(c.id)}
-                  onMenu={(e) => openMenu(e, charMenu(c))}
-                  dndEnabled={wide}
-                  onDragStart={() => setDraggedId(c.id)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="lib-grid" style={gridStyle}>
+                {visibleChars.map((c) => (
+                  <CharacterCard
+                    key={c.id}
+                    char={c}
+                    selecting={lib.selecting}
+                    selected={lib.selectedIds.has(c.id)}
+                    onOpen={() => lib.openCharacter(c)}
+                    onToggleSelect={() => lib.toggleSelect(c.id)}
+                    onMenu={(e) => openMenu(e, charMenu(c))}
+                    dndEnabled={wide}
+                    onDragStart={() => setDraggedId(c.id)}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <div ref={sentinelRef} className="lib-load-more" aria-hidden>
+                  <div className="spinner" />
+                </div>
+              )}
+            </>
           )}
         </>
       )}
