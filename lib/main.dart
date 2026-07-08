@@ -17,6 +17,9 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:async';
+// Hide `Size`: dart:ffi exports a `Size` type that collides with Flutter's
+// `Size`. `hide` (not `show`) keeps the `lookupFunction` extension in scope.
+import 'dart:ffi' hide Size;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -111,6 +114,24 @@ Future<bool> _windowBoundsVisible(Rect bounds) async {
   }
 }
 
+/// Sets SIGPIPE to SIG_IGN via libc so a write to a closed socket/pipe fails
+/// with a normal, catchable `SocketException` instead of silently killing the
+/// whole process (SIGPIPE's default disposition). No-op on Windows (no SIGPIPE)
+/// and best-effort everywhere else — a lookup failure just leaves the default.
+void _ignoreSigpipe() {
+  if (Platform.isWindows) return;
+  try {
+    // int signal(int signum, sighandler_t handler); SIG_IGN == (void*)1,
+    // SIGPIPE == 13 on both macOS (Darwin) and Linux.
+    final signal = DynamicLibrary.process().lookupFunction<
+        Pointer<Void> Function(Int32, Pointer<Void>),
+        Pointer<Void> Function(int, Pointer<Void>)>('signal');
+    signal(13, Pointer<Void>.fromAddress(1));
+  } catch (e) {
+    debugPrint('Could not set SIG_IGN for SIGPIPE: $e');
+  }
+}
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
@@ -128,21 +149,17 @@ void main(List<String> args) async {
       debugPrint('Caught SIGTERM — exiting immediately.');
       exit(0);
     });
-    // Ignore SIGPIPE. A write to a socket/pipe whose peer has already closed
-    // (a dropped web-server connection, the mDNSResponder/Tailscale sockets used
-    // when serving over the LAN or a tailnet, a subprocess stdio pipe) raises
-    // SIGPIPE, whose default disposition SILENTLY terminates the whole process
-    // with no crash report — the "app just vanishes from the dock when I toggle
-    // the web server on" bug in the signed/notarized build. (A `flutter run`
-    // dev VM already has SIGPIPE ignored, so it never surfaced in development.)
-    // Watching it with a no-op listener replaces the terminate-default with
-    // harmless delivery, so a broken write instead throws a normal, catchable
-    // SocketException in the code that did it. POSIX-only; SIGPIPE doesn't exist
-    // on Windows (guarded by the enclosing check).
-    ProcessSignal.sigpipe.watch().listen((_) {
-      debugPrint('Ignored SIGPIPE (broken pipe on a socket/pipe write).');
-    });
   }
+  // Ignore SIGPIPE at the C level. A write to a socket/pipe whose peer has
+  // already closed (a dropped web-server connection, the mDNSResponder/Tailscale
+  // sockets used when serving over the LAN or a tailnet, a subprocess stdio pipe)
+  // raises SIGPIPE, whose default disposition SILENTLY terminates the whole
+  // process with no crash report — the "app just vanishes from the dock when I
+  // toggle the web server on" bug in the signed/notarized build. The standalone
+  // Dart VM sets SIG_IGN for us (so `flutter run` never showed it), but the
+  // Flutter embedder leaves the default in place. dart:io deliberately REFUSES
+  // to watch SIGPIPE, so we set the disposition directly via libc.
+  _ignoreSigpipe();
 
   // Consolidate files BEFORE loading database or any configs.
   try {
