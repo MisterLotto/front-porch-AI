@@ -45,9 +45,12 @@ class BackendManager extends ChangeNotifier {
   bool _useRocm = false;
   bool _hasCuda = false;
   // Detected once. When the CPU lacks AVX2 (older/low-end PCs), KoboldCpp's
-  // standard + nocuda builds crash on launch, so we fetch its AVX2-free `oldpc`
-  // build instead. Defaults to true so detection failure never downgrades a
-  // capable machine. (Irrelevant on Apple Silicon; the mac build is arm64.)
+  // standard + nocuda builds crash on launch, so we fetch its `oldpc` build
+  // instead (per KoboldCpp: "Cuda11 + AVX1" — it keeps CUDA 11 GPU offload for
+  // older NVIDIA cards but has NO ROCm; an AMD box on a non-AVX2 CPU therefore
+  // runs CPU-side, since the ROCm binary is a standard AVX2 build that would
+  // simply crash there). Defaults to true so detection failure never downgrades
+  // a capable machine. (Irrelevant on Apple Silicon; the mac build is arm64.)
   final bool _hasAvx2 = cpuHasAvx2();
 
   bool get useRocm => _useRocm;
@@ -461,7 +464,8 @@ class BackendManager extends ChangeNotifier {
     }
     if (Platform.isLinux) {
       // AVX2 absence is fatal for every AVX2 build (cuda/rocm/nocuda alike), so
-      // it takes priority over the GPU-acceleration choice.
+      // it takes priority over the GPU-acceleration choice. oldpc = Cuda11+AVX1
+      // (CUDA offload kept for older NVIDIA; no ROCm — AMD falls back to CPU).
       if (!_hasAvx2) return 'koboldcpp-linux-x64-oldpc';
       if (_useRocm) return 'koboldcpp-linux-x64-rocm';
       if (_hasCuda) return 'koboldcpp-linux-x64';
