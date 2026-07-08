@@ -25,6 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/services/kobold_binary_version.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/update_service.dart';
+import 'package:front_porch_ai/utils/cpu_features.dart';
 
 class BackendManager extends ChangeNotifier {
   final StorageService _storageService;
@@ -43,6 +44,11 @@ class BackendManager extends ChangeNotifier {
   String _arch = 'x64';
   bool _useRocm = false;
   bool _hasCuda = false;
+  // Detected once. When the CPU lacks AVX2 (older/low-end PCs), KoboldCpp's
+  // standard + nocuda builds crash on launch, so we fetch its AVX2-free `oldpc`
+  // build instead. Defaults to true so detection failure never downgrades a
+  // capable machine. (Irrelevant on Apple Silicon; the mac build is arm64.)
+  final bool _hasAvx2 = cpuHasAvx2();
 
   bool get useRocm => _useRocm;
 
@@ -90,6 +96,12 @@ class BackendManager extends ChangeNotifier {
   }
 
   Future<void> _init() async {
+    if (!_hasAvx2 && (Platform.isWindows || Platform.isLinux)) {
+      print(
+        'AG_DEBUG: CPU lacks AVX2 — using KoboldCpp oldpc build '
+        '(${_getExecutableName()})',
+      );
+    }
     if (Platform.isMacOS) {
       try {
         final result = await Process.run('uname', ['-m']);
@@ -155,6 +167,7 @@ class BackendManager extends ChangeNotifier {
         'koboldcpp-linux-x64',
         'koboldcpp-linux-x64-rocm',
         'koboldcpp-linux-x64-nocuda',
+        'koboldcpp-linux-x64-oldpc',
       ]) {
         if (name != executableName) altNames.add(name);
       }
@@ -442,8 +455,14 @@ class BackendManager extends ChangeNotifier {
   }
 
   String _getExecutableName() {
-    if (Platform.isWindows) return 'koboldcpp.exe';
+    if (Platform.isWindows) {
+      // No AVX2 → the oldpc build is the only one that will run.
+      return _hasAvx2 ? 'koboldcpp.exe' : 'koboldcpp-oldpc.exe';
+    }
     if (Platform.isLinux) {
+      // AVX2 absence is fatal for every AVX2 build (cuda/rocm/nocuda alike), so
+      // it takes priority over the GPU-acceleration choice.
+      if (!_hasAvx2) return 'koboldcpp-linux-x64-oldpc';
       if (_useRocm) return 'koboldcpp-linux-x64-rocm';
       if (_hasCuda) return 'koboldcpp-linux-x64';
       return 'koboldcpp-linux-x64-nocuda';
@@ -455,15 +474,18 @@ class BackendManager extends ChangeNotifier {
   }
 
   String _getDownloadUrl() {
+    const base =
+        'https://github.com/LostRuins/koboldcpp/releases/latest/download';
     if (Platform.isWindows) {
-      return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp.exe';
+      // No AVX2 → the oldpc build is the only one that will run.
+      return _hasAvx2 ? '$base/koboldcpp.exe' : '$base/koboldcpp-oldpc.exe';
     }
     if (Platform.isLinux) {
+      // AVX2 absence is fatal for every AVX2 build, so it wins over GPU choice.
+      if (!_hasAvx2) return '$base/koboldcpp-linux-x64-oldpc';
       if (_useRocm) return 'https://koboldai.org/cpplinuxrocm';
-      if (_hasCuda) {
-        return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64';
-      }
-      return 'https://github.com/LostRuins/koboldcpp/releases/latest/download/koboldcpp-linux-x64-nocuda';
+      if (_hasCuda) return '$base/koboldcpp-linux-x64';
+      return '$base/koboldcpp-linux-x64-nocuda';
     }
     if (Platform.isMacOS) {
       return _arch == 'arm64'

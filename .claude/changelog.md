@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-07 — feat(backend): auto-pick KoboldCpp's AVX2-free "oldpc" build on CPUs without AVX2
+
+- **Files:** lib/utils/cpu_features.dart (NEW — `cpuHasAvx2()`), lib/services/backend_manager.dart (detect once + oldpc in `_getExecutableName`/`_getDownloadUrl` + oldpc in the Linux alt-name lookup + a log line), lib/services/kobold_service.dart (Windows orphan-kill also targets `koboldcpp-oldpc.exe`), docs/Rawhide.md.
+- **Reason:** A user on an old PC couldn't get Front Porch AI working. KoboldCpp's standard (and `nocuda`) builds are compiled with AVX2 and crash on launch on CPUs that lack it — common on older/low-end machines. KoboldCpp ships a separate AVX2-free `oldpc` build for exactly this, but the app always downloaded the AVX2 binary, so those users were dead in the water with no clear cause.
+- **How fixed:** new `cpuHasAvx2()` detects AVX2 per-platform — Linux reads `/proc/cpuinfo` (`\bavx2\b`), Windows calls the Win32 `IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE=40)` via a tiny kernel32 FFI lookup; macOS/any-failure returns true (safe default — never downgrade a capable machine, and the mac KoboldCpp build is arm64 where AVX2 is moot). BackendManager caches it in a `final _hasAvx2` and, when false, selects `koboldcpp-oldpc.exe` (Windows) / `koboldcpp-linux-x64-oldpc` (Linux) for both the executable name and the download URL. AVX2 absence takes priority over the CUDA/ROCm/nocuda choice because it's fatal for every AVX2 build; the oldpc build still carries GPU backends. Linux alt-name lookup gains oldpc so an already-downloaded oldpc binary is detected, and the Windows orphaned-process kill targets the distinct `koboldcpp-oldpc.exe` image name (Linux/macOS already `pkill -f koboldcpp`).
+- **Verification:** flutter analyze (full project) — No issues. dart fix — nothing. Detection runtime-tested: the `\bavx2\b` regex passes a 5-case table (matches `avx2`, rejects `avx`-only / `avx512` / non-token / matches end-of-line) and the function returns the safe default on this arm64 host without throwing. Both oldpc download URLs (`.../koboldcpp-oldpc.exe`, `.../koboldcpp-linux-x64-oldpc`) return HTTP 200 against KoboldCpp latest (v1.116.1). Windows FFI path not exercisable from macOS but uses the documented Win32 API; the whole call is wrapped so a lookup failure falls back to "AVX2 present". Desktop-only (backend binary management); no web counterpart.
+- **Commit:** (pending)
+
 ## 2026-07-07 — fix(macos): signed/notarized app silently quit when toggling the web server (unhandled SIGPIPE)
 
 - **Files:** lib/main.dart (watch/ignore SIGPIPE alongside the existing SIGINT/SIGTERM handlers).

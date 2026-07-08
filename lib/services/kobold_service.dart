@@ -140,6 +140,8 @@ class KoboldService extends ChangeNotifier
         // Kill all koboldcpp.exe processes — there should only be zombies.
         await Process.run('taskkill', ['/F', '/IM', 'koboldcpp.exe']);
         await Process.run('taskkill', ['/F', '/IM', 'koboldcpp_nocuda.exe']);
+        // Non-AVX2 machines run the oldpc build (distinct image name).
+        await Process.run('taskkill', ['/F', '/IM', 'koboldcpp-oldpc.exe']);
         _addLog('Killed orphaned KoboldCPP processes.');
       } else {
         // macOS/Linux: kill by process name
