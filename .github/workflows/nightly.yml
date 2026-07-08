@@ -42,8 +42,41 @@ permissions:
 # ─────────────────────────────────────────────────────────────────────────────
 
 jobs:
+  # Resolve the Rawhide commit + nightly version ONCE, up front, and hand it to
+  # every downstream job. Previously each job (build matrix, publish, AUR) did its
+  # own `checkout ref: Rawhide` + `git rev-parse --short HEAD` at its own start
+  # time. On a moving branch (rapid pushes / manual re-triggers) those SHAs could
+  # differ, so the binary got stamped with one SHA while the release was TAGGED
+  # with a later one — the .pkg's baked appVersion != its release tag, producing a
+  # permanent "Update Available" loop that reinstalling never fixed. Pinning one
+  # commit (full_sha) + one version string for the whole run makes build == tag by
+  # construction. Also fixes a midnight date-straddle (DATE resolved once here).
+  resolve:
+    name: Resolve Rawhide commit + version
+    runs-on: ubuntu-latest
+    outputs:
+      full_sha: ${{ steps.r.outputs.full_sha }}
+      version: ${{ steps.r.outputs.version }}
+    steps:
+      - name: Checkout Rawhide
+        uses: actions/checkout@v4
+        with:
+          ref: Rawhide
+      - name: Compute pinned version
+        id: r
+        shell: bash
+        run: |
+          DATE=$(date +%Y%m%d)
+          FULL_SHA=$(git rev-parse HEAD)
+          SHA=$(git rev-parse --short HEAD)
+          VERSION="rawhide.${DATE}.${SHA}"
+          echo "full_sha=$FULL_SHA" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved nightly version $VERSION at $FULL_SHA"
+
   nightly:
     name: Build Nightly
+    needs: resolve
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -61,10 +94,10 @@ jobs:
             build_path: build/linux/x64/release/bundle
 
     steps:
-      - name: Checkout Rawhide
+      - name: Checkout Rawhide (pinned to the resolved commit)
         uses: actions/checkout@v4
         with:
-          ref: Rawhide
+          ref: ${{ needs.resolve.outputs.full_sha }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -85,13 +118,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev libsecret-1-dev libwebkit2gtk-4.1-dev ninja-build pkg-config cmake libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
-      - name: Compute Rawhide Nightly Version
+      - name: Stamp Rawhide Nightly Version (pinned)
         id: version
         shell: bash
         run: |
-          DATE=$(date +%Y%m%d)
-          SHA=$(git rev-parse --short HEAD)
-          VERSION="rawhide.${DATE}.${SHA}"
+          # Use the version resolved ONCE for the whole run, so the binary's
+          # baked appVersion always equals the release tag (no SHA race).
+          VERSION="${{ needs.resolve.outputs.version }}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Setting nightly version to: $VERSION"
 
@@ -914,23 +947,23 @@ jobs:
 
   publish-nightly:
     name: Publish Nightly Release
-    needs: nightly
+    needs: [resolve, nightly]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Rawhide (for release notes & version computation)
+      - name: Checkout Rawhide (pinned to the resolved commit, for release notes)
         uses: actions/checkout@v4
         with:
-          ref: Rawhide
+          ref: ${{ needs.resolve.outputs.full_sha }}
 
-      - name: Compute Rawhide Nightly Version
+      - name: Resolve Rawhide Nightly Version (pinned)
         id: version
         shell: bash
         run: |
-          DATE=$(date +%Y%m%d)
-          SHA=$(git rev-parse --short HEAD)
-          VERSION="rawhide.${DATE}.${SHA}"
+          # Same pinned version the binary was stamped with — guarantees the
+          # release tag matches the .pkg's baked appVersion (no SHA/date race).
+          VERSION="${{ needs.resolve.outputs.version }}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Setting nightly version to: $VERSION"
+          echo "Publishing nightly version: $VERSION"
 
       - name: Prepare Friendly Release Notes (for in-app update dialog)
         id: release_notes
@@ -996,22 +1029,20 @@ jobs:
   # ── Update AUR beta package from Rawhide nightlies (reuse existing front-porch-ai-beta-bin) ──
   publish-aur-beta:
     name: Update AUR Beta Package (from Rawhide)
-    needs: [nightly, publish-nightly]
+    needs: [resolve, nightly, publish-nightly]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Rawhide (for version computation)
+      - name: Checkout Rawhide (pinned to the resolved commit)
         uses: actions/checkout@v4
         with:
-          ref: Rawhide
+          ref: ${{ needs.resolve.outputs.full_sha }}
 
       - name: Update AUR Beta Package from Nightly
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
-          # Recompute the exact Rawhide version for this build
-          DATE=$(date +%Y%m%d)
-          SHA=$(git rev-parse --short HEAD)
-          VERSION="rawhide.${DATE}.${SHA}"
+          # Same pinned version as the build + release (no SHA/date race).
+          VERSION="${{ needs.resolve.outputs.version }}"
           TAG="nightly-${VERSION}"
 
           # AUR pkgver can contain dots
