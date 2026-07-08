@@ -7,7 +7,7 @@
 - **Reason:** user asked for ComfyUI support that stays approachable for novices. Design: the user never sees a node graph — a bundled txt2img workflow (one shape covers SD1.5 + SDXL; Flux deferred, importable-workflow escape hatch a candidate follow-up) is filled from the same prompt/model/LoRA/sampler settings every backend shares, and everything is discovered from /object_info. Because it rides the central generateImage dispatcher, /image, the Studio, portraits, creators, and the web app all get ComfyUI with the LoRA/negative/portrait rules applying by construction.
 - **UX tidy (all local backends, not just comfy):** opening the settings or switching backend now tests the connection automatically and populates models/LoRAs/samplers on success; the status card replaces three separate Test buttons + two status-icon paradigms with one consistent, warm-porch (AppColors) surface.
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. comfy_ui_service 8/8; image studio ui 7/7 (1 updated to the new contract, 1 new); FULL suite green (recorded below). npm build clean. Live-server smoke (real ComfyUI generation) needs the maintainer's machine — the graph/API shapes are pinned by unit tests.
-- **Commit:** (pending)
+- **Commit:** d83ed9e
 
 ## 2026-07-08 — fix(images): every generation path now consistent (negatives, portrait orientation, sizes) + dead proto purge
 
