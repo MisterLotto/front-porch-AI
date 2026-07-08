@@ -7,7 +7,7 @@
 - **How fixed:** added a `resolve` job that checks out Rawhide and computes DATE + short SHA + full SHA + version string ONCE, exposing them as job outputs. `nightly`, `publish-nightly`, and `publish-aur-beta` now `needs: resolve`, check out `ref: ${{ needs.resolve.outputs.full_sha }}` (the exact pinned commit), and use `${{ needs.resolve.outputs.version }}` for stamping/tagging/AUR. Build == release tag == AUR version by construction, for the whole run, regardless of branch movement or trigger type. Also closes a midnight date-straddle (DATE resolved once).
 - **Verification:** nightly.yml parses as valid YAML; `git rev-parse` now appears only in the `resolve` job; all three downstream checkouts pin `full_sha`; all version usages reference the resolved `version`; downstream `steps.version.outputs.VERSION` refs (Windows installer, tag_name, notes) still resolve to the pinned value. actionlint not installed locally. Real end-to-end proof is the next nightly run producing a `.pkg` whose baked version equals its tag.
 - **Follow-up:** beta-release.yml / release.yml may share the pattern, but release builds from an immutable tag so the race likely doesn't apply; worth an audit separately. The version-compare `return true` same-day branch is a fragile secondary factor — a belt-and-suspenders hardening is still worth doing.
-- **Commit:** (pending)
+- **Commit:** 43fc7da
 
 ## 2026-07-08 — ci(nightly): REVERT the shim .dmg removal (in-app updater regression)
 
