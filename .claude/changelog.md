@@ -6,7 +6,7 @@
 - **Deleted (dead code, 4,940 lines):** lib/services/grpc/draw_things_generated.dart + image_service.pb.dart/.pbenum.dart/.pbgrpc.dart/.pbjson.dart — generated Dart proto/flatbuffer artifacts with ZERO importers (the Draw Things path went through the Python CLI sidecar long ago; the Python side has its own generated pb2). The .proto/.fbs schema sources stay as protocol documentation, so the Dart side can be regenerated if a native-gRPC client is ever built. NOTE for maintainer: grpc/protobuf/flat_buffers remain in pubspec.yaml (off-limits per repo rules) and are now unused — removable in a maintainer pass.
 - **Reason:** follow-up to the /image + DT LoRA work — user asked for all the other image gen paths to be fixed too. Audit covered every generateImage caller: Image Studio, /image command, guest portraits, desktop character creator, web chargen, web image panel; all route through the one dispatcher, so the LoRA + isPortrait fixes already applied everywhere — what diverged was negatives (3 paths generated with none), the Studio's portrait orientation, and the creators' hardcoded size.
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. Affected suites (image_studio ui, image_facade, chargen_facade) + FULL suite pass. dart format clean.
-- **Commit:** (pending)
+- **Commit:** af0da7a
 
 ## 2026-07-08 — feat(images): /image slash command + inline chat images (right-click save) + Draw Things LoRA support + Studio "Send to chat"
 
