@@ -2,29 +2,9 @@
 
 These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge builds.
 
-<!--
-MAINTAINER NOTE — keep this file lean (read before adding bullets).
-"Recent improvements" lists ONLY changes that have NOT yet shipped in a published
-nightly/stable release. Each release body is sourced from this section, so the moment a
-bullet ships, DELETE it here — otherwise the next release re-announces it (this is exactly
-the duplication that built up before the 2026-06-27 prune).
-
-PRUNE DAILY, BEFORE CUTTING A BUILD: check the newest nightly-rawhide.* release and remove
-every bullet already present in that release body (compare by emoji/title). Only the delta
-committed SINCE that build stays here. `gh release view <latest nightly-rawhide tag> --json body`
-is the source of truth; `git log <latest tag>..HEAD --oneline` shows what's genuinely new.
-
-Archive of shipped notes: the GitHub Releases page (every nightly/stable body) is the
-permanent record; docs/release-notes.md is the curated long-form history. Do NOT copy
-granular nightly bullets into release-notes.md — let the release bodies be their archive.
-
-Last pruned: 2026-07-07 — removed every bullet already published through
-nightly-rawhide.20260707.5ae33f4 (verified against the live release body); only the
-unreleased delta (committed since that build) remains below.
--->
-
 ## Recent improvements (unreleased — ships in the next build)
 
+- 💛 **Warm characters stay warm — and trust finally feels like it moves** — with Realism on, an open, funny, easygoing character could come across stiff and guarded even on a first meeting, and trust felt almost impossible to earn. Three fixes: the engine no longer quietly tells the model to hold back a character's natural warmth and humor at low trust — trust now only controls how far they let you *in*, not their basic temperament, so a warm character reads warm from turn one and a prickly one stays prickly. Genuinely good moments now bank a dependable bit of trust instead of often scoring nothing. And the early trust label reads "Warming" instead of the old "Cautious," so you can actually see progress the moment it starts. Applies to 1:1, groups, and web/mobile alike.
 - 🖥️ **Older PCs are supported now (no AVX2? no problem)** — the AI engine's standard download needs a newer CPU feature (AVX2) and would crash on launch on older or budget machines, leaving those users stuck. Front Porch AI now detects a non-AVX2 CPU on Windows and Linux and automatically grabs KoboldCpp's compatible "old PC" build instead — so it just works, no manual downloads or guesswork. And if that machine also has no NVIDIA GPU (so it can't use graphics acceleration at all), you'll now get a clear heads-up that local AI will run on the CPU and be slow — with a nudge toward a cloud model — instead of wondering why it's crawling.
 - 🔥 **NSFW mode is now easy to find in group chats** — the NSFW Enhancements toggle (arousal / Lust bar + post-climax cooldowns) now lives right in Group Settings → Realism, under the master Realism switch, so you can enable it for the whole group where you'd expect to. It was previously only tucked behind the sidebar gear. On web/mobile the same toggle now correctly reflects the group-wide state instead of the last speaker's.
 - 🧼 **"Prefers being dirty" now behaves — and stops leaking** — two fixes to the enjoys-low-hygiene trait. (1) The preference could leak between characters: after a 1:1 with a musk-loving character, a totally different character in a group could suddenly be written as feeling disgustingly filthy even at high, clean hygiene. It's now strictly per-character — a clean character stays clean and reads as comfortable. (2) For a character who genuinely loves being unwashed, being scrubbed clean is now described correctly — restless, exposed, itching to get grubby and smell like herself again — instead of the old backwards "she feels filthy" wording. 1:1 chats with normal characters were never affected.

@@ -393,7 +393,7 @@ class RelationshipService {
       case 2:
         return 'Leaning Positive';
       case 1:
-        return 'Cautious';
+        return 'Warming';
       case 0:
         return 'Neutral';
       case -1:

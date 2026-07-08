@@ -3859,3 +3859,15 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Deliberately NOT ported (flagged to maintainer in-conversation):** the Director/verifier critique output (opt-in, its own multi-kind correction contract — candidate for a follow-up), the AI character creator, and the story pipeline (both stream long creative JSON with live preview + repetition guards + their own brace-balancing/GBNF/repair machinery; tools are non-streaming, so porting would trade away the live preview for marginal gain). Objective task-gen/YES-NO checks parse lists/keywords, not JSON — already robust.
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. Ported-leaf suites pass unchanged + new converter tests (bool/array coercion, cast no-name). FULL suite 1728/1728.
 - **Commit:** (pending user review)
+
+## 2026-07-08 — Realism trust: stop flattening warm characters + make early trust visible
+
+- **Reason:** User reported a warm/open card (Stephania) felt "grating and annoying" with Realism on and that trust was nearly impossible to earn. Root causes: (1) `buildTrustBehaviorInjection` appended "Do NOT apply generic warmth or humor" to the MAIN generation prompt every turn, which suppressed the core traits of any warm/funny character; (2) the trust rubric let warm characters bank only +1/+2 and most turns scored 0; (3) positive trust tier +1 was labeled "Cautious" (identical to the negative side) so early progress was invisible in the sidebar.
+- **Files:**
+  - `lib/services/chat/prompt_injection/relationship_injection.dart` — rewrote `buildTrustBehaviorInjection` frames so trust governs only *depth of access* (vulnerability/guard), not temperament; replaced the harmful trailing "Do NOT apply generic warmth or humor" line with an explicit "warm stays warm, prickly stays prickly; express guardedness through what they withhold, not by becoming flatter" instruction.
+  - `lib/services/chat/relationship_service.dart` — `trustTierLabel` positive tier +1 renamed 'Cautious' → 'Warming' (negative -1 stays 'Cautious', so the two sides now differ).
+  - `lib/services/chat/realism_prompt_builder.dart` — `_trustSection` warm-character bullet now banks a dependable +2 to +3 on turns that go well and reserves 0 for truly unremarkable turns / wary-type characters. Shared prompt, so one-shot and multi-call paths + 1:1 and group stay in parity by construction.
+  - `web_ui/src/components/realism/realismTypes.ts` — mirrored the label fix: `trustTier` >=5 renamed 'Cautious Trust' → 'Warming' (WebUI parity).
+- **Parity:** injection change is main-gen prompt only (Dart backend serves both surfaces). Label change mirrored to web. web_ui asset rebuild (`npm run build`) pending before web ships.
+- **Verification:** flutter analyze on the 3 changed Dart files — No issues found. No tests referenced the old strings.
+- **Commit:** (pending user review)

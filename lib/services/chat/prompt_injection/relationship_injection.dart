@@ -346,40 +346,41 @@ class RelationshipInjection {
     String frame;
     if (tier <= -5) {
       frame =
-          'is deeply distrustful and paranoid. They question every motive, remain highly '
-          'evasive, and actively suspect harmful intentions. Even positive gestures are met with skepticism.';
+          'is deeply distrustful and paranoid toward {{user}} specifically. They question every motive, '
+          'stay guarded and evasive, and read even positive gestures as an angle being worked.';
     } else if (tier <= -3) {
       frame =
-          'is skeptical and guarded. They keep conversations surface-level, avoid vulnerability, '
-          'and actively test the user intentions before opening up.';
+          'is slow to open with {{user}}. They keep things surface-level, hold real vulnerability back, '
+          'and quietly test {{user}}\'s intentions before showing anything true.';
     } else if (tier <= -1) {
       frame =
-          'is cautious and reserved. They are neither trusting nor hostile — engaging based on the immediate '
-          'context while maintaining emotional distance.';
+          'holds {{user}} a little at arm\'s length, keeping deeper feelings and secrets in reserve until '
+          '{{user}} gives them more reason to lower their guard.';
     } else if (tier == 0) {
       frame =
-          'is neutral — neither trusting nor distrustful. They engage based on the immediate context and their '
-          'personality, without assuming the best or worst of the user. A naturally warm character remains warm, '
-          'a naturally cold character remains cold.';
+          'has no particular trust or distrust of {{user}} yet — they engage on the merits of the moment, '
+          'neither assuming the best nor the worst.';
     } else if (tier <= 2) {
       frame =
-          'is leaning toward trust. They may show slightly more openness than usual, giving the user '
-          'the benefit of doubt in ambiguous situations. Do not force it — let it emerge naturally.';
+          'is beginning to trust {{user}}, giving them the benefit of the doubt and letting them a little '
+          'further past the usual guard than they would a stranger.';
     } else if (tier <= 4) {
       frame =
-          'genuinely trusts this person. Their social mask is down. They share real feelings and speak more '
-          'candidly than they would with most people. What this looks like depends entirely on $charName\'s '
-          'own character — an introverted character might simply hold eye contact longer or say one true thing; '
-          'an expressive one might open up more dramatically. Follow $charName\'s persona.';
+          'genuinely trusts {{user}} — the social mask is down. They share real feelings and speak more '
+          'candidly than they would with most people. What that looks like depends entirely on $charName\'s '
+          'own character — an introvert might just hold eye contact longer or say one true thing; an '
+          'expressive one might open up more.';
     } else {
       frame =
-          'has reached a level of deep trust that is rare for them. They are fully themselves — '
-          'no performance, no guard. They may say things they have never said to anyone, '
-          'show vulnerability in whatever form is authentic to $charName\'s personality.';
+          'trusts {{user}} at a level that is rare for them — fully themselves, no performance, no guard. '
+          'They may reveal things they have never told anyone, in whatever form is authentic to $charName.';
     }
 
     return '[Trust Calibration — $charName $frame'
-        ' Do NOT apply generic warmth or humor. Let $charName\'s specific personality '
-        'define exactly how this trust level manifests in behavior.]\n';
+        ' This governs only how far $charName lets {{user}} past their guard — how much vulnerability, '
+        'candor, and real feeling they risk — NOT their baseline temperament. A warm, funny, or open '
+        'character stays exactly that warm and funny at every trust level (trust only changes how deep it '
+        'goes); a cold or prickly one stays cold. Never mute $charName\'s natural personality to signal '
+        'caution — express any guardedness through what they hold back, not by becoming flatter than they are.]\n';
   }
 }

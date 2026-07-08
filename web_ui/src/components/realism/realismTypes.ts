@@ -135,7 +135,7 @@ export function trustTier(level: number): string {
   if (level >= 80) return 'Absolute Trust';
   if (level >= 50) return 'Deep Trust';
   if (level >= 20) return 'Trusting';
-  if (level >= 5) return 'Cautious Trust';
+  if (level >= 5) return 'Warming';
   if (level >= -4) return 'Neutral';
   if (level >= -19) return 'Wary';
   if (level >= -49) return 'Suspicious';
