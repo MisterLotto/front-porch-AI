@@ -77,7 +77,10 @@ class ChatCommandHandler {
     required Future<bool> Function(CharacterCard member) removeGroupMember,
     required Future<void> Function(CharacterCard member) speakGroupMember,
     required bool Function() isGroupTurnOrderRandom,
-    required Future<void> Function(bool random, List<CharacterCard>? customOrder)
+    required Future<void> Function(
+      bool random,
+      List<CharacterCard>? customOrder,
+    )
     setGroupTurnOrder,
     required ({bool enabled, int maxMessages, int intervalSeconds}) Function(
       bool enabled,
@@ -85,6 +88,7 @@ class ChatCommandHandler {
       int? intervalSeconds,
     )
     configureAfk,
+    required Future<void> Function(String args) generateImage,
   }) : _setExpression = setExpression,
        _activeCharacterIsSet = activeCharacterIsSet,
        _getSceneGuestCards = getSceneGuestCards,
@@ -107,7 +111,8 @@ class ChatCommandHandler {
        _speakGroupMember = speakGroupMember,
        _isGroupTurnOrderRandom = isGroupTurnOrderRandom,
        _setGroupTurnOrder = setGroupTurnOrder,
-       _configureAfk = configureAfk;
+       _configureAfk = configureAfk,
+       _generateImage = generateImage;
 
   final void Function(String? label) _setExpression;
   final bool Function() _activeCharacterIsSet;
@@ -138,6 +143,7 @@ class ChatCommandHandler {
     int? intervalSeconds,
   )
   _configureAfk;
+  final Future<void> Function(String args) _generateImage;
 
   /// The user-facing slash-command reference (single source of truth for the
   /// "type /" helper panel). Order = display order. Aliases (/turn, /detect,
@@ -187,6 +193,11 @@ class ChatCommandHandler {
       'afk',
       '/afk [off] [--messages N] [--time 5m]',
       'Keep the scene alive while you step away — N solitary auto-responses at a set interval',
+    ),
+    SlashCommandInfo(
+      'image',
+      '/image [me | char | bg | raw <prompt> | <description>]',
+      'Generate an image in chat — bare /image pictures the current scene',
     ),
   ];
 
@@ -260,6 +271,16 @@ class ChatCommandHandler {
 
       case 'afk':
         _handleAfk(args);
+        return true;
+
+      case 'image':
+      case 'img':
+      case 'sd':
+      case 'imagine':
+        // In-chat image generation (SillyTavern-style). Parsing + the whole
+        // craft→generate→attach flow live in ImageCommandService; the injected
+        // callback is the ChatService wiring that builds that leaf.
+        await _generateImage(args);
         return true;
 
       default:
@@ -527,8 +548,10 @@ class ChatCommandHandler {
             .toList();
         if (partial.length > 1) {
           final names = partial.map((g) => g.name).join(', ');
-          _onSystemMessage('⚠ "$args" matches multiple guests ($names). '
-              'Use the full name.');
+          _onSystemMessage(
+            '⚠ "$args" matches multiple guests ($names). '
+            'Use the full name.',
+          );
           return;
         }
         if (partial.length == 1) target = partial.first;
@@ -593,7 +616,9 @@ class ChatCommandHandler {
     final names = members.map((m) => m.name).join(', ');
     final wanted = args.trim().toLowerCase();
     if (wanted.isEmpty) {
-      _onSystemMessage('⚠ Who should $emptyVerb? Use /$command <name> — $names.');
+      _onSystemMessage(
+        '⚠ Who should $emptyVerb? Use /$command <name> — $names.',
+      );
       return null;
     }
     for (final m in members) {
@@ -735,8 +760,13 @@ class ChatCommandHandler {
         .toList();
 
     if (tokens.isNotEmpty &&
-        const {'off', 'stop', 'disable', 'end', '0'}
-            .contains(tokens.first.toLowerCase())) {
+        const {
+          'off',
+          'stop',
+          'disable',
+          'end',
+          '0',
+        }.contains(tokens.first.toLowerCase())) {
       _configureAfk(false, null, null);
       _onSystemMessage('💤 AFK auto-responses off.');
       return;
@@ -759,7 +789,9 @@ class ChatCommandHandler {
         final v = i + 1 < tokens.length ? tokens[++i] : '';
         final m = RegExp(r'^(\d+)(s|sec|secs|m|min|mins)?$').firstMatch(v);
         if (m == null) {
-          _onSystemMessage('⚠ /afk: "$v" is not a valid time (try 90s or 5m). $usage');
+          _onSystemMessage(
+            '⚠ /afk: "$v" is not a valid time (try 90s or 5m). $usage',
+          );
           return;
         }
         var sec = int.parse(m.group(1)!);

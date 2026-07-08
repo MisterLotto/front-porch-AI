@@ -85,7 +85,20 @@ export function ChatMessageList({
               </div>
             ) : (
               <>
-                <div className={m.isUser ? 'bubble user' : 'bubble ai'}><MessageContent text={m.text} /></div>
+                <div className={m.isUser ? 'bubble user' : 'bubble ai'}>
+                  {m.image && (
+                    // Generated image (from /image or the Image Studio) —
+                    // native right-click gives "Save image as…" in a browser.
+                    <img
+                      className="chat-image"
+                      src={`/api/image/saved/${encodeURIComponent(m.image)}`}
+                      alt={m.imagePrompt || 'generated image'}
+                      title={m.imagePrompt}
+                      loading="lazy"
+                    />
+                  )}
+                  {m.text && <MessageContent text={m.text} />}
+                </div>
                 {!m.isUser && m.chips && (
                   <ChipsRow
                     chips={m.chips}

@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
+import '../widgets/inline_chat_image.dart';
 import 'styled_chat_message.dart';
 
 /// Message bubble widget (extracted from chat_page god file).
@@ -588,6 +589,14 @@ class _MessageBubbleState extends State<MessageBubble> {
                     character:
                         widget.character ?? widget.chatService?.activeCharacter,
                   ),
+                  // Locally generated image (from /image or the Image Studio's
+                  // "Send to chat") — click to zoom, right-click to save.
+                  if (message.activeMetadata?['image_path'] is String)
+                    InlineChatImage(
+                      path: message.activeMetadata!['image_path'] as String,
+                      prompt:
+                          message.activeMetadata!['image_prompt'] as String?,
+                    ),
                   if (message.activeMetadata != null)
                     _buildRealismIndicator(message.activeMetadata!),
                   // Swipe arrows for alternate greetings on first message
@@ -645,8 +654,13 @@ class _MessageBubbleState extends State<MessageBubble> {
                         );
                       },
                     ),
-                  // Action buttons: regen, continue, swipe arrows
-                  if (!message.isUser && message.sender != 'System')
+                  // Action buttons: regen, continue, swipe arrows.
+                  // Generated-image messages carry no regenerable text, so the
+                  // text-generation actions are hidden for them (regen would
+                  // stream prose into an image bubble).
+                  if (!message.isUser &&
+                      message.sender != 'System' &&
+                      message.activeMetadata?['is_generated_image'] != true)
                     Consumer<ChatService>(
                       builder: (context, chatService, _) {
                         final isLastBotMessage =
@@ -786,8 +800,11 @@ class _MessageBubbleState extends State<MessageBubble> {
                         );
                       },
                     ),
-                  // Suggest actions button + action pills (last bot message only)
-                  if (!message.isUser && message.sender != 'System')
+                  // Suggest actions button + action pills (last bot message only;
+                  // hidden for generated-image messages like the regen row above)
+                  if (!message.isUser &&
+                      message.sender != 'System' &&
+                      message.activeMetadata?['is_generated_image'] != true)
                     Consumer<ChatService>(
                       builder: (context, chatService, _) {
                         final isLast =

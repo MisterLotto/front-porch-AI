@@ -68,7 +68,9 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
 
   const insertIntoChat = () => {
     if (!filename) return;
-    api.post('/api/chat/insert-image', { filename })
+    // prompt rides along so the chat image carries the same hover/copyable
+    // prompt the desktop attaches (older servers ignore the extra field).
+    api.post('/api/chat/insert-image', { filename, prompt })
       .then(() => setInserted(true))
       .catch((e) => onError(e instanceof ApiError ? e.message : 'Could not insert into chat'));
   };

@@ -281,6 +281,12 @@ class WebServerHost extends ChangeNotifier {
       chatService,
       _characterRepository,
     );
+    // Built before ChatFacade so its saved-image resolver (basename → File
+    // with the traversal guard) can be shared for chat image messages.
+    final imageFacade = _imageGenService != null
+        ? ImageFacade(_imageGenService!, _storage)
+        : null;
+
     final chatFacade = (chatService != null && _characterRepository != null)
         ? ChatFacade(
             chatService,
@@ -288,6 +294,7 @@ class WebServerHost extends ChangeNotifier {
             _userPersonaService,
             streamHub,
             _groupChatRepository,
+            resolveSavedImage: imageFacade?.savedImageFile,
           )
         : null;
 
@@ -302,7 +309,12 @@ class WebServerHost extends ChangeNotifier {
         : null;
 
     final chargenFacade = _llmProvider != null
-        ? ChargenFacade(_llmProvider!, characterFacade, streamHub, _imageGenService)
+        ? ChargenFacade(
+            _llmProvider!,
+            characterFacade,
+            streamHub,
+            _imageGenService,
+          )
         : null;
 
     final chatToolsFacade = chatService != null
@@ -343,10 +355,6 @@ class WebServerHost extends ChangeNotifier {
             _modelManager!,
             _hardwareService,
           )
-        : null;
-
-    final imageFacade = _imageGenService != null
-        ? ImageFacade(_imageGenService!, _storage)
         : null;
 
     final voiceFacade = (_ttsService != null && _sttService != null)
@@ -529,5 +537,4 @@ class WebServerHost extends ChangeNotifier {
       reachable: reachable,
     );
   }
-
 }

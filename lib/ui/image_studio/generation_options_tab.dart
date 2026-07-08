@@ -72,7 +72,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     if (s.imageGenBackend != 'remote') {
       _fetchLocalModels(s.localImageGenUrl);
       _fetchLocalSamplers(s.localImageGenUrl);
-      if (s.imageGenBackend != 'drawthings') _fetchLocalLoras(s.localImageGenUrl);
+      _fetchLocalLoras(s.localImageGenUrl);
     }
   }
 
@@ -128,10 +128,17 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   }
 
   Future<void> _fetchLocalLoras(String url) async {
-    if (url.isEmpty) return;
+    // Mirrors the _fetchLocalModels guard: Draw Things lists LoRAs over gRPC
+    // (no URL needed), A1111 needs the local server URL.
+    final st = Provider.of<StorageService>(context, listen: false);
+    final isDT = st.imageGenBackend == 'drawthings';
+    if (!isDT && url.isEmpty) return;
+    if (isDT && st.drawThingsGrpcHost.isEmpty) return;
     setState(() => _loadingLoras = true);
     final svc = Provider.of<ImageGenService>(context, listen: false);
-    final loras = await svc.fetchA1111Loras(url);
+    final loras = isDT
+        ? await svc.fetchDrawThingsLoras(url)
+        : await svc.fetchA1111Loras(url);
     if (mounted) {
       setState(() {
         _localLoras = loras;
@@ -172,7 +179,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
       if (ok) {
         _fetchLocalModels(u);
         _fetchLocalSamplers(u);
-        if (!isDT) _fetchLocalLoras(u);
+        _fetchLocalLoras(u);
       }
     }
   }
@@ -286,7 +293,9 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: sel ? AppColors.cardOf(context) : AppColors.surfaceContainerOf(context),
+                  color: sel
+                      ? AppColors.cardOf(context)
+                      : AppColors.surfaceContainerOf(context),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: sel ? ac : AppColors.borderOf(context),
@@ -527,7 +536,10 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 16),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 24,
+                    height: 24,
+                  ),
                   onPressed: () {
                     final h = _dtHostController.text.trim();
                     final p = _dtPortController.text.trim();
@@ -550,54 +562,61 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               ),
             )
           else
-            Builder(builder: (_) {
-              final dtModels = _localModels.isNotEmpty
-                  ? _localModels
-                  : (st.imageGenModel.isNotEmpty ? [st.imageGenModel] : <String>[]);
-              if (dtModels.isEmpty) {
-                return Text(
-                  'Test to list models.',
+            Builder(
+              builder: (_) {
+                final dtModels = _localModels.isNotEmpty
+                    ? _localModels
+                    : (st.imageGenModel.isNotEmpty
+                          ? [st.imageGenModel]
+                          : <String>[]);
+                if (dtModels.isEmpty) {
+                  return Text(
+                    'Test to list models.',
+                    style: TextStyle(
+                      color: AppColors.textTertiary(context),
+                      fontSize: 10,
+                    ),
+                  );
+                }
+                return DropdownButtonFormField<String>(
+                  key: ValueKey('dt-checkpoint-${st.imageGenModel}'),
+                  initialValue: dtModels.contains(st.imageGenModel)
+                      ? st.imageGenModel
+                      : null,
+                  dropdownColor: AppColors.surfaceContainerOf(context),
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
-                    fontSize: 10,
+                    color: AppColors.textPrimary(context),
+                    fontSize: 11,
                   ),
-                );
-              }
-              return DropdownButtonFormField<String>(
-                key: ValueKey('dt-checkpoint-${st.imageGenModel}'),
-                initialValue: dtModels.contains(st.imageGenModel)
-                    ? st.imageGenModel
-                    : null,
-                dropdownColor: AppColors.surfaceContainerOf(context),
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontSize: 11,
-                ),
-                isExpanded: true,
-                decoration: _deco(hint: 'Select'),
-                items: dtModels
-                    .map(
-                      (m) => DropdownMenuItem(
-                        value: m,
-                        child: Text(
-                          m,
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                            fontSize: 11,
+                  isExpanded: true,
+                  decoration: _deco(hint: 'Select'),
+                  items: dtModels
+                      .map(
+                        (m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(
+                            m,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) st.setImageGenModel(v);
-                },
-              );
-            }),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) st.setImageGenModel(v);
+                  },
+                );
+              },
+            ),
           const SizedBox(height: 4),
           Text(
             'Selection is used automatically on the next generation.',
-            style: TextStyle(color: AppColors.textTertiary(context), fontSize: 9),
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 9,
+            ),
           ),
         ] else ...[
           Text(
@@ -762,36 +781,120 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             ],
           ),
         ],
-        // LoRA restored for non-DT fidelity (name + weight slider)
-        if (!isDT) ...[
+        // LoRA (name + weight slider). A1111 injects <lora:name:weight> into
+        // the prompt; Draw Things applies it natively via the gRPC config.
+        ...[
           Divider(color: AppColors.borderOf(context)),
           const SizedBox(height: 4),
-          Text('LoRA', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11, fontWeight: FontWeight.w600)),
+          Text(
+            'LoRA',
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text('Via &lt;lora:name:weight&gt; in prompt.', style: TextStyle(color: AppColors.textTertiary(context), fontSize: 9)),
+          Text(
+            isDT
+                ? 'Applied natively by Draw Things.'
+                : 'Via <lora:name:weight> in prompt.',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 9,
+            ),
+          ),
           const SizedBox(height: 2),
           if (_loadingLoras)
-            const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.formMasterAccent))
+            const SizedBox(
+              height: 14,
+              width: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.formMasterAccent,
+              ),
+            )
           else
             DropdownButtonFormField<String>(
-              initialValue: _localLoras.contains(st.imageGenLora) ? st.imageGenLora : (st.imageGenLora.isEmpty ? '' : null),
+              initialValue: _localLoras.contains(st.imageGenLora)
+                  ? st.imageGenLora
+                  : (st.imageGenLora.isEmpty ? '' : null),
               dropdownColor: AppColors.surfaceContainerOf(context),
-              style: TextStyle(color: AppColors.textPrimary(context), fontSize: 10),
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 10,
+              ),
               isExpanded: true,
-              decoration: _deco(hint: _localLoras.isEmpty ? 'Test conn for LoRAs' : 'LoRA (opt)'),
+              decoration: _deco(
+                hint: _localLoras.isEmpty
+                    ? 'Test conn for LoRAs'
+                    : 'LoRA (opt)',
+              ),
               items: [
-                DropdownMenuItem(value: '', child: Text('— None —', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10))),
-                ..._localLoras.map((l) => DropdownMenuItem(value: l, child: Text(l, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 10)))),
+                DropdownMenuItem(
+                  value: '',
+                  child: Text(
+                    '— None —',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+                ..._localLoras.map(
+                  (l) => DropdownMenuItem(
+                    value: l,
+                    child: Text(
+                      l,
+                      style: TextStyle(
+                        color: AppColors.textPrimary(context),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ),
               ],
-              onChanged: (val) { if (val != null) st.setImageGenLora(val); },
+              onChanged: (val) {
+                if (val != null) st.setImageGenLora(val);
+              },
             ),
           if (st.imageGenLora.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Row(children: [
-              Text('Wt', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9)),
-              Expanded(child: Slider(value: _dragLoraWeight ?? st.imageGenLoraWeight, min: 0, max: 1, divisions: 20, activeColor: AppColors.formMasterAccent, onChanged: (v) => setState(() => _dragLoraWeight = v), onChangeEnd: (v) { _dragLoraWeight = null; st.setImageGenLoraWeight(v); })),
-              SizedBox(width: 24, child: Text((_dragLoraWeight ?? st.imageGenLoraWeight).toStringAsFixed(2), style: TextStyle(fontSize: 8), textAlign: TextAlign.end)),
-            ]),
+            Row(
+              children: [
+                Text(
+                  'Wt',
+                  style: TextStyle(
+                    color: AppColors.textSecondary(context),
+                    fontSize: 9,
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    value: _dragLoraWeight ?? st.imageGenLoraWeight,
+                    min: 0,
+                    max: 1,
+                    divisions: 20,
+                    activeColor: AppColors.formMasterAccent,
+                    onChanged: (v) => setState(() => _dragLoraWeight = v),
+                    onChangeEnd: (v) {
+                      _dragLoraWeight = null;
+                      st.setImageGenLoraWeight(v);
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 24,
+                  child: Text(
+                    (_dragLoraWeight ?? st.imageGenLoraWeight).toStringAsFixed(
+                      2,
+                    ),
+                    style: TextStyle(fontSize: 8),
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
           ],
         ],
         const SizedBox(height: 8),
@@ -1158,17 +1261,120 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
       ),
       if (isDrawThings) ...[
         const SizedBox(height: 6),
-        Text('DT Advanced', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9, fontWeight: FontWeight.w600)),
-        Row(children: [Text('Shift', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9)), Expanded(child: Slider(value: st.drawThingsShift, min: 0, max: 10, divisions: 100, activeColor: AppColors.formMasterAccent, onChanged: (v) => st.setDrawThingsShift(v))), SizedBox(width: 24, child: Text(st.drawThingsShift.toStringAsFixed(1), style: TextStyle(fontSize: 8), textAlign: TextAlign.end)) ]),
-        Row(children: [Text('Str', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9)), Expanded(child: Slider(value: st.drawThingsStrength, min: 0, max: 2, divisions: 40, activeColor: AppColors.formMasterAccent, onChanged: (v) => st.setDrawThingsStrength(v))), SizedBox(width: 24, child: Text(st.drawThingsStrength.toStringAsFixed(1), style: TextStyle(fontSize: 8), textAlign: TextAlign.end)) ]),
-        Row(children: [
-          Text('SeedMode', style: TextStyle(color: AppColors.textSecondary(context), fontSize: 9)),
-          DropdownButton<int>(value: st.drawThingsSeedMode, style: TextStyle(fontSize: 9), items: const [DropdownMenuItem(value: 0, child: Text('Rand', style: TextStyle(fontSize: 8))), DropdownMenuItem(value: 1, child: Text('Const', style: TextStyle(fontSize: 8))), DropdownMenuItem(value: 2, child: Text('PerImg', style: TextStyle(fontSize: 8))), DropdownMenuItem(value: 3, child: Text('Prompt', style: TextStyle(fontSize: 8)))], onChanged: (v) { if (v != null) st.setDrawThingsSeedMode(v); }),
-          Checkbox(value: st.drawThingsTeaCache, onChanged: (v) => st.setDrawThingsTeaCache(v ?? false), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
-          Text('Tea', style: TextStyle(fontSize: 8)),
-          Checkbox(value: st.drawThingsCfgZeroStar, onChanged: (v) => st.setDrawThingsCfgZeroStar(v ?? false), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
-          Text('Zero', style: TextStyle(fontSize: 8)),
-        ]),
+        Text(
+          'DT Advanced',
+          style: TextStyle(
+            color: AppColors.textSecondary(context),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Row(
+          children: [
+            Text(
+              'Shift',
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 9,
+              ),
+            ),
+            Expanded(
+              child: Slider(
+                value: st.drawThingsShift,
+                min: 0,
+                max: 10,
+                divisions: 100,
+                activeColor: AppColors.formMasterAccent,
+                onChanged: (v) => st.setDrawThingsShift(v),
+              ),
+            ),
+            SizedBox(
+              width: 24,
+              child: Text(
+                st.drawThingsShift.toStringAsFixed(1),
+                style: TextStyle(fontSize: 8),
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Text(
+              'Str',
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 9,
+              ),
+            ),
+            Expanded(
+              child: Slider(
+                value: st.drawThingsStrength,
+                min: 0,
+                max: 2,
+                divisions: 40,
+                activeColor: AppColors.formMasterAccent,
+                onChanged: (v) => st.setDrawThingsStrength(v),
+              ),
+            ),
+            SizedBox(
+              width: 24,
+              child: Text(
+                st.drawThingsStrength.toStringAsFixed(1),
+                style: TextStyle(fontSize: 8),
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Text(
+              'SeedMode',
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 9,
+              ),
+            ),
+            DropdownButton<int>(
+              value: st.drawThingsSeedMode,
+              style: TextStyle(fontSize: 9),
+              items: const [
+                DropdownMenuItem(
+                  value: 0,
+                  child: Text('Rand', style: TextStyle(fontSize: 8)),
+                ),
+                DropdownMenuItem(
+                  value: 1,
+                  child: Text('Const', style: TextStyle(fontSize: 8)),
+                ),
+                DropdownMenuItem(
+                  value: 2,
+                  child: Text('PerImg', style: TextStyle(fontSize: 8)),
+                ),
+                DropdownMenuItem(
+                  value: 3,
+                  child: Text('Prompt', style: TextStyle(fontSize: 8)),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) st.setDrawThingsSeedMode(v);
+              },
+            ),
+            Checkbox(
+              value: st.drawThingsTeaCache,
+              onChanged: (v) => st.setDrawThingsTeaCache(v ?? false),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            Text('Tea', style: TextStyle(fontSize: 8)),
+            Checkbox(
+              value: st.drawThingsCfgZeroStar,
+              onChanged: (v) => st.setDrawThingsCfgZeroStar(v ?? false),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            Text('Zero', style: TextStyle(fontSize: 8)),
+          ],
+        ),
       ],
     ];
   }

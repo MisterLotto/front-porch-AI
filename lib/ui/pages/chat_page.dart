@@ -1646,6 +1646,20 @@ class _ChatPageState extends State<ChatPage> {
     // User spec: neutral open (custom as starter), types via internal buttons (popup removed), no pregen boilerplate,
     // visualize uses slider N + think strip on craft, user box text + persona + char visual (no pers) + style to LLM.
     // Re-uses collected raw context. No new private methods added to this surface (thin).
+    // "Send to chat": save the studio result to disk and attach it to the
+    // conversation as an inline image message (same path the /image slash
+    // command uses — ChatServiceImages.addGeneratedImageMessage).
+    final imageGenService = Provider.of<ImageGenService>(
+      context,
+      listen: false,
+    );
+    Future<void> onSendToChat(Uint8List bytes, String prompt) async {
+      final path = await imageGenService.saveImageToDisk(bytes);
+      if (path != null) {
+        await chatService.addGeneratedImageMessage(path, prompt);
+      }
+    }
+
     await ImageStudio.show(
       context,
       mode: ImageGenMode.customPrompt,
@@ -1661,6 +1675,7 @@ class _ChatPageState extends State<ChatPage> {
       recentMessages: recentMessages,
       llmService: llmService,
       onAccept: onAccept,
+      onSendToChat: onSendToChat,
       // Stage 4: pass collected richer fields (keep launch site + studio show/ctor/_ctx + service thins + builder + workspace pills in sync).
       currentExpression: currentExpression,
       timeOfDay: timeOfDay,
@@ -1707,10 +1722,7 @@ class _ChatPageState extends State<ChatPage> {
               _chatFocusNode.requestFocus();
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   SizedBox(
@@ -2824,7 +2836,8 @@ class _ChatPageState extends State<ChatPage> {
             ),
 
           // ── Participant roster (only when more than one speaker) ──
-          if (cast.length > 1) _buildParticipantRoster(chatService, cast, focused),
+          if (cast.length > 1)
+            _buildParticipantRoster(chatService, cast, focused),
 
           // ── Director controls (group turn-taking) ──
           if (isGroup) _buildDirectorControls(chatService),
@@ -3029,7 +3042,6 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
-
 }
 
 Widget _buildRiskItem(IconData icon, String text) {

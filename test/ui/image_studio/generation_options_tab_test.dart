@@ -25,17 +25,27 @@ void main() {
       addTearDown(() => tester.view.resetPhysicalSize());
     }
 
-    testWidgets('renders enable switch and Image Source selector', (tester) async {
+    testWidgets('renders enable switch and Image Source selector', (
+      tester,
+    ) async {
       final fakeStorage = _TabFakeStorage();
       final fakeSvc = _TabFakeImageGenService();
 
       _setupViewport(tester);
-      await tester.pumpWidget(MaterialApp(
-        home: MultiProvider(providers: [
-          ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
-          ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
-        ], child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 2000), child: const Scaffold(body: GenerationOptionsTab()))),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Enable Image Generation'), findsOneWidget);
@@ -44,18 +54,30 @@ void main() {
       expect(find.text('Remote API'), findsOneWidget);
     });
 
-    testWidgets('Test Connection button renders for local backend', (tester) async {
+    testWidgets('Test Connection button renders for local backend', (
+      tester,
+    ) async {
       final fakeStorage = _TabFakeStorage(backend: 'a1111');
       final fakeSvc = _TabFakeImageGenService();
-      fakeSvc.localLoras = ['lora1.safetensors']; // for LoRA population in init fetch
+      fakeSvc.localLoras = [
+        'lora1.safetensors',
+      ]; // for LoRA population in init fetch
 
       _setupViewport(tester);
-      await tester.pumpWidget(MaterialApp(
-        home: MultiProvider(providers: [
-          ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
-          ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
-        ], child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 2000), child: const Scaffold(body: GenerationOptionsTab()))),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // Local backend (A1111) shows 'Server URL' and Test button text (reliable render, no tap for rig stability)
@@ -66,7 +88,10 @@ void main() {
       expect(find.text('Test to list models.'), findsOneWidget);
 
       // Explicit interaction for restored LoRA fidelity (post-populate tap dropdown + assert storage write)
-      expect(find.text('LoRA'), findsOneWidget); // the label is always visible for the block
+      expect(
+        find.text('LoRA'),
+        findsOneWidget,
+      ); // the label is always visible for the block
       final loraFields = find.byType(DropdownButtonFormField<String>);
       if (loraFields.evaluate().isNotEmpty) {
         await tester.tap(loraFields.last, warnIfMissed: false); // LoRA dropdown
@@ -80,17 +105,27 @@ void main() {
       }
     });
 
-    testWidgets('size chips and advanced sliders update storage', (tester) async {
+    testWidgets('size chips and advanced sliders update storage', (
+      tester,
+    ) async {
       final fakeStorage = _TabFakeStorage();
       final fakeSvc = _TabFakeImageGenService();
 
       _setupViewport(tester);
-      await tester.pumpWidget(MaterialApp(
-        home: MultiProvider(providers: [
-          ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
-          ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
-        ], child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 2000), child: const Scaffold(body: GenerationOptionsTab()))),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // Size labels present (chips render)
@@ -102,34 +137,54 @@ void main() {
       // expect(find.byType(Slider), findsWidgets);
     });
 
-    testWidgets('seed randomize and paradigm change call storage', (tester) async {
+    testWidgets('seed randomize and paradigm change call storage', (
+      tester,
+    ) async {
       final fakeStorage = _TabFakeStorage();
       final fakeSvc = _TabFakeImageGenService();
 
       _setupViewport(tester);
-      await tester.pumpWidget(MaterialApp(
-        home: MultiProvider(providers: [
-          ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
-          ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
-        ], child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 2000), child: const Scaffold(body: GenerationOptionsTab()))),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // Paradigm dropdown label exists (reliable render)
       expect(find.text('Prompt Format'), findsOneWidget);
     });
 
-    testWidgets('DT advanced checkbox/slider update storage (fidelity interaction)', (tester) async {
+    testWidgets('DT advanced checkbox/slider update storage (fidelity interaction)', (
+      tester,
+    ) async {
       final fakeStorage = _TabFakeStorage(backend: 'drawthings');
       final fakeSvc = _TabFakeImageGenService();
 
       _setupViewport(tester);
-      await tester.pumpWidget(MaterialApp(
-        home: MultiProvider(providers: [
-          ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
-          ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
-        ], child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 2000), child: const Scaffold(body: GenerationOptionsTab()))),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // Expand Advanced to show DT advanced (shift/tea etc)
@@ -159,7 +214,11 @@ void main() {
       final sliders = find.byType(Slider);
       if (sliders.evaluate().isNotEmpty) {
         try {
-          await tester.drag(sliders.first, const Offset(50.0, 0.0), warnIfMissed: false);
+          await tester.drag(
+            sliders.first,
+            const Offset(50.0, 0.0),
+            warnIfMissed: false,
+          );
           await tester.pumpAndSettle();
           expect(fakeStorage.lastSetShift, isNotNull);
         } catch (_) {
@@ -182,12 +241,16 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   @override
   bool get imageGenEnabled => false;
   @override
-  Future<void> setImageGenEnabled(bool v) async { notifyListeners(); }
+  Future<void> setImageGenEnabled(bool v) async {
+    notifyListeners();
+  }
 
   @override
   String get imageGenBackend => backend;
   @override
-  Future<void> setImageGenBackend(String v) async { notifyListeners(); }
+  Future<void> setImageGenBackend(String v) async {
+    notifyListeners();
+  }
 
   @override
   String get localImageGenUrl => 'http://127.0.0.1:7860';
@@ -232,7 +295,10 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   @override
   String get imageGenLora => '';
   @override
-  Future<void> setImageGenLora(String v) async { lastSetLora = v; notifyListeners(); }
+  Future<void> setImageGenLora(String v) async {
+    lastSetLora = v;
+    notifyListeners();
+  }
 
   @override
   double get imageGenLoraWeight => 0.8;
@@ -267,7 +333,10 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   @override
   double get drawThingsShift => 3.0;
   @override
-  Future<void> setDrawThingsShift(double v) async { lastSetShift = v; notifyListeners(); }
+  Future<void> setDrawThingsShift(double v) async {
+    lastSetShift = v;
+    notifyListeners();
+  }
 
   @override
   double get drawThingsStrength => 1.0;
@@ -282,7 +351,10 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   @override
   bool get drawThingsTeaCache => false;
   @override
-  Future<void> setDrawThingsTeaCache(bool v) async { lastSetTeaCache = v; notifyListeners(); }
+  Future<void> setDrawThingsTeaCache(bool v) async {
+    lastSetTeaCache = v;
+    notifyListeners();
+  }
 
   @override
   bool get drawThingsCfgZeroStar => false;
@@ -302,7 +374,8 @@ class _TabFakeImageGenSettings implements ImageGenSettings {
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
-class _TabFakeImageGenService extends ChangeNotifier implements ImageGenService {
+class _TabFakeImageGenService extends ChangeNotifier
+    implements ImageGenService {
   bool testResult = true;
   List<String> localModels = [];
   List<String> localLoras = [];
@@ -318,6 +391,8 @@ class _TabFakeImageGenService extends ChangeNotifier implements ImageGenService 
   @override
   Future<List<String>> fetchA1111Loras(String url) async => localLoras;
   @override
+  Future<List<String>> fetchDrawThingsLoras(String url) async => localLoras;
+  @override
   Future<List<String>> fetchA1111Samplers(String url) async => localSamplers;
 
   @override
@@ -328,9 +403,37 @@ class _TabFakeImageGenService extends ChangeNotifier implements ImageGenService 
   @override
   Future<List<ImageModelInfo>> fetchImageModels() async => [];
   @override
-  Future<Uint8List?> generateImage({required String prompt, String negativePrompt = '', String? size, Uint8List? referenceImage, String? model, bool isPortrait = false}) async => null;
+  Future<Uint8List?> generateImage({
+    required String prompt,
+    String negativePrompt = '',
+    String? size,
+    Uint8List? referenceImage,
+    String? model,
+    bool isPortrait = false,
+  }) async => null;
   @override
-  Future<String> generateSmartPrompt({required ImageGenMode mode, required String style, LLMService? llmService, String? customPrompt, String? lastMessage, String? characterName, String? characterDescription, String? characterPersonality, String? scenario, String? worldInfo, String? personaName, String? personaText, List<String>? recentMessages, String? currentExpression, String? timeOfDay, String? lightingHint, bool isGroupNonObserver = false, String? currentSpeakerId, String? userInstruction, int? visualizeNumMessages}) async => '';
+  Future<String> generateSmartPrompt({
+    required ImageGenMode mode,
+    required String style,
+    LLMService? llmService,
+    String? customPrompt,
+    String? lastMessage,
+    String? characterName,
+    String? characterDescription,
+    String? characterPersonality,
+    String? scenario,
+    String? worldInfo,
+    String? personaName,
+    String? personaText,
+    List<String>? recentMessages,
+    String? currentExpression,
+    String? timeOfDay,
+    String? lightingHint,
+    bool isGroupNonObserver = false,
+    String? currentSpeakerId,
+    String? userInstruction,
+    int? visualizeNumMessages,
+  }) async => '';
   @override
   String get statusMessage => '';
   @override

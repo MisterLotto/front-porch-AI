@@ -199,6 +199,15 @@ class ImageGenService extends ChangeNotifier {
     _lastSavedPath = null;
     notifyListeners();
 
+    // Portrait requests (character/persona portraits, guest card art) orient
+    // the configured size vertically when the caller didn't pass an explicit
+    // size. Previously this flag was accepted but ignored, so portraits came
+    // out landscape whenever the default size was landscape.
+    if (size == null && isPortrait) {
+      final (w, h) = _parseSize(_storage.imageGenSettings.imageGenSize);
+      if (w > h) size = '${h}x$w';
+    }
+
     try {
       Uint8List imageBytes;
 
@@ -240,6 +249,10 @@ class ImageGenService extends ChangeNotifier {
             final seedMode = _storage.drawThingsSeedMode;
             final teaCache = _storage.drawThingsTeaCache;
             final cfgZeroStar = _storage.drawThingsCfgZeroStar;
+            // Same shared LoRA setting the A1111 path uses; DT applies it
+            // natively via the generation config instead of a prompt tag.
+            final loraName = _storage.imageGenSettings.imageGenLora;
+            final loraWeight = _storage.imageGenSettings.imageGenLoraWeight;
 
             imageBytes = await _generateViaDrawThingsGrpc(
               grpcService: grpcService,
@@ -257,6 +270,11 @@ class ImageGenService extends ChangeNotifier {
               seedMode: seedMode,
               teaCache: teaCache,
               cfgZeroStar: cfgZeroStar,
+              loras: loraName.isEmpty
+                  ? const []
+                  : [
+                      {'file': loraName, 'weight': loraWeight},
+                    ],
               referenceImage: referenceImage,
             );
           } catch (e) {
@@ -957,7 +975,8 @@ class ImageGenService extends ChangeNotifier {
 
   /// Fetch models from a Draw Things server.
   ///
-  /// Uses the Draw Things gRPC CLI to fetch available .ckpt models (via the special Echo('models') response). LoRAs not surfaced here.
+  /// Uses the Draw Things gRPC CLI to fetch available .ckpt models (via the
+  /// special Echo('models') response). LoRAs come from [fetchDrawThingsLoras].
   Future<List<String>> fetchDrawThingsModels(String baseUrl) async {
     try {
       final grpcService = _ensureDrawThingsGrpc;
@@ -968,11 +987,24 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// Fetch LoRA files from a Draw Things server (gRPC CLI op 'loras' — the
+  /// same Echo('models') listing as [fetchDrawThingsModels], filtered to
+  /// LoRAs). The selected name is applied natively via the generation config.
+  Future<List<String>> fetchDrawThingsLoras(String baseUrl) async {
+    try {
+      final grpcService = _ensureDrawThingsGrpc;
+      return await grpcService.fetchLoras();
+    } catch (e) {
+      debugPrint('ImageGen: fetchDrawThingsLoras failed: $e');
+      return [];
+    }
+  }
+
   /// Fetch LoRAs from an A1111 / Forge / SD.Next server.
   ///
   /// Endpoint: GET /sdapi/v1/loras
   /// Returns a list of LoRA names (the `name` field from each entry).
-  /// Draw Things does not support this endpoint — returns empty list.
+  /// Draw Things uses [fetchDrawThingsLoras] instead (no HTTP endpoint).
   Future<List<String>> fetchA1111Loras(String baseUrl) async {
     final client = http.Client();
     try {
@@ -1260,7 +1292,7 @@ class ImageGenService extends ChangeNotifier {
   }
 
   /// Generate via Draw Things gRPC service (Python client bridge).
-  /// Extended with DT-native params + optional reference image (passed through to CLI).
+  /// Extended with DT-native params, LoRAs, + optional reference image (passed through to CLI).
   Future<Uint8List> _generateViaDrawThingsGrpc({
     required DrawThingsGrpcService grpcService,
     required String prompt,
@@ -1278,6 +1310,7 @@ class ImageGenService extends ChangeNotifier {
     bool teaCache = false,
     double teaCacheThreshold = 0.15,
     bool cfgZeroStar = false,
+    List<Map<String, dynamic>> loras = const [],
     Uint8List? referenceImage,
   }) async {
     return await grpcService.generateImage(
@@ -1296,6 +1329,7 @@ class ImageGenService extends ChangeNotifier {
       teaCache: teaCache,
       teaCacheThreshold: teaCacheThreshold,
       cfgZeroStar: cfgZeroStar,
+      loras: loras,
       referenceImageBytes: referenceImage,
     );
   }
