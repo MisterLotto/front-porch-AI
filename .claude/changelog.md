@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-08 — ci(nightly): REVERT the shim .dmg removal (in-app updater regression)
+
+- **Files:** .github/workflows/nightly.yml (restored the "Build unsigned shim DMG" step + the `Front_Porch_AI_Nightly.dmg` entries in the upload-artifact and gh-release lists; flow comment updated).
+- **Reason:** After the shim `.dmg` was dropped (fc4aeda), a macOS user hit an in-app-updater regression: the `.pkg` downloads "like always" but the app stays on the OLD version and re-prompts to update every launch. Confirmed with the user it's NOT the relocation-fork bug (single app in /Applications, no `.localized` duplicate) — the `.pkg` simply isn't applying. On paper removing the `.dmg` shouldn't affect this (the client prefers the `.pkg` regardless, and the `.pkg` build block is byte-identical), so the true mechanism is still unknown. Reverted to the known-good release shape while the `.pkg`-apply path is diagnosed rather than leave nightly updates broken.
+- **Note:** This revert restores the release shape but does NOT unstick an already-stuck `.pkg`-preferring client (it still picks the `.pkg`). Affected users update manually (download the release `.pkg`, double-click) until the root cause is fixed. Superseded the 2026-07-07 removal entry below.
+- **Verification:** nightly.yml parses as valid YAML; the DMG build step + both `.dmg` asset lines are present again.
+- **Commit:** (pending)
+
 ## 2026-07-07 — ci(nightly): drop the transitional unsigned macOS shim .dmg (nightly/Rawhide only)
 
 - **Files:** .github/workflows/nightly.yml.
