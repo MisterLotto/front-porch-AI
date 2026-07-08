@@ -128,6 +128,20 @@ void main(List<String> args) async {
       debugPrint('Caught SIGTERM — exiting immediately.');
       exit(0);
     });
+    // Ignore SIGPIPE. A write to a socket/pipe whose peer has already closed
+    // (a dropped web-server connection, the mDNSResponder/Tailscale sockets used
+    // when serving over the LAN or a tailnet, a subprocess stdio pipe) raises
+    // SIGPIPE, whose default disposition SILENTLY terminates the whole process
+    // with no crash report — the "app just vanishes from the dock when I toggle
+    // the web server on" bug in the signed/notarized build. (A `flutter run`
+    // dev VM already has SIGPIPE ignored, so it never surfaced in development.)
+    // Watching it with a no-op listener replaces the terminate-default with
+    // harmless delivery, so a broken write instead throws a normal, catchable
+    // SocketException in the code that did it. POSIX-only; SIGPIPE doesn't exist
+    // on Windows (guarded by the enclosing check).
+    ProcessSignal.sigpipe.watch().listen((_) {
+      debugPrint('Ignored SIGPIPE (broken pipe on a socket/pipe write).');
+    });
   }
 
   // Consolidate files BEFORE loading database or any configs.
