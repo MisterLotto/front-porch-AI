@@ -19,6 +19,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:front_porch_ai/utils/cpu_features.dart';
 
 /// Parsed output of `nvidia-smi --query-gpu=name,memory.total`.
 /// Used internally by [HardwareService._parseNvidiaSmi] so the multi-line CSV
@@ -64,6 +65,24 @@ class HardwareService extends ChangeNotifier {
 
   HardwareInfo? get hardwareInfo => _hardwareInfo;
   bool get isDetecting => _isDetecting;
+
+  /// True when this machine can only run local models on the CPU, slowly.
+  ///
+  /// Trigger: the CPU lacks AVX2 (so the ONLY KoboldCpp build that will launch
+  /// is the `oldpc` one) AND there is no NVIDIA GPU. The oldpc build is
+  /// "Cuda11 + AVX1" — it keeps CUDA for older NVIDIA cards but has no ROCm and
+  /// no Vulkan, so an AMD/Intel GPU (or no GPU) gets zero acceleration and
+  /// inference falls entirely onto the CPU. Returns false until detection has
+  /// run (so the warning never flashes prematurely) and on macOS (arm64/Metal,
+  /// where AVX2 is irrelevant). Drives the "expect slow performance" warning in
+  /// setup + model settings (desktop) and the web Models page.
+  bool get cpuOnlyLowPerf {
+    if (!Platform.isWindows && !Platform.isLinux) return false;
+    final info = _hardwareInfo;
+    if (info == null) return false;
+    if (cpuHasAvx2()) return false;
+    return info.vendor != 'Nvidia';
+  }
 
   HardwareService() {
     // Auto-detect hardware at creation so it's available everywhere,

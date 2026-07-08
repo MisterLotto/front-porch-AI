@@ -67,6 +67,15 @@ function BackendStatusCard({
   return (
     <section className="card">
       <h3>Local backend</h3>
+      {status.cpuOnlyLowPerf && (
+        <div className="cpu-warn">
+          <strong>⚠️ Slow performance expected on this PC</strong>
+          This computer's CPU doesn't support AVX2 and has no NVIDIA GPU, so the local AI
+          runs on the CPU only — AMD/Intel graphics can't be used by the compatible engine
+          build. Replies may be very slow. A newer CPU or an NVIDIA GPU is recommended, or
+          connect to a cloud model instead.
+        </div>
+      )}
       <p className="muted small">
         {status.running ? (status.modelReady ? 'Running · model ready' : `Running · ${status.statusMessage || 'loading…'}`) : 'Stopped'}
         {' · '}<strong>{status.loadedModel}</strong>

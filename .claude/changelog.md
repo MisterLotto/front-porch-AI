@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-07 — feat(backend): warn when a machine can only run local AI on the CPU (no AVX2 + no NVIDIA)
+
+- **Files:** lib/services/hardware_service.dart (`cpuOnlyLowPerf` getter), lib/ui/widgets/low_perf_cpu_warning.dart (NEW shared banner), lib/ui/widgets/widgets.dart (barrel export), lib/ui/widgets/setup_overlay.dart + lib/ui/dialogs/model_settings_dialog.dart (show it), lib/services/web/facade/backend_facade.dart (`cpuOnlyLowPerf` in status()), web_ui/src/components/models/types.ts + pages/ModelsPage.tsx + styles.css (web banner), assets/web_app/** (rebuilt), docs/Rawhide.md.
+- **Reason:** Follow-up to the AVX2 oldpc auto-select. The oldpc build is "Cuda11 + AVX1" — CUDA only, no ROCm and no Vulkan. So a non-AVX2 machine with an AMD/Intel GPU (or no GPU) gets ZERO acceleration and runs local models entirely on the CPU — painfully slow — with no way for the user to know why. They need a heads-up so they can grab an NVIDIA GPU / newer CPU or switch to a cloud model instead of assuming the app is broken.
+- **How fixed:** `HardwareService.cpuOnlyLowPerf` returns true only when (Windows/Linux) AND `!cpuHasAvx2()` AND the detected GPU vendor isn't Nvidia (an NVIDIA card still gets CUDA in oldpc). Returns false until GPU detection has run (no premature flash) and on macOS (arm64/Metal). Reuses the existing all-platform vendor detection in HardwareService. A single reusable warm-porch `LowPerfCpuWarning` widget (renders nothing when not applicable) is shown in the first-run setup overlay AND the model settings dialog — no duplicated copy. Web parity: the backend facade already receives HardwareService, so `status()` now carries the flag and the web Models page shows the same warning (new `.cpu-warn` amber banner in the warm palette).
+- **Verification:** flutter analyze (full project) — No issues. Web `tsc --noEmit` + vite build clean; assets/web_app rebuilt. Confirmed HardwareService is a top-level provider (main.dart:306) so both desktop surfaces resolve it, and `setHardwareService` is wired into the web host (main.dart:662) so the web flag is live (not a dangling `?? false`). Detection logic runtime-verified via the AVX2 unit test from the prior commit; the non-AVX2 branch can't be exercised on this arm64 host but the pieces are individually proven.
+- **Commit:** (pending)
+
 ## 2026-07-07 — feat(backend): auto-pick KoboldCpp's AVX2-free "oldpc" build on CPUs without AVX2
 
 - **Files:** lib/utils/cpu_features.dart (NEW — `cpuHasAvx2()`), lib/services/backend_manager.dart (detect once + oldpc in `_getExecutableName`/`_getDownloadUrl` + oldpc in the Linux alt-name lookup + a log line), lib/services/kobold_service.dart (Windows orphan-kill also targets `koboldcpp-oldpc.exe`), docs/Rawhide.md.

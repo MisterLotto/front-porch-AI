@@ -11,6 +11,8 @@ export interface BackendStatus {
   modelReady: boolean;
   statusMessage: string;
   loadedModel: string;
+  /** Host CPU lacks AVX2 and has no NVIDIA GPU → local AI runs CPU-only, slowly. */
+  cpuOnlyLowPerf?: boolean;
 }
 
 export interface LocalModel {

@@ -45,6 +45,10 @@ class BackendFacade {
       'modelReady': k.modelReady,
       'statusMessage': k.modelLoadingStatus,
       'loadedModel': _loadedModelName(),
+      // True when the desktop host can only run local models on the CPU, slowly
+      // (no AVX2 + no NVIDIA GPU → KoboldCpp's oldpc build, which has no ROCm/
+      // Vulkan). Mirrors the desktop warning so the web Models page warns too.
+      'cpuOnlyLowPerf': _hardware?.cpuOnlyLowPerf ?? false,
     };
   }
 

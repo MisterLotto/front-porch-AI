@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/setup_service.dart';
 import 'package:front_porch_ai/services/backend_manager.dart';
+import 'package:front_porch_ai/ui/widgets/low_perf_cpu_warning.dart';
 
 class SetupOverlay extends StatefulWidget {
   const SetupOverlay({super.key});
@@ -137,6 +138,7 @@ class _SetupOverlayState extends State<SetupOverlay> {
               style: const TextStyle(color: Colors.white70, fontSize: 13),
               textAlign: TextAlign.center,
             ),
+            const LowPerfCpuWarning(margin: EdgeInsets.only(top: 16)),
           ],
         );
       case SetupStep.startingBackend:

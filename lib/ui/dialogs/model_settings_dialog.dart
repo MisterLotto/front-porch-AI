@@ -704,6 +704,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const LowPerfCpuWarning(margin: EdgeInsets.only(bottom: 12)),
         ModelSelector(
           models: modelManager.models,
           selectedModelPath: _selectedModelPath,
