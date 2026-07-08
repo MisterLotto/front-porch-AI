@@ -7,7 +7,7 @@
 - **How fixed:** removed the "Build unsigned shim DMG" step and the `Front_Porch_AI_Nightly.dmg` entry from both the upload-artifact list and the gh-release `files:` list; tidied the macOS flow comment to note the shim was retired. Scope is NIGHTLY ONLY (Rawhide) per the maintainer decision — `beta-release.yml` and `release.yml` keep their `.dmg` shim for now (stable/beta users are more likely to still have a straggler on a `.dmg` install). No orphaned helper left (no `create-dmg.sh` fetch, no verification step referenced the dmg; upload uses `if-no-files-found: ignore`).
 - **Consequence (accepted):** a nightly client still on an old `.dmg`/`.app` install will no longer find a `.dmg` asset to auto-update from — expected, since the premise is that everyone's on `.pkg`. No client code changed.
 - **Verification:** `python3 -c "yaml.safe_load(...)"` — nightly.yml is valid YAML; grep confirms no remaining dmg/shim/hdiutil/create-dmg references except the explanatory comment.
-- **Commit:** (pending)
+- **Commit:** fc4aeda
 
 ## 2026-07-07 — feat(backend): warn when a machine can only run local AI on the CPU (no AVX2 + no NVIDIA)
 
