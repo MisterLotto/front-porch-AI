@@ -3869,5 +3869,5 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
   - `lib/services/chat/realism_prompt_builder.dart` — `_trustSection` warm-character bullet now banks a dependable +2 to +3 on turns that go well and reserves 0 for truly unremarkable turns / wary-type characters. Shared prompt, so one-shot and multi-call paths + 1:1 and group stay in parity by construction.
   - `web_ui/src/components/realism/realismTypes.ts` — mirrored the label fix: `trustTier` >=5 renamed 'Cautious Trust' → 'Warming' (WebUI parity).
 - **Parity:** injection change is main-gen prompt only (Dart backend serves both surfaces). Label change mirrored to web. web_ui asset rebuild (`npm run build`) pending before web ships.
-- **Verification:** flutter analyze on the 3 changed Dart files — No issues found. No tests referenced the old strings.
-- **Commit:** (pending user review)
+- **Verification:** flutter analyze on the 3 changed Dart files — No issues found. No tests referenced the old strings. User confirmed "working better now" in local `flutter run`.
+- **Commit:** c0abe1c
