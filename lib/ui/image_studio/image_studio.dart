@@ -501,6 +501,11 @@ class _ImageStudioState extends State<ImageStudio> {
         prompt: prompt,
         negativePrompt: _negativeForGen,
         size: size,
+        // Portrait modes orient the configured size vertically (same flag the
+        // /image command and the character creators pass).
+        isPortrait:
+            _activeMode == ImageGenMode.characterPortrait ||
+            _activeMode == ImageGenMode.userAvatar,
       );
 
       if (!mounted) return;

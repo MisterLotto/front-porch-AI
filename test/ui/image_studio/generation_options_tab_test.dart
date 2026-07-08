@@ -405,7 +405,7 @@ class _TabFakeImageGenService extends ChangeNotifier
   @override
   Future<Uint8List?> generateImage({
     required String prompt,
-    String negativePrompt = '',
+    String? negativePrompt,
     String? size,
     Uint8List? referenceImage,
     String? model,

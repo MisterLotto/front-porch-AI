@@ -66,7 +66,10 @@ class ChargenFacade {
   /// the desktop lore input). Reuses the shared [LoreExtractionService] so the
   /// scraping/cleaning behaves identically to the desktop creator.
   Future<Map<String, dynamic>> extractLoreFromUrls(List<String> urls) async {
-    final text = await LoreExtractionService.extractAll(urls: urls, files: const []);
+    final text = await LoreExtractionService.extractAll(
+      urls: urls,
+      files: const [],
+    );
     return {'lore': text, 'chars': text.length};
   }
 
@@ -81,7 +84,10 @@ class ChargenFacade {
       size: bytes.length,
       bytes: Uint8List.fromList(bytes),
     );
-    final text = await LoreExtractionService.extractAll(urls: const [], files: [file]);
+    final text = await LoreExtractionService.extractAll(
+      urls: const [],
+      files: [file],
+    );
     return {'lore': text, 'chars': text.length};
   }
 
@@ -89,7 +95,10 @@ class ChargenFacade {
   /// [fallback] when absent or empty. Used for greeting tones / lore categories.
   List<String> _strList(dynamic v, List<String> fallback) {
     if (v is List) {
-      final out = v.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+      final out = v
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
       return out.isEmpty ? fallback : out;
     }
     return fallback;
@@ -118,17 +127,20 @@ class ChargenFacade {
         .trim();
     if (clean.startsWith(',')) clean = clean.substring(1).trim();
     if (clean.isEmpty) clean = prompt;
-    _hub?.broadcast({'event': 'chargen_status', 'data': 'Generating portrait...'});
+    _hub?.broadcast({
+      'event': 'chargen_status',
+      'data': 'Generating portrait...',
+    });
     try {
-      return await svc.generateImage(
-        prompt: clean,
-        size: '512x512',
-        isPortrait: true,
-      );
+      // Configured size, oriented portrait, configured default negative —
+      // mirrors the desktop creator (the old fixed 512x512 failed on remote
+      // models that reject small sizes and capped local quality).
+      return await svc.generateImage(prompt: clean, isPortrait: true);
     } catch (_) {
-      _hub?.broadcast(
-        {'event': 'chargen_status', 'data': 'Portrait generation skipped'},
-      );
+      _hub?.broadcast({
+        'event': 'chargen_status',
+        'data': 'Portrait generation skipped',
+      });
       return null;
     }
   }
@@ -174,15 +186,17 @@ class ChargenFacade {
             : null,
         nsfwEnabled: fields['nsfwEnabled'] == true,
         reasoningEnabled: fields['reasoningEnabled'] == true,
-        onStatus: (s) => _hub?.broadcast({'event': 'chargen_status', 'data': s}),
+        onStatus: (s) =>
+            _hub?.broadcast({'event': 'chargen_status', 'data': s}),
       );
       if (card != null && mode == 'automated' && concept.isNotEmpty) {
         card.description = concept;
       }
       if (card == null) {
-        _hub?.broadcast(
-          {'event': 'chargen_error', 'error': 'generation produced no card'},
-        );
+        _hub?.broadcast({
+          'event': 'chargen_error',
+          'error': 'generation produced no card',
+        });
         return;
       }
       // Auto-render a portrait when an image backend is configured — the web
@@ -190,7 +204,10 @@ class ChargenFacade {
       // engine.dart). The LLM authored the prompt during generation; strip the
       // name (image models render names as text) and render a 512² portrait.
       final portrait = await _renderPortrait(name, gen.generatedImagePrompt);
-      final saved = await _characters.persistNewCard(card, portraitBytes: portrait);
+      final saved = await _characters.persistNewCard(
+        card,
+        portraitBytes: portrait,
+      );
       if (saved == null) {
         _hub?.broadcast({
           'event': 'chargen_error',

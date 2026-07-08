@@ -186,7 +186,7 @@ class ImageGenService extends ChangeNotifier {
   /// Returns the image bytes on success, or null on failure.
   Future<Uint8List?> generateImage({
     required String prompt,
-    String negativePrompt = '',
+    String? negativePrompt,
     String? size,
     Uint8List?
     referenceImage, // for img2img / reference conditioning (wired for Draw Things; ignored by others for now)
@@ -198,6 +198,13 @@ class ImageGenService extends ChangeNotifier {
     _lastGeneratedImage = null;
     _lastSavedPath = null;
     notifyListeners();
+
+    // Callers that don't specify a negative prompt (guest portraits, the
+    // character creators, web chargen) get the user's configured default —
+    // previously those paths silently generated with none. An explicit ''
+    // still means "no negative". Remote APIs ignore negatives (see the
+    // remote generators below).
+    negativePrompt ??= _storage.imageGenSettings.imageGenNegativePrompt;
 
     // Portrait requests (character/persona portraits, guest card art) orient
     // the configured size vertically when the caller didn't pass an explicit
@@ -1341,6 +1348,12 @@ class ImageGenService extends ChangeNotifier {
 
   /// Generate via OpenAI-compatible /images/generations endpoint.
   /// Works with Nano-GPT, direct OpenAI, and local A1111/SD servers.
+  ///
+  /// NOTE: [negativePrompt] is accepted for signature symmetry but is NOT
+  /// sent — the OpenAI images API has no negative_prompt parameter and
+  /// rejects unknown fields, so it is deliberately dropped here (and by
+  /// [_generateViaOpenRouter]). Negatives only take effect on the A1111 and
+  /// Draw Things backends.
   Future<Uint8List> _generateViaOpenAICompat({
     required String apiUrl,
     required String apiKey,
