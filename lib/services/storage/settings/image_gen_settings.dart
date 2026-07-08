@@ -23,8 +23,10 @@ import 'settings_base.dart';
 /// Lifted Stage 7.
 class ImageGenSettings with SettingsBase {
   bool _imageGenEnabled = false;
-  String _imageGenBackend = 'remote'; // 'remote', 'a1111', 'drawthings'
+  String _imageGenBackend =
+      'remote'; // 'remote', 'a1111', 'drawthings', 'comfyui'
   String _localImageGenUrl = 'http://127.0.0.1:7860';
+  String _comfyUiUrl = 'http://127.0.0.1:8188';
   String _imageGenModel = '';
   String _imageGenSize = '1024x1024';
   String _imageGenNegativePrompt = 'blurry, low quality, watermark, text';
@@ -50,6 +52,7 @@ class ImageGenSettings with SettingsBase {
   bool get imageGenEnabled => _imageGenEnabled;
   String get imageGenBackend => _imageGenBackend;
   String get localImageGenUrl => _localImageGenUrl;
+  String get comfyUiUrl => _comfyUiUrl;
   String get imageGenModel => _imageGenModel;
   String get imageGenSize => _imageGenSize;
   String get imageGenNegativePrompt => _imageGenNegativePrompt;
@@ -76,6 +79,8 @@ class ImageGenSettings with SettingsBase {
     _imageGenBackend = prefs?.getString(k('image_gen_backend')) ?? 'remote';
     _localImageGenUrl =
         prefs?.getString(k('local_image_gen_url')) ?? 'http://127.0.0.1:7860';
+    _comfyUiUrl =
+        prefs?.getString(k('comfy_ui_url')) ?? 'http://127.0.0.1:8188';
     _imageGenModel = prefs?.getString(k('image_gen_model')) ?? '';
     _imageGenSize = prefs?.getString(k('image_gen_size')) ?? '1024x1024';
     _imageGenNegativePrompt =
@@ -118,6 +123,12 @@ class ImageGenSettings with SettingsBase {
   Future<void> setLocalImageGenUrl(String value) async {
     _localImageGenUrl = value;
     await prefs?.setString(k('local_image_gen_url'), value);
+    notify();
+  }
+
+  Future<void> setComfyUiUrl(String value) async {
+    _comfyUiUrl = value;
+    await prefs?.setString(k('comfy_ui_url'), value);
     notify();
   }
 

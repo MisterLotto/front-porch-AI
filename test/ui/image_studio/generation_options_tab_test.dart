@@ -54,7 +54,7 @@ void main() {
       expect(find.text('Remote API'), findsOneWidget);
     });
 
-    testWidgets('Test Connection button renders for local backend', (
+    testWidgets('local backend auto-tests and shows the status card', (
       tester,
     ) async {
       final fakeStorage = _TabFakeStorage(backend: 'a1111');
@@ -80,12 +80,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Local backend (A1111) shows 'Server URL' and Test button text (reliable render, no tap for rig stability)
+      // Local backend (A1111) shows 'Server URL' and the auto-tested status
+      // card (the fake's testLocalConnection returns true, so it reads
+      // connected — the old manual Test button is gone by design).
       expect(find.text('Server URL'), findsOneWidget);
-      expect(find.text('Test'), findsOneWidget);
-
-      // Empty fetch state visibly for models (default empty localModels in this test)
-      expect(find.text('Test to list models.'), findsOneWidget);
+      expect(find.text('AUTOMATIC1111 connected'), findsOneWidget);
+      expect(find.text('Refresh'), findsOneWidget);
 
       // Explicit interaction for restored LoRA fidelity (post-populate tap dropdown + assert storage write)
       expect(
@@ -103,6 +103,36 @@ void main() {
           expect(fakeStorage.lastSetLora, 'lora1.safetensors');
         }
       }
+    });
+
+    testWidgets('ComfyUI backend shows URL field, status card, and models', (
+      tester,
+    ) async {
+      final fakeStorage = _TabFakeStorage(backend: 'comfyui');
+      final fakeSvc = _TabFakeImageGenService();
+      fakeSvc.localModels = ['sdxl.safetensors'];
+
+      _setupViewport(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('ComfyUI URL'), findsOneWidget);
+      expect(find.text('ComfyUI connected'), findsOneWidget);
+      // Discovered checkpoint appears in the model dropdown.
+      expect(find.text('Checkpoint Model'), findsOneWidget);
     });
 
     testWidgets('size chips and advanced sliders update storage', (
@@ -258,6 +288,11 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   Future<void> setLocalImageGenUrl(String v) async {}
 
   @override
+  String get comfyUiUrl => 'http://127.0.0.1:8188';
+  @override
+  Future<void> setComfyUiUrl(String v) async {}
+
+  @override
   String get drawThingsGrpcHost => '127.0.0.1';
   @override
   Future<void> setDrawThingsGrpcHost(String v) async {}
@@ -392,6 +427,12 @@ class _TabFakeImageGenService extends ChangeNotifier
   Future<List<String>> fetchA1111Loras(String url) async => localLoras;
   @override
   Future<List<String>> fetchDrawThingsLoras(String url) async => localLoras;
+  @override
+  Future<List<String>> fetchComfyModels(String url) async => localModels;
+  @override
+  Future<List<String>> fetchComfyLoras(String url) async => localLoras;
+  @override
+  Future<List<String>> fetchComfySamplers(String url) async => localSamplers;
   @override
   Future<List<String>> fetchA1111Samplers(String url) async => localSamplers;
 

@@ -18,6 +18,7 @@ interface ImageConfig {
   cfgScale: number;
   sampler: string;
   localUrl: string;
+  comfyUrl: string;
   drawThingsHost: string;
   drawThingsPort: number;
   remoteApiUrl: string;
@@ -84,6 +85,7 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
           <option value="remote">Remote API</option>
           <option value="a1111">Local (A1111)</option>
           <option value="drawthings">Local (Draw Things)</option>
+          <option value="comfyui">Local (ComfyUI)</option>
         </select>
       </label>
       {cfg.backend === 'remote' ? (
@@ -109,6 +111,17 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
           </label>
           <label>
             Model <span className="muted small">(checkpoint, optional)</span>
+            <input value={cfg.model} onChange={(e) => set({ model: e.target.value })} onBlur={() => saveConfig({ model: cfg.model })} />
+          </label>
+        </>
+      ) : cfg.backend === 'comfyui' ? (
+        <>
+          <label>
+            ComfyUI URL
+            <input value={cfg.comfyUrl} onChange={(e) => set({ comfyUrl: e.target.value })} onBlur={() => saveConfig({ comfyUrl: cfg.comfyUrl })} placeholder="http://127.0.0.1:8188" />
+          </label>
+          <label>
+            Model <span className="muted small">(checkpoint — required for ComfyUI)</span>
             <input value={cfg.model} onChange={(e) => set({ model: e.target.value })} onBlur={() => saveConfig({ model: cfg.model })} />
           </label>
         </>

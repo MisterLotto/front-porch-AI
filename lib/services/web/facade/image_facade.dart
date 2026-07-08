@@ -51,6 +51,7 @@ class ImageFacade {
       'cfgScale': img.imageGenCfgScale,
       'sampler': img.imageGenSampler,
       'localUrl': img.localImageGenUrl,
+      'comfyUrl': img.comfyUiUrl,
       'drawThingsHost': img.drawThingsGrpcHost,
       'drawThingsPort': img.drawThingsGrpcPort,
       // Remote (API) image gen reuses the shared remote backend config.
@@ -82,6 +83,9 @@ class ImageFacade {
     }
     if (f['localUrl'] is String) {
       await img.setLocalImageGenUrl(f['localUrl'] as String);
+    }
+    if (f['comfyUrl'] is String) {
+      await img.setComfyUiUrl(f['comfyUrl'] as String);
     }
     if (f['drawThingsHost'] is String) {
       await img.setDrawThingsGrpcHost(f['drawThingsHost'] as String);

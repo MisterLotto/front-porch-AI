@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/grpc/draw_things_grpc_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
+import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 
 /// Available image generation modes.
@@ -40,7 +41,8 @@ enum ImageGenMode {
 enum ImageGenBackend {
   remote,
   a1111,
-  drawThings;
+  drawThings,
+  comfyUi;
 
   static ImageGenBackend fromKey(String key) {
     switch (key) {
@@ -48,6 +50,8 @@ enum ImageGenBackend {
         return ImageGenBackend.a1111;
       case 'drawthings':
         return ImageGenBackend.drawThings;
+      case 'comfyui':
+        return ImageGenBackend.comfyUi;
       default:
         return ImageGenBackend.remote;
     }
@@ -59,6 +63,8 @@ enum ImageGenBackend {
         return 'a1111';
       case ImageGenBackend.drawThings:
         return 'drawthings';
+      case ImageGenBackend.comfyUi:
+        return 'comfyui';
       case ImageGenBackend.remote:
         return 'remote';
     }
@@ -70,6 +76,8 @@ enum ImageGenBackend {
         return 'AUTOMATIC1111';
       case ImageGenBackend.drawThings:
         return 'Draw Things';
+      case ImageGenBackend.comfyUi:
+        return 'ComfyUI';
       case ImageGenBackend.remote:
         return 'Remote API';
     }
@@ -143,10 +151,21 @@ class ImageGenService extends ChangeNotifier {
         return _storage.imageGenSettings.localImageGenUrl.isNotEmpty;
       case ImageGenBackend.drawThings:
         return _storage.imageGenSettings.drawThingsGrpcHost.isNotEmpty;
+      case ImageGenBackend.comfyUi:
+        return _storage.imageGenSettings.comfyUiUrl.isNotEmpty;
     }
   }
 
   DrawThingsGrpcService? _drawThingsGrpc;
+  ComfyUiService? _comfyUi;
+
+  ComfyUiService get _ensureComfyUi {
+    final url = _storage.imageGenSettings.comfyUiUrl;
+    if (_comfyUi == null || _comfyUi!.baseUrl != url) {
+      _comfyUi = ComfyUiService(baseUrl: url);
+    }
+    return _comfyUi!;
+  }
 
   // Thin delegation hook for prompt construction.
   // Full ownership of ImageGenContext mapping semantics, mode contracts (visualizeScene N-slider
@@ -322,6 +341,48 @@ class ImageGenService extends ChangeNotifier {
             samplerName: _storage.imageGenSettings.imageGenSampler,
             seed: _storage.imageGenSettings.imageGenSeed,
           );
+        }
+      } else if (backend == ImageGenBackend.comfyUi) {
+        // ── ComfyUI (HTTP + bundled txt2img workflow) ──────────────────
+        _statusMessage = 'Connecting to ComfyUI...';
+        notifyListeners();
+        try {
+          final comfy = _ensureComfyUi;
+          final (width, height) = _parseSize(
+            size ?? _storage.imageGenSettings.imageGenSize,
+          );
+          // The stored sampler is shared across backends and may be an
+          // A1111-style name; normalize it against what this server offers.
+          final available = await comfy.fetchSamplers();
+          final storedSampler = _storage.imageGenSettings.imageGenSampler;
+          imageBytes = await comfy.generateImage(
+            prompt: prompt,
+            negativePrompt: negativePrompt,
+            model: model ?? _storage.imageGenSettings.imageGenModel,
+            width: width,
+            height: height,
+            steps: _storage.imageGenSettings.imageGenSteps,
+            cfgScale: _storage.imageGenSettings.imageGenCfgScale,
+            seed: _storage.imageGenSettings.imageGenSeed,
+            samplerName: ComfyUiService.normalizeSampler(
+              storedSampler,
+              available,
+            ),
+            scheduler: ComfyUiService.schedulerFor(storedSampler),
+            loraName: _storage.imageGenSettings.imageGenLora,
+            loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
+          );
+        } catch (e) {
+          // Sanitize for user display (mirrors the Draw Things branch).
+          final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+          _statusMessage = msg.startsWith('ComfyUI') || msg.contains('model')
+              ? msg
+              : 'ComfyUI generation failed. Check that ComfyUI is running and '
+                    'the URL is correct.';
+          debugPrint('ImageGen: ComfyUI error: $e');
+          _isGenerating = false;
+          notifyListeners();
+          return null;
         }
       } else {
         // ── Remote API ─────────────────────────────────────────────────
@@ -915,12 +976,12 @@ class ImageGenService extends ChangeNotifier {
 
   /// Test whether a local image-gen server is reachable.
   ///
-  /// For Draw Things, uses gRPC. For A1111, uses HTTP.
+  /// For Draw Things, uses gRPC. For ComfyUI, GET /system_stats. For A1111,
+  /// GET /sdapi/v1/sd-models.
   Future<bool> testLocalConnection(String baseUrl) async {
-    final isDrawThings =
-        _storage.imageGenSettings.imageGenBackend == 'drawthings';
+    final backendKey = _storage.imageGenSettings.imageGenBackend;
 
-    if (isDrawThings) {
+    if (backendKey == 'drawthings') {
       try {
         final grpcService = _ensureDrawThingsGrpc;
         return await grpcService.testConnection();
@@ -928,6 +989,8 @@ class ImageGenService extends ChangeNotifier {
         debugPrint('ImageGen: Draw Things connection test failed: $e');
         return false;
       }
+    } else if (backendKey == 'comfyui') {
+      return _ensureComfyUi.testConnection();
     } else {
       final client = http.Client();
       try {
@@ -1007,6 +1070,17 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// ComfyUI discovery — checkpoints / LoRAs / samplers all come from one
+  /// GET /object_info payload (see [ComfyUiService]); URL from settings.
+  Future<List<String>> fetchComfyModels(String baseUrl) =>
+      _ensureComfyUi.fetchModels();
+
+  Future<List<String>> fetchComfyLoras(String baseUrl) =>
+      _ensureComfyUi.fetchLoras();
+
+  Future<List<String>> fetchComfySamplers(String baseUrl) =>
+      _ensureComfyUi.fetchSamplers();
+
   /// Fetch LoRAs from an A1111 / Forge / SD.Next server.
   ///
   /// Endpoint: GET /sdapi/v1/loras
@@ -1083,16 +1157,15 @@ class ImageGenService extends ChangeNotifier {
   /// Returns true if the model was successfully switched and confirmed ready.
   Future<bool> switchLocalModel(String baseUrl, String modelName) async {
     if (modelName.isEmpty) return false;
-    final isDrawThings =
-        _storage.imageGenSettings.imageGenBackend == 'drawthings';
-    if (isDrawThings) {
-      // Draw Things has no separate switch endpoint exposed via our gRPC CLI.
-      // The requested 'model' is passed per-generation inside the config dict
-      // (see _generateViaDrawThingsGrpc + DrawThingsGrpcService). Treat as
-      // immediate success so web API / legacy callers and the lastLoaded
-      // tracking continue to work without error.
+    final backendKey = _storage.imageGenSettings.imageGenBackend;
+    if (backendKey == 'drawthings' || backendKey == 'comfyui') {
+      // Draw Things and ComfyUI have no separate switch endpoint — the model
+      // is named per-generation (DT config dict / ComfyUI workflow graph).
+      // Treat as immediate success so web API / legacy callers and the
+      // lastLoaded tracking continue to work without error.
       debugPrint(
-        'ImageGen: switchLocalModel: DT backend — recording $modelName (sent at generate time; no pre-load RPC)',
+        'ImageGen: switchLocalModel: $backendKey backend — recording '
+        '$modelName (sent at generate time; no pre-load call)',
       );
       _lastLoadedCheckpoint = modelName;
       return true;

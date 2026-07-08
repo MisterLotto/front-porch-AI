@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/ui/image_studio/connection_status_card.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 const List<({String label, int value})> _drawThingsSamplers = [
@@ -55,6 +56,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   final _seedController = TextEditingController();
   final _dtHostController = TextEditingController();
   final _dtPortController = TextEditingController();
+  final _comfyUrlController = TextEditingController();
   double? _dragLoraWeight;
   double? _dragSteps;
   double? _dragCfgScale;
@@ -68,11 +70,15 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     _seedController.text = s.imageGenSeed.toString();
     _dtHostController.text = s.drawThingsGrpcHost;
     _dtPortController.text = s.drawThingsGrpcPort.toString();
+    _comfyUrlController.text = s.comfyUiUrl;
     _fetchModels();
+    // Auto-test local backends on open — the status card shows the result and
+    // a successful test populates models/samplers/LoRAs, so novices never
+    // have to find a Test button. (Post-frame: _testConnection uses Provider.)
     if (s.imageGenBackend != 'remote') {
-      _fetchLocalModels(s.localImageGenUrl);
-      _fetchLocalSamplers(s.localImageGenUrl);
-      _fetchLocalLoras(s.localImageGenUrl);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _testConnection();
+      });
     }
   }
 
@@ -83,6 +89,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     _seedController.dispose();
     _dtHostController.dispose();
     _dtPortController.dispose();
+    _comfyUrlController.dispose();
     super.dispose();
   }
 
@@ -100,13 +107,18 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
 
   Future<void> _fetchLocalModels(String url) async {
     final st = Provider.of<StorageService>(context, listen: false);
-    final isDT = st.imageGenBackend == 'drawthings';
-    if (!isDT && url.isEmpty) return;
+    final backend = st.imageGenBackend;
+    final isDT = backend == 'drawthings';
+    final isComfy = backend == 'comfyui';
+    if (!isDT && !isComfy && url.isEmpty) return;
     if (isDT && st.drawThingsGrpcHost.isEmpty) return;
+    if (isComfy && st.comfyUiUrl.isEmpty) return;
     setState(() => _loadingLocalModels = true);
     final svc = Provider.of<ImageGenService>(context, listen: false);
     final ms = isDT
         ? await svc.fetchDrawThingsModels(url)
+        : isComfy
+        ? await svc.fetchComfyModels(url)
         : await svc.fetchA1111Models(url);
     if (mounted) {
       setState(() {
@@ -117,9 +129,13 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   }
 
   Future<void> _fetchLocalSamplers(String url) async {
-    if (url.isEmpty) return;
+    final st = Provider.of<StorageService>(context, listen: false);
+    final isComfy = st.imageGenBackend == 'comfyui';
+    if (!isComfy && url.isEmpty) return;
     final svc = Provider.of<ImageGenService>(context, listen: false);
-    final ss = await svc.fetchA1111Samplers(url);
+    final ss = isComfy
+        ? await svc.fetchComfySamplers(url)
+        : await svc.fetchA1111Samplers(url);
     if (mounted) {
       setState(() {
         _localSamplers = ss;
@@ -129,15 +145,20 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
 
   Future<void> _fetchLocalLoras(String url) async {
     // Mirrors the _fetchLocalModels guard: Draw Things lists LoRAs over gRPC
-    // (no URL needed), A1111 needs the local server URL.
+    // and ComfyUI via its own URL setting; A1111 needs the local server URL.
     final st = Provider.of<StorageService>(context, listen: false);
-    final isDT = st.imageGenBackend == 'drawthings';
-    if (!isDT && url.isEmpty) return;
+    final backend = st.imageGenBackend;
+    final isDT = backend == 'drawthings';
+    final isComfy = backend == 'comfyui';
+    if (!isDT && !isComfy && url.isEmpty) return;
     if (isDT && st.drawThingsGrpcHost.isEmpty) return;
+    if (isComfy && st.comfyUiUrl.isEmpty) return;
     setState(() => _loadingLoras = true);
     final svc = Provider.of<ImageGenService>(context, listen: false);
     final loras = isDT
         ? await svc.fetchDrawThingsLoras(url)
+        : isComfy
+        ? await svc.fetchComfyLoras(url)
         : await svc.fetchA1111Loras(url);
     if (mounted) {
       setState(() {
@@ -156,6 +177,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   Future<void> _testConnection() async {
     final st = Provider.of<StorageService>(context, listen: false);
     final isDT = st.imageGenBackend == 'drawthings';
+    final isComfy = st.imageGenBackend == 'comfyui';
     String u = _localUrlController.text.trim();
     if (isDT) {
       final h = _dtHostController.text.trim();
@@ -163,6 +185,9 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
       final host = h.isNotEmpty ? h : st.drawThingsGrpcHost;
       final port = p.isNotEmpty ? p : st.drawThingsGrpcPort.toString();
       u = '$host:$port';
+    } else if (isComfy) {
+      final typed = _comfyUrlController.text.trim();
+      u = typed.isNotEmpty ? typed : st.comfyUiUrl;
     }
     if (u.isEmpty) return;
     setState(() {
@@ -285,9 +310,15 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             child: GestureDetector(
               onTap: () {
                 st.setImageGenBackend(b.key);
-                if (b != ImageGenBackend.remote) {
-                  _fetchLocalModels(st.localImageGenUrl);
-                }
+                setState(() {
+                  _connectionOk = null;
+                  _localModels = [];
+                  _localLoras = [];
+                  _localSamplers = [];
+                });
+                // Auto-test the newly selected local backend (the status card
+                // reflects progress; success populates models/LoRAs/samplers).
+                if (b != ImageGenBackend.remote) _testConnection();
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
@@ -309,6 +340,8 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                           ? Icons.cloud_outlined
                           : b == ImageGenBackend.drawThings
                           ? Icons.apple
+                          : b == ImageGenBackend.comfyUi
+                          ? Icons.account_tree_outlined
                           : Icons.computer_outlined,
                       size: 16,
                       color: sel ? ac : AppColors.iconSecondary(context),
@@ -409,30 +442,28 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
 
   Widget _buildLocalPanel(StorageService st) {
     final isDT = st.imageGenBackend == 'drawthings';
+    final isComfy = st.imageGenBackend == 'comfyui';
+    final backend = ImageGenBackend.fromKey(st.imageGenBackend);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerOf(context),
-            borderRadius: BorderRadius.circular(8),
-            border: Border(
-              left: BorderSide(
-                color: isDT ? AppColors.formMasterAccent : AppColors.userBubble,
-                width: 3,
-              ),
-            ),
-          ),
-          child: Text(
-            isDT
-                ? 'Draw Things gRPC (default port 7859). Test to list models. Selection used on next generation.'
-                : 'A1111 --api. Test to list/switch.',
-            style: TextStyle(
-              color: AppColors.textSecondary(context),
-              fontSize: 10,
-            ),
-          ),
+        // One glanceable status line + Retry, fed by the automatic connection
+        // test (on open and on backend switch). Replaces the old per-backend
+        // Test buttons and status icons.
+        ConnectionStatusCard(
+          backendLabel: backend.label,
+          connected: _connectionOk,
+          testing: _testingConnection,
+          modelCount: _localModels.length,
+          loraCount: _localLoras.length,
+          notReachableHint: isDT
+              ? 'Is Draw Things running with its gRPC server enabled? '
+                    'Default port 7859.'
+              : isComfy
+              ? 'Is ComfyUI running? It listens on http://127.0.0.1:8188 '
+                    'by default.'
+              : 'Is Stable Diffusion WebUI running with the --api flag?',
+          onRetry: _testConnection,
         ),
         const SizedBox(height: 8),
         if (isDT) ...[
@@ -483,41 +514,6 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                   },
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              ElevatedButton(
-                onPressed: _testingConnection ? null : _testConnection,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.surfaceContainerOf(context),
-                  foregroundColor: AppColors.textPrimary(context),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                ),
-                child: _testingConnection
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.formMasterAccent,
-                        ),
-                      )
-                    : const Text('Test', style: TextStyle(fontSize: 11)),
-              ),
-              const SizedBox(width: 6),
-              if (_connectionOk != null)
-                Icon(
-                  _connectionOk! ? Icons.check_circle : Icons.cancel,
-                  color: _connectionOk!
-                      ? AppColors.logReady
-                      : AppColors.logError,
-                  size: 16,
-                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -618,6 +614,98 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               fontSize: 9,
             ),
           ),
+        ] else if (isComfy) ...[
+          Text(
+            'ComfyUI URL',
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextField(
+            controller: _comfyUrlController,
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 12,
+            ),
+            decoration: _deco(hint: 'http://127.0.0.1:8188'),
+            onChanged: (v) {
+              st.setComfyUiUrl(v.trim());
+              setState(() {
+                _connectionOk = null;
+                _localModels = [];
+              });
+            },
+            onSubmitted: (_) => _testConnection(),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Checkpoint Model',
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (_loadingLocalModels)
+            const Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.formMasterAccent,
+                ),
+              ),
+            )
+          else if (_localModels.isEmpty)
+            Text(
+              'No models found yet — Retry above once ComfyUI is running.',
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 10,
+              ),
+            )
+          else
+            DropdownButtonFormField<String>(
+              key: ValueKey('comfy-checkpoint-${st.imageGenModel}'),
+              initialValue: _localModels.contains(st.imageGenModel)
+                  ? st.imageGenModel
+                  : null,
+              dropdownColor: AppColors.surfaceContainerOf(context),
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 11,
+              ),
+              isExpanded: true,
+              decoration: _deco(hint: 'Select'),
+              items: _localModels
+                  .map(
+                    (m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(
+                        m,
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) st.setImageGenModel(v);
+              },
+            ),
+          const SizedBox(height: 4),
+          Text(
+            'The model is applied per generation — no separate load step.',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 9,
+            ),
+          ),
         ] else ...[
           Text(
             'Server URL',
@@ -627,71 +715,18 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _localUrlController,
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 12,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'http://127.0.0.1:7860',
-                    hintStyle: TextStyle(
-                      color: AppColors.textTertiary(context),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.surfaceContainerOf(context),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    isDense: true,
-                    suffixIcon: _connectionOk == null
-                        ? null
-                        : Icon(
-                            _connectionOk! ? Icons.check_circle : Icons.cancel,
-                            color: _connectionOk!
-                                ? AppColors.logReady
-                                : AppColors.logError,
-                            size: 16,
-                          ),
-                  ),
-                  onChanged: (v) {
-                    st.setLocalImageGenUrl(v.trim());
-                    setState(() => _connectionOk = null);
-                  },
-                  onSubmitted: (_) => _testConnection(),
-                ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton(
-                onPressed: _testingConnection ? null : _testConnection,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.surfaceContainerOf(context),
-                  foregroundColor: AppColors.textPrimary(context),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                ),
-                child: _testingConnection
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.formMasterAccent,
-                        ),
-                      )
-                    : const Text('Test', style: TextStyle(fontSize: 11)),
-              ),
-            ],
+          TextField(
+            controller: _localUrlController,
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 12,
+            ),
+            decoration: _deco(hint: 'http://127.0.0.1:7860'),
+            onChanged: (v) {
+              st.setLocalImageGenUrl(v.trim());
+              setState(() => _connectionOk = null);
+            },
+            onSubmitted: (_) => _testConnection(),
           ),
           const SizedBox(height: 8),
           Text(

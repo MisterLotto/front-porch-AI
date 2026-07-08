@@ -172,6 +172,8 @@ class FakeStorageService extends ChangeNotifier implements StorageService {
   @override
   String get localImageGenUrl => '';
   @override
+  String get comfyUiUrl => '';
+  @override
   int get imageGenSeed => 0;
   @override
   String get drawThingsGrpcHost => '';
