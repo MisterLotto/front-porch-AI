@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-07 — ci(nightly): drop the transitional unsigned macOS shim .dmg (nightly/Rawhide only)
+
+- **Files:** .github/workflows/nightly.yml.
+- **Reason:** The nightly macOS build published a notarized `.pkg` PLUS an unsigned shim `.dmg`. The shim only existed as a bridge so the in-app updater could still reach users who'd installed via the old `.dmg`/`.app`. Per maintainer: all macOS nightly users have moved to the `.pkg` installer, so the shim is now dead weight (and an unsigned artifact we'd rather not keep shipping).
+- **How fixed:** removed the "Build unsigned shim DMG" step and the `Front_Porch_AI_Nightly.dmg` entry from both the upload-artifact list and the gh-release `files:` list; tidied the macOS flow comment to note the shim was retired. Scope is NIGHTLY ONLY (Rawhide) per the maintainer decision — `beta-release.yml` and `release.yml` keep their `.dmg` shim for now (stable/beta users are more likely to still have a straggler on a `.dmg` install). No orphaned helper left (no `create-dmg.sh` fetch, no verification step referenced the dmg; upload uses `if-no-files-found: ignore`).
+- **Consequence (accepted):** a nightly client still on an old `.dmg`/`.app` install will no longer find a `.dmg` asset to auto-update from — expected, since the premise is that everyone's on `.pkg`. No client code changed.
+- **Verification:** `python3 -c "yaml.safe_load(...)"` — nightly.yml is valid YAML; grep confirms no remaining dmg/shim/hdiutil/create-dmg references except the explanatory comment.
+- **Commit:** (pending)
+
 ## 2026-07-07 — feat(backend): warn when a machine can only run local AI on the CPU (no AVX2 + no NVIDIA)
 
 - **Files:** lib/services/hardware_service.dart (`cpuOnlyLowPerf` getter), lib/ui/widgets/low_perf_cpu_warning.dart (NEW shared banner), lib/ui/widgets/widgets.dart (barrel export), lib/ui/widgets/setup_overlay.dart + lib/ui/dialogs/model_settings_dialog.dart (show it), lib/services/web/facade/backend_facade.dart (`cpuOnlyLowPerf` in status()), web_ui/src/components/models/types.ts + pages/ModelsPage.tsx + styles.css (web banner), assets/web_app/** (rebuilt), docs/Rawhide.md.
