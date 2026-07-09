@@ -682,11 +682,26 @@ ${_jsonInstruction(tier)}''';
   // ── PIPELINE STAGES ─────────────────────────────────────────────────
 
   /// Call the LLM and get a text response. Streams tokens to _streamingText for UI.
+  ///
+  /// Every story stage funnels through here, so this is also where backend
+  /// availability is enforced: the story pages and the web client surface
+  /// pipeline errors verbatim, and a raw SocketException ("The remote computer
+  /// refused the network connection" on Windows) tells users nothing. Guard
+  /// up-front and translate connection failures into a plain-language
+  /// [LlmUnavailableException] instead.
   Future<String> _callLLM(
     String prompt, {
     int maxLength = 4096,
     double temp = 0.8,
   }) async {
+    if (!_llmService.isReady) {
+      throw LlmUnavailableException(
+        'The AI backend (${_llmService.backendName}) isn\'t ready. Stories '
+        'use the same AI engine as chat — start it and load a model in '
+        'Settings (or set up your remote API), then try again.',
+      );
+    }
+
     // Prepend an anti-thinking instruction for reasoning models
     final fullPrompt =
         'Do NOT use <think> tags or chain-of-thought reasoning. Respond directly.\n\n$prompt';
@@ -706,16 +721,28 @@ ${_jsonInstruction(tier)}''';
 
     final buffer = StringBuffer();
     int notifyCounter = 0;
-    await for (final token in _llmService.generateStream(params)) {
-      buffer.write(token);
-      _streamingText = buffer.toString();
-      _tokenCount++;
-      notifyCounter++;
-      // Throttle UI updates to every 3 tokens to avoid jank
-      if (notifyCounter >= 3) {
-        notifyCounter = 0;
-        notifyListeners();
+    try {
+      await for (final token in _llmService.generateStream(params)) {
+        buffer.write(token);
+        _streamingText = buffer.toString();
+        _tokenCount++;
+        notifyCounter++;
+        // Throttle UI updates to every 3 tokens to avoid jank
+        if (notifyCounter >= 3) {
+          notifyCounter = 0;
+          notifyListeners();
+        }
       }
+    } catch (e) {
+      if (looksLikeBackendUnreachable(e)) {
+        throw LlmUnavailableException(
+          'Couldn\'t reach the AI backend (${_llmService.backendName}) — '
+          'nothing answered at its address, or it stopped responding '
+          'mid-generation. Make sure the engine is running with a model '
+          'loaded (stories use the same AI backend as chat), then try again.',
+        );
+      }
+      rethrow;
     }
     // Final update
     _streamingText = buffer.toString();

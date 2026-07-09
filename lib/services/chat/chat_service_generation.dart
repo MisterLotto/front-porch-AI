@@ -1428,14 +1428,7 @@ extension ChatServiceGeneration on ChatService {
       // "Connection closed before full header was received" is thrown by the http package
       // when the HTTP client is closed mid-stream (either by abortGeneration() or a process
       // crash/restart). Treat it the same as a user cancel — keep the partial response.
-      final errStr = e.toString();
-      final isConnectionClosed =
-          errStr.contains('Connection closed before full header') ||
-          errStr.contains('Connection refused') ||
-          errStr.contains('errno = 61') || // macOS ECONNREFUSED
-          errStr.contains('SocketException') ||
-          (errStr.contains('ClientException') && errStr.contains('closed'));
-      final treatAsCancel = wasCancelled || isConnectionClosed;
+      final treatAsCancel = wasCancelled || looksLikeBackendUnreachable(e);
 
       // User-initiated cancel (or forced client close) — keep the partial response, no error message
       if (treatAsCancel) {
