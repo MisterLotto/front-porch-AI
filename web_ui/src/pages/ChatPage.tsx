@@ -50,6 +50,9 @@ interface ChatState {
   // Crafted /image prompt parked for review (review setting on) — the modal
   // resolves it via POST /api/chat/image-review.
   imagePromptReview?: string;
+  // Current model's tool-calling verdict (desktop sidebar pill parity);
+  // retest via POST /api/chat/tool-test.
+  toolSupport?: { state: string; testing: boolean };
 }
 
 export function ChatPage() {
@@ -395,6 +398,7 @@ export function ChatPage() {
       onCommand={sendMessage}
       cast={cast}
       onFocus={focusParticipant}
+      toolSupport={state.toolSupport}
     />
   ) : null;
 

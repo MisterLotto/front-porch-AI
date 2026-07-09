@@ -93,6 +93,7 @@ import 'package:front_porch_ai/services/chat/growth_review.dart';
 import 'package:front_porch_ai/services/chat/growth_service.dart';
 import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/tool_support_tester.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
 
@@ -2317,6 +2318,27 @@ class ChatService extends ChangeNotifier {
         '|${_storageService.lastUsedModelPath ?? ''}';
   }
 
+  /// Active tool-support prober behind the sidebar's tool-calling pill:
+  /// verdicts land on the same [_toolProbe] the passes use, auto-retests on
+  /// backend/model switches, and backs the pill's tap-to-retest.
+  late final _toolSupportTester = ToolSupportTester(
+    probe: _toolProbe,
+    fireToolEval: _fireToolEval,
+    getBackendIdentity: () => _evalBackendIdentity,
+    isBackendReady: () =>
+        (testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService)
+            .isReady,
+    isBusy: () => _isGenerating,
+    onNotify: notifyListeners,
+  );
+
+  /// The current model's tool-calling verdict (sidebar pill + web facade).
+  ToolCallSupport get toolCallSupport => _toolSupportTester.current;
+  bool get isTestingToolSupport => _toolSupportTester.isTesting;
+
+  /// Re-probe the current backend+model's tool support (pill tap).
+  Future<void> testToolCalling() => _toolSupportTester.test(force: true);
+
   late final _journalMaintenance = JournalMaintenance(
     store: _journalStore,
     review: _journalReview,
@@ -2680,7 +2702,19 @@ class ChatService extends ChangeNotifier {
     this._userPersonaService,
     this._storageService,
     this._worldRepository,
-  );
+  ) {
+    // Probe verdicts land from background passes and the manual test alike —
+    // rebroadcast so the sidebar's tool-calling pill repaints live.
+    _toolProbe.addListener(notifyListeners);
+    // Local model path / remote model name changes alter the eval identity —
+    // retest tool support for the new model (sidebar pill contract).
+    _storageService.addListener(_onBackendIdentityMaybeChanged);
+  }
+
+  void _onBackendIdentityMaybeChanged() {
+    if (_disposed) return;
+    _toolSupportTester.onBackendMaybeChanged();
+  }
 
   /// Set the database instance after construction.
   void setDatabase(AppDatabase db) {
@@ -2981,6 +3015,9 @@ class ChatService extends ChangeNotifier {
   /// Set the LLMProvider after construction (to break circular dependency in provider tree).
   void setLLMProvider(LLMProvider provider) {
     _llmProvider = provider;
+    // Backend switches and local-engine ready transitions flow through the
+    // provider — retest tool support when the identity changes and is ready.
+    provider.addListener(_onBackendIdentityMaybeChanged);
   }
 
   /// Set the TtsService after construction (for TTS-aware auto-play delay).
@@ -4442,6 +4479,9 @@ class ChatService extends ChangeNotifier {
     _cancelIdleTimer();
     _guestStatusClearTimer?.cancel();
     _characterRepository?.removeListener(_onCharacterLibraryChanged);
+    _storageService.removeListener(_onBackendIdentityMaybeChanged);
+    _llmProvider?.removeListener(_onBackendIdentityMaybeChanged);
+    _toolProbe.removeListener(notifyListeners);
     super.dispose();
   }
 }

@@ -304,6 +304,7 @@ class JournalMaintenance {
     if (!probe.isXmlOnly(backend)) {
       final resp = await fireToolEval(prompt(toolsMode: true), kJournalTools);
       if (resp != null) {
+        if (resp.calls.isNotEmpty) probe.markSupported(backend);
         var (ops, recap) = parseJournalToolCalls(resp.calls);
         if (ops.isEmpty && recap == null && resp.text.trim().isNotEmpty) {
           // The model ignored the tools but wrote text — salvage any tags.

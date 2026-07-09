@@ -360,6 +360,7 @@ class GrowthService {
     if (!probe.isXmlOnly(backend)) {
       final resp = await fireToolEval(prompt(toolsMode: true), kGrowthTools);
       if (resp != null) {
+        if (resp.calls.isNotEmpty) probe.markSupported(backend);
         var ops = parseGrowthToolCalls(resp.calls);
         if (ops.isEmpty && resp.text.trim().isNotEmpty) {
           // The model ignored the tools but wrote text — salvage any tags.

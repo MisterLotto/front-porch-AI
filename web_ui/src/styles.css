@@ -1614,3 +1614,50 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   flex-shrink: 0;
 }
 .engine-strip .engine-actions a { color: var(--accent); font-weight: 600; }
+
+/* ── Tool-calling pill (chat insight panel) ───────────────────────────────
+   Desktop sidebar parity: does the current model speak the tools protocol?
+   Green supported, amber text-fallback, neutral untested; click retests. */
+.tool-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.tool-pill:disabled { cursor: progress; opacity: 0.8; }
+.tool-pill .tool-pill-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+.tool-pill-ok { border-color: rgba(105, 240, 174, 0.45); }
+.tool-pill-ok .tool-pill-dot { background: var(--ok); }
+.tool-pill-warn { border-color: rgba(255, 193, 7, 0.5); }
+.tool-pill-warn .tool-pill-dot { background: var(--accent-amber); }
+.tool-pill-busy .tool-pill-dot {
+  background: var(--accent-amber);
+  animation: tool-pill-pulse 1s ease-in-out infinite;
+}
+@keyframes tool-pill-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.tool-pill .tool-pill-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+.tool-pill .tool-pill-retest { color: var(--muted); font-size: 0.9rem; }

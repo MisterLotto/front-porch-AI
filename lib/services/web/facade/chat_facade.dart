@@ -211,6 +211,22 @@ class ChatFacade {
       // Crafted /image prompt awaiting review (review setting on). The client
       // shows an edit modal and resolves via POST /api/chat/image-review.
       'imagePromptReview': ?_chat.pendingImagePromptReview,
+      // Tool-calling verdict for the current backend+model (desktop sidebar
+      // pill parity). Retest via POST /api/chat/tool-test. Additive field.
+      'toolSupport': {
+        'state': _chat.toolCallSupport.name,
+        'testing': _chat.isTestingToolSupport,
+      },
+    };
+  }
+
+  /// Re-probe the current backend+model's tool-calling support (the web
+  /// pill's tap-to-retest). Returns the fresh verdict.
+  Future<Map<String, dynamic>> testToolCalling() async {
+    await _chat.testToolCalling();
+    return {
+      'state': _chat.toolCallSupport.name,
+      'testing': _chat.isTestingToolSupport,
     };
   }
 
