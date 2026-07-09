@@ -1661,3 +1661,25 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   line-height: 1.25;
 }
 .tool-pill .tool-pill-retest { color: var(--muted); font-size: 0.9rem; }
+
+/* ── Type-DELETE confirm (severe mass-delete gate) ───────────────────────────
+   Web mirror of the desktop TypeDeleteDialog: the delete button stays disabled
+   until the user types the keyword exactly. Used for bulk character delete and
+   delete-folder-with-characters. */
+.danger-modal { border: 1px solid rgba(255, 107, 107, 0.5); }
+.type-confirm-label {
+  display: block;
+  margin: 14px 0 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+  font-weight: 600;
+}
+.type-confirm-label .search {
+  margin-top: 6px;
+  border-color: rgba(255, 107, 107, 0.4);
+}
+.danger-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: none;
+}

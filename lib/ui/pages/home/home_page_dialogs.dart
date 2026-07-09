@@ -73,6 +73,104 @@ extension _HomePageDialogs on _HomePageState {
     );
   }
 
+  /// Mass delete for the select-mode bar: resolve the selection ids (the
+  /// imagePath-basename scheme _toggleSelect writes) back to cards, then run
+  /// the shared severe-confirm purge.
+  Future<void> _massDeleteSelected(Set<String> ids) async {
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final cards = repo.characters.where((c) {
+      final id = c.imagePath != null
+          ? path.basenameWithoutExtension(c.imagePath!)
+          : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+      return ids.contains(id);
+    }).toList();
+    if (cards.isEmpty) return;
+
+    await _runMassDelete(
+      cards,
+      title: 'Delete ${cards.length} Characters?',
+      message:
+          'This will PERMANENTLY delete ${cards.length} '
+          'character${cards.length == 1 ? '' : 's'} — their cards, image '
+          'files, chat histories, and any linked worlds. There is no undo '
+          'and no recycle bin.',
+      afterDelete: () async => _cancelSelection(),
+    );
+  }
+
+  /// The ONE severe-delete pipeline shared by mass select and
+  /// delete-folder-with-characters: typed-DELETE gate → progress dialog →
+  /// CharacterRepository.deleteCharacters → optional follow-up → snackbar.
+  Future<void> _runMassDelete(
+    List<CharacterCard> cards, {
+    required String title,
+    required String message,
+    Future<void> Function()? afterDelete,
+  }) async {
+    final confirmed = await showTypeDeleteDialog(
+      context,
+      title: title,
+      message: message,
+    );
+    if (!confirmed || !mounted) return;
+
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final worldRepo = Provider.of<WorldRepository>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+
+    final progress = ValueNotifier<int>(0);
+    // Non-dismissible counter while a 100+ card purge grinds through file IO.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceOf(ctx),
+        content: ValueListenableBuilder<int>(
+          valueListenable: progress,
+          builder: (ctx, done, _) => Row(
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'Deleting… $done of ${cards.length}',
+                  style: TextStyle(color: AppColors.textPrimary(ctx)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    var deleted = 0;
+    try {
+      deleted = await repo.deleteCharacters(
+        cards,
+        worldRepo: worldRepo,
+        chatsDir: storage.chatsDir,
+        onProgress: (done, _) => progress.value = done,
+      );
+      await afterDelete?.call();
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      progress.dispose();
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Deleted $deleted character${deleted == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _editCharacter(
     BuildContext context,
     CharacterCard character,

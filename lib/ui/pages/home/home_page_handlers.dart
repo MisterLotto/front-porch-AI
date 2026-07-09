@@ -296,35 +296,93 @@ extension _HomePageHandlers on _HomePageState {
     CharacterFolder folder,
     FolderService folderService,
   ) {
+    final charCount = folderService
+        .getCharactersInFolderRecursive(folder.id)
+        .length;
     showWarmDialog(
       context,
       title: 'Delete Folder',
       destructive: true,
       content: WarmDialogText(
-        'Delete "${folder.name}"?\n\nCharacters inside will NOT be deleted — '
-        'they\'ll return to the top level.',
+        'Delete "${folder.name}"?\n\n'
+        '• Delete Folder Only: the $charCount character'
+        '${charCount == 1 ? '' : 's'} inside return to the top level.\n'
+        '• Delete Folder + Characters: PERMANENTLY deletes the folder AND '
+        'every character inside it (including subfolders).',
       ),
       actions: [
         warmDialogCancel(context),
         warmDialogConfirm(
           context,
-          label: 'Delete',
-          destructive: true,
+          label: 'Delete Folder Only',
           onPressed: () {
             folderService.deleteFolder(folder.id);
             Navigator.pop(context);
-            if (_activeFolderId == folder.id) {
-              applyState(() {
-                if (_folderStack.isNotEmpty) {
-                  _activeFolderId = _folderStack.removeLast();
-                } else {
-                  _activeFolderId = null;
-                }
-              });
-            }
+            _leaveDeletedFolder(folder.id);
           },
         ),
+        if (charCount > 0)
+          warmDialogConfirm(
+            context,
+            label: 'Delete Folder + Characters…',
+            destructive: true,
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteFolderWithCharacters(folder, folderService);
+            },
+          ),
       ],
+    );
+  }
+
+  /// If the user is standing inside the folder being deleted, step back out.
+  void _leaveDeletedFolder(String folderId) {
+    if (_activeFolderId != folderId) return;
+    applyState(() {
+      if (_folderStack.isNotEmpty) {
+        _activeFolderId = _folderStack.removeLast();
+      } else {
+        _activeFolderId = null;
+      }
+    });
+  }
+
+  /// The nuclear option: PERMANENTLY delete a folder, its subfolders, and
+  /// every character inside them — gated by the typed-DELETE dialog and run
+  /// through the same shared purge pipeline as mass select-delete.
+  Future<void> _deleteFolderWithCharacters(
+    CharacterFolder folder,
+    FolderService folderService,
+  ) async {
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    // Folder membership is stored as image basenames (with extension).
+    final filenames = folderService
+        .getCharactersInFolderRecursive(folder.id)
+        .toSet();
+    final cards = repo.characters
+        .where(
+          (c) =>
+              c.imagePath != null &&
+              filenames.contains(path.basename(c.imagePath!)),
+        )
+        .toList();
+    final subfolders = folderService
+        .getSubfolders(folder.id)
+        .length;
+
+    await _runMassDelete(
+      cards,
+      title: 'Delete "${folder.name}" & ${cards.length} Characters?',
+      message:
+          'This will PERMANENTLY delete the folder "${folder.name}"'
+          '${subfolders > 0 ? ', its subfolders,' : ''} and ALL '
+          '${cards.length} character${cards.length == 1 ? '' : 's'} inside — '
+          'their cards, image files, chat histories, and any linked worlds. '
+          'There is no undo and no recycle bin.',
+      afterDelete: () async {
+        await folderService.deleteFolder(folder.id);
+        _leaveDeletedFolder(folder.id);
+      },
     );
   }
 

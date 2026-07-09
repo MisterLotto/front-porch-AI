@@ -45,11 +45,13 @@ class WebCharacterRoutes {
     router.post('/api/folders', _createFolder);
     router.post('/api/folders/<id>/rename', _renameFolder);
     router.post('/api/folders/<id>/delete', _deleteFolder);
+    router.post('/api/folders/<id>/delete-deep', _deleteFolderDeep);
     // Register before '/api/characters/<id>' so 'import'/'create'/'move' aren't
     // captured as an id.
     router.post('/api/characters/import', _import);
     router.post('/api/characters/create', _create);
     router.post('/api/characters/move', _bulkMove);
+    router.post('/api/characters/bulk-delete', _bulkDelete);
     // Active-character expression portrait (mood-driven). Static path, so it
     // registers before the '<id>' captures below.
     router.get('/api/chat/expression-avatar', _expressionAvatar);
@@ -174,6 +176,38 @@ class WebCharacterRoutes {
     final ok = await lib.deleteFolder(id);
     if (!ok) return JsonResponse.error(404, 'Folder not found');
     return JsonResponse.ok({'status': 'deleted'});
+  }
+
+  /// The nuclear folder delete — folder + subfolders + every character inside.
+  /// The client enforces the severe typed-DELETE confirm before calling this.
+  Future<shelf.Response> _deleteFolderDeep(
+    shelf.Request request,
+    String id,
+  ) async {
+    final lib = _library;
+    if (lib == null) return JsonResponse.error(503, 'Unavailable');
+    final deleted = await lib.deleteFolderWithCharacters(id);
+    if (deleted < 0) return JsonResponse.error(404, 'Folder not found');
+    return JsonResponse.ok({'status': 'deleted', 'deletedCharacters': deleted});
+  }
+
+  /// Mass delete of the selected characters. The client enforces the severe
+  /// typed-DELETE confirm before calling this.
+  Future<shelf.Response> _bulkDelete(shelf.Request request) async {
+    final lib = _library;
+    if (lib == null) return JsonResponse.error(503, 'Unavailable');
+    Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid JSON body');
+    }
+    final ids = body['ids'] is List
+        ? (body['ids'] as List).map((e) => e.toString()).toList()
+        : const <String>[];
+    if (ids.isEmpty) return JsonResponse.badRequest('ids is required');
+    final deleted = await lib.bulkDelete(ids);
+    return JsonResponse.ok({'status': 'deleted', 'deleted': deleted});
   }
 
   /// Duplicate a character (deep-copies extensions + fresh stable id).
