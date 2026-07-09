@@ -4074,4 +4074,4 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Scope:** desktop only (maintainer-approved); `web_ui/` intentionally untouched.
 - **Verification:** `flutter analyze` — No issues found (full project). `flutter test` — all 1832 tests pass. macOS build + visual check delegated to the orchestrator.
 - **Caveats needing visual sign-off:** (1) the collapsible Settings panel is placed at the *bottom* of the canvas (creative flow first); (2) the "Character" subject uses the single active chat character — a multi-character picker for groups is a possible future enhancement; (3) style/paradigm appear both on the canvas (StylePreview, live re-apply) and inside the shared GenerationOptionsTab — a pre-existing single-value duplication carried over from the old 2-tab layout, kept because GenerationOptionsTab is shared with the standalone settings dialog.
-- **Commit:** (pending)
+- **Commit:** 29d5a42
