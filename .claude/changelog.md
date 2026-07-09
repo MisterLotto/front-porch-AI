@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-07-09 — feat(vision): LLM vision-capability detection + KoboldCpp mmproj wiring (branch salvage)
+
+- **Context:** a prior agent built the LLM vision / mmproj feature on the diverged `main` branch (branch `worktree-agent-a2c2343b953c9cb7e`, unmergeable). Salvaged the base-independent modules verbatim and re-applied the base-sensitive wiring by hand against current `feat/image-studio-vision` (Rawhide-based).
+- **Salvaged verbatim (base-independent, analyze clean + tests green on this branch):**
+  - `lib/utils/gguf_vision.dart` — `GgufVisionParser` / `GgufVisionInfo`: a self-contained GGUF-header walk (separate from `gguf_parser.dart`, which is at the 500-line cap) that detects embedded vision projectors (clip.* keys, vision tensors) and always-multimodal architectures.
+  - `lib/services/capability/model_capabilities.dart` — `ModelApiCapabilities` (OpenRouter `input_modalities` / Nano-GPT `capabilities` parse) + `VisionSupport`/`VisionSource` verdicts.
+  - `lib/services/capability/vision_support_resolver.dart` — process-wide `VisionSupportResolver` (local GGUF parse, remote `/models` metadata, runtime image probe of last resort; caches one verdict per identity).
+  - `lib/ui/widgets/vision_projector_field.dart` — 3-state mmproj picker (`VisionProjectorField`, embedded→greyed+override / multimodal→picker / text-only→hidden) + `visionStatusPill` + `RemoteVisionPill`. AppColors throughout; 492 lines (untouched, storage API matched by name).
+  - Tests: `test/utils/gguf_vision_test.dart` (8) + `test/services/capability/model_capabilities_test.dart` (14) — 22/22 green.
+- **Re-applied wiring against CURRENT Rawhide APIs (NOT checked out — hand-ported):**
+  - `preset_settings.dart` — added `_modelMmprojMap` (String→String) + `modelMmprojMap` getter + `setModelMmproj` + load/persist under key `model_mmproj_map`, mirroring `modelPresetMap` exactly.
+  - `storage_service.dart` — delegating `modelMmprojMap` getter, `mmprojForModel(path)` helper, `setModelMmproj` setter.
+  - `kobold_service.dart` — `startKobold` gained an optional `mmprojPath`; appends `--mmproj <path>` in BOTH preset and standard modes, guarded by non-empty AND `File(...).existsSync()` so a stale path never aborts the launch.
+  - `pseudo_remote_service.dart` — `start` gained the same guarded `mmprojPath` → `--mmproj`.
+  - Threaded the configured mmproj (keyed by the concrete GGUF path) into every launch call site that has a model path in scope: `llm_provider.dart` (kobold auto-start), `setup_service.dart` (kobold autostart), `model_settings_dialog.dart` (kobold + pseudoRemote), `settings_page.dart` (kobold + pseudoRemote save + the two Start/Restart buttons), `creator_state.dart` (kobold + pseudoRemote).
+  - `model_settings_dialog.dart` — surfaced `VisionProjectorField` directly under the local `ModelSelector` (self-hides when a preset owns the model).
+  - `settings_page.dart` — surfaced `RemoteVisionPill` under the remote model selector (both the OpenRouter and oMLX remote sections).
+  - `widgets.dart` — exported `vision_projector_field.dart`.
+- **Deliberately skipped (model path NOT in scope — noted honestly):** `llm_provider.startActiveManagedProcess` (pseudoRemote) and `setup_service` pseudoRemote autostart take only the .kcpps path; the preset owns the model there, so there is no Flutter-side key to look mmproj up on. mmproj still applies whenever the user picks a concrete GGUF.
+- **WebUI parity:** N/A — desktop-only local-model config (maintainer pre-approved in the task).
+- **Verification:** `flutter analyze` — No issues found (full project). `dart fix --dry-run` — Nothing to fix. New tests 22/22 green. Dead-code audit: all new storage APIs + both new widgets have live consumers (13 mmproj call sites; both widgets surfaced).
+- **Commit:** (see git log)
+
 ## 2026-07-09 — feat(images): user-selectable scheduler (noise schedule) for A1111 + ComfyUI
 
 - **New setting:** `imageGenScheduler` (String, default `'Automatic'`) in `lib/services/storage/settings/image_gen_settings.dart` — getter/setter/load/persist mirroring `imageGenSampler`, plus StorageService delegates in `storage_service.dart`. `'Automatic'` means "let the backend decide" (A1111 omits the field → server default; ComfyUI derives it from the sampler via `ComfyUiService.schedulerFor()`), so the default path is byte-for-byte unchanged.

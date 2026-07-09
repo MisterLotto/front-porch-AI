@@ -589,6 +589,9 @@ class _SettingsPageState extends State<SettingsPage> {
         executablePath: backendManager.backendPath!,
         kcppsPath: storage.activeKcppsPath ?? '',
         modelPath: overrideModel,
+        mmprojPath: overrideModel != null
+            ? storage.mmprojForModel(overrideModel)
+            : null,
         port: 5001,
       );
     } else {
@@ -597,6 +600,9 @@ class _SettingsPageState extends State<SettingsPage> {
         backendManager.backendPath!,
         effectiveModel,
         kcppsPath: storage.activeKcppsPath,
+        mmprojPath: _selectedModelPath != null
+            ? storage.mmprojForModel(_selectedModelPath!)
+            : null,
         gpuLayers: gpuLayers,
         contextSize: contextSize,
         useVulkan: _useVulkan,
@@ -1401,6 +1407,22 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (val) =>
                           storageService.setRemoteModelName(val.trim()),
                     ),
+                  // Vision-capability pill for the selected remote model.
+                  // OpenRouter / Nano-GPT resolve automatically from free
+                  // /models metadata; generic backends expose a manual "Check
+                  // vision" button so the runtime probe never costs a token
+                  // unasked.
+                  if (storageService.remoteModelName.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: RemoteVisionPill(
+                        apiUrl: storageService.remoteApiUrl,
+                        apiKey: storageService.remoteApiKey,
+                        modelName: storageService.remoteModelName,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -1566,6 +1588,22 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (val) =>
                           storageService.setRemoteModelName(val.trim()),
                     ),
+                  // Vision-capability pill for the selected remote model.
+                  // OpenRouter / Nano-GPT resolve automatically from free
+                  // /models metadata; generic backends expose a manual "Check
+                  // vision" button so the runtime probe never costs a token
+                  // unasked.
+                  if (storageService.remoteModelName.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: RemoteVisionPill(
+                        apiUrl: storageService.remoteApiUrl,
+                        apiKey: storageService.remoteApiKey,
+                        modelName: storageService.remoteModelName,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -3394,6 +3432,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 backendManager.backendPath!,
                                 storage.lastUsedModelPath!,
                                 kcppsPath: storage.activeKcppsPath,
+                                mmprojPath: storage.mmprojForModel(
+                                  storage.lastUsedModelPath!,
+                                ),
                                 gpuLayers: storage.gpuLayers,
                                 contextSize: storage.contextSize,
                                 useVulkan: storage.useVulkan ?? false,
@@ -3414,6 +3455,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 backendManager.backendPath!,
                                 storage.lastUsedModelPath!,
                                 kcppsPath: storage.activeKcppsPath,
+                                mmprojPath: storage.mmprojForModel(
+                                  storage.lastUsedModelPath!,
+                                ),
                                 gpuLayers: storage.gpuLayers,
                                 contextSize: storage.contextSize,
                                 useVulkan: storage.useVulkan ?? false,

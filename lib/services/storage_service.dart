@@ -424,6 +424,11 @@ class StorageService extends ChangeNotifier {
       backendSettings.setKoboldThinkingModel(v);
   Future<void> setModelPreset(String modelPath, String? kcppsPath) =>
       presetSettings.setModelPreset(modelPath, kcppsPath);
+  Map<String, String> get modelMmprojMap => presetSettings.modelMmprojMap;
+  String? mmprojForModel(String modelPath) =>
+      presetSettings.modelMmprojMap[modelPath];
+  Future<void> setModelMmproj(String modelPath, String? mmprojPath) =>
+      presetSettings.setModelMmproj(modelPath, mmprojPath);
 
   // Generation / sampling
   double get temperature => generationSettings.temperature;

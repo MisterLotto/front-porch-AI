@@ -207,6 +207,7 @@ class KoboldService extends ChangeNotifier
     String executablePath,
     String modelPath, {
     String? kcppsPath,
+    String? mmprojPath,
     int port = 5001,
     int gpuLayers = 0,
     int contextSize = 4096,
@@ -330,6 +331,18 @@ class KoboldService extends ChangeNotifier
           _storageService.blasBatchSize.toString(),
         ]);
       }
+    }
+
+    // ── Vision projector (mmproj) ────────────────────────────────────────────
+    // A multimodal model whose projector is NOT baked into the GGUF (it ships in
+    // a separate mmproj file) can actually see images only when KoboldCpp is
+    // handed that file. Added for BOTH preset and standard modes, and only when
+    // a non-empty path is configured AND the file exists on disk — a stale or
+    // missing mmproj must never abort the launch.
+    if (mmprojPath != null &&
+        mmprojPath.isNotEmpty &&
+        File(mmprojPath).existsSync()) {
+      args.addAll(['--mmproj', mmprojPath]);
     }
 
     try {

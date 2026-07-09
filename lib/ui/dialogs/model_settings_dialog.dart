@@ -262,6 +262,11 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       backendManager.backendPath!,
       effectiveModel,
       kcppsPath: storage.activeKcppsPath,
+      // Vision projector is keyed by the concrete GGUF the user picked; when a
+      // preset owns the model there is no Flutter-side path to key on.
+      mmprojPath: _selectedModelPath != null
+          ? storage.mmprojForModel(_selectedModelPath!)
+          : null,
       gpuLayers: int.tryParse(_gpuLayersController.text) ?? 0,
       contextSize: int.tryParse(_contextSizeController.text) ?? 8192,
       useVulkan: _useVulkan,
@@ -731,6 +736,15 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
               _applyAutoConfiguration();
             }
           },
+        ),
+
+        // Vision projector (mmproj) — only meaningful for a concrete local GGUF;
+        // the field self-hides when no model file is selected (a preset owns it)
+        // and greys out for text-only / vision-built-in models.
+        VisionProjectorField(
+          modelPath: _selectedModelPath,
+          storage: storage,
+          onChanged: () => setState(() {}),
         ),
 
         const SizedBox(height: 16),
@@ -1334,6 +1348,11 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       executablePath: backendManager.backendPath!,
       kcppsPath: storage.activeKcppsPath!,
       modelPath: overrideModel,
+      // Only the manually-overridden model has a Flutter-side path to key the
+      // mmproj on; when the preset owns the model there is nothing to look up.
+      mmprojPath: overrideModel != null
+          ? storage.mmprojForModel(overrideModel)
+          : null,
     );
   }
 
