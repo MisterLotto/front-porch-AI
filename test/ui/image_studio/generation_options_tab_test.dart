@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/storage/settings/image_gen_settings.dart';
@@ -429,13 +430,16 @@ class _TabFakeImageGenService extends ChangeNotifier
   @override
   Future<List<String>> fetchDrawThingsModels(String url) async => localModels;
   @override
-  Future<List<String>> fetchA1111Loras(String url) async => localLoras;
+  Future<List<LoraOption>> fetchA1111Loras(String url) async =>
+      localLoras.map((n) => ImageModelFamily.classifyLora(n)).toList();
   @override
-  Future<List<String>> fetchDrawThingsLoras(String url) async => localLoras;
+  Future<List<LoraOption>> fetchDrawThingsLoras(String url) async =>
+      localLoras.map((n) => ImageModelFamily.classifyLora(n)).toList();
   @override
   Future<List<String>> fetchComfyModels(String url) async => localModels;
   @override
-  Future<List<String>> fetchComfyLoras(String url) async => localLoras;
+  Future<List<LoraOption>> fetchComfyLoras(String url) async =>
+      localLoras.map((n) => ImageModelFamily.classifyLora(n)).toList();
   @override
   Future<List<String>> fetchComfySamplers(String url) async => localSamplers;
   @override

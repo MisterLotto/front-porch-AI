@@ -233,6 +233,26 @@ class ComfyUiService {
     return optionsFromObjectInfo(info, 'LoraLoader', 'lora_name');
   }
 
+  /// Read a LoRA's embedded safetensors metadata via ComfyUI's core
+  /// `/view_metadata/loras?filename=…` endpoint. Used to detect the LoRA's base
+  /// model (`ss_base_model_version` / `modelspec.architecture`). Returns an empty
+  /// map on any error or when the server/model exposes no metadata — callers
+  /// fall back to file-name detection, so this is strictly best-effort.
+  Future<Map<String, dynamic>> fetchLoraMetadata(String filename) async {
+    try {
+      final uri = Uri.parse(
+        '$_root/view_metadata/loras',
+      ).replace(queryParameters: {'filename': filename});
+      final r = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (r.statusCode != 200 || r.body.isEmpty) return const {};
+      final decoded = jsonDecode(r.body);
+      return decoded is Map<String, dynamic> ? decoded : const {};
+    } catch (e) {
+      debugPrint('ComfyUI: fetchLoraMetadata($filename) failed: $e');
+      return const {};
+    }
+  }
+
   Future<List<String>> fetchSamplers() async {
     final info = await _objectInfo();
     if (info == null) return const [];

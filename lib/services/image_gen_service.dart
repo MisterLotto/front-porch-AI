@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/grpc/draw_things_grpc_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
+import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 
 /// Available image generation modes.
@@ -1091,10 +1092,16 @@ class ImageGenService extends ChangeNotifier {
   /// Fetch LoRA files from a Draw Things server (gRPC CLI op 'loras' — the
   /// same Echo('models') listing as [fetchDrawThingsModels], filtered to
   /// LoRAs). The selected name is applied natively via the generation config.
-  Future<List<String>> fetchDrawThingsLoras(String baseUrl) async {
+  ///
+  /// Draw Things does not expose per-model compatibility over its gRPC surface,
+  /// so family is detected from the (canonical) file name only —
+  /// [LoraOption.familyFromMetadata] is false, which makes the UI warn on a
+  /// mismatch rather than hide it.
+  Future<List<LoraOption>> fetchDrawThingsLoras(String baseUrl) async {
     try {
       final grpcService = _ensureDrawThingsGrpc;
-      return await grpcService.fetchLoras();
+      final names = await grpcService.fetchLoras();
+      return names.map((n) => ImageModelFamily.classifyLora(n)).toList();
     } catch (e) {
       debugPrint('ImageGen: fetchDrawThingsLoras failed: $e');
       return [];
@@ -1106,18 +1113,43 @@ class ImageGenService extends ChangeNotifier {
   Future<List<String>> fetchComfyModels(String baseUrl) =>
       _ensureComfyUi.fetchModels();
 
-  Future<List<String>> fetchComfyLoras(String baseUrl) =>
-      _ensureComfyUi.fetchLoras();
+  /// ComfyUI LoRAs, enriched with base-model family. Names come from
+  /// /object_info; the family is read per-LoRA from the embedded safetensors
+  /// metadata via /view_metadata (authoritative), falling back to the file name
+  /// when a model exposes none. Metadata reads run in small concurrent batches
+  /// so a large library doesn't stall the picker, and any failure degrades
+  /// silently to name detection.
+  Future<List<LoraOption>> fetchComfyLoras(String baseUrl) async {
+    final comfy = _ensureComfyUi;
+    final names = await comfy.fetchLoras();
+    final out = <LoraOption>[];
+    const batch = 8;
+    for (var i = 0; i < names.length; i += batch) {
+      final slice = names.skip(i).take(batch);
+      final metas = await Future.wait(slice.map(comfy.fetchLoraMetadata));
+      var j = 0;
+      for (final n in slice) {
+        final meta = metas[j++];
+        out.add(
+          ImageModelFamily.classifyLora(n, metadata: meta.isEmpty ? null : meta),
+        );
+      }
+    }
+    return out;
+  }
 
   Future<List<String>> fetchComfySamplers(String baseUrl) =>
       _ensureComfyUi.fetchSamplers();
 
-  /// Fetch LoRAs from an A1111 / Forge / SD.Next server.
+  /// Fetch LoRAs from an A1111 / Forge / SD.Next server, enriched with
+  /// base-model family.
   ///
-  /// Endpoint: GET /sdapi/v1/loras
-  /// Returns a list of LoRA names (the `name` field from each entry).
+  /// Endpoint: GET /sdapi/v1/loras — each entry carries a `metadata` block that
+  /// usually includes `ss_base_model_version` / `modelspec.architecture`, which
+  /// gives an authoritative family (this is the same field A1111's own UI uses).
+  /// When a LoRA exposes no metadata we fall back to file-name detection.
   /// Draw Things uses [fetchDrawThingsLoras] instead (no HTTP endpoint).
-  Future<List<String>> fetchA1111Loras(String baseUrl) async {
+  Future<List<LoraOption>> fetchA1111Loras(String baseUrl) async {
     final client = http.Client();
     try {
       final uri = Uri.parse(
@@ -1129,16 +1161,23 @@ class ImageGenService extends ChangeNotifier {
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return [];
       final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-      return data
-          .map((e) {
-            final m = e as Map<String, dynamic>;
-            // Prefer alias if present and non-empty, else use name
-            final alias = m['alias']?.toString() ?? '';
-            final name = m['name']?.toString() ?? '';
-            return alias.isNotEmpty ? alias : name;
-          })
-          .where((s) => s.isNotEmpty)
-          .toList();
+      final out = <LoraOption>[];
+      for (final e in data) {
+        final m = e as Map<String, dynamic>;
+        // Prefer alias if present and non-empty, else use name
+        final alias = m['alias']?.toString() ?? '';
+        final name = m['name']?.toString() ?? '';
+        final display = alias.isNotEmpty ? alias : name;
+        if (display.isEmpty) continue;
+        final meta = m['metadata'];
+        out.add(
+          ImageModelFamily.classifyLora(
+            display,
+            metadata: meta is Map<String, dynamic> ? meta : null,
+          ),
+        );
+      }
+      return out;
     } catch (e) {
       debugPrint('ImageGen: fetchA1111Loras failed: $e');
       return [];

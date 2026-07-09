@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/ui/image_studio/connection_status_card.dart';
+import 'package:front_porch_ai/ui/image_studio/lora_picker.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 const List<({String label, int value})> _drawThingsSamplers = [
@@ -51,13 +53,12 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   bool _unloadingModel = false;
   bool _switchingModel = false;
   List<String> _localSamplers = [];
-  List<String> _localLoras = [];
+  List<LoraOption> _localLoras = [];
   bool _loadingLoras = false;
   final _seedController = TextEditingController();
   final _dtHostController = TextEditingController();
   final _dtPortController = TextEditingController();
   final _comfyUrlController = TextEditingController();
-  double? _dragLoraWeight;
   double? _dragSteps;
   double? _dragCfgScale;
 
@@ -850,87 +851,14 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               ),
             )
           else
-            DropdownButtonFormField<String>(
-              initialValue: _localLoras.contains(st.imageGenLora)
-                  ? st.imageGenLora
-                  : (st.imageGenLora.isEmpty ? '' : null),
-              dropdownColor: AppColors.surfaceContainerOf(context),
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 10,
-              ),
-              isExpanded: true,
-              decoration: _deco(
-                hint: _localLoras.isEmpty
-                    ? 'Available when connected'
-                    : 'LoRA (opt)',
-              ),
-              items: [
-                DropdownMenuItem(
-                  value: '',
-                  child: Text(
-                    '— None —',
-                    style: TextStyle(
-                      color: AppColors.textSecondary(context),
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
-                ..._localLoras.map(
-                  (l) => DropdownMenuItem(
-                    value: l,
-                    child: Text(
-                      l,
-                      style: TextStyle(
-                        color: AppColors.textPrimary(context),
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              onChanged: (val) {
-                if (val != null) st.setImageGenLora(val);
-              },
+            LoraPicker(
+              loras: _localLoras,
+              checkpointFamily: ImageModelFamily.detectFromName(st.imageGenModel),
+              selected: st.imageGenLora,
+              weight: st.imageGenLoraWeight,
+              onSelected: (val) => st.setImageGenLora(val),
+              onWeightChanged: (v) => st.setImageGenLoraWeight(v),
             ),
-          if (st.imageGenLora.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Text(
-                  'Wt',
-                  style: TextStyle(
-                    color: AppColors.textSecondary(context),
-                    fontSize: 9,
-                  ),
-                ),
-                Expanded(
-                  child: Slider(
-                    value: _dragLoraWeight ?? st.imageGenLoraWeight,
-                    min: 0,
-                    max: 1,
-                    divisions: 20,
-                    activeColor: AppColors.formMasterAccent,
-                    onChanged: (v) => setState(() => _dragLoraWeight = v),
-                    onChangeEnd: (v) {
-                      _dragLoraWeight = null;
-                      st.setImageGenLoraWeight(v);
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: 24,
-                  child: Text(
-                    (_dragLoraWeight ?? st.imageGenLoraWeight).toStringAsFixed(
-                      2,
-                    ),
-                    style: TextStyle(fontSize: 8),
-                    textAlign: TextAlign.end,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
         const SizedBox(height: 8),
         _buildSharedFields(st),
