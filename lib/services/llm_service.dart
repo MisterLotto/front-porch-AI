@@ -135,3 +135,32 @@ abstract class LLMService extends ChangeNotifier {
   /// Human-readable name for this backend (e.g. "KoboldCPP", "OpenRouter").
   String get backendName;
 }
+
+/// True when [error] reads like a failure to reach the backend at all —
+/// nothing listening on the port, host down, or the HTTP client torn down
+/// mid-request. The OS words the same failure differently per platform:
+/// Windows says "The remote computer refused the network connection"
+/// (errno 1225), macOS "Connection refused" (errno 61), Linux errno 111 —
+/// so match the broad shapes rather than one platform's phrasing.
+bool looksLikeBackendUnreachable(Object error) {
+  final s = error.toString();
+  return s.contains('SocketException') ||
+      s.contains('Connection refused') ||
+      s.contains('refused the network connection') ||
+      s.contains('errno = 61') ||
+      s.contains('Connection closed before full header') ||
+      (s.contains('ClientException') && s.contains('closed'));
+}
+
+/// Thrown when a feature needs the AI backend but it isn't ready or can't be
+/// reached. [message] is user-facing — surfaces like the story pages and the
+/// web client show pipeline errors verbatim, so [toString] returns the plain
+/// message with no "Exception:" prefix.
+class LlmUnavailableException implements Exception {
+  final String message;
+
+  LlmUnavailableException(this.message);
+
+  @override
+  String toString() => message;
+}

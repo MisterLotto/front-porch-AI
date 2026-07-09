@@ -3916,3 +3916,16 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Parity:** injection change is main-gen prompt only (Dart backend serves both surfaces). Label change mirrored to web. web_ui asset rebuild (`npm run build`) pending before web ships.
 - **Verification:** flutter analyze on the 3 changed Dart files — No issues found. No tests referenced the old strings. User confirmed "working better now" in local `flutter run`.
 - **Commit:** c0abe1c
+
+## 2026-07-09 — Stories: friendly AI-backend errors + up-front readiness check
+
+- **Reason:** Discord user hit "OS Error: The remote computer refused the network connection" (Windows errno 1225 = connection refused, worded as "Connection refused, errno = 61" on macOS) when running story stages without their AI backend running. Story pages surfaced raw `e.toString()` and the pipeline attempted the connection with no readiness check, so the failure read as scary network jargon instead of "start your engine".
+- **Files:**
+  - `lib/services/llm_service.dart` — new shared `looksLikeBackendUnreachable(Object)` matcher (covers Windows/macOS/Linux connection-refused wordings, SocketException, http-package mid-stream close) + `LlmUnavailableException` whose `toString()` is the plain user-facing message (no "Exception:" prefix), since story pages and the web client render errors verbatim.
+  - `lib/services/story_pipeline_service.dart` — `_callLLM` (the single choke point every story stage funnels through) now (1) throws a plain-language LlmUnavailableException up-front when `_llmService.isReady` is false ("stories use the same AI engine as chat — start it and load a model…") and (2) wraps the token stream, translating connection-shaped failures into the same friendly exception; everything else rethrows unchanged.
+  - `lib/services/chat/chat_service_generation.dart` — consolidated its inline connection-error string matcher onto the shared `looksLikeBackendUnreachable` (identical semantics; dedup).
+  - `test/services/llm_unreachable_test.dart` — new: per-platform wording matches, negative cases, clean toString.
+  - `docs/Rawhide.md` — user-facing note.
+- **Web parity:** automatic — `StoryFacade.runStage` broadcasts `story_error` with `'$e'` and `useStory.ts` displays it verbatim, so the clean message flows to the web banner with zero web changes.
+- **Verification:** flutter analyze — No issues found. dart fix --dry-run — nothing. New test file 6/6. FULL suite 1865/1865 passed.
+- **Commit:** (recorded in PR)
