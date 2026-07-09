@@ -49,6 +49,7 @@ class WebChatRoutes {
     router.post('/api/chat/delete', _delete);
     router.post('/api/chat/insert-image', _insertImage);
     router.post('/api/chat/image-review', _imageReview);
+    router.post('/api/chat/tool-test', _toolTest);
     router.post('/api/chat/reprocess-needs', _reprocessNeeds);
     router.post('/api/chat/revert-needs-reprocess', _revertNeedsReprocess);
     router.post('/api/chat/author-note', _authorNote);
@@ -62,6 +63,10 @@ class WebChatRoutes {
 
   shelf.Response _state(shelf.Request request) =>
       JsonResponse.ok(_facade.state());
+
+  /// Re-probe the current model's tool-calling support (web pill retest).
+  Future<shelf.Response> _toolTest(shelf.Request request) async =>
+      JsonResponse.ok(await _facade.testToolCalling());
 
   /// The chat-scoped lorebook (full-fidelity rows) — desktop "This Chat"
   /// sidebar section parity.

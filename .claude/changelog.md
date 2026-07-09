@@ -3948,3 +3948,17 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Deliberately unchanged:** reader's book palette (above); web setup wizard structure (already a StepIndicator wizard — desktop caught up to it).
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. web tsc clean, vitest 27/27, bundle rebuilt. FULL desktop suite 1865/1865 passed.
 - **Commit:** (recorded in PR)
+
+## 2026-07-09 — Tool-calling visibility: sidebar pill + auto-retest on model switch
+
+- **Reason:** Maintainer request: users had no way to see whether their model supports native tool calling (the Realism/Journal/Growth tools transport) — the probe verdict was invisible, only remembered failures, and was never refreshed proactively. Requested: a noticeable sidebar indicator + retest on model switching.
+- **Files:**
+  - `lib/services/chat/pass_support.dart` — `ToolTransportProbe` upgraded from a failure-only set to a notifying tri-state (`ToolCallSupport {untested, supported, unsupported}`): `markSupported`/`reset`/`supportFor` added; it now extends ChangeNotifier so the pill repaints as verdicts land from ANY consumer. `fireStructuredEval` marks success on a converted tool call and — bug fix — no longer brands a merely-unreachable backend as tools-incapable (uses the shared `looksLikeBackendUnreachable`).
+  - `lib/services/chat/journal_maintenance.dart`, `growth_service.dart` — their tools lanes now `markSupported` when real calls come back (previously only failures were recorded, so "supported" could never be displayed).
+  - `lib/services/chat/tool_support_tester.dart` — NEW leaf: fires one tiny `report_ping` tool call at the live backend and records the verdict on the SAME shared probe (manual test and passes can never disagree). Auto-tests when the backend identity changes and is ready (`onBackendMaybeChanged`, idempotent per identity); skips while a chat generation streams (single-slot local engines); an unreachable backend leaves the verdict untested; a mid-probe model switch discards the stale answer.
+  - `lib/services/chat_service.dart` — minimal wiring: probe → notifyListeners rebroadcast; storage + LLMProvider listeners → `onBackendMaybeChanged` (both removed in dispose); `late final _toolSupportTester`; public `toolCallSupport` / `isTestingToolSupport` / `testToolCalling()`.
+  - `lib/ui/chat_components/sidebar/tool_calling_pill.dart` — NEW: always-visible pill at the top of the chat sidebar (green supported / amber not-supported-text-fallback / neutral untested / spinner testing), tap to retest, tooltip explaining what tool calling affects. Mounted first in `sidebar_body.dart`.
+  - **Web parity:** `chat_facade.dart` state() gains additive `toolSupport {state, testing}` + `testToolCalling()`; `chat_routes.dart` POST `/api/chat/tool-test`; `ChatInsight.tsx` renders the same pill at the top of the insight panel (click retests via the endpoint); `ChatPage.tsx` threads the field; `styles.css` `.tool-pill*`; bundle rebuilt.
+  - `test/services/chat/tool_support_test.dart` — NEW: 9 tests (tri-state transitions + notify-once, supported/unsupported/unreachable probe verdicts, force retest, not-ready/busy guards, once-per-identity auto-test, mid-probe switch safety).
+- **Verification:** flutter analyze — No issues found. dart fix — nothing. New tests 9/9; journal/growth/eval suites 64/64 unchanged. web tsc clean, vitest 27/27, bundle rebuilt. FULL desktop suite 1874/1874 passed.
+- **Commit:** (recorded in PR)

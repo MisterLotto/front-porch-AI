@@ -21,7 +21,8 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
+import 'package:front_porch_ai/services/llm_service.dart'
+    show LlmToolResponse, looksLikeBackendUnreachable;
 
 /// Shared support for the two background maintenance passes (the Journal and
 /// Growth Rings) — extracted from JournalMaintenance so the growth pass
@@ -77,16 +78,49 @@ List<CharacterCard> resolvePassOwners({
   return owners;
 }
 
-/// Per-run memory of which backend identities can't (or won't) speak the
+/// A backend identity's native tool-calling verdict, as observed this run.
+enum ToolCallSupport { untested, supported, unsupported }
+
+/// Per-run memory of which backend identities can (or can't) speak the
 /// OpenAI tools protocol — shared by every tool-negotiating consumer (the
 /// Journal, Growth, and all structured evals) so a backend answers the probe
 /// at most once per run no matter who asks first.
-class ToolTransportProbe {
-  final Set<String> _xmlOnly = {};
+///
+/// A ChangeNotifier so the chat sidebar's tool-calling pill repaints live as
+/// verdicts land (from background passes or the manual test). Identity keys
+/// carry the backend name + model, so switching models resets the verdict to
+/// [ToolCallSupport.untested] by construction.
+class ToolTransportProbe extends ChangeNotifier {
+  /// true = tools confirmed working, false = XML/text-only.
+  final Map<String, bool> _verdicts = {};
 
-  bool isXmlOnly(String backendIdentity) => _xmlOnly.contains(backendIdentity);
+  bool isXmlOnly(String backendIdentity) => _verdicts[backendIdentity] == false;
 
-  void markXmlOnly(String backendIdentity) => _xmlOnly.add(backendIdentity);
+  void markXmlOnly(String backendIdentity) {
+    if (_verdicts[backendIdentity] == false) return;
+    _verdicts[backendIdentity] = false;
+    notifyListeners();
+  }
+
+  /// A tools-mode request on [backendIdentity] came back with real tool
+  /// calls — the transport is confirmed working.
+  void markSupported(String backendIdentity) {
+    if (_verdicts[backendIdentity] == true) return;
+    _verdicts[backendIdentity] = true;
+    notifyListeners();
+  }
+
+  /// Forget the verdict (manual retest / model reloaded under the same key).
+  void reset(String backendIdentity) {
+    if (_verdicts.remove(backendIdentity) != null) notifyListeners();
+  }
+
+  ToolCallSupport supportFor(String backendIdentity) =>
+      switch (_verdicts[backendIdentity]) {
+        true => ToolCallSupport.supported,
+        false => ToolCallSupport.unsupported,
+        null => ToolCallSupport.untested,
+      };
 }
 
 /// The ONE tools-vs-text negotiation for structured evals whose downstream
@@ -122,12 +156,14 @@ Future<String?> fireStructuredEval({
   void Function(String)? onChunk,
 }) async {
   if (!probe.isXmlOnly(backendIdentity)) {
+    var backendUnreachable = false;
     try {
       final resp = await fireToolEval(buildPrompt(toolsMode: true), tools);
       if (isCancelled?.call() ?? false) return null;
       if (resp != null) {
         final text = callToText(resp);
         if (text != null) {
+          probe.markSupported(backendIdentity);
           // The overlay/raw-eval trace shows the synthesized text (the tools
           // lane doesn't stream tokens).
           onChunk?.call('$text\n');
@@ -141,12 +177,17 @@ Future<String?> fireStructuredEval({
     } catch (e) {
       debugPrint('[Eval:Tools] $debugLabel attempt failed: $e');
       if (isCancelled?.call() ?? false) return null;
+      // A dead/unreachable backend is a connectivity problem, not a verdict
+      // on the MODEL's tool support — don't brand it unsupported for the run.
+      backendUnreachable = looksLikeBackendUnreachable(e);
     }
-    probe.markXmlOnly(backendIdentity);
-    debugPrint(
-      '[Eval:Tools] Tools unavailable on $backendIdentity — using text '
-      '($debugLabel)',
-    );
+    if (!backendUnreachable) {
+      probe.markXmlOnly(backendIdentity);
+      debugPrint(
+        '[Eval:Tools] Tools unavailable on $backendIdentity — using text '
+        '($debugLabel)',
+      );
+    }
   }
   return fireTextEval(buildPrompt(toolsMode: false), onChunk: onChunk);
 }
