@@ -9,7 +9,7 @@
 - **Web parity:** `image_facade.dart` config()/updateConfig() now serve + save `scheduler`; `web_ui/src/components/models/ImageGen.tsx` adds a Scheduler text field (interface + control), shown only for A1111/ComfyUI. `assets/web_app/` rebuilt.
 - **Tests:** ImageGenSettings scheduler default + setter (image_gen_service_test.dart); KSampler `scheduler` extraction case in optionsFromObjectInfo (comfy_ui_service_test.dart); tab test fakes extended with the new getters/fetch stubs.
 - **Verification:** flutter analyze — No issues found (full tree). comfy/image service + tab widget tests green. Web `npm run build` succeeded. Live end-to-end against real A1111/ComfyUI servers needs the maintainer's machine.
-- **Commit:** (pending)
+- **Commit:** 414bab7
 
 ## 2026-07-09 — feat(images): live generation progress/preview on every backend + image gen ON by default + walkthrough gap fixes
 
