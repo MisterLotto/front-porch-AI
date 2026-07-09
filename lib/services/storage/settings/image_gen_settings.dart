@@ -38,8 +38,8 @@ class ImageGenSettings with SettingsBase {
   String _imageGenPromptParadigm = 'natural'; // 'natural', 'tags'
   String _imageGenLora = '';
   double _imageGenLoraWeight = 0.8;
-  int _imageGenSteps = 20;
-  double _imageGenCfgScale = 7.0;
+  int _imageGenSteps = 4;
+  double _imageGenCfgScale = 1.0;
   String _imageGenSampler = 'Euler a';
   int _imageGenSeed = -1;
   bool _imageGenPromptReview = true;
@@ -100,8 +100,8 @@ class ImageGenSettings with SettingsBase {
         prefs?.getString(k('image_gen_prompt_paradigm')) ?? 'natural';
     _imageGenLora = prefs?.getString(k('image_gen_lora')) ?? '';
     _imageGenLoraWeight = prefs?.getDouble(k('image_gen_lora_weight')) ?? 0.8;
-    _imageGenSteps = prefs?.getInt(k('image_gen_steps')) ?? 20;
-    _imageGenCfgScale = prefs?.getDouble(k('image_gen_cfg_scale')) ?? 7.0;
+    _imageGenSteps = prefs?.getInt(k('image_gen_steps')) ?? 4;
+    _imageGenCfgScale = prefs?.getDouble(k('image_gen_cfg_scale')) ?? 1.0;
     _imageGenSampler = prefs?.getString(k('image_gen_sampler')) ?? 'Euler a';
     _imageGenSeed = prefs?.getInt(k('image_gen_seed')) ?? -1;
     _imageGenPromptReview =
@@ -192,7 +192,7 @@ class ImageGenSettings with SettingsBase {
   }
 
   Future<void> setImageGenSteps(int value) async {
-    _imageGenSteps = value.clamp(5, 50);
+    _imageGenSteps = value.clamp(1, 50);
     await prefs?.setInt(k('image_gen_steps'), _imageGenSteps);
     notify();
   }
