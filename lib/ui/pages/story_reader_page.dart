@@ -28,6 +28,7 @@ import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/services/story_narration_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/ui/widgets/ai_engine_status_card.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 /// A book-like reader for completed Porch Stories with paper aesthetic
@@ -369,12 +370,7 @@ class _StoryReaderPageState extends State<StoryReaderPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isRegenerating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Rewrite failed: $e'),
-            backgroundColor: Colors.red.shade800,
-          ),
-        );
+        showAiErrorSnackBar(context, e);
       }
     }
   }
