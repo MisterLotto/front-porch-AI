@@ -26,8 +26,10 @@ import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 import 'prompt_workspace.dart';
+import 'reference_image_picker.dart';
 import 'generation_panel.dart';
 import 'result_view.dart';
 import 'generation_history.dart';
@@ -177,6 +179,13 @@ class _ImageStudioState extends State<ImageStudio> {
   // in the prompt to the LLM (for craft). Default 5, range 1-10. Only visible when _activeMode == visualizeScene.
   // Messages pre-generated so stripping all &lt;think&gt; is simple (delegated to builder _clean / _stripThinkBlocks).
   int _visualizeMessageCount = 5;
+
+  // Optional img2img reference image (transient — per-generation input, never
+  // persisted). When set, Generate runs img2img on the active local backend at
+  // the shared imageGenDenoise strength; when null it's txt2img as before. The
+  // remote backends have no img2img endpoint and ignore it (the picker widget
+  // hides itself there).
+  Uint8List? _referenceImageBytes;
 
   // History: session-local thumbnails + restoreable prompt/bytes
   final List<({String prompt, Uint8List bytes, String style})> _history = [];
@@ -506,6 +515,9 @@ class _ImageStudioState extends State<ImageStudio> {
         isPortrait:
             _activeMode == ImageGenMode.characterPortrait ||
             _activeMode == ImageGenMode.userAvatar,
+        // img2img when a reference image was chosen; honored by the local
+        // backends at imageGenDenoise strength (remote APIs ignore it).
+        referenceImage: _referenceImageBytes,
       );
 
       if (!mounted) return;
@@ -534,6 +546,23 @@ class _ImageStudioState extends State<ImageStudio> {
           _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
         });
       }
+    }
+  }
+
+  /// Pick a transient img2img reference image (desktop file dialog). Kept in
+  /// memory only for the next Generate; never persisted.
+  Future<void> _pickReferenceImage() async {
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
+      dialogTitle: 'Select a reference image',
+      type: FileType.image,
+      withData: true,
+    );
+    final bytes = (result != null && result.files.isNotEmpty)
+        ? result.files.first.bytes
+        : null;
+    if (bytes != null && mounted) {
+      setState(() => _referenceImageBytes = bytes);
     }
   }
 
@@ -948,6 +977,19 @@ class _ImageStudioState extends State<ImageStudio> {
                                   onParadigmChanged: _isBusy
                                       ? null
                                       : _updateParadigm,
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                // Optional img2img reference + denoise (local
+                                // backends only; hides itself on remote APIs).
+                                ReferenceImagePicker(
+                                  referenceBytes: _referenceImageBytes,
+                                  isBusy: _isBusy,
+                                  onPick: _pickReferenceImage,
+                                  onClear: () => setState(
+                                    () => _referenceImageBytes = null,
+                                  ),
                                 ),
 
                                 const SizedBox(height: 12),

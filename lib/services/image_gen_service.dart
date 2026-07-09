@@ -228,7 +228,9 @@ class ImageGenService extends ChangeNotifier {
     String? negativePrompt,
     String? size,
     Uint8List?
-    referenceImage, // for img2img / reference conditioning (wired for Draw Things; ignored by others for now)
+    referenceImage, // img2img reference: honored by all three local backends
+    // (Draw Things, A1111, ComfyUI) at imageGenDenoise strength; remote APIs
+    // have no img2img endpoint here, so they ignore it.
     String? model,
     bool isPortrait = false,
   }) async {
@@ -293,7 +295,10 @@ class ImageGenService extends ChangeNotifier {
             // DT-native advanced knobs (shared sliders still used for steps/cfg/seed/size)
             final sampler = _storage.imageGenSettings.drawThingsSampler;
             final shift = _storage.imageGenSettings.drawThingsShift;
-            final strength = _storage.imageGenSettings.drawThingsStrength;
+            // Unified img2img denoise. Draw Things only consults this when a
+            // reference image is present (pure txt2img ignores it), so it is
+            // always safe to pass. Replaces the retired drawThingsStrength knob.
+            final strength = _storage.imageGenSettings.imageGenDenoise;
             final seedMode = _storage.drawThingsSeedMode;
             final teaCache = _storage.drawThingsTeaCache;
             final cfgZeroStar = _storage.drawThingsCfgZeroStar;
@@ -366,6 +371,8 @@ class ImageGenService extends ChangeNotifier {
             samplerName: _storage.imageGenSettings.imageGenSampler,
             scheduler: _storage.imageGenSettings.imageGenScheduler,
             seed: _storage.imageGenSettings.imageGenSeed,
+            referenceImage: referenceImage,
+            denoise: _storage.imageGenSettings.imageGenDenoise,
           );
         }
       } else if (backend == ImageGenBackend.comfyUi) {
@@ -405,6 +412,8 @@ class ImageGenService extends ChangeNotifier {
             scheduler: scheduler,
             loraName: _storage.imageGenSettings.imageGenLora,
             loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
+            referenceImageBytes: referenceImage,
+            denoise: _storage.imageGenSettings.imageGenDenoise,
             onProgress: _updateGenProgress,
           );
         } catch (e) {
@@ -1395,9 +1404,57 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// Build the AUTOMATIC1111 generation payload shared by the txt2img and
+  /// img2img endpoints. Pure — unit-tested. When [referenceImageB64] is
+  /// non-null/non-empty the caller must POST to `/sdapi/v1/img2img`, and this
+  /// adds `init_images` + `denoising_strength` ([denoise]); otherwise it is a
+  /// plain txt2img payload for `/sdapi/v1/txt2img`.
+  static Map<String, dynamic> buildA1111Payload({
+    required String prompt,
+    required String negativePrompt,
+    required int width,
+    required int height,
+    required int steps,
+    required double cfgScale,
+    required String samplerName,
+    required String scheduler,
+    required int seed,
+    String? referenceImageB64,
+    double denoise = 0.5,
+  }) {
+    final isImg2Img =
+        referenceImageB64 != null && referenceImageB64.isNotEmpty;
+    return <String, dynamic>{
+      'prompt': prompt,
+      'negative_prompt': negativePrompt,
+      'width': width,
+      'height': height,
+      'steps': steps,
+      'cfg_scale': cfgScale,
+      'sampler_name': samplerName,
+      // Only pin the scheduler when the user picked an explicit one. 'Automatic'
+      // omits the field so A1111 uses its own default (and older forks that
+      // don't know the field never see it). Newer A1111/Forge builds accept
+      // `scheduler` alongside `sampler_name`.
+      if (scheduler.isNotEmpty && scheduler != 'Automatic')
+        'scheduler': scheduler,
+      'seed': seed,
+      'batch_size': 1,
+      if (isImg2Img) 'init_images': [referenceImageB64],
+      if (isImg2Img) 'denoising_strength': denoise,
+      // NOTE: override_settings is intentionally omitted here.
+      // Passing sd_model_checkpoint inside override_settings causes A1111 to
+      // attempt a model reload mid-request, which splits tensors across
+      // cpu and cuda and throws:
+      //   "Expected all tensors to be on the same device"
+      // The model switch is already handled by switchLocalModel() above.
+    };
+  }
+
   /// Generate via AUTOMATIC1111 / Draw Things local server.
   ///
-  /// Endpoint: POST {baseUrl}/sdapi/v1/txt2img
+  /// Endpoint: POST {baseUrl}/sdapi/v1/txt2img — or /sdapi/v1/img2img when a
+  /// [referenceImage] is supplied (init image at [denoise] denoising strength).
   /// Response: { "images": ["<base64>", ...] }
   ///
   /// When [modelCheckpoint] is non-empty and the backend is Draw Things,
@@ -1417,6 +1474,8 @@ class ImageGenService extends ChangeNotifier {
     String samplerName = 'Euler a',
     String scheduler = 'Automatic',
     int seed = -1,
+    Uint8List? referenceImage,
+    double denoise = 0.5,
   }) async {
     // Switch model only if a different checkpoint was requested.
     // Skipping redundant switches prevents the unload→reload cycle that
@@ -1430,8 +1489,11 @@ class ImageGenService extends ChangeNotifier {
     }
 
     final (width, height) = _parseSize(size);
+    // img2img when a reference image is supplied; else txt2img (unchanged path).
+    final isImg2Img = referenceImage != null && referenceImage.isNotEmpty;
+    final endpoint = isImg2Img ? 'img2img' : 'txt2img';
     final uri = Uri.parse(
-      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/txt2img',
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/$endpoint',
     );
 
     // Inject LoRA into the prompt: <lora:name:weight>
@@ -1443,29 +1505,19 @@ class ImageGenService extends ChangeNotifier {
       'ImageGen: POST $uri (model=${modelCheckpoint.isNotEmpty ? modelCheckpoint : "current"}, lora=${loraName.isNotEmpty ? loraName : "none"})',
     );
 
-    final payload = <String, dynamic>{
-      'prompt': effectivePrompt,
-      'negative_prompt': negativePrompt,
-      'width': width,
-      'height': height,
-      'steps': steps,
-      'cfg_scale': cfgScale,
-      'sampler_name': samplerName,
-      // Only pin the scheduler when the user picked an explicit one. 'Automatic'
-      // omits the field so A1111 uses its own default (and older forks that
-      // don't know the field never see it). Newer A1111/Forge builds accept
-      // `scheduler` alongside `sampler_name`.
-      if (scheduler.isNotEmpty && scheduler != 'Automatic')
-        'scheduler': scheduler,
-      'seed': seed,
-      'batch_size': 1,
-      // NOTE: override_settings is intentionally omitted here.
-      // Passing sd_model_checkpoint inside override_settings causes A1111 to
-      // attempt a model reload mid-request, which splits tensors across
-      // cpu and cuda and throws:
-      //   "Expected all tensors to be on the same device"
-      // The model switch is already handled by switchLocalModel() above.
-    };
+    final payload = buildA1111Payload(
+      prompt: effectivePrompt,
+      negativePrompt: negativePrompt,
+      width: width,
+      height: height,
+      steps: steps,
+      cfgScale: cfgScale,
+      samplerName: samplerName,
+      scheduler: scheduler,
+      seed: seed,
+      referenceImageB64: isImg2Img ? base64Encode(referenceImage) : null,
+      denoise: denoise,
+    );
 
     final client = http.Client();
     // Live progress while the txt2img request is in flight: A1111 exposes

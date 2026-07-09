@@ -1347,35 +1347,6 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
         Row(
           children: [
             Text(
-              'Str',
-              style: TextStyle(
-                color: AppColors.textSecondary(context),
-                fontSize: 9,
-              ),
-            ),
-            Expanded(
-              child: Slider(
-                value: st.drawThingsStrength,
-                min: 0,
-                max: 2,
-                divisions: 40,
-                activeColor: AppColors.formMasterAccent,
-                onChanged: (v) => st.setDrawThingsStrength(v),
-              ),
-            ),
-            SizedBox(
-              width: 24,
-              child: Text(
-                st.drawThingsStrength.toStringAsFixed(1),
-                style: TextStyle(fontSize: 8),
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Text(
               'SeedMode',
               style: TextStyle(
                 color: AppColors.textSecondary(context),

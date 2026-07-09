@@ -71,6 +71,85 @@ void main() {
     });
   });
 
+  group('ImageGenSettings denoise (img2img strength)', () {
+    test('defaults to 0.5', () {
+      expect(ImageGenSettings().imageGenDenoise, 0.5);
+    });
+
+    test('setter updates the in-memory value', () async {
+      final s = ImageGenSettings();
+      await s.setImageGenDenoise(0.7);
+      expect(s.imageGenDenoise, 0.7);
+    });
+
+    test('clamps to the 0.0–1.0 fraction', () async {
+      final s = ImageGenSettings();
+      await s.setImageGenDenoise(2.5);
+      expect(s.imageGenDenoise, 1.0);
+      await s.setImageGenDenoise(-1.0);
+      expect(s.imageGenDenoise, 0.0);
+    });
+  });
+
+  group('ImageGenService.buildA1111Payload', () {
+    Map<String, dynamic> build({String? refB64, double denoise = 0.5}) =>
+        ImageGenService.buildA1111Payload(
+          prompt: 'a porch at dusk',
+          negativePrompt: 'blurry',
+          width: 1024,
+          height: 1216,
+          steps: 25,
+          cfgScale: 6.5,
+          samplerName: 'Euler a',
+          scheduler: 'Karras',
+          seed: 1234,
+          referenceImageB64: refB64,
+          denoise: denoise,
+        );
+
+    test('txt2img omits init_images + denoising_strength', () {
+      final p = build();
+      expect(p.containsKey('init_images'), isFalse);
+      expect(p.containsKey('denoising_strength'), isFalse);
+      expect(p['prompt'], 'a porch at dusk');
+      expect(p['width'], 1024);
+      expect(p['height'], 1216);
+      expect(p['sampler_name'], 'Euler a');
+      expect(p['scheduler'], 'Karras');
+      expect(p['seed'], 1234);
+    });
+
+    test('img2img adds init_images + denoising_strength at the given denoise', () {
+      final p = build(refB64: 'QUJD', denoise: 0.42);
+      expect(p['init_images'], ['QUJD']);
+      expect(p['denoising_strength'], 0.42);
+      // Shared params still present so img2img matches txt2img settings.
+      expect(p['steps'], 25);
+      expect(p['cfg_scale'], 6.5);
+    });
+
+    test('an empty reference string is treated as txt2img', () {
+      final p = build(refB64: '');
+      expect(p.containsKey('init_images'), isFalse);
+      expect(p.containsKey('denoising_strength'), isFalse);
+    });
+
+    test("'Automatic' scheduler is omitted (server default)", () {
+      final p = ImageGenService.buildA1111Payload(
+        prompt: 'p',
+        negativePrompt: 'n',
+        width: 512,
+        height: 512,
+        steps: 20,
+        cfgScale: 7.0,
+        samplerName: 'Euler a',
+        scheduler: 'Automatic',
+        seed: -1,
+      );
+      expect(p.containsKey('scheduler'), isFalse);
+    });
+  });
+
   group('ImageGenMode', () {
     test(
       'has all 5 expected modes (Message Illustration/fromLastMessage removed as redundant with Visualize Scene N slider)',

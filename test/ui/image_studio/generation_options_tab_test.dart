@@ -385,11 +385,6 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   }
 
   @override
-  double get drawThingsStrength => 1.0;
-  @override
-  Future<void> setDrawThingsStrength(double v) async {}
-
-  @override
   int get drawThingsSeedMode => 2;
   @override
   Future<void> setDrawThingsSeedMode(int v) async {}

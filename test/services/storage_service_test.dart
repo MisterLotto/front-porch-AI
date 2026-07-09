@@ -684,7 +684,6 @@ void main() {
       await svc.setDrawThingsGrpcPort(7860);
       await svc.setDrawThingsSampler(5);
       await svc.setDrawThingsShift(2.5);
-      await svc.setDrawThingsStrength(0.8);
       await svc.setDrawThingsSeedMode(1);
       await svc.setDrawThingsTeaCache(true);
       await svc.setDrawThingsCfgZeroStar(true);
@@ -693,7 +692,6 @@ void main() {
       expect(prefs.getInt('draw_things_grpc_port'), 7860);
       expect(prefs.getInt('draw_things_sampler'), 5);
       expect(prefs.getDouble('draw_things_shift'), 2.5);
-      expect(prefs.getDouble('draw_things_strength'), 0.8);
       expect(prefs.getInt('draw_things_seed_mode'), 1);
       expect(prefs.getBool('draw_things_tea_cache'), true);
       expect(prefs.getBool('draw_things_cfg_zero_star'), true);

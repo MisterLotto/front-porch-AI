@@ -324,6 +324,9 @@ class StorageService extends ChangeNotifier {
   double get imageGenLoraWeight => imageGenSettings.imageGenLoraWeight;
   Future<void> setImageGenLoraWeight(double v) =>
       imageGenSettings.setImageGenLoraWeight(v);
+  double get imageGenDenoise => imageGenSettings.imageGenDenoise;
+  Future<void> setImageGenDenoise(double v) =>
+      imageGenSettings.setImageGenDenoise(v);
   int get imageGenSteps => imageGenSettings.imageGenSteps;
   Future<void> setImageGenSteps(int v) => imageGenSettings.setImageGenSteps(v);
   double get imageGenCfgScale => imageGenSettings.imageGenCfgScale;
@@ -349,9 +352,6 @@ class StorageService extends ChangeNotifier {
   double get drawThingsShift => imageGenSettings.drawThingsShift;
   Future<void> setDrawThingsShift(double v) =>
       imageGenSettings.setDrawThingsShift(v);
-  double get drawThingsStrength => imageGenSettings.drawThingsStrength;
-  Future<void> setDrawThingsStrength(double v) =>
-      imageGenSettings.setDrawThingsStrength(v);
   int get drawThingsSeedMode => imageGenSettings.drawThingsSeedMode;
   Future<void> setDrawThingsSeedMode(int v) =>
       imageGenSettings.setDrawThingsSeedMode(v);

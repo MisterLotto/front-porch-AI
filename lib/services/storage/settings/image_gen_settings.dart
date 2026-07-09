@@ -38,6 +38,13 @@ class ImageGenSettings with SettingsBase {
   String _imageGenPromptParadigm = 'natural'; // 'natural', 'tags'
   String _imageGenLora = '';
   double _imageGenLoraWeight = 0.8;
+  // img2img denoising strength — the single, backend-agnostic knob for how far
+  // a generation moves away from the supplied reference image (0 = keep the
+  // reference, 1 = ignore it). Only takes effect when a reference image is
+  // provided; pure txt2img generations never read it. Replaced the old
+  // Draw-Things-only `drawThingsStrength` (which was redundant once img2img
+  // became a shared feature across A1111/ComfyUI/Draw Things).
+  double _imageGenDenoise = 0.5;
   int _imageGenSteps = 4;
   double _imageGenCfgScale = 1.0;
   String _imageGenSampler = 'Euler a';
@@ -53,7 +60,6 @@ class ImageGenSettings with SettingsBase {
   int _drawThingsGrpcPort = 7859;
   int _drawThingsSampler = 16;
   double _drawThingsShift = 3.0;
-  double _drawThingsStrength = 1.0;
   int _drawThingsSeedMode = 2;
   bool _drawThingsTeaCache = false;
   bool _drawThingsCfgZeroStar = false;
@@ -69,6 +75,7 @@ class ImageGenSettings with SettingsBase {
   String get imageGenPromptParadigm => _imageGenPromptParadigm;
   String get imageGenLora => _imageGenLora;
   double get imageGenLoraWeight => _imageGenLoraWeight;
+  double get imageGenDenoise => _imageGenDenoise;
   int get imageGenSteps => _imageGenSteps;
   double get imageGenCfgScale => _imageGenCfgScale;
   String get imageGenSampler => _imageGenSampler;
@@ -83,7 +90,6 @@ class ImageGenSettings with SettingsBase {
   int get drawThingsGrpcPort => _drawThingsGrpcPort;
   int get drawThingsSampler => _drawThingsSampler;
   double get drawThingsShift => _drawThingsShift;
-  double get drawThingsStrength => _drawThingsStrength;
   int get drawThingsSeedMode => _drawThingsSeedMode;
   bool get drawThingsTeaCache => _drawThingsTeaCache;
   bool get drawThingsCfgZeroStar => _drawThingsCfgZeroStar;
@@ -105,6 +111,7 @@ class ImageGenSettings with SettingsBase {
         prefs?.getString(k('image_gen_prompt_paradigm')) ?? 'natural';
     _imageGenLora = prefs?.getString(k('image_gen_lora')) ?? '';
     _imageGenLoraWeight = prefs?.getDouble(k('image_gen_lora_weight')) ?? 0.8;
+    _imageGenDenoise = prefs?.getDouble(k('image_gen_denoise')) ?? 0.5;
     _imageGenSteps = prefs?.getInt(k('image_gen_steps')) ?? 4;
     _imageGenCfgScale = prefs?.getDouble(k('image_gen_cfg_scale')) ?? 1.0;
     _imageGenSampler = prefs?.getString(k('image_gen_sampler')) ?? 'Euler a';
@@ -119,7 +126,6 @@ class ImageGenSettings with SettingsBase {
     _drawThingsGrpcPort = prefs?.getInt(k('draw_things_grpc_port')) ?? 7859;
     _drawThingsSampler = prefs?.getInt(k('draw_things_sampler')) ?? 16;
     _drawThingsShift = prefs?.getDouble(k('draw_things_shift')) ?? 3.0;
-    _drawThingsStrength = prefs?.getDouble(k('draw_things_strength')) ?? 1.0;
     _drawThingsSeedMode = prefs?.getInt(k('draw_things_seed_mode')) ?? 2;
     _drawThingsTeaCache = prefs?.getBool(k('draw_things_tea_cache')) ?? false;
     _drawThingsCfgZeroStar =
@@ -198,6 +204,14 @@ class ImageGenSettings with SettingsBase {
     notify();
   }
 
+  /// img2img denoising strength. Clamped to the meaningful 0.0–1.0 fraction
+  /// (the Studio slider narrows this further to 0.2–0.9 for usable results).
+  Future<void> setImageGenDenoise(double value) async {
+    _imageGenDenoise = value.clamp(0.0, 1.0);
+    await prefs?.setDouble(k('image_gen_denoise'), _imageGenDenoise);
+    notify();
+  }
+
   Future<void> setImageGenSteps(int value) async {
     _imageGenSteps = value.clamp(1, 50);
     await prefs?.setInt(k('image_gen_steps'), _imageGenSteps);
@@ -250,12 +264,6 @@ class ImageGenSettings with SettingsBase {
   Future<void> setDrawThingsShift(double value) async {
     _drawThingsShift = value;
     await prefs?.setDouble(k('draw_things_shift'), value);
-    notify();
-  }
-
-  Future<void> setDrawThingsStrength(double value) async {
-    _drawThingsStrength = value.clamp(0.0, 1.0);
-    await prefs?.setDouble(k('draw_things_strength'), _drawThingsStrength);
     notify();
   }
 
