@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
+import { AiEngineStrip } from '../components/AiEngineStrip';
 import type { StoryListItem } from '../storyTypes';
 import { TIER_LABELS } from '../storyTypes';
 import { cardStatus, exportText, exportEpub } from './story/storyUtil';
@@ -66,6 +67,7 @@ export function StoriesPage() {
           {creating ? 'Creating…' : '＋ New story'}
         </button>
       </div>
+      <AiEngineStrip />
       {error && <p className="error">{error}</p>}
       {stories === null ? (
         <div className="spinner" aria-label="Loading" />

@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { AiEngineStrip } from '../components/AiEngineStrip';
 import { useStory } from '../hooks/useStory';
 import type { StoryAct, StoryVoice } from '../storyTypes';
 import { ChatDistillPanel } from './story/ChatDistillPanel';
@@ -51,6 +52,7 @@ export function StoryDashboardPage() {
         <h2>{p.title}</h2>
         <button className="ghost small" onClick={() => navigate(`/stories/${id}/setup`)}>Edit setup</button>
       </div>
+      <AiEngineStrip />
 
       {busy && (
         <div className="card story-progress" aria-live="polite">
