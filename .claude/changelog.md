@@ -8,7 +8,7 @@
 - **Default ON:** `image_gen_enabled` default false→true (field + load fallback). Rationale in-code: enabling only shows the ✨ button + /image — nothing generates until a backend is configured, so zero overhead; saved user choices are respected. Fixes the walkthrough's discoverability cliff (the ✨ button was invisible until users found a buried settings switch).
 - **Walkthrough gap fixes:** the Studio's "Craft / Refresh with LLM" button is now "✨ Write it for me" and the prompt box hint explains the write-then-generate flow in plain words.
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. tsc clean; bundle rebuilt; Python ast.parse OK. FULL suite green (recorded below). Live end-to-end (real preview frames from each backend) needs the maintainer's machine.
-- **Commit:** (pending)
+- **Commit:** a505182
 
 ## 2026-07-09 — feat(images): prompt review before generation + scheme-forgiving URLs + copy polish
 
