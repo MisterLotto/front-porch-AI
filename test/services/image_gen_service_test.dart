@@ -59,6 +59,18 @@ void main() {
     });
   });
 
+  group('ImageGenSettings scheduler', () {
+    test('defaults to Automatic (backend decides)', () {
+      expect(ImageGenSettings().imageGenScheduler, 'Automatic');
+    });
+
+    test('setter updates the in-memory value (prefs null in tests)', () async {
+      final s = ImageGenSettings();
+      await s.setImageGenScheduler('karras');
+      expect(s.imageGenScheduler, 'karras');
+    });
+  });
+
   group('ImageGenMode', () {
     test(
       'has all 5 expected modes (Message Illustration/fromLastMessage removed as redundant with Visualize Scene N slider)',

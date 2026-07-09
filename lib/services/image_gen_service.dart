@@ -364,6 +364,7 @@ class ImageGenService extends ChangeNotifier {
             steps: _storage.imageGenSettings.imageGenSteps,
             cfgScale: _storage.imageGenSettings.imageGenCfgScale,
             samplerName: _storage.imageGenSettings.imageGenSampler,
+            scheduler: _storage.imageGenSettings.imageGenScheduler,
             seed: _storage.imageGenSettings.imageGenSeed,
           );
         }
@@ -380,6 +381,14 @@ class ImageGenService extends ChangeNotifier {
           // A1111-style name; normalize it against what this server offers.
           final available = await comfy.fetchSamplers();
           final storedSampler = _storage.imageGenSettings.imageGenSampler;
+          // An explicit user scheduler wins; 'Automatic' derives it from the
+          // sampler (Karras-flavored names → karras, else normal) exactly as
+          // before, so the default path is unchanged.
+          final storedScheduler = _storage.imageGenSettings.imageGenScheduler;
+          final scheduler = (storedScheduler.isNotEmpty &&
+                  storedScheduler != 'Automatic')
+              ? storedScheduler
+              : ComfyUiService.schedulerFor(storedSampler);
           imageBytes = await comfy.generateImage(
             prompt: prompt,
             negativePrompt: negativePrompt,
@@ -393,7 +402,7 @@ class ImageGenService extends ChangeNotifier {
               storedSampler,
               available,
             ),
-            scheduler: ComfyUiService.schedulerFor(storedSampler),
+            scheduler: scheduler,
             loraName: _storage.imageGenSettings.imageGenLora,
             loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
             onProgress: _updateGenProgress,
@@ -1141,6 +1150,9 @@ class ImageGenService extends ChangeNotifier {
   Future<List<String>> fetchComfySamplers(String baseUrl) =>
       _ensureComfyUi.fetchSamplers();
 
+  Future<List<String>> fetchComfySchedulers(String baseUrl) =>
+      _ensureComfyUi.fetchSchedulers();
+
   /// Fetch LoRAs from an A1111 / Forge / SD.Next server, enriched with
   /// base-model family.
   ///
@@ -1353,6 +1365,36 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// Fetch available schedulers from an A1111 / Forge / SD.Next server.
+  ///
+  /// Endpoint: GET /sdapi/v1/schedulers
+  /// Returns scheduler names (the `name` field from each entry). Older forks
+  /// (and Draw Things' A1111 shim) predate this endpoint and answer 404 — that
+  /// degrades silently to an empty list, so the UI simply offers only
+  /// 'Automatic' there.
+  Future<List<String>> fetchA1111Schedulers(String baseUrl) async {
+    final client = http.Client();
+    try {
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/schedulers',
+      );
+      final response = await client
+          .get(uri)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return [];
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+      return data
+          .map((e) => (e as Map<String, dynamic>)['name']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } catch (e) {
+      debugPrint('ImageGen: fetchA1111Schedulers failed: $e');
+      return [];
+    } finally {
+      client.close();
+    }
+  }
+
   /// Generate via AUTOMATIC1111 / Draw Things local server.
   ///
   /// Endpoint: POST {baseUrl}/sdapi/v1/txt2img
@@ -1373,6 +1415,7 @@ class ImageGenService extends ChangeNotifier {
     int steps = 20,
     double cfgScale = 7.0,
     String samplerName = 'Euler a',
+    String scheduler = 'Automatic',
     int seed = -1,
   }) async {
     // Switch model only if a different checkpoint was requested.
@@ -1408,6 +1451,12 @@ class ImageGenService extends ChangeNotifier {
       'steps': steps,
       'cfg_scale': cfgScale,
       'sampler_name': samplerName,
+      // Only pin the scheduler when the user picked an explicit one. 'Automatic'
+      // omits the field so A1111 uses its own default (and older forks that
+      // don't know the field never see it). Newer A1111/Forge builds accept
+      // `scheduler` alongside `sampler_name`.
+      if (scheduler.isNotEmpty && scheduler != 'Automatic')
+        'scheduler': scheduler,
       'seed': seed,
       'batch_size': 1,
       // NOTE: override_settings is intentionally omitted here.

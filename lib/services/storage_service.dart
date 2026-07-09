@@ -332,6 +332,9 @@ class StorageService extends ChangeNotifier {
   String get imageGenSampler => imageGenSettings.imageGenSampler;
   Future<void> setImageGenSampler(String v) =>
       imageGenSettings.setImageGenSampler(v);
+  String get imageGenScheduler => imageGenSettings.imageGenScheduler;
+  Future<void> setImageGenScheduler(String v) =>
+      imageGenSettings.setImageGenScheduler(v);
   int get imageGenSeed => imageGenSettings.imageGenSeed;
   Future<void> setImageGenSeed(int v) => imageGenSettings.setImageGenSeed(v);
   String get drawThingsGrpcHost => imageGenSettings.drawThingsGrpcHost;

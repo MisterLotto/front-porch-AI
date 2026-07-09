@@ -41,6 +41,10 @@ class ImageGenSettings with SettingsBase {
   int _imageGenSteps = 4;
   double _imageGenCfgScale = 1.0;
   String _imageGenSampler = 'Euler a';
+  // 'Automatic' means "let the backend decide": A1111 omits the scheduler field
+  // (server default) and ComfyUI derives it from the sampler via
+  // ComfyUiService.schedulerFor(). Any other value is passed through verbatim.
+  String _imageGenScheduler = 'Automatic';
   int _imageGenSeed = -1;
   bool _imageGenPromptReview = true;
 
@@ -68,6 +72,7 @@ class ImageGenSettings with SettingsBase {
   int get imageGenSteps => _imageGenSteps;
   double get imageGenCfgScale => _imageGenCfgScale;
   String get imageGenSampler => _imageGenSampler;
+  String get imageGenScheduler => _imageGenScheduler;
   int get imageGenSeed => _imageGenSeed;
 
   /// Whether AI-crafted image prompts (the /image command) pause for user
@@ -103,6 +108,8 @@ class ImageGenSettings with SettingsBase {
     _imageGenSteps = prefs?.getInt(k('image_gen_steps')) ?? 4;
     _imageGenCfgScale = prefs?.getDouble(k('image_gen_cfg_scale')) ?? 1.0;
     _imageGenSampler = prefs?.getString(k('image_gen_sampler')) ?? 'Euler a';
+    _imageGenScheduler =
+        prefs?.getString(k('image_gen_scheduler')) ?? 'Automatic';
     _imageGenSeed = prefs?.getInt(k('image_gen_seed')) ?? -1;
     _imageGenPromptReview =
         prefs?.getBool(k('image_gen_prompt_review')) ?? true;
@@ -206,6 +213,12 @@ class ImageGenSettings with SettingsBase {
   Future<void> setImageGenSampler(String value) async {
     _imageGenSampler = value;
     await prefs?.setString(k('image_gen_sampler'), value);
+    notify();
+  }
+
+  Future<void> setImageGenScheduler(String value) async {
+    _imageGenScheduler = value;
+    await prefs?.setString(k('image_gen_scheduler'), value);
     notify();
   }
 

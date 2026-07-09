@@ -259,6 +259,15 @@ class ComfyUiService {
     return optionsFromObjectInfo(info, 'KSampler', 'sampler_name');
   }
 
+  /// The schedule (noise sigma curve) options ComfyUI's KSampler exposes —
+  /// karras / exponential / sgm_uniform / normal / etc. Read from the same
+  /// /object_info payload as the samplers. Empty on any error.
+  Future<List<String>> fetchSchedulers() async {
+    final info = await _objectInfo();
+    if (info == null) return const [];
+    return optionsFromObjectInfo(info, 'KSampler', 'scheduler');
+  }
+
   /// Generate one image: submit the workflow, poll /history until the prompt
   /// finishes, then download the first output image via /view. Throws with a
   /// readable message on failure (the ImageGenService dispatcher sanitizes).

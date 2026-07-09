@@ -144,6 +144,20 @@ void main() {
           },
         },
       },
+      // KSampler exposes both the sampler_name and scheduler enums — the
+      // scheduler picker reads the latter (fetchSchedulers → this extraction).
+      'KSampler': {
+        'input': {
+          'required': {
+            'sampler_name': [
+              ['euler', 'dpmpp_2m'],
+            ],
+            'scheduler': [
+              ['normal', 'karras', 'exponential', 'sgm_uniform'],
+            ],
+          },
+        },
+      },
     };
 
     test('extracts enum options from required inputs', () {
@@ -158,6 +172,10 @@ void main() {
       expect(
         ComfyUiService.optionsFromObjectInfo(info, 'LoraLoader', 'lora_name'),
         ['style.safetensors'],
+      );
+      expect(
+        ComfyUiService.optionsFromObjectInfo(info, 'KSampler', 'scheduler'),
+        ['normal', 'karras', 'exponential', 'sgm_uniform'],
       );
     });
 
