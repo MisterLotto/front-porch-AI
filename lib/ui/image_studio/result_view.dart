@@ -22,7 +22,8 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// Result view: large generated image + Variations / Edit+regen / Save / Accept.
+/// Result view: large generated image + Variations / Edit+regen / Save / Accept
+/// (+ Send to chat when launched from a conversation).
 /// Context-sensitive Accept (triggers crop for avatar modes, identical to legacy).
 class ResultView extends StatelessWidget {
   final Uint8List imageBytes;
@@ -34,6 +35,7 @@ class ResultView extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback onVariations;
   final VoidCallback onEditRegen;
+  final VoidCallback? onSendToChat;
 
   const ResultView({
     super.key,
@@ -46,6 +48,7 @@ class ResultView extends StatelessWidget {
     required this.onAccept,
     required this.onVariations,
     required this.onEditRegen,
+    this.onSendToChat,
   });
 
   @override
@@ -110,6 +113,20 @@ class ResultView extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onSendToChat != null)
+                ElevatedButton.icon(
+                  onPressed: isSaving ? null : onSendToChat,
+                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                  label: const Text('Send to chat'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.surfaceContainerOf(context),
+                    foregroundColor: AppColors.textPrimary(context),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
+                ),
               ElevatedButton.icon(
                 onPressed: isSaving ? null : onSave,
                 icon: isSaving

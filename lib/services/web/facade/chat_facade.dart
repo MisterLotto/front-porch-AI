@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/services/character_repository.dart';
@@ -35,8 +37,14 @@ class ChatFacade {
     this._characters,
     this._personas,
     this._hub,
-    this._groups,
-  );
+    this._groups, {
+    File? Function(String name)? resolveSavedImage,
+  }) : _resolveSavedImage = resolveSavedImage;
+
+  /// Resolves a saved generated image's basename to its file (with the
+  /// traversal guard) — wired to [ImageFacade.savedImageFile] by the host so
+  /// the guard lives in one place.
+  final File? Function(String name)? _resolveSavedImage;
 
   final ChatService _chat;
   final CharacterRepository _characters;
@@ -53,7 +61,19 @@ class ChatFacade {
     final activeChar = _chat.activeCharacter;
     final messages = _chat.messages.asMap().entries.map((e) {
       final m = e.value;
-      final chips = _messageChips(m.activeMetadata);
+      final md = m.activeMetadata;
+      final chips = _messageChips(md);
+      // Generated-image messages (from /image or the Studio's "Send to chat"):
+      // expose the basename so the client renders it via the existing
+      // GET /api/image/saved/<name> endpoint (desktop bubble parity).
+      String? imageName;
+      String? imagePrompt;
+      if (md != null && md['is_generated_image'] == true) {
+        final ip = md['image_path'];
+        if (ip is String) imageName = p.basename(ip);
+        final pr = md['image_prompt'];
+        if (pr is String && pr.isNotEmpty) imagePrompt = pr;
+      }
       return {
         'index': e.key,
         'sender': m.sender,
@@ -66,6 +86,8 @@ class ChatFacade {
         'swipeIndex': m.swipeIndex,
         'characterId': m.characterId,
         'chips': ?chips,
+        'image': ?imageName,
+        'imagePrompt': ?imagePrompt,
       };
     }).toList();
 
@@ -87,10 +109,11 @@ class ChatFacade {
           'constant': entry.constant,
           'remainingDepth': entry.remainingDepth,
           // ST timed effects — the web timer pills (desktop sidebar parity).
-          'stickyLeft':
-              _chat.loreTimedEffects.stickyRemaining(entry, chatLen),
-          'cooldownLeft':
-              _chat.loreTimedEffects.cooldownRemaining(entry, chatLen),
+          'stickyLeft': _chat.loreTimedEffects.stickyRemaining(entry, chatLen),
+          'cooldownLeft': _chat.loreTimedEffects.cooldownRemaining(
+            entry,
+            chatLen,
+          ),
         });
       }
     }
@@ -185,6 +208,9 @@ class ChatFacade {
         'pending': _chat.isAwaitingChanceTime,
         'event': ?_chat.webChanceTimeDisplay,
       },
+      // Crafted /image prompt awaiting review (review setting on). The client
+      // shows an edit modal and resolves via POST /api/chat/image-review.
+      'imagePromptReview': ?_chat.pendingImagePromptReview,
     };
   }
 
@@ -370,21 +396,25 @@ class ChatFacade {
     _notify();
   }
 
-  /// Append a generated image (served at `/api/image/saved/<filename>`) to the
-  /// most recent message as inline markdown, so it renders in the conversation —
-  /// parity with the desktop chat's inline-image rendering. Reuses the existing
-  /// edit path (no new ChatService surface). Returns false when there is no
-  /// message to attach to.
-  bool insertImage(String filename) {
-    final name = filename.trim();
-    if (name.isEmpty) return false;
-    final messages = _chat.messages;
-    if (messages.isEmpty) return false;
-    final index = messages.length - 1;
-    final current = messages[index].text;
-    final markdown = '![generated image](/api/image/saved/$name)';
-    final newText = current.isEmpty ? markdown : '$current\n\n$markdown';
-    _chat.editMessage(index, newText);
+  /// Attach a generated image (saved under `KoboldManager/images/`) to the
+  /// conversation as its own image message — the SAME path the desktop's
+  /// /image command and the Image Studio's "Send to chat" use
+  /// (ChatServiceImages.addGeneratedImageMessage), so it renders identically
+  /// on both surfaces. Replaces the old markdown-append-to-last-message hack,
+  /// which never rendered on desktop (relative URLs aren't matched by the
+  /// markdown-image regex) and mutated an unrelated message.
+  /// Resolve a parked /image prompt review from the web modal: the (possibly
+  /// edited) prompt to generate with, or null to cancel. No-op when nothing
+  /// is pending (e.g. the desktop dialog resolved it first).
+  void resolveImageReview(String? prompt) {
+    _chat.resolveImagePromptReview(prompt);
+    _notify();
+  }
+
+  Future<bool> insertImage(String filename, {String prompt = ''}) async {
+    final file = _resolveSavedImage?.call(filename.trim());
+    if (file == null) return false;
+    await _chat.addGeneratedImageMessage(file.path, prompt);
     _notify();
     return true;
   }
@@ -518,8 +548,8 @@ class ChatFacade {
 
   /// The chat-scoped lorebook as web editor rows (full-fidelity via `ext`).
   Map<String, dynamic> chatLorebookRows() => {
-        'entries': lorebookEntriesToJson(_chat.chatLorebook),
-      };
+    'entries': lorebookEntriesToJson(_chat.chatLorebook),
+  };
 
   /// Replace the chat-scoped lorebook from web editor rows. An empty/absent
   /// list clears it. Returns false when no session is active.
@@ -537,8 +567,8 @@ class ChatFacade {
   /// Mutation-free "would trigger next" preview for a composer draft —
   /// display names of idle entries the draft would wake up.
   List<String> lorePreview(String draft) => [
-        for (final e in _chat.previewLoreTriggers(draft)) e.displayName,
-      ];
+    for (final e in _chat.previewLoreTriggers(draft)) e.displayName,
+  ];
 
   void _notify() => _hub?.broadcastChatUpdate();
 }

@@ -53,6 +53,7 @@ import 'package:front_porch_ai/utils/emotion_labels.dart';
 import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
+import 'package:front_porch_ai/services/chat/image_command_service.dart';
 import 'package:front_porch_ai/services/chat/cast_detector.dart';
 import 'package:front_porch_ai/services/chat/scene_guest_director.dart';
 import 'package:front_porch_ai/services/chat/scene_guest_factory.dart';
@@ -119,6 +120,7 @@ part 'chat/chat_service_impersonate.dart';
 part 'chat/chat_service_session_manage.dart';
 part 'chat/chat_service_generation.dart';
 part 'chat/chat_service_cast.dart';
+part 'chat/chat_service_images.dart';
 
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
@@ -426,7 +428,10 @@ class ChatService extends ChangeNotifier {
   Future<void> joinFull(CharacterCard card) async {
     final repo = _groupChatRepository;
     if (repo == null) {
-      _setGuestStatus('⚠ Group support is unavailable right now.', isError: true);
+      _setGuestStatus(
+        '⚠ Group support is unavailable right now.',
+        isError: true,
+      );
       return;
     }
     if (_isGenerating) {
@@ -468,10 +473,7 @@ class ChatService extends ChangeNotifier {
       (g) => _getCharacterIdFromCard(g) == cardId,
     );
 
-    final additional = <CharacterCard>[
-      if (!isPresentGuest) card,
-      ...present,
-    ];
+    final additional = <CharacterCard>[if (!isPresentGuest) card, ...present];
     final entrances = isPresentGuest
         ? const <String, ({String text, bool creative})>{}
         : {
@@ -491,7 +493,10 @@ class ChatService extends ChangeNotifier {
   Future<void> promoteSceneToFull() async {
     final repo = _groupChatRepository;
     if (repo == null) {
-      _setGuestStatus('⚠ Group support is unavailable right now.', isError: true);
+      _setGuestStatus(
+        '⚠ Group support is unavailable right now.',
+        isError: true,
+      );
       return;
     }
     if (_isGenerating) {
@@ -579,6 +584,47 @@ class ChatService extends ChangeNotifier {
 
   ChatCommandHandler? _commandHandler;
 
+  /// `/image` slash-command orchestrator (lazily built in
+  /// chat_service_images.dart; callbacks read live state, so it survives
+  /// chat switches like [_commandHandler] does).
+  ImageCommandService? _imageCommand;
+
+  /// Prompt-review pause for /image (Chance-Time-style pending flag +
+  /// completer): when the review setting is on, the crafted prompt parks
+  /// here until the UI (desktop dialog / web modal) resolves it via
+  /// [resolveImagePromptReview] — see chat_service_images.dart.
+  String? _pendingImagePromptReview;
+  Completer<String?>? _imageReviewCompleter;
+
+  /// Append an already-saved generated image to the conversation as a
+  /// character message (empty text; the bubble renders the image from
+  /// metadata). Shared by the /image slash command, the Image Studio's
+  /// "Send to chat", and the web insert-image endpoint. Lives in the class
+  /// (not the images extension) so web-facade fakes can override it.
+  Future<void> addGeneratedImageMessage(
+    String path,
+    String prompt, {
+    String? senderName,
+    String? characterId,
+  }) async {
+    if (_activeCharacter == null && _activeGroup == null) return;
+    _messages.add(
+      ChatMessage(
+        text: '',
+        sender: senderName ?? _activeCharacter?.name ?? 'Narrator',
+        isUser: false,
+        characterId: characterId,
+        metadata: {
+          'is_generated_image': true,
+          'image_path': path,
+          'image_prompt': prompt,
+        },
+      ),
+    );
+    await _saveChat();
+    notifyListeners();
+  }
+
   /// Slash-command dispatcher (lazily built). All cross-state mutations route
   /// back here via small callbacks so the handler stays pure and never imports
   /// this god file or any heavy service.
@@ -665,6 +711,7 @@ class ChatService extends ChangeNotifier {
           intervalSeconds: gen.dynamicResponseInterval,
         );
       },
+      generateImage: (args) => _ensureImageCommand().handle(args),
     );
   }
 
@@ -776,8 +823,11 @@ class ChatService extends ChangeNotifier {
 
     await _addGuestWithStatus(
       displayName: detected.name,
-      mint: (onStatus) =>
-          _mintSceneGuest(detected.name, detected.descriptor, onStatus: onStatus),
+      mint: (onStatus) => _mintSceneGuest(
+        detected.name,
+        detected.descriptor,
+        onStatus: onStatus,
+      ),
     );
   }
 
@@ -824,15 +874,21 @@ class ChatService extends ChangeNotifier {
     // build the guest FROM the host's portrayal (the "guest IS the host" bug).
     // Skip grounding in that case and let concept-only generation handle it.
     final firstLc = first.toLowerCase();
-    final hostFirst =
-        (_activeCharacter?.name ?? '').trim().split(RegExp(r'\s+')).first.toLowerCase();
+    final hostFirst = (_activeCharacter?.name ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .first
+        .toLowerCase();
     final userFirst = _userPersonaService.persona.name
         .trim()
         .split(RegExp(r'\s+'))
         .first
         .toLowerCase();
     if (firstLc == hostFirst || firstLc == userFirst) return '';
-    final re = RegExp(r'\b' + RegExp.escape(first) + r'\b', caseSensitive: false);
+    final re = RegExp(
+      r'\b' + RegExp.escape(first) + r'\b',
+      caseSensitive: false,
+    );
     final hits = <String>[];
     for (final m in _messages) {
       if (m.sender == 'System') continue;
@@ -882,7 +938,9 @@ class ChatService extends ChangeNotifier {
         final resolved = <CharacterCard>[];
         final validIds = <String>[];
         for (final id in List<String>.from(_sceneGuestIds)) {
-          if (_sceneChanged(token)) return; // disposed or chat switched mid-pass
+          if (_sceneChanged(token)) {
+            return; // disposed or chat switched mid-pass
+          }
           final card = await repo.getCharacterCardById(id);
           if (card != null) {
             resolved.add(card);
@@ -962,7 +1020,11 @@ class ChatService extends ChangeNotifier {
   /// Update the transient Scene Guest status line (the inline banner). [sticky]
   /// keeps it shown until the next update (for in-progress steps); otherwise it
   /// auto-clears after a few seconds (errors linger a little longer).
-  void _setGuestStatus(String? msg, {bool isError = false, bool sticky = false}) {
+  void _setGuestStatus(
+    String? msg, {
+    bool isError = false,
+    bool sticky = false,
+  }) {
     _guestStatusClearTimer?.cancel();
     _guestStatusClearTimer = null;
     _guestActivityStatus = msg;
@@ -1012,7 +1074,10 @@ class ChatService extends ChangeNotifier {
     if (existing == null) {
       final wanted = displayName.trim().toLowerCase();
       if (_sceneGuestCards.any((g) => g.name.trim().toLowerCase() == wanted)) {
-        _setGuestStatus('"$displayName" is already in the scene.', isError: true);
+        _setGuestStatus(
+          '"$displayName" is already in the scene.',
+          isError: true,
+        );
         return;
       }
     }
@@ -1046,7 +1111,9 @@ class ChatService extends ChangeNotifier {
       await _enterSceneGuest(card);
       if (_sceneChanged(token)) return; // switched during the entrance turn
       _setGuestStatus('${card.name} joined the scene'); // auto-clears
-      _maybeGenerateGuestPortrait(card); // background; never blocks the entrance
+      _maybeGenerateGuestPortrait(
+        card,
+      ); // background; never blocks the entrance
     } finally {
       // Only clear busy if we still own this scene — a context switch already
       // reset it (and may have started new work we must not clobber).
@@ -1086,7 +1153,7 @@ class ChatService extends ChangeNotifier {
         tmpPath = path.join(
           Directory.systemTemp.path,
           'fp_guest_portrait_${dbId ?? card.name.hashCode}_'
-              '${DateTime.now().microsecondsSinceEpoch}.png',
+          '${DateTime.now().microsecondsSinceEpoch}.png',
         );
         await File(tmpPath).writeAsBytes(bytes);
         await V2CardService().saveCardAsPng(card, cardPath, tmpPath);
@@ -1477,7 +1544,8 @@ class ChatService extends ChangeNotifier {
     timedEffects: _loreTimedEffects,
     getChatLength: () => _messages.length,
     resolveKeyMacros: (key) {
-      final ch = _activeCharacter ??
+      final ch =
+          _activeCharacter ??
           (_groupCharacters.isNotEmpty ? _groupCharacters.first : null);
       if (ch == null) return key;
       return _macroResolver.resolve(
@@ -1555,8 +1623,9 @@ class ChatService extends ChangeNotifier {
     }
     if (_cachedGroupBookJson != raw) {
       try {
-        _cachedGroupBook =
-            Lorebook.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        _cachedGroupBook = Lorebook.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
       } catch (_) {
         _cachedGroupBook = Lorebook(entries: []);
       }
@@ -2684,7 +2753,9 @@ class ChatService extends ChangeNotifier {
   /// Director/observerMode (per design — Director is narrative control,
   /// not simulation).
   bool get _realismActiveThisMode =>
-      _realismEnabled && !_autoResponseInProgress && (_activeGroup == null || !_observerMode);
+      _realismEnabled &&
+      !_autoResponseInProgress &&
+      (_activeGroup == null || !_observerMode);
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;
   bool get isCancellingRealismEval => _isCancellingRealismEval;
@@ -2959,7 +3030,6 @@ class ChatService extends ChangeNotifier {
     });
   }
 
-
   /// Returns a stable ID string for a character card.
   /// Delegates to the canonical stable ID for group contexts.
   /// See [StableGroupId.stableGroupId] in lib/utils/character_id.dart
@@ -3171,14 +3241,14 @@ class ChatService extends ChangeNotifier {
     if (!_storageService.generationSettings.dynamicResponses) return;
     if (!_hasCompletedExchange) return;
     if (_autoResponseInProgress) {
-      final cooldown = _storageService.generationSettings.dynamicResponseInterval * 2;
+      final cooldown =
+          _storageService.generationSettings.dynamicResponseInterval * 2;
       _idleTimer = Timer(Duration(seconds: cooldown), _onIdleTimerFired);
       return;
     }
     final interval = _storageService.generationSettings.dynamicResponseInterval;
     _idleTimer = Timer(Duration(seconds: interval), _onIdleTimerFired);
   }
-
 
   void _cancelIdleTimer() {
     _idleTimer?.cancel();
@@ -3190,10 +3260,19 @@ class ChatService extends ChangeNotifier {
 
   void _onIdleTimerFired() {
     if (_disposed) return;
-    if (_isGenerating) { _resetIdleTimer(); return; }
-    if (_ttsService != null && _ttsService!.isSpeaking) { _resetIdleTimer(); return; }
+    if (_isGenerating) {
+      _resetIdleTimer();
+      return;
+    }
+    if (_ttsService != null && _ttsService!.isSpeaking) {
+      _resetIdleTimer();
+      return;
+    }
     final llm = _llmProvider?.activeService ?? _koboldService;
-    if (!llm.isReady) { _resetIdleTimer(); return; }
+    if (!llm.isReady) {
+      _resetIdleTimer();
+      return;
+    }
     if (_consecutiveAutoResponses >=
         _storageService.generationSettings.dynamicResponseMaxMessages) {
       return;
@@ -3202,8 +3281,9 @@ class ChatService extends ChangeNotifier {
     // Capture pre-AFK needs vector so the needs delta chip has a baseline
     if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {
       _pendingRealismMetadata ??= {};
-      _pendingRealismMetadata!['needs_pre_turn_vector'] =
-          Map<String, int>.from(_needsSimulation.vector);
+      _pendingRealismMetadata!['needs_pre_turn_vector'] = Map<String, int>.from(
+        _needsSimulation.vector,
+      );
     }
 
     // Advance narrative time for the elapsed period.
@@ -3218,15 +3298,17 @@ class ChatService extends ChangeNotifier {
     _autoResponseInProgress = true;
     _consecutiveAutoResponses++;
 
-    _generateResponse(GenerationMode.normal).then((_) {
-      _pendingIdleCue = null;
-      _resetIdleTimer();
-      _autoResponseInProgress = false;
-    }).catchError((_) {
-      _pendingIdleCue = null;
-      _autoResponseInProgress = false;
-      _resetIdleTimer();
-    });
+    _generateResponse(GenerationMode.normal)
+        .then((_) {
+          _pendingIdleCue = null;
+          _resetIdleTimer();
+          _autoResponseInProgress = false;
+        })
+        .catchError((_) {
+          _pendingIdleCue = null;
+          _autoResponseInProgress = false;
+          _resetIdleTimer();
+        });
   }
 
   String _buildAutonomousCue() {
@@ -3237,8 +3319,7 @@ class ChatService extends ChangeNotifier {
     // announced "a few hours have passed" while the clock was frozen — e.g.
     // Realism off but passage-of-time still defaulted on — the cue would
     // contradict the unchanging time on every AFK turn.
-    final timeAdvancing =
-        _realismEnabled && _timeService.passageOfTimeEnabled;
+    final timeAdvancing = _realismEnabled && _timeService.passageOfTimeEnabled;
     final timeStr = timeAdvancing
         ? '${_timeService.timeOfDay} (Day ${_timeService.dayCount})'
         : '';
@@ -3259,18 +3340,21 @@ class ChatService extends ChangeNotifier {
     }
 
     // Full autonomous cue with needs data
-    final lowNeeds = _needsSimulation
-        .getLowNeedsForInjection(_needsSimulation.vector);
+    final lowNeeds = _needsSimulation.getLowNeedsForInjection(
+      _needsSimulation.vector,
+    );
     String needsStr = '';
     if (lowNeeds.isNotEmpty) {
-      needsStr = lowNeeds.map((n) {
-        final desc = n.value <= 20
-            ? 'low'
-            : n.value <= 35
+      needsStr = lowNeeds
+          .map((n) {
+            final desc = n.value <= 20
+                ? 'low'
+                : n.value <= 35
                 ? 'getting low'
                 : 'noticeable';
-        return '${n.key} is $desc (${n.value}/100)';
-      }).join(', ');
+            return '${n.key} is $desc (${n.value}/100)';
+          })
+          .join(', ');
     }
 
     final preamble = timeAdvancing
@@ -3302,6 +3386,10 @@ class ChatService extends ChangeNotifier {
     // runs a separate LLM call that doesn't set _isGenerating).
     if (_guestBusy) return;
     clearSuggestions();
+
+    // A new message while an /image prompt review is parked cancels it —
+    // the desktop dialog is modal, but the web modal can be typed around.
+    resolveImagePromptReview(null);
 
     // User is interacting — clear any pending auto-response state
     _pendingIdleCue = null;
@@ -3443,7 +3531,9 @@ class ChatService extends ChangeNotifier {
     // First exchange complete — arm idle timer
     _hasCompletedExchange = true;
     if (_storageService.generationSettings.dynamicResponses) {
-      debugPrint('[DynamicResponses] First exchange done, arming idle timer (interval=${_storageService.generationSettings.dynamicResponseInterval}s)');
+      debugPrint(
+        '[DynamicResponses] First exchange done, arming idle timer (interval=${_storageService.generationSettings.dynamicResponseInterval}s)',
+      );
       _resetIdleTimer();
     }
 
@@ -3564,7 +3654,6 @@ class ChatService extends ChangeNotifier {
     await _generateResponse(GenerationMode.normal);
   }
 
-
   /// Navigate swipes on a specific message. direction: -1 = left, +1 = right.
   /// If swiping right past the last swipe on the last bot message, regenerates.
   Future<void> swipeMessage(int messageIndex, int direction) async {
@@ -3621,7 +3710,6 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-
   /// Trigger the next character to speak in group mode.
   Future<void> triggerNextCharacter() async {
     if (_activeGroup == null || _groupCharacters.isEmpty || _isGenerating) {
@@ -3653,10 +3741,8 @@ class ChatService extends ChangeNotifier {
     return _groupManager!.pickNextSpeaker();
   }
 
-
   // ensureInterCharacterRelationshipsSeeded / updateInterCharacterFeelingsFromRecentExchange
   // moved verbatim to RelationshipService (with callbacks for group/messages). Old bodies deleted.
-
 
   /// Reload the current session from the database without clearing messages first.
   /// Used after cloud sync or DB migration updates the database — preserves the
@@ -3854,7 +3940,6 @@ class ChatService extends ChangeNotifier {
     );
   }
 
-
   /// Coordinator for the periodic background evals (now just Scene Guest cast
   /// detection). User-fact extraction and chat summaries were replaced by the
   /// Journal maintenance pass (_maybeRunJournalPass); character evolution was
@@ -3946,7 +4031,6 @@ class ChatService extends ChangeNotifier {
   /// getters are statically dispatched and cannot be overridden via
   /// `implements`.
   bool get isGrowthPassRunning => _isGrowthPassRunning;
-
 
   /// Get the list of character IDs to search for RAG memory retrieval.
   /// Reads the current character's `memorySources` from the DB and includes
@@ -4053,7 +4137,6 @@ class ChatService extends ChangeNotifier {
   // grouped "Speaker Internal State" output (see realism_state_injection.dart).
   // The sub-builders themselves are still instantiated and passed to the composer.
   // Chance Time remains separate (it is not part of the per-turn realism state bundle).
-
 
   /// Loads the active objectives for the given character in the current session.
   /// Safe to call from group objective UIs — does not mutate global _activeObjectives.

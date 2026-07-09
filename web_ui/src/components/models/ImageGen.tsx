@@ -18,6 +18,8 @@ interface ImageConfig {
   cfgScale: number;
   sampler: string;
   localUrl: string;
+  comfyUrl: string;
+  promptReview: boolean;
   drawThingsHost: string;
   drawThingsPort: number;
   remoteApiUrl: string;
@@ -68,7 +70,9 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
 
   const insertIntoChat = () => {
     if (!filename) return;
-    api.post('/api/chat/insert-image', { filename })
+    // prompt rides along so the chat image carries the same hover/copyable
+    // prompt the desktop attaches (older servers ignore the extra field).
+    api.post('/api/chat/insert-image', { filename, prompt })
       .then(() => setInserted(true))
       .catch((e) => onError(e instanceof ApiError ? e.message : 'Could not insert into chat'));
   };
@@ -82,6 +86,7 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
           <option value="remote">Remote API</option>
           <option value="a1111">Local (A1111)</option>
           <option value="drawthings">Local (Draw Things)</option>
+          <option value="comfyui">Local (ComfyUI)</option>
         </select>
       </label>
       {cfg.backend === 'remote' ? (
@@ -110,6 +115,17 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
             <input value={cfg.model} onChange={(e) => set({ model: e.target.value })} onBlur={() => saveConfig({ model: cfg.model })} />
           </label>
         </>
+      ) : cfg.backend === 'comfyui' ? (
+        <>
+          <label>
+            ComfyUI URL
+            <input value={cfg.comfyUrl} onChange={(e) => set({ comfyUrl: e.target.value })} onBlur={() => saveConfig({ comfyUrl: cfg.comfyUrl })} placeholder="http://127.0.0.1:8188" />
+          </label>
+          <label>
+            Model <span className="muted small">(checkpoint — required for ComfyUI)</span>
+            <input value={cfg.model} onChange={(e) => set({ model: e.target.value })} onBlur={() => saveConfig({ model: cfg.model })} />
+          </label>
+        </>
       ) : (
         <>
           <div className="img-row2">
@@ -129,6 +145,14 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
         </>
       )}
 
+      <label className="tool-toggle">
+        <span>Review AI prompts before generating (/image pauses so you can edit)</span>
+        <input
+          type="checkbox"
+          checked={cfg.promptReview}
+          onChange={(e) => { set({ promptReview: e.target.checked }); void saveConfig({ promptReview: e.target.checked }); }}
+        />
+      </label>
       <label>
         Art style
         <select value={STYLES[cfg.style] ? cfg.style : 'photorealistic'} onChange={(e) => { set({ style: e.target.value }); void saveConfig({ style: e.target.value }); }}>

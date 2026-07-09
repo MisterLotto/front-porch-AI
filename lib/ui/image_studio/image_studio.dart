@@ -63,6 +63,11 @@ class ImageStudio extends StatefulWidget {
   final List<String>? recentMessages;
   final LLMService? llmService;
   final void Function(String path)? onAccept;
+
+  /// When provided (chat launches), the result view offers "Send to chat" —
+  /// the callback receives the image bytes + final prompt and attaches them
+  /// to the conversation (ChatService.addGeneratedImageMessage wiring).
+  final Future<void> Function(Uint8List bytes, String prompt)? onSendToChat;
   // Stage 4 richer context (wired from chat launch for better prompts; kept in sync with service thins,
   // _buildPromptContext, ImageGenContext, chat_page _show, builder use, and studio _ctx + craft path).
   // Keep reset/ctor blocks in sync (no owned reset state here; per-invocation snapshot like before).
@@ -87,6 +92,7 @@ class ImageStudio extends StatefulWidget {
     this.recentMessages,
     this.llmService,
     this.onAccept,
+    this.onSendToChat,
     this.currentExpression,
     this.timeOfDay,
     this.lightingHint,
@@ -110,6 +116,7 @@ class ImageStudio extends StatefulWidget {
     List<String>? recentMessages,
     LLMService? llmService,
     void Function(String path)? onAccept,
+    Future<void> Function(Uint8List bytes, String prompt)? onSendToChat,
     // Stage 4: pass richer fields through (keep show/ctor/widget fields/_ctx/craft + service thins + launch site + builder in sync).
     String? currentExpression,
     String? timeOfDay,
@@ -134,6 +141,7 @@ class ImageStudio extends StatefulWidget {
         recentMessages: recentMessages,
         llmService: llmService,
         onAccept: onAccept,
+        onSendToChat: onSendToChat,
         currentExpression: currentExpression,
         timeOfDay: timeOfDay,
         lightingHint: lightingHint,
@@ -493,6 +501,11 @@ class _ImageStudioState extends State<ImageStudio> {
         prompt: prompt,
         negativePrompt: _negativeForGen,
         size: size,
+        // Portrait modes orient the configured size vertically (same flag the
+        // /image command and the character creators pass).
+        isPortrait:
+            _activeMode == ImageGenMode.characterPortrait ||
+            _activeMode == ImageGenMode.userAvatar,
       );
 
       if (!mounted) return;
@@ -806,7 +819,10 @@ class _ImageStudioState extends State<ImageStudio> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
+                      ),
                       child: TabBar(
                         labelColor: AppColors.textPrimary(context),
                         unselectedLabelColor: AppColors.textSecondary(context),
@@ -824,7 +840,9 @@ class _ImageStudioState extends State<ImageStudio> {
                           // Tab 0: Generation Settings (full controls; enable toggle omitted + forced on in this context)
                           SingleChildScrollView(
                             padding: const EdgeInsets.all(20),
-                            child: const GenerationOptionsTab(showEnableToggle: false),
+                            child: const GenerationOptionsTab(
+                              showEnableToggle: false,
+                            ),
                           ),
 
                           // Tab 1: Studio (existing workflow)
@@ -847,7 +865,8 @@ class _ImageStudioState extends State<ImageStudio> {
 
                                 // Visualize slider (user spec, only for that type): "slider for how many messages to send in the image generation prompt"
                                 // (stripped of all &lt;think&gt;; simple because messages already generated). Default 5, 1-10. Affects craft assembly only.
-                                if (_activeMode == ImageGenMode.visualizeScene) ...[
+                                if (_activeMode ==
+                                    ImageGenMode.visualizeScene) ...[
                                   const SizedBox(height: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -855,26 +874,32 @@ class _ImageStudioState extends State<ImageStudio> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: AppColors.surfaceContainerOf(context),
+                                      color: AppColors.surfaceContainerOf(
+                                        context,
+                                      ),
                                       borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: AppColors.borderOf(context),
                                       ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
                                           'Most recent messages to include (N): $_visualizeMessageCount',
                                           style: TextStyle(
-                                            color: AppColors.textSecondary(context),
+                                            color: AppColors.textSecondary(
+                                              context,
+                                            ),
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                         Slider(
-                                          value: _visualizeMessageCount.toDouble(),
+                                          value: _visualizeMessageCount
+                                              .toDouble(),
                                           min: 1,
                                           max: 10,
                                           divisions: 9,
@@ -883,7 +908,8 @@ class _ImageStudioState extends State<ImageStudio> {
                                               ? null
                                               : (v) {
                                                   setState(() {
-                                                    _visualizeMessageCount = v.round();
+                                                    _visualizeMessageCount = v
+                                                        .round();
                                                     // The N is captured live and passed on the next Craft for this mode
                                                     // (so exactly that many stripped recent messages + your current box
                                                     // text as guidance + character visual info from the card + persona + style are sent
@@ -900,7 +926,9 @@ class _ImageStudioState extends State<ImageStudio> {
                                         Text(
                                           'The N most recent chat messages (stripped of all &lt;think&gt;) from when the studio opened. These are the primary "what is actually going on right now" content for the visualization prompt (plus your box text as guidance + character visual info from the card + persona + style).',
                                           style: TextStyle(
-                                            color: AppColors.textTertiary(context),
+                                            color: AppColors.textTertiary(
+                                              context,
+                                            ),
                                             fontSize: 10,
                                           ),
                                         ),
@@ -917,7 +945,9 @@ class _ImageStudioState extends State<ImageStudio> {
                                   paradigm: _paradigm,
                                   builder: _builder,
                                   onStyleChanged: _isBusy ? null : _updateStyle,
-                                  onParadigmChanged: _isBusy ? null : _updateParadigm,
+                                  onParadigmChanged: _isBusy
+                                      ? null
+                                      : _updateParadigm,
                                 ),
 
                                 const SizedBox(height: 12),
@@ -950,7 +980,9 @@ class _ImageStudioState extends State<ImageStudio> {
                                   isGenerating: _isGenerating,
                                   isCrafting: _isCrafting,
                                   error: _error,
-                                  promptIsSane: _editablePrompt.trim().isNotEmpty,
+                                  promptIsSane: _editablePrompt
+                                      .trim()
+                                      .isNotEmpty,
                                 ),
 
                                 const SizedBox(height: 12),
@@ -970,6 +1002,29 @@ class _ImageStudioState extends State<ImageStudio> {
                                           onAccept: _accept,
                                           onVariations: _variations,
                                           onEditRegen: _editAndRegen,
+                                          onSendToChat:
+                                              widget.onSendToChat == null
+                                              ? null
+                                              : () async {
+                                                  final bytes =
+                                                      _currentImageBytes;
+                                                  if (bytes == null) return;
+                                                  await widget.onSendToChat!(
+                                                    bytes,
+                                                    _editablePrompt.trim(),
+                                                  );
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Image sent to chat',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                },
                                         )
                                       : const SizedBox.shrink(),
                                 ),

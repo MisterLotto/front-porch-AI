@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -25,6 +26,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/grpc/draw_things_grpc_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
+import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 
 /// Available image generation modes.
@@ -40,7 +42,8 @@ enum ImageGenMode {
 enum ImageGenBackend {
   remote,
   a1111,
-  drawThings;
+  drawThings,
+  comfyUi;
 
   static ImageGenBackend fromKey(String key) {
     switch (key) {
@@ -48,6 +51,8 @@ enum ImageGenBackend {
         return ImageGenBackend.a1111;
       case 'drawthings':
         return ImageGenBackend.drawThings;
+      case 'comfyui':
+        return ImageGenBackend.comfyUi;
       default:
         return ImageGenBackend.remote;
     }
@@ -59,6 +64,8 @@ enum ImageGenBackend {
         return 'a1111';
       case ImageGenBackend.drawThings:
         return 'drawthings';
+      case ImageGenBackend.comfyUi:
+        return 'comfyui';
       case ImageGenBackend.remote:
         return 'remote';
     }
@@ -70,6 +77,8 @@ enum ImageGenBackend {
         return 'AUTOMATIC1111';
       case ImageGenBackend.drawThings:
         return 'Draw Things';
+      case ImageGenBackend.comfyUi:
+        return 'ComfyUI';
       case ImageGenBackend.remote:
         return 'Remote API';
     }
@@ -119,6 +128,24 @@ class ImageGenService extends ChangeNotifier {
   Uint8List? _lastGeneratedImage;
   String? _lastSavedPath;
 
+  /// Live generation progress (0..1) and the latest in-progress preview
+  /// frame, so the UI can show the image "coming to life" instead of a
+  /// spinner. Fed per backend: A1111 polls /sdapi/v1/progress (percent +
+  /// preview), ComfyUI streams its WebSocket (percent + preview when the
+  /// server has previews enabled), Draw Things reports sampling steps
+  /// (percent only). Remote APIs return in one shot — both stay null there
+  /// (indeterminate). Cleared at the start and end of every generation.
+  double? _genProgress;
+  Uint8List? _genPreview;
+  double? get genProgress => _genProgress;
+  Uint8List? get genPreview => _genPreview;
+
+  void _updateGenProgress(double? progress, [Uint8List? preview]) {
+    _genProgress = progress;
+    if (preview != null) _genPreview = preview;
+    notifyListeners();
+  }
+
   /// The checkpoint name that is currently loaded on the local A1111 server.
   /// Used to skip redundant unload→reload cycles that can leave tensors
   /// split across CPU and CUDA on Windows/nVidia setups.
@@ -143,10 +170,21 @@ class ImageGenService extends ChangeNotifier {
         return _storage.imageGenSettings.localImageGenUrl.isNotEmpty;
       case ImageGenBackend.drawThings:
         return _storage.imageGenSettings.drawThingsGrpcHost.isNotEmpty;
+      case ImageGenBackend.comfyUi:
+        return _storage.imageGenSettings.comfyUiUrl.isNotEmpty;
     }
   }
 
   DrawThingsGrpcService? _drawThingsGrpc;
+  ComfyUiService? _comfyUi;
+
+  ComfyUiService get _ensureComfyUi {
+    final url = _storage.imageGenSettings.comfyUiUrl;
+    if (_comfyUi == null || _comfyUi!.baseUrl != url) {
+      _comfyUi = ComfyUiService(baseUrl: url);
+    }
+    return _comfyUi!;
+  }
 
   // Thin delegation hook for prompt construction.
   // Full ownership of ImageGenContext mapping semantics, mode contracts (visualizeScene N-slider
@@ -186,7 +224,7 @@ class ImageGenService extends ChangeNotifier {
   /// Returns the image bytes on success, or null on failure.
   Future<Uint8List?> generateImage({
     required String prompt,
-    String negativePrompt = '',
+    String? negativePrompt,
     String? size,
     Uint8List?
     referenceImage, // for img2img / reference conditioning (wired for Draw Things; ignored by others for now)
@@ -197,7 +235,25 @@ class ImageGenService extends ChangeNotifier {
     _statusMessage = 'Generating image...';
     _lastGeneratedImage = null;
     _lastSavedPath = null;
+    _genProgress = null;
+    _genPreview = null;
     notifyListeners();
+
+    // Callers that don't specify a negative prompt (guest portraits, the
+    // character creators, web chargen) get the user's configured default —
+    // previously those paths silently generated with none. An explicit ''
+    // still means "no negative". Remote APIs ignore negatives (see the
+    // remote generators below).
+    negativePrompt ??= _storage.imageGenSettings.imageGenNegativePrompt;
+
+    // Portrait requests (character/persona portraits, guest card art) orient
+    // the configured size vertically when the caller didn't pass an explicit
+    // size. Previously this flag was accepted but ignored, so portraits came
+    // out landscape whenever the default size was landscape.
+    if (size == null && isPortrait) {
+      final (w, h) = _parseSize(_storage.imageGenSettings.imageGenSize);
+      if (w > h) size = '${h}x$w';
+    }
 
     try {
       Uint8List imageBytes;
@@ -240,6 +296,10 @@ class ImageGenService extends ChangeNotifier {
             final seedMode = _storage.drawThingsSeedMode;
             final teaCache = _storage.drawThingsTeaCache;
             final cfgZeroStar = _storage.drawThingsCfgZeroStar;
+            // Same shared LoRA setting the A1111 path uses; DT applies it
+            // natively via the generation config instead of a prompt tag.
+            final loraName = _storage.imageGenSettings.imageGenLora;
+            final loraWeight = _storage.imageGenSettings.imageGenLoraWeight;
 
             imageBytes = await _generateViaDrawThingsGrpc(
               grpcService: grpcService,
@@ -257,7 +317,15 @@ class ImageGenService extends ChangeNotifier {
               seedMode: seedMode,
               teaCache: teaCache,
               cfgZeroStar: cfgZeroStar,
+              loras: loraName.isEmpty
+                  ? const []
+                  : [
+                      {'file': loraName, 'weight': loraWeight},
+                    ],
               referenceImage: referenceImage,
+              onProgress: (step, total) => _updateGenProgress(
+                total > 0 ? (step / total).clamp(0.0, 1.0) : null,
+              ),
             );
           } catch (e) {
             // Sanitize for user display (no full tracebacks, absolute paths, or raw CLI internals)
@@ -297,6 +365,49 @@ class ImageGenService extends ChangeNotifier {
             samplerName: _storage.imageGenSettings.imageGenSampler,
             seed: _storage.imageGenSettings.imageGenSeed,
           );
+        }
+      } else if (backend == ImageGenBackend.comfyUi) {
+        // ── ComfyUI (HTTP + bundled txt2img workflow) ──────────────────
+        _statusMessage = 'Connecting to ComfyUI...';
+        notifyListeners();
+        try {
+          final comfy = _ensureComfyUi;
+          final (width, height) = _parseSize(
+            size ?? _storage.imageGenSettings.imageGenSize,
+          );
+          // The stored sampler is shared across backends and may be an
+          // A1111-style name; normalize it against what this server offers.
+          final available = await comfy.fetchSamplers();
+          final storedSampler = _storage.imageGenSettings.imageGenSampler;
+          imageBytes = await comfy.generateImage(
+            prompt: prompt,
+            negativePrompt: negativePrompt,
+            model: model ?? _storage.imageGenSettings.imageGenModel,
+            width: width,
+            height: height,
+            steps: _storage.imageGenSettings.imageGenSteps,
+            cfgScale: _storage.imageGenSettings.imageGenCfgScale,
+            seed: _storage.imageGenSettings.imageGenSeed,
+            samplerName: ComfyUiService.normalizeSampler(
+              storedSampler,
+              available,
+            ),
+            scheduler: ComfyUiService.schedulerFor(storedSampler),
+            loraName: _storage.imageGenSettings.imageGenLora,
+            loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
+            onProgress: _updateGenProgress,
+          );
+        } catch (e) {
+          // Sanitize for user display (mirrors the Draw Things branch).
+          final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+          _statusMessage = msg.startsWith('ComfyUI') || msg.contains('model')
+              ? msg
+              : 'ComfyUI generation failed. Check that ComfyUI is running and '
+                    'the URL is correct.';
+          debugPrint('ImageGen: ComfyUI error: $e');
+          _isGenerating = false;
+          notifyListeners();
+          return null;
         }
       } else {
         // ── Remote API ─────────────────────────────────────────────────
@@ -350,6 +461,8 @@ class ImageGenService extends ChangeNotifier {
       return null;
     } finally {
       _isGenerating = false;
+      _genProgress = null;
+      _genPreview = null;
       notifyListeners();
     }
   }
@@ -890,12 +1003,12 @@ class ImageGenService extends ChangeNotifier {
 
   /// Test whether a local image-gen server is reachable.
   ///
-  /// For Draw Things, uses gRPC. For A1111, uses HTTP.
+  /// For Draw Things, uses gRPC. For ComfyUI, GET /system_stats. For A1111,
+  /// GET /sdapi/v1/sd-models.
   Future<bool> testLocalConnection(String baseUrl) async {
-    final isDrawThings =
-        _storage.imageGenSettings.imageGenBackend == 'drawthings';
+    final backendKey = _storage.imageGenSettings.imageGenBackend;
 
-    if (isDrawThings) {
+    if (backendKey == 'drawthings') {
       try {
         final grpcService = _ensureDrawThingsGrpc;
         return await grpcService.testConnection();
@@ -903,10 +1016,14 @@ class ImageGenService extends ChangeNotifier {
         debugPrint('ImageGen: Draw Things connection test failed: $e');
         return false;
       }
+    } else if (backendKey == 'comfyui') {
+      return _ensureComfyUi.testConnection();
     } else {
       final client = http.Client();
       try {
-        final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/sd-models');
+        final uri = Uri.parse(
+          '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/sd-models',
+        );
         final response = await client
             .get(uri)
             .timeout(const Duration(seconds: 5));
@@ -937,7 +1054,9 @@ class ImageGenService extends ChangeNotifier {
     } else {
       final client = http.Client();
       try {
-        final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/sd-models');
+        final uri = Uri.parse(
+          '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/sd-models',
+        );
         final response = await client
             .get(uri)
             .timeout(const Duration(seconds: 15));
@@ -957,7 +1076,8 @@ class ImageGenService extends ChangeNotifier {
 
   /// Fetch models from a Draw Things server.
   ///
-  /// Uses the Draw Things gRPC CLI to fetch available .ckpt models (via the special Echo('models') response). LoRAs not surfaced here.
+  /// Uses the Draw Things gRPC CLI to fetch available .ckpt models (via the
+  /// special Echo('models') response). LoRAs come from [fetchDrawThingsLoras].
   Future<List<String>> fetchDrawThingsModels(String baseUrl) async {
     try {
       final grpcService = _ensureDrawThingsGrpc;
@@ -968,15 +1088,41 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// Fetch LoRA files from a Draw Things server (gRPC CLI op 'loras' — the
+  /// same Echo('models') listing as [fetchDrawThingsModels], filtered to
+  /// LoRAs). The selected name is applied natively via the generation config.
+  Future<List<String>> fetchDrawThingsLoras(String baseUrl) async {
+    try {
+      final grpcService = _ensureDrawThingsGrpc;
+      return await grpcService.fetchLoras();
+    } catch (e) {
+      debugPrint('ImageGen: fetchDrawThingsLoras failed: $e');
+      return [];
+    }
+  }
+
+  /// ComfyUI discovery — checkpoints / LoRAs / samplers all come from one
+  /// GET /object_info payload (see [ComfyUiService]); URL from settings.
+  Future<List<String>> fetchComfyModels(String baseUrl) =>
+      _ensureComfyUi.fetchModels();
+
+  Future<List<String>> fetchComfyLoras(String baseUrl) =>
+      _ensureComfyUi.fetchLoras();
+
+  Future<List<String>> fetchComfySamplers(String baseUrl) =>
+      _ensureComfyUi.fetchSamplers();
+
   /// Fetch LoRAs from an A1111 / Forge / SD.Next server.
   ///
   /// Endpoint: GET /sdapi/v1/loras
   /// Returns a list of LoRA names (the `name` field from each entry).
-  /// Draw Things does not support this endpoint — returns empty list.
+  /// Draw Things uses [fetchDrawThingsLoras] instead (no HTTP endpoint).
   Future<List<String>> fetchA1111Loras(String baseUrl) async {
     final client = http.Client();
     try {
-      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/loras');
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/loras',
+      );
       debugPrint('ImageGen: Fetching LoRAs from $uri');
       final response = await client
           .get(uri)
@@ -1013,7 +1159,7 @@ class ImageGenService extends ChangeNotifier {
     final client = http.Client();
     try {
       final uri = Uri.parse(
-        '${baseUrl.trimRight()}/sdapi/v1/unload-checkpoint',
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/unload-checkpoint',
       );
       debugPrint('ImageGen: Requesting model unload at $uri');
       final response = await client
@@ -1044,16 +1190,15 @@ class ImageGenService extends ChangeNotifier {
   /// Returns true if the model was successfully switched and confirmed ready.
   Future<bool> switchLocalModel(String baseUrl, String modelName) async {
     if (modelName.isEmpty) return false;
-    final isDrawThings =
-        _storage.imageGenSettings.imageGenBackend == 'drawthings';
-    if (isDrawThings) {
-      // Draw Things has no separate switch endpoint exposed via our gRPC CLI.
-      // The requested 'model' is passed per-generation inside the config dict
-      // (see _generateViaDrawThingsGrpc + DrawThingsGrpcService). Treat as
-      // immediate success so web API / legacy callers and the lastLoaded
-      // tracking continue to work without error.
+    final backendKey = _storage.imageGenSettings.imageGenBackend;
+    if (backendKey == 'drawthings' || backendKey == 'comfyui') {
+      // Draw Things and ComfyUI have no separate switch endpoint — the model
+      // is named per-generation (DT config dict / ComfyUI workflow graph).
+      // Treat as immediate success so web API / legacy callers and the
+      // lastLoaded tracking continue to work without error.
       debugPrint(
-        'ImageGen: switchLocalModel: DT backend — recording $modelName (sent at generate time; no pre-load RPC)',
+        'ImageGen: switchLocalModel: $backendKey backend — recording '
+        '$modelName (sent at generate time; no pre-load call)',
       );
       _lastLoadedCheckpoint = modelName;
       return true;
@@ -1063,7 +1208,9 @@ class ImageGenService extends ChangeNotifier {
     // Step 2: request the new checkpoint
     final client = http.Client();
     try {
-      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/options');
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/options',
+      );
       debugPrint('ImageGen: Switching checkpoint → $modelName');
       final response = await client
           .post(
@@ -1111,7 +1258,9 @@ class ImageGenService extends ChangeNotifier {
     String expected,
     http.Client client,
   ) async {
-    final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/options');
+    final uri = Uri.parse(
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/options',
+    );
     const maxAttempts = 30;
     const pollInterval = Duration(seconds: 2);
 
@@ -1145,7 +1294,9 @@ class ImageGenService extends ChangeNotifier {
   Future<List<String>> fetchA1111Samplers(String baseUrl) async {
     final client = http.Client();
     try {
-      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/samplers');
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/samplers',
+      );
       final response = await client
           .get(uri)
           .timeout(const Duration(seconds: 15));
@@ -1197,7 +1348,9 @@ class ImageGenService extends ChangeNotifier {
     }
 
     final (width, height) = _parseSize(size);
-    final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/txt2img');
+    final uri = Uri.parse(
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/txt2img',
+    );
 
     // Inject LoRA into the prompt: <lora:name:weight>
     final effectivePrompt = (loraName.isNotEmpty)
@@ -1227,6 +1380,29 @@ class ImageGenService extends ChangeNotifier {
     };
 
     final client = http.Client();
+    // Live progress while the txt2img request is in flight: A1111 exposes
+    // GET /sdapi/v1/progress with a percent AND an in-progress preview frame,
+    // so the chat/studio can show the image forming instead of a spinner.
+    final progressUri = Uri.parse(
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/progress',
+    );
+    final progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      try {
+        final r = await http
+            .get(progressUri)
+            .timeout(const Duration(seconds: 2));
+        if (r.statusCode != 200) return;
+        final p = jsonDecode(r.body) as Map<String, dynamic>;
+        final pct = (p['progress'] as num?)?.toDouble();
+        final b64 = p['current_image'] as String?;
+        _updateGenProgress(
+          (pct != null && pct > 0) ? pct.clamp(0.0, 1.0) : null,
+          (b64 != null && b64.isNotEmpty) ? base64Decode(b64) : null,
+        );
+      } catch (_) {
+        // transient — the next tick retries; the request itself is the truth
+      }
+    });
     try {
       final response = await client
           .post(
@@ -1255,12 +1431,13 @@ class ImageGenService extends ChangeNotifier {
       final b64 = images[0] as String;
       return base64Decode(b64);
     } finally {
+      progressTimer.cancel();
       client.close();
     }
   }
 
   /// Generate via Draw Things gRPC service (Python client bridge).
-  /// Extended with DT-native params + optional reference image (passed through to CLI).
+  /// Extended with DT-native params, LoRAs, + optional reference image (passed through to CLI).
   Future<Uint8List> _generateViaDrawThingsGrpc({
     required DrawThingsGrpcService grpcService,
     required String prompt,
@@ -1278,7 +1455,9 @@ class ImageGenService extends ChangeNotifier {
     bool teaCache = false,
     double teaCacheThreshold = 0.15,
     bool cfgZeroStar = false,
+    List<Map<String, dynamic>> loras = const [],
     Uint8List? referenceImage,
+    void Function(int step, int totalSteps)? onProgress,
   }) async {
     return await grpcService.generateImage(
       prompt: prompt,
@@ -1296,7 +1475,9 @@ class ImageGenService extends ChangeNotifier {
       teaCache: teaCache,
       teaCacheThreshold: teaCacheThreshold,
       cfgZeroStar: cfgZeroStar,
+      loras: loras,
       referenceImageBytes: referenceImage,
+      onProgress: onProgress,
     );
   }
 
@@ -1307,6 +1488,12 @@ class ImageGenService extends ChangeNotifier {
 
   /// Generate via OpenAI-compatible /images/generations endpoint.
   /// Works with Nano-GPT, direct OpenAI, and local A1111/SD servers.
+  ///
+  /// NOTE: [negativePrompt] is accepted for signature symmetry but is NOT
+  /// sent — the OpenAI images API has no negative_prompt parameter and
+  /// rejects unknown fields, so it is deliberately dropped here (and by
+  /// [_generateViaOpenRouter]). Negatives only take effect on the A1111 and
+  /// Draw Things backends.
   Future<Uint8List> _generateViaOpenAICompat({
     required String apiUrl,
     required String apiKey,

@@ -22,9 +22,15 @@ import 'settings_base.dart';
 ///
 /// Lifted Stage 7.
 class ImageGenSettings with SettingsBase {
-  bool _imageGenEnabled = false;
-  String _imageGenBackend = 'remote'; // 'remote', 'a1111', 'drawthings'
+  // Default ON since 2026-07: the feature is opt-out. Enabling only shows the
+  // ✨ toolbar button and the /image command — nothing generates until a
+  // backend is actually configured, so there is no overhead for users who
+  // never touch it. Users who previously toggled it keep their saved choice.
+  bool _imageGenEnabled = true;
+  String _imageGenBackend =
+      'remote'; // 'remote', 'a1111', 'drawthings', 'comfyui'
   String _localImageGenUrl = 'http://127.0.0.1:7860';
+  String _comfyUiUrl = 'http://127.0.0.1:8188';
   String _imageGenModel = '';
   String _imageGenSize = '1024x1024';
   String _imageGenNegativePrompt = 'blurry, low quality, watermark, text';
@@ -36,6 +42,7 @@ class ImageGenSettings with SettingsBase {
   double _imageGenCfgScale = 7.0;
   String _imageGenSampler = 'Euler a';
   int _imageGenSeed = -1;
+  bool _imageGenPromptReview = true;
 
   // Draw Things gRPC-specific
   String _drawThingsGrpcHost = '127.0.0.1';
@@ -50,6 +57,7 @@ class ImageGenSettings with SettingsBase {
   bool get imageGenEnabled => _imageGenEnabled;
   String get imageGenBackend => _imageGenBackend;
   String get localImageGenUrl => _localImageGenUrl;
+  String get comfyUiUrl => _comfyUiUrl;
   String get imageGenModel => _imageGenModel;
   String get imageGenSize => _imageGenSize;
   String get imageGenNegativePrompt => _imageGenNegativePrompt;
@@ -62,6 +70,10 @@ class ImageGenSettings with SettingsBase {
   String get imageGenSampler => _imageGenSampler;
   int get imageGenSeed => _imageGenSeed;
 
+  /// Whether AI-crafted image prompts (the /image command) pause for user
+  /// review/editing before being sent to the backend. Default ON.
+  bool get imageGenPromptReview => _imageGenPromptReview;
+
   String get drawThingsGrpcHost => _drawThingsGrpcHost;
   int get drawThingsGrpcPort => _drawThingsGrpcPort;
   int get drawThingsSampler => _drawThingsSampler;
@@ -72,10 +84,12 @@ class ImageGenSettings with SettingsBase {
   bool get drawThingsCfgZeroStar => _drawThingsCfgZeroStar;
 
   void load() {
-    _imageGenEnabled = prefs?.getBool(k('image_gen_enabled')) ?? false;
+    _imageGenEnabled = prefs?.getBool(k('image_gen_enabled')) ?? true;
     _imageGenBackend = prefs?.getString(k('image_gen_backend')) ?? 'remote';
     _localImageGenUrl =
         prefs?.getString(k('local_image_gen_url')) ?? 'http://127.0.0.1:7860';
+    _comfyUiUrl =
+        prefs?.getString(k('comfy_ui_url')) ?? 'http://127.0.0.1:8188';
     _imageGenModel = prefs?.getString(k('image_gen_model')) ?? '';
     _imageGenSize = prefs?.getString(k('image_gen_size')) ?? '1024x1024';
     _imageGenNegativePrompt =
@@ -90,6 +104,8 @@ class ImageGenSettings with SettingsBase {
     _imageGenCfgScale = prefs?.getDouble(k('image_gen_cfg_scale')) ?? 7.0;
     _imageGenSampler = prefs?.getString(k('image_gen_sampler')) ?? 'Euler a';
     _imageGenSeed = prefs?.getInt(k('image_gen_seed')) ?? -1;
+    _imageGenPromptReview =
+        prefs?.getBool(k('image_gen_prompt_review')) ?? true;
 
     _drawThingsGrpcHost =
         prefs?.getString(k('draw_things_grpc_host')) ?? '127.0.0.1';
@@ -118,6 +134,18 @@ class ImageGenSettings with SettingsBase {
   Future<void> setLocalImageGenUrl(String value) async {
     _localImageGenUrl = value;
     await prefs?.setString(k('local_image_gen_url'), value);
+    notify();
+  }
+
+  Future<void> setComfyUiUrl(String value) async {
+    _comfyUiUrl = value;
+    await prefs?.setString(k('comfy_ui_url'), value);
+    notify();
+  }
+
+  Future<void> setImageGenPromptReview(bool value) async {
+    _imageGenPromptReview = value;
+    await prefs?.setBool(k('image_gen_prompt_review'), value);
     notify();
   }
 

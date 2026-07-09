@@ -24,14 +24,29 @@ part of '../chat_service.dart';
 /// change) to shrink the god file. Private members, so safe to move to an
 /// extension (never part of the public interface / fakeable).
 extension ChatServiceHistory on ChatService {
+  /// One history line per message (shared by both history builders so they
+  /// can never drift). Director notes get bracketed so the AI treats them as
+  /// instructions; generated-image messages (empty text + image metadata from
+  /// `/image` or the studio's Send to chat) are described briefly instead of
+  /// producing a bare "Sender:" line.
+  String _formatHistoryLine(ChatMessage m) {
+    if (m.characterId == '__director__') {
+      return '[Director: ${m.text}]';
+    }
+    if (m.activeMetadata?['is_generated_image'] == true && m.text.isEmpty) {
+      final prompt = (m.activeMetadata?['image_prompt'] as String? ?? '')
+          .trim();
+      final short = prompt.length > 120
+          ? '${prompt.substring(0, 120)}…'
+          : prompt;
+      return '${m.sender}: [shares a generated image'
+          '${short.isEmpty ? '' : ': $short'}]';
+    }
+    return '${m.sender}: ${m.text}';
+  }
+
   String _buildChatHistory({List<LoreDepthEntry> depthLore = const []}) {
-    final lines = _messages.map((m) {
-      // Director notes get bracketed so the AI treats them as instructions
-      if (m.characterId == '__director__') {
-        return '[Director: ${m.text}]';
-      }
-      return '${m.sender}: ${m.text}';
-    }).toList();
+    final lines = _messages.map(_formatHistoryLine).toList();
     if (lines.any((l) => ChatService._macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }
@@ -74,12 +89,7 @@ extension ChatServiceHistory on ChatService {
     if (_messages.isEmpty) return (history: '', droppedCount: 0, tokenCount: 0);
 
     // Format all messages, skipping hidden group realism checkpoints
-    final formatted = _messages.map((m) {
-      if (m.characterId == '__director__') {
-        return '[Director: ${m.text}]';
-      }
-      return '${m.sender}: ${m.text}';
-    }).toList();
+    final formatted = _messages.map(_formatHistoryLine).toList();
     if (formatted.any((l) => ChatService._macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }

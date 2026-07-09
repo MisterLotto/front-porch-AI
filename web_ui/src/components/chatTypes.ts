@@ -32,6 +32,10 @@ export interface Message {
   hasThinking?: boolean;
   thinkingContent?: string;
   characterId?: string;
+  /** Generated-image message: saved basename, served at /api/image/saved/<image>. */
+  image?: string;
+  /** The prompt that produced the image (tooltip / alt text). */
+  imagePrompt?: string;
 }
 
 export interface Realism {

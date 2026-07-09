@@ -10,9 +10,11 @@ Protocol matches whisper_stt.py / kokoro_tts.py style:
 Ops supported:
   test:    {"op":"test","host":"127.0.0.1","port":7859}
   models:  {"op":"models","host":"...","port":7859}
+  loras:   {"op":"loras","host":"...","port":7859}
   generate:{"op":"generate","host":"...","port":7859,
             "prompt":"...","negative_prompt":"",
-            "config":{...GenerationConfig fields as dict (enums as int)...},
+            "config":{...GenerationConfig fields as dict (enums as int);
+                      "loras":[{"file":"...","weight":0.8}] optional...},
             "reference_image_path":"/abs/path/to/ref.png" (optional),
             "output_path":"/abs/path/for/result.png" (optional)}
 
@@ -21,6 +23,9 @@ Response shapes:
   error:   {"success":false, "error":"..." }
 """
 
+import contextlib
+import io
+import re
 import sys
 import json
 import os
@@ -32,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from client import DrawThingsClient, GenerationConfig, Sampler, SeedMode
+    from client import DrawThingsClient, GenerationConfig, LoRAConfig, Sampler, SeedMode
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed (client.py or deps): {e}"}), flush=True)
     sys.exit(1)
@@ -88,6 +93,25 @@ def _build_generation_config(cfg: dict) -> GenerationConfig:
         }
         seed_mode_val = sm_map.get(sm_name, SeedMode.SCALE_ALIKE)
 
+    # LoRAs: list of {"file": str, "weight": float, "mode": int} dicts from Dart.
+    # Draw Things applies them natively (unlike A1111's <lora:...> prompt tags).
+    loras = []
+    for entry in cfg.get("loras") or []:
+        if not isinstance(entry, dict):
+            continue
+        lora_file = str(entry.get("file") or "").strip()
+        if not lora_file:
+            continue
+        try:
+            weight = float(entry.get("weight", 1.0))
+        except (TypeError, ValueError):
+            weight = 1.0
+        try:
+            mode = int(entry.get("mode", 0))  # 0=All, 1=Base, 2=Refiner
+        except (TypeError, ValueError):
+            mode = 0
+        loras.append(LoRAConfig(file=lora_file, weight=weight, mode=mode))
+
     return GenerationConfig(
         model=cfg.get("model", ""),
         refiner_model=cfg.get("refiner_model", ""),
@@ -111,7 +135,7 @@ def _build_generation_config(cfg: dict) -> GenerationConfig:
         resolution_dependent_shift=bool(cfg.get("resolution_dependent_shift", False)),
         mask_blur=float(cfg.get("mask_blur", 1.5)),
         sharpness=float(cfg.get("sharpness", 0.0)),
-        # loras etc. left at defaults for v1 (can be extended later)
+        loras=loras,
     )
 
 
@@ -152,15 +176,22 @@ def main():
                 print(json.dumps({"success": False, "error": f"gRPC connect/test failed: {e}"}), flush=True)
                 sys.exit(1)
 
-        elif op == "models":
+        elif op in ("models", "loras"):
             if pb2 is None:
                 print(json.dumps({"success": False, "error": "pb2 module not importable (grpc generated files missing)"}), flush=True)
                 sys.exit(1)
             try:
                 client._connect()
                 # Draw Things special-case: Echo(name='models') returns a response with .files
+                # (one flat list of everything DT knows about — checkpoints, LoRAs, VAEs, …).
+                # op "models" filters that list down to plausible checkpoints; op "loras"
+                # filters the same list down to LoRA files instead.
                 response = client._stub.Echo(pb2.EchoRequest(name="models"))
                 raw_files = getattr(response, "files", []) or []
+                if op == "loras":
+                    loras = [str(f) for f in raw_files if "lora" in str(f).lower()]
+                    print(json.dumps({"success": True, "loras": loras}), flush=True)
+                    sys.exit(0)
                 # Heuristic filter to show only plausible main diffusion checkpoints.
                 # Draw Things' raw model list contains everything (VAEs, encoders,
                 # ControlNets, upscalers, preprocessors, LoRAs, video models, etc.).
@@ -236,14 +267,32 @@ def main():
                 os.close(fd)
 
             start = time.time()
-            result = client.generate(
-                config=gcfg,
-                prompt=prompt,
-                negative_prompt=negative,
-                image_path=ref_image_path,
-                scale_factor=1,
-                verbose=False,
-            )
+            # Live step progress WITHOUT touching client.py: its verbose mode
+            # prints "  Step N..." per sampling signpost to stdout. Stdout is
+            # reserved for the final JSON, so route those prints through a
+            # scanner that forwards them to STDERR as "FP_PROGRESS <N>" lines
+            # (the Dart side streams stderr and turns them into a progress
+            # bar) and swallows the rest of the verbose chatter.
+            step_re = re.compile(r"^\s*Step (\d+)\.\.\.")
+
+            class _ProgressScanner(io.TextIOBase):
+                def write(self, text):
+                    for line in str(text).splitlines():
+                        m = step_re.match(line)
+                        if m:
+                            print(f"FP_PROGRESS {m.group(1)}",
+                                  file=sys.stderr, flush=True)
+                    return len(text)
+
+            with contextlib.redirect_stdout(_ProgressScanner()):
+                result = client.generate(
+                    config=gcfg,
+                    prompt=prompt,
+                    negative_prompt=negative,
+                    image_path=ref_image_path,
+                    scale_factor=1,
+                    verbose=True,
+                )
             elapsed = result.elapsed_seconds if hasattr(result, "elapsed_seconds") else (time.time() - start)
 
             if not result.images:
@@ -269,7 +318,7 @@ def main():
             sys.exit(0)
 
         else:
-            print(json.dumps({"success": False, "error": f"Unknown op '{op}' (expected test/models/generate)"}), flush=True)
+            print(json.dumps({"success": False, "error": f"Unknown op '{op}' (expected test/models/loras/generate)"}), flush=True)
             sys.exit(1)
 
     except Exception as e:

@@ -248,9 +248,12 @@ extension CreatorEngine on CreatorState {
     isGeneratingAvatar = true;
     notify();
     try {
+      // No hardcoded size: use the configured size, oriented portrait, and the
+      // configured default negative (via generateImage's defaults). The old
+      // fixed 512x512 both capped quality on local backends and made remote
+      // models that reject small sizes (e.g. DALL·E 3) fail outright.
       final bytes = await imageService.generateImage(
         prompt: prompt,
-        size: '512x512',
         isPortrait: true,
       );
       if (bytes != null) generatedAvatar = bytes;

@@ -9,15 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-/// Progress update from image generation
-class ImageGenProgress {
-  final int step;
-  final int totalSteps;
-  final String message;
-
-  const ImageGenProgress(this.step, this.totalSteps, {this.message = ''});
-}
-
 /// Draw Things gRPC service — thin JSON CLI wrapper around the (untouched) Python client.py
 /// Bundled via PyInstaller in release builds (Resources/dt_grpc/dt_grpc_client/...).
 /// Falls back to python3 + dt_grpc_client.py for flutter run dev (requires `pip install -r tools/dt-grpc-python/requirements.txt` once).
@@ -29,92 +20,137 @@ class DrawThingsGrpcService {
     debugPrint('DrawThingsGrpcService: host=$host port=$port (CLI sidecar)');
   }
 
+  /// Runs one JSON request through the CLI sidecar and returns the parsed
+  /// JSON response map, or null when the CLI failed / returned non-JSON.
+  ///
+  /// Consolidates the CLI resolution + spawn + stdin/stdout plumbing that was
+  /// previously copy-pasted into testConnection/fetchModels/generateImage
+  /// (three near-identical ~50-line blocks). Resolution order: the PyInstaller
+  /// bundle (macOS Resources/dt_grpc/...) first, then the dev fallback of
+  /// `python`/`python3 tools/dt-grpc-python/dt_grpc_client.py` found by
+  /// walking up from the executable dir (mirrors the stt/kokoro pattern).
+  /// [onStderrLine] streams stderr lines as they arrive (used by generate for
+  /// live `FP_PROGRESS <step>` lines); the full stderr is still collected for
+  /// the error log either way.
+  Future<Map<String, dynamic>?> _runCli(
+    Map<String, dynamic> request,
+    Duration timeout, {
+    void Function(String line)? onStderrLine,
+  }) async {
+    final execDir = File(Platform.resolvedExecutable).parent.path;
+    String? cliExe;
+    String? pyScript;
+    bool useWrapper = false;
+    if (Platform.isMacOS) {
+      final contents = File(Platform.resolvedExecutable).parent.parent.path;
+      final bundled = p.join(
+        contents,
+        'Resources',
+        'dt_grpc',
+        'dt_grpc_client',
+        'dt_grpc_client',
+      );
+      if (File(bundled).existsSync()) {
+        cliExe = bundled;
+        useWrapper = true;
+      }
+    }
+    if (cliExe == null) {
+      var dir = Directory(execDir);
+      for (int i = 0; i < 12; i++) {
+        final cand = File(
+          p.join(dir.path, 'tools', 'dt-grpc-python', 'dt_grpc_client.py'),
+        );
+        if (cand.existsSync()) {
+          pyScript = cand.path;
+          break;
+        }
+        final parent = dir.parent;
+        if (parent.path == dir.path) break;
+        dir = parent;
+      }
+      if (pyScript == null) {
+        final cwdCand = File(
+          p.join(
+            Directory.current.path,
+            'tools',
+            'dt-grpc-python',
+            'dt_grpc_client.py',
+          ),
+        );
+        if (cwdCand.existsSync()) pyScript = cwdCand.path;
+      }
+    }
+
+    final process = await Process.start(
+      useWrapper ? cliExe! : (Platform.isWindows ? 'python' : 'python3'),
+      useWrapper ? [] : (pyScript != null ? [pyScript] : []),
+      includeParentEnvironment: true,
+    );
+    process.stdin.writeln(jsonEncode(request));
+    await process.stdin.close();
+
+    final stdoutFut = process.stdout.transform(utf8.decoder).join();
+    final stderrBuf = StringBuffer();
+    final stderrFut = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach((line) {
+          stderrBuf.writeln(line);
+          onStderrLine?.call(line);
+        });
+    final exitCode = await process.exitCode.timeout(timeout);
+    final stdoutStr = await stdoutFut;
+    await stderrFut;
+    final stderrStr = stderrBuf.toString();
+
+    final filteredErr = stderrStr
+        .split('\n')
+        .where((l) => !l.contains('CERTIFICATE_VERIFY_FAILED'))
+        .join('\n')
+        .trim();
+    if (filteredErr.isNotEmpty) {
+      debugPrint('DrawThingsGrpcService: CLI stderr: $filteredErr');
+    }
+
+    // The CLI should emit exactly one clean JSON line on stdout, but if extra
+    // prints leaked, fall back to the last JSON-looking line.
+    Map<String, dynamic>? parsed;
+    try {
+      parsed = jsonDecode(stdoutStr.trim()) as Map<String, dynamic>;
+    } catch (_) {
+      for (final line in stdoutStr.trim().split('\n').reversed) {
+        final t = line.trim();
+        if (t.startsWith('{') && t.endsWith('}')) {
+          try {
+            parsed = jsonDecode(t) as Map<String, dynamic>;
+          } catch (_) {}
+          break;
+        }
+      }
+    }
+    if (parsed == null || exitCode != 0 && parsed['success'] != true) {
+      debugPrint(
+        'DrawThingsGrpcService: CLI op=${request['op']} failed '
+        '(exit $exitCode): $stdoutStr',
+      );
+    }
+    return parsed;
+  }
+
   /// Tests connection via the JSON CLI sidecar (bundled or dev fallback).
   Future<bool> testConnection() async {
     try {
-      final req = jsonEncode({'op': 'test', 'host': host, 'port': port});
-
-      // Inline CLI invocation (no new private helpers — see method count hygiene)
-      final execDir = File(Platform.resolvedExecutable).parent.path;
-      String? cliExe;
-      String? pyScript;
-      bool useWrapper = false;
-      if (Platform.isMacOS) {
-        final contents = File(Platform.resolvedExecutable).parent.parent.path;
-        final bundled = p.join(
-          contents,
-          'Resources',
-          'dt_grpc',
-          'dt_grpc_client',
-          'dt_grpc_client',
-        );
-        if (File(bundled).existsSync()) {
-          cliExe = bundled;
-          useWrapper = true;
-        }
-      }
-      if (cliExe == null) {
-        // Dev fallback: walk for dt_grpc_client.py (mirrors stt/kokoro pattern, inlined)
-        var dir = Directory(execDir);
-        for (int i = 0; i < 12; i++) {
-          final cand = File(
-            p.join(dir.path, 'tools', 'dt-grpc-python', 'dt_grpc_client.py'),
-          );
-          if (cand.existsSync()) {
-            pyScript = cand.path;
-            break;
-          }
-          final parent = dir.parent;
-          if (parent.path == dir.path) break;
-          dir = parent;
-        }
-        if (pyScript == null) {
-          final cwdCand = File(
-            p.join(
-              Directory.current.path,
-              'tools',
-              'dt-grpc-python',
-              'dt_grpc_client.py',
-            ),
-          );
-          if (cwdCand.existsSync()) pyScript = cwdCand.path;
-        }
-      }
-
-      final process = await Process.start(
-        useWrapper ? cliExe! : (Platform.isWindows ? 'python' : 'python3'),
-        useWrapper ? [] : (pyScript != null ? [pyScript] : []),
-        includeParentEnvironment: true,
-      );
-      process.stdin.writeln(req);
-      await process.stdin.close();
-
-      final stdoutFut = process.stdout.transform(utf8.decoder).join();
-      final stderrFut = process.stderr.transform(utf8.decoder).join();
-      final exitCode = await process.exitCode.timeout(
-        const Duration(seconds: 25),
-      );
-      final stdoutStr = await stdoutFut;
-      final stderrStr = await stderrFut;
-
-      if (exitCode == 0) {
-        try {
-          final parsed = jsonDecode(stdoutStr.trim());
-          if (parsed is Map && parsed['success'] == true) {
-            debugPrint('DrawThingsGrpcService: testConnection OK');
-            return true;
-          }
-        } catch (_) {}
-      }
-      final filteredTestErr = stderrStr
-          .split('\n')
-          .where((l) => !l.contains('CERTIFICATE_VERIFY_FAILED'))
-          .join('\n')
-          .trim();
+      final parsed = await _runCli({
+        'op': 'test',
+        'host': host,
+        'port': port,
+      }, const Duration(seconds: 25));
+      final ok = parsed?['success'] == true;
       debugPrint(
-        'DrawThingsGrpcService: testConnection failed: $stdoutStr / $filteredTestErr',
+        'DrawThingsGrpcService: testConnection ${ok ? "OK" : "failed"}',
       );
-      return false;
+      return ok;
     } catch (e) {
       debugPrint('DrawThingsGrpcService: testConnection error: $e');
       return false;
@@ -124,153 +160,90 @@ class DrawThingsGrpcService {
   /// Fetches checkpoint models via the JSON CLI sidecar (uses Draw Things Echo hack internally in CLI).
   Future<List<String>> fetchModels() async {
     try {
-      final req = jsonEncode({'op': 'models', 'host': host, 'port': port});
+      final parsed = await _runCli({
+        'op': 'models',
+        'host': host,
+        'port': port,
+      }, const Duration(seconds: 25));
+      if (parsed == null || parsed['success'] != true) return [];
+      final raw = (parsed['models'] as List?)?.cast<String>() ?? <String>[];
+      // Secondary filter on Dart side (defense in depth).
+      // This mirrors the improved logic in dt_grpc_client.py.
+      // We use broad category patterns so users don't have to manually
+      // blacklist every VAE, upscaler (4x_ultrasharp, etc.), or preprocessor.
+      final skip = [
+        // Text encoders / CLIP / T5 / LLM encoders
+        'clip', 't5', 'text_encoder', 'encoder', 'gemma', 'llama',
+        'mistral', 'qwen', 'phi', 'chroma', 'ltx', 'vicuna', 'alpaca',
 
-      // Inline CLI invocation (duplicated resolution + spawn to obey "at most 2 new private methods across all Dart changes" rule)
-      final execDir = File(Platform.resolvedExecutable).parent.path;
-      String? cliExe;
-      String? pyScript;
-      bool useWrapper = false;
-      if (Platform.isMacOS) {
-        final contents = File(Platform.resolvedExecutable).parent.parent.path;
-        final bundled = p.join(
-          contents,
-          'Resources',
-          'dt_grpc',
-          'dt_grpc_client',
-          'dt_grpc_client',
-        );
-        if (File(bundled).existsSync()) {
-          cliExe = bundled;
-          useWrapper = true;
-        }
-      }
-      if (cliExe == null) {
-        var dir = Directory(execDir);
-        for (int i = 0; i < 12; i++) {
-          final cand = File(
-            p.join(dir.path, 'tools', 'dt-grpc-python', 'dt_grpc_client.py'),
-          );
-          if (cand.existsSync()) {
-            pyScript = cand.path;
-            break;
-          }
-          final parent = dir.parent;
-          if (parent.path == dir.path) break;
-          dir = parent;
-        }
-        if (pyScript == null) {
-          final cwdCand = File(
-            p.join(
-              Directory.current.path,
-              'tools',
-              'dt-grpc-python',
-              'dt_grpc_client.py',
-            ),
-          );
-          if (cwdCand.existsSync()) pyScript = cwdCand.path;
-        }
-      }
+        // VAEs
+        'vae',
 
-      final process = await Process.start(
-        useWrapper ? cliExe! : (Platform.isWindows ? 'python' : 'python3'),
-        useWrapper ? [] : (pyScript != null ? [pyScript] : []),
-        includeParentEnvironment: true,
-      );
-      process.stdin.writeln(req);
-      await process.stdin.close();
+        // Safety / NSFW filters
+        'safety',
 
-      final stdoutFut = process.stdout.transform(utf8.decoder).join();
-      final stderrFut = process.stderr.transform(utf8.decoder).join();
-      final exitCode = await process.exitCode.timeout(
-        const Duration(seconds: 25),
-      );
-      final stdoutStr = await stdoutFut;
-      final stderrStr = await stderrFut;
+        // LoRAs
+        'lora',
 
-      if (exitCode == 0) {
-        try {
-          var parsed = jsonDecode(stdoutStr.trim());
-          if (parsed is Map && parsed['success'] == true) {
-            // good
-          } else {
-            // try last JSON line robustness
-            final lines = stdoutStr.trim().split('\n').reversed;
-            for (final line in lines) {
-              final t = line.trim();
-              if (t.startsWith('{') && t.endsWith('}')) {
-                parsed = jsonDecode(t);
-                break;
-              }
-            }
-          }
-          if (parsed is Map && parsed['success'] == true) {
-            final raw =
-                (parsed['models'] as List?)?.cast<String>() ?? <String>[];
-            // Secondary filter on Dart side (defense in depth).
-            // This mirrors the improved logic in dt_grpc_client.py.
-            // We use broad category patterns so users don't have to manually
-            // blacklist every VAE, upscaler (4x_ultrasharp, etc.), or preprocessor.
-            final skip = [
-              // Text encoders / CLIP / T5 / LLM encoders
-              'clip', 't5', 'text_encoder', 'encoder', 'gemma', 'llama',
-              'mistral', 'qwen', 'phi', 'chroma', 'ltx', 'vicuna', 'alpaca',
+        // ControlNet + common preprocessors
+        'controlnet', 'openpose', 'dwpose', 'pose', 'depth', 'canny',
+        'normal', 'lineart', 'softedge', 'seg', 'inpaint', 'ip2p',
+        'shuffle', 'mlsd', 'tile', 'blur', 'hed', 'parsenet',
 
-              // VAEs
-              'vae',
+        // Upscalers (catches most 4x_*, realesrgan, ultrasharp variants etc.)
+        '4x_', '2x_', 'realesrgan', 'esrgan', 'ultrasharp', 'swinir',
+        'hat_', 'real_esrgan', 'upscaler',
 
-              // Safety / NSFW filters
-              'safety',
+        // Video / I2V / motion models
+        'i2v', 'video', 'wan_', 'svd', 'motion',
+      ];
+      // Trust the Python CLI's skip list primarily; include everything that is
+      // not a known sidecar type so the dropdown populates even when Draw
+      // Things reports bare names, .pth files, or paths.
+      final models = raw.where((f) {
+        final lower = f.toLowerCase();
+        return !skip.any((k) => lower.contains(k));
+      }).toList();
 
-              // LoRAs
-              'lora',
-
-              // ControlNet + common preprocessors
-              'controlnet', 'openpose', 'dwpose', 'pose', 'depth', 'canny',
-              'normal', 'lineart', 'softedge', 'seg', 'inpaint', 'ip2p',
-              'shuffle', 'mlsd', 'tile', 'blur', 'hed', 'parsenet',
-
-              // Upscalers (catches most 4x_*, realesrgan, ultrasharp variants etc.)
-              '4x_', '2x_', 'realesrgan', 'esrgan', 'ultrasharp', 'swinir',
-              'hat_', 'real_esrgan', 'upscaler',
-
-              // Video / I2V / motion models
-              'i2v', 'video', 'wan_', 'svd', 'motion',
-            ];
-            final models = raw.where((f) {
-              final lower = f.toLowerCase();
-              if (skip.any((k) => lower.contains(k))) return false;
-              // Trust the Python CLI's skip list primarily.
-              // Include virtually everything that is not a known sidecar type.
-              // This makes the dropdown actually populate for users whose
-              // Draw Things reports bare names, .pth, paths, etc.
-              return true;
-            }).toList();
-
-            debugPrint(
-              'DrawThingsGrpcService: Fetched ${models.length} models via CLI (after filtering)',
-            );
-            return models;
-          }
-        } catch (_) {}
-      }
-      final filteredFetchErr = stderrStr
-          .split('\n')
-          .where((l) => !l.contains('CERTIFICATE_VERIFY_FAILED'))
-          .join('\n')
-          .trim();
       debugPrint(
-        'DrawThingsGrpcService: fetchModels failed (CLI): $stdoutStr / $filteredFetchErr',
+        'DrawThingsGrpcService: Fetched ${models.length} models via CLI (after filtering)',
       );
-      return [];
+      return models;
     } catch (e) {
       debugPrint('DrawThingsGrpcService: fetchModels error: $e');
       return [];
     }
   }
 
+  /// Fetches available LoRA files from Draw Things (op 'loras' — same
+  /// Echo('models') listing the checkpoint fetch uses, filtered to LoRAs by
+  /// the CLI). Returned names are passed verbatim into the generation
+  /// config's `loras` list.
+  Future<List<String>> fetchLoras() async {
+    try {
+      final parsed = await _runCli({
+        'op': 'loras',
+        'host': host,
+        'port': port,
+      }, const Duration(seconds: 25));
+      if (parsed == null || parsed['success'] != true) return [];
+      final loras = (parsed['loras'] as List?)?.cast<String>() ?? <String>[];
+      debugPrint(
+        'DrawThingsGrpcService: Fetched ${loras.length} LoRAs via CLI',
+      );
+      return loras;
+    } catch (e) {
+      debugPrint('DrawThingsGrpcService: fetchLoras error: $e');
+      return [];
+    }
+  }
+
   /// Generates an image via the JSON CLI sidecar (full DT-native config passed through).
   /// referenceImageBytes: optional PNG/JPG/etc bytes for img2img (written to temp file for the Python client).
+  /// loras: optional list of {'file': name, 'weight': double} maps applied natively by Draw Things.
+  /// [onProgress] receives (step, totalSteps) live from the CLI's
+  /// `FP_PROGRESS <step>` stderr lines (Draw Things streams sampling
+  /// signposts; no preview frames are available over this protocol).
   Future<Uint8List> generateImage({
     required String prompt,
     String negativePrompt = '',
@@ -287,10 +260,10 @@ class DrawThingsGrpcService {
     bool teaCache = false,
     double teaCacheThreshold = 0.15,
     bool cfgZeroStar = false,
+    List<Map<String, dynamic>> loras = const [],
     Uint8List? referenceImageBytes,
-    Function(ImageGenProgress)? onProgress,
+    void Function(int step, int totalSteps)? onProgress,
   }) async {
-    // Inline everything (0 new private methods added in this file — rule compliance)
     Directory? refTempDir;
     String? refImagePath;
     String? cliOutPath; // reported by CLI
@@ -331,127 +304,39 @@ class DrawThingsGrpcService {
         'resolution_dependent_shift': false,
         'mask_blur': 1.5,
         'sharpness': 0.0,
+        if (loras.isNotEmpty) 'loras': loras,
       };
 
-      final req = jsonEncode({
-        'op': 'generate',
-        'host': host,
-        'port': port,
-        'prompt': prompt,
-        'negative_prompt': negativePrompt,
-        'config': cfg,
-        'reference_image_path': ?refImagePath,
-      });
-
-      // Inline CLI resolution + spawn + stdin (duplicated from other methods — required for 0 new private methods rule)
-      final execDir = File(Platform.resolvedExecutable).parent.path;
-      String? cliExe;
-      String? pyScript;
-      bool useWrapper = false;
-      if (Platform.isMacOS) {
-        final contents = File(Platform.resolvedExecutable).parent.parent.path;
-        final bundled = p.join(
-          contents,
-          'Resources',
-          'dt_grpc',
-          'dt_grpc_client',
-          'dt_grpc_client',
-        );
-        if (File(bundled).existsSync()) {
-          cliExe = bundled;
-          useWrapper = true;
-        }
-      }
-      if (cliExe == null) {
-        var dir = Directory(execDir);
-        for (int i = 0; i < 12; i++) {
-          final cand = File(
-            p.join(dir.path, 'tools', 'dt-grpc-python', 'dt_grpc_client.py'),
-          );
-          if (cand.existsSync()) {
-            pyScript = cand.path;
-            break;
-          }
-          final parent = dir.parent;
-          if (parent.path == dir.path) break;
-          dir = parent;
-        }
-        if (pyScript == null) {
-          final cwdCand = File(
-            p.join(
-              Directory.current.path,
-              'tools',
-              'dt-grpc-python',
-              'dt_grpc_client.py',
-            ),
-          );
-          if (cwdCand.existsSync()) pyScript = cwdCand.path;
-        }
-      }
-
       debugPrint(
-        'DrawThingsGrpcService: spawning ${useWrapper ? "bundled" : "dev python"} CLI for generate',
+        'DrawThingsGrpcService: generate (model=$model, '
+        'loras=${loras.isEmpty ? "none" : loras.map((l) => l['file']).join(',')})',
       );
-      final process = await Process.start(
-        useWrapper ? cliExe! : (Platform.isWindows ? 'python' : 'python3'),
-        useWrapper ? [] : (pyScript != null ? [pyScript] : []),
-        includeParentEnvironment: true,
-      );
-      process.stdin.writeln(req);
-      await process.stdin.close();
-
-      final stdoutFut = process.stdout.transform(utf8.decoder).join();
-      final stderrFut = process.stderr.transform(utf8.decoder).join();
-      final exitCode = await process.exitCode.timeout(
+      final parsed = await _runCli(
+        {
+          'op': 'generate',
+          'host': host,
+          'port': port,
+          'prompt': prompt,
+          'negative_prompt': negativePrompt,
+          'config': cfg,
+          'reference_image_path': ?refImagePath,
+        },
         const Duration(seconds: 300),
+        onStderrLine: onProgress == null
+            ? null
+            : (line) {
+                if (line.startsWith('FP_PROGRESS ')) {
+                  final step = int.tryParse(line.substring(12).trim());
+                  if (step != null) onProgress(step, steps);
+                }
+              },
       );
-      final stdoutStr = await stdoutFut;
-      final stderrStr = await stderrFut;
 
-      if (stderrStr.isNotEmpty) {
-        final filtered = stderrStr
-            .split('\n')
-            .where((l) => !l.contains('CERTIFICATE_VERIFY_FAILED'))
-            .join('\n')
-            .trim();
-        if (filtered.isNotEmpty) {
-          debugPrint('DrawThingsGrpcService: CLI stderr: $filtered');
-        }
-      }
-
-      if (exitCode != 0) {
-        throw Exception('CLI generation failed (exit $exitCode): $stdoutStr');
-      }
-
-      Map<String, dynamic> parsed;
-      try {
-        parsed = jsonDecode(stdoutStr.trim()) as Map<String, dynamic>;
-      } catch (_) {
-        // Robustness: the CLI should only emit one clean JSON line on stdout,
-        // but if extra prints leaked, try to find the last JSON object.
-        final lines = stdoutStr.trim().split('\n').reversed;
-        String? jsonLine;
-        for (final line in lines) {
-          final trimmed = line.trim();
-          if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-            jsonLine = trimmed;
-            break;
-          }
-        }
-        if (jsonLine != null) {
-          try {
-            parsed = jsonDecode(jsonLine) as Map<String, dynamic>;
-          } catch (_) {
-            throw Exception('CLI returned non-JSON: $stdoutStr');
-          }
-        } else {
-          throw Exception('CLI returned non-JSON: $stdoutStr');
-        }
+      if (parsed == null) {
+        throw Exception('CLI returned no parseable response');
       }
       if (parsed['success'] != true) {
-        throw Exception(
-          'Generation error from CLI: ${parsed['error'] ?? stdoutStr}',
-        );
+        throw Exception('Generation error from CLI: ${parsed['error']}');
       }
 
       cliOutPath = parsed['output_path'] as String?;
