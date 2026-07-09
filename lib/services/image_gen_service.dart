@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -127,6 +128,24 @@ class ImageGenService extends ChangeNotifier {
   Uint8List? _lastGeneratedImage;
   String? _lastSavedPath;
 
+  /// Live generation progress (0..1) and the latest in-progress preview
+  /// frame, so the UI can show the image "coming to life" instead of a
+  /// spinner. Fed per backend: A1111 polls /sdapi/v1/progress (percent +
+  /// preview), ComfyUI streams its WebSocket (percent + preview when the
+  /// server has previews enabled), Draw Things reports sampling steps
+  /// (percent only). Remote APIs return in one shot — both stay null there
+  /// (indeterminate). Cleared at the start and end of every generation.
+  double? _genProgress;
+  Uint8List? _genPreview;
+  double? get genProgress => _genProgress;
+  Uint8List? get genPreview => _genPreview;
+
+  void _updateGenProgress(double? progress, [Uint8List? preview]) {
+    _genProgress = progress;
+    if (preview != null) _genPreview = preview;
+    notifyListeners();
+  }
+
   /// The checkpoint name that is currently loaded on the local A1111 server.
   /// Used to skip redundant unload→reload cycles that can leave tensors
   /// split across CPU and CUDA on Windows/nVidia setups.
@@ -216,6 +235,8 @@ class ImageGenService extends ChangeNotifier {
     _statusMessage = 'Generating image...';
     _lastGeneratedImage = null;
     _lastSavedPath = null;
+    _genProgress = null;
+    _genPreview = null;
     notifyListeners();
 
     // Callers that don't specify a negative prompt (guest portraits, the
@@ -302,6 +323,9 @@ class ImageGenService extends ChangeNotifier {
                       {'file': loraName, 'weight': loraWeight},
                     ],
               referenceImage: referenceImage,
+              onProgress: (step, total) => _updateGenProgress(
+                total > 0 ? (step / total).clamp(0.0, 1.0) : null,
+              ),
             );
           } catch (e) {
             // Sanitize for user display (no full tracebacks, absolute paths, or raw CLI internals)
@@ -371,6 +395,7 @@ class ImageGenService extends ChangeNotifier {
             scheduler: ComfyUiService.schedulerFor(storedSampler),
             loraName: _storage.imageGenSettings.imageGenLora,
             loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
+            onProgress: _updateGenProgress,
           );
         } catch (e) {
           // Sanitize for user display (mirrors the Draw Things branch).
@@ -436,6 +461,8 @@ class ImageGenService extends ChangeNotifier {
       return null;
     } finally {
       _isGenerating = false;
+      _genProgress = null;
+      _genPreview = null;
       notifyListeners();
     }
   }
@@ -1353,6 +1380,29 @@ class ImageGenService extends ChangeNotifier {
     };
 
     final client = http.Client();
+    // Live progress while the txt2img request is in flight: A1111 exposes
+    // GET /sdapi/v1/progress with a percent AND an in-progress preview frame,
+    // so the chat/studio can show the image forming instead of a spinner.
+    final progressUri = Uri.parse(
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/progress',
+    );
+    final progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      try {
+        final r = await http
+            .get(progressUri)
+            .timeout(const Duration(seconds: 2));
+        if (r.statusCode != 200) return;
+        final p = jsonDecode(r.body) as Map<String, dynamic>;
+        final pct = (p['progress'] as num?)?.toDouble();
+        final b64 = p['current_image'] as String?;
+        _updateGenProgress(
+          (pct != null && pct > 0) ? pct.clamp(0.0, 1.0) : null,
+          (b64 != null && b64.isNotEmpty) ? base64Decode(b64) : null,
+        );
+      } catch (_) {
+        // transient — the next tick retries; the request itself is the truth
+      }
+    });
     try {
       final response = await client
           .post(
@@ -1381,6 +1431,7 @@ class ImageGenService extends ChangeNotifier {
       final b64 = images[0] as String;
       return base64Decode(b64);
     } finally {
+      progressTimer.cancel();
       client.close();
     }
   }
@@ -1406,6 +1457,7 @@ class ImageGenService extends ChangeNotifier {
     bool cfgZeroStar = false,
     List<Map<String, dynamic>> loras = const [],
     Uint8List? referenceImage,
+    void Function(int step, int totalSteps)? onProgress,
   }) async {
     return await grpcService.generateImage(
       prompt: prompt,
@@ -1425,6 +1477,7 @@ class ImageGenService extends ChangeNotifier {
       cfgZeroStar: cfgZeroStar,
       loras: loras,
       referenceImageBytes: referenceImage,
+      onProgress: onProgress,
     );
   }
 

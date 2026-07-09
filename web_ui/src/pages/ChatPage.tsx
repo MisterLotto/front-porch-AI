@@ -62,6 +62,10 @@ export function ChatPage() {
   // reconnect that finds the engine still parked); `revealed` is the pure-UI
   // flip from the teaser to the event card. Null = no modal.
   const [chance, setChance] = useState<{ event: string; revealed: boolean } | null>(null);
+  // Live image-gen progress (from the `image_progress` WS event): percent
+  // (null = indeterminate) + the latest preview frame data URL when the
+  // backend streams one. Null = no image generating.
+  const [imageProg, setImageProg] = useState<{ progress: number | null; preview: string | null } | null>(null);
   // Realism/Objective engine overlay, driven by the `processing` WS event.
   const [processing, setProcessing] = useState<Processing>(NO_PROCESSING);
   // Resizable insight sidebar (desktop) — width persists across sessions.
@@ -188,6 +192,18 @@ export function ChatPage() {
         // modal instantly (desktop shows its own wheel); `pending:false` closes
         // it — e.g. the desktop, or another device, accepted first.
         setChance(e.pending ? { event: e.data ?? '', revealed: false } : null);
+      } else if (e.event === 'image_progress') {
+        // Live image generation: percent + (when the backend streams one) the
+        // in-progress preview frame — the picture forms in the card below the
+        // messages instead of a black-box wait. Desktop bubble parity.
+        setImageProg(
+          e.generating
+            ? (prev) => ({
+                progress: typeof e.progress === 'number' ? e.progress : null,
+                preview: (e.preview as string | undefined) ?? prev?.preview ?? null,
+              })
+            : null,
+        );
       } else if (e.event === 'chat_updated' || e.event === 'generating') {
         scheduleRefresh();
       }
@@ -461,6 +477,25 @@ export function ChatPage() {
         />
 
         <ProcessingOverlay p={processing} onCancel={cancelRealism} />
+
+        {imageProg && (
+          <div className="image-progress-card">
+            {imageProg.preview && (
+              <img className="image-progress-preview" src={imageProg.preview} alt="generating" />
+            )}
+            <div className="image-progress-bar">
+              <div
+                className={`image-progress-fill${imageProg.progress == null ? ' indeterminate' : ''}`}
+                style={imageProg.progress != null ? { width: `${Math.round(imageProg.progress * 100)}%` } : undefined}
+              />
+            </div>
+            <span className="muted small">
+              {imageProg.progress != null
+                ? `Painting… ${Math.round(imageProg.progress * 100)}%`
+                : 'Painting…'}
+            </span>
+          </div>
+        )}
 
         <ChatComposer
           onSend={sendMessage}

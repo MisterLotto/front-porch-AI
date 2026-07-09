@@ -61,6 +61,7 @@ class ImageCommandService {
     )
     attachToChat,
     required Future<void> Function(String path) setChatBackground,
+    void Function()? notifyRunStateChanged,
   }) : _isConfigured = isConfigured,
        _isBusy = isBusy,
        _onStatus = onStatus,
@@ -68,7 +69,8 @@ class ImageCommandService {
        _generate = generate,
        _saveImage = saveImage,
        _attachToChat = attachToChat,
-       _setChatBackground = setChatBackground;
+       _setChatBackground = setChatBackground,
+       _notifyRunStateChanged = notifyRunStateChanged;
 
   final bool Function() _isConfigured;
   final bool Function() _isBusy;
@@ -84,9 +86,12 @@ class ImageCommandService {
   )
   _attachToChat;
   final Future<void> Function(String path) _setChatBackground;
+  final void Function()? _notifyRunStateChanged;
 
-  /// Guards against overlapping `/image` runs (generation is slow).
+  /// Guards against overlapping `/image` runs (generation is slow). Public
+  /// read so the chat UI can show the in-progress bubble while a run is live.
   bool _generating = false;
+  bool get generating => _generating;
 
   /// Parse `/image` arguments into a typed request. Pure and static so the
   /// grammar is unit-testable without any wiring:
@@ -157,6 +162,7 @@ class ImageCommandService {
     }
 
     _generating = true;
+    _notifyRunStateChanged?.call();
     try {
       String? prompt;
       if (request.kind == ImageCommandKind.raw) {
@@ -199,6 +205,7 @@ class ImageCommandService {
       }
     } finally {
       _generating = false;
+      _notifyRunStateChanged?.call();
     }
   }
 }

@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -90,6 +91,11 @@ class WebServerHost extends ChangeNotifier {
   bool _wasEvaluatingRealism = false;
   bool _wasAwaitingChanceTime = false;
   bool _wasPendingImageReview = false;
+
+  // Image-gen progress relay (see the imageGen listener in start()).
+  VoidCallback? _imageProgressListener;
+  bool _wasImageGenerating = false;
+  DateTime _lastImageProgressSent = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Near-instant library live-sync: one debounced listener attached to the
   // CharacterRepository, FolderService and GroupChatRepository (all
@@ -263,6 +269,49 @@ class WebServerHost extends ChangeNotifier {
 
       _realismListener = onProcessing;
       chatService.addListener(onProcessing);
+    }
+
+    // Image generation live progress → web clients: percent + (when the
+    // backend streams one) the in-progress preview frame, so the web chat
+    // shows the image coming to life like the desktop bubble. Preview frames
+    // are throttled to ~1/s to keep the socket light.
+    final imageGen = _imageGenService;
+    if (streamHub != null && imageGen != null) {
+      void onImageProgress() {
+        final generating = imageGen.isGenerating;
+        if (!generating && !_wasImageGenerating) return;
+        if (!generating) {
+          streamHub.broadcast({'event': 'image_progress', 'generating': false});
+          _wasImageGenerating = false;
+          return;
+        }
+        final now = DateTime.now();
+        if (_wasImageGenerating &&
+            now.difference(_lastImageProgressSent).inMilliseconds < 700) {
+          return;
+        }
+        _lastImageProgressSent = now;
+        final preview = imageGen.genPreview;
+        // A1111 previews are PNG, ComfyUI's are typically JPEG — sniff the
+        // magic bytes so the data URL declares the right mime.
+        String? previewUrl;
+        if (preview != null && preview.length > 2) {
+          final mime = (preview[0] == 0xFF && preview[1] == 0xD8)
+              ? 'image/jpeg'
+              : 'image/png';
+          previewUrl = 'data:$mime;base64,${base64Encode(preview)}';
+        }
+        streamHub.broadcast({
+          'event': 'image_progress',
+          'generating': true,
+          'progress': ?imageGen.genProgress,
+          'preview': ?previewUrl,
+        });
+        _wasImageGenerating = true;
+      }
+
+      _imageProgressListener = onImageProgress;
+      imageGen.addListener(onImageProgress);
     }
 
     // Library live-sync: broadcast a single debounced `library_changed` whenever
@@ -490,6 +539,11 @@ class WebServerHost extends ChangeNotifier {
       _realismListener = null;
     }
     _wasEvaluatingRealism = false;
+    if (_imageProgressListener != null) {
+      _imageGenService?.removeListener(_imageProgressListener!);
+      _imageProgressListener = null;
+    }
+    _wasImageGenerating = false;
     if (_libraryListener != null) {
       _characterRepository?.removeListener(_libraryListener!);
       _folderService?.removeListener(_libraryListener!);

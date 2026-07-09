@@ -38,6 +38,10 @@ extension ChatServiceImages on ChatService {
   /// desktop dialog and the web modal both key off this.
   String? get pendingImagePromptReview => _pendingImagePromptReview;
 
+  /// Whether an /image run is live (crafting, awaiting review, or
+  /// generating) — drives the in-chat "image coming to life" bubble.
+  bool get isGeneratingChatImage => _imageCommand?.generating ?? false;
+
   /// Resolve a pending prompt review: the (possibly edited) prompt to
   /// generate with, or null to cancel. Safe to call when nothing is pending.
   void resolveImagePromptReview(String? prompt) {
@@ -95,6 +99,7 @@ extension ChatServiceImages on ChatService {
         );
       },
       setChatBackground: (path) => _storageService.setChatBackground(path),
+      notifyRunStateChanged: notifyListeners,
     );
   }
 

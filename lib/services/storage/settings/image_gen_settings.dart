@@ -22,7 +22,11 @@ import 'settings_base.dart';
 ///
 /// Lifted Stage 7.
 class ImageGenSettings with SettingsBase {
-  bool _imageGenEnabled = false;
+  // Default ON since 2026-07: the feature is opt-out. Enabling only shows the
+  // ✨ toolbar button and the /image command — nothing generates until a
+  // backend is actually configured, so there is no overhead for users who
+  // never touch it. Users who previously toggled it keep their saved choice.
+  bool _imageGenEnabled = true;
   String _imageGenBackend =
       'remote'; // 'remote', 'a1111', 'drawthings', 'comfyui'
   String _localImageGenUrl = 'http://127.0.0.1:7860';
@@ -80,7 +84,7 @@ class ImageGenSettings with SettingsBase {
   bool get drawThingsCfgZeroStar => _drawThingsCfgZeroStar;
 
   void load() {
-    _imageGenEnabled = prefs?.getBool(k('image_gen_enabled')) ?? false;
+    _imageGenEnabled = prefs?.getBool(k('image_gen_enabled')) ?? true;
     _imageGenBackend = prefs?.getString(k('image_gen_backend')) ?? 'remote';
     _localImageGenUrl =
         prefs?.getString(k('local_image_gen_url')) ?? 'http://127.0.0.1:7860';

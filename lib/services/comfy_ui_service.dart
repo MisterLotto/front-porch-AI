@@ -18,6 +18,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -241,6 +242,11 @@ class ComfyUiService {
   /// Generate one image: submit the workflow, poll /history until the prompt
   /// finishes, then download the first output image via /view. Throws with a
   /// readable message on failure (the ImageGenService dispatcher sanitizes).
+  ///
+  /// [onProgress] receives sampling progress (0..1) and, when the ComfyUI
+  /// server has previews enabled, the latest in-progress preview frame —
+  /// streamed over ComfyUI's WebSocket. The WebSocket is best-effort: if it
+  /// can't connect, generation still completes via /history polling.
   Future<Uint8List> generateImage({
     required String prompt,
     String negativePrompt = '',
@@ -254,6 +260,7 @@ class ComfyUiService {
     String scheduler = 'normal',
     String loraName = '',
     double loraWeight = 0.8,
+    void Function(double? progress, Uint8List? preview)? onProgress,
   }) async {
     if (model.isEmpty) {
       // ComfyUI has no "current model" concept like A1111 — the graph must
@@ -299,35 +306,87 @@ class ComfyUiService {
       throw Exception('ComfyUI did not return a prompt_id');
     }
 
+    // Best-effort live progress over ComfyUI's WebSocket: text frames carry
+    // {type:'progress', data:{value,max}} during sampling; binary frames are
+    // preview images (8-byte header: int32 event type 1 = preview, int32
+    // format, then JPEG/PNG bytes) when the server runs with previews on.
+    WebSocket? ws;
+    if (onProgress != null) {
+      try {
+        final wsRoot = _root
+            .replaceFirst('https://', 'wss://')
+            .replaceFirst('http://', 'ws://');
+        ws = await WebSocket.connect(
+          '$wsRoot/ws?clientId=$clientId',
+        ).timeout(const Duration(seconds: 3));
+        ws.listen(
+          (frame) {
+            try {
+              if (frame is String) {
+                final msg = jsonDecode(frame) as Map<String, dynamic>;
+                if (msg['type'] == 'progress') {
+                  final d = msg['data'] as Map<String, dynamic>?;
+                  final value = (d?['value'] as num?)?.toDouble();
+                  final max = (d?['max'] as num?)?.toDouble();
+                  if (value != null && max != null && max > 0) {
+                    onProgress((value / max).clamp(0.0, 1.0), null);
+                  }
+                }
+              } else if (frame is List<int> && frame.length > 8) {
+                final header = Uint8List.fromList(
+                  frame.sublist(0, 4),
+                ).buffer.asByteData();
+                if (header.getInt32(0) == 1) {
+                  onProgress(null, Uint8List.fromList(frame.sublist(8)));
+                }
+              }
+            } catch (_) {
+              // malformed frame — ignore; progress is decorative
+            }
+          },
+          onError: (_) {},
+          cancelOnError: true,
+        );
+      } catch (e) {
+        debugPrint('ComfyUI: progress WebSocket unavailable ($e)');
+        ws = null;
+      }
+    }
+
     // Poll history until this prompt completes (generation can be slow on
-    // first model load; 10 min cap mirrors the other local backends).
+    // first model load; 10 min cap mirrors the other local backends). The
+    // WebSocket above is decorative only — completion truth stays here.
     final deadline = DateTime.now().add(const Duration(minutes: 10));
     Map<String, dynamic>? outputs;
-    while (DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(seconds: 1));
-      try {
-        final h = await http
-            .get(Uri.parse('$_root/history/$promptId'))
-            .timeout(const Duration(seconds: 10));
-        if (h.statusCode != 200) continue;
-        final hist = jsonDecode(h.body) as Map<String, dynamic>;
-        final entry = hist[promptId];
-        if (entry is! Map) continue;
-        final status = entry['status'];
-        if (status is Map && status['status_str'] == 'error') {
-          throw Exception(
-            'ComfyUI reported an error — check the model name and its server '
-            'console.',
-          );
+    try {
+      while (DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        try {
+          final h = await http
+              .get(Uri.parse('$_root/history/$promptId'))
+              .timeout(const Duration(seconds: 10));
+          if (h.statusCode != 200) continue;
+          final hist = jsonDecode(h.body) as Map<String, dynamic>;
+          final entry = hist[promptId];
+          if (entry is! Map) continue;
+          final status = entry['status'];
+          if (status is Map && status['status_str'] == 'error') {
+            throw Exception(
+              'ComfyUI reported an error — check the model name and its '
+              'server console.',
+            );
+          }
+          final out = entry['outputs'];
+          if (out is Map && out.isNotEmpty) {
+            outputs = Map<String, dynamic>.from(out);
+            break;
+          }
+        } on TimeoutException {
+          // transient — keep polling until the deadline
         }
-        final out = entry['outputs'];
-        if (out is Map && out.isNotEmpty) {
-          outputs = Map<String, dynamic>.from(out);
-          break;
-        }
-      } on TimeoutException {
-        // transient — keep polling until the deadline
       }
+    } finally {
+      unawaited(ws?.close());
     }
     if (outputs == null) {
       throw Exception('ComfyUI generation timed out');

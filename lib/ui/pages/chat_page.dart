@@ -698,8 +698,22 @@ class _ChatPageState extends State<ChatPage> {
                                     controller: _scrollController,
                                     reverse: true,
                                     padding: const EdgeInsets.all(20),
-                                    itemCount: messages.length,
+                                    // +1 while an /image run is live: reverse
+                                    // index 0 (visual bottom) shows the
+                                    // "image coming to life" bubble with live
+                                    // preview + progress.
+                                    itemCount:
+                                        messages.length +
+                                        (chatService.isGeneratingChatImage
+                                            ? 1
+                                            : 0),
                                     itemBuilder: (context, index) {
+                                      if (chatService.isGeneratingChatImage) {
+                                        if (index == 0) {
+                                          return const GeneratingImageBubble();
+                                        }
+                                        index -= 1;
+                                      }
                                       // Reverse index so newest messages are at the top of the reversed list (visual bottom)
                                       final reversedIndex =
                                           messages.length - 1 - index;

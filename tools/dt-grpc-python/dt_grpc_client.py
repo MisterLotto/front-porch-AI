@@ -23,6 +23,9 @@ Response shapes:
   error:   {"success":false, "error":"..." }
 """
 
+import contextlib
+import io
+import re
 import sys
 import json
 import os
@@ -264,14 +267,32 @@ def main():
                 os.close(fd)
 
             start = time.time()
-            result = client.generate(
-                config=gcfg,
-                prompt=prompt,
-                negative_prompt=negative,
-                image_path=ref_image_path,
-                scale_factor=1,
-                verbose=False,
-            )
+            # Live step progress WITHOUT touching client.py: its verbose mode
+            # prints "  Step N..." per sampling signpost to stdout. Stdout is
+            # reserved for the final JSON, so route those prints through a
+            # scanner that forwards them to STDERR as "FP_PROGRESS <N>" lines
+            # (the Dart side streams stderr and turns them into a progress
+            # bar) and swallows the rest of the verbose chatter.
+            step_re = re.compile(r"^\s*Step (\d+)\.\.\.")
+
+            class _ProgressScanner(io.TextIOBase):
+                def write(self, text):
+                    for line in str(text).splitlines():
+                        m = step_re.match(line)
+                        if m:
+                            print(f"FP_PROGRESS {m.group(1)}",
+                                  file=sys.stderr, flush=True)
+                    return len(text)
+
+            with contextlib.redirect_stdout(_ProgressScanner()):
+                result = client.generate(
+                    config=gcfg,
+                    prompt=prompt,
+                    negative_prompt=negative,
+                    image_path=ref_image_path,
+                    scale_factor=1,
+                    verbose=True,
+                )
             elapsed = result.elapsed_seconds if hasattr(result, "elapsed_seconds") else (time.time() - start)
 
             if not result.images:

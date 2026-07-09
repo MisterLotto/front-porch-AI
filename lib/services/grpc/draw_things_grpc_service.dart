@@ -29,10 +29,14 @@ class DrawThingsGrpcService {
   /// bundle (macOS Resources/dt_grpc/...) first, then the dev fallback of
   /// `python`/`python3 tools/dt-grpc-python/dt_grpc_client.py` found by
   /// walking up from the executable dir (mirrors the stt/kokoro pattern).
+  /// [onStderrLine] streams stderr lines as they arrive (used by generate for
+  /// live `FP_PROGRESS <step>` lines); the full stderr is still collected for
+  /// the error log either way.
   Future<Map<String, dynamic>?> _runCli(
     Map<String, dynamic> request,
-    Duration timeout,
-  ) async {
+    Duration timeout, {
+    void Function(String line)? onStderrLine,
+  }) async {
     final execDir = File(Platform.resolvedExecutable).parent.path;
     String? cliExe;
     String? pyScript;
@@ -87,10 +91,18 @@ class DrawThingsGrpcService {
     await process.stdin.close();
 
     final stdoutFut = process.stdout.transform(utf8.decoder).join();
-    final stderrFut = process.stderr.transform(utf8.decoder).join();
+    final stderrBuf = StringBuffer();
+    final stderrFut = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .forEach((line) {
+          stderrBuf.writeln(line);
+          onStderrLine?.call(line);
+        });
     final exitCode = await process.exitCode.timeout(timeout);
     final stdoutStr = await stdoutFut;
-    final stderrStr = await stderrFut;
+    await stderrFut;
+    final stderrStr = stderrBuf.toString();
 
     final filteredErr = stderrStr
         .split('\n')
@@ -229,6 +241,9 @@ class DrawThingsGrpcService {
   /// Generates an image via the JSON CLI sidecar (full DT-native config passed through).
   /// referenceImageBytes: optional PNG/JPG/etc bytes for img2img (written to temp file for the Python client).
   /// loras: optional list of {'file': name, 'weight': double} maps applied natively by Draw Things.
+  /// [onProgress] receives (step, totalSteps) live from the CLI's
+  /// `FP_PROGRESS <step>` stderr lines (Draw Things streams sampling
+  /// signposts; no preview frames are available over this protocol).
   Future<Uint8List> generateImage({
     required String prompt,
     String negativePrompt = '',
@@ -247,6 +262,7 @@ class DrawThingsGrpcService {
     bool cfgZeroStar = false,
     List<Map<String, dynamic>> loras = const [],
     Uint8List? referenceImageBytes,
+    void Function(int step, int totalSteps)? onProgress,
   }) async {
     Directory? refTempDir;
     String? refImagePath;
@@ -295,15 +311,26 @@ class DrawThingsGrpcService {
         'DrawThingsGrpcService: generate (model=$model, '
         'loras=${loras.isEmpty ? "none" : loras.map((l) => l['file']).join(',')})',
       );
-      final parsed = await _runCli({
-        'op': 'generate',
-        'host': host,
-        'port': port,
-        'prompt': prompt,
-        'negative_prompt': negativePrompt,
-        'config': cfg,
-        'reference_image_path': ?refImagePath,
-      }, const Duration(seconds: 300));
+      final parsed = await _runCli(
+        {
+          'op': 'generate',
+          'host': host,
+          'port': port,
+          'prompt': prompt,
+          'negative_prompt': negativePrompt,
+          'config': cfg,
+          'reference_image_path': ?refImagePath,
+        },
+        const Duration(seconds: 300),
+        onStderrLine: onProgress == null
+            ? null
+            : (line) {
+                if (line.startsWith('FP_PROGRESS ')) {
+                  final step = int.tryParse(line.substring(12).trim());
+                  if (step != null) onProgress(step, steps);
+                }
+              },
+      );
 
       if (parsed == null) {
         throw Exception('CLI returned no parseable response');
