@@ -158,7 +158,7 @@ Three related fixes to the "enjoys low hygiene" (prefers-being-dirty) feature.
 - **Build note:** `assets/web_app` is committed build output that both nightly.yml and build-macos.sh regenerate via `npm run build`; ran it so the tracked assets (and the generated `sw.js`/`workbox-*.js`) reflect the Tier 1 **and** Tier 2 source, and so local `flutter run` serves the new UI. Verified the generated `sw.js` contains the `fpa-avatar-thumbs` CacheFirst rule.
 - **Parity note:** web/server-only (service workers + browser caching don't exist on desktop; desktop reads avatars from local disk). No desktop counterpart.
 - **Verification:** `flutter analyze` (full) clean; web `npm run build` succeeds (tsc clean, PWA generateSW emits sw.js + workbox with the avatar rule); web vitest 27/27; Tier 1 thumbnail unit test still 5/5.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — perf(web): serve downscaled avatar thumbnails to the web/mobile UI (Tier 1 of the slow-connection fix)
 - **Files:** lib/services/web/util/image_thumbnails.dart (NEW — `ThumbnailCache`), lib/services/web/routes/character_routes.dart (`_avatar` + `_avatarImage` → `_thumbs.serve`), lib/services/web/routes/group_routes.dart (`_avatar` → `_thumbs.serve`), lib/services/web/server_bootstrap.dart (construct + inject the cache), lib/services/storage/directories.dart + lib/services/storage_service.dart (new `webThumbnailCacheDir` getter), web_ui/src/components/library/LibraryCards.tsx (grid char `?w=400`, group member `?w=256`), web_ui/src/components/CharacterPicker.tsx, web_ui/src/pages/CreateGroupChatPage.tsx, web_ui/src/components/WorldCard.tsx, web_ui/src/components/AvatarManager.tsx (all grid avatars `?w=256`), test/services/web/image_thumbnails_test.dart (NEW), docs/Rawhide.md.
@@ -167,7 +167,7 @@ Three related fixes to the "enjoys low hygiene" (prefers-being-dirty) feature.
 - **Parity note:** web/server-only performance change — the Flutter desktop app reads avatars from local disk (no network), so there is no desktop counterpart to mirror. No visual change on either surface.
 - **Not yet done (offered, not built this turn):** Tier 2 (service-worker runtime caching of `/api/**/avatar` so avatars persist across reloads for days), Tier 3 (gzip the currently-uncompressed list JSON + drop the unused description/scenario/personality fields the grid never renders), Tier 4 (grid virtualization/pagination + throttle the `library_changed` full refetch).
 - **Verification:** `flutter analyze` (full project) clean; `dart fix --dry-run` nothing to fix; web_ui `tsc --noEmit` exit 0; new unit test 5/5 (resize width, JPEG vs PNG selection, no-upscale, disk-cache reuse, stale regeneration).
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-05 — fix(realism): needs deltas from the last accepted message were reverted when regenerating (or swiping) the next message
 - **Files:** lib/services/chat/chat_service_generation.dart (post-gen: re-stamp realism_state.needs.vector with the final post-impact vector), lib/services/chat/chat_service_reprocess.dart (regen: don't let the previous-message baseline clobber the accurate pre-turn needs restore), docs/Rawhide.md.
@@ -3846,7 +3846,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Fix:** Kept the sound design premise (arousal is a DESIRE meter, not a climax countdown — a character merely *aching* while untouched must not spontaneously orgasm) but stopped forbidding release outright. The peak-tier note now gates autonomous climax on *active stimulation*: if the scene is physically sexual and stimulation continues, the character is "right at the very edge and should be allowed to tip over into climax naturally, in their own voice, of their own accord — do NOT hold them back waiting for an explicit command"; if nothing physical is happening, the desire≠climax guard still applies ("do NOT orgasm out of nowhere"). This mirrors the structure already used in the 60–80 tier ("could climax with continued stimulation"), which was never broken. No OOC prompt needed anymore, and the refractory/afterglow cycle now engages on its own.
 - **Parity:** `nsfw_injection.dart` is the single shared builder for 1:1 and group (charName resolves per active speaker), so the change is parity-safe by construction — both paths get identical wording. Web UI builds prompts through this same Dart path (server-side facade), so it inherits the fix with no separate change.
 - **Verification:** New unit test asserts the peak-arousal injection no longer contains the old prohibition ("Do NOT write orgasm", "not past it"), now permits autonomous release ("tip over into climax", "Do NOT hold them back"), and still guards the untouched case ("do NOT orgasm out of nowhere"). `flutter test test/services/chat/prompt_injection_test.dart` — 12/12 pass. `flutter analyze` on the changed file — No issues found.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — Release-promotion runbook + guarded script; Rawhide README refresh
 
@@ -3854,7 +3854,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Reason:** Merging Rawhide → main for a stable release has repeatedly mangled release.yml/nightly.yml. Root cause (diagnosed this session): main is the DEFAULT branch, so its workflow copies are live (the nightly cron runs from the default branch), and both branches carry independently hand-edited copies of the big CI YAML — so a 3-way merge forces a human to hand-resolve 50 KB of YAML (the actual corruption). Also found the local clone was shallow (no merge-base → every file an add/add conflict); had to `git fetch --unshallow`. Verified Rawhide is a functional superset of main (chargen split, BYAF importer, TTS emoji-strip, 600s image timeout, full 37-file Character Creator all already on Rawhide), so a "Rawhide wins" promotion loses nothing functional.
 - **Script (`scripts/promote-rawhide-to-main.sh`):** builds a `release/promote-<date>-<sha>` candidate whose tree == Rawhide's, EXCEPT a guard list kept from main (`README.md`, `docs/main.md` — override via `GUARD_PATHS`). Mechanism: `git merge -s ours --no-commit Rawhide` → `git read-tree -u --reset Rawhide` → restore guarded paths from main → commit (merge commit, parents [main, Rawhide], so ancestry stays connected for the next cut). Then hard gates: workflows (and release.yml specifically) == Rawhide verbatim; each guard == main; tree differs from Rawhide ONLY in guarded paths; no conflict markers; every workflow YAML parses. Refuses to run on a shallow clone or a dirty tree; NEVER touches main, pushes, or tags (human does the PR → ff-only main → tag). Tested end-to-end in an isolated worktree (exit 0, all 7 gates green); fixed a bash-3.2 portability bug (`mapfile` → while-read) and tty-gated the colors.
 - **README refresh (Rawhide):** apt/rpm install URLs `*.dreamersai.art` → `*.frontporchai.app`; removed the stale built-in Chub/AICC browser claim (feature + `wpewebkit`/`libwpewebkit-1.0-dev`/`wpewebkit-devel` build deps — the webview dep is gone from Rawhide's pubspec, confirmed) and the browser import bullet; rewrote the "What's New on Rawhide" section to current headline features (The Journal, lorebook engine + macro toolbox, warm-porch redesign, AFK, Stoop web hub + credits, quests-with-steps, sampler fixes) and dropped the old God-File-Stages framing; added The Journal to the Realism Engine feature list. main's stable README is the guarded file, so the promotion no longer overwrites it (the reported bug). Verified: 0 stale strings, fences balanced.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — Fix: completed quests never retired, blocking the next autonomous main quest
 
@@ -3863,7 +3863,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Fix:** Two changes inside the existing check pass (no new methods): (1) an objective found with all tasks complete is now retired via the existing `deactivateObjective` cb + reload (same path the taskless-YES branch already used), fires the journal event kick (`anyCompleted`), and — because the branch runs on every check pass — self-heals quests already stuck from before the fix in existing chats; (2) when the YES path marks the *last* open task complete (pre-mark open count <= 1), the quest retires in the same pass instead of lingering one extra turn. Deactivation (active=false) keeps the row as history; it simply leaves `_activeObjectives`, freeing the `primaryObjective` getter.
 - **Parity:** The check operates on `_activeObjectives`, which the group path repoints per speaker (`_loadObjectivesForCurrentSpeaker`); retire uses the same cbs both modes already share, so 1:1 and group behavior stay identical by construction. Web UI reads objectives through the same Dart facade — inherits the fix with no web-side change.
 - **Verification:** `flutter analyze` — No issues found. `dart fix --dry-run` — Nothing to fix. `flutter test test/services/chat/` — 488/488 pass (includes the updated "all tasks already completed → quest retired" test and the new "retires only when last open task" test). Header test-count notes synced (15→16).
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — Design: Growth Rings (character evolution redesign) approved + spec'd
 
@@ -3880,7 +3880,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Settings:** growth_interval (NEW, default 5), growth_review_first (NEW, false); character_evolution_enabled kept (users keep their choice); evolution_interval retired dormant.
 - **Web:** /api/chat/tools/growth (+/review) replace /evolution; ChatTools gained a Growth section hosting the timeline; assets/web_app rebuilt (npm run build). Receipts render as #N pills on web but tap-to-jump is desktop-only for now — the web has no message-jump plumbing at all (pre-existing platform gap, flagged to maintainer in-conversation).
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. FULL suite 1720/1720 pass (2 pre-existing tests updated: schema v36, facade payload without evolved fields; journal tests updated for the shared probe param). npx tsc --noEmit clean; web bundle built. flutter build macos SKIPPED: the maintainer's own `flutter run -d macos` dev session held the Xcode build lock (killing it = destroying their session); the full test build compiles lib/ so the Dart side is proven.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — Fix: Growth Rings showed raw {{char}}/{{user}} placeholders in the timeline
 
@@ -3888,14 +3888,14 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Reason:** User screenshot: rings displayed literally as "{{char}} has developed genuine emotional attachment to {{user}}…". The pass prompt (intentionally) asks the model to write card-style macros, and the old evolution system got away with storing them because its text only ever entered PROMPTS (where the macro resolver runs). Rings are displayed verbatim in the timeline/review UI on both surfaces, so macros must never reach the DB.
 - **Fix:** Rings are now STORED resolved: one choke point in GrowthStore (covers pass ops, plant, edit, and the distill archive), proposals resolved at pass time for the review dialog, and a refresh-time self-heal rewrites any macro-bearing rings already saved (idempotent; user's existing rings fix themselves on next chat load). {{char}} maps to the ring OWNER (per-member in groups, guests included); an unresolvable owner keeps the macro rather than guessing. Injection behavior unchanged (the prompt resolver produced the same names before; now they arrive pre-resolved).
 - **Verification:** flutter analyze — No issues found. Growth suite 21/21 (new: resolver semantics; write-resolution + DB self-heal; name-capital preservation). Full suite 1722/1722. No web rebuild needed — the facade serves stored content, which is now clean.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — Realism evals gained the tools transport (probe + fallback, parity-safe)
 
 - **Files:** lib/services/chat/realism_tools.dart (NEW — tool schemas for report_relationship/report_emotional_state/report_narrative/report_realism + realismToolCallToJson canonical-JSON converter, pure), realism_prompt_builder.dart (toolsMode closing variants; rubric byte-identical between transports, the journal_prompt guarantee), realism_evals.dart (+fireToolEval/probe/getBackendIdentity/isEvalCancelled cbs + ONE new private _fireEval negotiation helper; the 4 JSON eval call sites route through it), chat_service.dart (wiring — reuses the existing _fireToolEval/_toolProbe/_evalBackendIdentity from the Journal/Growth work), CLAUDE.md (Realism gotcha section), test factory + 5 new tests.
 - **Design:** tools are a RELIABLE WAY TO OBTAIN THE SAME JSON the evals always parsed. A successful tool call becomes canonical flat-JSON text and flows through the untouched pipeline (batch collection → Director/verifier → regex extractors → clamp/apply), so one-shot vs multi-call and 1:1 vs group parity hold by construction — no second apply path exists. Negotiation mirrors Journal/Growth: probe once per backend+model identity (SHARED probe — a backend answers the tools question at most once per run across Journal, Growth, and all realism evals), salvage plain-text replies through the normal parse, permanent text fallback otherwise. Cancel guard: a user-cancelled tools attempt reads as cancelled, never as "backend can't do tools" (would have poisoned the probe for the run). Deliberately left on text: the time/posture eval inside TimeService (tiny historically-robust JSON; would need new cb plumbing) and the needs-impact eval (candidate for a follow-up).
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. realism_evals_test 34/34 (new: converter coercion/whitelist, tool-call side-effect parity with text path, probe-once fallback, text salvage, cancel guard). FULL suite 1727/1727.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-06 — Tools transport sweep: every flat-JSON eval now negotiates tool calls
 
@@ -3903,7 +3903,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Coverage now:** Journal, Growth, 4 realism evals, needs impact (incl. is_climax/refractory), scene time/posture, expression reclassify, cast detect — one shared probe per backend+model per run across ALL of them. New leaf params are optional/nullable, so every existing test transparently keeps exercising the text floor.
 - **Deliberately NOT ported (flagged to maintainer in-conversation):** the Director/verifier critique output (opt-in, its own multi-kind correction contract — candidate for a follow-up), the AI character creator, and the story pipeline (both stream long creative JSON with live preview + repetition guards + their own brace-balancing/GBNF/repair machinery; tools are non-streaming, so porting would trade away the live preview for marginal gain). Objective task-gen/YES-NO checks parse lists/keywords, not JSON — already robust.
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. Ported-leaf suites pass unchanged + new converter tests (bool/array coercion, cast no-name). FULL suite 1728/1728.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
 
 ## 2026-07-08 — Realism trust: stop flattening warm characters + make early trust visible
 
@@ -3997,4 +3997,4 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **WebUI parity:** maintainer explicitly approved keeping the web image panel simpler (no LoRA selector / advanced features) — the desktop-only advanced tradeoff is accepted, so no web counterpart is required for this work.
 - **Draw Things verification:** re-confirmed at the maintainer's request against the generated gRPC stub (`imageService_pb2_grpc.py`) — the DT server serves exactly 6 RPCs (GenerateImage, FilesExist, UploadFile, Echo, Pubkey, Hours); there is no per-model version/metadata RPC. DT's own UI filters from a local on-disk model DB not exposed over gRPC. Canonical-filename detection is the confirmed ceiling for DT.
 - **Verification:** `flutter analyze` — No issues found (full project). New tests 16/16; comfy + generation_options widget suites green. `flutter build macos --debug` — Built successfully.
-- **Commit:** (pending user review)
+- **Commit:** b3aab3b
