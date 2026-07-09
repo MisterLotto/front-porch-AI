@@ -3962,3 +3962,22 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
   - `test/services/chat/tool_support_test.dart` — NEW: 9 tests (tri-state transitions + notify-once, supported/unsupported/unreachable probe verdicts, force retest, not-ready/busy guards, once-per-identity auto-test, mid-probe switch safety).
 - **Verification:** flutter analyze — No issues found. dart fix — nothing. New tests 9/9; journal/growth/eval suites 64/64 unchanged. web tsc clean, vitest 27/27, bundle rebuilt. FULL desktop suite 1874/1874 passed.
 - **Commit:** (recorded in PR)
+
+## 2026-07-09 — Mass delete characters + delete-folder-with-characters (type-DELETE gated)
+
+- **Reason:** A user accidentally imported 100+ characters and had no way to remove them in bulk — only one-at-a-time delete. Requested: mass delete, delete-all-in-folder, both behind a severe "type DELETE" confirm.
+- **Files (desktop):**
+  - `lib/services/character_repository.dart` — new `deleteCharacters(cards, {worldRepo, chatsDir, onProgress})`: loops the EXISTING single `deleteCharacter` per card (soft-delete row + PNG + chat-history folder + linked worlds), reporting progress for the 100+ purge. No parallel delete logic.
+  - `lib/ui/dialogs/type_delete_dialog.dart` — NEW: `showTypeDeleteDialog` — the severe gate; the Delete button stays disabled until the user types `DELETE` exactly. Red-bordered, AppColors only.
+  - `lib/ui/widgets/character_card_grid.dart` — the select-mode bottom bar (which had NO actions after the old Create-Group removal) gains a "Delete N Selected" button → new `onDeleteSelected` callback.
+  - `lib/ui/pages/home/home_page_dialogs.dart` — `_massDeleteSelected` (resolves selection ids → cards) + the ONE shared `_runMassDelete` pipeline (typed-DELETE gate → non-dismissible progress dialog → `deleteCharacters` → optional follow-up → snackbar), reused by both entry points.
+  - `lib/ui/pages/home/home_page_handlers.dart` — `_deleteFolder` now offers "Delete Folder Only" (unchanged: characters return to root) AND "Delete Folder + Characters…" → `_deleteFolderWithCharacters` (recursive membership → `_runMassDelete` → then `deleteFolder`). Extracted `_leaveDeletedFolder` helper (dedup of the step-out logic).
+  - `lib/ui/pages/home_page.dart` — import + `onDeleteSelected: _massDeleteSelected` wiring.
+  - `test/golden/widget/home_golden_test.dart` — new required `onDeleteSelected` arg.
+  - `test/services/character_repository_test.dart` — 2 new tests (bulk delete removes all + progress monotonic; empty-list no-op).
+- **Files (web parity):**
+  - `character_library_facade.dart` — now takes `StorageService` (for `chatsDir`); new `deleteFolderWithCharacters(id)` and `bulkDelete(ids)` reusing `deleteCharacters`. `web_server_host.dart` passes `_storage`.
+  - `character_routes.dart` — new `POST /api/folders/<id>/delete-deep` + `POST /api/characters/bulk-delete` (the old web bulkDelete fired N parallel single-deletes; now one endpoint).
+  - `LibraryDialogs.tsx` — new `TypeConfirmDialog` (type-DELETE gate, web mirror). `useLibrary.ts` — `bulkDelete` → single endpoint, new `deleteFolderDeep`. `CharactersPage.tsx` — folder menu split into "Delete folder only" / "Delete folder + characters"; deleteSelected + deleteFolderDeep now use `TypeConfirmDialog`. `styles.css` — `.type-confirm-label` / `.danger-modal` / disabled `.danger-btn`. Bundle rebuilt.
+- **Verification:** flutter analyze — No issues found. New repo tests + home golden pass. web tsc clean, vitest 27/27, bundle rebuilt. FULL desktop suite 1876/1876 passed.
+- **Commit:** (recorded in PR)

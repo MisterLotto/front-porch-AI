@@ -41,6 +41,7 @@ import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/story_home_view.dart';
 import 'package:front_porch_ai/ui/dialogs/byaf_import_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/type_delete_dialog.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';
 
@@ -408,6 +409,7 @@ class _HomePageState extends State<HomePage> {
             onFolderTap: _handleFolderTap,
             onFolderNavigateBack: _handleFolderNavigateBack,
             onCancelSelection: _cancelSelection,
+            onDeleteSelected: _massDeleteSelected,
             // onCreateGroup no longer wired — old select-for-group path deprecated.
             onMoveToFolder: _handleMoveToFolder,
             onSortChanged: _handleSortChanged,

@@ -51,6 +51,7 @@ class CharacterCardGrid extends StatelessWidget {
     required this.onFolderTap,
     required this.onFolderNavigateBack,
     required this.onCancelSelection,
+    required this.onDeleteSelected,
     required this.onMoveToFolder,
     required this.onSortChanged,
     required this.onGridScaleChanged,
@@ -100,6 +101,9 @@ class CharacterCardGrid extends StatelessWidget {
   final VoidCallback onFolderNavigateBack;
   final VoidCallback onCancelSelection;
   // onCreateGroup removed — group creation is now exclusively via the sidebar "Create Group Chat" button.
+  /// Mass delete of the selected characters (severe typed-DELETE confirm
+  /// lives with the handler — this just hands over the selection).
+  final void Function(Set<String> selectedIds) onDeleteSelected;
   final void Function(Set<String> selectedIds) onMoveToFolder;
   final void Function(String mode) onSortChanged;
   final void Function(double scale) onGridScaleChanged;
@@ -235,8 +239,10 @@ class CharacterCardGrid extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.group,
-                    color: Colors.purpleAccent.withValues(alpha: 0.7),
+                    Icons.checklist,
+                    color: AppColors.porchHoneyOf(context).withValues(
+                      alpha: 0.8,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -255,8 +261,17 @@ class CharacterCardGrid extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Old "Create Group" action removed. Group creation is now exclusively
-                  // via the persistent left sidebar button ("Create Group Chat").
+                  ElevatedButton.icon(
+                    onPressed: () => onDeleteSelected(selectedCharacterIds),
+                    icon: const Icon(Icons.delete_forever, size: 18),
+                    label: Text(
+                      'Delete ${selectedCharacterIds.length} Selected',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.negativeAccentOf(context),
+                      foregroundColor: AppColors.userText,
+                    ),
+                  ),
                 ],
               ),
             ),

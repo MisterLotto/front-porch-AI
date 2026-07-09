@@ -363,7 +363,11 @@ class WebServerHost extends ChangeNotifier {
     final folderService = _folderService;
     final characterLibraryFacade =
         (_characterRepository != null && folderService != null)
-        ? CharacterLibraryFacade(_characterRepository!, folderService)
+        ? CharacterLibraryFacade(
+            _characterRepository!,
+            folderService,
+            _storage,
+          )
         : null;
 
     final chargenFacade = _llmProvider != null

@@ -21,12 +21,14 @@ import {
   ConfirmDialog,
   MoveToFolderDialog,
   PromptDialog,
+  TypeConfirmDialog,
 } from '../components/library/LibraryDialogs';
 
 type Dialog =
   | { kind: 'newFolder' }
   | { kind: 'renameFolder'; folder: LibFolder }
   | { kind: 'deleteFolder'; folder: LibFolder }
+  | { kind: 'deleteFolderDeep'; folder: LibFolder }
   | { kind: 'deleteChar'; char: LibChar }
   | { kind: 'deleteGroup'; group: LibGroup }
   | { kind: 'deleteSelected'; ids: string[] }
@@ -78,7 +80,17 @@ export function CharactersPage() {
 
   const folderMenu = (f: LibFolder): CardMenuItem[] => [
     { label: 'Rename', icon: '✏️', onClick: () => setDialog({ kind: 'renameFolder', folder: f }) },
-    { label: 'Delete', icon: '🗑', danger: true, onClick: () => setDialog({ kind: 'deleteFolder', folder: f }) },
+    {
+      label: 'Delete folder only',
+      icon: '🗑',
+      onClick: () => setDialog({ kind: 'deleteFolder', folder: f }),
+    },
+    {
+      label: 'Delete folder + characters',
+      icon: '💥',
+      danger: true,
+      onClick: () => setDialog({ kind: 'deleteFolderDeep', folder: f }),
+    },
   ];
 
   const groupMenu = (g: LibGroup): CardMenuItem[] => [
@@ -286,6 +298,15 @@ export function CharactersPage() {
           onClose={() => setDialog(null)}
         />
       )}
+      {dialog?.kind === 'deleteFolderDeep' && (
+        <TypeConfirmDialog
+          title="Delete folder + characters"
+          message={`This will PERMANENTLY delete the folder "${dialog.folder.name}", its subfolders, and EVERY character inside them — cards, images, and chat histories. There is no undo and no recycle bin.`}
+          confirmLabel="Delete everything"
+          onConfirm={() => lib.deleteFolderDeep(dialog.folder.id)}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {dialog?.kind === 'deleteChar' && (
         <ConfirmDialog
           title="Delete character"
@@ -297,11 +318,10 @@ export function CharactersPage() {
         />
       )}
       {dialog?.kind === 'deleteSelected' && (
-        <ConfirmDialog
-          title="Delete selected"
-          message={`Permanently delete ${dialog.ids.length} selected character${dialog.ids.length === 1 ? '' : 's'} and their chat history? This cannot be undone.`}
-          confirmLabel="Delete"
-          danger
+        <TypeConfirmDialog
+          title={`Delete ${dialog.ids.length} character${dialog.ids.length === 1 ? '' : 's'}`}
+          message={`This will PERMANENTLY delete ${dialog.ids.length} selected character${dialog.ids.length === 1 ? '' : 's'} — their cards, images, and chat histories. There is no undo and no recycle bin.`}
+          confirmLabel={`Delete ${dialog.ids.length}`}
           onConfirm={() => lib.bulkDelete(dialog.ids)}
           onClose={() => setDialog(null)}
         />

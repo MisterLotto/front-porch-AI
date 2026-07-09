@@ -291,7 +291,9 @@ export function useLibrary() {
   const bulkDelete = useCallback(
     async (ids: string[]) => {
       try {
-        await Promise.all(ids.map((id) => api.post(`/api/characters/${id}/delete`)));
+        // One severe-delete endpoint (was N parallel single deletes) — matches
+        // the desktop mass-delete pipeline and keeps the confirm gate meaningful.
+        await api.post('/api/characters/bulk-delete', { ids });
         const drop = new Set(ids);
         setChars((cs) => cs.filter((c) => !drop.has(c.id)));
         cancelSelecting();
@@ -300,6 +302,20 @@ export function useLibrary() {
       }
     },
     [cancelSelecting],
+  );
+
+  /** The nuclear folder delete: folder + subfolders + every character inside. */
+  const deleteFolderDeep = useCallback(
+    async (id: string) => {
+      try {
+        await api.post(`/api/folders/${id}/delete-deep`);
+        if (folderId === id) setFolderId(null);
+        reload();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not delete folder');
+      }
+    },
+    [folderId, reload, setFolderId],
   );
 
   // ── Group actions ─────────────────────────────────────────────────────────
@@ -395,6 +411,7 @@ export function useLibrary() {
     createFolder,
     renameFolder,
     deleteFolder,
+    deleteFolderDeep,
     duplicateCharacter,
     deleteCharacter,
     exportPng,
