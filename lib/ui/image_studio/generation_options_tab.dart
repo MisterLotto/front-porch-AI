@@ -567,7 +567,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                           : <String>[]);
                 if (dtModels.isEmpty) {
                   return Text(
-                    'Test to list models.',
+                    'Models appear here once the server is connected.',
                     style: TextStyle(
                       color: AppColors.textTertiary(context),
                       fontSize: 10,
@@ -750,7 +750,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             )
           else if (_localModels.isEmpty)
             Text(
-              'Test to list models.',
+              'Models appear here once the server is connected.',
               style: TextStyle(
                 color: AppColors.textTertiary(context),
                 fontSize: 10,
@@ -862,7 +862,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               isExpanded: true,
               decoration: _deco(
                 hint: _localLoras.isEmpty
-                    ? 'Test conn for LoRAs'
+                    ? 'Available when connected'
                     : 'LoRA (opt)',
               ),
               items: [
@@ -942,6 +942,28 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        SwitchListTile(
+          title: Text(
+            'Review AI prompts before generating',
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 12,
+            ),
+          ),
+          subtitle: Text(
+            '/image pauses so you can edit the crafted prompt first',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 10,
+            ),
+          ),
+          value: st.imageGenPromptReview,
+          activeTrackColor: AppColors.formMasterAccent,
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          onChanged: (v) => st.setImageGenPromptReview(v),
+        ),
+        const SizedBox(height: 4),
         Text(
           'Image Size',
           style: TextStyle(

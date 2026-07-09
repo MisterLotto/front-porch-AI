@@ -33,10 +33,22 @@ import 'package:http/http.dart' as http;
 class ComfyUiService {
   ComfyUiService({required this.baseUrl});
 
-  /// e.g. `http://127.0.0.1:8188` (trailing slash tolerated).
+  /// e.g. `http://127.0.0.1:8188` (trailing slash tolerated; a missing
+  /// scheme is assumed to be http — novices type `localhost:8188`).
   final String baseUrl;
 
-  String get _root => baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+  String get _root => ensureHttpScheme(baseUrl);
+
+  /// Normalize a user-typed server address into a usable base URL: trims,
+  /// strips trailing slashes, and prepends `http://` when no scheme is given
+  /// (`localhost:8188`, `192.168.1.20:7860` → valid URLs instead of a silent
+  /// connection failure). Shared by the A1111 paths in ImageGenService. Pure.
+  static String ensureHttpScheme(String url) {
+    var u = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (u.isEmpty) return u;
+    if (!u.contains('://')) u = 'http://$u';
+    return u;
+  }
 
   /// Known A1111-style → ComfyUI sampler name mappings, used when the stored
   /// sampler (shared across backends) isn't already a ComfyUI-native name.

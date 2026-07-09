@@ -305,6 +305,9 @@ class StorageService extends ChangeNotifier {
       imageGenSettings.setLocalImageGenUrl(v);
   String get comfyUiUrl => imageGenSettings.comfyUiUrl;
   Future<void> setComfyUiUrl(String v) => imageGenSettings.setComfyUiUrl(v);
+  bool get imageGenPromptReview => imageGenSettings.imageGenPromptReview;
+  Future<void> setImageGenPromptReview(bool v) =>
+      imageGenSettings.setImageGenPromptReview(v);
   String get imageGenSize => imageGenSettings.imageGenSize;
   Future<void> setImageGenSize(String v) => imageGenSettings.setImageGenSize(v);
   String get imageGenStyle => imageGenSettings.imageGenStyle;

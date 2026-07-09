@@ -38,6 +38,7 @@ class ImageGenSettings with SettingsBase {
   double _imageGenCfgScale = 7.0;
   String _imageGenSampler = 'Euler a';
   int _imageGenSeed = -1;
+  bool _imageGenPromptReview = true;
 
   // Draw Things gRPC-specific
   String _drawThingsGrpcHost = '127.0.0.1';
@@ -64,6 +65,10 @@ class ImageGenSettings with SettingsBase {
   double get imageGenCfgScale => _imageGenCfgScale;
   String get imageGenSampler => _imageGenSampler;
   int get imageGenSeed => _imageGenSeed;
+
+  /// Whether AI-crafted image prompts (the /image command) pause for user
+  /// review/editing before being sent to the backend. Default ON.
+  bool get imageGenPromptReview => _imageGenPromptReview;
 
   String get drawThingsGrpcHost => _drawThingsGrpcHost;
   int get drawThingsGrpcPort => _drawThingsGrpcPort;
@@ -95,6 +100,8 @@ class ImageGenSettings with SettingsBase {
     _imageGenCfgScale = prefs?.getDouble(k('image_gen_cfg_scale')) ?? 7.0;
     _imageGenSampler = prefs?.getString(k('image_gen_sampler')) ?? 'Euler a';
     _imageGenSeed = prefs?.getInt(k('image_gen_seed')) ?? -1;
+    _imageGenPromptReview =
+        prefs?.getBool(k('image_gen_prompt_review')) ?? true;
 
     _drawThingsGrpcHost =
         prefs?.getString(k('draw_things_grpc_host')) ?? '127.0.0.1';
@@ -129,6 +136,12 @@ class ImageGenSettings with SettingsBase {
   Future<void> setComfyUiUrl(String value) async {
     _comfyUiUrl = value;
     await prefs?.setString(k('comfy_ui_url'), value);
+    notify();
+  }
+
+  Future<void> setImageGenPromptReview(bool value) async {
+    _imageGenPromptReview = value;
+    await prefs?.setBool(k('image_gen_prompt_review'), value);
     notify();
   }
 

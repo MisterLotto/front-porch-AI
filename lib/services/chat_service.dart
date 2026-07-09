@@ -589,6 +589,13 @@ class ChatService extends ChangeNotifier {
   /// chat switches like [_commandHandler] does).
   ImageCommandService? _imageCommand;
 
+  /// Prompt-review pause for /image (Chance-Time-style pending flag +
+  /// completer): when the review setting is on, the crafted prompt parks
+  /// here until the UI (desktop dialog / web modal) resolves it via
+  /// [resolveImagePromptReview] — see chat_service_images.dart.
+  String? _pendingImagePromptReview;
+  Completer<String?>? _imageReviewCompleter;
+
   /// Append an already-saved generated image to the conversation as a
   /// character message (empty text; the bubble renders the image from
   /// metadata). Shared by the /image slash command, the Image Studio's
@@ -3379,6 +3386,10 @@ class ChatService extends ChangeNotifier {
     // runs a separate LLM call that doesn't set _isGenerating).
     if (_guestBusy) return;
     clearSuggestions();
+
+    // A new message while an /image prompt review is parked cancels it —
+    // the desktop dialog is modal, but the web modal can be typed around.
+    resolveImagePromptReview(null);
 
     // User is interacting — clear any pending auto-response state
     _pendingIdleCue = null;

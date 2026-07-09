@@ -155,11 +155,20 @@ void main() {
       expect(generated, isEmpty);
     });
 
-    test('craft failure surfaces an error and stops', () async {
-      craftResult = null;
+    test('craft failure (empty prompt) surfaces an error and stops', () async {
+      craftResult = '';
       await build().handle('scene');
       expect(statuses.last, startsWith('⚠'));
       expect(generated, isEmpty);
+    });
+
+    test('craft returning null stops silently (review cancelled — the '
+        'callback owns the messaging)', () async {
+      craftResult = null;
+      await build().handle('scene');
+      expect(statuses.where((s) => s.startsWith('⚠')), isEmpty);
+      expect(generated, isEmpty);
+      expect(attached, isEmpty);
     });
 
     test('generation failure surfaces an error and stops', () async {

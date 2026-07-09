@@ -48,6 +48,7 @@ class WebChatRoutes {
     router.post('/api/chat/edit', _edit);
     router.post('/api/chat/delete', _delete);
     router.post('/api/chat/insert-image', _insertImage);
+    router.post('/api/chat/image-review', _imageReview);
     router.post('/api/chat/reprocess-needs', _reprocessNeeds);
     router.post('/api/chat/revert-needs-reprocess', _revertNeedsReprocess);
     router.post('/api/chat/author-note', _authorNote);
@@ -233,6 +234,17 @@ class WebChatRoutes {
     final index = body['index'];
     if (index is! int) return JsonResponse.badRequest('index is required');
     _facade.delete(index);
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  /// Resolve a parked /image prompt review: {prompt: '...'} generates with
+  /// the (possibly edited) prompt; an absent/empty prompt cancels.
+  Future<shelf.Response> _imageReview(shelf.Request request) async {
+    final body = await _json(request);
+    final prompt = body['prompt']?.toString().trim();
+    _facade.resolveImageReview(
+      (prompt == null || prompt.isEmpty) ? null : prompt,
+    );
     return JsonResponse.ok({'status': 'ok'});
   }
 

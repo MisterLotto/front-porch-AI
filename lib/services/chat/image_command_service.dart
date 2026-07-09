@@ -164,8 +164,11 @@ class ImageCommandService {
       } else {
         _onStatus('🎨 Crafting image prompt…', sticky: true);
         prompt = await _craftPrompt(request);
+        // null = stop silently — the callback already surfaced its own
+        // message (e.g. the user cancelled the prompt review).
+        if (prompt == null) return;
       }
-      if (prompt == null || prompt.trim().isEmpty) {
+      if (prompt.trim().isEmpty) {
         _onStatus('⚠ Couldn’t build an image prompt for that.', sticky: false);
         return;
       }

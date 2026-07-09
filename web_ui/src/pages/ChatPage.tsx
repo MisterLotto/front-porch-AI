@@ -15,6 +15,7 @@ import { ChatInsight } from '../components/ChatInsight';
 import { ConversationsDrawer, type SessionSummary } from '../components/ConversationsDrawer';
 import { ReprocessNeedsModal } from '../components/ReprocessNeedsModal';
 import { ChanceTimeModal } from '../components/ChanceTimeModal';
+import { ImagePromptReviewModal } from '../components/ImagePromptReviewModal';
 import { type Message, type Realism, type LoreEntry } from '../components/chatTypes';
 
 interface ChatState {
@@ -46,6 +47,9 @@ interface ChatState {
   // Chaos "Chance Time" park state: while pending, the engine is frozen waiting
   // for the user to accept their fate (event is pre-resolved server-side).
   chanceTime?: { pending: boolean; event?: string };
+  // Crafted /image prompt parked for review (review setting on) — the modal
+  // resolves it via POST /api/chat/image-review.
+  imagePromptReview?: string;
 }
 
 export function ChatPage() {
@@ -511,6 +515,16 @@ export function ChatPage() {
           revealed={chance.revealed}
           onReveal={revealFate}
           onAccept={acceptFate}
+        />
+      )}
+
+      {state.imagePromptReview && (
+        <ImagePromptReviewModal
+          prompt={state.imagePromptReview}
+          onGenerate={(edited) =>
+            void api.post('/api/chat/image-review', { prompt: edited }).catch(() => {})
+          }
+          onCancel={() => void api.post('/api/chat/image-review', {}).catch(() => {})}
         />
       )}
 

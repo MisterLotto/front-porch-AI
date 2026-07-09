@@ -19,6 +19,7 @@ interface ImageConfig {
   sampler: string;
   localUrl: string;
   comfyUrl: string;
+  promptReview: boolean;
   drawThingsHost: string;
   drawThingsPort: number;
   remoteApiUrl: string;
@@ -144,6 +145,14 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
         </>
       )}
 
+      <label className="tool-toggle">
+        <span>Review AI prompts before generating (/image pauses so you can edit)</span>
+        <input
+          type="checkbox"
+          checked={cfg.promptReview}
+          onChange={(e) => { set({ promptReview: e.target.checked }); void saveConfig({ promptReview: e.target.checked }); }}
+        />
+      </label>
       <label>
         Art style
         <select value={STYLES[cfg.style] ? cfg.style : 'photorealistic'} onChange={(e) => { set({ style: e.target.value }); void saveConfig({ style: e.target.value }); }}>

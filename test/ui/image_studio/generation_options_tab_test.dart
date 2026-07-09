@@ -293,6 +293,11 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   Future<void> setComfyUiUrl(String v) async {}
 
   @override
+  bool get imageGenPromptReview => true;
+  @override
+  Future<void> setImageGenPromptReview(bool v) async {}
+
+  @override
   String get drawThingsGrpcHost => '127.0.0.1';
   @override
   Future<void> setDrawThingsGrpcHost(String v) async {}

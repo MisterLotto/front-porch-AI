@@ -208,6 +208,9 @@ class ChatFacade {
         'pending': _chat.isAwaitingChanceTime,
         'event': ?_chat.webChanceTimeDisplay,
       },
+      // Crafted /image prompt awaiting review (review setting on). The client
+      // shows an edit modal and resolves via POST /api/chat/image-review.
+      'imagePromptReview': ?_chat.pendingImagePromptReview,
     };
   }
 
@@ -400,6 +403,14 @@ class ChatFacade {
   /// on both surfaces. Replaces the old markdown-append-to-last-message hack,
   /// which never rendered on desktop (relative URLs aren't matched by the
   /// markdown-image regex) and mutated an unrelated message.
+  /// Resolve a parked /image prompt review from the web modal: the (possibly
+  /// edited) prompt to generate with, or null to cancel. No-op when nothing
+  /// is pending (e.g. the desktop dialog resolved it first).
+  void resolveImageReview(String? prompt) {
+    _chat.resolveImagePromptReview(prompt);
+    _notify();
+  }
+
   Future<bool> insertImage(String filename, {String prompt = ''}) async {
     final file = _resolveSavedImage?.call(filename.trim());
     if (file == null) return false;

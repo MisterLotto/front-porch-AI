@@ -33,6 +33,7 @@ import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
@@ -74,6 +75,7 @@ class _ChatPageState extends State<ChatPage> {
   // Guards the Scene Guest detection popup so it cannot stack while open.
   bool _showingGuestDetection = false;
   bool _showingGuestPicker = false;
+  bool _showingImageReview = false;
   bool? _externalImagesAllowed;
   bool _imageConsentChecked = false;
   TtsService? _ttsService;
@@ -239,6 +241,13 @@ class _ChatPageState extends State<ChatPage> {
         (_) => _showGuestPickerDialog(chat),
       );
     }
+    // /image prompt review — same pending-flag pattern (review setting on).
+    if (chat.pendingImagePromptReview != null && !_showingImageReview) {
+      _showingImageReview = true;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showImagePromptReviewDialog(chat),
+      );
+    }
     // A guest's background portrait finished — evict its stale cached image so
     // the new art replaces the initials avatar.
     final evictPath = chat.guestAvatarEvictPath;
@@ -282,6 +291,23 @@ class _ChatPageState extends State<ChatPage> {
       barrierDismissible: false,
       builder: (_) => const ChanceTimeOverlay(),
     );
+  }
+
+  /// Show the /image prompt-review dialog and resolve the pending review with
+  /// the edited prompt (or null on cancel). Mirrors the guest-picker flow.
+  Future<void> _showImagePromptReviewDialog(ChatService chat) async {
+    final prompt = chat.pendingImagePromptReview;
+    if (prompt == null || !mounted) {
+      _showingImageReview = false;
+      return;
+    }
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ImagePromptReviewDialog(prompt: prompt),
+    );
+    _showingImageReview = false;
+    chat.resolveImagePromptReview(result);
   }
 
   Future<void> _showGuestDetectionDialog(ChatService chat) async {

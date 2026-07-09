@@ -89,6 +89,7 @@ class WebServerHost extends ChangeNotifier {
   VoidCallback? _realismListener;
   bool _wasEvaluatingRealism = false;
   bool _wasAwaitingChanceTime = false;
+  bool _wasPendingImageReview = false;
 
   // Near-instant library live-sync: one debounced listener attached to the
   // CharacterRepository, FolderService and GroupChatRepository (all
@@ -249,6 +250,14 @@ class WebServerHost extends ChangeNotifier {
                 : {'event': 'chance_time', 'pending': false},
           );
           _wasAwaitingChanceTime = awaitingChance;
+        }
+        // /image prompt review parked/resolved — poke clients to refetch state
+        // so the web review modal opens/closes (same transition pattern as
+        // Chance Time; the send request itself is blocked on the completer).
+        final pendingReview = chatService.pendingImagePromptReview != null;
+        if (pendingReview != _wasPendingImageReview) {
+          streamHub.broadcast({'event': 'chat_updated'});
+          _wasPendingImageReview = pendingReview;
         }
       }
 

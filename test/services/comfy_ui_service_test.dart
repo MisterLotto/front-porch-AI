@@ -107,6 +107,22 @@ void main() {
     expect(ComfyUiService.schedulerFor('Euler a'), 'normal');
   });
 
+  test('ensureHttpScheme fixes scheme-less addresses and trailing slashes', () {
+    expect(
+      ComfyUiService.ensureHttpScheme('localhost:8188'),
+      'http://localhost:8188',
+    );
+    expect(
+      ComfyUiService.ensureHttpScheme('192.168.1.20:7860/'),
+      'http://192.168.1.20:7860',
+    );
+    expect(
+      ComfyUiService.ensureHttpScheme('https://my.server:8443//'),
+      'https://my.server:8443',
+    );
+    expect(ComfyUiService.ensureHttpScheme('  '), '');
+  });
+
   group('optionsFromObjectInfo', () {
     final info = {
       'CheckpointLoaderSimple': {

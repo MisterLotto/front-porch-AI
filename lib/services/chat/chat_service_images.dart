@@ -34,6 +34,21 @@ part of '../chat_service.dart';
 /// named member), exactly like the studio launch site. ZERO Realism/Needs
 /// work happens here.
 extension ChatServiceImages on ChatService {
+  /// The crafted /image prompt awaiting user review (null when none). The
+  /// desktop dialog and the web modal both key off this.
+  String? get pendingImagePromptReview => _pendingImagePromptReview;
+
+  /// Resolve a pending prompt review: the (possibly edited) prompt to
+  /// generate with, or null to cancel. Safe to call when nothing is pending.
+  void resolveImagePromptReview(String? prompt) {
+    final completer = _imageReviewCompleter;
+    if (completer == null) return;
+    _pendingImagePromptReview = null;
+    _imageReviewCompleter = null;
+    completer.complete(prompt);
+    notifyListeners();
+  }
+
   ImageCommandService _ensureImageCommand() {
     return _imageCommand ??= ImageCommandService(
       isConfigured: () => _imageGenService?.isConfigured ?? false,
@@ -43,7 +58,23 @@ extension ChatServiceImages on ChatService {
         isError: message.startsWith('⚠'),
         sticky: sticky,
       ),
-      craftPrompt: _craftImageCommandPrompt,
+      craftPrompt: (request) async {
+        final crafted = await _craftImageCommandPrompt(request);
+        // '' = craft failure (the leaf surfaces the ⚠); null = stop silently.
+        if (crafted == null || crafted.trim().isEmpty) return '';
+        if (!_storageService.imageGenPromptReview) return crafted;
+        // Review-first: park the crafted prompt for the UI (desktop dialog /
+        // web modal) and wait for the user's edit or cancel.
+        _pendingImagePromptReview = crafted;
+        _imageReviewCompleter = Completer<String?>();
+        notifyListeners();
+        final reviewed = await _imageReviewCompleter!.future;
+        if (reviewed == null || reviewed.trim().isEmpty) {
+          _setGuestStatus('Image generation cancelled.');
+          return null;
+        }
+        return reviewed.trim();
+      },
       generate: (prompt, request) => _imageGenService!.generateImage(
         prompt: prompt,
         negativePrompt: _imageCommandNegative(request),

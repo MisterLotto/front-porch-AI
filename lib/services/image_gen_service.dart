@@ -994,7 +994,9 @@ class ImageGenService extends ChangeNotifier {
     } else {
       final client = http.Client();
       try {
-        final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/sd-models');
+        final uri = Uri.parse(
+          '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/sd-models',
+        );
         final response = await client
             .get(uri)
             .timeout(const Duration(seconds: 5));
@@ -1025,7 +1027,9 @@ class ImageGenService extends ChangeNotifier {
     } else {
       final client = http.Client();
       try {
-        final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/sd-models');
+        final uri = Uri.parse(
+          '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/sd-models',
+        );
         final response = await client
             .get(uri)
             .timeout(const Duration(seconds: 15));
@@ -1089,7 +1093,9 @@ class ImageGenService extends ChangeNotifier {
   Future<List<String>> fetchA1111Loras(String baseUrl) async {
     final client = http.Client();
     try {
-      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/loras');
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/loras',
+      );
       debugPrint('ImageGen: Fetching LoRAs from $uri');
       final response = await client
           .get(uri)
@@ -1126,7 +1132,7 @@ class ImageGenService extends ChangeNotifier {
     final client = http.Client();
     try {
       final uri = Uri.parse(
-        '${baseUrl.trimRight()}/sdapi/v1/unload-checkpoint',
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/unload-checkpoint',
       );
       debugPrint('ImageGen: Requesting model unload at $uri');
       final response = await client
@@ -1175,7 +1181,9 @@ class ImageGenService extends ChangeNotifier {
     // Step 2: request the new checkpoint
     final client = http.Client();
     try {
-      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/options');
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/options',
+      );
       debugPrint('ImageGen: Switching checkpoint → $modelName');
       final response = await client
           .post(
@@ -1223,7 +1231,9 @@ class ImageGenService extends ChangeNotifier {
     String expected,
     http.Client client,
   ) async {
-    final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/options');
+    final uri = Uri.parse(
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/options',
+    );
     const maxAttempts = 30;
     const pollInterval = Duration(seconds: 2);
 
@@ -1257,7 +1267,9 @@ class ImageGenService extends ChangeNotifier {
   Future<List<String>> fetchA1111Samplers(String baseUrl) async {
     final client = http.Client();
     try {
-      final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/samplers');
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/samplers',
+      );
       final response = await client
           .get(uri)
           .timeout(const Duration(seconds: 15));
@@ -1309,7 +1321,9 @@ class ImageGenService extends ChangeNotifier {
     }
 
     final (width, height) = _parseSize(size);
-    final uri = Uri.parse('${baseUrl.trimRight()}/sdapi/v1/txt2img');
+    final uri = Uri.parse(
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/txt2img',
+    );
 
     // Inject LoRA into the prompt: <lora:name:weight>
     final effectivePrompt = (loraName.isNotEmpty)
