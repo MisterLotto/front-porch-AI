@@ -152,23 +152,20 @@ void main() {
 
   group('ImageGenMode', () {
     test(
-      'has all 5 expected modes (Message Illustration/fromLastMessage removed as redundant with Visualize Scene N slider)',
+      'has the 3 surviving subjects (visualizeScene + chatBackground retired; '
+      'scene visualization folded into customPrompt)',
       () {
-        expect(ImageGenMode.values.length, 5);
+        expect(ImageGenMode.values.length, 3);
         expect(ImageGenMode.values, contains(ImageGenMode.customPrompt));
-        expect(ImageGenMode.values, contains(ImageGenMode.visualizeScene));
         expect(ImageGenMode.values, contains(ImageGenMode.characterPortrait));
-        expect(ImageGenMode.values, contains(ImageGenMode.chatBackground));
         expect(ImageGenMode.values, contains(ImageGenMode.userAvatar));
       },
     );
 
     test('values are in expected order', () {
       expect(ImageGenMode.values[0], ImageGenMode.customPrompt);
-      expect(ImageGenMode.values[1], ImageGenMode.visualizeScene);
-      expect(ImageGenMode.values[2], ImageGenMode.characterPortrait);
-      expect(ImageGenMode.values[3], ImageGenMode.chatBackground);
-      expect(ImageGenMode.values[4], ImageGenMode.userAvatar);
+      expect(ImageGenMode.values[1], ImageGenMode.characterPortrait);
+      expect(ImageGenMode.values[2], ImageGenMode.userAvatar);
     });
   });
 
@@ -267,16 +264,18 @@ void main() {
     );
 
     test(
-      'generateSmartPrompt thin (no llm) falls back to builder static and respects passed style',
+      'generateSmartPrompt thin (no llm) distills the current scene for '
+      'blank customPrompt and respects passed style',
       () async {
         final storage = _makePromptTestStorage();
         final service = ImageGenService(storage);
+        // customPrompt with no typed text but recent narrative → scene distillation
+        // (the folded-in former "Visualize Scene" behavior).
         final p = await service.generateSmartPrompt(
-          mode: ImageGenMode.visualizeScene,
+          mode: ImageGenMode.customPrompt,
           style: 'watercolor',
-          lastMessage: 'The hero drew their blade as the storm broke.',
+          recentMessages: const ['The hero drew their blade as the storm broke.'],
           characterDescription: 'armored warrior',
-          visualizeNumMessages: 1,
         );
         expect(p, isNotEmpty);
         expect(p.toLowerCase(), contains('watercolor'));
@@ -302,29 +301,28 @@ void main() {
       },
     );
 
-    // Stage 4: exercise richer fields (time/lighting/group speaker) through the service thin ctx mapping
-    // (roundtrips the optionals to _buildPromptContext + builder for fromLast/visualize). Minimal extension
-    // of delegation group (no new fakes needed; defaults + forwarding).
+    // Exercise richer fields (time/lighting/group speaker) through the service thin
+    // ctx mapping and the builder's customPrompt scene distillation.
     test(
-      'generateSmartPrompt thin forwards Stage 4 richer fields (timeOfDay/lighting/group speaker) and builder consumes them',
+      'generateSmartPrompt thin forwards richer fields (timeOfDay/lighting/group speaker) and builder consumes them',
       () async {
         final storage = _makePromptTestStorage();
         final service = ImageGenService(storage);
         final p = await service.generateSmartPrompt(
-          mode: ImageGenMode.visualizeScene,
+          mode: ImageGenMode.customPrompt,
           style: 'watercolor',
-          lastMessage:
-              'The hero drew their blade as the storm broke under evening light.',
+          recentMessages: const [
+            'The hero drew their blade as the storm broke under evening light.',
+          ],
           characterDescription: 'armored warrior',
           timeOfDay: 'evening',
           lightingHint: 'storm glow',
           isGroupNonObserver: true,
           currentSpeakerId: 'Hero',
-          visualizeNumMessages: 1,
         );
         expect(p, isNotEmpty);
         expect(p.toLowerCase(), contains('watercolor'));
-        // Consumption of richer (lighting/speaker injected in builder for the mode).
+        // Consumption of richer (lighting/speaker injected in builder for the scene).
         expect(
           p.toLowerCase(),
           anyOf(contains('evening'), contains('storm'), contains('hero')),
@@ -332,45 +330,43 @@ void main() {
       },
     );
 
-    // User spec: the thin extension (sole edit to pre-existing _buildPromptContext) must forward
-    // userInstruction + visualizeNumMessages through ctx to builder (N limit + strip + instr block + persona/char visual no-pers).
+    // The thin must forward userInstruction (box text) through ctx to the builder,
+    // and the customPrompt scene distillation must strip <think> from recent messages.
     test(
-      'generateSmartPrompt thin forwards userInstruction (box text) and visualizeNumMessages (N + think-strip) and builder consumes',
+      'generateSmartPrompt thin forwards userInstruction and the builder strips <think> from scene messages',
       () async {
         final storage = _makePromptTestStorage();
         final service = ImageGenService(storage);
         final p = await service.generateSmartPrompt(
-          mode: ImageGenMode.visualizeScene,
+          mode: ImageGenMode.customPrompt,
           style: 'photorealistic',
           characterDescription: 'silver hair, tall',
           personaName: 'User',
           personaText: 'the player',
-          recentMessages: [
+          recentMessages: const [
             'First <think>secret</think> action here.',
             'Second clean pose.',
             'Third with </think> tail.',
           ],
           userInstruction:
               'focus on dramatic stormy lighting and her determined expression',
-          visualizeNumMessages: 2,
         );
         expect(p, isNotEmpty);
         expect(p.toLowerCase(), contains('photorealistic'));
-        // userInstruction surfaced (via 'Additional instructions' or guidance in assembly).
+        // userInstruction surfaced (via 'User guidance' in assembly).
         expect(
           p.toLowerCase(),
           anyOf(
             contains('dramatic stormy'),
             contains('determined expression'),
             contains('user guidance'),
-            contains('additional instructions'),
           ),
         );
-        // N=2 limit + strip: first (think) dropped, no think artifacts in output.
+        // <think> content stripped, no artifacts in output.
         expect(p, isNot(contains('secret')));
         expect(p, isNot(contains('<think>')));
         expect(p, isNot(contains('</think>')));
-        // Persona + char visual (no pers) present.
+        // Persona + char visual (no personality) present.
         expect(p, contains('User'));
         expect(p.toLowerCase(), contains('silver hair'));
       },

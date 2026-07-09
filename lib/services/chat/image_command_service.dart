@@ -21,7 +21,7 @@ import 'dart:typed_data';
 /// What a parsed `/image` command asks for. [kind] selects the generation
 /// mode; [text] carries the free text (a character name for `char`, the raw
 /// prompt for `raw`, the scene description for `custom`, empty otherwise).
-enum ImageCommandKind { scene, me, character, background, raw, custom }
+enum ImageCommandKind { scene, me, character, raw, custom }
 
 /// Parsed form of the `/image` slash-command arguments.
 class ImageCommandRequest {
@@ -34,7 +34,7 @@ class ImageCommandRequest {
 /// Orchestrates in-chat image generation for the `/image` slash command
 /// (SillyTavern-style): parse the subcommand, craft a prompt from the live
 /// chat context, generate through the configured image backend, and attach
-/// the result to the conversation (or set it as the chat background).
+/// the result to the conversation.
 ///
 /// This leaf keeps the flow out of the `ChatService` god file. It never
 /// imports `ChatService` or `ImageGenService` — every action is injected as a
@@ -60,7 +60,6 @@ class ImageCommandService {
       ImageCommandRequest request,
     )
     attachToChat,
-    required Future<void> Function(String path) setChatBackground,
     void Function()? notifyRunStateChanged,
   }) : _isConfigured = isConfigured,
        _isBusy = isBusy,
@@ -69,7 +68,6 @@ class ImageCommandService {
        _generate = generate,
        _saveImage = saveImage,
        _attachToChat = attachToChat,
-       _setChatBackground = setChatBackground,
        _notifyRunStateChanged = notifyRunStateChanged;
 
   final bool Function() _isConfigured;
@@ -85,7 +83,6 @@ class ImageCommandService {
     ImageCommandRequest request,
   )
   _attachToChat;
-  final Future<void> Function(String path) _setChatBackground;
   final void Function()? _notifyRunStateChanged;
 
   /// Guards against overlapping `/image` runs (generation is slow). Public
@@ -100,7 +97,6 @@ class ImageCommandService {
   ///   `/image last`             → the last message only
   ///   `/image me`               → the user's persona portrait
   ///   `/image char [name]`      → a character portrait (name optional)
-  ///   `/image bg`               → generate + set the chat background
   ///   `/image raw ...`          → send the rest to the backend verbatim
   ///   `/image ...`              → LLM-crafted image of the description
   static ImageCommandRequest parse(String args) {
@@ -127,9 +123,6 @@ class ImageCommandService {
       case 'portrait':
       case 'you':
         return ImageCommandRequest(ImageCommandKind.character, rest);
-      case 'bg':
-      case 'background':
-        return const ImageCommandRequest(ImageCommandKind.background);
       case 'raw':
         return ImageCommandRequest(ImageCommandKind.raw, rest);
       default:
@@ -196,13 +189,8 @@ class ImageCommandService {
         return;
       }
 
-      if (request.kind == ImageCommandKind.background) {
-        await _setChatBackground(path);
-        _onStatus('🖼 Chat background updated.', sticky: false);
-      } else {
-        await _attachToChat(path, prompt, request);
-        _onStatus('🎨 Image added to the chat.', sticky: false);
-      }
+      await _attachToChat(path, prompt, request);
+      _onStatus('🎨 Image added to the chat.', sticky: false);
     } finally {
       _generating = false;
       _notifyRunStateChanged?.call();

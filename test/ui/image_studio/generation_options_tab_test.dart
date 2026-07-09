@@ -489,7 +489,6 @@ class _TabFakeImageGenService extends ChangeNotifier
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
     String? userInstruction,
-    int? visualizeNumMessages,
   }) async => '';
   @override
   String get statusMessage => '';

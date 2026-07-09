@@ -30,12 +30,23 @@ import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 
-/// Available image generation modes.
+/// Available image generation subjects.
+///
+/// The Image Studio and the `/image` slash command share these:
+/// - **customPrompt**: a freeform prompt. When the prompt text is empty but
+///   recent chat narrative is supplied, the builder distills the *current
+///   scene* from it (this is what the bare `/image` / `/image scene` command
+///   uses — the former standalone "Visualize Scene" mode was folded in here).
+/// - **characterPortrait**: a portrait built from a character's appearance.
+/// - **userAvatar**: a portrait built from the user persona's appearance.
+///
+/// (The old `visualizeScene` and `chatBackground` modes were removed — the
+/// former is now `customPrompt` with scene context, the latter was retired
+/// because generating a figure-free chat background confused users. Backgrounds
+/// are still chosen from the Background settings dialog.)
 enum ImageGenMode {
   customPrompt,
-  visualizeScene,
   characterPortrait,
-  chatBackground,
   userAvatar,
 }
 
@@ -188,12 +199,12 @@ class ImageGenService extends ChangeNotifier {
   }
 
   // Thin delegation hook for prompt construction.
-  // Full ownership of ImageGenContext mapping semantics, mode contracts (visualizeScene N-slider
-  // now covers the former fromLastMessage "Message Illustration" distillation; no-personality portraits,
-  // no-people backgrounds, etc.), style enforcement, LLM smart path, and static fallbacks lives in
-  // ImagePromptBuilder.
+  // Full ownership of ImageGenContext mapping semantics, mode contracts
+  // (no-personality portraits, and customPrompt's scene-distillation fallback
+  // when the prompt is empty but recent chat narrative is present), style
+  // enforcement, LLM smart path, and static fallbacks lives in ImagePromptBuilder.
   // Keep prompt blocks in sync: changes to ctx construction here must be mirrored in
-  // builder tests (roundtrips), any direct ImageGenContext sites, and the builder's own
+  // any direct ImageGenContext sites and the builder's own
   // _buildStatic / buildPrompt / _generateSmartWith. The builder is stateless/prompt-only
   // (no reset calls needed). ImageGenService owns no prompt scalars that require zeroing
   // on chat startNew / setActive / load (per-call snapshot from _storage is authoritative).
@@ -753,28 +764,18 @@ class ImageGenService extends ChangeNotifier {
   /// Use the active LLM to craft a concise, effective image prompt from raw context.
   ///
   /// Thin delegation to ImagePromptBuilder — see there for mode semantics and style rules
-  /// (visualizeScene N-slider now covers former fromLastMessage/Message Illustration; portrait = appearance+expression only, background
-  /// = environment only with strong NO PEOPLE, visualize = current scene distillation, style
-  /// enforcement for both paradigms, etc.).
-  /// Old inline implementation (switch cases, raw dumps, personality injection, "Depict the
-  /// following scene", fragile substring style) removed in Stage 2.
+  /// (portrait = appearance + expression only; customPrompt = the user's text verbatim, or,
+  /// when that text is empty, a distilled visualization of the current scene from the
+  /// supplied recent chat narrative; style enforcement for both paradigms, etc.).
   /// Keep prompt blocks in sync with ImagePromptBuilder (and ctx construction in call sites
-  /// like chat_page._showImageGenDialog and web chargen paths). Builder is stateless/prompt-only.
+  /// like chat_page._showImageGenDialog and the /image slash command). Builder is stateless/prompt-only.
   ///
-  /// NOTE on duplication fix (Stage 2 review): the ternary + 15+ field bag construction that
-  /// used to be repeated in happy path, ultimate fallback, and buildPrompt is now in the
-  /// tiny pure helper _buildPromptContext below. This is *thin coordination only* (data bag
-  /// assembly + the custom vs lastMessage rule from the original thins). It contains ZERO
-  /// prompt logic, distillation, style, or LLM — all of that stays in ImagePromptBuilder.
-  /// This does not violate the "0 new god private _ methods for prompt logic" rule.
-  /// MUST KEEP IN SYNC with roundtrips (especially the new customPrompt ternary test) and
-  /// future call-site enrichment (currentExpression etc.).
+  /// The flat params are assembled into a typed [ImageGenContext] by the tiny pure helper
+  /// [_buildPromptContext] (data-bag assembly + the custom-vs-lastMessage rule only — zero
+  /// prompt/distillation/style/LLM logic, which all lives in ImagePromptBuilder).
   ///
-  /// Stage 4 user spec continuation (no boilerplate pregen in box; visualize slider N + simple `<think>` strip on pre-generated msgs;
-  /// user box text + User persona + char visual info (no personality) + style sent to LLM on Craft to produce the visual prompt;
-  /// 6 types now buttons inside studio, launch neutral): added userInstruction (box text before craft), visualizeNumMessages (slider).
-  /// Forwarded to thin _build + ctx + builder. Keep all thins + ctx ctor + studio craft + launcher collection + builder assembly in sync.
-  /// (0 new private _ methods — only extended existing _buildPromptContext thin; void _ count stable at baseline.)
+  /// [userInstruction] is free text the user typed in the studio box before Craft; it is
+  /// forwarded to the LLM as extra guidance so it "parses into the image prompt".
   Future<String> generateSmartPrompt({
     required ImageGenMode mode,
     required String style,
@@ -797,16 +798,15 @@ class ImageGenService extends ChangeNotifier {
     String? lightingHint,
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
-    // User spec: text user typed in studio box pre-Craft (passed to LLM as instr to "parse into" image prompt).
-    // visualize N: slider value (only meaningful for visualizeScene); messages stripped simply since already generated.
+    // Text the user typed in the studio box pre-Craft (passed to the LLM as an
+    // instruction to "parse into" the image prompt).
     String? userInstruction,
-    int? visualizeNumMessages,
   }) async {
     final paradigm = _storage.imageGenSettings.imageGenPromptParadigm;
 
     // Build the rich typed context (builder owns all distillation + style rules).
     // Uses the thin coordination helper (see _buildPromptContext) to keep the customPrompt
-    // ternary + future-hint mapping in one place. Expanded for future visual hints...
+    // ternary + hint mapping in one place.
     final ctx = _buildPromptContext(
       mode: mode,
       style: style,
@@ -826,10 +826,7 @@ class ImageGenService extends ChangeNotifier {
       lightingHint: lightingHint,
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: currentSpeakerId,
-      // User spec continuation (no pregen boiler; N slider for visualize + user box text + persona+char visual no pers + style on craft/LLM).
-      // Keep thin + ctx + studio craft call + builder _generateSmartWith parts + chat launcher in sync (both startNew equiv N/A for snapshot).
       userInstruction: userInstruction,
-      visualizeNumMessages: visualizeNumMessages,
     );
 
     // Pass an LLM only if the caller supplied a ready one (builder will use it for smart path).
@@ -864,9 +861,7 @@ class ImageGenService extends ChangeNotifier {
         lightingHint: lightingHint,
         isGroupNonObserver: isGroupNonObserver,
         currentSpeakerId: currentSpeakerId,
-        // User spec (userInstruction for craft box text, visualizeNum for slider N stripped msgs). Sync with happy path above + builder.
         userInstruction: userInstruction,
-        visualizeNumMessages: visualizeNumMessages,
       );
       return effectiveBuilder.buildStaticPrompt(fbCtx);
     }
@@ -880,9 +875,6 @@ class ImageGenService extends ChangeNotifier {
   /// Keep prompt blocks in sync: this thin + generateSmartPrompt's ctx mapping must stay
   /// aligned with builder._buildStatic + _ensureStyleAndCap. No new _private methods were
   /// added for prompt logic (only the pre-existing _promptBuilder late final hook).
-  ///
-  /// User spec (visualize slider, user box as instr to LLM craft, buttons inside studio instead of popup, no boilerplate pregen):
-  /// forward userInstruction + visualizeNumMessages (edit to existing thin only; 0 new _privs).
   String buildPrompt({
     required ImageGenMode mode,
     String? customPrompt,
@@ -903,7 +895,6 @@ class ImageGenService extends ChangeNotifier {
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
     String? userInstruction,
-    int? visualizeNumMessages,
   }) {
     final paradigm = _storage.imageGenSettings.imageGenPromptParadigm;
     final style = _storage.imageGenSettings.imageGenStyle;
@@ -928,9 +919,7 @@ class ImageGenService extends ChangeNotifier {
       lightingHint: lightingHint,
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: currentSpeakerId,
-      // User spec: forward box text + viz N (for static fallback parity on visualize limit + instr if used in static; main is LLM craft path).
       userInstruction: userInstruction,
-      visualizeNumMessages: visualizeNumMessages,
     );
 
     // buildPrompt remains the synchronous "static quality" path (used by fallbacks and any direct callers).
@@ -961,20 +950,12 @@ class ImageGenService extends ChangeNotifier {
   /// This is *thin coordination/wiring only* — no distillation, no style rules, no LLM,
   /// no mode semantics. All of that is in ImagePromptBuilder (the single source of truth).
   /// The only "logic" here is the original customPrompt ? customPrompt : lastMessage
-  /// ternary (plus the paradigm read that was already here).
-  /// MUST KEEP IN SYNC with: builder_test roundtrips (including the customPrompt ternary
-  /// test + new field roundtrips for expression/time/group), any direct ImageGenContext
-  /// construction (chat_page launch, studio init, studio _craft path), studio ctx build,
-  /// and call sites. Keep blocks in sync with ImageGenContext ctor, studio _ctx=,
-  /// chat_page _showImageGenDialog collection, and builder consumption sites.
-  /// (incomplete zeroing of secondary config on resets not applicable here; ctx is per-invocation snapshot).
-  /// Stage 4 complete for richer fields wiring.
-  ///
-  /// User spec (Stage 4 continuation): extended for userInstruction (typed box text pre-Craft, sent to LLM "to parse into the image gen prompt")
-  /// + visualizeNumMessages (slider for N recent msgs to include for visualize; stripped of all `<think>` simply — messages pre-generated).
-  /// No new private _ methods (this is edit to the sole existing thin _buildPromptContext; live grep count of _ methods stable post-edit).
-  /// 1:1/group parity qualified via existing speaker/flag paths (visualize N applies to provided recent snapshot regardless of 1:1 vs group).
-  /// Keep launcher collection (now take(12) for slider headroom), studio (internal mode + slider + craft pass of current box + active), builder assembly in sync.
+  /// ternary (plus the paradigm read that was already here). For customPrompt the ctx's
+  /// lastMessage carries the user's typed text; when that is null/empty the builder
+  /// distills the current scene from [recentMessages] instead.
+  /// Keep in sync with ImageGenContext ctor, studio _ctx, the chat_page launch collection,
+  /// the /image slash-command craft, and builder consumption sites. (ctx is a per-invocation
+  /// snapshot — no reset semantics apply.)
   ImageGenContext _buildPromptContext({
     required ImageGenMode mode,
     required String style,
@@ -994,7 +975,6 @@ class ImageGenService extends ChangeNotifier {
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
     String? userInstruction,
-    int? visualizeNumMessages,
   }) {
     return ImageGenContext(
       mode: mode,
@@ -1016,7 +996,6 @@ class ImageGenService extends ChangeNotifier {
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: currentSpeakerId,
       userInstruction: userInstruction,
-      visualizeNumMessages: visualizeNumMessages,
     );
   }
 

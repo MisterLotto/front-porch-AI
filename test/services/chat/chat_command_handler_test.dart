@@ -692,9 +692,9 @@ void main() {
 
       test('aliases /img, /sd, /imagine all dispatch', () async {
         await build().handle('/img me');
-        await build().handle('/sd bg');
+        await build().handle('/sd char');
         await build().handle('/imagine raw neon city');
-        expect(imageCalls, ['me', 'bg', 'raw neon city']);
+        expect(imageCalls, ['me', 'char', 'raw neon city']);
       });
     });
   });
