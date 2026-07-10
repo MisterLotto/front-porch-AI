@@ -1104,6 +1104,65 @@ class VoiceMediaTab extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      // Emoji burst toggle
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.celebration,
+                            size: 16,
+                            color: AppColors.textSecondary(context),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Expression Emoji Burst',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary(context),
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: storage.expressionEmojiBurst,
+                            onChanged: (val) =>
+                                storage.setExpressionEmojiBurst(val),
+                            activeTrackColor: AppColors.presetColors[4],
+                          ),
+                        ],
+                      ),
+                      // Burst particle size (only relevant when the burst is on)
+                      if (storage.expressionEmojiBurst) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Burst emoji size',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary(context),
+                              ),
+                            ),
+                            Text(
+                              '${storage.expressionEmojiBurstSize.round()} px',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary(context),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Slider(
+                          value: storage.expressionEmojiBurstSize,
+                          min: 12,
+                          max: 60,
+                          divisions: 12,
+                          activeColor: AppColors.presetColors[4],
+                          onChanged: (val) =>
+                              storage.setExpressionEmojiBurstSize(val),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
                       // Fallback dropdown
                       Row(
                         children: [
