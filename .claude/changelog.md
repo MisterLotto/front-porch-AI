@@ -4182,3 +4182,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `lib/ui/image_studio/expression_pack_dialog.dart` — free-form crop (no 1:1 aspect args); `_normalizePackBase` now returns bytes+width+height (long side 768, dims snapped to ×64, aspect preserved); dialog carries `baseImage`/`baseWidth`/`baseHeight` (was `base768`) and generates every slot at `'${w}x$h'`. `expression_pack_setup.dart` — param rename only.
 - **Verification:** analyze clean; 29/29 pack+studio tests; macOS debug build ✓.
 - **Commit:** 9ce3fba
+
+## 2026-07-10 — Expression pack: crop dialog removed, base prep fully automatic
+- **Why:** maintainer decision — zero friction; the only hard requirement is the pack matches the sidebar avatar's shape, which the aspect-preserving normalizer already guarantees. The crop dialog added a step (and confusion) for nothing.
+- **Files:** `lib/ui/image_studio/expression_pack_dialog.dart` — ImageCropDialog call + import removed; `launch` normalizes the resolved base directly; docs updated (framing alternative: pick a pre-cropped reference image).
+- **Verification:** analyze clean; macOS debug build ✓ (first attempt failed transiently from build-dir contention with the live `flutter run`; retry clean).
+- **Commit:** af33e2c
