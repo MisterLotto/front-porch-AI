@@ -289,6 +289,9 @@ class StorageService extends ChangeNotifier {
   String get expressionFallback => expressionSettings.expressionFallback;
   Future<void> setExpressionFallback(String v) =>
       expressionSettings.setExpressionFallback(v);
+  bool get expressionEmojiBurst => expressionSettings.expressionEmojiBurst;
+  Future<void> setExpressionEmojiBurst(bool v) =>
+      expressionSettings.setExpressionEmojiBurst(v);
 
   // Image gen / draw things (types per imageGenSettings canonical: String size, int for draw* ints, bool for flags)
   bool get imageGenEnabled => imageGenSettings.imageGenEnabled;
