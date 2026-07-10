@@ -18,6 +18,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -111,8 +112,10 @@ class ExpressionPackDialog extends StatefulWidget {
       return false;
     }
 
-    // Base portrait: the studio's current result/reference when it has one,
-    // else the character's prime avatar from disk.
+    // Base portrait: the studio's current result/reference when it has one
+    // (style-matched to what the user is making right now), else the
+    // character's existing avatar (prime expression avatar, falling back to
+    // the main card portrait).
     final base =
         candidateBase ??
         await _primeAvatarBytes(
@@ -129,8 +132,9 @@ class ExpressionPackDialog extends StatefulWidget {
         icon: Icons.theater_comedy,
         accent: AppColors.formMasterAccent,
         content: const WarmDialogText(
-          'Generate or choose a portrait first — the pack is built from a '
-          'base image.',
+          'This character has no avatar image yet — generate a portrait in '
+          'the Studio (or set a card avatar) first; the pack is built from '
+          'a base image.',
         ),
         actions: [warmDialogCancel(context, label: 'Got it')],
       );
@@ -177,16 +181,18 @@ class ExpressionPackDialog extends StatefulWidget {
     return imported == true;
   }
 
-  /// The prime (else first-on-disk) avatar for [characterDbId], or null when
-  /// the character has no avatar files yet.
+  /// The best on-disk portrait for [characterDbId]: the prime (else first)
+  /// expression avatar when any exist, else the character's MAIN card avatar
+  /// ([CharacterCard.imagePath]). The card avatar is the load-bearing case —
+  /// a character about to get their first expression pack has no expression
+  /// images yet (creating them is the whole point), but almost always has a
+  /// card portrait. Null only when the character has no image at all.
   static Future<Uint8List?> _primeAvatarBytes(
     CharacterRepository repository,
     StorageService storage,
     String characterDbId,
     String characterName,
   ) async {
-    final avatars = await repository.getAvatarImages(characterDbId);
-    if (avatars.isEmpty) return null;
     CharacterCard? card;
     for (final c in repository.characters) {
       if (c.dbId == characterDbId) {
@@ -194,14 +200,24 @@ class ExpressionPackDialog extends StatefulWidget {
         break;
       }
     }
-    // primeAvatarIndex is 1-based; clamp handles stale indices.
-    final primeIdx = ((card?.primeAvatarIndex ?? 1) - 1).clamp(
-      0,
-      avatars.length - 1,
-    );
-    final dirPath = storage.characterAvatarDir(characterName).path;
-    for (final avatar in [avatars[primeIdx], ...avatars]) {
-      final file = avatar.file(dirPath);
+
+    final avatars = await repository.getAvatarImages(characterDbId);
+    if (avatars.isNotEmpty) {
+      // primeAvatarIndex is 1-based; clamp handles stale indices.
+      final primeIdx = ((card?.primeAvatarIndex ?? 1) - 1).clamp(
+        0,
+        avatars.length - 1,
+      );
+      final dirPath = storage.characterAvatarDir(characterName).path;
+      for (final avatar in [avatars[primeIdx], ...avatars]) {
+        final file = avatar.file(dirPath);
+        if (await file.exists()) return file.readAsBytes();
+      }
+    }
+
+    final imagePath = card?.imagePath;
+    if (imagePath != null && imagePath.isNotEmpty) {
+      final file = File(imagePath);
       if (await file.exists()) return file.readAsBytes();
     }
     return null;
