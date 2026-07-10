@@ -137,3 +137,6 @@ bug_triage.md
 # Build/release scripts and docs
 create-dmg.sh
 docs/Newsletter-Since-March-28-2026.md
+
+# Local Claude Code skills (per-machine, never shared).
+.claude/skills/

@@ -43,6 +43,7 @@ void main() {
     late bool turnOrderRandom;
     late List<(bool, List<CharacterCard>?)> turnOrderCalls;
     late List<(bool, int?, int?)> afkCalls;
+    late List<String> imageCalls;
     bool castScanFound = false;
 
     ChatCommandHandler build({bool activeSet = true}) {
@@ -88,6 +89,7 @@ void main() {
             intervalSeconds: intervalSeconds ?? 60,
           );
         },
+        generateImage: (args) async => imageCalls.add(args),
       );
     }
 
@@ -115,6 +117,7 @@ void main() {
       turnOrderRandom = false;
       turnOrderCalls = [];
       afkCalls = [];
+      imageCalls = [];
       castScanFound = false;
     });
 
@@ -225,22 +228,29 @@ void main() {
 
     test('/join with no chat open (no 1:1, no group) is rejected', () async {
       joinable = [_guest('Nora')];
-      final h = build(activeSet: false); // not a 1:1 and groupMembers stays empty
+      final h = build(
+        activeSet: false,
+      ); // not a 1:1 and groupMembers stays empty
       expect(await h.handle('/join Nora'), true);
       expect(systemMessages.single, contains('Open a chat'));
       expect(joined, isEmpty);
       expect(pickerRequests, isEmpty);
     });
 
-    test('/join <name> in a group routes to a FULL join (no lite tier)', () async {
-      groupMembers = [_guest('Aria'), _guest('Bryn')];
-      groupJoinable = [_guest('Nora')];
-      final h = build(activeSet: false); // group mode (activeCharacterIsSet false)
-      expect(await h.handle('/join Nora'), true);
-      expect(joinedFull.single.name, 'Nora'); // full, not lite
-      expect(joined, isEmpty);
-      expect(pickerRequests, isEmpty);
-    });
+    test(
+      '/join <name> in a group routes to a FULL join (no lite tier)',
+      () async {
+        groupMembers = [_guest('Aria'), _guest('Bryn')];
+        groupJoinable = [_guest('Nora')];
+        final h = build(
+          activeSet: false,
+        ); // group mode (activeCharacterIsSet false)
+        expect(await h.handle('/join Nora'), true);
+        expect(joinedFull.single.name, 'Nora'); // full, not lite
+        expect(joined, isEmpty);
+        expect(pickerRequests, isEmpty);
+      },
+    );
 
     test('/join --full <name> in a group adds the member', () async {
       groupMembers = [_guest('Aria'), _guest('Bryn')];
@@ -274,20 +284,26 @@ void main() {
       expect(systemMessages.single, contains('No group member'));
     });
 
-    test('/speak <name> in a group forces that member to take a turn', () async {
-      groupMembers = [_guest('Aria'), _guest('Bryn')];
-      final h = build(activeSet: false);
-      expect(await h.handle('/speak Bryn'), true);
-      expect(spokeMembers.single.name, 'Bryn');
-      expect(spoke, isEmpty); // not the Lite-NPC path
-    });
+    test(
+      '/speak <name> in a group forces that member to take a turn',
+      () async {
+        groupMembers = [_guest('Aria'), _guest('Bryn')];
+        final h = build(activeSet: false);
+        expect(await h.handle('/speak Bryn'), true);
+        expect(spokeMembers.single.name, 'Bryn');
+        expect(spoke, isEmpty); // not the Lite-NPC path
+      },
+    );
 
-    test('/speak <unique substring> in a group forces the single match', () async {
-      groupMembers = [_guest('Aria'), _guest('Bryn')];
-      final h = build(activeSet: false);
-      expect(await h.handle('/speak bry'), true);
-      expect(spokeMembers.single.name, 'Bryn');
-    });
+    test(
+      '/speak <unique substring> in a group forces the single match',
+      () async {
+        groupMembers = [_guest('Aria'), _guest('Bryn')];
+        final h = build(activeSet: false);
+        expect(await h.handle('/speak bry'), true);
+        expect(spokeMembers.single.name, 'Bryn');
+      },
+    );
 
     test('/speak (no name) in a group asks which member', () async {
       groupMembers = [_guest('Aria'), _guest('Bryn')];
@@ -297,13 +313,16 @@ void main() {
       expect(systemMessages.single, contains('Who should speak'));
     });
 
-    test('/speak <unknown> in a group speaks nobody and surfaces a message', () async {
-      groupMembers = [_guest('Aria'), _guest('Bryn')];
-      final h = build(activeSet: false);
-      expect(await h.handle('/speak Zed'), true);
-      expect(spokeMembers, isEmpty);
-      expect(systemMessages.single, contains('No group member'));
-    });
+    test(
+      '/speak <unknown> in a group speaks nobody and surfaces a message',
+      () async {
+        groupMembers = [_guest('Aria'), _guest('Bryn')];
+        final h = build(activeSet: false);
+        expect(await h.handle('/speak Zed'), true);
+        expect(spokeMembers, isEmpty);
+        expect(systemMessages.single, contains('No group member'));
+      },
+    );
 
     test('/speak <ambiguous substring> in a group speaks nobody', () async {
       groupMembers = [_guest('Aria'), _guest('Arien')];
@@ -329,26 +348,32 @@ void main() {
       expect(turnOrderCalls.single.$2, isNull);
     });
 
-    test('/turnorder <names> sets an explicit order (unnamed appended)', () async {
-      groupMembers = [_guest('Aria'), _guest('Bryn'), _guest('Cleo')];
-      final h = build(activeSet: false);
-      expect(await h.handle('/turnorder Bryn, Aria'), true);
-      final call = turnOrderCalls.single;
-      expect(call.$1, false);
-      expect(call.$2!.map((c) => c.name).toList(), ['Bryn', 'Aria', 'Cleo']);
-    });
+    test(
+      '/turnorder <names> sets an explicit order (unnamed appended)',
+      () async {
+        groupMembers = [_guest('Aria'), _guest('Bryn'), _guest('Cleo')];
+        final h = build(activeSet: false);
+        expect(await h.handle('/turnorder Bryn, Aria'), true);
+        final call = turnOrderCalls.single;
+        expect(call.$1, false);
+        expect(call.$2!.map((c) => c.name).toList(), ['Bryn', 'Aria', 'Cleo']);
+      },
+    );
 
-    test('/turnorder accepts a "you"/{{user}} slot (skipped in AI rotation)', () async {
-      groupMembers = [_guest('Aria'), _guest('Bryn'), _guest('Cleo')];
-      final h = build(activeSet: false);
-      expect(await h.handle('/turnorder Bryn, {{user}}, Aria'), true);
-      final call = turnOrderCalls.single;
-      expect(call.$1, false);
-      // The user token is NOT a character — rotation is the named members
-      // (unnamed appended), and the confirmation mentions "you".
-      expect(call.$2!.map((c) => c.name).toList(), ['Bryn', 'Aria', 'Cleo']);
-      expect(systemMessages.single, contains('you'));
-    });
+    test(
+      '/turnorder accepts a "you"/{{user}} slot (skipped in AI rotation)',
+      () async {
+        groupMembers = [_guest('Aria'), _guest('Bryn'), _guest('Cleo')];
+        final h = build(activeSet: false);
+        expect(await h.handle('/turnorder Bryn, {{user}}, Aria'), true);
+        final call = turnOrderCalls.single;
+        expect(call.$1, false);
+        // The user token is NOT a character — rotation is the named members
+        // (unnamed appended), and the confirmation mentions "you".
+        expect(call.$2!.map((c) => c.name).toList(), ['Bryn', 'Aria', 'Cleo']);
+        expect(systemMessages.single, contains('you'));
+      },
+    );
 
     test('/turnorder <unknown name> errors and sets nothing', () async {
       groupMembers = [_guest('Aria'), _guest('Bryn')];
@@ -454,15 +479,21 @@ void main() {
       expect(joinedFull, isEmpty);
     });
 
-    test('bare /join --full opens the FULL picker (no exact name needed)', () async {
-      joinable = [_guest('Nora'), _guest('Pax')];
-      final h = build();
-      await h.handle('/join --full');
-      expect(joinedFull, isEmpty); // not joined yet — the picker is shown first
-      expect(pickerRequests.single, ''); // browse the whole list
-      expect(pickerFull.single, true); // ...as a FULL-join picker
-      expect(systemMessages, isEmpty);
-    });
+    test(
+      'bare /join --full opens the FULL picker (no exact name needed)',
+      () async {
+        joinable = [_guest('Nora'), _guest('Pax')];
+        final h = build();
+        await h.handle('/join --full');
+        expect(
+          joinedFull,
+          isEmpty,
+        ); // not joined yet — the picker is shown first
+        expect(pickerRequests.single, ''); // browse the whole list
+        expect(pickerFull.single, true); // ...as a FULL-join picker
+        expect(systemMessages, isEmpty);
+      },
+    );
 
     test('/promote turns the scene into a full group', () async {
       guests = [_guest('Mara'), _guest('Pax')];
@@ -472,14 +503,20 @@ void main() {
       expect(joinedFull, isEmpty);
     });
 
-    test('/join --full <ambiguous> opens the FULL picker pre-filtered', () async {
-      joinable = [_guest('Nora'), _guest('Norbert')];
-      final h = build();
-      await h.handle('/join --full nor');
-      expect(joinedFull, isEmpty); // not joined — picker shown to disambiguate
-      expect(pickerRequests.single, 'nor'); // pre-filtered to the typed text
-      expect(pickerFull.single, true);
-    });
+    test(
+      '/join --full <ambiguous> opens the FULL picker pre-filtered',
+      () async {
+        joinable = [_guest('Nora'), _guest('Norbert')];
+        final h = build();
+        await h.handle('/join --full nor');
+        expect(
+          joinedFull,
+          isEmpty,
+        ); // not joined — picker shown to disambiguate
+        expect(pickerRequests.single, 'nor'); // pre-filtered to the typed text
+        expect(pickerFull.single, true);
+      },
+    );
 
     test('/join --full can target a PRESENT guest (promotion)', () async {
       // The guest is present (not in the joinable list), yet --full resolves it
@@ -563,16 +600,18 @@ void main() {
       expect(spoke.single.name, 'Aria the Brave');
     });
 
-    test('/speak <wrong name> lists the valid guests and speaks nobody',
-        () async {
-      guests = [_guest('Aria'), _guest('Bram')];
-      final h = build();
-      expect(await h.handle('/speak Zelda'), true);
-      expect(spoke, isEmpty);
-      expect(systemMessages.single, contains('Zelda'));
-      expect(systemMessages.single, contains('Aria'));
-      expect(systemMessages.single, contains('Bram'));
-    });
+    test(
+      '/speak <wrong name> lists the valid guests and speaks nobody',
+      () async {
+        guests = [_guest('Aria'), _guest('Bram')];
+        final h = build();
+        expect(await h.handle('/speak Zelda'), true);
+        expect(spoke, isEmpty);
+        expect(systemMessages.single, contains('Zelda'));
+        expect(systemMessages.single, contains('Aria'));
+        expect(systemMessages.single, contains('Bram'));
+      },
+    );
 
     test('/speak <ambiguous substring> lists guests, speaks nobody', () async {
       guests = [_guest('Mara'), _guest('Marcus')];
@@ -594,8 +633,11 @@ void main() {
     test('every advertised command in the registry is recognized', () async {
       guests = [_guest('Aria')];
       for (final c in ChatCommandHandler.commands) {
-        expect(await build().handle('/${c.command}'), true,
-            reason: '/${c.command} is advertised but not handled');
+        expect(
+          await build().handle('/${c.command}'),
+          true,
+          reason: '/${c.command} is advertised but not handled',
+        );
       }
     });
 
@@ -634,6 +676,25 @@ void main() {
         await h.handle('/afk --time soon');
         expect(afkCalls, isEmpty);
         expect(systemMessages.single, startsWith('⚠'));
+      });
+    });
+
+    group('/image', () {
+      test('dispatches to the injected image flow with raw args', () async {
+        expect(await build().handle('/image a dragon over the castle'), true);
+        expect(imageCalls.single, 'a dragon over the castle');
+      });
+
+      test('bare /image dispatches with empty args', () async {
+        expect(await build().handle('/image'), true);
+        expect(imageCalls.single, '');
+      });
+
+      test('aliases /img, /sd, /imagine all dispatch', () async {
+        await build().handle('/img me');
+        await build().handle('/sd bg');
+        await build().handle('/imagine raw neon city');
+        expect(imageCalls, ['me', 'bg', 'raw neon city']);
       });
     });
   });

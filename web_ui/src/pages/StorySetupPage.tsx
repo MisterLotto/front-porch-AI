@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
+import { AiEngineStrip } from '../components/AiEngineStrip';
 import { StepIndicator } from '../components/StepIndicator';
 import { OptionTiles } from './story/OptionTiles';
 import {
@@ -225,7 +226,8 @@ export function StorySetupPage() {
             </div>
           )}
           <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '14px 0' }} />
-          <label>Model tier
+          <AiEngineStrip />
+          <label>Prompt style — how prompts are written for your model (this does not pick the model)
             <select value={p.prompt_tier} onChange={(e) => set({ prompt_tier: e.target.value })}>
               {PROMPT_TIERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>

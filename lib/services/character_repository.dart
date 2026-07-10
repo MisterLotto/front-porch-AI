@@ -382,6 +382,26 @@ class CharacterRepository extends ChangeNotifier {
     }
   }
 
+  /// Bulk delete (mass select / delete-folder-with-characters). Same pipeline
+  /// as [deleteCharacter] per card — soft-delete row, remove PNG, remove chat
+  /// history, drop linked worlds — with progress reported per card so the UI
+  /// can show a counter over a 100+ card purge (the accidental-bulk-import
+  /// case this exists for). Returns how many were deleted.
+  Future<int> deleteCharacters(
+    List<CharacterCard> cards, {
+    WorldRepository? worldRepo,
+    Directory? chatsDir,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    var done = 0;
+    for (final card in cards) {
+      await deleteCharacter(card, worldRepo: worldRepo, chatsDir: chatsDir);
+      done++;
+      onProgress?.call(done, cards.length);
+    }
+    return done;
+  }
+
   Future<CharacterCard?> importCharacter(File file) async {
     _isLoading = true;
     notifyListeners();

@@ -191,9 +191,9 @@ export const MATURITY: Record<string, string> = {
 };
 
 export const PROMPT_TIERS: { value: string; label: string }[] = [
-  { value: 'frontier', label: 'Frontier (cloud APIs / large models)' },
-  { value: 'largLocal', label: 'Large local (70B+)' },
-  { value: 'smallLocal', label: 'Small local (7–13B)' },
+  { value: 'frontier', label: 'Full detail — for cloud APIs' },
+  { value: 'largLocal', label: 'Rich — for big local models (70B+)' },
+  { value: 'smallLocal', label: 'Simplified — for small local models (7-34B)' },
 ];
 
 /** Short label for a prompt tier (library card badge). */

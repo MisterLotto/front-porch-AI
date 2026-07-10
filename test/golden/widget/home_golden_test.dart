@@ -105,6 +105,7 @@ Widget _grid({
       onFolderTap: (_) {},
       onFolderNavigateBack: () {},
       onCancelSelection: () {},
+      onDeleteSelected: (_) {},
       onMoveToFolder: (_) {},
       onSortChanged: (_) {},
       onGridScaleChanged: (_) {},

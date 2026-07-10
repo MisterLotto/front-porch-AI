@@ -28,6 +28,10 @@ export type WsEvent = {
   // `chance_time` event (chaos): whether a Chance Time is now parked awaiting the
   // user's "accept your fate". `data` carries the pre-resolved event text.
   pending?: boolean;
+  // `image_progress` event: the latest in-progress preview frame (data URL)
+  // when the image backend streams one; `progress`/`generating` above carry
+  // the percent and lifecycle.
+  preview?: string;
 };
 
 export class ChatSocket {

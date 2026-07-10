@@ -31,7 +31,10 @@ export function MessageActions({
 }) {
   const count = m.swipeCount ?? 1;
   const idx = (m.swipeIndex ?? 0) + 1;
-  const canSwipe = !m.isUser && (count > 1 || isLast);
+  // Generated-image messages carry no regenerable text — hide the text-gen
+  // actions for them (desktop bubble parity).
+  const isImage = !!m.image;
+  const canSwipe = !m.isUser && !isImage && (count > 1 || isLast);
   return (
     <div className={`msg-actions${m.isUser ? ' user' : ''}`}>
       {canSwipe && (
@@ -43,7 +46,7 @@ export function MessageActions({
             onClick={() => onSwipe(m.index, 1)}>▶</button>
         </span>
       )}
-      {!m.isUser && isLast && (
+      {!m.isUser && !isImage && isLast && (
         <>
           <button className="icon-btn" title="Regenerate" disabled={busy} onClick={onRegenerate}>⟳</button>
           <button className="icon-btn" title="Continue" disabled={busy} onClick={onContinue}>⏩</button>

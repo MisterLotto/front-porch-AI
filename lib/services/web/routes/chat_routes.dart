@@ -48,6 +48,8 @@ class WebChatRoutes {
     router.post('/api/chat/edit', _edit);
     router.post('/api/chat/delete', _delete);
     router.post('/api/chat/insert-image', _insertImage);
+    router.post('/api/chat/image-review', _imageReview);
+    router.post('/api/chat/tool-test', _toolTest);
     router.post('/api/chat/reprocess-needs', _reprocessNeeds);
     router.post('/api/chat/revert-needs-reprocess', _revertNeedsReprocess);
     router.post('/api/chat/author-note', _authorNote);
@@ -61,6 +63,10 @@ class WebChatRoutes {
 
   shelf.Response _state(shelf.Request request) =>
       JsonResponse.ok(_facade.state());
+
+  /// Re-probe the current model's tool-calling support (web pill retest).
+  Future<shelf.Response> _toolTest(shelf.Request request) async =>
+      JsonResponse.ok(await _facade.testToolCalling());
 
   /// The chat-scoped lorebook (full-fidelity rows) — desktop "This Chat"
   /// sidebar section parity.
@@ -85,7 +91,9 @@ class WebChatRoutes {
   /// Realism for one cast participant (focus-scoped sidebar in the unified UI).
   shelf.Response _participantRealism(shelf.Request request, String id) {
     final realism = _facade.participantRealism(id);
-    if (realism == null) return JsonResponse.error(404, 'Participant not found');
+    if (realism == null) {
+      return JsonResponse.error(404, 'Participant not found');
+    }
     return JsonResponse.ok(realism);
   }
 
@@ -122,13 +130,19 @@ class WebChatRoutes {
     return JsonResponse.ok(detail);
   }
 
-  Future<shelf.Response> _updatePersona(shelf.Request request, String id) async {
+  Future<shelf.Response> _updatePersona(
+    shelf.Request request,
+    String id,
+  ) async {
     final ok = await _facade.updatePersona(id, await _json(request));
     if (!ok) return JsonResponse.error(404, 'Persona not found');
     return JsonResponse.ok({'personas': _facade.personas()});
   }
 
-  Future<shelf.Response> _deletePersona(shelf.Request request, String id) async {
+  Future<shelf.Response> _deletePersona(
+    shelf.Request request,
+    String id,
+  ) async {
     final ok = await _facade.deletePersona(id);
     if (!ok) {
       return JsonResponse.error(409, 'Cannot delete (last persona or unknown)');
@@ -228,14 +242,28 @@ class WebChatRoutes {
     return JsonResponse.ok({'status': 'ok'});
   }
 
+  /// Resolve a parked /image prompt review: {prompt: '...'} generates with
+  /// the (possibly edited) prompt; an absent/empty prompt cancels.
+  Future<shelf.Response> _imageReview(shelf.Request request) async {
+    final body = await _json(request);
+    final prompt = body['prompt']?.toString().trim();
+    _facade.resolveImageReview(
+      (prompt == null || prompt.isEmpty) ? null : prompt,
+    );
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
   Future<shelf.Response> _insertImage(shelf.Request request) async {
     final body = await _json(request);
     final filename = body['filename']?.toString();
     if (filename == null || filename.trim().isEmpty) {
       return JsonResponse.badRequest('filename is required');
     }
-    final ok = _facade.insertImage(filename);
-    if (!ok) return JsonResponse.error(409, 'No message to attach the image to');
+    // Optional prompt (newer clients send it so the image message carries the
+    // same hover/copyable prompt the desktop attaches).
+    final prompt = body['prompt']?.toString() ?? '';
+    final ok = await _facade.insertImage(filename, prompt: prompt);
+    if (!ok) return JsonResponse.error(404, 'Saved image not found');
     return JsonResponse.ok({'status': 'ok'});
   }
 
@@ -244,7 +272,9 @@ class WebChatRoutes {
     final index = body['index'];
     final critique = body['critique']?.toString().trim() ?? '';
     if (index is! int) return JsonResponse.badRequest('index is required');
-    if (critique.isEmpty) return JsonResponse.badRequest('critique is required');
+    if (critique.isEmpty) {
+      return JsonResponse.badRequest('critique is required');
+    }
     final ok = await _facade.reprocessNeeds(index, critique);
     if (!ok) return JsonResponse.error(409, 'Message cannot be reprocessed');
     return JsonResponse.ok({'status': 'ok'});

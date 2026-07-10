@@ -105,6 +105,76 @@ export function ConfirmDialog({
   );
 }
 
+/**
+ * The severe "type DELETE to confirm" gate for mass-destructive actions (bulk
+ * character delete, delete-folder-with-characters) — web mirror of the desktop
+ * TypeDeleteDialog. A plain confirm is too easy to click through when the blast
+ * radius is 100+ characters and their chat histories, so the delete button
+ * stays disabled until the keyword is typed exactly.
+ */
+export function TypeConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  keyword = 'DELETE',
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  keyword?: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const [typed, setTyped] = useState('');
+  const matches = typed.trim() === keyword;
+  return (
+    <div className="drawer-backdrop center" onClick={onClose}>
+      <div className="modal danger-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="drawer-head">
+          <span>⚠️ {title}</span>
+          <button className="link-btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <p className="muted dialog-msg">{message}</p>
+        <label className="type-confirm-label">
+          Type {keyword} to confirm:
+          <input
+            className="search"
+            autoFocus
+            value={typed}
+            placeholder={keyword}
+            onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && matches) {
+                onConfirm();
+                onClose();
+              }
+            }}
+          />
+        </label>
+        <div className="modal-actions">
+          <button className="ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="danger-btn"
+            disabled={!matches}
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface FolderRow {
   folder: LibFolder;
   depth: number;

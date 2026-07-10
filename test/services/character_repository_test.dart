@@ -655,5 +655,45 @@ void main() {
         await tmpDir.delete(recursive: true);
       },
     );
+
+    test(
+      'deleteCharacters bulk-removes all cards and reports progress',
+      () async {
+        // Seed three extra cards alongside the setUp character.
+        final cards = <CharacterCard>[];
+        for (var i = 0; i < 3; i++) {
+          final card = CharacterCard(
+            name: 'Bulk $i',
+            description: 'to be purged',
+            imagePath: 'bulk_$i.png',
+          );
+          await repo.addCharacter(card);
+          cards.add(card);
+        }
+        expect(repo.characters.where((c) => c.name.startsWith('Bulk')), hasLength(3));
+
+        final progress = <int>[];
+        final deleted = await repo.deleteCharacters(
+          cards,
+          onProgress: (done, total) {
+            expect(total, 3);
+            progress.add(done);
+          },
+        );
+
+        expect(deleted, 3);
+        // Progress fires once per card, monotonically to the total.
+        expect(progress, [1, 2, 3]);
+        // All bulk cards gone from the in-memory list.
+        expect(repo.characters.any((c) => c.name.startsWith('Bulk')), isFalse);
+      },
+    );
+
+    test('deleteCharacters on an empty list is a safe no-op', () async {
+      final before = repo.characters.length;
+      final deleted = await repo.deleteCharacters(const []);
+      expect(deleted, 0);
+      expect(repo.characters.length, before);
+    });
   });
 }

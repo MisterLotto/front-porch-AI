@@ -23,6 +23,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 
 /// Write-side adapter for the character *library*: folder CRUD, moving cards
@@ -35,10 +36,11 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 /// never trusting a client filesystem path. Distinct from [CharacterFacade]
 /// (read/list + create/edit text) so neither file grows a second concern.
 class CharacterLibraryFacade {
-  CharacterLibraryFacade(this._repo, this._folders);
+  CharacterLibraryFacade(this._repo, this._folders, this._storage);
 
   final CharacterRepository _repo;
   final FolderService _folders;
+  final StorageService _storage;
 
   /// Resolve a character by its DB id (in-memory card first, DB fallback), or
   /// null when it doesn't exist.
@@ -88,6 +90,44 @@ class CharacterLibraryFacade {
     if (!_folderExists(id)) return false;
     await _folders.deleteFolder(id);
     return true;
+  }
+
+  /// The nuclear folder delete (desktop "Delete Folder + Characters" parity):
+  /// PERMANENTLY remove a folder, its subfolders, AND every character inside
+  /// them — cards, PNGs, chat histories — via the same
+  /// [CharacterRepository.deleteCharacters] pipeline the mass-delete uses.
+  /// The severe typed-DELETE confirm is enforced client-side; this endpoint
+  /// only runs when that gate passed. Returns how many characters were deleted
+  /// (-1 when the folder id is unknown).
+  Future<int> deleteFolderWithCharacters(String id) async {
+    if (!_folderExists(id)) return -1;
+    // Folder membership is stored as image basenames (with extension).
+    final filenames = _folders.getCharactersInFolderRecursive(id).toSet();
+    final cards = _repo.characters
+        .where(
+          (c) =>
+              c.imagePath != null &&
+              filenames.contains(p.basename(c.imagePath!)),
+        )
+        .toList();
+    final deleted = await _repo.deleteCharacters(
+      cards,
+      chatsDir: _storage.chatsDir,
+    );
+    await _folders.deleteFolder(id);
+    return deleted;
+  }
+
+  /// Mass delete of characters by id (desktop select-mode "Delete N Selected"
+  /// parity). Same per-card pipeline as a single delete. The severe typed
+  /// confirm is enforced client-side. Returns how many were deleted.
+  Future<int> bulkDelete(List<String> ids) async {
+    final cards = <CharacterCard>[];
+    for (final id in ids) {
+      final card = await _resolve(id);
+      if (card != null) cards.add(card);
+    }
+    return _repo.deleteCharacters(cards, chatsDir: _storage.chatsDir);
   }
 
   /// Move a character into [folderId], or back to the root when [folderId] is

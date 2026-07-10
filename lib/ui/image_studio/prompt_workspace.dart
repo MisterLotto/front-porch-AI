@@ -135,7 +135,7 @@ class _PromptWorkspaceState extends State<PromptWorkspace> {
                   child: TextButton.icon(
                     onPressed: widget.isBusy ? null : widget.onCraftLlm,
                     icon: const Icon(Icons.auto_fix_high, size: 16),
-                    label: const Text('Craft / Refresh with LLM'),
+                    label: const Text('✨ Write it for me'),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.resolve(
                         context,
@@ -168,7 +168,8 @@ class _PromptWorkspaceState extends State<PromptWorkspace> {
             ),
             decoration: InputDecoration(
               hintText:
-                  'Edit the distilled prompt here. Changes are used for the next Generate.',
+                  'Describe what you want (optional), tap ✨ Write it for me to have '
+                  'the AI draft the prompt from your scene, then Generate.',
               hintStyle: TextStyle(
                 color: AppColors.textTertiary(context),
                 fontSize: 12,

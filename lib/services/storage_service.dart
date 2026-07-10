@@ -310,6 +310,11 @@ class StorageService extends ChangeNotifier {
   String get localImageGenUrl => imageGenSettings.localImageGenUrl;
   Future<void> setLocalImageGenUrl(String v) =>
       imageGenSettings.setLocalImageGenUrl(v);
+  String get comfyUiUrl => imageGenSettings.comfyUiUrl;
+  Future<void> setComfyUiUrl(String v) => imageGenSettings.setComfyUiUrl(v);
+  bool get imageGenPromptReview => imageGenSettings.imageGenPromptReview;
+  Future<void> setImageGenPromptReview(bool v) =>
+      imageGenSettings.setImageGenPromptReview(v);
   String get imageGenSize => imageGenSettings.imageGenSize;
   Future<void> setImageGenSize(String v) => imageGenSettings.setImageGenSize(v);
   String get imageGenStyle => imageGenSettings.imageGenStyle;
@@ -675,7 +680,9 @@ class StorageService extends ChangeNotifier {
     // Load settings (DELETED in Stage 7 — bodies lifted to the *Settings.load(); see above + shims)
     // Original load code excised (deletion part of task).
     final loadedCustom = _prefs?.getString(_k('custom_models_path'));
-    _customModelsPath = (loadedCustom != null && loadedCustom.isNotEmpty) ? loadedCustom : null;
+    _customModelsPath = (loadedCustom != null && loadedCustom.isNotEmpty)
+        ? loadedCustom
+        : null;
 
     if (!_initCompleter.isCompleted) _initCompleter.complete();
     notifyListeners();

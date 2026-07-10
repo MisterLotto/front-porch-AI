@@ -33,6 +33,7 @@ import 'porch_accordion.dart';
 import 'sidebar_tokens.dart';
 import 'story_tools/author_note_section.dart';
 import 'story_tools/story_tools_group.dart';
+import 'tool_calling_pill.dart';
 
 /// The scrolling body of the warm-porch chat sidebar: the lite-NPC banner
 /// plus the three accordion groups (🎭 Character State · 📖 Journal & Memory
@@ -81,6 +82,10 @@ class SidebarBody extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            // Tool-calling capability of the current model, always visible —
+            // users shouldn't have to guess why evals silently run in text
+            // mode (and it retests itself on model/backend switches).
+            ToolCallingPill(chatService: chat),
             if (isLite) const _LiteNpcBanner(),
             // Author's Note leads the sidebar as its own card (it was the
             // always-first section in the old design; burying it inside

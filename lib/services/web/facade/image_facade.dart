@@ -51,6 +51,8 @@ class ImageFacade {
       'cfgScale': img.imageGenCfgScale,
       'sampler': img.imageGenSampler,
       'localUrl': img.localImageGenUrl,
+      'comfyUrl': img.comfyUiUrl,
+      'promptReview': img.imageGenPromptReview,
       'drawThingsHost': img.drawThingsGrpcHost,
       'drawThingsPort': img.drawThingsGrpcPort,
       // Remote (API) image gen reuses the shared remote backend config.
@@ -64,7 +66,9 @@ class ImageFacade {
   Future<void> updateConfig(Map<String, dynamic> f) async {
     final img = _storage.imageGenSettings;
     final b = _storage.backendSettings;
-    if (f['backend'] is String) await img.setImageGenBackend(f['backend'] as String);
+    if (f['backend'] is String) {
+      await img.setImageGenBackend(f['backend'] as String);
+    }
     if (f['size'] is String) await img.setImageGenSize(f['size'] as String);
     if (f['style'] is String) await img.setImageGenStyle(f['style'] as String);
     if (f['model'] is String) await img.setImageGenModel(f['model'] as String);
@@ -75,9 +79,17 @@ class ImageFacade {
     if (f['cfgScale'] is num) {
       await img.setImageGenCfgScale((f['cfgScale'] as num).toDouble());
     }
-    if (f['sampler'] is String) await img.setImageGenSampler(f['sampler'] as String);
+    if (f['sampler'] is String) {
+      await img.setImageGenSampler(f['sampler'] as String);
+    }
     if (f['localUrl'] is String) {
       await img.setLocalImageGenUrl(f['localUrl'] as String);
+    }
+    if (f['comfyUrl'] is String) {
+      await img.setComfyUiUrl(f['comfyUrl'] as String);
+    }
+    if (f['promptReview'] is bool) {
+      await img.setImageGenPromptReview(f['promptReview'] as bool);
     }
     if (f['drawThingsHost'] is String) {
       await img.setDrawThingsGrpcHost(f['drawThingsHost'] as String);
@@ -101,9 +113,12 @@ class ImageFacade {
   Future<Map<String, dynamic>?> generate(Map<String, dynamic> f) async {
     final prompt = f['prompt']?.toString().trim() ?? '';
     if (prompt.isEmpty) return null;
+    // negativePrompt: absent → null → generateImage falls back to the user's
+    // configured default (the web panel sends only a prompt). An explicit
+    // value — including '' — is respected as-is.
     final bytes = await _image.generateImage(
       prompt: prompt,
-      negativePrompt: f['negativePrompt']?.toString() ?? '',
+      negativePrompt: f['negativePrompt']?.toString(),
       size: f['size']?.toString(),
     );
     if (bytes == null) return null;

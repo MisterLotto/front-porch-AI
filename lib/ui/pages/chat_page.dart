@@ -33,6 +33,7 @@ import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
@@ -74,6 +75,7 @@ class _ChatPageState extends State<ChatPage> {
   // Guards the Scene Guest detection popup so it cannot stack while open.
   bool _showingGuestDetection = false;
   bool _showingGuestPicker = false;
+  bool _showingImageReview = false;
   bool? _externalImagesAllowed;
   bool _imageConsentChecked = false;
   TtsService? _ttsService;
@@ -239,6 +241,13 @@ class _ChatPageState extends State<ChatPage> {
         (_) => _showGuestPickerDialog(chat),
       );
     }
+    // /image prompt review — same pending-flag pattern (review setting on).
+    if (chat.pendingImagePromptReview != null && !_showingImageReview) {
+      _showingImageReview = true;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showImagePromptReviewDialog(chat),
+      );
+    }
     // A guest's background portrait finished — evict its stale cached image so
     // the new art replaces the initials avatar.
     final evictPath = chat.guestAvatarEvictPath;
@@ -282,6 +291,23 @@ class _ChatPageState extends State<ChatPage> {
       barrierDismissible: false,
       builder: (_) => const ChanceTimeOverlay(),
     );
+  }
+
+  /// Show the /image prompt-review dialog and resolve the pending review with
+  /// the edited prompt (or null on cancel). Mirrors the guest-picker flow.
+  Future<void> _showImagePromptReviewDialog(ChatService chat) async {
+    final prompt = chat.pendingImagePromptReview;
+    if (prompt == null || !mounted) {
+      _showingImageReview = false;
+      return;
+    }
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ImagePromptReviewDialog(prompt: prompt),
+    );
+    _showingImageReview = false;
+    chat.resolveImagePromptReview(result);
   }
 
   Future<void> _showGuestDetectionDialog(ChatService chat) async {
@@ -672,8 +698,22 @@ class _ChatPageState extends State<ChatPage> {
                                     controller: _scrollController,
                                     reverse: true,
                                     padding: const EdgeInsets.all(20),
-                                    itemCount: messages.length,
+                                    // +1 while an /image run is live: reverse
+                                    // index 0 (visual bottom) shows the
+                                    // "image coming to life" bubble with live
+                                    // preview + progress.
+                                    itemCount:
+                                        messages.length +
+                                        (chatService.isGeneratingChatImage
+                                            ? 1
+                                            : 0),
                                     itemBuilder: (context, index) {
+                                      if (chatService.isGeneratingChatImage) {
+                                        if (index == 0) {
+                                          return const GeneratingImageBubble();
+                                        }
+                                        index -= 1;
+                                      }
                                       // Reverse index so newest messages are at the top of the reversed list (visual bottom)
                                       final reversedIndex =
                                           messages.length - 1 - index;
@@ -1646,6 +1686,20 @@ class _ChatPageState extends State<ChatPage> {
     // User spec: neutral open (custom as starter), types via internal buttons (popup removed), no pregen boilerplate,
     // visualize uses slider N + think strip on craft, user box text + persona + char visual (no pers) + style to LLM.
     // Re-uses collected raw context. No new private methods added to this surface (thin).
+    // "Send to chat": save the studio result to disk and attach it to the
+    // conversation as an inline image message (same path the /image slash
+    // command uses — ChatServiceImages.addGeneratedImageMessage).
+    final imageGenService = Provider.of<ImageGenService>(
+      context,
+      listen: false,
+    );
+    Future<void> onSendToChat(Uint8List bytes, String prompt) async {
+      final path = await imageGenService.saveImageToDisk(bytes);
+      if (path != null) {
+        await chatService.addGeneratedImageMessage(path, prompt);
+      }
+    }
+
     await ImageStudio.show(
       context,
       mode: ImageGenMode.customPrompt,
@@ -1661,6 +1715,7 @@ class _ChatPageState extends State<ChatPage> {
       recentMessages: recentMessages,
       llmService: llmService,
       onAccept: onAccept,
+      onSendToChat: onSendToChat,
       // Stage 4: pass collected richer fields (keep launch site + studio show/ctor/_ctx + service thins + builder + workspace pills in sync).
       currentExpression: currentExpression,
       timeOfDay: timeOfDay,
@@ -1707,10 +1762,7 @@ class _ChatPageState extends State<ChatPage> {
               _chatFocusNode.requestFocus();
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   SizedBox(
@@ -2830,7 +2882,8 @@ class _ChatPageState extends State<ChatPage> {
             ),
 
           // ── Participant roster (only when more than one speaker) ──
-          if (cast.length > 1) _buildParticipantRoster(chatService, cast, focused),
+          if (cast.length > 1)
+            _buildParticipantRoster(chatService, cast, focused),
 
           // ── Director controls (group turn-taking) ──
           if (isGroup) _buildDirectorControls(chatService),
@@ -3035,7 +3088,6 @@ class _ChatPageState extends State<ChatPage> {
       ),
     );
   }
-
 }
 
 Widget _buildRiskItem(IconData icon, String text) {
