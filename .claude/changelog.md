@@ -4224,3 +4224,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `expression_pack_service.dart` — `ExpressionSlot.rerollCount`/`customPrompt`, `reroll(promptOverride:)`, `effectivePromptFor`, shared `_promptFor`; `expression_pack_grid.dart` — pencil beside dice/retry when `rerollCount > 0`; NEW `expression_pack_prompt_editor.dart` (96 lines, keeps grid at 468); session test extended.
 - **Verification:** analyze clean; 28/28; macOS debug build ✓.
 - **Commit:** 1936052
+
+## 2026-07-10 — Expression pack seeds: back to ONE shared seed (field-tested both ways)
+- **Why:** per-slot seeds fixed the identical-pack bug but caused visible identity drift at 0.7 denoise (eye color/face shape drift per slot). Root cause of sameness was weak tail prompts, since fixed by the geometry rewrite — so shared noise + strong prompts = distinct expressions AND one consistent character. Re-rolls keep fresh seeds.
+- **Files:** `expression_pack_service.dart` + session test.
+- **Verification:** analyze clean; 21/21; macOS build ✓.
+- **Commit:** 4355bd8
