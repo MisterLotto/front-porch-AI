@@ -2652,27 +2652,33 @@ class _ChatPageState extends State<ChatPage> {
                       Positioned(
                         bottom: 4,
                         right: 4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.resolve(
-                              context,
-                              Colors.black.withValues(alpha: 0.7),
-                              Colors.black.withValues(alpha: 0.45),
+                        child: EmojiBurst(
+                          emoji: expressionEmoji,
+                          enabled: storage.expressionEmojiBurst,
+                          generating: chat.isGenerating,
+                          size: storage.expressionEmojiBurstSize,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
                             ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                expressionEmoji,
-                                style: const TextStyle(fontSize: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.resolve(
+                                context,
+                                Colors.black.withValues(alpha: 0.7),
+                                Colors.black.withValues(alpha: 0.45),
                               ),
-                            ],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  expressionEmoji,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
