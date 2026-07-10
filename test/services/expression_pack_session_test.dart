@@ -10,7 +10,8 @@ import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
 
 void main() {
   group('ExpressionPackSession', () {
-    test('run() drives all slots pending → done with ONE shared seed', () async {
+    test('run() drives all slots pending → done with per-slot derived seeds '
+        'and emotion-first prompts', () async {
       final seeds = <int>[];
       final prompts = <String>[];
       Future<Uint8List?> gen({
@@ -44,10 +45,16 @@ void main() {
         expect(slot.error, isNull);
       }
       expect(seeds, hasLength(3));
-      expect(seeds.toSet(), hasLength(1), reason: 'seed must be shared');
-      expect(seeds.first, session.seed);
-      expect(prompts[0], 'a portrait of luna, ${kExpressionModifiers['joy']}');
-      expect(prompts[2], endsWith(kExpressionModifiers['neutral']!));
+      // Identity rides the img2img base — seeds must DIFFER per slot (a
+      // shared seed at low CFG produced near-identical images), derived
+      // deterministically from the session seed.
+      expect(seeds.toSet(), hasLength(3), reason: 'per-slot noise');
+      for (var i = 0; i < 3; i++) {
+        expect(seeds[i], (session.seed + i) & 0x7fffffff);
+      }
+      // Emotion leads the prompt: front tokens carry the most weight.
+      expect(prompts[0], '${kExpressionModifiers['joy']}, a portrait of luna');
+      expect(prompts[2], startsWith(kExpressionModifiers['neutral']!));
     });
 
     test('explicit constructor seed is honored', () async {

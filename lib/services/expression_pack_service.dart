@@ -77,9 +77,13 @@ class ExpressionSlot {
 
 /// Drives sequential per-emotion generation for an expression pack.
 ///
-/// All slots share ONE fixed seed (so the character stays consistent across
-/// emotions); only the emotion phrase appended to [ExpressionPackSession.new]'s
-/// `basePrompt` varies per slot. Re-rolls draw a fresh seed for that slot only.
+/// Identity consistency comes from the img2img BASE image, not the seed —
+/// each slot derives its own seed from the session seed (+ its index), which
+/// is what lets the expression actually differ per emotion. (The original
+/// shared-seed design produced 28 near-identical images: same base + same
+/// noise + a short prompt tail that low-CFG turbo models barely weigh.) The
+/// emotion phrase leads the prompt for the same reason: front tokens carry
+/// the most conditioning weight. Re-rolls draw a fresh random seed.
 class ExpressionPackSession extends ChangeNotifier {
   ExpressionPackSession({
     required List<String> emotions,
@@ -104,7 +108,7 @@ class ExpressionPackSession extends ChangeNotifier {
 
   List<ExpressionSlot> get slots => List.unmodifiable(_slots);
 
-  /// The shared seed used by every non-rerolled slot.
+  /// The session seed; slot N generates with `(seed + N) & 0x7fffffff`.
   int get seed => _seed;
 
   bool get isRunning => _running;
@@ -125,12 +129,13 @@ class ExpressionPackSession extends ChangeNotifier {
     _running = true;
     _cancelRequested = false;
     notifyListeners();
-    for (final slot in _slots) {
+    for (var i = 0; i < _slots.length; i++) {
+      final slot = _slots[i];
       // In-flight generation cannot be aborted (known service limitation), so
       // the cancel flag is only consulted between slots.
       if (_cancelRequested) break;
       if (slot.state != ExpressionSlotState.pending) continue;
-      await _generateSlot(slot, _seed);
+      await _generateSlot(slot, (_seed + i) & 0x7fffffff);
       if (_disposed) return;
     }
     _running = false;
@@ -184,8 +189,10 @@ class ExpressionPackSession extends ChangeNotifier {
     String? error;
     try {
       final modifier = kExpressionModifiers[slot.emotion] ?? slot.emotion;
+      // Emotion first: front tokens get the most conditioning weight, and at
+      // turbo-model CFG (~1) a tail phrase was too weak to change the face.
       result = await _generate(
-        prompt: '$_basePrompt, $modifier',
+        prompt: '$modifier, $_basePrompt',
         seed: slotSeed,
       );
       if (result == null) error = 'Generation returned no image.';

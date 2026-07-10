@@ -53,10 +53,10 @@ void main() {
         doneSlot('sad', [5, 6]),
       ];
       final fake = FakeEval([
-        '{"same_person": true, "expression_matches": true, "flaw": "none"}',
-        'Sure! {"same_person": false, "expression_matches": true, '
+        '{"same_person": true, "expression": "happy", "flaw": "none"}',
+        'Sure! {"same_person": false, "expression": "angry", '
             '"flaw": "warped face"}',
-        '{"same_person": true, "expression_matches": true, '
+        '{"same_person": true, "expression": "sad", '
             '"flaw": "extra finger"}',
       ]);
       final qc = ExpressionPackQc(
@@ -82,9 +82,10 @@ void main() {
       expect(qc.unparsedCount, 0);
       expect(qc.isRunning, isFalse);
 
-      expect(fake.prompts[0], contains('«happy»'));
-      expect(fake.prompts[1], contains('«angry»'));
-      expect(fake.prompts[2], contains('«sad»'));
+      // The target emotion must NOT be leaked to the model — it has to NAME
+      // what it sees (blind/sycophantic setups can't pass by echoing "true").
+      expect(fake.prompts[0], isNot(contains('happy')));
+      expect(fake.prompts[0], contains('naming the facial expression'));
       for (var i = 0; i < slots.length; i++) {
         expect(fake.images[i], [base, base64Encode(slots[i].bytes!)]);
       }
@@ -96,7 +97,7 @@ void main() {
         ..state = ExpressionSlotState.failed;
       final done = doneSlot('sad', [7]);
       final fake = FakeEval([
-        '{"same_person": true, "expression_matches": true, "flaw": "none"}',
+        '{"same_person": true, "expression": "sad", "flaw": "none"}',
       ]);
       final qc = ExpressionPackQc(
         slots: [pending, failed, done],
@@ -142,8 +143,7 @@ void main() {
       }) async {
         calls++;
         qc.cancel(); // requested mid-flight → consulted between slots
-        return '{"same_person": true, "expression_matches": true, '
-            '"flaw": "none"}';
+        return '{"same_person": true, "expression": "happy", "flaw": "none"}';
       }
 
       qc = ExpressionPackQc(slots: slots, baseImageB64: base, fire: fire);
@@ -166,8 +166,7 @@ void main() {
       }) async {
         calls++;
         await gate.future;
-        return '{"same_person": true, "expression_matches": true, '
-            '"flaw": "none"}';
+        return '{"same_person": true, "expression": "happy", "flaw": "none"}';
       }
 
       final qc = ExpressionPackQc(
@@ -190,16 +189,18 @@ void main() {
       'stale verdict (bytes identity guard)',
       () async {
         final slots = [doneSlot('happy', [1]), doneSlot('angry', [2])];
+        var call = 0;
         Future<String?> fire({
           required String prompt,
           required List<String> imagesB64,
         }) async {
-          if (prompt.contains('happy')) {
-            // Simulate a re-roll landing while this check was in flight.
+          // The prompt no longer names the target emotion (by design), so
+          // key the simulated mid-flight re-roll on the first call instead.
+          if (++call == 1) {
             slots[0].bytes = Uint8List.fromList([9, 9]);
             slots[0].qc = null;
           }
-          return '{"same_person": false, "expression_matches": false, '
+          return '{"same_person": false, "expression": "neutral", '
               '"flaw": "none"}';
         }
 
@@ -217,6 +218,37 @@ void main() {
       },
     );
 
+    test(
+      'named expressions match through the shared vocabulary (furious→anger, '
+      'stems) and mismatches carry an honest "reads as" note',
+      () async {
+        final slots = [
+          doneSlot('anger', [1]),
+          doneSlot('amusement', [2]),
+          doneSlot('joy', [3]),
+        ];
+        final fake = FakeEval([
+          '{"same_person": true, "expression": "furious", "flaw": "none"}',
+          '{"same_person": true, "expression": "amused grin", "flaw": "none"}',
+          // The blind-model failure mode: a generic answer that fit every
+          // slot under the old yes/no prompt now reads as a mismatch.
+          '{"same_person": true, "expression": "neutral", "flaw": "none"}',
+        ]);
+        final qc = ExpressionPackQc(
+          slots: slots,
+          baseImageB64: base,
+          fire: fake.call,
+        );
+        await qc.run();
+
+        expect(slots[0].qc!.pass, isTrue, reason: 'furious → anger via map');
+        expect(slots[1].qc!.pass, isTrue, reason: 'amused → amusement stem');
+        expect(slots[2].qc!.pass, isFalse);
+        expect(slots[2].qc!.note, contains('reads as "neutral"'));
+        expect(qc.flaggedCount, 1);
+      },
+    );
+
     test('dispose mid-run bails out without stamping or notifying', () async {
       final slots = [doneSlot('happy', [1])];
       late ExpressionPackQc qc;
@@ -225,8 +257,7 @@ void main() {
         required List<String> imagesB64,
       }) async {
         qc.dispose(); // dialog closed while the eval was in flight
-        return '{"same_person": true, "expression_matches": true, '
-            '"flaw": "none"}';
+        return '{"same_person": true, "expression": "happy", "flaw": "none"}';
       }
 
       qc = ExpressionPackQc(slots: slots, baseImageB64: base, fire: fire);
