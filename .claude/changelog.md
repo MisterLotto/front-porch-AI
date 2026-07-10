@@ -4176,3 +4176,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `lib/ui/pages/settings_page.dart` — oMLX `RemoteVisionPill` → fixed local URL (no longer auto-resolves; proper on-demand check button); 4 radio labels wrapped in `Flexible` + ellipsis. `lib/services/capability/vision_support_resolver.dart` — `_probeVision` → `Future<bool?>` (null = unreachable, never cached); caching decision moved into `resolveRemote`; dead `_computeRemote` inlined and deleted.
 - **Verification:** analyze clean; capability tests 16/16; macOS debug build ✓.
 - **Commit:** d10e73b
+
+## 2026-07-10 — Expression packs: aspect-preserving base (forced square removed)
+- **Why:** maintainer feedback — the forced 768×768 square couldn't fit portrait card art in the crop dialog (handles hung off the image sides) and produced square expressions that don't match the avatar's shape.
+- **Files:** `lib/ui/image_studio/expression_pack_dialog.dart` — free-form crop (no 1:1 aspect args); `_normalizePackBase` now returns bytes+width+height (long side 768, dims snapped to ×64, aspect preserved); dialog carries `baseImage`/`baseWidth`/`baseHeight` (was `base768`) and generates every slot at `'${w}x$h'`. `expression_pack_setup.dart` — param rename only.
+- **Verification:** analyze clean; 29/29 pack+studio tests; macOS debug build ✓.
+- **Commit:** 9ce3fba
