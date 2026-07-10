@@ -4230,3 +4230,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `expression_pack_service.dart` + session test.
 - **Verification:** analyze clean; 21/21; macOS build ✓.
 - **Commit:** 4355bd8
+
+## 2026-07-10 — Expression pack: re-roll editor (same-seed levers) + second runs keep existing images
+- **Re-roll editor (d02f1e4):** dice opens prompt + strength + "new random seed" (OFF default — img2img same seed/prompt/strength = same image, so levers are the point; rolled seeds stick per slot). Replaces the dice+pencil gating; rerollCount deleted; PackSlotGenerator carries per-call denoise.
+- **Keep-existing (363d1b4):** second pack runs load the character's existing labels; setup defaults to generating only the missing emotions ("Start (20)"), untick to regenerate all (overwrite warning shown). Fixes Starter→Full overwriting kept images.
+- **Verification:** analyze clean; all pack suites pass; macOS build ✓ (both).
+- **Commits:** d02f1e4, 363d1b4
