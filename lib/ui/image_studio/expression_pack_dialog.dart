@@ -32,7 +32,6 @@ import 'package:front_porch_ai/services/expression_pack_qc.dart';
 import 'package:front_porch_ai/services/expression_pack_service.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
 import 'package:front_porch_ai/services/vision_eval.dart';
-import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
@@ -65,9 +64,9 @@ import 'expression_pack_setup.dart';
 
 /// The Expression-pack flow: turn one base portrait into a labeled set of
 /// expression avatars via img2img. [launch] runs the pre-flight (backend
-/// guard, base-image resolution, an optional free-form crop, and
-/// aspect-preserving size normalization) and then shows this two-step dialog
-/// (setup, then the live generation grid).
+/// guard, base-image resolution, and automatic aspect-preserving size
+/// normalization — no crop step) and then shows this two-step dialog (setup,
+/// then the live generation grid).
 class ExpressionPackDialog extends StatefulWidget {
   const ExpressionPackDialog._({
     required this.characterDbId,
@@ -157,12 +156,13 @@ class ExpressionPackDialog extends StatefulWidget {
       return false;
     }
 
-    // Optional free-form crop (frame the face however the art allows — no
-    // forced aspect; card art is rarely square), then normalize to a
-    // diffusion-friendly size that keeps the chosen aspect ratio.
-    final cropped = await ImageCropDialog.show(context, imageBytes: base);
-    if (cropped == null || cropped.isEmpty) return false;
-    final normalized = _normalizePackBase(cropped);
+    // Fully automatic base prep — no crop step (maintainer decision: zero
+    // friction; the pack must simply match the avatar's shape). The
+    // normalizer preserves the source aspect ratio, so the generated
+    // expressions look like the avatar the user already sees in the sidebar.
+    // Anyone wanting different framing can pick a pre-cropped reference
+    // image in the Studio first.
+    final normalized = _normalizePackBase(base);
     if (!context.mounted) return false;
     if (normalized == null) {
       await showWarmDialog(
