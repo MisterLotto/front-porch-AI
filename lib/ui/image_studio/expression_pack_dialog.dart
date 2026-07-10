@@ -334,11 +334,13 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
       emotions: fullSet ? kFullExpressionSet : kCuratedExpressionSet,
       basePrompt: '${widget.basePrompt}, $kExpressionFraming',
       negativePrompt: widget.negativePrompt,
+      denoise: denoise,
       generate:
           ({
             required String prompt,
             required String negativePrompt,
             required int seed,
+            required double denoise,
           }) => widget.imageGen.generateImage(
             prompt: prompt,
             negativePrompt: negativePrompt,

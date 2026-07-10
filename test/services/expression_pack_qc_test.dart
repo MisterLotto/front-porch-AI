@@ -274,7 +274,8 @@ void main() {
         emotions: const ['happy'],
         basePrompt: 'portrait',
         negativePrompt: 'np',
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async =>
+        denoise: 0.7,
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async =>
             Uint8List.fromList([9]),
       );
       await session.run();

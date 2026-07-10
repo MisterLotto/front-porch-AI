@@ -19,6 +19,7 @@ void main() {
         required String prompt,
         required String negativePrompt,
         required int seed,
+        required double denoise,
       }) async {
         seeds.add(seed);
         prompts.add(prompt);
@@ -30,6 +31,7 @@ void main() {
         emotions: const ['joy', 'anger', 'neutral'],
         basePrompt: 'a portrait of luna',
         negativePrompt: 'np',
+        denoise: 0.7,
         generate: gen,
       );
 
@@ -71,8 +73,9 @@ void main() {
         emotions: const ['joy'],
         basePrompt: 'p',
         negativePrompt: 'np',
+        denoise: 0.7,
         seed: 42,
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async {
           seeds.add(seed);
           return Uint8List.fromList([1]);
         },
@@ -87,7 +90,8 @@ void main() {
         emotions: const ['joy'],
         basePrompt: 'p',
         negativePrompt: 'np',
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async => null,
+        denoise: 0.7,
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async => null,
       );
       await session.run();
       final slot = session.slots.single;
@@ -102,6 +106,7 @@ void main() {
         required String prompt,
         required String negativePrompt,
         required int seed,
+        required double denoise,
       }) async {
         if (prompt.contains(kExpressionModifiers['anger']!)) {
           throw Exception('boom');
@@ -113,6 +118,7 @@ void main() {
         emotions: const ['joy', 'anger', 'neutral'],
         basePrompt: 'p',
         negativePrompt: 'np',
+        denoise: 0.7,
         generate: gen,
       );
       await session.run();
@@ -130,6 +136,7 @@ void main() {
         required String prompt,
         required String negativePrompt,
         required int seed,
+        required double denoise,
       }) async {
         calls++;
         if (calls == 2) session.cancel();
@@ -140,6 +147,7 @@ void main() {
         emotions: const ['joy', 'anger', 'fear', 'sadness'],
         basePrompt: 'p',
         negativePrompt: 'np',
+        denoise: 0.7,
         generate: gen,
       );
       await session.run();
@@ -163,6 +171,7 @@ void main() {
         required String prompt,
         required String negativePrompt,
         required int seed,
+        required double denoise,
       }) async {
         seeds.add(seed);
         counter++;
@@ -173,6 +182,7 @@ void main() {
         emotions: const ['joy', 'anger'],
         basePrompt: 'p',
         negativePrompt: 'np',
+        denoise: 0.7,
         generate: gen,
       );
       await session.run();
@@ -181,7 +191,8 @@ void main() {
 
       await session.reroll(1);
       expect(seeds, hasLength(3));
-      expect(seeds[2], isNot(session.seed), reason: 'reroll needs fresh seed');
+      expect(seeds[2], session.seed,
+          reason: 'default re-roll keeps the pack seed (levers change it)');
       expect(session.seed, seeds[0], reason: 'session seed must not change');
       expect(session.slots[0].bytes, same(joyBytes));
       expect(session.slots[1].bytes, isNot(same(angerBytes)));
@@ -198,7 +209,8 @@ void main() {
           emotions: const ['joy', 'anger'],
           basePrompt: 'p',
           negativePrompt: 'np',
-          generate: ({required String prompt, required String negativePrompt, required int seed}) async {
+          denoise: 0.7,
+          generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async {
             calls++;
             // Only the reroll (3rd call) blocks; the initial run flows through.
             if (calls > 2) await gate.future;
@@ -219,44 +231,54 @@ void main() {
     );
 
     test(
-      'reroll tracks rerollCount and a promptOverride becomes the slot\'s '
-      'custom prompt, used for this and every later re-roll',
+      're-roll keeps the slot seed by default; prompt/strength overrides '
+      'stick; an explicit newSeed draws fresh noise and stays sticky',
       () async {
-        final prompts = <String>[];
+        final calls = <({String prompt, int seed, double denoise})>[];
         final session = ExpressionPackSession(
           emotions: const ['joy'],
           basePrompt: 'base',
           negativePrompt: 'np',
+          denoise: 0.7,
           generate:
               ({
                 required String prompt,
                 required String negativePrompt,
                 required int seed,
+                required double denoise,
               }) async {
-                prompts.add(prompt);
-                return Uint8List.fromList([prompts.length]);
+                calls.add((prompt: prompt, seed: seed, denoise: denoise));
+                return Uint8List.fromList([calls.length]);
               },
         );
         await session.run();
         final auto = '${kExpressionModifiers['joy']}, base';
-        expect(session.slots[0].rerollCount, 0);
+        expect(calls.last.seed, session.seed);
+        expect(calls.last.denoise, 0.7);
         expect(session.effectivePromptFor(0), auto);
+        expect(session.effectiveDenoiseFor(0), 0.7);
 
-        // First re-roll: automatic prompt, count starts gating the editor.
-        await session.reroll(0);
-        expect(session.slots[0].rerollCount, 1);
-        expect(prompts.last, auto);
-
-        // Edited re-roll: custom prompt sticks…
-        await session.reroll(0, promptOverride: '  gentle smile, base  ');
-        expect(session.slots[0].customPrompt, 'gentle smile, base');
-        expect(prompts.last, 'gentle smile, base');
+        // Default re-roll: SAME seed (pack consistency) — the editor's
+        // prompt/strength levers are what change the result.
+        await session.reroll(
+          0,
+          promptOverride: '  gentle smile, base  ',
+          denoiseOverride: 0.55,
+        );
+        expect(calls.last.seed, session.seed);
+        expect(calls.last.prompt, 'gentle smile, base');
+        expect(calls.last.denoise, 0.55);
         expect(session.effectivePromptFor(0), 'gentle smile, base');
+        expect(session.effectiveDenoiseFor(0), 0.55);
 
-        // …including for later plain re-rolls.
+        // Explicit new noise: fresh seed, sticky for later re-rolls.
+        await session.reroll(0, newSeed: true);
+        final rolled = calls.last.seed;
+        expect(rolled, isNot(session.seed));
+        expect(calls.last.prompt, 'gentle smile, base'); // custom sticks
+        expect(calls.last.denoise, 0.55); // strength sticks
         await session.reroll(0);
-        expect(prompts.last, 'gentle smile, base');
-        expect(session.slots[0].rerollCount, 3);
+        expect(calls.last.seed, rolled, reason: 'rolled seed is sticky');
 
         // Blank override is ignored (no accidental prompt wipe).
         await session.reroll(0, promptOverride: '   ');
@@ -270,7 +292,8 @@ void main() {
         emotions: const ['joy'],
         basePrompt: 'p',
         negativePrompt: 'np',
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
+        denoise: 0.7,
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async {
           if (failNext) {
             failNext = false;
             return null;
@@ -293,7 +316,8 @@ void main() {
         emotions: const ['joy', 'anger'],
         basePrompt: 'p',
         negativePrompt: 'np',
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
+        denoise: 0.7,
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async {
           calls++;
           await gate.future;
           return Uint8List.fromList([calls]);
@@ -325,7 +349,8 @@ void main() {
         emotions: const ['joy', 'anger'],
         basePrompt: 'p',
         negativePrompt: 'np',
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async =>
+        denoise: 0.7,
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async =>
             Uint8List.fromList([1]),
       );
       await session.run();
@@ -346,7 +371,8 @@ void main() {
         emotions: const ['joy'],
         basePrompt: 'p',
         negativePrompt: 'np',
-        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
+        denoise: 0.7,
+        generate: ({required String prompt, required String negativePrompt, required int seed, required double denoise}) async {
           await gate.future;
           return Uint8List.fromList([1]);
         },

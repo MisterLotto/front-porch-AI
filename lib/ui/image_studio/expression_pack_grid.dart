@@ -346,60 +346,29 @@ class _PackCell extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Manual prompt steering unlocks only after the app has
-                      // had its automatic re-roll attempt (rerollCount > 0) —
-                      // no blind re-rolling forever.
-                      if (slot.rerollCount > 0) ...[
-                        packOverlayChip(
-                          context,
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 24,
-                              minHeight: 24,
-                            ),
-                            iconSize: 14,
-                            tooltip: 'Edit prompt & re-roll',
-                            icon: Icon(
-                              Icons.edit_outlined,
-                              color: AppColors.iconPrimary(context),
-                            ),
-                            onPressed: session.isRunning
-                                ? null
-                                : () => unawaited(
-                                    editPackSlotPrompt(
-                                      context,
-                                      session,
-                                      index,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      packOverlayChip(
-                        context,
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 24,
-                            minHeight: 24,
-                          ),
-                          iconSize: 14,
-                          tooltip: 'Re-roll',
-                          icon: Icon(
-                            Icons.casino_outlined,
-                            color: AppColors.iconPrimary(context),
-                          ),
-                          onPressed: session.isRunning
-                              ? null
-                              : () => unawaited(session.reroll(index)),
-                        ),
+                  packOverlayChip(
+                    context,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
                       ),
-                    ],
+                      iconSize: 14,
+                      tooltip: 'Re-roll (edit prompt, strength, seed)',
+                      icon: Icon(
+                        Icons.casino_outlined,
+                        color: AppColors.iconPrimary(context),
+                      ),
+                      // Same seed + same settings = the same image, so a
+                      // re-roll is ALWAYS the editor: tweak prompt/strength
+                      // (pack-consistent seed) or opt into fresh noise.
+                      onPressed: session.isRunning
+                          ? null
+                          : () => unawaited(
+                              showPackRerollEditor(context, session, index),
+                            ),
+                    ),
                   ),
                 ],
               ),
@@ -420,45 +389,23 @@ class _PackCell extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    iconSize: 16,
-                    tooltip: 'Retry',
-                    icon: Icon(
-                      Icons.refresh,
-                      color: AppColors.iconSecondary(context),
-                    ),
-                    onPressed: session.isRunning
-                        ? null
-                        : () => unawaited(session.reroll(index)),
-                  ),
-                  if (slot.rerollCount > 0)
-                    IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 28,
-                        minHeight: 28,
-                      ),
-                      iconSize: 16,
-                      tooltip: 'Edit prompt & retry',
-                      icon: Icon(
-                        Icons.edit_outlined,
-                        color: AppColors.iconSecondary(context),
-                      ),
-                      onPressed: session.isRunning
-                          ? null
-                          : () => unawaited(
-                              editPackSlotPrompt(context, session, index),
-                            ),
-                    ),
-                ],
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+                iconSize: 16,
+                // A failed slot produced NO image, so a same-settings retry
+                // is meaningful (errors are usually transient).
+                tooltip: 'Retry',
+                icon: Icon(
+                  Icons.refresh,
+                  color: AppColors.iconSecondary(context),
+                ),
+                onPressed: session.isRunning
+                    ? null
+                    : () => unawaited(session.reroll(index)),
               ),
             ],
           ),

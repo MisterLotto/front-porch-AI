@@ -36,6 +36,7 @@ typedef PackSlotGenerator =
       required String prompt,
       required String negativePrompt,
       required int seed,
+      required double denoise,
     });
 
 /// Lifecycle of one emotion slot in an expression pack grid.
@@ -77,15 +78,20 @@ class ExpressionSlot {
 
   String? error;
 
-  /// Times this slot has been re-rolled. The grid unlocks manual prompt
-  /// editing only after the first re-roll — the app gets its automatic
-  /// attempt before the user is offered the steering wheel.
-  int rerollCount = 0;
-
-  /// User-edited prompt for this slot (set via edit-and-re-roll). When set it
-  /// REPLACES the modifier+base composition for every later generation of
+  /// User-edited prompt for this slot (set via the re-roll editor). When set
+  /// it REPLACES the modifier+base composition for every later generation of
   /// this slot, so the user isn't re-rolling blind forever.
   String? customPrompt;
+
+  /// Per-slot variation-strength override from the re-roll editor; null =
+  /// the pack's strength.
+  double? customDenoise;
+
+  /// Per-slot seed, set only when the user explicitly rolls new noise in the
+  /// re-roll editor — and sticky afterwards, so a good noise direction can
+  /// be refined with further prompt/strength tweaks. Null = the pack's
+  /// shared seed (consistency by default).
+  int? customSeed;
 
   /// Advisory Vision QC verdict; null = unchecked. Cleared whenever the slot
   /// regenerates so a stale verdict can't describe a new image.
@@ -109,10 +115,12 @@ class ExpressionPackSession extends ChangeNotifier {
     required List<String> emotions,
     required String basePrompt,
     required String negativePrompt,
+    required double denoise,
     required PackSlotGenerator generate,
     int? seed, // fixed shared seed; default = random positive int
   }) : _basePrompt = basePrompt,
        _negativePrompt = negativePrompt,
+       _denoise = denoise,
        _generate = generate,
        // Must be a fixed POSITIVE value: ComfyUI randomizes -1 client-side and
        // A1111 server-side, so sharing a seed across slots requires pinning it.
@@ -121,6 +129,7 @@ class ExpressionPackSession extends ChangeNotifier {
 
   final String _basePrompt;
   final String _negativePrompt;
+  final double _denoise;
   final PackSlotGenerator _generate;
   final int _seed;
   final List<ExpressionSlot> _slots;
@@ -165,9 +174,13 @@ class ExpressionPackSession extends ChangeNotifier {
   }
 
   /// The positive prompt slot [index] generates with right now: the user's
-  /// custom prompt when one was set via edit-and-re-roll, else the emotion
+  /// custom prompt when one was set via the re-roll editor, else the emotion
   /// modifier + base composition. The grid uses this to prefill the editor.
   String effectivePromptFor(int index) => _promptFor(_slots[index]);
+
+  /// The variation strength slot [index] generates with right now.
+  double effectiveDenoiseFor(int index) =>
+      _slots[index].customDenoise ?? _denoise;
 
   String _promptFor(ExpressionSlot slot) {
     final custom = slot.customPrompt;
@@ -178,17 +191,25 @@ class ExpressionPackSession extends ChangeNotifier {
     return '$modifier, $_basePrompt';
   }
 
-  /// Regenerate ONE slot with a fresh random seed (the shared session seed is
-  /// unchanged). Works on failed slots too — that's the retry. No-op while a
-  /// run is in progress, for an out-of-range index, or if the slot is
-  /// currently generating. A non-empty [promptOverride] is remembered as the
-  /// slot's custom prompt and used for this and every later generation.
+  /// Regenerate ONE slot. By DEFAULT the slot's current seed is kept (the
+  /// pack's shared seed, or a previously rolled slot seed) — with img2img,
+  /// same seed + same prompt + same strength reproduces the same image, so
+  /// the re-roll editor changes results through the prompt and strength
+  /// levers, keeping the pack's noise consistent. [newSeed] draws fresh
+  /// noise explicitly and the new seed sticks to the slot so a good
+  /// direction can be refined further. Works on failed slots too. No-op
+  /// while a run is in progress, out of range, or mid-generation.
   ///
   /// Marks the session running for its duration: the backends are single-GPU,
   /// so every generation — full runs AND single re-rolls — must serialize
   /// through [isRunning] (which is also what disables the grid's other
   /// re-roll/resume buttons while one is in flight).
-  Future<void> reroll(int index, {String? promptOverride}) async {
+  Future<void> reroll(
+    int index, {
+    String? promptOverride,
+    double? denoiseOverride,
+    bool newSeed = false,
+  }) async {
     if (_running) return;
     if (index < 0 || index >= _slots.length) return;
     final slot = _slots[index];
@@ -196,10 +217,11 @@ class ExpressionPackSession extends ChangeNotifier {
     if (promptOverride != null && promptOverride.trim().isNotEmpty) {
       slot.customPrompt = promptOverride.trim();
     }
-    slot.rerollCount++;
+    if (denoiseOverride != null) slot.customDenoise = denoiseOverride;
+    if (newSeed) slot.customSeed = Random().nextInt(1 << 31);
     _running = true;
     notifyListeners();
-    await _generateSlot(slot, Random().nextInt(1 << 31));
+    await _generateSlot(slot, slot.customSeed ?? _seed);
     if (_disposed) return;
     _running = false;
     notifyListeners();
@@ -238,6 +260,7 @@ class ExpressionPackSession extends ChangeNotifier {
                   ? counterCues
                   : '$_negativePrompt, $counterCues'),
         seed: slotSeed,
+        denoise: slot.customDenoise ?? _denoise,
       );
       if (result == null) error = 'Generation returned no image.';
     } catch (e) {
