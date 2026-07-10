@@ -218,6 +218,52 @@ void main() {
       },
     );
 
+    test(
+      'reroll tracks rerollCount and a promptOverride becomes the slot\'s '
+      'custom prompt, used for this and every later re-roll',
+      () async {
+        final prompts = <String>[];
+        final session = ExpressionPackSession(
+          emotions: const ['joy'],
+          basePrompt: 'base',
+          negativePrompt: 'np',
+          generate:
+              ({
+                required String prompt,
+                required String negativePrompt,
+                required int seed,
+              }) async {
+                prompts.add(prompt);
+                return Uint8List.fromList([prompts.length]);
+              },
+        );
+        await session.run();
+        final auto = '${kExpressionModifiers['joy']}, base';
+        expect(session.slots[0].rerollCount, 0);
+        expect(session.effectivePromptFor(0), auto);
+
+        // First re-roll: automatic prompt, count starts gating the editor.
+        await session.reroll(0);
+        expect(session.slots[0].rerollCount, 1);
+        expect(prompts.last, auto);
+
+        // Edited re-roll: custom prompt sticks…
+        await session.reroll(0, promptOverride: '  gentle smile, base  ');
+        expect(session.slots[0].customPrompt, 'gentle smile, base');
+        expect(prompts.last, 'gentle smile, base');
+        expect(session.effectivePromptFor(0), 'gentle smile, base');
+
+        // …including for later plain re-rolls.
+        await session.reroll(0);
+        expect(prompts.last, 'gentle smile, base');
+        expect(session.slots[0].rerollCount, 3);
+
+        // Blank override is ignored (no accidental prompt wipe).
+        await session.reroll(0, promptOverride: '   ');
+        expect(session.slots[0].customPrompt, 'gentle smile, base');
+      },
+    );
+
     test('reroll() retries failed slots', () async {
       var failNext = true;
       final session = ExpressionPackSession(

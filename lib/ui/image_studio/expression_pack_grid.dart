@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/expression_pack_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
+import 'expression_pack_prompt_editor.dart';
 import 'expression_pack_qc_ui.dart';
 
 /// Step 2 of the Expression-pack dialog: the live generation grid. One cell
@@ -345,24 +346,60 @@ class _PackCell extends StatelessWidget {
                       ),
                     ),
                   ),
-                  packOverlayChip(
-                    context,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 24,
-                        minHeight: 24,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Manual prompt steering unlocks only after the app has
+                      // had its automatic re-roll attempt (rerollCount > 0) —
+                      // no blind re-rolling forever.
+                      if (slot.rerollCount > 0) ...[
+                        packOverlayChip(
+                          context,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 24,
+                              minHeight: 24,
+                            ),
+                            iconSize: 14,
+                            tooltip: 'Edit prompt & re-roll',
+                            icon: Icon(
+                              Icons.edit_outlined,
+                              color: AppColors.iconPrimary(context),
+                            ),
+                            onPressed: session.isRunning
+                                ? null
+                                : () => unawaited(
+                                    editPackSlotPrompt(
+                                      context,
+                                      session,
+                                      index,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      packOverlayChip(
+                        context,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 24,
+                            minHeight: 24,
+                          ),
+                          iconSize: 14,
+                          tooltip: 'Re-roll',
+                          icon: Icon(
+                            Icons.casino_outlined,
+                            color: AppColors.iconPrimary(context),
+                          ),
+                          onPressed: session.isRunning
+                              ? null
+                              : () => unawaited(session.reroll(index)),
+                        ),
                       ),
-                      iconSize: 14,
-                      tooltip: 'Re-roll',
-                      icon: Icon(
-                        Icons.casino_outlined,
-                        color: AppColors.iconPrimary(context),
-                      ),
-                      onPressed: session.isRunning
-                          ? null
-                          : () => unawaited(session.reroll(index)),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -383,21 +420,45 @@ class _PackCell extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ),
-                iconSize: 16,
-                tooltip: 'Retry',
-                icon: Icon(
-                  Icons.refresh,
-                  color: AppColors.iconSecondary(context),
-                ),
-                onPressed: session.isRunning
-                    ? null
-                    : () => unawaited(session.reroll(index)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    iconSize: 16,
+                    tooltip: 'Retry',
+                    icon: Icon(
+                      Icons.refresh,
+                      color: AppColors.iconSecondary(context),
+                    ),
+                    onPressed: session.isRunning
+                        ? null
+                        : () => unawaited(session.reroll(index)),
+                  ),
+                  if (slot.rerollCount > 0)
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      iconSize: 16,
+                      tooltip: 'Edit prompt & retry',
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        color: AppColors.iconSecondary(context),
+                      ),
+                      onPressed: session.isRunning
+                          ? null
+                          : () => unawaited(
+                              editPackSlotPrompt(context, session, index),
+                            ),
+                    ),
+                ],
               ),
             ],
           ),

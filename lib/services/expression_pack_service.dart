@@ -77,6 +77,16 @@ class ExpressionSlot {
 
   String? error;
 
+  /// Times this slot has been re-rolled. The grid unlocks manual prompt
+  /// editing only after the first re-roll — the app gets its automatic
+  /// attempt before the user is offered the steering wheel.
+  int rerollCount = 0;
+
+  /// User-edited prompt for this slot (set via edit-and-re-roll). When set it
+  /// REPLACES the modifier+base composition for every later generation of
+  /// this slot, so the user isn't re-rolling blind forever.
+  String? customPrompt;
+
   /// Advisory Vision QC verdict; null = unchecked. Cleared whenever the slot
   /// regenerates so a stale verdict can't describe a new image.
   PackQcVerdict? qc;
@@ -152,20 +162,39 @@ class ExpressionPackSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The positive prompt slot [index] generates with right now: the user's
+  /// custom prompt when one was set via edit-and-re-roll, else the emotion
+  /// modifier + base composition. The grid uses this to prefill the editor.
+  String effectivePromptFor(int index) => _promptFor(_slots[index]);
+
+  String _promptFor(ExpressionSlot slot) {
+    final custom = slot.customPrompt;
+    if (custom != null && custom.isNotEmpty) return custom;
+    final modifier = kExpressionModifiers[slot.emotion] ?? slot.emotion;
+    // Emotion first: front tokens get the most conditioning weight, and at
+    // turbo-model CFG (~1) a tail phrase was too weak to change the face.
+    return '$modifier, $_basePrompt';
+  }
+
   /// Regenerate ONE slot with a fresh random seed (the shared session seed is
   /// unchanged). Works on failed slots too — that's the retry. No-op while a
   /// run is in progress, for an out-of-range index, or if the slot is
-  /// currently generating.
+  /// currently generating. A non-empty [promptOverride] is remembered as the
+  /// slot's custom prompt and used for this and every later generation.
   ///
   /// Marks the session running for its duration: the backends are single-GPU,
   /// so every generation — full runs AND single re-rolls — must serialize
   /// through [isRunning] (which is also what disables the grid's other
   /// re-roll/resume buttons while one is in flight).
-  Future<void> reroll(int index) async {
+  Future<void> reroll(int index, {String? promptOverride}) async {
     if (_running) return;
     if (index < 0 || index >= _slots.length) return;
     final slot = _slots[index];
     if (slot.state == ExpressionSlotState.generating) return;
+    if (promptOverride != null && promptOverride.trim().isNotEmpty) {
+      slot.customPrompt = promptOverride.trim();
+    }
+    slot.rerollCount++;
     _running = true;
     notifyListeners();
     await _generateSlot(slot, Random().nextInt(1 << 31));
@@ -198,12 +227,9 @@ class ExpressionPackSession extends ChangeNotifier {
     Uint8List? result;
     String? error;
     try {
-      final modifier = kExpressionModifiers[slot.emotion] ?? slot.emotion;
-      // Emotion first: front tokens get the most conditioning weight, and at
-      // turbo-model CFG (~1) a tail phrase was too weak to change the face.
       final counterCues = kExpressionNegatives[slot.emotion] ?? '';
       result = await _generate(
-        prompt: '$modifier, $_basePrompt',
+        prompt: _promptFor(slot),
         negativePrompt: counterCues.isEmpty
             ? _negativePrompt
             : (_negativePrompt.trim().isEmpty
