@@ -4254,8 +4254,19 @@ class ChatService extends ChangeNotifier {
     if (_activeGroup != null) {
       for (final c in _groupCharacters) {
         final id = _getCharacterIdFromCard(c);
-        (_groupRealism[id] ??= <String, dynamic>{})['nsfwCooldownEnabled'] =
-            enabled;
+        final entry = _groupRealism[id] ??= <String, dynamic>{};
+        entry['nsfwCooldownEnabled'] = enabled;
+        // Parity with 1:1: NsfwService.setNsfwCooldownEnabled(false) zeroes
+        // the scalar arousal + cooldowns, so disabling must clear each
+        // member's persisted values too — otherwise re-enabling resumed
+        // members from stale arousal/cooldowns while a 1:1 chat restarted
+        // fresh. (Also the documented escape hatch: toggling off and on
+        // resets a chat's lust state to neutral in BOTH modes.)
+        if (!enabled) {
+          entry['arousal'] = 0;
+          entry['cooldownTurnsRemaining'] = 0;
+          entry['cooldownTurnsTotal'] = 0;
+        }
       }
     }
     await _saveChat();
