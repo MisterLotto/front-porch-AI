@@ -18,16 +18,13 @@ import 'package:front_porch_ai/services/chat/needs_simulation.dart';
 
 /// Test factory to reduce 13+ callback boilerplate across tests (and future extractions).
 /// Supplies realistic defaults; use overrides for targeted state (e.g. speaker, group flag, time).
-/// For values mutated by the test after construction (timeOfDay, arousal, speaker etc.),
+/// For values mutated by the test after construction (timeOfDay, speaker etc.),
 /// pass live getters via *Fn params so sim callbacks see updates (e.g. timeOfDayFn: () => timeOfDay).
 NeedsSimulation createTestSim({
   List<String>? notifies,
   List<String>? saves,
   String Function()? timeOfDayFn,
   bool Function()? realismFn,
-  int Function()? arousalFn,
-  bool Function()? nsfwCooldownFn,
-  int Function()? cooldownFn,
   bool Function()? observerFn,
   String Function()? speakerIdFn,
   bool Function()? isGroupNonObserverFn,
@@ -44,9 +41,6 @@ NeedsSimulation createTestSim({
     onSaveChat: () async => s.add('save'),
     getTimeOfDay: timeOfDayFn ?? () => 'morning',
     getRealismEnabled: realismFn ?? () => true,
-    getArousalLevel: arousalFn ?? () => 0,
-    getNsfwCooldownEnabled: nsfwCooldownFn ?? () => false,
-    getCooldownTurnsRemaining: cooldownFn ?? () => 0,
     getObserverMode: observerFn ?? () => false,
     getCurrentSpeakerIdForRealism: speakerIdFn ?? () => 'char-1',
     getIsGroupNonObserverMode: isGroupNonObserverFn ?? () => false,
@@ -55,7 +49,6 @@ NeedsSimulation createTestSim({
     setGroupNeeds: (id, nn) => gn[id] = Map.from(nn),
     getEnjoysLowHygiene: enjoysFn ?? () => false,
     getNeedsSimEnabled: simEnabledFn ?? () => true,
-    setArousalLevel: (_) {},
   );
 }
 

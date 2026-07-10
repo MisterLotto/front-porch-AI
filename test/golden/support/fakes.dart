@@ -153,9 +153,6 @@ class FakeChatService extends ChangeNotifier implements ChatService {
       onSaveChat: () async {},
       getTimeOfDay: () => timeOfDay,
       getRealismEnabled: () => realismEnabled,
-      getArousalLevel: () => 0,
-      getNsfwCooldownEnabled: () => false,
-      getCooldownTurnsRemaining: () => 0,
       getObserverMode: () => false,
       getCurrentSpeakerIdForRealism: () => '',
       getIsGroupNonObserverMode: () => false,
@@ -163,7 +160,6 @@ class FakeChatService extends ChangeNotifier implements ChatService {
       setGroupNeeds: (_, _) {},
       getEnjoysLowHygiene: () => false,
       getNeedsSimEnabled: () => needsSimEnabled,
-      setArousalLevel: (_) {},
     )..restoreFromSnapshot(needs);
     _relationship = RelationshipService(
       onNotify: () {},

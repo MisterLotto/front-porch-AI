@@ -110,14 +110,18 @@ void main() {
       expect(svc.arousalTierName, 'Deserted');
     });
 
-    test('applyClimaxEffects sets total/remaining + arousal crash value', () {
-      final svc = createTestNsfw();
-      svc.setArousalLevel(80);
-      svc.applyClimaxEffects(turns: 5);
-      expect(svc.cooldownTurnsTotal, 5);
-      expect(svc.cooldownTurnsRemaining, 5);
-      expect(svc.arousalLevel, -3);
-    });
+    test(
+      'applyClimaxEffects sets total/remaining + sated-neutral arousal '
+      '(0, not negative — satedness is not aversion)',
+      () {
+        final svc = createTestNsfw();
+        svc.setArousalLevel(80);
+        svc.applyClimaxEffects(turns: 5);
+        expect(svc.cooldownTurnsTotal, 5);
+        expect(svc.cooldownTurnsRemaining, 5);
+        expect(svc.arousalLevel, 0);
+      },
+    );
 
     test('decrementCooldownIfActive only decrements when >0', () {
       final svc = createTestNsfw();
@@ -129,6 +133,75 @@ void main() {
       svc.decrementCooldownIfActive();
       expect(svc.cooldownTurnsRemaining, 0);
     });
+
+    test(
+      'refractory expiry resets the total and halves lingering negative '
+      'arousal toward neutral (baseline receptivity returns)',
+      () {
+        final svc = createTestNsfw();
+        svc.applyClimaxEffects(turns: 2);
+        svc.setArousalLevel(-9); // dug down during the cooldown
+        svc.decrementCooldownIfActive();
+        expect(svc.cooldownTurnsRemaining, 1);
+        expect(svc.cooldownTurnsTotal, 2); // total kept while running
+        expect(svc.arousalLevel, -9); // no nudge until expiry
+        svc.decrementCooldownIfActive(); // reaches 0 → expiry
+        expect(svc.cooldownTurnsRemaining, 0);
+        expect(svc.cooldownTurnsTotal, 0);
+        expect(svc.arousalLevel, -4); // -9 ~/ 2, truncates toward zero
+        // Positive arousal is never touched on expiry.
+        svc.applyClimaxEffects(turns: 1);
+        svc.setArousalLevel(20);
+        svc.decrementCooldownIfActive();
+        expect(svc.arousalLevel, 20);
+      },
+    );
+
+    test(
+      'applyEvalArousalDelta: normal path applies fully, clamps at bounds, '
+      'and returns the delta that actually landed',
+      () {
+        final svc = createTestNsfw();
+        svc.setArousalLevel(0);
+        expect(svc.applyEvalArousalDelta(15), 15);
+        expect(svc.arousalLevel, 15);
+        expect(svc.applyEvalArousalDelta(-20), -20);
+        expect(svc.arousalLevel, -5);
+        // Clamp at the -100 floor: only the landed portion is reported.
+        svc.setArousalLevel(-95);
+        expect(svc.applyEvalArousalDelta(-25), -5);
+        expect(svc.arousalLevel, -100);
+      },
+    );
+
+    test(
+      'applyEvalArousalDelta: refractory halves swings and cannot dig below '
+      'mild disinterest (-10) — satedness is not aversion',
+      () {
+        final svc = createTestNsfw();
+        svc.applyClimaxEffects(turns: 4); // arousal 0, refractory active
+        // -20 halves to -10, landing exactly at the floor.
+        expect(svc.applyEvalArousalDelta(-20), -10);
+        expect(svc.arousalLevel, -10);
+        // Further negatives can't dig deeper while refractory.
+        expect(svc.applyEvalArousalDelta(-25), 0);
+        expect(svc.arousalLevel, -10);
+        // Positive stirring works but is damped (+10 → +5).
+        expect(svc.applyEvalArousalDelta(10), 5);
+        expect(svc.arousalLevel, -5);
+        // A speaker loaded already below the floor is not clamped upward,
+        // but also can't be pushed deeper.
+        svc.setArousalLevel(-40);
+        expect(svc.applyEvalArousalDelta(-10), 0);
+        expect(svc.arousalLevel, -40);
+        // Once the refractory ends, physiology no longer applies.
+        svc.setCooldownTurnsRemaining(1);
+        svc.decrementCooldownIfActive(); // expiry: -40 → -20
+        expect(svc.arousalLevel, -20);
+        expect(svc.applyEvalArousalDelta(-10), -10);
+        expect(svc.arousalLevel, -30);
+      },
+    );
 
     test('resetForFreshChat zeros all + disables', () {
       final svc = createTestNsfw();

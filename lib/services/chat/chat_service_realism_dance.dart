@@ -92,6 +92,18 @@ extension ChatServiceRealismDance on ChatService {
       // group realism state into the scalar fields the eval will read and mutate.
       _loadGroupRealismIntoScalars(charId);
     }
+
+    // Per-speaker refractory tick (group only — the 1:1 host ticks in
+    // sendMessage, which is now gated to 1:1). Must run AFTER this speaker's
+    // scalars are loaded; the old pre-pick site in sendMessage ticked the
+    // previous speaker's loaded scalars and the tick was lost on load, so
+    // group cooldowns never counted down. Saved back to the per-char map
+    // immediately (like the needs decay write above) so a cancelled eval
+    // can't lose the tick.
+    if (_activeGroup != null && !_observerMode) {
+      _nsfwService.decrementCooldownIfActive();
+      _nsfwService.saveNsfwScalarsToGroup(charId);
+    }
     // 1:1 host: the scalar fields ALREADY hold this character's loaded + post-decay
     // state (restored by loadSession, decayed in sendMessage). The _groupRealism map
     // is a group-only store whose writes are gated on `_activeGroup != null`, so

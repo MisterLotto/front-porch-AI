@@ -309,9 +309,6 @@ NsfwInjection createTestNsfw({
         onSaveChat: () async {},
         getTimeOfDay: () => 'morning',
         getRealismEnabled: () => realism,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => false,
@@ -320,7 +317,6 @@ NsfwInjection createTestNsfw({
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
   final r =
       relSvc ??
@@ -406,9 +402,6 @@ NeedsInjection createTestNeeds({
         onSaveChat: () async {},
         getTimeOfDay: () => 'morning',
         getRealismEnabled: () => realism,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => isGroupNonObs,
@@ -417,7 +410,6 @@ NeedsInjection createTestNeeds({
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => enjoys,
         getNeedsSimEnabled: () => needsEnabled,
-        setArousalLevel: (_) {},
       );
   final n =
       nsfwSvc ??
@@ -532,9 +524,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => '',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => true,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => false,
@@ -543,7 +532,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       final b = createTestNsfw(
         nsfwSvc: n,
@@ -616,9 +604,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => '',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 50,
-          getNsfwCooldownEnabled: () => true,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => 'g1',
           getIsGroupNonObserverMode: () => true,
@@ -627,7 +612,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         final n = NsfwService(
           getGroupInt: (_, _) => 0,
@@ -650,9 +634,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => '',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 0,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => '',
           getIsGroupNonObserverMode: () => false,
@@ -661,7 +642,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         // post-buffer thinned: use applySceneImpact (old initializeIfNeeded/setNeedValue removed with afterglow/buffers). aug exercising only passive/qualified (no needs-spaghetti-specific aug edits; full in dedicated + manual; exercised via god thins; qualified notes only in dedicated header + god + MD per precedent).
         ne2.initializeFresh();
@@ -689,9 +669,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => '',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 50,
-          getNsfwCooldownEnabled: () => true,
-          getCooldownTurnsRemaining: () => 2,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => '',
           getIsGroupNonObserverMode: () => false,
@@ -700,7 +677,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         neSpecial.initializeFresh();
         // thinned: applySceneImpact for current post-buffer API. aug only qualified passive (no leaf aug edits; qualified notes only).
@@ -863,9 +839,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => 'evening',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 50,
-          getNsfwCooldownEnabled: () => true,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => 'c1',
           getIsGroupNonObserverMode: () => false,
@@ -874,7 +847,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         // post-buffer: NeedsImpact now only deltas+reason (startAfterglow/crash removed with buffers/afterglow). aug exercising only passive/qualified (no needs-spaghetti aug file edits; full in dedicated+manual; qualified notes only in dedicated header+god+MD per precedent).
         rawSim.applySceneImpact(

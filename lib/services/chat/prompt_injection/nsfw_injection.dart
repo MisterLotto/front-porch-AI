@@ -110,13 +110,32 @@ class NsfwInjection {
       statePrompt +=
           ' ($charName\'s refractory recovery: ${nsfwService.cooldownTurnsRemaining} of $total turns remaining.)\n';
     } else {
+      // Negative arousal is a spectrum of soured desire, not a cliff: only a
+      // deeply violated character reads as repulsed. Mild negatives (including
+      // the halved remnant of a post-climax refractory) are "not in the mood",
+      // which warmth can genuinely turn around. (The old ladder flipped to
+      // "physically repulsed" at -2, so a character exiting the refractory at
+      // -3 recoiled from their own lover indefinitely.)
       String arousalDesc;
-      if (nsfwService.arousalLevel <= -2) {
+      if (nsfwService.arousalLevel <= -60) {
         arousalDesc =
-            'completely unaroused and physically repulsed. They will actively reject, recoil from, or shut down any sexual advance';
+            'physically repulsed right now — what has happened has shut their body down completely. '
+            'They will recoil from, reject, or coldly deflect any sexual advance, and only genuine amends '
+            'and time could ever change that';
+      } else if (nsfwService.arousalLevel <= -20) {
+        arousalDesc =
+            'physically closed-off — not disgusted, but their desire has been soured and sits behind a wall. '
+            'Flirtation lands flat, touch is tolerated at best, and advances get firmly (if not cruelly) turned '
+            'aside. Real warmth, safety, and patience would have to rebuild before anything could stir';
+      } else if (nsfwService.arousalLevel < 0) {
+        arousalDesc =
+            'simply not in the mood — present and comfortable, but carrying no sexual charge right now. '
+            'An advance gets a soft deflection, an affectionate laugh, or a "not right now" rather than any '
+            'revulsion — and genuine tenderness or the right moment could slowly change their mind';
       } else if (nsfwService.arousalLevel == 0) {
         arousalDesc =
-            'physically neutral — sex is the furthest thing from their mind. Any sexual advance feels out of place';
+            'physically neutral — sex simply isn\'t on their mind. An advance would feel sudden, and how '
+            'they take it depends entirely on their mood, their feelings for {{user}}, and how it\'s offered';
       } else if (nsfwService.arousalLevel <= 15) {
         arousalDesc =
             'mildly flustered — a low hum of warmth, maybe a lingering glance or quickened pulse, but easily suppressed. '

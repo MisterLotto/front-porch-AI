@@ -47,9 +47,6 @@ class NeedsSimulation {
 
   final String Function() getTimeOfDay;
   final bool Function() getRealismEnabled;
-  final int Function() getArousalLevel;
-  final bool Function() getNsfwCooldownEnabled;
-  final int Function() getCooldownTurnsRemaining;
   final bool Function() getObserverMode;
   final String Function() getCurrentSpeakerIdForRealism;
   final bool Function() getIsGroupNonObserverMode;
@@ -57,7 +54,6 @@ class NeedsSimulation {
   final void Function(String charId, Map<String, int> needs) setGroupNeeds;
   final bool Function() getEnjoysLowHygiene;
   final bool Function() getNeedsSimEnabled;
-  final void Function(int newArousal) setArousalLevel;
   final Map<String, int>? Function()? getCustomDecayRates;
 
   Map<String, int> _vector = {};
@@ -69,9 +65,6 @@ class NeedsSimulation {
     required this.onSaveChat,
     required this.getTimeOfDay,
     required this.getRealismEnabled,
-    required this.getArousalLevel,
-    required this.getNsfwCooldownEnabled,
-    required this.getCooldownTurnsRemaining,
     required this.getObserverMode,
     required this.getCurrentSpeakerIdForRealism,
     required this.getIsGroupNonObserverMode,
@@ -79,7 +72,6 @@ class NeedsSimulation {
     required this.setGroupNeeds,
     required this.getEnjoysLowHygiene,
     required this.getNeedsSimEnabled,
-    required this.setArousalLevel,
     this.getCustomDecayRates,
   });
 

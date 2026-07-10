@@ -1713,9 +1713,6 @@ class ChatService extends ChangeNotifier {
     onSaveChat: _saveChat,
     getTimeOfDay: () => _timeService.timeOfDay,
     getRealismEnabled: () => _realismEnabled,
-    getArousalLevel: () => _nsfwService.arousalLevel,
-    getNsfwCooldownEnabled: () => _nsfwService.nsfwCooldownEnabled,
-    getCooldownTurnsRemaining: () => _nsfwService.cooldownTurnsRemaining,
     getObserverMode: () => _observerMode,
     getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
     getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
@@ -1723,7 +1720,6 @@ class ChatService extends ChangeNotifier {
     setGroupNeeds: _setGroupNeeds,
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getNeedsSimEnabled: () => _needsSimEnabled,
-    setArousalLevel: (v) => _nsfwService.setArousalLevel(v),
     getCustomDecayRates: () => _activeDecayRates(),
   );
 
@@ -3535,7 +3531,16 @@ class ChatService extends ChangeNotifier {
         // Group non-obs + needs on: decay is applied per-speaker inside the
         // single eval path (_evaluateRealismForUpcomingSpeaker).
       }
-      _nsfwService.decrementCooldownIfActive();
+      // Refractory tick for the 1:1 host only. In group mode the speaker
+      // hasn't been picked yet — decrementing here mutated whichever member's
+      // scalars were still loaded from LAST turn, and the tick was then
+      // discarded by _loadGroupRealismIntoScalars, so group cooldowns never
+      // actually counted down. The group tick now lives per-speaker in
+      // _evaluateRealismForUpcomingSpeaker, right after that speaker's
+      // scalars are loaded (mirroring the per-speaker needs decay).
+      if (_activeGroup == null) {
+        _nsfwService.decrementCooldownIfActive();
+      }
 
       // Single-path bridge: realism evaluation now runs inside _generateResponse
       // for EVERY speaker (1:1 host or group member) via
