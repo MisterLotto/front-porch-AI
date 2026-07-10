@@ -1802,6 +1802,18 @@ class _SettingsPageState extends State<SettingsPage> {
               },
             ),
 
+            // Vision projector (mmproj) for the selected model — the same
+            // field the chat Model Settings dialog shows, surfaced here too
+            // because this page is where users actually pick the model.
+            // Self-hides when a preset owns the model; greys out for
+            // text-only / vision-built-in GGUFs. Applied on next start.
+            const SizedBox(height: 12),
+            VisionProjectorField(
+              modelPath: _selectedModelPath,
+              storage: storageService,
+              onChanged: () => setState(() {}),
+            ),
+
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
