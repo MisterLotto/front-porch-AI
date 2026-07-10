@@ -52,7 +52,10 @@ class ExpressionPackSetup extends StatefulWidget {
 
 class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
   bool _fullSet = false;
-  double _denoise = 0.5;
+  // 0.7 default from maintainer field-testing: at 0.5 the img2img anchor
+  // dominates and expressions barely move (the face is a small region of an
+  // avatar-shaped base); 0.7 changes the face while the base holds identity.
+  double _denoise = 0.7;
   bool _replaceExisting = true;
 
   @override
@@ -120,8 +123,8 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
               child: Slider(
                 value: _denoise,
                 min: 0.30,
-                max: 0.70,
-                divisions: 8,
+                max: 0.85,
+                divisions: 11,
                 activeColor: AppColors.formMasterAccent,
                 inactiveColor: AppColors.borderOf(context),
                 onChanged: (v) => setState(() => _denoise = v),
