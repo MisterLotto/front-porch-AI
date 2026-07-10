@@ -972,13 +972,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : theme.iconTheme.color,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'Local (KoboldCPP)',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: backendManager.isIntelMac
-                                      ? Colors.grey
-                                      : null,
+                              Flexible(
+                                child: Text(
+                                  'Local (KoboldCPP)',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: backendManager.isIntelMac
+                                        ? Colors.grey
+                                        : null,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1001,13 +1005,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : theme.iconTheme.color,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'Pseudo-Remote',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: backendManager.isIntelMac
-                                      ? Colors.grey
-                                      : null,
+                              Flexible(
+                                child: Text(
+                                  'Pseudo-Remote',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: backendManager.isIntelMac
+                                        ? Colors.grey
+                                        : null,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1028,9 +1036,13 @@ class _SettingsPageState extends State<SettingsPage> {
                                 color: theme.iconTheme.color,
                               ),
                               const SizedBox(width: 6),
-                              const Text(
-                                'Remote API',
-                                style: TextStyle(fontSize: 13),
+                              const Flexible(
+                                child: Text(
+                                  'Remote API',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 13),
+                                ),
                               ),
                             ],
                           ),
@@ -1051,11 +1063,15 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : Colors.grey,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'oMLX',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Platform.isMacOS ? null : Colors.grey,
+                              Flexible(
+                                child: Text(
+                                  'oMLX',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Platform.isMacOS ? null : Colors.grey,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1597,8 +1613,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerLeft,
+                      // oMLX lives at its fixed local URL — probing the
+                      // Remote API URL here asked the WRONG server (e.g.
+                      // OpenRouter) about an oMLX model and always said none.
                       child: RemoteVisionPill(
-                        apiUrl: storageService.remoteApiUrl,
+                        apiUrl: 'http://localhost:8000/v1',
                         apiKey: storageService.remoteApiKey,
                         modelName: storageService.remoteModelName,
                       ),

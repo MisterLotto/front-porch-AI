@@ -104,6 +104,11 @@ class VisionSupportResolver {
 
   /// Resolve vision for an OpenAI-compatible remote backend, choosing the best
   /// signal for the provider inferred from [apiUrl].
+  ///
+  /// A probe that never REACHED the server (connection refused, timeout) is
+  /// not a verdict: it returns none for now but is NOT cached, so the next
+  /// ask retries — otherwise checking a moment before the server was up
+  /// branded the model "no vision" for the rest of the session.
   Future<VisionSupport> resolveRemote({
     required String apiUrl,
     required String apiKey,
@@ -114,11 +119,30 @@ class VisionSupportResolver {
     final cached = _remoteCache[key];
     if (cached != null) return cached;
 
-    final verdict = await _computeRemote(
+    // Metadata path for the two providers whose /models describe capabilities
+    // (capabilitiesForRemote returns null immediately for every other host,
+    // and caches so the tool-calling short-circuit shares this one fetch).
+    final caps = await capabilitiesForRemote(
       apiUrl: apiUrl,
       apiKey: apiKey,
       modelName: modelName,
     );
+    if (caps != null) {
+      final verdict = VisionSupport.fromApi(caps);
+      _remoteCache[key] = verdict;
+      return verdict;
+    }
+
+    // Generic OpenAI-compatible / MLX / unknown, or a metadata miss above.
+    final probed = await _probeVision(
+      apiUrl: apiUrl,
+      apiKey: apiKey,
+      modelName: modelName,
+    );
+    if (probed == null) return VisionSupport.none; // unreachable — don't cache
+    final verdict = probed
+        ? const VisionSupport(true, VisionSource.probe)
+        : VisionSupport.none;
     _remoteCache[key] = verdict;
     return verdict;
   }
@@ -170,33 +194,6 @@ class VisionSupportResolver {
     }
   }
 
-  Future<VisionSupport> _computeRemote({
-    required String apiUrl,
-    required String apiKey,
-    required String modelName,
-  }) async {
-    // Metadata path for the two providers whose /models describe capabilities
-    // (capabilitiesForRemote returns null immediately for every other host,
-    // and caches so the tool-calling short-circuit shares this one fetch).
-    final caps = await capabilitiesForRemote(
-      apiUrl: apiUrl,
-      apiKey: apiKey,
-      modelName: modelName,
-    );
-    // Provider metadata is authoritative when the model entry was found.
-    if (caps != null) return VisionSupport.fromApi(caps);
-
-    // Generic OpenAI-compatible / MLX / unknown, or a metadata miss above.
-    final probed = await _probeVision(
-      apiUrl: apiUrl,
-      apiKey: apiKey,
-      modelName: modelName,
-    );
-    return probed
-        ? const VisionSupport(true, VisionSource.probe)
-        : VisionSupport.none;
-  }
-
   /// Fetch `/models` (detailed for Nano-GPT) and parse the matching entry.
   /// Returns null when the entry can't be found or the request fails.
   Future<ModelApiCapabilities?> _fetchModelCapabilities({
@@ -245,8 +242,10 @@ class VisionSupportResolver {
   }
 
   /// Send a tiny image via `/chat/completions` and treat a non-error response
-  /// as acceptance. Best-effort: any failure → false.
-  Future<bool> _probeVision({
+  /// as acceptance. Returns null when the request never reached the server
+  /// (connection refused, timeout) — "unreachable" is a connectivity fact,
+  /// not a capability verdict, and must not be cached as "no vision".
+  Future<bool?> _probeVision({
     required String apiUrl,
     required String apiKey,
     required String modelName,
@@ -299,8 +298,8 @@ class VisionSupportResolver {
       }
       return false;
     } catch (e) {
-      debugPrint('[VisionResolver] probe failed: $e');
-      return false;
+      debugPrint('[VisionResolver] probe unreachable/failed: $e');
+      return null;
     } finally {
       client.close();
     }
