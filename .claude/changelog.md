@@ -4213,3 +4213,8 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `expression_prompts.dart` — all 28 modifiers rewritten (explicit mouth/brow/eye states, no negation, no teeth-summoners) + NEW `kExpressionNegatives`; `expression_pack_service.dart` — PackSlotGenerator carries per-slot negativePrompt (user negative + counter-cues); `expression_pack_dialog.dart` — closure updated; tests extended (33/33).
 - **Rollback:** bd71b1d = pre-tune state.
 - **Commit:** c433380
+
+## 2026-07-10 — Draw Things checkpoint filter: qwen_image unhidden, encoder tier smarter
+- **Why:** blanket "qwen" skip (meant for the Qwen2.5-VL text-encoder sidecar) hid the Qwen-Image checkpoint; meanwhile ministral (encoder) and restoreformer (face restorer) leaked into the picker.
+- **Fix:** encoder keywords now skip only files without an "image" marker (qwen_image_* kept, qwen_2.5_vl_* hidden); +ministral/restoreformer/gfpgan/codeformer to skips; chroma unbanned (real image family); ltx → video tier. Same logic in `tools/dt-grpc-python/dt_grpc_client.py` and the Dart mirror; simulated against the real model list.
+- **Commit:** f9c2a5d
