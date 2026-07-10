@@ -94,13 +94,16 @@ class ExpressionSlot {
 
 /// Drives sequential per-emotion generation for an expression pack.
 ///
-/// Identity consistency comes from the img2img BASE image, not the seed —
-/// each slot derives its own seed from the session seed (+ its index), which
-/// is what lets the expression actually differ per emotion. (The original
-/// shared-seed design produced 28 near-identical images: same base + same
-/// noise + a short prompt tail that low-CFG turbo models barely weigh.) The
-/// emotion phrase leads the prompt for the same reason: front tokens carry
-/// the most conditioning weight. Re-rolls draw a fresh random seed.
+/// Seed strategy (settled by field-testing, in both directions): the initial
+/// run shares ONE seed across every slot. At pack denoise (~0.7) the noise
+/// decides which way fine identity features drift (eye color, makeup, face
+/// shape) — per-slot seeds gave each emotion its own drift direction and the
+/// pack stopped looking like one character. Differentiation between emotions
+/// is the PROMPT's job (geometry-explicit modifiers leading the prompt,
+/// where tokens carry the most conditioning weight); with the original weak
+/// tail-phrases a shared seed collapsed to near-identical images, but that
+/// was a prompt problem, not a seed problem. Re-rolls DO draw a fresh random
+/// seed — trying different noise for one slot is what a re-roll means.
 class ExpressionPackSession extends ChangeNotifier {
   ExpressionPackSession({
     required List<String> emotions,
@@ -128,7 +131,7 @@ class ExpressionPackSession extends ChangeNotifier {
 
   List<ExpressionSlot> get slots => List.unmodifiable(_slots);
 
-  /// The session seed; slot N generates with `(seed + N) & 0x7fffffff`.
+  /// The shared seed every initial-run slot generates with.
   int get seed => _seed;
 
   bool get isRunning => _running;
@@ -149,13 +152,12 @@ class ExpressionPackSession extends ChangeNotifier {
     _running = true;
     _cancelRequested = false;
     notifyListeners();
-    for (var i = 0; i < _slots.length; i++) {
-      final slot = _slots[i];
+    for (final slot in _slots) {
       // In-flight generation cannot be aborted (known service limitation), so
       // the cancel flag is only consulted between slots.
       if (_cancelRequested) break;
       if (slot.state != ExpressionSlotState.pending) continue;
-      await _generateSlot(slot, (_seed + i) & 0x7fffffff);
+      await _generateSlot(slot, _seed);
       if (_disposed) return;
     }
     _running = false;

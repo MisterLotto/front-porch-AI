@@ -10,7 +10,7 @@ import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
 
 void main() {
   group('ExpressionPackSession', () {
-    test('run() drives all slots pending → done with per-slot derived seeds '
+    test('run() drives all slots pending → done with ONE shared seed '
         'and emotion-first prompts', () async {
       final seeds = <int>[];
       final prompts = <String>[];
@@ -49,13 +49,13 @@ void main() {
         expect(slot.error, isNull);
       }
       expect(seeds, hasLength(3));
-      // Identity rides the img2img base — seeds must DIFFER per slot (a
-      // shared seed at low CFG produced near-identical images), derived
-      // deterministically from the session seed.
-      expect(seeds.toSet(), hasLength(3), reason: 'per-slot noise');
-      for (var i = 0; i < 3; i++) {
-        expect(seeds[i], (session.seed + i) & 0x7fffffff);
-      }
+      // ONE shared seed for the initial run: at pack denoise the noise picks
+      // the drift direction for fine identity features (eye color, face
+      // shape) — per-slot seeds made each emotion drift its own way and the
+      // pack stopped looking like one character. Emotion differentiation is
+      // the geometry-prompt's job; fresh noise is what RE-ROLLS are for.
+      expect(seeds.toSet(), hasLength(1), reason: 'pack-wide consistency');
+      expect(seeds.first, session.seed);
       // Emotion leads the prompt: front tokens carry the most weight.
       expect(prompts[0], '${kExpressionModifiers['joy']}, a portrait of luna');
       expect(prompts[2], startsWith(kExpressionModifiers['neutral']!));
