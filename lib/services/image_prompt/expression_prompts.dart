@@ -70,38 +70,80 @@ const List<String> kFullExpressionSet = [
 ];
 
 /// Diffusion-friendly facial-expression phrase per emotion
-/// (keys == [kFullExpressionSet] exactly). Short comma-tag style describing
-/// the FACE, usable in both natural-language and booru-tag prompts — inner
-/// states are translated into visible facial cues a model can actually draw.
+/// (keys == [kFullExpressionSet] exactly). Written as concrete FACIAL
+/// GEOMETRY — explicit mouth, brow, and eye states — because CFG-1 /
+/// distilled models (Flux, Qwen, turbo SDXL) have no negative prompt: the
+/// only way to displace the base portrait's expression is to positively
+/// describe the replacement state. Never negate ("no smile" makes text
+/// encoders draw MORE smile) and never use teeth-summoning words like
+/// "beaming"/"grinning ear to ear" (horror-grin artifacts at high denoise).
 const Map<String, String> kExpressionModifiers = {
-  'admiration': 'admiring gaze, sparkling wide eyes, soft impressed smile',
-  'amusement': 'amused grin, crinkled eyes, holding back laughter',
-  'anger': 'furious glare, furrowed brow, clenched jaw, bared teeth',
-  'annoyance': 'annoyed scowl, narrowed eyes, pursed lips, twitching eyebrow',
-  'approval': 'approving warm smile, relaxed eyes, satisfied nod',
-  'caring': 'gentle caring smile, soft warm eyes, tender expression',
-  'confusion': 'puzzled expression, furrowed brow, head tilted, questioning look',
-  'curiosity': 'curious look, one raised eyebrow, bright inquisitive eyes, slight head tilt',
-  'desire': 'sultry half-lidded eyes, parted lips, flushed cheeks, longing gaze',
-  'disappointment': 'disappointed frown, downcast eyes, deflated expression',
-  'disapproval': 'disapproving frown, narrowed judging eyes, tight pressed lips',
-  'disgust': 'disgusted grimace, wrinkled nose, curled upper lip, recoiling',
-  'embarrassment': 'deep blush, averted eyes, bashful cringing smile',
-  'excitement': 'excited wide grin, shining eager eyes, raised eyebrows',
-  'fear': 'terrified wide eyes, pale face, trembling parted lips',
-  'gratitude': 'grateful heartfelt smile, moved teary eyes, hand over heart',
-  'grief': 'anguished expression, tears streaming down face, devastated',
-  'joy': 'beaming smile, bright happy eyes, joyful expression',
-  'love': 'loving adoring gaze, soft dreamy smile, gentle blush, warm eyes',
-  'nervousness': 'nervous strained smile, darting anxious eyes, biting lip, sweat on brow',
-  'optimism': 'hopeful bright smile, uplifted gaze, confident warm expression',
-  'pride': 'proud smirk, chin raised high, confident gleaming eyes',
-  'realization': 'eyes widening in sudden understanding, parted lips, dawning look',
-  'relief': 'relieved exhale, eyes closed softly, relaxed easing smile',
-  'remorse': 'remorseful downcast eyes, sorrowful frown, guilty lowered head',
-  'sadness': 'sad teary eyes, downturned mouth, melancholy expression',
-  'surprise': 'shocked wide eyes, raised eyebrows, mouth open in surprise',
-  'neutral': 'calm neutral expression, relaxed face',
+  'admiration': 'admiring gaze, sparkling wide eyes, raised inner brows, softly parted lips, impressed look',
+  'amusement': 'amused lopsided smile, one raised eyebrow, crinkled sparkling eyes, holding back a laugh',
+  'anger': 'furious scowl, brows slammed down and drawn together, glaring eyes, clenched jaw, mouth pressed into a hard line',
+  'annoyance': 'irritated scowl, narrowed eyes, flat pressed lips, twitching raised eyebrow',
+  'approval': 'approving warm closed-lip smile, relaxed brows, steady confident gaze, slight nod',
+  'caring': 'tender gentle smile, soft warm eyes, inner eyebrows tilted up in sympathy, head tilted slightly',
+  'confusion': 'puzzled frown, one eyebrow raised and one lowered, uneven squinting eyes, mouth slightly open, head tilted',
+  'curiosity': 'intrigued bright eyes, both eyebrows lifted, small parted mouth, attentive leaning-in look',
+  'desire': 'sultry half-lidded eyes, softly parted lips, flushed cheeks, smoldering longing gaze',
+  'disappointment': 'deflated expression, mouth corners turned down, drooping eyelids, lowered sighing gaze',
+  'disapproval': 'stern disapproving frown, hard narrowed eyes, tightly pressed lips, chin drawn back',
+  'disgust': 'revolted grimace, wrinkled nose, curled upper lip, squinted eyes, head pulled back',
+  'embarrassment': 'deep blush across cheeks, averted downcast eyes, awkward sheepish small smile, hunched shoulders',
+  'excitement': 'thrilled open smile, wide shining eyes, eyebrows raised high, energized expression',
+  'fear': 'terrified expression, wide white-rimmed eyes, brows raised and pulled together, mouth open in a silent gasp, pale face',
+  'gratitude': 'moved grateful soft smile, glistening warm eyes, relaxed brows, touched expression',
+  'grief': 'devastated anguish, tears streaming down cheeks, inner brows knotted upward, trembling downturned mouth',
+  'joy': 'happy warm smile, raised rounded cheeks, sparkling crescent-moon eyes, relaxed brows, radiant glow',
+  'love': 'adoring soft gaze, dreamy gentle half-smile, faint blush, tender sparkling eyes',
+  'nervousness': 'anxious tight-lipped smile, darting worried eyes, tense raised brows, biting lower lip, bead of sweat',
+  'optimism': 'hopeful bright expression, gentle upturned smile, lifted shining gaze, open relaxed face',
+  'pride': 'confident smirk, chin lifted high, half-lidded self-assured eyes, satisfied expression',
+  'realization': 'sudden dawning look, eyes snapping wide open, eyebrows shooting up, lips parted in a small oh',
+  'relief': 'relieved soft exhale, eyes gently closed, easing unburdened smile, relaxed released shoulders',
+  'remorse': 'guilty downcast eyes, sorrowful frown, head bowed low, brows pinched together',
+  'sadness': 'sad glistening teary eyes, downturned mouth, inner brows raised and pinched, subdued heavy expression',
+  'surprise': 'startled expression, eyebrows shot up high, round wide eyes, mouth open in a small o shape',
+  'neutral': 'calm neutral expression, relaxed face, level brows, closed relaxed mouth, steady even gaze',
+};
+
+/// Per-emotion counter-cues appended to the NEGATIVE prompt (keys ==
+/// [kFullExpressionSet]). A free rider: distilled/CFG-1 models ignore
+/// negatives entirely (no unconditional branch to steer away from), so this
+/// costs them nothing — but classic SD1.5/SDXL at CFG 5–7 get real pressure
+/// away from the base portrait's anchored expression (a smiling avatar
+/// fights every sad/angry slot) and away from known artifacts (the joy
+/// horror-grin: oversized teeth and gums at high denoise).
+const Map<String, String> kExpressionNegatives = {
+  'admiration': 'frown, scowl, tears',
+  'amusement': 'frown, scowl, tears, gaping mouth',
+  'anger': 'smile, smiling, grin, laughing',
+  'annoyance': 'smile, smiling, grin, laughing',
+  'approval': 'frown, scowl, tears',
+  'caring': 'frown, scowl, anger',
+  'confusion': 'smile, grin, confident gaze',
+  'curiosity': 'frown, scowl, bored expression',
+  'desire': 'frown, scowl, tears',
+  'disappointment': 'smile, grin, laughing',
+  'disapproval': 'smile, grin, laughing',
+  'disgust': 'smile, grin, serene expression',
+  'embarrassment': 'confident gaze, scowl, tears',
+  'excitement': 'frown, scowl, tears, bored expression',
+  'fear': 'smile, smiling, grin, laughing, calm expression',
+  'gratitude': 'frown, scowl, anger',
+  'grief': 'smile, smiling, grin, laughing',
+  'joy': 'frown, scowl, tears, crying, oversized teeth, gums, gaping mouth',
+  'love': 'frown, scowl, disgust',
+  'nervousness': 'confident gaze, broad smile, laughing',
+  'optimism': 'frown, scowl, tears',
+  'pride': 'downcast eyes, frown, timid expression',
+  'realization': 'bored expression, closed eyes, frown',
+  'relief': 'tension, gritted teeth, frown, wide eyes',
+  'remorse': 'smile, grin, confident gaze',
+  'sadness': 'smile, smiling, grin, laughing',
+  'surprise': 'bored expression, closed mouth, neutral expression',
+  'neutral': 'exaggerated expression, wide grin, crying, scowl, open mouth',
 };
 
 /// Framing suffix appended once to the base prompt by the pack launcher.

@@ -333,10 +333,15 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
     final session = ExpressionPackSession(
       emotions: fullSet ? kFullExpressionSet : kCuratedExpressionSet,
       basePrompt: '${widget.basePrompt}, $kExpressionFraming',
-      generate: ({required String prompt, required int seed}) =>
-          widget.imageGen.generateImage(
+      negativePrompt: widget.negativePrompt,
+      generate:
+          ({
+            required String prompt,
+            required String negativePrompt,
+            required int seed,
+          }) => widget.imageGen.generateImage(
             prompt: prompt,
-            negativePrompt: widget.negativePrompt,
+            negativePrompt: negativePrompt,
             size: '${widget.baseWidth}x${widget.baseHeight}',
             referenceImage: widget.baseImage,
             seed: seed,

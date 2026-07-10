@@ -68,4 +68,16 @@ void main() {
       expect(kExpressionFraming.trim(), isNotEmpty);
     });
   });
+
+  test('kExpressionNegatives covers the full set with non-empty cues', () {
+    expect(
+      kExpressionNegatives.keys.toSet(),
+      kFullExpressionSet.toSet(),
+      reason: 'every pack emotion needs its counter-cues (even if a backend '
+          'ignores negatives)',
+    );
+    for (final entry in kExpressionNegatives.entries) {
+      expect(entry.value.trim(), isNotEmpty, reason: entry.key);
+    }
+  });
 }

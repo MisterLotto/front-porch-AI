@@ -27,9 +27,16 @@ import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
 /// Generates one image per emotion for an expression pack. The generator
 /// closure is injected so this class stays pure and unit-testable; the UI
 /// wires it to ImageGenService.generateImage with the fixed base image,
-/// negative prompt, 768x768 size, and denoise captured in the closure.
+/// size, and denoise captured in the closure. The negative prompt is passed
+/// per call because each emotion appends its own counter-cues (see
+/// kExpressionNegatives — a no-op on CFG-1 models, real steering on classic
+/// CFG backends).
 typedef PackSlotGenerator =
-    Future<Uint8List?> Function({required String prompt, required int seed});
+    Future<Uint8List?> Function({
+      required String prompt,
+      required String negativePrompt,
+      required int seed,
+    });
 
 /// Lifecycle of one emotion slot in an expression pack grid.
 enum ExpressionSlotState { pending, generating, done, failed }
@@ -88,9 +95,11 @@ class ExpressionPackSession extends ChangeNotifier {
   ExpressionPackSession({
     required List<String> emotions,
     required String basePrompt,
+    required String negativePrompt,
     required PackSlotGenerator generate,
     int? seed, // fixed shared seed; default = random positive int
   }) : _basePrompt = basePrompt,
+       _negativePrompt = negativePrompt,
        _generate = generate,
        // Must be a fixed POSITIVE value: ComfyUI randomizes -1 client-side and
        // A1111 server-side, so sharing a seed across slots requires pinning it.
@@ -98,6 +107,7 @@ class ExpressionPackSession extends ChangeNotifier {
        _slots = [for (final e in emotions) ExpressionSlot(e)];
 
   final String _basePrompt;
+  final String _negativePrompt;
   final PackSlotGenerator _generate;
   final int _seed;
   final List<ExpressionSlot> _slots;
@@ -191,8 +201,14 @@ class ExpressionPackSession extends ChangeNotifier {
       final modifier = kExpressionModifiers[slot.emotion] ?? slot.emotion;
       // Emotion first: front tokens get the most conditioning weight, and at
       // turbo-model CFG (~1) a tail phrase was too weak to change the face.
+      final counterCues = kExpressionNegatives[slot.emotion] ?? '';
       result = await _generate(
         prompt: '$modifier, $_basePrompt',
+        negativePrompt: counterCues.isEmpty
+            ? _negativePrompt
+            : (_negativePrompt.trim().isEmpty
+                  ? counterCues
+                  : '$_negativePrompt, $counterCues'),
         seed: slotSeed,
       );
       if (result == null) error = 'Generation returned no image.';

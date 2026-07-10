@@ -14,18 +14,22 @@ void main() {
         'and emotion-first prompts', () async {
       final seeds = <int>[];
       final prompts = <String>[];
+      final negatives = <String>[];
       Future<Uint8List?> gen({
         required String prompt,
+        required String negativePrompt,
         required int seed,
       }) async {
         seeds.add(seed);
         prompts.add(prompt);
+        negatives.add(negativePrompt);
         return Uint8List.fromList([seeds.length]);
       }
 
       final session = ExpressionPackSession(
         emotions: const ['joy', 'anger', 'neutral'],
         basePrompt: 'a portrait of luna',
+        negativePrompt: 'np',
         generate: gen,
       );
 
@@ -55,6 +59,10 @@ void main() {
       // Emotion leads the prompt: front tokens carry the most weight.
       expect(prompts[0], '${kExpressionModifiers['joy']}, a portrait of luna');
       expect(prompts[2], startsWith(kExpressionModifiers['neutral']!));
+      // Per-emotion counter-cues ride the negative prompt (free rider: CFG-1
+      // models ignore negatives; classic CFG backends get real steering).
+      expect(negatives[0], 'np, ${kExpressionNegatives['joy']}');
+      expect(negatives[1], 'np, ${kExpressionNegatives['anger']}');
     });
 
     test('explicit constructor seed is honored', () async {
@@ -62,8 +70,9 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy'],
         basePrompt: 'p',
+        negativePrompt: 'np',
         seed: 42,
-        generate: ({required String prompt, required int seed}) async {
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
           seeds.add(seed);
           return Uint8List.fromList([1]);
         },
@@ -77,7 +86,8 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy'],
         basePrompt: 'p',
-        generate: ({required String prompt, required int seed}) async => null,
+        negativePrompt: 'np',
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async => null,
       );
       await session.run();
       final slot = session.slots.single;
@@ -90,6 +100,7 @@ void main() {
     test('throwing generator → failed, run continues to later slots', () async {
       Future<Uint8List?> gen({
         required String prompt,
+        required String negativePrompt,
         required int seed,
       }) async {
         if (prompt.contains(kExpressionModifiers['anger']!)) {
@@ -101,6 +112,7 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy', 'anger', 'neutral'],
         basePrompt: 'p',
+        negativePrompt: 'np',
         generate: gen,
       );
       await session.run();
@@ -116,6 +128,7 @@ void main() {
       var calls = 0;
       Future<Uint8List?> gen({
         required String prompt,
+        required String negativePrompt,
         required int seed,
       }) async {
         calls++;
@@ -126,6 +139,7 @@ void main() {
       session = ExpressionPackSession(
         emotions: const ['joy', 'anger', 'fear', 'sadness'],
         basePrompt: 'p',
+        negativePrompt: 'np',
         generate: gen,
       );
       await session.run();
@@ -147,6 +161,7 @@ void main() {
       var counter = 0;
       Future<Uint8List?> gen({
         required String prompt,
+        required String negativePrompt,
         required int seed,
       }) async {
         seeds.add(seed);
@@ -157,6 +172,7 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy', 'anger'],
         basePrompt: 'p',
+        negativePrompt: 'np',
         generate: gen,
       );
       await session.run();
@@ -181,7 +197,8 @@ void main() {
         final session = ExpressionPackSession(
           emotions: const ['joy', 'anger'],
           basePrompt: 'p',
-          generate: ({required String prompt, required int seed}) async {
+          negativePrompt: 'np',
+          generate: ({required String prompt, required String negativePrompt, required int seed}) async {
             calls++;
             // Only the reroll (3rd call) blocks; the initial run flows through.
             if (calls > 2) await gate.future;
@@ -206,7 +223,8 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy'],
         basePrompt: 'p',
-        generate: ({required String prompt, required int seed}) async {
+        negativePrompt: 'np',
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
           if (failNext) {
             failNext = false;
             return null;
@@ -228,7 +246,8 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy', 'anger'],
         basePrompt: 'p',
-        generate: ({required String prompt, required int seed}) async {
+        negativePrompt: 'np',
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
           calls++;
           await gate.future;
           return Uint8List.fromList([calls]);
@@ -259,7 +278,8 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy', 'anger'],
         basePrompt: 'p',
-        generate: ({required String prompt, required int seed}) async =>
+        negativePrompt: 'np',
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async =>
             Uint8List.fromList([1]),
       );
       await session.run();
@@ -279,7 +299,8 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['joy'],
         basePrompt: 'p',
-        generate: ({required String prompt, required int seed}) async {
+        negativePrompt: 'np',
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async {
           await gate.future;
           return Uint8List.fromList([1]);
         },

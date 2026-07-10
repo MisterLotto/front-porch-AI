@@ -273,7 +273,8 @@ void main() {
       final session = ExpressionPackSession(
         emotions: const ['happy'],
         basePrompt: 'portrait',
-        generate: ({required String prompt, required int seed}) async =>
+        negativePrompt: 'np',
+        generate: ({required String prompt, required String negativePrompt, required int seed}) async =>
             Uint8List.fromList([9]),
       );
       await session.run();
