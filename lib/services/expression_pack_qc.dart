@@ -160,26 +160,3 @@ PackQcVerdict? _parseVerdict(String reply) {
     note: flaw.toLowerCase() == 'none' ? '' : flaw,
   );
 }
-
-/// Vision describe of the base portrait for prompt grounding: asks the model
-/// for comma-separated physical-appearance tags (hair, eyes, skin, notable
-/// features, clothing — no names, no emotion words). Returns the trimmed
-/// tags, truncated at a tag boundary when the model rambles past ~600 chars,
-/// or null when the reply is empty or the eval failed.
-Future<String?> describePortrait({
-  required String imageB64,
-  required VisionEvalFn fire,
-}) async {
-  const prompt =
-      'Describe the physical appearance of the character in this image as a '
-      'comma-separated list of short visual tags: hair color and style, eye '
-      'color, skin tone, notable features, clothing. No names, no emotion '
-      'words, no sentences — reply with ONLY the comma-separated tags.';
-  final reply = await fire(prompt: prompt, imagesB64: [imageB64]);
-  var text = reply?.trim() ?? '';
-  if (text.length > 600) {
-    final cut = text.lastIndexOf(',', 600);
-    text = text.substring(0, cut > 0 ? cut : 600).trim();
-  }
-  return text.isEmpty ? null : text;
-}

@@ -324,34 +324,15 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
     unawaited(qc.run());
   }
 
-  /// Setup "Describe portrait": vision-describe the base portrait so the
-  /// description can ground every slot's prompt. Returns the description,
-  /// '' when the no-vision dialog was already shown (the setup form stays
-  /// quiet), or null when the call itself failed (the form shows its inline
-  /// error).
-  Future<String?> _describeBasePortrait() async {
-    final fire = await _resolveVisionFire();
-    if (fire == null) return '';
-    final description = await describePortrait(imageB64: _baseB64, fire: fire);
-    final trimmed = description?.trim() ?? '';
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
   void _start({
     required bool fullSet,
     required double denoise,
     required bool replaceExisting,
-    String? appearanceDetail,
   }) {
     _replaceExisting = replaceExisting;
-    // Portrait grounding: the vision model's description of the base portrait
-    // rides between the user's prompt and the framing tail.
-    final grounded = (appearanceDetail == null || appearanceDetail.isEmpty)
-        ? widget.basePrompt
-        : '${widget.basePrompt}, $appearanceDetail';
     final session = ExpressionPackSession(
       emotions: fullSet ? kFullExpressionSet : kCuratedExpressionSet,
-      basePrompt: '$grounded, $kExpressionFraming',
+      basePrompt: '${widget.basePrompt}, $kExpressionFraming',
       generate: ({required String prompt, required int seed}) =>
           widget.imageGen.generateImage(
             prompt: prompt,
@@ -443,7 +424,6 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
                         characterName: widget.characterName,
                         onCancel: () => Navigator.of(context).pop(false),
                         onStart: _start,
-                        onDescribePortrait: _describeBasePortrait,
                       ),
                     )
                   : ExpressionPackGrid(

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Tests for ExpressionPackQc (advisory Vision QC over a finished expression
-// pack) and describePortrait — both driven through a fake VisionEvalFn so no
-// LLM or HTTP is involved. Also covers the reroll-reset contract on
-// ExpressionPackSession: a regenerated slot must drop its stale verdict.
+// pack), driven through a fake VisionEvalFn so no LLM or HTTP is involved.
+// Also covers the reroll-reset contract on ExpressionPackSession: a
+// regenerated slot must drop its stale verdict.
 
 import 'dart:async';
 import 'dart:convert';
@@ -259,36 +259,4 @@ void main() {
     });
   });
 
-  group('describePortrait', () {
-    test('happy path returns the trimmed tags', () async {
-      final fake = FakeEval(['  red hair, green eyes, freckles  ']);
-      final tags = await describePortrait(imageB64: base, fire: fake.call);
-
-      expect(tags, 'red hair, green eyes, freckles');
-      expect(fake.images.single, [base]);
-      expect(fake.prompts.single, contains('comma-separated'));
-    });
-
-    test('empty or null replies return null', () async {
-      expect(
-        await describePortrait(imageB64: base, fire: FakeEval(['   ']).call),
-        isNull,
-      );
-      expect(
-        await describePortrait(imageB64: base, fire: FakeEval([null]).call),
-        isNull,
-      );
-    });
-
-    test('overlong replies are truncated at a tag boundary', () async {
-      final rambling = List.generate(120, (i) => 'tag number $i').join(', ');
-      final fake = FakeEval([rambling]);
-      final tags = await describePortrait(imageB64: base, fire: fake.call);
-
-      expect(tags, isNotNull);
-      expect(tags!.length, lessThanOrEqualTo(600));
-      expect(tags.endsWith(','), isFalse);
-      expect(rambling.startsWith(tags), isTrue);
-    });
-  });
 }
