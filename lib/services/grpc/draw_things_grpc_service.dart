@@ -171,11 +171,17 @@ class DrawThingsGrpcService {
       // This mirrors the improved logic in dt_grpc_client.py.
       // We use broad category patterns so users don't have to manually
       // blacklist every VAE, upscaler (4x_ultrasharp, etc.), or preprocessor.
-      final skip = [
-        // Text encoders / CLIP / T5 / LLM encoders
+      // Text encoders / CLIP / T5 / LLM sidecars — these skip a file ONLY
+      // when it lacks an image-model marker: modern checkpoints carry the
+      // LLM family name AND 'image' (qwen_image_*.ckpt, z_image_*,
+      // ernie_image_*), while encoder sidecars never do (qwen_2.5_vl_*,
+      // ministral_3_3b_*, t5_xxl_*). A blanket 'qwen' ban used to hide the
+      // Qwen-Image checkpoint itself.
+      const encoderKeywords = [
         'clip', 't5', 'text_encoder', 'encoder', 'gemma', 'llama',
-        'mistral', 'qwen', 'phi', 'chroma', 'ltx', 'vicuna', 'alpaca',
-
+        'mistral', 'ministral', 'qwen', 'phi', 'vicuna', 'alpaca',
+      ];
+      const skip = [
         // VAEs
         'vae',
 
@@ -190,19 +196,25 @@ class DrawThingsGrpcService {
         'normal', 'lineart', 'softedge', 'seg', 'inpaint', 'ip2p',
         'shuffle', 'mlsd', 'tile', 'blur', 'hed', 'parsenet',
 
-        // Upscalers (catches most 4x_*, realesrgan, ultrasharp variants etc.)
+        // Upscalers / face restorers (4x_*, realesrgan, ultrasharp etc.)
         '4x_', '2x_', 'realesrgan', 'esrgan', 'ultrasharp', 'swinir',
-        'hat_', 'real_esrgan', 'upscaler',
+        'hat_', 'real_esrgan', 'upscaler', 'restoreformer', 'gfpgan',
+        'codeformer',
 
         // Video / I2V / motion models
-        'i2v', 'video', 'wan_', 'svd', 'motion',
+        'i2v', 'video', 'wan_', 'svd', 'motion', 'ltx',
       ];
       // Trust the Python CLI's skip list primarily; include everything that is
       // not a known sidecar type so the dropdown populates even when Draw
       // Things reports bare names, .pth files, or paths.
       final models = raw.where((f) {
         final lower = f.toLowerCase();
-        return !skip.any((k) => lower.contains(k));
+        if (skip.any((k) => lower.contains(k))) return false;
+        if (!lower.contains('image') &&
+            encoderKeywords.any((k) => lower.contains(k))) {
+          return false;
+        }
+        return true;
       }).toList();
 
       debugPrint(
