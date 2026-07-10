@@ -98,7 +98,6 @@ extension ChatServiceImages on ChatService {
               : null,
         );
       },
-      setChatBackground: (path) => _storageService.setChatBackground(path),
       notifyRunStateChanged: notifyListeners,
     );
   }
@@ -137,22 +136,9 @@ extension ChatServiceImages on ChatService {
         (_groupCharacters.isNotEmpty ? _groupCharacters.first : null);
   }
 
-  /// Negative prompt for a `/image` generation: the user's configured default,
-  /// plus the strong no-people negative for backgrounds (keep in sync with the
-  /// Image Studio's chatBackground seeding in image_studio.dart initState).
-  String _imageCommandNegative(ImageCommandRequest request) {
-    final base = _storageService.imageGenNegativePrompt.trim();
-    if (request.kind != ImageCommandKind.background) return base;
-    const strongNoPeople =
-        'no people, no characters, no figures, no humans, no silhouettes, '
-        'empty of any living subjects';
-    if (base.isEmpty) return strongNoPeople;
-    final lower = base.toLowerCase();
-    if (lower.contains('no people') || lower.contains('no characters')) {
-      return base;
-    }
-    return '$base, $strongNoPeople';
-  }
+  /// Negative prompt for a `/image` generation: the user's configured default.
+  String _imageCommandNegative(ImageCommandRequest request) =>
+      _storageService.imageGenNegativePrompt.trim();
 
   /// Assemble the live chat context and craft the image prompt through
   /// `ImageGenService.generateSmartPrompt` (LLM when ready, static fallback
@@ -161,12 +147,12 @@ extension ChatServiceImages on ChatService {
     final igs = _imageGenService;
     if (igs == null) return null;
 
+    // scene → customPrompt with no typed text: the builder distills the current
+    // scene from the recent narrative (the former "Visualize Scene" mode). custom
+    // → customPrompt with the user's free description. raw never reaches craft.
     final mode = switch (request.kind) {
-      ImageCommandKind.scene => ImageGenMode.visualizeScene,
       ImageCommandKind.me => ImageGenMode.userAvatar,
       ImageCommandKind.character => ImageGenMode.characterPortrait,
-      ImageCommandKind.background => ImageGenMode.chatBackground,
-      // raw never reaches craft; custom = LLM-crafted free description.
       _ => ImageGenMode.customPrompt,
     };
     final character = _resolveImageCommandCharacter(request);
@@ -192,6 +178,13 @@ extension ChatServiceImages on ChatService {
     final llm = testLlmServiceOverride ?? _llmProvider?.activeService;
     final isGroupNonObserver = isGroupMode && !observerMode;
 
+    // `/image last` distills just the single most recent turn; `/image [scene]`
+    // distills the recent run (the builder caps how many it actually uses).
+    final effectiveRecent =
+        (request.kind == ImageCommandKind.scene && request.text == 'last')
+        ? (lastMessage != null ? <String>[lastMessage] : const <String>[])
+        : recentMessages;
+
     return igs.generateSmartPrompt(
       mode: mode,
       style: _storageService.imageGenSettings.imageGenStyle,
@@ -206,12 +199,11 @@ extension ChatServiceImages on ChatService {
       worldInfo: worldInfo,
       personaName: userName,
       personaText: _userPersonaService.persona.persona,
-      recentMessages: recentMessages,
+      recentMessages: effectiveRecent,
       currentExpression: currentExpressionLabel,
       timeOfDay: _timeService.timeOfDay,
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: isGroupNonObserver ? character?.name : null,
-      visualizeNumMessages: request.text == 'last' ? 1 : 5,
     );
   }
 }

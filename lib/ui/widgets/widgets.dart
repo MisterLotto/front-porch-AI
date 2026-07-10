@@ -52,3 +52,4 @@ export 'needs_bar.dart';
 export 'fixation_chip.dart';
 export 'group_avatar_montage.dart';
 export 'group_member_card.dart';
+export 'vision_projector_field.dart';

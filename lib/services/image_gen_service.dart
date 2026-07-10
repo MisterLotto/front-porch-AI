@@ -30,12 +30,23 @@ import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 
-/// Available image generation modes.
+/// Available image generation subjects.
+///
+/// The Image Studio and the `/image` slash command share these:
+/// - **customPrompt**: a freeform prompt. When the prompt text is empty but
+///   recent chat narrative is supplied, the builder distills the *current
+///   scene* from it (this is what the bare `/image` / `/image scene` command
+///   uses — the former standalone "Visualize Scene" mode was folded in here).
+/// - **characterPortrait**: a portrait built from a character's appearance.
+/// - **userAvatar**: a portrait built from the user persona's appearance.
+///
+/// (The old `visualizeScene` and `chatBackground` modes were removed — the
+/// former is now `customPrompt` with scene context, the latter was retired
+/// because generating a figure-free chat background confused users. Backgrounds
+/// are still chosen from the Background settings dialog.)
 enum ImageGenMode {
   customPrompt,
-  visualizeScene,
   characterPortrait,
-  chatBackground,
   userAvatar,
 }
 
@@ -188,12 +199,12 @@ class ImageGenService extends ChangeNotifier {
   }
 
   // Thin delegation hook for prompt construction.
-  // Full ownership of ImageGenContext mapping semantics, mode contracts (visualizeScene N-slider
-  // now covers the former fromLastMessage "Message Illustration" distillation; no-personality portraits,
-  // no-people backgrounds, etc.), style enforcement, LLM smart path, and static fallbacks lives in
-  // ImagePromptBuilder.
+  // Full ownership of ImageGenContext mapping semantics, mode contracts
+  // (no-personality portraits, and customPrompt's scene-distillation fallback
+  // when the prompt is empty but recent chat narrative is present), style
+  // enforcement, LLM smart path, and static fallbacks lives in ImagePromptBuilder.
   // Keep prompt blocks in sync: changes to ctx construction here must be mirrored in
-  // builder tests (roundtrips), any direct ImageGenContext sites, and the builder's own
+  // any direct ImageGenContext sites and the builder's own
   // _buildStatic / buildPrompt / _generateSmartWith. The builder is stateless/prompt-only
   // (no reset calls needed). ImageGenService owns no prompt scalars that require zeroing
   // on chat startNew / setActive / load (per-call snapshot from _storage is authoritative).
@@ -228,9 +239,17 @@ class ImageGenService extends ChangeNotifier {
     String? negativePrompt,
     String? size,
     Uint8List?
-    referenceImage, // for img2img / reference conditioning (wired for Draw Things; ignored by others for now)
+    referenceImage, // img2img reference: honored by all three local backends
+    // (Draw Things, A1111, ComfyUI) at imageGenDenoise strength; remote APIs
+    // have no img2img endpoint here, so they ignore it.
     String? model,
     bool isPortrait = false,
+    // Per-call overrides for the stored seed/denoise settings; used by batch
+    // flows (expression packs) that need a shared fixed seed and fixed denoise
+    // across every image without touching the user's persisted settings.
+    // Remote APIs ignore them (no seed/denoise support on those endpoints).
+    int? seed,
+    double? denoise,
   }) async {
     _isGenerating = true;
     _statusMessage = 'Generating image...';
@@ -288,12 +307,17 @@ class ImageGenService extends ChangeNotifier {
             final (width, height) = _parseSize(imageSize);
             final steps = _storage.imageGenSettings.imageGenSteps;
             final cfgScale = _storage.imageGenSettings.imageGenCfgScale;
-            final seed = _storage.imageGenSettings.imageGenSeed;
+            final effectiveSeed =
+                seed ?? _storage.imageGenSettings.imageGenSeed;
 
             // DT-native advanced knobs (shared sliders still used for steps/cfg/seed/size)
             final sampler = _storage.imageGenSettings.drawThingsSampler;
             final shift = _storage.imageGenSettings.drawThingsShift;
-            final strength = _storage.imageGenSettings.drawThingsStrength;
+            // Unified img2img denoise. Draw Things only consults this when a
+            // reference image is present (pure txt2img ignores it), so it is
+            // always safe to pass. Replaces the retired drawThingsStrength knob.
+            final strength =
+                denoise ?? _storage.imageGenSettings.imageGenDenoise;
             final seedMode = _storage.drawThingsSeedMode;
             final teaCache = _storage.drawThingsTeaCache;
             final cfgZeroStar = _storage.drawThingsCfgZeroStar;
@@ -311,7 +335,7 @@ class ImageGenService extends ChangeNotifier {
               height: height,
               steps: steps,
               cfgScale: cfgScale,
-              seed: seed,
+              seed: effectiveSeed,
               strength: strength,
               shift: shift,
               sampler: sampler,
@@ -364,7 +388,10 @@ class ImageGenService extends ChangeNotifier {
             steps: _storage.imageGenSettings.imageGenSteps,
             cfgScale: _storage.imageGenSettings.imageGenCfgScale,
             samplerName: _storage.imageGenSettings.imageGenSampler,
-            seed: _storage.imageGenSettings.imageGenSeed,
+            scheduler: _storage.imageGenSettings.imageGenScheduler,
+            seed: seed ?? _storage.imageGenSettings.imageGenSeed,
+            referenceImage: referenceImage,
+            denoise: denoise ?? _storage.imageGenSettings.imageGenDenoise,
           );
         }
       } else if (backend == ImageGenBackend.comfyUi) {
@@ -380,6 +407,14 @@ class ImageGenService extends ChangeNotifier {
           // A1111-style name; normalize it against what this server offers.
           final available = await comfy.fetchSamplers();
           final storedSampler = _storage.imageGenSettings.imageGenSampler;
+          // An explicit user scheduler wins; 'Automatic' derives it from the
+          // sampler (Karras-flavored names → karras, else normal) exactly as
+          // before, so the default path is unchanged.
+          final storedScheduler = _storage.imageGenSettings.imageGenScheduler;
+          final scheduler = (storedScheduler.isNotEmpty &&
+                  storedScheduler != 'Automatic')
+              ? storedScheduler
+              : ComfyUiService.schedulerFor(storedSampler);
           imageBytes = await comfy.generateImage(
             prompt: prompt,
             negativePrompt: negativePrompt,
@@ -388,14 +423,16 @@ class ImageGenService extends ChangeNotifier {
             height: height,
             steps: _storage.imageGenSettings.imageGenSteps,
             cfgScale: _storage.imageGenSettings.imageGenCfgScale,
-            seed: _storage.imageGenSettings.imageGenSeed,
+            seed: seed ?? _storage.imageGenSettings.imageGenSeed,
             samplerName: ComfyUiService.normalizeSampler(
               storedSampler,
               available,
             ),
-            scheduler: ComfyUiService.schedulerFor(storedSampler),
+            scheduler: scheduler,
             loraName: _storage.imageGenSettings.imageGenLora,
             loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
+            referenceImageBytes: referenceImage,
+            denoise: denoise ?? _storage.imageGenSettings.imageGenDenoise,
             onProgress: _updateGenProgress,
           );
         } catch (e) {
@@ -735,28 +772,18 @@ class ImageGenService extends ChangeNotifier {
   /// Use the active LLM to craft a concise, effective image prompt from raw context.
   ///
   /// Thin delegation to ImagePromptBuilder — see there for mode semantics and style rules
-  /// (visualizeScene N-slider now covers former fromLastMessage/Message Illustration; portrait = appearance+expression only, background
-  /// = environment only with strong NO PEOPLE, visualize = current scene distillation, style
-  /// enforcement for both paradigms, etc.).
-  /// Old inline implementation (switch cases, raw dumps, personality injection, "Depict the
-  /// following scene", fragile substring style) removed in Stage 2.
+  /// (portrait = appearance + expression only; customPrompt = the user's text verbatim, or,
+  /// when that text is empty, a distilled visualization of the current scene from the
+  /// supplied recent chat narrative; style enforcement for both paradigms, etc.).
   /// Keep prompt blocks in sync with ImagePromptBuilder (and ctx construction in call sites
-  /// like chat_page._showImageGenDialog and web chargen paths). Builder is stateless/prompt-only.
+  /// like chat_page._showImageGenDialog and the /image slash command). Builder is stateless/prompt-only.
   ///
-  /// NOTE on duplication fix (Stage 2 review): the ternary + 15+ field bag construction that
-  /// used to be repeated in happy path, ultimate fallback, and buildPrompt is now in the
-  /// tiny pure helper _buildPromptContext below. This is *thin coordination only* (data bag
-  /// assembly + the custom vs lastMessage rule from the original thins). It contains ZERO
-  /// prompt logic, distillation, style, or LLM — all of that stays in ImagePromptBuilder.
-  /// This does not violate the "0 new god private _ methods for prompt logic" rule.
-  /// MUST KEEP IN SYNC with roundtrips (especially the new customPrompt ternary test) and
-  /// future call-site enrichment (currentExpression etc.).
+  /// The flat params are assembled into a typed [ImageGenContext] by the tiny pure helper
+  /// [_buildPromptContext] (data-bag assembly + the custom-vs-lastMessage rule only — zero
+  /// prompt/distillation/style/LLM logic, which all lives in ImagePromptBuilder).
   ///
-  /// Stage 4 user spec continuation (no boilerplate pregen in box; visualize slider N + simple `<think>` strip on pre-generated msgs;
-  /// user box text + User persona + char visual info (no personality) + style sent to LLM on Craft to produce the visual prompt;
-  /// 6 types now buttons inside studio, launch neutral): added userInstruction (box text before craft), visualizeNumMessages (slider).
-  /// Forwarded to thin _build + ctx + builder. Keep all thins + ctx ctor + studio craft + launcher collection + builder assembly in sync.
-  /// (0 new private _ methods — only extended existing _buildPromptContext thin; void _ count stable at baseline.)
+  /// [userInstruction] is free text the user typed in the studio box before Craft; it is
+  /// forwarded to the LLM as extra guidance so it "parses into the image prompt".
   Future<String> generateSmartPrompt({
     required ImageGenMode mode,
     required String style,
@@ -779,16 +806,15 @@ class ImageGenService extends ChangeNotifier {
     String? lightingHint,
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
-    // User spec: text user typed in studio box pre-Craft (passed to LLM as instr to "parse into" image prompt).
-    // visualize N: slider value (only meaningful for visualizeScene); messages stripped simply since already generated.
+    // Text the user typed in the studio box pre-Craft (passed to the LLM as an
+    // instruction to "parse into" the image prompt).
     String? userInstruction,
-    int? visualizeNumMessages,
   }) async {
     final paradigm = _storage.imageGenSettings.imageGenPromptParadigm;
 
     // Build the rich typed context (builder owns all distillation + style rules).
     // Uses the thin coordination helper (see _buildPromptContext) to keep the customPrompt
-    // ternary + future-hint mapping in one place. Expanded for future visual hints...
+    // ternary + hint mapping in one place.
     final ctx = _buildPromptContext(
       mode: mode,
       style: style,
@@ -808,10 +834,7 @@ class ImageGenService extends ChangeNotifier {
       lightingHint: lightingHint,
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: currentSpeakerId,
-      // User spec continuation (no pregen boiler; N slider for visualize + user box text + persona+char visual no pers + style on craft/LLM).
-      // Keep thin + ctx + studio craft call + builder _generateSmartWith parts + chat launcher in sync (both startNew equiv N/A for snapshot).
       userInstruction: userInstruction,
-      visualizeNumMessages: visualizeNumMessages,
     );
 
     // Pass an LLM only if the caller supplied a ready one (builder will use it for smart path).
@@ -846,9 +869,7 @@ class ImageGenService extends ChangeNotifier {
         lightingHint: lightingHint,
         isGroupNonObserver: isGroupNonObserver,
         currentSpeakerId: currentSpeakerId,
-        // User spec (userInstruction for craft box text, visualizeNum for slider N stripped msgs). Sync with happy path above + builder.
         userInstruction: userInstruction,
-        visualizeNumMessages: visualizeNumMessages,
       );
       return effectiveBuilder.buildStaticPrompt(fbCtx);
     }
@@ -862,9 +883,6 @@ class ImageGenService extends ChangeNotifier {
   /// Keep prompt blocks in sync: this thin + generateSmartPrompt's ctx mapping must stay
   /// aligned with builder._buildStatic + _ensureStyleAndCap. No new _private methods were
   /// added for prompt logic (only the pre-existing _promptBuilder late final hook).
-  ///
-  /// User spec (visualize slider, user box as instr to LLM craft, buttons inside studio instead of popup, no boilerplate pregen):
-  /// forward userInstruction + visualizeNumMessages (edit to existing thin only; 0 new _privs).
   String buildPrompt({
     required ImageGenMode mode,
     String? customPrompt,
@@ -885,7 +903,6 @@ class ImageGenService extends ChangeNotifier {
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
     String? userInstruction,
-    int? visualizeNumMessages,
   }) {
     final paradigm = _storage.imageGenSettings.imageGenPromptParadigm;
     final style = _storage.imageGenSettings.imageGenStyle;
@@ -910,9 +927,7 @@ class ImageGenService extends ChangeNotifier {
       lightingHint: lightingHint,
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: currentSpeakerId,
-      // User spec: forward box text + viz N (for static fallback parity on visualize limit + instr if used in static; main is LLM craft path).
       userInstruction: userInstruction,
-      visualizeNumMessages: visualizeNumMessages,
     );
 
     // buildPrompt remains the synchronous "static quality" path (used by fallbacks and any direct callers).
@@ -943,20 +958,12 @@ class ImageGenService extends ChangeNotifier {
   /// This is *thin coordination/wiring only* — no distillation, no style rules, no LLM,
   /// no mode semantics. All of that is in ImagePromptBuilder (the single source of truth).
   /// The only "logic" here is the original customPrompt ? customPrompt : lastMessage
-  /// ternary (plus the paradigm read that was already here).
-  /// MUST KEEP IN SYNC with: builder_test roundtrips (including the customPrompt ternary
-  /// test + new field roundtrips for expression/time/group), any direct ImageGenContext
-  /// construction (chat_page launch, studio init, studio _craft path), studio ctx build,
-  /// and call sites. Keep blocks in sync with ImageGenContext ctor, studio _ctx=,
-  /// chat_page _showImageGenDialog collection, and builder consumption sites.
-  /// (incomplete zeroing of secondary config on resets not applicable here; ctx is per-invocation snapshot).
-  /// Stage 4 complete for richer fields wiring.
-  ///
-  /// User spec (Stage 4 continuation): extended for userInstruction (typed box text pre-Craft, sent to LLM "to parse into the image gen prompt")
-  /// + visualizeNumMessages (slider for N recent msgs to include for visualize; stripped of all `<think>` simply — messages pre-generated).
-  /// No new private _ methods (this is edit to the sole existing thin _buildPromptContext; live grep count of _ methods stable post-edit).
-  /// 1:1/group parity qualified via existing speaker/flag paths (visualize N applies to provided recent snapshot regardless of 1:1 vs group).
-  /// Keep launcher collection (now take(12) for slider headroom), studio (internal mode + slider + craft pass of current box + active), builder assembly in sync.
+  /// ternary (plus the paradigm read that was already here). For customPrompt the ctx's
+  /// lastMessage carries the user's typed text; when that is null/empty the builder
+  /// distills the current scene from [recentMessages] instead.
+  /// Keep in sync with ImageGenContext ctor, studio _ctx, the chat_page launch collection,
+  /// the /image slash-command craft, and builder consumption sites. (ctx is a per-invocation
+  /// snapshot — no reset semantics apply.)
   ImageGenContext _buildPromptContext({
     required ImageGenMode mode,
     required String style,
@@ -976,7 +983,6 @@ class ImageGenService extends ChangeNotifier {
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
     String? userInstruction,
-    int? visualizeNumMessages,
   }) {
     return ImageGenContext(
       mode: mode,
@@ -998,7 +1004,6 @@ class ImageGenService extends ChangeNotifier {
       isGroupNonObserver: isGroupNonObserver,
       currentSpeakerId: currentSpeakerId,
       userInstruction: userInstruction,
-      visualizeNumMessages: visualizeNumMessages,
     );
   }
 
@@ -1140,6 +1145,9 @@ class ImageGenService extends ChangeNotifier {
 
   Future<List<String>> fetchComfySamplers(String baseUrl) =>
       _ensureComfyUi.fetchSamplers();
+
+  Future<List<String>> fetchComfySchedulers(String baseUrl) =>
+      _ensureComfyUi.fetchSchedulers();
 
   /// Fetch LoRAs from an A1111 / Forge / SD.Next server, enriched with
   /// base-model family.
@@ -1353,9 +1361,87 @@ class ImageGenService extends ChangeNotifier {
     }
   }
 
+  /// Fetch available schedulers from an A1111 / Forge / SD.Next server.
+  ///
+  /// Endpoint: GET /sdapi/v1/schedulers
+  /// Returns scheduler names (the `name` field from each entry). Older forks
+  /// (and Draw Things' A1111 shim) predate this endpoint and answer 404 — that
+  /// degrades silently to an empty list, so the UI simply offers only
+  /// 'Automatic' there.
+  Future<List<String>> fetchA1111Schedulers(String baseUrl) async {
+    final client = http.Client();
+    try {
+      final uri = Uri.parse(
+        '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/schedulers',
+      );
+      final response = await client
+          .get(uri)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return [];
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+      return data
+          .map((e) => (e as Map<String, dynamic>)['name']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } catch (e) {
+      debugPrint('ImageGen: fetchA1111Schedulers failed: $e');
+      return [];
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Build the AUTOMATIC1111 generation payload shared by the txt2img and
+  /// img2img endpoints. Pure — unit-tested. When [referenceImageB64] is
+  /// non-null/non-empty the caller must POST to `/sdapi/v1/img2img`, and this
+  /// adds `init_images` + `denoising_strength` ([denoise]); otherwise it is a
+  /// plain txt2img payload for `/sdapi/v1/txt2img`.
+  static Map<String, dynamic> buildA1111Payload({
+    required String prompt,
+    required String negativePrompt,
+    required int width,
+    required int height,
+    required int steps,
+    required double cfgScale,
+    required String samplerName,
+    required String scheduler,
+    required int seed,
+    String? referenceImageB64,
+    double denoise = 0.5,
+  }) {
+    final isImg2Img =
+        referenceImageB64 != null && referenceImageB64.isNotEmpty;
+    return <String, dynamic>{
+      'prompt': prompt,
+      'negative_prompt': negativePrompt,
+      'width': width,
+      'height': height,
+      'steps': steps,
+      'cfg_scale': cfgScale,
+      'sampler_name': samplerName,
+      // Only pin the scheduler when the user picked an explicit one. 'Automatic'
+      // omits the field so A1111 uses its own default (and older forks that
+      // don't know the field never see it). Newer A1111/Forge builds accept
+      // `scheduler` alongside `sampler_name`.
+      if (scheduler.isNotEmpty && scheduler != 'Automatic')
+        'scheduler': scheduler,
+      'seed': seed,
+      'batch_size': 1,
+      if (isImg2Img) 'init_images': [referenceImageB64],
+      if (isImg2Img) 'denoising_strength': denoise,
+      // NOTE: override_settings is intentionally omitted here.
+      // Passing sd_model_checkpoint inside override_settings causes A1111 to
+      // attempt a model reload mid-request, which splits tensors across
+      // cpu and cuda and throws:
+      //   "Expected all tensors to be on the same device"
+      // The model switch is already handled by switchLocalModel() above.
+    };
+  }
+
   /// Generate via AUTOMATIC1111 / Draw Things local server.
   ///
-  /// Endpoint: POST {baseUrl}/sdapi/v1/txt2img
+  /// Endpoint: POST {baseUrl}/sdapi/v1/txt2img — or /sdapi/v1/img2img when a
+  /// [referenceImage] is supplied (init image at [denoise] denoising strength).
   /// Response: { "images": ["<base64>", ...] }
   ///
   /// When [modelCheckpoint] is non-empty and the backend is Draw Things,
@@ -1373,7 +1459,10 @@ class ImageGenService extends ChangeNotifier {
     int steps = 20,
     double cfgScale = 7.0,
     String samplerName = 'Euler a',
+    String scheduler = 'Automatic',
     int seed = -1,
+    Uint8List? referenceImage,
+    double denoise = 0.5,
   }) async {
     // Switch model only if a different checkpoint was requested.
     // Skipping redundant switches prevents the unload→reload cycle that
@@ -1387,8 +1476,11 @@ class ImageGenService extends ChangeNotifier {
     }
 
     final (width, height) = _parseSize(size);
+    // img2img when a reference image is supplied; else txt2img (unchanged path).
+    final isImg2Img = referenceImage != null && referenceImage.isNotEmpty;
+    final endpoint = isImg2Img ? 'img2img' : 'txt2img';
     final uri = Uri.parse(
-      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/txt2img',
+      '${ComfyUiService.ensureHttpScheme(baseUrl)}/sdapi/v1/$endpoint',
     );
 
     // Inject LoRA into the prompt: <lora:name:weight>
@@ -1400,23 +1492,19 @@ class ImageGenService extends ChangeNotifier {
       'ImageGen: POST $uri (model=${modelCheckpoint.isNotEmpty ? modelCheckpoint : "current"}, lora=${loraName.isNotEmpty ? loraName : "none"})',
     );
 
-    final payload = <String, dynamic>{
-      'prompt': effectivePrompt,
-      'negative_prompt': negativePrompt,
-      'width': width,
-      'height': height,
-      'steps': steps,
-      'cfg_scale': cfgScale,
-      'sampler_name': samplerName,
-      'seed': seed,
-      'batch_size': 1,
-      // NOTE: override_settings is intentionally omitted here.
-      // Passing sd_model_checkpoint inside override_settings causes A1111 to
-      // attempt a model reload mid-request, which splits tensors across
-      // cpu and cuda and throws:
-      //   "Expected all tensors to be on the same device"
-      // The model switch is already handled by switchLocalModel() above.
-    };
+    final payload = buildA1111Payload(
+      prompt: effectivePrompt,
+      negativePrompt: negativePrompt,
+      width: width,
+      height: height,
+      steps: steps,
+      cfgScale: cfgScale,
+      samplerName: samplerName,
+      scheduler: scheduler,
+      seed: seed,
+      referenceImageB64: isImg2Img ? base64Encode(referenceImage) : null,
+      denoise: denoise,
+    );
 
     final client = http.Client();
     // Live progress while the txt2img request is in flight: A1111 exposes

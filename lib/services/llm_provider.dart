@@ -106,6 +106,9 @@ class LLMProvider extends ChangeNotifier {
             _backendManager.backendPath!,
             modelPath ?? '',
             kcppsPath: _storageService.activeKcppsPath,
+            mmprojPath: modelPath != null
+                ? _storageService.mmprojForModel(modelPath)
+                : null,
             gpuLayers: _storageService.gpuLayers,
             contextSize: _storageService.contextSize,
             useVulkan: _storageService.useVulkan ?? false,

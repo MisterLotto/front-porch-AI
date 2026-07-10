@@ -25,6 +25,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 
@@ -1713,9 +1714,6 @@ class ChatService extends ChangeNotifier {
     onSaveChat: _saveChat,
     getTimeOfDay: () => _timeService.timeOfDay,
     getRealismEnabled: () => _realismEnabled,
-    getArousalLevel: () => _nsfwService.arousalLevel,
-    getNsfwCooldownEnabled: () => _nsfwService.nsfwCooldownEnabled,
-    getCooldownTurnsRemaining: () => _nsfwService.cooldownTurnsRemaining,
     getObserverMode: () => _observerMode,
     getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
     getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
@@ -1723,7 +1721,6 @@ class ChatService extends ChangeNotifier {
     setGroupNeeds: _setGroupNeeds,
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getNeedsSimEnabled: () => _needsSimEnabled,
-    setArousalLevel: (v) => _nsfwService.setArousalLevel(v),
     getCustomDecayRates: () => _activeDecayRates(),
   );
 
@@ -2330,6 +2327,20 @@ class ChatService extends ChangeNotifier {
             .isReady,
     isBusy: () => _isGenerating,
     onNotify: notifyListeners,
+    // OpenRouter/Nano-GPT list tool support in their /models metadata, so the
+    // auto-test seeds the probe for free instead of pinging the model. Gated
+    // to the openRouter backend: oMLX runs at localhost (no metadata) and the
+    // resolver returns null for any non-metadata host anyway — those, like
+    // local backends, keep the runtime ping.
+    fetchMetadataToolVerdict: () async {
+      if (_llmProvider?.activeBackend != BackendType.openRouter) return null;
+      final caps = await VisionSupportResolver.instance.capabilitiesForRemote(
+        apiUrl: _storageService.remoteApiUrl,
+        apiKey: _storageService.remoteApiKey,
+        modelName: _storageService.remoteModelName,
+      );
+      return caps?.toolCalling;
+    },
   );
 
   /// The current model's tool-calling verdict (sidebar pill + web facade).
@@ -3535,7 +3546,16 @@ class ChatService extends ChangeNotifier {
         // Group non-obs + needs on: decay is applied per-speaker inside the
         // single eval path (_evaluateRealismForUpcomingSpeaker).
       }
-      _nsfwService.decrementCooldownIfActive();
+      // Refractory tick for the 1:1 host only. In group mode the speaker
+      // hasn't been picked yet — decrementing here mutated whichever member's
+      // scalars were still loaded from LAST turn, and the tick was then
+      // discarded by _loadGroupRealismIntoScalars, so group cooldowns never
+      // actually counted down. The group tick now lives per-speaker in
+      // _evaluateRealismForUpcomingSpeaker, right after that speaker's
+      // scalars are loaded (mirroring the per-speaker needs decay).
+      if (_activeGroup == null) {
+        _nsfwService.decrementCooldownIfActive();
+      }
 
       // Single-path bridge: realism evaluation now runs inside _generateResponse
       // for EVERY speaker (1:1 host or group member) via
@@ -4249,8 +4269,19 @@ class ChatService extends ChangeNotifier {
     if (_activeGroup != null) {
       for (final c in _groupCharacters) {
         final id = _getCharacterIdFromCard(c);
-        (_groupRealism[id] ??= <String, dynamic>{})['nsfwCooldownEnabled'] =
-            enabled;
+        final entry = _groupRealism[id] ??= <String, dynamic>{};
+        entry['nsfwCooldownEnabled'] = enabled;
+        // Parity with 1:1: NsfwService.setNsfwCooldownEnabled(false) zeroes
+        // the scalar arousal + cooldowns, so disabling must clear each
+        // member's persisted values too — otherwise re-enabling resumed
+        // members from stale arousal/cooldowns while a 1:1 chat restarted
+        // fresh. (Also the documented escape hatch: toggling off and on
+        // resets a chat's lust state to neutral in BOTH modes.)
+        if (!enabled) {
+          entry['arousal'] = 0;
+          entry['cooldownTurnsRemaining'] = 0;
+          entry['cooldownTurnsTotal'] = 0;
+        }
       }
     }
     await _saveChat();

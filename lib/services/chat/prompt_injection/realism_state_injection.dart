@@ -166,8 +166,25 @@ class RealismStateInjection {
       buf.writeln('Time: ${timeService.timeOfDay.replaceAll('_', ' ')}, Day $day');
     }
 
-    // Arousal / cooldown (from nsfw)
-    buf.writeln('Arousal level: ${nsfwService.arousalLevel} (cooldown active: ${nsfwService.nsfwCooldownEnabled}, turns left: ${nsfwService.cooldownTurnsRemaining})');
+    // Arousal / refractory (from nsfw). Only state a cooldown when one is
+    // actually running: the old line printed the FEATURE toggle as
+    // "cooldown active: true" on every turn forever, so the model kept
+    // playing the character as post-climax long after the refractory ended
+    // (and the eval then scored every message with a negative lust delta).
+    if (nsfwService.nsfwCooldownEnabled) {
+      if (nsfwService.cooldownTurnsRemaining > 0) {
+        final total = nsfwService.cooldownTurnsTotal > 0
+            ? nsfwService.cooldownTurnsTotal
+            : nsfwService.cooldownTurnsRemaining;
+        buf.writeln(
+          'Arousal level: ${nsfwService.arousalLevel} (post-climax refractory: '
+          '${nsfwService.cooldownTurnsRemaining} of $total turns left — sated '
+          'and recovering, not averse)',
+        );
+      } else {
+        buf.writeln('Arousal level: ${nsfwService.arousalLevel}');
+      }
+    }
 
     buf.writeln('--- End Metrics ---');
     buf.writeln();

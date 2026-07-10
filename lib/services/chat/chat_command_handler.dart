@@ -196,7 +196,7 @@ class ChatCommandHandler {
     ),
     SlashCommandInfo(
       'image',
-      '/image [me | char | bg | raw <prompt> | <description>]',
+      '/image [me | char | raw <prompt> | <description>]',
       'Generate an image in chat — bare /image pictures the current scene',
     ),
   ];

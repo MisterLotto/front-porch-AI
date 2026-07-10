@@ -806,6 +806,9 @@ class CreatorState extends ChangeNotifier {
         execPath,
         effectiveModel,
         kcppsPath: storage.activeKcppsPath,
+        mmprojPath: modelPath.isNotEmpty
+            ? storage.mmprojForModel(modelPath)
+            : null,
         port: 5001,
         gpuLayers: storage.gpuLayers,
         contextSize: storage.contextSize,
@@ -886,11 +889,15 @@ class CreatorState extends ChangeNotifier {
       final overrideModel =
           hasValidKcppsModel ? null : selectedLocalModelPath;
 
+      final effectiveOverride =
+          overrideModel?.isNotEmpty == true ? overrideModel : null;
       await pseudoRemote.start(
         executablePath: backendManager.backendPath!,
         kcppsPath: storage.activeKcppsPath!,
-        modelPath:
-            overrideModel?.isNotEmpty == true ? overrideModel : null,
+        modelPath: effectiveOverride,
+        mmprojPath: effectiveOverride != null
+            ? storage.mmprojForModel(effectiveOverride)
+            : null,
       );
 
       koboldStatus = 'Pseudo-Remote started successfully!';

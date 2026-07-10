@@ -3,9 +3,10 @@
 //
 // Tests for ImageCommandService (the /image slash-command leaf). The leaf is
 // pure orchestration over injected closures, so the whole surface is
-// unit-coverable: the parse grammar (scene/last/me/char/bg/raw/custom), the
+// unit-coverable: the parse grammar (scene/last/me/char/raw/custom), the
 // not-configured / busy / raw-usage guards, the craft→generate→save→attach
-// happy path, the background set path, and failure statuses at each stage.
+// happy path, and failure statuses at each stage. (The `bg`/background subcommand
+// was retired along with the chat-background generation mode.)
 
 import 'dart:typed_data';
 
@@ -41,11 +42,13 @@ void main() {
       expect(bare.text, '');
     });
 
-    test('bg/background → background', () {
-      expect(ImageCommandService.parse('bg').kind, ImageCommandKind.background);
+    test('retired bg/background keyword falls through to free-text custom', () {
+      // The chat-background generation mode was removed; `bg` is no longer
+      // special and is treated as an ordinary custom description.
+      expect(ImageCommandService.parse('bg').kind, ImageCommandKind.custom);
       expect(
         ImageCommandService.parse('background').kind,
-        ImageCommandKind.background,
+        ImageCommandKind.custom,
       );
     });
 
@@ -62,7 +65,7 @@ void main() {
     });
 
     test('keywords are case-insensitive', () {
-      expect(ImageCommandService.parse('BG').kind, ImageCommandKind.background);
+      expect(ImageCommandService.parse('ME').kind, ImageCommandKind.me);
       expect(ImageCommandService.parse('RAW stuff').kind, ImageCommandKind.raw);
     });
   });
@@ -72,7 +75,6 @@ void main() {
     late List<String> crafted;
     late List<String> generated;
     late List<(String, String)> attached;
-    late List<String> backgrounds;
     late bool configured;
     late bool busy;
     String? craftResult;
@@ -94,7 +96,6 @@ void main() {
         },
         saveImage: (bytes) async => saveResult,
         attachToChat: (path, prompt, req) async => attached.add((path, prompt)),
-        setChatBackground: (path) async => backgrounds.add(path),
       );
     }
 
@@ -103,7 +104,6 @@ void main() {
       crafted = [];
       generated = [];
       attached = [];
-      backgrounds = [];
       configured = true;
       busy = false;
       craftResult = 'a cozy porch at dusk';
@@ -116,7 +116,6 @@ void main() {
       expect(crafted.single, 'scene:');
       expect(generated.single, 'a cozy porch at dusk');
       expect(attached.single, ('/tmp/img.png', 'a cozy porch at dusk'));
-      expect(backgrounds, isEmpty);
       expect(statuses.last, contains('added to the chat'));
     });
 
@@ -131,13 +130,6 @@ void main() {
       await build().handle('raw');
       expect(statuses.single, startsWith('⚠'));
       expect(generated, isEmpty);
-    });
-
-    test('bg sets the background instead of attaching', () async {
-      await build().handle('bg');
-      expect(backgrounds.single, '/tmp/img.png');
-      expect(attached, isEmpty);
-      expect(statuses.last, contains('background'));
     });
 
     test('not configured → error status, nothing runs', () async {
@@ -198,7 +190,6 @@ void main() {
         ),
         saveImage: (bytes) async => '/tmp/x.png',
         attachToChat: (path, prompt, req) async => attached.add((path, prompt)),
-        setChatBackground: (path) async {},
       );
       final first = slow.handle('scene');
       await slow.handle('scene'); // overlaps → rejected with busy status

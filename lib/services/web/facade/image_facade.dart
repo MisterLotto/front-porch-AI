@@ -50,6 +50,7 @@ class ImageFacade {
       'steps': img.imageGenSteps,
       'cfgScale': img.imageGenCfgScale,
       'sampler': img.imageGenSampler,
+      'scheduler': img.imageGenScheduler,
       'localUrl': img.localImageGenUrl,
       'comfyUrl': img.comfyUiUrl,
       'promptReview': img.imageGenPromptReview,
@@ -81,6 +82,9 @@ class ImageFacade {
     }
     if (f['sampler'] is String) {
       await img.setImageGenSampler(f['sampler'] as String);
+    }
+    if (f['scheduler'] is String) {
+      await img.setImageGenScheduler(f['scheduler'] as String);
     }
     if (f['localUrl'] is String) {
       await img.setLocalImageGenUrl(f['localUrl'] as String);

@@ -99,6 +99,9 @@ class SetupService extends ChangeNotifier {
             _backendManager.backendPath!,
             _storageService.lastUsedModelPath!,
             kcppsPath: _storageService.activeKcppsPath,
+            mmprojPath: _storageService.mmprojForModel(
+              _storageService.lastUsedModelPath!,
+            ),
             gpuLayers: _storageService.gpuLayers,
             contextSize: _storageService.contextSize,
             useVulkan: _storageService.useVulkan ?? false,

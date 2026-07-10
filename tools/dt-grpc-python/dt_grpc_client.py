@@ -196,11 +196,17 @@ def main():
                 # Draw Things' raw model list contains everything (VAEs, encoders,
                 # ControlNets, upscalers, preprocessors, LoRAs, video models, etc.).
                 # We use broad category patterns instead of blacklisting individual files.
-                skip_keywords = [
-                    # Text encoders / CLIP / T5 / LLM encoders
+                # Text encoders / CLIP / T5 / LLM sidecars. These skip a file
+                # ONLY when it lacks an image-model marker: modern checkpoints
+                # carry their LLM family name AND "image" (qwen_image_*.ckpt,
+                # z_image_*, ernie_image_*), while their encoder sidecars never
+                # do (qwen_2.5_vl_*, ministral_3_3b_*, t5_xxl_*). A blanket
+                # "qwen" ban used to hide the Qwen-Image checkpoint itself.
+                encoder_keywords = [
                     "clip", "t5", "text_encoder", "encoder", "gemma", "llama",
-                    "mistral", "qwen", "phi", "chroma", "ltx", "vicuna", "alpaca",
-
+                    "mistral", "ministral", "qwen", "phi", "vicuna", "alpaca",
+                ]
+                skip_keywords = [
                     # VAEs (catches most custom VAEs without naming each one)
                     "vae",
 
@@ -215,17 +221,22 @@ def main():
                     "normal", "lineart", "softedge", "seg", "inpaint", "ip2p",
                     "shuffle", "mlsd", "tile", "blur", "hed", "parsenet",
 
-                    # Upscalers (catches 4x_ultrasharp, realesrgan variants, etc.)
+                    # Upscalers / face restorers (4x_ultrasharp, realesrgan, etc.)
                     "4x_", "2x_", "realesrgan", "esrgan", "ultrasharp", "swinir",
-                    "hat_", "real_esrgan", "upscaler",
+                    "hat_", "real_esrgan", "upscaler", "restoreformer", "gfpgan",
+                    "codeformer",
 
                     # Video / I2V / motion models (these are not for regular img2img)
-                    "i2v", "video", "wan_", "svd", "motion",
+                    "i2v", "video", "wan_", "svd", "motion", "ltx",
                 ]
                 models = []
                 for f in raw_files:
                     lower = str(f).lower()
                     if any(k in lower for k in skip_keywords):
+                        continue
+                    if "image" not in lower and any(
+                        k in lower for k in encoder_keywords
+                    ):
                         continue
                     # Return anything that survived the skip list.
                     # Draw Things Echo("models") can return bare names, full paths,

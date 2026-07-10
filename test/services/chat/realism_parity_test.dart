@@ -103,9 +103,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => 'morning',
         getRealismEnabled: () => true,
-        getArousalLevel: () => nsfw.arousalLevel,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => currentSpeaker,
         getIsGroupNonObserverMode: () => true,
@@ -114,7 +111,6 @@ void main() {
         setGroupNeeds: (id, nn) => e(id)['needs'] = Map<String, int>.from(nn),
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (v) => nsfw.setArousalLevel(v),
       );
     });
 

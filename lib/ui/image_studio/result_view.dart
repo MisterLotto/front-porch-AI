@@ -19,15 +19,13 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Result view: large generated image + Variations / Edit+regen / Save / Accept
 /// (+ Send to chat when launched from a conversation).
-/// Context-sensitive Accept (triggers crop for avatar modes, identical to legacy).
+/// Context-sensitive Accept (triggers crop for avatar subjects, identical to legacy).
 class ResultView extends StatelessWidget {
   final Uint8List imageBytes;
-  final ImageGenMode mode;
   final bool hasAccept;
   final String acceptLabel;
   final bool isSaving;
@@ -40,7 +38,6 @@ class ResultView extends StatelessWidget {
   const ResultView({
     super.key,
     required this.imageBytes,
-    required this.mode,
     required this.hasAccept,
     required this.acceptLabel,
     required this.isSaving,
@@ -156,12 +153,7 @@ class ResultView extends StatelessWidget {
               if (hasAccept)
                 ElevatedButton.icon(
                   onPressed: isSaving ? null : onAccept,
-                  icon: Icon(
-                    mode == ImageGenMode.chatBackground
-                        ? Icons.wallpaper
-                        : Icons.person,
-                    size: 16,
-                  ),
+                  icon: const Icon(Icons.person, size: 16),
                   label: Text(acceptLabel),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.resolve(

@@ -81,9 +81,6 @@ NeedsImpactEvaluator createTestEvaluator({
         onSaveChat: () async => s.add('save'),
         getTimeOfDay: () => 'morning',
         getRealismEnabled: realismFn ?? () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: observerFn ?? () => false,
         getCurrentSpeakerIdForRealism: speakerFn ?? () => 'char-1',
         getIsGroupNonObserverMode: groupNonObsFn ?? () => false,
@@ -92,7 +89,6 @@ NeedsImpactEvaluator createTestEvaluator({
         setGroupNeeds: (id, nn) => gn[id] = Map.from(nn),
         getEnjoysLowHygiene: enjoysFn ?? () => false,
         getNeedsSimEnabled: needsEnabledFn ?? () => true,
-        setArousalLevel: (_) {},
       );
 
   return NeedsImpactEvaluator(
@@ -160,9 +156,6 @@ void main() {
         onSaveChat: () async => saves.add('save'),
         getTimeOfDay: () => 'morning',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 10,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => 'char-1',
         getIsGroupNonObserverMode: () => false,
@@ -171,7 +164,6 @@ void main() {
         setGroupNeeds: (id, nn) => groupNeeds[id] = Map.from(nn),
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
 
       eval = createTestEvaluator(
@@ -242,9 +234,6 @@ void main() {
           onSaveChat: () async => localSaves.add('save'),
           getTimeOfDay: () => 'morning',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 10,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => 'char-1',
           getIsGroupNonObserverMode: () => false,
@@ -253,7 +242,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         final e = createTestEvaluator(
           sim: localSim,
@@ -285,9 +273,6 @@ void main() {
           onSaveChat: () async => localSaves.add('save'),
           getTimeOfDay: () => 'morning',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 10,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => 'char-1',
           getIsGroupNonObserverMode: () => false,
@@ -296,7 +281,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         final e = createTestEvaluator(
           sim: localSim,
@@ -329,9 +313,6 @@ void main() {
           onSaveChat: () async => localSaves.add('save'),
           getTimeOfDay: () => 'morning',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 10,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => 'char-1',
           getIsGroupNonObserverMode: () => false,
@@ -340,7 +321,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         final e = createTestEvaluator(
           sim: localSim,
@@ -371,9 +351,6 @@ void main() {
         onSaveChat: () async => localSaves.add('save'),
         getTimeOfDay: () => 'morning',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 10,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => 'char-1',
         getIsGroupNonObserverMode: () => false,
@@ -382,7 +359,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       final e = createTestEvaluator(
         sim: localSim,
@@ -407,9 +383,6 @@ void main() {
           onSaveChat: () async => localSaves.add('save'),
           getTimeOfDay: () => 'morning',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 10,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => 'char-1',
           getIsGroupNonObserverMode: () => false,
@@ -418,7 +391,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         final e = createTestEvaluator(
           sim: localSim,
@@ -476,9 +448,6 @@ void main() {
         onSaveChat: () async => localSaves.add('save'),
         getTimeOfDay: () => 'morning',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 10,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => 'char-1',
         getIsGroupNonObserverMode: () => false,
@@ -487,7 +456,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       final e = createTestEvaluator(
         sim: localSim,
@@ -971,9 +939,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => '',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 0,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => '',
           getIsGroupNonObserverMode: () => false,
@@ -981,7 +946,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         sim.restoreFromSnapshot({
           'vector': {
@@ -1022,9 +986,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => '',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => false,
@@ -1032,7 +993,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       sim.restoreFromSnapshot({
         'vector': {
@@ -1062,9 +1022,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => '',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => false,
@@ -1072,7 +1029,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       sim.restoreFromSnapshot({
         'vector': Map<String, int>.from({
@@ -1106,9 +1062,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => '',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 0,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => '',
           getIsGroupNonObserverMode: () => false,
@@ -1116,7 +1069,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         sim.restoreFromSnapshot({
           'vector': {
@@ -1156,9 +1108,6 @@ void main() {
           onSaveChat: () async {},
           getTimeOfDay: () => '',
           getRealismEnabled: () => true,
-          getArousalLevel: () => 0,
-          getNsfwCooldownEnabled: () => false,
-          getCooldownTurnsRemaining: () => 0,
           getObserverMode: () => false,
           getCurrentSpeakerIdForRealism: () => '',
           getIsGroupNonObserverMode: () => false,
@@ -1166,7 +1115,6 @@ void main() {
           setGroupNeeds: (_, _) {},
           getEnjoysLowHygiene: () => false,
           getNeedsSimEnabled: () => true,
-          setArousalLevel: (_) {},
         );
         sim.restoreFromSnapshot({
           'vector': {
@@ -1202,9 +1150,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => '',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => false,
@@ -1212,7 +1157,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       sim.restoreFromSnapshot({
         'vector': {
@@ -1246,9 +1190,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => '',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => '',
         getIsGroupNonObserverMode: () => false,
@@ -1256,7 +1197,6 @@ void main() {
         setGroupNeeds: (_, _) {},
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       final preV = {
         'hunger': 50,
@@ -1287,9 +1227,6 @@ void main() {
         onSaveChat: () async {},
         getTimeOfDay: () => '',
         getRealismEnabled: () => true,
-        getArousalLevel: () => 0,
-        getNsfwCooldownEnabled: () => false,
-        getCooldownTurnsRemaining: () => 0,
         getObserverMode: () => false,
         getCurrentSpeakerIdForRealism: () => 's',
         getIsGroupNonObserverMode: () => true,
@@ -1297,7 +1234,6 @@ void main() {
         setGroupNeeds: (id, nn) => gn[id] = Map.from(nn),
         getEnjoysLowHygiene: () => false,
         getNeedsSimEnabled: () => true,
-        setArousalLevel: (_) {},
       );
       sim.restoreFromSnapshot({
         'vector': {

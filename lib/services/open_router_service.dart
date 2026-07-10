@@ -96,18 +96,23 @@ class OpenRouterService extends LLMService {
 
   /// Test whether the API connection is working.
   /// Returns a human-readable status message.
-  Future<String> testConnection() async {
-    if (_apiUrl.isEmpty) return 'API URL is empty.';
+  /// Tests connectivity against [apiUrl] (else this service's live URL).
+  /// Same override contract as [fetchAvailableModels]: pass the target
+  /// explicitly from UI so a connection test never re-routes the active
+  /// backend's live configuration.
+  Future<String> testConnection({String? apiUrl, String? apiKey}) async {
+    final url = apiUrl ?? _apiUrl;
+    final key = apiKey ?? _apiKey;
+    if (url.isEmpty) return 'API URL is empty.';
     // Allow empty API key for local backends (localhost / 127.0.0.1)
-    final isLocal =
-        _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
-    if (_apiKey.isEmpty && !isLocal) return 'API key is empty.';
+    final isLocal = url.contains('localhost') || url.contains('127.0.0.1');
+    if (key.isEmpty && !isLocal) return 'API key is empty.';
 
     final client = http.Client();
     try {
-      final uri = Uri.parse('$_apiUrl/models');
+      final uri = Uri.parse('$url/models');
       final response = await client
-          .get(uri, headers: {'Authorization': 'Bearer $_apiKey'})
+          .get(uri, headers: {'Authorization': 'Bearer $key'})
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -128,21 +133,32 @@ class OpenRouterService extends LLMService {
   }
 
   /// Fetch the list of available models with pricing info from the API.
-  Future<List<RemoteModelInfo>> fetchAvailableModels() async {
-    if (_apiUrl.isEmpty) return [];
-    final isLocal =
-        _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
-    if (_apiKey.isEmpty && !isLocal) return [];
+  /// Lists models from [apiUrl] (else this service's live URL). Pass the
+  /// target EXPLICITLY when fetching for a picker: this service is the ONE
+  /// shared client for Remote API and oMLX, and UI sites that called
+  /// `configure(...)` just to point a list-fetch somewhere were silently
+  /// re-routing the ACTIVE backend's chat traffic (opening Settings while on
+  /// oMLX sent every request to the Remote API provider until the next
+  /// storage sync). The overrides fetch without touching live state.
+  Future<List<RemoteModelInfo>> fetchAvailableModels({
+    String? apiUrl,
+    String? apiKey,
+  }) async {
+    final url = apiUrl ?? _apiUrl;
+    final key = apiKey ?? _apiKey;
+    if (url.isEmpty) return [];
+    final isLocal = url.contains('localhost') || url.contains('127.0.0.1');
+    if (key.isEmpty && !isLocal) return [];
 
     final client = http.Client();
     try {
-      final uri = Uri.parse('$_apiUrl/models');
+      final uri = Uri.parse('$url/models');
       debugPrint('[OpenRouter] Fetching models from: $uri');
       final response = await client
           .get(
             uri,
             headers: {
-              if (_apiKey.isNotEmpty) 'Authorization': 'Bearer $_apiKey',
+              if (key.isNotEmpty) 'Authorization': 'Bearer $key',
             },
           )
           .timeout(const Duration(seconds: 15));
@@ -232,12 +248,13 @@ class OpenRouterService extends LLMService {
     GenerationParams params, {
     required bool stream,
   }) {
-    // Build messages array with proper role separation for chat APIs.
-    final messages = <Map<String, String>>[];
+    // Role-separated messages; user content is a plain string or, when
+    // images ride along, a multimodal array (see openAiUserContent).
+    final messages = <Map<String, Object>>[];
     if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
       messages.add({'role': 'system', 'content': params.systemPrompt!});
     }
-    messages.add({'role': 'user', 'content': params.prompt});
+    messages.add({'role': 'user', 'content': params.openAiUserContent});
 
     // api.openai.com rejects unknown parameters outright, so it keeps the
     // old conservative payload (frequency_penalty approximation, no

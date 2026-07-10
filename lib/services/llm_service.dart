@@ -66,6 +66,13 @@ class GenerationParams {
   /// so template stop tokens (`<|im_end|>` etc.) don't silently eat the output.
   final bool trimStop;
 
+  /// Optional base64-encoded PNG images attached to the user chat message
+  /// (Vision QC, portrait describe). When non-empty, the OpenAI-compatible
+  /// chat transports render the user content as a multimodal array via
+  /// [openAiUserContent]; when null/empty the payload keeps the plain string
+  /// content, byte-identical to the pre-vision text-only path.
+  final List<String>? images;
+
   const GenerationParams({
     required this.prompt,
     this.maxLength = 200,
@@ -89,7 +96,26 @@ class GenerationParams {
     this.grammar,
     this.banEosToken = false,
     this.trimStop = true,
+    this.images,
   });
+
+  /// The `content` value for the OpenAI chat user message: the plain [prompt]
+  /// string when no [images] ride along, or a multimodal content array of one
+  /// text part followed by one `image_url` part per image. Both chat-payload
+  /// builders (openai_chat_stream.dart and OpenRouterService) call this so
+  /// the two wire shapes can't drift.
+  Object get openAiUserContent {
+    final imgs = images;
+    if (imgs == null || imgs.isEmpty) return prompt;
+    return [
+      {'type': 'text', 'text': prompt},
+      for (final img in imgs)
+        {
+          'type': 'image_url',
+          'image_url': {'url': 'data:image/png;base64,$img'},
+        },
+    ];
+  }
 }
 
 /// One tool invocation from a tool-calling response (OpenAI `tool_calls`

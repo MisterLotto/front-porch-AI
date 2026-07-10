@@ -331,9 +331,8 @@ class _PromptWorkspaceState extends State<PromptWorkspace> {
         );
       }
     }
-    // Stage 4: surface richer ctx data in provenance pills (currentExpression already merged into appearance;
-    // show explicit group speaker + time/lighting for transparency in fromLast/visualize/bg).
-    // Keep in sync with _ctx construction and ImageGenContext.
+    // Surface richer ctx data in provenance pills (currentExpression is already
+    // merged into appearance; show group speaker + time/lighting for transparency).
     if (ctx.isGroupNonObserver &&
         ctx.currentSpeakerId != null &&
         ctx.currentSpeakerId!.trim().isNotEmpty) {

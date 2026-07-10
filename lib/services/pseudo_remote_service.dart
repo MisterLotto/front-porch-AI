@@ -61,6 +61,7 @@ class PseudoRemoteService extends LLMService {
     required String executablePath,
     required String kcppsPath,
     String? modelPath,
+    String? mmprojPath,
     int port = 5001,
   }) async {
     if (_isStarting) return;
@@ -80,6 +81,12 @@ class PseudoRemoteService extends LLMService {
       '--port',
       port.toString(),
       if (modelPath != null && modelPath.isNotEmpty) ...['--model', modelPath],
+      // Vision projector: only when configured AND the file exists, so a stale
+      // mmproj path never aborts the launch. Mirrors KoboldService.startKobold.
+      if (mmprojPath != null &&
+          mmprojPath.isNotEmpty &&
+          File(mmprojPath).existsSync())
+        ...['--mmproj', mmprojPath],
     ];
 
     try {

@@ -331,6 +331,9 @@ class StorageService extends ChangeNotifier {
   double get imageGenLoraWeight => imageGenSettings.imageGenLoraWeight;
   Future<void> setImageGenLoraWeight(double v) =>
       imageGenSettings.setImageGenLoraWeight(v);
+  double get imageGenDenoise => imageGenSettings.imageGenDenoise;
+  Future<void> setImageGenDenoise(double v) =>
+      imageGenSettings.setImageGenDenoise(v);
   int get imageGenSteps => imageGenSettings.imageGenSteps;
   Future<void> setImageGenSteps(int v) => imageGenSettings.setImageGenSteps(v);
   double get imageGenCfgScale => imageGenSettings.imageGenCfgScale;
@@ -339,6 +342,9 @@ class StorageService extends ChangeNotifier {
   String get imageGenSampler => imageGenSettings.imageGenSampler;
   Future<void> setImageGenSampler(String v) =>
       imageGenSettings.setImageGenSampler(v);
+  String get imageGenScheduler => imageGenSettings.imageGenScheduler;
+  Future<void> setImageGenScheduler(String v) =>
+      imageGenSettings.setImageGenScheduler(v);
   int get imageGenSeed => imageGenSettings.imageGenSeed;
   Future<void> setImageGenSeed(int v) => imageGenSettings.setImageGenSeed(v);
   String get drawThingsGrpcHost => imageGenSettings.drawThingsGrpcHost;
@@ -353,9 +359,6 @@ class StorageService extends ChangeNotifier {
   double get drawThingsShift => imageGenSettings.drawThingsShift;
   Future<void> setDrawThingsShift(double v) =>
       imageGenSettings.setDrawThingsShift(v);
-  double get drawThingsStrength => imageGenSettings.drawThingsStrength;
-  Future<void> setDrawThingsStrength(double v) =>
-      imageGenSettings.setDrawThingsStrength(v);
   int get drawThingsSeedMode => imageGenSettings.drawThingsSeedMode;
   Future<void> setDrawThingsSeedMode(int v) =>
       imageGenSettings.setDrawThingsSeedMode(v);
@@ -428,6 +431,11 @@ class StorageService extends ChangeNotifier {
       backendSettings.setKoboldThinkingModel(v);
   Future<void> setModelPreset(String modelPath, String? kcppsPath) =>
       presetSettings.setModelPreset(modelPath, kcppsPath);
+  Map<String, String> get modelMmprojMap => presetSettings.modelMmprojMap;
+  String? mmprojForModel(String modelPath) =>
+      presetSettings.modelMmprojMap[modelPath];
+  Future<void> setModelMmproj(String modelPath, String? mmprojPath) =>
+      presetSettings.setModelMmproj(modelPath, mmprojPath);
 
   // Generation / sampling
   double get temperature => generationSettings.temperature;

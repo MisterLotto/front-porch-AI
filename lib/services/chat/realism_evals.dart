@@ -282,12 +282,10 @@ class RealismEvals {
     if (nsfwService.nsfwCooldownEnabled) {
       final arDelta = extractJsonInt(text, 'arousal_delta');
       if (arDelta != null) {
-        final arousalDelta = arDelta.clamp(
-          kMinArousalDelta,
-          kMaxArousalDelta,
-        );
-        nsfwService.setArousalLevel(
-          (nsfwService.arousalLevel + arousalDelta).clamp(-100, 100),
+        // Record the EFFECTIVE delta (post-clamp + refractory physiology) so
+        // chips show what actually happened and regen revert stays exact.
+        final arousalDelta = nsfwService.applyEvalArousalDelta(
+          arDelta.clamp(kMinArousalDelta, kMaxArousalDelta),
         );
         if (arousalDelta != 0) {
           var pending = getPendingRealismMetadata() ?? {};
@@ -550,14 +548,15 @@ class RealismEvals {
 
     // Arousal (only when NSFW cooldowns are enabled; relationship path treats
     // as best-effort since its prompt does not request the field; emotional and
-    // one-shot paths request it when enabled).
+    // one-shot paths request it when enabled). arousalDelta ends up holding the
+    // EFFECTIVE delta (post-clamp + refractory physiology) so pending metadata,
+    // chips, and regen revert all agree on what actually landed.
     int arousalDelta = 0;
     if (nsfwService.nsfwCooldownEnabled) {
       final arDelta = extractJsonInt(text, 'arousal_delta');
       if (arDelta != null) {
-        arousalDelta = arDelta.clamp(kMinArousalDelta, kMaxArousalDelta);
-        nsfwService.setArousalLevel(
-          (nsfwService.arousalLevel + arousalDelta).clamp(-100, 100),
+        arousalDelta = nsfwService.applyEvalArousalDelta(
+          arDelta.clamp(kMinArousalDelta, kMaxArousalDelta),
         );
       }
     }
@@ -771,6 +770,7 @@ class RealismEvals {
           recent: recent,
           arousalEnabled: arousalEnabled,
           arousalLevel: nsfwService.arousalLevel,
+          refractoryTurnsLeft: nsfwService.cooldownTurnsRemaining,
           allowedEmotionLabels: labels,
           toolsMode: toolsMode,
         );
@@ -1004,6 +1004,7 @@ class RealismEvals {
           recent: recent,
           arousalEnabled: arousalEnabled,
           arousalLevel: nsfwService.arousalLevel,
+          refractoryTurnsLeft: nsfwService.cooldownTurnsRemaining,
           allowedEmotionLabels: labels,
           primaryObjective: primary?.objective,
           toolsMode: toolsMode,

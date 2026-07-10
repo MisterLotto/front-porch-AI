@@ -1551,12 +1551,9 @@ class _ChatPageState extends State<ChatPage> {
     BuildContext context,
     ChatService chatService,
   ) async {
-    // Note: mode param removed (user spec: types are buttons inside Image Studio now; launcher is neutral).
-    // We launch with customPrompt as safe neutral starter; user taps a type button inside immediately.
-    // Special pre-dialog for "custom" removed (typing in the main prompt box + Craft covers it cleanly, no boiler).
-    // onAccept captured here is for legacy direct callers; studio _accept now uses _activeMode for side effects
-    // where possible (bg set, user avatar) via providers. Portrait set (needs full Character) kept for launch-time
-    // wiring if provided. Keep thin launcher + sync comments with studio show/ctor/_active, service, builder, ctx.
+    // Launch neutral (Freeform / customPrompt); the user picks a Subject inside
+    // the studio. Portrait/persona "Set as avatar" side effects happen inside
+    // the studio via providers; onAccept remains for any direct launcher.
 
     final personaService = Provider.of<UserPersonaService>(
       context,
@@ -1612,9 +1609,9 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     if (messages.isNotEmpty) {
-      // User spec: collect more (12) so the visualize slider (1-10) in studio has headroom. The N chosen
-      // is stripped of <think> in builder (simple, pre-generated msgs). Keep collection + studio slider + builder
-      // recent limit + service ctx + ImageGenContext in sync. (1:1/group via same public surface + speaker preference).
+      // Collect recent turns so the Freeform "Craft the current scene" path (and
+      // the /image scene command) has narrative to distill. Each is stripped of
+      // <think> here; the builder caps how many it actually uses.
       recentMessages = messages.reversed
           .take(12)
           .map((m) => m.displayText)
@@ -1625,13 +1622,9 @@ class _ChatPageState extends State<ChatPage> {
           .reversed
           .toList();
 
-      // For visualizeScene (N=1 is the spiritual successor to the removed "Message Illustration" / fromLastMessage
-      // mode), prefer the most recent *AI/non-user* turn's displayText as a strong narrative anchor.
-      // This ensures the visualization is based on the character's described action/scene/pose rather than
-      // the user's just-typed input (common when studio is opened immediately after user send).
-      // In normal 1:1 the absolute last is usually the AI response. Safe fallback to absolute last.
-      // Mirrors the currentSpeakerId preference (below) for group under non-observer. Keep in sync with
-      // ModeInfoCard, builder visualize handling, studio _ctx, service thin, and tests.
+      // Prefer the most recent *AI/non-user* turn as the narrative anchor so the
+      // scene reflects the character's described action rather than the user's
+      // just-typed input. Safe fallback to the absolute last message.
       final userName = personaService.persona.name;
       for (final m in messages.reversed) {
         final txt = _cleanImageSourceText(m.displayText);
@@ -1643,17 +1636,10 @@ class _ChatPageState extends State<ChatPage> {
       lastMessage ??= _cleanImageSourceText(messages.last.displayText);
     }
 
-    // Stage 4: collect richer context from public ChatService surface for ImageStudio (expression from Realism/ExpressionClassifier,
-    // timeOfDay from TimeService, group non-observer + speaker id for correct char targeting in fromLast/visualize under impersonation).
-    // Keep collection + ImageStudio.show call + studio ctor/_ctx + service thins/_build + builder use "in sync".
-    // currentSpeakerId prefers the *most recent AI (non-user) sender* for illustration modes (fromLast/visualize) when in group
-    // (so "Focus on X" targets the character whose narrative is being illustrated, not the user if last turn was user).
-    // Iterate reversed; fall back safely. Qualifies 1:1 vs group dispatch (flag + speaker only relevant under non-obs group).
-    // No private _ methods touched in chat god; only public getters (currentExpressionLabel, timeService, isGroupMode, observerMode).
-    // Keep blocks in sync with ImageGenContext ctor, service _buildPromptContext (all 3 sites), studio _ctx + _craft, builder
-    // consumption (static + _generateSmartWith), workspace pills, and builder_test roundtrips/edges. (incomplete zeroing of
-    // secondary config on group/0-session/new-chat now complete — N/A for per-invocation stateless snapshot; see both
-    // startNew paths + setActiveGroup + load in chat_service for precedent).
+    // Collect richer context for the Image Studio (expression, time of day, and
+    // the group speaker so scene distillation focuses the right character).
+    // currentSpeakerId prefers the most recent AI (non-user) sender in a group,
+    // so "Focus on X" targets the character whose narrative is illustrated.
     final currentExpression = chatService.currentExpressionLabel;
     final timeOfDay = chatService.timeService.timeOfDay;
     final bool isGroupNonObserver =
@@ -1693,6 +1679,8 @@ class _ChatPageState extends State<ChatPage> {
       context,
       listen: false,
     );
+    // Captured pre-dialog for the Expression-pack import refresh below.
+    final charRepo = Provider.of<CharacterRepository>(context, listen: false);
     Future<void> onSendToChat(Uint8List bytes, String prompt) async {
       final path = await imageGenService.saveImageToDisk(bytes);
       if (path != null) {
@@ -1700,28 +1688,66 @@ class _ChatPageState extends State<ChatPage> {
       }
     }
 
-    await ImageStudio.show(
-      context,
-      mode: ImageGenMode.customPrompt,
-      customPrompt: null,
-      lastMessage: lastMessage,
-      characterName: character?.name,
-      characterDescription: character?.description,
-      characterPersonality: character?.personality,
-      scenario: _cleanImageSourceText(character?.scenario ?? ''),
-      worldInfo: _cleanImageSourceText(worldInfo ?? ''),
-      personaName: personaService.persona.name,
-      personaText: personaService.persona.persona,
-      recentMessages: recentMessages,
-      llmService: llmService,
-      onAccept: onAccept,
-      onSendToChat: onSendToChat,
-      // Stage 4: pass collected richer fields (keep launch site + studio show/ctor/_ctx + service thins + builder + workspace pills in sync).
-      currentExpression: currentExpression,
-      timeOfDay: timeOfDay,
-      lightingHint: null,
-      isGroupNonObserver: isGroupNonObserver,
-      currentSpeakerId: currentSpeakerId,
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ImageStudio(
+        mode: ImageGenMode.customPrompt,
+        customPrompt: null,
+        lastMessage: lastMessage,
+        characterName: character?.name,
+        characterDescription: character?.description,
+        characterPersonality: character?.personality,
+        characterDbId: character?.dbId,
+        // Group cast for the Subject picker: per-member portrait + a caveated
+        // whole-cast "group shot". Empty for 1:1 chats. dbId resolves to the
+        // member's LIBRARY origin (same routing as the Expression Images menu)
+        // so Expression packs land on the shared home, not a throwaway copy.
+        groupCharacters: chatService.isGroupMode
+            ? [
+                for (final c in chatService.groupCharacters)
+                  (
+                    name: c.name,
+                    description: c.description,
+                    dbId: (chatService.originLibraryCardFor(c) ?? c).dbId,
+                  ),
+              ]
+            : const [],
+        scenario: _cleanImageSourceText(character?.scenario ?? ''),
+        worldInfo: _cleanImageSourceText(worldInfo ?? ''),
+        personaName: personaService.persona.name,
+        personaText: personaService.persona.persona,
+        recentMessages: recentMessages,
+        llmService: llmService,
+        onAccept: onAccept,
+        onSendToChat: onSendToChat,
+        // Richer context for better prompts (keep in sync with ImageStudio
+        // ctor + service thins + builder).
+        currentExpression: currentExpression,
+        timeOfDay: timeOfDay,
+        lightingHint: null,
+        isGroupNonObserver: isGroupNonObserver,
+        currentSpeakerId: currentSpeakerId,
+        // After an Expression-pack import, reload the library card's avatars
+        // and push them onto the live chat card(s) — the same refresh dance
+        // the Expression Images menu case does — so the new expressions show
+        // without reopening the chat.
+        onExpressionsImported: (dbId) async {
+          final fresh = await charRepo.getAvatarImages(dbId);
+          final targets = [
+            ...charRepo.characters,
+            ?character,
+            ...chatService.groupCharacters,
+          ];
+          for (final c in targets) {
+            if (c.dbId == dbId ||
+                chatService.originLibraryCardFor(c)?.dbId == dbId) {
+              c.avatarImages = List<AvatarImage>.from(fresh);
+            }
+          }
+          if (mounted) setState(() {});
+        },
+      ),
     );
   }
 
@@ -2116,12 +2142,9 @@ class _ChatPageState extends State<ChatPage> {
                     ],
                   ),
 
-                  // Image Generation (user spec): direct button (no PopupMenuButton<ImageGenMode>).
-                  // The 6 types are now buttons *inside* the Image Studio UI. Magic wand opens neutral studio
-                  // (starter mode custom; user picks type button immediately for clean UX). All assembly (incl.
-                  // visualize N slider + think strip + user box as instr + persona + char visual no pers + style)
-                  // handled inside on Craft. Keep launcher thin + "keep in sync" with studio show/ctor, service thins,
-                  // builder, ImageGenContext, ModeInfoCard, _show (now mode-less).
+                  // Image Generation: the magic-wand button opens the Image
+                  // Studio, where the user picks a Subject (Freeform / Character
+                  // / Persona) and crafts the prompt.
                   Consumer<StorageService>(
                     builder: (context, storage, _) {
                       if (!storage.imageGenEnabled) {

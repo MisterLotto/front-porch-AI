@@ -164,13 +164,14 @@ class _SettingsPageState extends State<SettingsPage> {
     if (storage.remoteApiKey.isEmpty && !isLocal) return; // no API configured
 
     final openRouter = Provider.of<OpenRouterService>(context, listen: false);
-    openRouter.configure(
-      apiUrl: storage.remoteApiUrl,
-      apiKey: storage.remoteApiKey,
-    );
-
+    // Explicit-target fetch — configure() here silently re-routed the ACTIVE
+    // backend (opening Settings while on oMLX pointed all chat traffic at the
+    // Remote API provider until the next storage sync).
     try {
-      final models = await openRouter.fetchAvailableModels();
+      final models = await openRouter.fetchAvailableModels(
+        apiUrl: storage.remoteApiUrl,
+        apiKey: storage.remoteApiKey,
+      );
       if (mounted && models.isNotEmpty) {
         setState(() => _availableModels = models);
       }
@@ -589,6 +590,9 @@ class _SettingsPageState extends State<SettingsPage> {
         executablePath: backendManager.backendPath!,
         kcppsPath: storage.activeKcppsPath ?? '',
         modelPath: overrideModel,
+        mmprojPath: overrideModel != null
+            ? storage.mmprojForModel(overrideModel)
+            : null,
         port: 5001,
       );
     } else {
@@ -597,6 +601,9 @@ class _SettingsPageState extends State<SettingsPage> {
         backendManager.backendPath!,
         effectiveModel,
         kcppsPath: storage.activeKcppsPath,
+        mmprojPath: _selectedModelPath != null
+            ? storage.mmprojForModel(_selectedModelPath!)
+            : null,
         gpuLayers: gpuLayers,
         contextSize: contextSize,
         useVulkan: _useVulkan,
@@ -966,13 +973,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : theme.iconTheme.color,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'Local (KoboldCPP)',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: backendManager.isIntelMac
-                                      ? Colors.grey
-                                      : null,
+                              Flexible(
+                                child: Text(
+                                  'Local (KoboldCPP)',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: backendManager.isIntelMac
+                                        ? Colors.grey
+                                        : null,
+                                  ),
                                 ),
                               ),
                             ],
@@ -995,13 +1006,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : theme.iconTheme.color,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'Pseudo-Remote',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: backendManager.isIntelMac
-                                      ? Colors.grey
-                                      : null,
+                              Flexible(
+                                child: Text(
+                                  'Pseudo-Remote',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: backendManager.isIntelMac
+                                        ? Colors.grey
+                                        : null,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1022,9 +1037,13 @@ class _SettingsPageState extends State<SettingsPage> {
                                 color: theme.iconTheme.color,
                               ),
                               const SizedBox(width: 6),
-                              const Text(
-                                'Remote API',
-                                style: TextStyle(fontSize: 13),
+                              const Flexible(
+                                child: Text(
+                                  'Remote API',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 13),
+                                ),
                               ),
                             ],
                           ),
@@ -1045,11 +1064,15 @@ class _SettingsPageState extends State<SettingsPage> {
                                     : Colors.grey,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'oMLX',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Platform.isMacOS ? null : Colors.grey,
+                              Flexible(
+                                child: Text(
+                                  'oMLX',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Platform.isMacOS ? null : Colors.grey,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1196,11 +1219,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                 context,
                                 listen: false,
                               );
-                              openRouter.configure(
+                              final result = await openRouter.testConnection(
                                 apiUrl: storageService.remoteApiUrl,
                                 apiKey: storageService.remoteApiKey,
                               );
-                              final result = await openRouter.testConnection();
                               if (mounted) {
                                 setState(() => _isCheckingConnection = false);
                                 final isSuccess = result.contains('successful');
@@ -1265,12 +1287,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       context,
                                       listen: false,
                                     );
-                                openRouter.configure(
-                                  apiUrl: storageService.remoteApiUrl,
-                                  apiKey: storageService.remoteApiKey,
-                                );
                                 final models = await openRouter
-                                    .fetchAvailableModels();
+                                    .fetchAvailableModels(
+                                      apiUrl: storageService.remoteApiUrl,
+                                      apiKey: storageService.remoteApiKey,
+                                    );
                                 if (mounted) {
                                   setState(() {
                                     _availableModels = models;
@@ -1401,6 +1422,22 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (val) =>
                           storageService.setRemoteModelName(val.trim()),
                     ),
+                  // Vision-capability pill for the selected remote model.
+                  // OpenRouter / Nano-GPT resolve automatically from free
+                  // /models metadata; generic backends expose a manual "Check
+                  // vision" button so the runtime probe never costs a token
+                  // unasked.
+                  if (storageService.remoteModelName.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: RemoteVisionPill(
+                        apiUrl: storageService.remoteApiUrl,
+                        apiKey: storageService.remoteApiKey,
+                        modelName: storageService.remoteModelName,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -1464,12 +1501,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       context,
                                       listen: false,
                                     );
-                                openRouter.configure(
-                                  apiUrl: 'http://localhost:8000/v1',
-                                  apiKey: storageService.remoteApiKey,
-                                );
                                 final models = await openRouter
-                                    .fetchAvailableModels();
+                                    .fetchAvailableModels(
+                                      apiUrl: 'http://localhost:8000/v1',
+                                      apiKey: storageService.remoteApiKey,
+                                    );
                                 if (mounted) {
                                   setState(() {
                                     _availableModels = models;
@@ -1566,6 +1602,25 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (val) =>
                           storageService.setRemoteModelName(val.trim()),
                     ),
+                  // Vision-capability pill for the selected remote model.
+                  // OpenRouter / Nano-GPT resolve automatically from free
+                  // /models metadata; generic backends expose a manual "Check
+                  // vision" button so the runtime probe never costs a token
+                  // unasked.
+                  if (storageService.remoteModelName.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      // oMLX lives at its fixed local URL — probing the
+                      // Remote API URL here asked the WRONG server (e.g.
+                      // OpenRouter) about an oMLX model and always said none.
+                      child: RemoteVisionPill(
+                        apiUrl: 'http://localhost:8000/v1',
+                        apiKey: storageService.remoteApiKey,
+                        modelName: storageService.remoteModelName,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -1762,6 +1817,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   _applyAutoConfiguration(silent: true);
                 }
               },
+            ),
+
+            // Vision projector (mmproj) for the selected model — the same
+            // field the chat Model Settings dialog shows, surfaced here too
+            // because this page is where users actually pick the model.
+            // Self-hides when a preset owns the model; greys out for
+            // text-only / vision-built-in GGUFs. Applied on next start.
+            const SizedBox(height: 12),
+            VisionProjectorField(
+              modelPath: _selectedModelPath,
+              storage: storageService,
+              onChanged: () => setState(() {}),
             ),
 
             const SizedBox(height: 24),
@@ -3394,6 +3461,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 backendManager.backendPath!,
                                 storage.lastUsedModelPath!,
                                 kcppsPath: storage.activeKcppsPath,
+                                mmprojPath: storage.mmprojForModel(
+                                  storage.lastUsedModelPath!,
+                                ),
                                 gpuLayers: storage.gpuLayers,
                                 contextSize: storage.contextSize,
                                 useVulkan: storage.useVulkan ?? false,
@@ -3414,6 +3484,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 backendManager.backendPath!,
                                 storage.lastUsedModelPath!,
                                 kcppsPath: storage.activeKcppsPath,
+                                mmprojPath: storage.mmprojForModel(
+                                  storage.lastUsedModelPath!,
+                                ),
                                 gpuLayers: storage.gpuLayers,
                                 contextSize: storage.contextSize,
                                 useVulkan: storage.useVulkan ?? false,
@@ -3695,16 +3768,19 @@ class _SettingsPageState extends State<SettingsPage> {
         storageService.setRemoteApiUrl(url);
         _remoteApiUrlController.text = url;
 
-        // Configure OpenRouter with stored values (apiKey persists across switches)
+        // setRemoteApiUrl above already triggered LLMProvider's storage sync,
+        // which applies the live config per active backend; the picker fetch
+        // targets the new URL explicitly instead of clobbering live state.
         final openRouter = Provider.of<OpenRouterService>(
           context,
           listen: false,
         );
-        openRouter.configure(apiUrl: url, apiKey: storageService.remoteApiKey);
-
         setState(() => _isFetchingModels = true);
         try {
-          final models = await openRouter.fetchAvailableModels();
+          final models = await openRouter.fetchAvailableModels(
+            apiUrl: url,
+            apiKey: storageService.remoteApiKey,
+          );
           if (mounted) {
             setState(() {
               _availableModels = models;

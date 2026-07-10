@@ -36,7 +36,17 @@ const List<({String label, int value})> _drawThingsSamplers = [
 
 class GenerationOptionsTab extends StatefulWidget {
   final bool showEnableToggle;
-  const GenerationOptionsTab({super.key, this.showEnableToggle = true});
+
+  /// When false, the Default Style + Prompt Format controls are hidden here —
+  /// the Studio owns them via its canvas StylePreview, so showing them in the
+  /// settings panel too would duplicate the control. The standalone image
+  /// settings dialog (which has no StylePreview) keeps them.
+  final bool showStyleControls;
+  const GenerationOptionsTab({
+    super.key,
+    this.showEnableToggle = true,
+    this.showStyleControls = true,
+  });
   @override
   State<GenerationOptionsTab> createState() => _GenerationOptionsTabState();
 }
@@ -53,6 +63,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   bool _unloadingModel = false;
   bool _switchingModel = false;
   List<String> _localSamplers = [];
+  List<String> _localSchedulers = [];
   List<LoraOption> _localLoras = [];
   bool _loadingLoras = false;
   final _seedController = TextEditingController();
@@ -134,12 +145,18 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     final isComfy = st.imageGenBackend == 'comfyui';
     if (!isComfy && url.isEmpty) return;
     final svc = Provider.of<ImageGenService>(context, listen: false);
+    // Samplers and schedulers come from the same server (and, for ComfyUI, the
+    // same /object_info payload), so fetch them together on connect.
     final ss = isComfy
         ? await svc.fetchComfySamplers(url)
         : await svc.fetchA1111Samplers(url);
+    final sched = isComfy
+        ? await svc.fetchComfySchedulers(url)
+        : await svc.fetchA1111Schedulers(url);
     if (mounted) {
       setState(() {
         _localSamplers = ss;
+        _localSchedulers = sched;
       });
     }
   }
@@ -316,6 +333,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                   _localModels = [];
                   _localLoras = [];
                   _localSamplers = [];
+                  _localSchedulers = [];
                 });
                 // Auto-test the newly selected local backend (the status card
                 // reflects progress; success populates models/LoRAs/samplers).
@@ -903,6 +921,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
         const SizedBox(height: 4),
         _buildSizeSelector(st),
         const SizedBox(height: 8),
+        if (widget.showStyleControls) ...[
         Text(
           'Default Style',
           style: TextStyle(
@@ -964,6 +983,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             if (v != null) st.setImageGenPromptParadigm(v);
           },
         ),
+        ],
         const SizedBox(height: 6),
         Text(
           'Default Negative Prompt',
@@ -1201,6 +1221,59 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           ),
         ],
       ),
+      // Scheduler (noise schedule) — a real quality lever on A1111 and ComfyUI.
+      // Draw Things has no separate scheduler concept, so it's hidden there.
+      // 'Automatic' means the backend decides (A1111 default / sampler-derived
+      // for ComfyUI); the fetched list is server-specific.
+      if (!isDrawThings)
+        Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                'Scheduler',
+                style: TextStyle(
+                  color: AppColors.textSecondary(context),
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: DropdownButtonFormField<String>(
+                initialValue:
+                    (st.imageGenScheduler == 'Automatic' ||
+                        _localSchedulers.contains(st.imageGenScheduler))
+                    ? st.imageGenScheduler
+                    : 'Automatic',
+                dropdownColor: AppColors.surfaceContainerOf(context),
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
+                  fontSize: 10,
+                ),
+                isExpanded: true,
+                decoration: _deco(hint: 'scheduler'),
+                items: <String>['Automatic', ..._localSchedulers]
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(
+                          s,
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textPrimary(context),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) st.setImageGenScheduler(v);
+                },
+              ),
+            ),
+          ],
+        ),
       Row(
         children: [
           Expanded(
@@ -1277,35 +1350,6 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               width: 24,
               child: Text(
                 st.drawThingsShift.toStringAsFixed(1),
-                style: TextStyle(fontSize: 8),
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Text(
-              'Str',
-              style: TextStyle(
-                color: AppColors.textSecondary(context),
-                fontSize: 9,
-              ),
-            ),
-            Expanded(
-              child: Slider(
-                value: st.drawThingsStrength,
-                min: 0,
-                max: 2,
-                divisions: 40,
-                activeColor: AppColors.formMasterAccent,
-                onChanged: (v) => st.setDrawThingsStrength(v),
-              ),
-            ),
-            SizedBox(
-              width: 24,
-              child: Text(
-                st.drawThingsStrength.toStringAsFixed(1),
                 style: TextStyle(fontSize: 8),
                 textAlign: TextAlign.end,
               ),

@@ -362,6 +362,11 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
   Future<void> setImageGenSampler(String v) async {}
 
   @override
+  String get imageGenScheduler => 'Automatic';
+  @override
+  Future<void> setImageGenScheduler(String v) async {}
+
+  @override
   int get imageGenSeed => -1;
   @override
   Future<void> setImageGenSeed(int v) async {}
@@ -378,11 +383,6 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
     lastSetShift = v;
     notifyListeners();
   }
-
-  @override
-  double get drawThingsStrength => 1.0;
-  @override
-  Future<void> setDrawThingsStrength(double v) async {}
 
   @override
   int get drawThingsSeedMode => 2;
@@ -421,6 +421,7 @@ class _TabFakeImageGenService extends ChangeNotifier
   List<String> localModels = [];
   List<String> localLoras = [];
   List<String> localSamplers = [];
+  List<String> localSchedulers = [];
 
   @override
   Future<bool> testLocalConnection(String url) async => testResult;
@@ -444,6 +445,12 @@ class _TabFakeImageGenService extends ChangeNotifier
   Future<List<String>> fetchComfySamplers(String url) async => localSamplers;
   @override
   Future<List<String>> fetchA1111Samplers(String url) async => localSamplers;
+  @override
+  Future<List<String>> fetchComfySchedulers(String url) async =>
+      localSchedulers;
+  @override
+  Future<List<String>> fetchA1111Schedulers(String url) async =>
+      localSchedulers;
 
   @override
   Future<bool> unloadLocalModel(String url) async => true;
@@ -460,6 +467,8 @@ class _TabFakeImageGenService extends ChangeNotifier
     Uint8List? referenceImage,
     String? model,
     bool isPortrait = false,
+    int? seed,
+    double? denoise,
   }) async => null;
   @override
   Future<String> generateSmartPrompt({
@@ -482,7 +491,6 @@ class _TabFakeImageGenService extends ChangeNotifier
     bool isGroupNonObserver = false,
     String? currentSpeakerId,
     String? userInstruction,
-    int? visualizeNumMessages,
   }) async => '';
   @override
   String get statusMessage => '';

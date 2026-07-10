@@ -24,6 +24,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'comfy_workflow.dart';
+
 /// ComfyUI backend client (plain HTTP — no sidecar). The novice contract:
 /// ComfyUI runs on http://127.0.0.1:8188 out of the box, everything the UI
 /// needs (models, LoRAs, samplers) is discovered via GET /object_info, and
@@ -89,86 +91,34 @@ class ComfyUiService {
   static String schedulerFor(String storedSampler) =>
       storedSampler.toLowerCase().contains('karras') ? 'karras' : 'normal';
 
-  /// Build the bundled txt2img workflow (ComfyUI API format: node-id →
-  /// {class_type, inputs}). When [loraName] is set, a LoraLoader is spliced
-  /// between the checkpoint and the sampler/text-encoders. Pure — unit-tested.
-  static Map<String, dynamic> buildTxt2ImgWorkflow({
-    required String model,
-    required String prompt,
-    required String negativePrompt,
-    required int width,
-    required int height,
-    required int steps,
-    required double cfgScale,
-    required int seed,
-    required String samplerName,
-    required String scheduler,
-    String loraName = '',
-    double loraWeight = 0.8,
-  }) {
-    final hasLora = loraName.isNotEmpty;
-    // Model/clip source for the sampler + prompts: the checkpoint directly,
-    // or the LoRA loader when one is selected.
-    final modelSrc = hasLora ? ['lora', 0] : ['ckpt', 0];
-    final clipSrc = hasLora ? ['lora', 1] : ['ckpt', 1];
-    return {
-      'ckpt': {
-        'class_type': 'CheckpointLoaderSimple',
-        'inputs': {'ckpt_name': model},
-      },
-      if (hasLora)
-        'lora': {
-          'class_type': 'LoraLoader',
-          'inputs': {
-            'lora_name': loraName,
-            'strength_model': loraWeight,
-            'strength_clip': loraWeight,
-            'model': ['ckpt', 0],
-            'clip': ['ckpt', 1],
-          },
-        },
-      'pos': {
-        'class_type': 'CLIPTextEncode',
-        'inputs': {'text': prompt, 'clip': clipSrc},
-      },
-      'neg': {
-        'class_type': 'CLIPTextEncode',
-        'inputs': {'text': negativePrompt, 'clip': clipSrc},
-      },
-      'latent': {
-        'class_type': 'EmptyLatentImage',
-        'inputs': {'width': width, 'height': height, 'batch_size': 1},
-      },
-      'sampler': {
-        'class_type': 'KSampler',
-        'inputs': {
-          'seed': seed,
-          'steps': steps,
-          'cfg': cfgScale,
-          'sampler_name': samplerName,
-          'scheduler': scheduler,
-          'denoise': 1.0,
-          'model': modelSrc,
-          'positive': ['pos', 0],
-          'negative': ['neg', 0],
-          'latent_image': ['latent', 0],
-        },
-      },
-      'decode': {
-        'class_type': 'VAEDecode',
-        'inputs': {
-          'samples': ['sampler', 0],
-          'vae': ['ckpt', 2],
-        },
-      },
-      'save': {
-        'class_type': 'SaveImage',
-        'inputs': {
-          'filename_prefix': 'FrontPorchAI',
-          'images': ['decode', 0],
-        },
-      },
-    };
+  /// Upload an image to ComfyUI's input folder (POST /upload/image, multipart)
+  /// so a LoadImage node can reference it by name — the prerequisite for
+  /// img2img. Returns the server-side filename (prefixed with its subfolder
+  /// when ComfyUI stored it in one). Throws with a readable message on failure.
+  Future<String> uploadImage(Uint8List bytes) async {
+    final req = http.MultipartRequest('POST', Uri.parse('$_root/upload/image'))
+      ..fields['overwrite'] = 'true'
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: 'fpai_ref_${DateTime.now().microsecondsSinceEpoch}.png',
+        ),
+      );
+    final streamed = await req.send().timeout(const Duration(seconds: 30));
+    final resp = await http.Response.fromStream(streamed);
+    if (resp.statusCode != 200) {
+      throw Exception(
+        'ComfyUI rejected the reference image (HTTP ${resp.statusCode})',
+      );
+    }
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    final name = body['name']?.toString() ?? '';
+    final subfolder = body['subfolder']?.toString() ?? '';
+    if (name.isEmpty) {
+      throw Exception('ComfyUI upload returned no filename');
+    }
+    return subfolder.isEmpty ? name : '$subfolder/$name';
   }
 
   /// Extract the option list for one node input from a GET /object_info
@@ -259,6 +209,15 @@ class ComfyUiService {
     return optionsFromObjectInfo(info, 'KSampler', 'sampler_name');
   }
 
+  /// The schedule (noise sigma curve) options ComfyUI's KSampler exposes —
+  /// karras / exponential / sgm_uniform / normal / etc. Read from the same
+  /// /object_info payload as the samplers. Empty on any error.
+  Future<List<String>> fetchSchedulers() async {
+    final info = await _objectInfo();
+    if (info == null) return const [];
+    return optionsFromObjectInfo(info, 'KSampler', 'scheduler');
+  }
+
   /// Generate one image: submit the workflow, poll /history until the prompt
   /// finishes, then download the first output image via /view. Throws with a
   /// readable message on failure (the ImageGenService dispatcher sanitizes).
@@ -280,6 +239,8 @@ class ComfyUiService {
     String scheduler = 'normal',
     String loraName = '',
     double loraWeight = 0.8,
+    Uint8List? referenceImageBytes,
+    double denoise = 0.5,
     void Function(double? progress, Uint8List? preview)? onProgress,
   }) async {
     if (model.isEmpty) {
@@ -287,20 +248,39 @@ class ComfyUiService {
       // name a checkpoint. Surface that instead of a cryptic node error.
       throw Exception('Select a checkpoint model for ComfyUI first.');
     }
-    final workflow = buildTxt2ImgWorkflow(
-      model: model,
-      prompt: prompt,
-      negativePrompt: negativePrompt,
-      width: width,
-      height: height,
-      steps: steps,
-      cfgScale: cfgScale,
-      seed: seed == -1 ? Random().nextInt(1 << 31) : seed,
-      samplerName: samplerName,
-      scheduler: scheduler,
-      loraName: loraName,
-      loraWeight: loraWeight,
-    );
+    final effectiveSeed = seed == -1 ? Random().nextInt(1 << 31) : seed;
+    // img2img when a reference image is supplied: upload it first so a
+    // LoadImage node can name it, then feed the encoded latent to the sampler.
+    final hasRef = referenceImageBytes != null && referenceImageBytes.isNotEmpty;
+    final workflow = hasRef
+        ? ComfyWorkflow.buildImg2ImgWorkflow(
+            model: model,
+            prompt: prompt,
+            negativePrompt: negativePrompt,
+            steps: steps,
+            cfgScale: cfgScale,
+            seed: effectiveSeed,
+            samplerName: samplerName,
+            scheduler: scheduler,
+            loraName: loraName,
+            loraWeight: loraWeight,
+            initImageName: await uploadImage(referenceImageBytes),
+            denoise: denoise,
+          )
+        : ComfyWorkflow.buildTxt2ImgWorkflow(
+            model: model,
+            prompt: prompt,
+            negativePrompt: negativePrompt,
+            width: width,
+            height: height,
+            steps: steps,
+            cfgScale: cfgScale,
+            seed: effectiveSeed,
+            samplerName: samplerName,
+            scheduler: scheduler,
+            loraName: loraName,
+            loraWeight: loraWeight,
+          );
 
     final clientId =
         'frontporch-${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';

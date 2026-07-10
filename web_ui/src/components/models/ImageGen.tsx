@@ -17,6 +17,7 @@ interface ImageConfig {
   steps: number;
   cfgScale: number;
   sampler: string;
+  scheduler: string;
   localUrl: string;
   comfyUrl: string;
   promptReview: boolean;
@@ -171,6 +172,12 @@ export function ImageGen({ onError }: { onError: (s: string) => void }) {
           <input value={cfg.sampler} onChange={(e) => set({ sampler: e.target.value })} onBlur={() => saveConfig({ sampler: cfg.sampler })} placeholder="Euler a" />
         </label>
       </div>
+      {(cfg.backend === 'a1111' || cfg.backend === 'comfyui') && (
+        <label>
+          Scheduler <span className="muted small">(noise schedule — karras, exponential, sgm_uniform…)</span>
+          <input value={cfg.scheduler} onChange={(e) => set({ scheduler: e.target.value })} onBlur={() => saveConfig({ scheduler: cfg.scheduler })} placeholder="Automatic" />
+        </label>
+      )}
       <div className="img-row2">
         <label>
           Steps

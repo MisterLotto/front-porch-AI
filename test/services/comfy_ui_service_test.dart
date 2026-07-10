@@ -10,11 +10,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
+import 'package:front_porch_ai/services/comfy_workflow.dart';
 
 void main() {
   group('buildTxt2ImgWorkflow', () {
     Map<String, dynamic> build({String lora = ''}) =>
-        ComfyUiService.buildTxt2ImgWorkflow(
+        ComfyWorkflow.buildTxt2ImgWorkflow(
           model: 'sdxl.safetensors',
           prompt: 'a porch at dusk',
           negativePrompt: 'blurry',
@@ -67,6 +68,72 @@ void main() {
         expect(g['neg']['inputs']['clip'], ['lora', 1]);
       },
     );
+  });
+
+  group('buildImg2ImgWorkflow', () {
+    Map<String, dynamic> build({String lora = '', double denoise = 0.55}) =>
+        ComfyWorkflow.buildImg2ImgWorkflow(
+          model: 'sdxl.safetensors',
+          prompt: 'a porch at dusk',
+          negativePrompt: 'blurry',
+          steps: 25,
+          cfgScale: 6.5,
+          seed: 1234,
+          samplerName: 'euler_ancestral',
+          scheduler: 'karras',
+          initImageName: 'fpai_ref_123.png',
+          denoise: denoise,
+          loraName: lora,
+          loraWeight: 0.7,
+        );
+
+    test('replaces the empty latent with LoadImage → VAEEncode', () {
+      final g = build();
+      // No txt2img empty latent — the latent now comes from the encoded ref.
+      expect(g.containsKey('init_image'), isTrue);
+      expect(g['init_image']['class_type'], 'LoadImage');
+      expect(g['init_image']['inputs']['image'], 'fpai_ref_123.png');
+      expect(g['latent']['class_type'], 'VAEEncode');
+      expect(g['latent']['inputs']['pixels'], ['init_image', 0]);
+      expect(g['latent']['inputs']['vae'], ['ckpt', 2]);
+      // The sampler consumes the encoded latent, not an EmptyLatentImage.
+      expect(g['sampler']['inputs']['latent_image'], ['latent', 0]);
+    });
+
+    test('KSampler denoises from the reference at the requested strength', () {
+      final s = build(denoise: 0.4)['sampler']['inputs'] as Map;
+      expect(s['denoise'], 0.4);
+      // Everything else matches the txt2img sampler wiring.
+      expect(s['seed'], 1234);
+      expect(s['steps'], 25);
+      expect(s['sampler_name'], 'euler_ancestral');
+      expect(s['scheduler'], 'karras');
+    });
+
+    test('a LoRA still splices in the same way as txt2img', () {
+      final g = build(lora: 'style.safetensors');
+      expect(g['lora']['inputs']['lora_name'], 'style.safetensors');
+      expect(g['sampler']['inputs']['model'], ['lora', 0]);
+      expect(g['pos']['inputs']['clip'], ['lora', 1]);
+    });
+
+    test('txt2img graph is unchanged (empty latent, denoise 1.0)', () {
+      final g = ComfyWorkflow.buildTxt2ImgWorkflow(
+        model: 'm.safetensors',
+        prompt: 'p',
+        negativePrompt: 'n',
+        width: 768,
+        height: 768,
+        steps: 20,
+        cfgScale: 7.0,
+        seed: 7,
+        samplerName: 'euler',
+        scheduler: 'normal',
+      );
+      expect(g['latent']['class_type'], 'EmptyLatentImage');
+      expect(g.containsKey('init_image'), isFalse);
+      expect(g['sampler']['inputs']['denoise'], 1.0);
+    });
   });
 
   group('normalizeSampler', () {
@@ -144,6 +211,20 @@ void main() {
           },
         },
       },
+      // KSampler exposes both the sampler_name and scheduler enums — the
+      // scheduler picker reads the latter (fetchSchedulers → this extraction).
+      'KSampler': {
+        'input': {
+          'required': {
+            'sampler_name': [
+              ['euler', 'dpmpp_2m'],
+            ],
+            'scheduler': [
+              ['normal', 'karras', 'exponential', 'sgm_uniform'],
+            ],
+          },
+        },
+      },
     };
 
     test('extracts enum options from required inputs', () {
@@ -158,6 +239,10 @@ void main() {
       expect(
         ComfyUiService.optionsFromObjectInfo(info, 'LoraLoader', 'lora_name'),
         ['style.safetensors'],
+      );
+      expect(
+        ComfyUiService.optionsFromObjectInfo(info, 'KSampler', 'scheduler'),
+        ['normal', 'karras', 'exponential', 'sgm_uniform'],
       );
     });
 
