@@ -4158,3 +4158,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files (test):** `tool_support_test.dart` +4 tests (metadata true/false seeds without pinging; null/throwing fetch falls through to ping; mid-fetch model switch records nothing; force retest overrules wrong metadata); `model_capabilities_test.dart` + host-helper group.
 - **Verification:** `flutter analyze` — No issues found; 64/64 across tool_support + model_capabilities + realism_evals suites; `flutter build macos --debug` ✓. All touched files <500 lines.
 - **Commit:** 71f4025
+
+## 2026-07-10 — mmproj picker surfaced on Settings → Backend (discoverability fix)
+- **Why:** the maintainer went to load an mmproj and couldn't find the field — it only existed inside the chat page's Model Settings dialog, while the natural place (Settings → Backend → Model Selection, where the model is actually picked) had nothing for local vision (remote sections already had their pill there).
+- **Files:** `lib/ui/pages/settings_page.dart` — `VisionProjectorField` rendered under the Model Selection dropdown (shared by Local KoboldCPP + Pseudo-Remote modes); +12 lines, reuses the existing widget via the widgets barrel, no logic changes.
+- **Verification:** `flutter analyze` clean; `flutter build macos --debug` ✓.
+- **Commit:** 6611020
