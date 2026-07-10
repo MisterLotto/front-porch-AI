@@ -4218,3 +4218,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Why:** blanket "qwen" skip (meant for the Qwen2.5-VL text-encoder sidecar) hid the Qwen-Image checkpoint; meanwhile ministral (encoder) and restoreformer (face restorer) leaked into the picker.
 - **Fix:** encoder keywords now skip only files without an "image" marker (qwen_image_* kept, qwen_2.5_vl_* hidden); +ministral/restoreformer/gfpgan/codeformer to skips; chroma unbanned (real image family); ltx → video tier. Same logic in `tools/dt-grpc-python/dt_grpc_client.py` and the Dart mirror; simulated against the real model list.
 - **Commit:** f9c2a5d
+
+## 2026-07-10 — Expression pack: editable prompt on re-roll (gated behind the first automatic attempt)
+- **Why:** maintainer request — endless blind re-rolls; let the user steer the prompt once the app has had its automatic try.
+- **Files:** `expression_pack_service.dart` — `ExpressionSlot.rerollCount`/`customPrompt`, `reroll(promptOverride:)`, `effectivePromptFor`, shared `_promptFor`; `expression_pack_grid.dart` — pencil beside dice/retry when `rerollCount > 0`; NEW `expression_pack_prompt_editor.dart` (96 lines, keeps grid at 468); session test extended.
+- **Verification:** analyze clean; 28/28; macOS debug build ✓.
+- **Commit:** 1936052
