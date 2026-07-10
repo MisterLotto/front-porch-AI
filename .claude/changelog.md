@@ -4201,3 +4201,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Fixes:** `expression_pack_service.dart` — slot N generates with `(seed+N) & 0x7fffffff` (base image carries identity; per-slot noise lets the face change); emotion modifier moved to the FRONT of the prompt. `expression_pack_qc.dart` — QC prompt no longer names the target; the model must name what it sees and the app compares via `EmotionLabels.nuancedToStandard` + stem heuristic; mismatches carry a `reads as "…"` note.
 - **Tests:** session + QC suites updated/extended — 20/20.
 - **Commit:** c7a1a20
+
+## 2026-07-10 — Expression pack variation strength default 0.5 → 0.7 (max 0.85)
+- **Why:** maintainer field-testing — 0.5 left expressions essentially unchanged (img2img anchor dominates a small face region); 0.7 produced real variation even before the per-slot-seed fix landed.
+- **Files:** `lib/ui/image_studio/expression_pack_setup.dart` — `_denoise` default 0.7; slider 0.30–0.85 (11 divisions).
+- **Verification:** analyze clean; studio suites pass.
+- **Commit:** bd71b1d
