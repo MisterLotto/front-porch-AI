@@ -28,6 +28,7 @@ class ExpressionSettings with SettingsBase {
   bool _expressionRerollSame = false;
   String _expressionFallback = 'neutral'; // 'neutral', 'prime', 'none', 'emoji'
   bool _expressionEmojiBurst = false;
+  double _expressionEmojiBurstSize = 28.0; // particle base font size (12–60)
 
   bool get expressionEnabled => _expressionEnabled;
   String get expressionClassificationMode => _expressionClassificationMode;
@@ -35,6 +36,7 @@ class ExpressionSettings with SettingsBase {
   bool get expressionRerollSame => _expressionRerollSame;
   String get expressionFallback => _expressionFallback;
   bool get expressionEmojiBurst => _expressionEmojiBurst;
+  double get expressionEmojiBurstSize => _expressionEmojiBurstSize;
 
   void load() {
     _expressionEnabled = prefs?.getBool(k('expression_enabled')) ?? false;
@@ -48,6 +50,9 @@ class ExpressionSettings with SettingsBase {
         prefs?.getString(k('expression_fallback')) ?? 'neutral';
     _expressionEmojiBurst =
         prefs?.getBool(k('expression_emoji_burst')) ?? false;
+    _expressionEmojiBurstSize =
+        (prefs?.getDouble(k('expression_emoji_burst_size')) ?? 28.0)
+            .clamp(12.0, 60.0);
   }
 
   Future<void> setExpressionEnabled(bool value) async {
@@ -83,6 +88,15 @@ class ExpressionSettings with SettingsBase {
   Future<void> setExpressionEmojiBurst(bool value) async {
     _expressionEmojiBurst = value;
     await prefs?.setBool(k('expression_emoji_burst'), value);
+    notify();
+  }
+
+  Future<void> setExpressionEmojiBurstSize(double value) async {
+    _expressionEmojiBurstSize = value.clamp(12.0, 60.0);
+    await prefs?.setDouble(
+      k('expression_emoji_burst_size'),
+      _expressionEmojiBurstSize,
+    );
     notify();
   }
 }

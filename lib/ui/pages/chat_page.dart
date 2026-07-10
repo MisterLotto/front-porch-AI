@@ -2604,10 +2604,11 @@ class _ChatPageState extends State<ChatPage> {
                           emoji: expressionEmoji,
                           enabled: storage.expressionEmojiBurst,
                           generating: chat.isGenerating,
+                          size: storage.expressionEmojiBurstSize,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                              horizontal: 6,
+                              vertical: 2,
                             ),
                             decoration: BoxDecoration(
                               color: AppColors.resolve(
@@ -2621,8 +2622,8 @@ class _ChatPageState extends State<ChatPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                expressionEmoji,
-                                style: const TextStyle(fontSize: 36),
+                                  expressionEmoji,
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                               ],
                             ),

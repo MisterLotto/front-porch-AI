@@ -292,6 +292,10 @@ class StorageService extends ChangeNotifier {
   bool get expressionEmojiBurst => expressionSettings.expressionEmojiBurst;
   Future<void> setExpressionEmojiBurst(bool v) =>
       expressionSettings.setExpressionEmojiBurst(v);
+  double get expressionEmojiBurstSize =>
+      expressionSettings.expressionEmojiBurstSize;
+  Future<void> setExpressionEmojiBurstSize(double v) =>
+      expressionSettings.setExpressionEmojiBurstSize(v);
 
   // Image gen / draw things (types per imageGenSettings canonical: String size, int for draw* ints, bool for flags)
   bool get imageGenEnabled => imageGenSettings.imageGenEnabled;

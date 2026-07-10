@@ -3871,3 +3871,18 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Parity:** injection change is main-gen prompt only (Dart backend serves both surfaces). Label change mirrored to web. web_ui asset rebuild (`npm run build`) pending before web ships.
 - **Verification:** flutter analyze on the 3 changed Dart files — No issues found. No tests referenced the old strings. User confirmed "working better now" in local `flutter run`.
 - **Commit:** c0abe1c
+
+## 2026-07-10 — Expression emoji burst (PR #83) review fixes + user-selectable particle size
+
+- **Context:** Reviewed community PR #83 (dazpants1, "Expression explosion") targeting Rawhide. The feature adds an opt-in `EmojiBurst` particle animation from the expression badge. Review surfaced three problems: (1) an *unconditional* enlargement of the always-on expression badge (fontSize 12→36, padding 6/2→8/4) that shipped to every expression user regardless of the default-off burst toggle — the author believed it was gated but it was not; (2) a misindented `Text` in chat_page.dart that would fail the `flutter format` gate; (3) a hardcoded, oversized particle `fontSize: 60` (peaks ~78px with the 1.3× scale-up), judged excessive. Maintainer decision: keep the badge at its original size for everyone (no per-feature size variance), and expose the burst particle size as a user slider instead of picking one magic number.
+- **Branch:** cut fresh from Rawhide tip (5dfeae1) and merged the author's ExpressionExplosion commits on top (preserves attribution); the only Rawhide conflict was docs/Rawhide.md, auto-resolved by the existing `merge=union` driver.
+- **Files:**
+  - `lib/services/storage/settings/expression_settings.dart` — new `expressionEmojiBurstSize` (double, default 28.0, clamped 12–60; min = the badge's own 12px): field, getter, `load()` with clamp, and `setExpressionEmojiBurstSize` setter (mirrors the existing expression setter pattern).
+  - `lib/services/storage_service.dart` — pass-through getter/setter for `expressionEmojiBurstSize`.
+  - `lib/ui/chat_components/sidebar/emoji_burst.dart` — threaded a `size` param through `EmojiBurst` → `_BurstOverlay`; particle `fontSize` and the centering offset (`size/2`, was the hardcoded `-30`) now derive from it. Removed the hardcoded `60`.
+  - `lib/ui/pages/chat_page.dart` — reverted the badge to its original look (fontSize 12, padding 6/2), fixed the misindented `Text`, and passed `size: storage.expressionEmojiBurstSize` into `EmojiBurst`.
+  - `lib/ui/settings/tabs/voice_media_tab.dart` — added a "Burst emoji size" slider (16–64px, 12 divisions, live px label) shown only when the burst toggle is on; styled with `AppColors.textSecondary`/`presetColors[4]` like its siblings.
+  - `docs/Rawhide.md` — extended the burst bullet to mention the size slider.
+- **Design notes:** no new private methods (public setter follows the established `setExpression*` convention). Slider persists on `onChanged`; `divisions` keep writes to discrete steps so no drag-buffer plumbing into the stateless tab was needed. Badge size is now identical for all users per maintainer direction — no conditional sizing.
+- **Verification:** dart/flutter toolchain is unavailable in this environment, so `flutter analyze`/`format` could NOT be run here — changes were verified by manual review against the compiler rules (const removed where a non-const field is now used; all new refs resolve; AppColors honored). Analyze/format must be run before merge.
+- **Commit:** (pending)

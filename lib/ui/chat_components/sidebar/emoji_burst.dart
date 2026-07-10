@@ -6,6 +6,7 @@ class EmojiBurst extends StatefulWidget {
   final String? emoji;
   final bool enabled;
   final bool generating;
+  final double size;
   final Widget child;
 
   const EmojiBurst({
@@ -13,6 +14,7 @@ class EmojiBurst extends StatefulWidget {
     required this.emoji,
     required this.enabled,
     required this.generating,
+    required this.size,
     required this.child,
   });
 
@@ -82,6 +84,7 @@ class _EmojiBurstState extends State<EmojiBurst> {
           child: _BurstOverlay(
             emoji: emoji,
             center: center,
+            size: widget.size,
             onComplete: () {
               entry.remove();
               if (_activeEntry == entry) _activeEntry = null;
@@ -124,11 +127,13 @@ class _ParticleConfig {
 class _BurstOverlay extends StatefulWidget {
   final String emoji;
   final Offset center;
+  final double size;
   final VoidCallback onComplete;
 
   const _BurstOverlay({
     required this.emoji,
     required this.center,
+    required this.size,
     required this.onComplete,
   });
 
@@ -198,17 +203,18 @@ class _BurstOverlayState extends State<_BurstOverlay>
                   ? 1.0 + t * 1.0
                   : 1.3 - ((t - 0.3) / 0.7) * 1.3;
 
+              final half = widget.size / 2;
               return Positioned(
-                left: widget.center.dx + p.dx * t - 30,
-                top: widget.center.dy + p.dy * t - 30,
+                left: widget.center.dx + p.dx * t - half,
+                top: widget.center.dy + p.dy * t - half,
                 child: Opacity(
                   opacity: opacity.clamp(0.0, 1.0),
                   child: Transform.scale(
                     scale: scale.clamp(0.0, 1.5),
                     child: Text(
                       widget.emoji,
-                      style: const TextStyle(
-                        fontSize: 60,
+                      style: TextStyle(
+                        fontSize: widget.size,
                         decoration: TextDecoration.none,
                       ),
                     ),
