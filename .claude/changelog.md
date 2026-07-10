@@ -4207,3 +4207,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `lib/ui/image_studio/expression_pack_setup.dart` — `_denoise` default 0.7; slider 0.30–0.85 (11 divisions).
 - **Verification:** analyze clean; studio suites pass.
 - **Commit:** bd71b1d
+
+## 2026-07-10 — Expression prompts: facial-geometry rewrite + negative counter-cue free rider
+- **Why:** post-seed-fix field test — expressions differ but rough (horror-grin joy from "beaming smile" at denoise 0.7). CFG-1 models (Flux/Qwen/turbo) have no negative branch, so displacement must be positive-prompt geometry; negatives still help classic CFG backends for free.
+- **Files:** `expression_prompts.dart` — all 28 modifiers rewritten (explicit mouth/brow/eye states, no negation, no teeth-summoners) + NEW `kExpressionNegatives`; `expression_pack_service.dart` — PackSlotGenerator carries per-slot negativePrompt (user negative + counter-cues); `expression_pack_dialog.dart` — closure updated; tests extended (33/33).
+- **Rollback:** bd71b1d = pre-tune state.
+- **Commit:** c433380
