@@ -151,6 +151,10 @@ class StudioView extends StatelessWidget {
                     const SizedBox(height: 12),
                     ModeInfoCard(mode: activeMode),
                     const SizedBox(height: 12),
+                    // Generation Settings live above the style box so they're
+                    // visible without scrolling; the fold-out stays collapsible.
+                    StudioSettingsPanel(initiallyExpanded: !configured),
+                    const SizedBox(height: 12),
                     StylePreview(
                       selectedStyle: selectedStyle,
                       paradigm: paradigm,
@@ -213,8 +217,6 @@ class StudioView extends StatelessWidget {
                       const SizedBox(height: 16),
                       GenerationHistory(entries: history, onRestore: onRestore),
                     ],
-                    const SizedBox(height: 16),
-                    StudioSettingsPanel(initiallyExpanded: !configured),
                   ],
                 ),
               ),

@@ -126,11 +126,10 @@ class _ImageStudioState extends State<ImageStudio> {
     _negativeForGen = storage.imageGenNegativePrompt;
     _activeMode = widget.mode;
     _builder = ImagePromptBuilder(llmService: widget.llmService);
-    // No boilerplate prefill: empty box until the user types, Crafts, or picks
-    // a Character/Persona subject (which auto-fills).
-    _editablePrompt = _activeMode == ImageGenMode.customPrompt
-        ? ''
-        : _autoFillFor(_activeMode);
+    // No boilerplate prefill for ANY subject: an empty box (with a guiding
+    // hint) until the user types or taps "Write it for me". Dumping the raw
+    // character description made both a poor prompt and poor UX.
+    _editablePrompt = '';
     _ctx = _makeContextForMode(_activeMode);
   }
 
@@ -158,24 +157,14 @@ class _ImageStudioState extends State<ImageStudio> {
     );
   }
 
-  /// Static, editable appearance prompt for a portrait subject.
-  String _autoFillFor(ImageGenMode mode) {
-    try {
-      return _builder.buildStaticPrompt(_makeContextForMode(mode));
-    } catch (_) {
-      return '';
-    }
-  }
-
-  /// Switch subject: rebuild ctx and auto-fill Character/Persona from appearance
-  /// (Freeform keeps the box).
+  /// Switch subject: rebuild the ctx snapshot and clear the prompt box — no
+  /// bleed between subjects, and no raw-description prefill (the user types or
+  /// taps "Write it for me").
   void _selectSubject(ImageGenMode mode) {
     setState(() {
       _activeMode = mode;
       _ctx = _makeContextForMode(mode);
-      if (mode != ImageGenMode.customPrompt) {
-        _editablePrompt = _autoFillFor(mode);
-      }
+      _editablePrompt = '';
     });
   }
 
