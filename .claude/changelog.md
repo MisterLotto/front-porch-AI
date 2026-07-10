@@ -4164,3 +4164,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `lib/ui/pages/settings_page.dart` — `VisionProjectorField` rendered under the Model Selection dropdown (shared by Local KoboldCPP + Pseudo-Remote modes); +12 lines, reuses the existing widget via the widgets barrel, no logic changes.
 - **Verification:** `flutter analyze` clean; `flutter build macos --debug` ✓.
 - **Commit:** 6611020
+
+## 2026-07-10 — Expression pack base falls back to the main card avatar
+- **Why:** the avatar fallback only read the expression-avatar store, which is empty for any character who hasn't had a pack yet (the entire audience of the feature) — a character with a card portrait got "No base portrait". Maintainer hit it on first use.
+- **Files:** `lib/ui/image_studio/expression_pack_dialog.dart` — `_primeAvatarBytes` now ends its chain at `CharacterCard.imagePath` (main card avatar); expression avatars still win when present; error copy updated for the only remaining case (character with no image at all).
+- **Verification:** `flutter analyze` clean; `flutter build macos --debug` ✓.
+- **Commit:** b0edbfd
