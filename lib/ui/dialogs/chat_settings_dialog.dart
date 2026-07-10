@@ -358,12 +358,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                           context,
                                           listen: false,
                                         );
-                                    openRouter.configure(
-                                      apiUrl: 'http://localhost:8000/v1',
-                                      apiKey: storage.remoteApiKey,
-                                    );
                                     final models = await openRouter
-                                        .fetchAvailableModels();
+                                        .fetchAvailableModels(
+                                          apiUrl: 'http://localhost:8000/v1',
+                                          apiKey: storage.remoteApiKey,
+                                        );
                                     if (mounted) {
                                       setState(() {
                                         _omlxModels = models;

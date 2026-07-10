@@ -164,13 +164,14 @@ class _SettingsPageState extends State<SettingsPage> {
     if (storage.remoteApiKey.isEmpty && !isLocal) return; // no API configured
 
     final openRouter = Provider.of<OpenRouterService>(context, listen: false);
-    openRouter.configure(
-      apiUrl: storage.remoteApiUrl,
-      apiKey: storage.remoteApiKey,
-    );
-
+    // Explicit-target fetch — configure() here silently re-routed the ACTIVE
+    // backend (opening Settings while on oMLX pointed all chat traffic at the
+    // Remote API provider until the next storage sync).
     try {
-      final models = await openRouter.fetchAvailableModels();
+      final models = await openRouter.fetchAvailableModels(
+        apiUrl: storage.remoteApiUrl,
+        apiKey: storage.remoteApiKey,
+      );
       if (mounted && models.isNotEmpty) {
         setState(() => _availableModels = models);
       }
@@ -1218,11 +1219,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                 context,
                                 listen: false,
                               );
-                              openRouter.configure(
+                              final result = await openRouter.testConnection(
                                 apiUrl: storageService.remoteApiUrl,
                                 apiKey: storageService.remoteApiKey,
                               );
-                              final result = await openRouter.testConnection();
                               if (mounted) {
                                 setState(() => _isCheckingConnection = false);
                                 final isSuccess = result.contains('successful');
@@ -1287,12 +1287,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       context,
                                       listen: false,
                                     );
-                                openRouter.configure(
-                                  apiUrl: storageService.remoteApiUrl,
-                                  apiKey: storageService.remoteApiKey,
-                                );
                                 final models = await openRouter
-                                    .fetchAvailableModels();
+                                    .fetchAvailableModels(
+                                      apiUrl: storageService.remoteApiUrl,
+                                      apiKey: storageService.remoteApiKey,
+                                    );
                                 if (mounted) {
                                   setState(() {
                                     _availableModels = models;
@@ -1502,12 +1501,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       context,
                                       listen: false,
                                     );
-                                openRouter.configure(
-                                  apiUrl: 'http://localhost:8000/v1',
-                                  apiKey: storageService.remoteApiKey,
-                                );
                                 final models = await openRouter
-                                    .fetchAvailableModels();
+                                    .fetchAvailableModels(
+                                      apiUrl: 'http://localhost:8000/v1',
+                                      apiKey: storageService.remoteApiKey,
+                                    );
                                 if (mounted) {
                                   setState(() {
                                     _availableModels = models;
@@ -3770,16 +3768,19 @@ class _SettingsPageState extends State<SettingsPage> {
         storageService.setRemoteApiUrl(url);
         _remoteApiUrlController.text = url;
 
-        // Configure OpenRouter with stored values (apiKey persists across switches)
+        // setRemoteApiUrl above already triggered LLMProvider's storage sync,
+        // which applies the live config per active backend; the picker fetch
+        // targets the new URL explicitly instead of clobbering live state.
         final openRouter = Provider.of<OpenRouterService>(
           context,
           listen: false,
         );
-        openRouter.configure(apiUrl: url, apiKey: storageService.remoteApiKey);
-
         setState(() => _isFetchingModels = true);
         try {
-          final models = await openRouter.fetchAvailableModels();
+          final models = await openRouter.fetchAvailableModels(
+            apiUrl: url,
+            apiKey: storageService.remoteApiKey,
+          );
           if (mounted) {
             setState(() {
               _availableModels = models;

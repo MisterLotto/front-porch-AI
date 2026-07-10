@@ -136,17 +136,13 @@ class SetupStep extends StatelessWidget {
                         isSelected: activeBackend == BackendType.omlx,
                         onTap: () async {
                           if (activeBackend != BackendType.omlx) {
+                            // setActiveBackend(omlx) configures the live
+                            // service onto localhost:8000 synchronously — the
+                            // old re-configure + 100ms "settle" delay here
+                            // were redundant.
                             await llmProvider.setActiveBackend(
                               BackendType.omlx,
                             );
-                            // Ensure oMLX URL is configured before loading models
-                            llmProvider.openRouterService.configure(
-                              apiUrl: 'http://localhost:8000/v1',
-                              apiKey: llmProvider.openRouterService.apiKey,
-                              modelName: llmProvider.openRouterService.modelName,
-                            );
-                            // Small delay to ensure configuration is applied
-                            await Future.delayed(const Duration(milliseconds: 100));
                             state.loadAvailableModels(llmProvider);
                           }
                         },
