@@ -36,7 +36,17 @@ const List<({String label, int value})> _drawThingsSamplers = [
 
 class GenerationOptionsTab extends StatefulWidget {
   final bool showEnableToggle;
-  const GenerationOptionsTab({super.key, this.showEnableToggle = true});
+
+  /// When false, the Default Style + Prompt Format controls are hidden here —
+  /// the Studio owns them via its canvas StylePreview, so showing them in the
+  /// settings panel too would duplicate the control. The standalone image
+  /// settings dialog (which has no StylePreview) keeps them.
+  final bool showStyleControls;
+  const GenerationOptionsTab({
+    super.key,
+    this.showEnableToggle = true,
+    this.showStyleControls = true,
+  });
   @override
   State<GenerationOptionsTab> createState() => _GenerationOptionsTabState();
 }
@@ -911,6 +921,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
         const SizedBox(height: 4),
         _buildSizeSelector(st),
         const SizedBox(height: 8),
+        if (widget.showStyleControls) ...[
         Text(
           'Default Style',
           style: TextStyle(
@@ -972,6 +983,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             if (v != null) st.setImageGenPromptParadigm(v);
           },
         ),
+        ],
         const SizedBox(height: 6),
         Text(
           'Default Negative Prompt',

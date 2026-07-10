@@ -24,39 +24,82 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 ///
 /// The three subjects map onto the surviving [ImageGenMode]s:
 /// - **Freeform** → `customPrompt` (type anything; blank + Craft pictures the scene)
-/// - **Character** → `characterPortrait` (the active chat character's appearance)
+/// - **Character** → `characterPortrait` (a chat character's appearance)
 /// - **Your persona** → `userAvatar` (the user persona's appearance)
 ///
-/// Picking Character/Persona auto-fills the prompt from their appearance (handled
-/// by the coordinator); the box stays fully editable.
+/// In a **group** chat there is no single active character, so the Character
+/// button opens a picker of the cast — you portrait one member at a time
+/// (reliable), rather than trying to render multiple specific characters in one
+/// image (which vanilla diffusion does poorly).
 class SubjectPicker extends StatelessWidget {
   final ImageGenMode selected;
 
-  /// The active chat character's display name. When null/empty the Character
+  /// The active character's name (1:1 chat) or the currently-picked group
+  /// member. When null/empty AND there are no [groupCharacters], the Character
   /// option is disabled (nothing to portray).
   final String? characterName;
 
+  /// In a group chat, the cast to choose from. When non-empty, the Character
+  /// button opens a member picker instead of selecting directly.
+  final List<({String name, String description})> groupCharacters;
+
   final ValueChanged<ImageGenMode>? onChanged;
+
+  /// Fires with the chosen index into [groupCharacters] when a group member is
+  /// picked for a portrait.
+  final ValueChanged<int>? onPickGroupMember;
+
+  /// Fires when "Group shot" is chosen — attempt the whole cast in one image
+  /// (honestly caveated: diffusion models render multiple specific characters
+  /// unreliably).
+  final VoidCallback? onPickGroupShot;
 
   const SubjectPicker({
     super.key,
     required this.selected,
     required this.characterName,
     required this.onChanged,
+    this.groupCharacters = const [],
+    this.onPickGroupMember,
+    this.onPickGroupShot,
   });
 
   @override
   Widget build(BuildContext context) {
+    final hasGroup = groupCharacters.isNotEmpty;
     final hasCharacter = (characterName ?? '').trim().isNotEmpty;
-    final options = <(ImageGenMode, String, IconData, bool)>[
-      (ImageGenMode.customPrompt, 'Freeform', Icons.brush, true),
+    final characterEnabled = onChanged != null && (hasCharacter || hasGroup);
+    final characterLabel = hasCharacter
+        ? characterName!.trim()
+        : (hasGroup ? 'Character…' : 'Character');
+
+    // (mode, label, icon, enabled, onTap)
+    final options = <(ImageGenMode, String, IconData, bool, VoidCallback?)>[
+      (
+        ImageGenMode.customPrompt,
+        'Freeform',
+        Icons.brush,
+        onChanged != null,
+        onChanged == null ? null : () => onChanged!(ImageGenMode.customPrompt),
+      ),
       (
         ImageGenMode.characterPortrait,
-        hasCharacter ? characterName!.trim() : 'Character',
+        characterLabel,
         Icons.face,
-        hasCharacter,
+        characterEnabled,
+        !characterEnabled
+            ? null
+            : (hasGroup
+                  ? () => _showMemberMenu(context)
+                  : () => onChanged!(ImageGenMode.characterPortrait)),
       ),
-      (ImageGenMode.userAvatar, 'Your persona', Icons.person, true),
+      (
+        ImageGenMode.userAvatar,
+        'Your persona',
+        Icons.person,
+        onChanged != null,
+        onChanged == null ? null : () => onChanged!(ImageGenMode.userAvatar),
+      ),
     ];
 
     return Column(
@@ -75,13 +118,11 @@ class SubjectPicker extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: options.map((o) {
-            final (mode, label, icon, enabled) = o;
+            final (mode, label, icon, enabled, onTap) = o;
             final isSel = mode == selected;
             final accent = AppColors.formMasterAccent;
             return OutlinedButton.icon(
-              onPressed: (onChanged == null || !enabled)
-                  ? null
-                  : () => onChanged!(mode),
+              onPressed: enabled ? onTap : null,
               icon: Icon(
                 icon,
                 size: 16,
@@ -112,5 +153,67 @@ class SubjectPicker extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// Pop a menu of the group cast anchored to the Character button; the chosen
+  /// member becomes the portrait subject.
+  Future<void> _showMemberMenu(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final pos = RelativeRect.fromRect(
+      Rect.fromPoints(
+        box.localToGlobal(Offset.zero, ancestor: overlay),
+        box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+    final idx = await showMenu<int>(
+      context: context,
+      position: pos,
+      color: AppColors.surfaceContainerOf(context),
+      items: [
+        // Whole-cast shot (value -1) — first, with the honest caveat inline.
+        PopupMenuItem<int>(
+          value: -1,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Group shot — all ${groupCharacters.length}',
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                'results vary by model',
+                style: TextStyle(
+                  color: AppColors.textTertiary(context),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        for (var i = 0; i < groupCharacters.length; i++)
+          PopupMenuItem<int>(
+            value: i,
+            child: Text(
+              groupCharacters[i].name,
+              style: TextStyle(color: AppColors.textPrimary(context)),
+            ),
+          ),
+      ],
+    );
+    if (idx == null) return;
+    if (idx < 0) {
+      onPickGroupShot?.call();
+    } else {
+      onPickGroupMember?.call(idx);
+    }
   }
 }

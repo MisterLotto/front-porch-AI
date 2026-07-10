@@ -46,6 +46,10 @@ class StudioView extends StatelessWidget {
     super.key,
     required this.activeMode,
     required this.characterName,
+    this.groupCharacters = const [],
+    this.groupShotActive = false,
+    this.onPickGroupMember,
+    this.onPickGroupShot,
     required this.selectedStyle,
     required this.paradigm,
     required this.prompt,
@@ -82,6 +86,10 @@ class StudioView extends StatelessWidget {
 
   final ImageGenMode activeMode;
   final String? characterName;
+  final List<({String name, String description})> groupCharacters;
+  final bool groupShotActive;
+  final ValueChanged<int>? onPickGroupMember;
+  final VoidCallback? onPickGroupShot;
   final String selectedStyle;
   final String paradigm;
   final String prompt;
@@ -146,8 +154,15 @@ class StudioView extends StatelessWidget {
                     SubjectPicker(
                       selected: activeMode,
                       characterName: characterName,
+                      groupCharacters: groupCharacters,
                       onChanged: isBusy ? null : onSelectSubject,
+                      onPickGroupMember: isBusy ? null : onPickGroupMember,
+                      onPickGroupShot: isBusy ? null : onPickGroupShot,
                     ),
+                    if (groupShotActive) ...[
+                      const SizedBox(height: 8),
+                      _groupShotCaveat(context),
+                    ],
                     const SizedBox(height: 12),
                     ModeInfoCard(mode: activeMode),
                     const SizedBox(height: 12),
@@ -223,6 +238,40 @@ class StudioView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Honest warning shown while the whole-cast "Group shot" subject is active.
+  Widget _groupShotCaveat(BuildContext context) {
+    final warn = AppColors.resolve(
+      context,
+      const Color(0xFFDAA83F),
+      const Color(0xFFA97514),
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: warn.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: warn.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 15, color: warn),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Group shot: rendering multiple specific characters in one image is '
+              'unreliable — faces and features often blend or mix up. Results vary '
+              'a lot by model; expect a few re-rolls.',
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 11.5,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

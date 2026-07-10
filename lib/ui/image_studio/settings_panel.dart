@@ -68,7 +68,12 @@ class StudioSettingsPanel extends StatelessWidget {
           ),
           iconColor: AppColors.iconSecondary(context),
           collapsedIconColor: AppColors.iconSecondary(context),
-          children: const [GenerationOptionsTab(showEnableToggle: false)],
+          children: const [
+            GenerationOptionsTab(
+              showEnableToggle: false,
+              showStyleControls: false,
+            ),
+          ],
         ),
       ),
     );

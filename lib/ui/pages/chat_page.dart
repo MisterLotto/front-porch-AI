@@ -1696,6 +1696,14 @@ class _ChatPageState extends State<ChatPage> {
         characterName: character?.name,
         characterDescription: character?.description,
         characterPersonality: character?.personality,
+        // Group cast for the Subject picker: per-member portrait + a caveated
+        // whole-cast "group shot". Empty for 1:1 chats.
+        groupCharacters: chatService.isGroupMode
+            ? [
+                for (final c in chatService.groupCharacters)
+                  (name: c.name, description: c.description),
+              ]
+            : const [],
         scenario: _cleanImageSourceText(character?.scenario ?? ''),
         worldInfo: _cleanImageSourceText(worldInfo ?? ''),
         personaName: personaService.persona.name,

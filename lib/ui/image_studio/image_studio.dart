@@ -45,6 +45,11 @@ class ImageStudio extends StatefulWidget {
   final String? characterName;
   final String? characterDescription;
   final String? characterPersonality; // signature compat only
+
+  /// Group-chat cast (name + appearance). Empty for 1:1 chats. When non-empty,
+  /// the Subject picker offers a per-member portrait picker plus a caveated
+  /// whole-cast "Group shot".
+  final List<({String name, String description})> groupCharacters;
   final String? scenario;
   final String? worldInfo;
   final String? personaName;
@@ -72,6 +77,7 @@ class ImageStudio extends StatefulWidget {
     this.characterName,
     this.characterDescription,
     this.characterPersonality,
+    this.groupCharacters = const [],
     this.scenario,
     this.worldInfo,
     this.personaName,
@@ -95,6 +101,12 @@ class _ImageStudioState extends State<ImageStudio> {
   // Session state (owned here; no god proliferation).
   late String _selectedStyle;
   late String _paradigm;
+
+  // Group-chat subject: the picked cast member, or a whole-cast "group shot".
+  // Both null/false → fall back to the 1:1 character passed on the widget.
+  String? _pickedGroupName;
+  String? _pickedGroupDesc;
+  bool _groupShot = false;
   late String _editablePrompt;
   late String _negativeForGen;
   Uint8List? _currentImageBytes;
@@ -139,8 +151,8 @@ class _ImageStudioState extends State<ImageStudio> {
       mode: mode,
       style: _selectedStyle,
       paradigm: _paradigm,
-      characterName: widget.characterName,
-      characterDescription: widget.characterDescription,
+      characterName: _activeCharName,
+      characterDescription: _activeCharDesc,
       lastMessage: (mode == ImageGenMode.customPrompt
           ? widget.customPrompt
           : widget.lastMessage),
@@ -163,7 +175,60 @@ class _ImageStudioState extends State<ImageStudio> {
   void _selectSubject(ImageGenMode mode) {
     setState(() {
       _activeMode = mode;
+      // Leaving the Character subject clears any group pick/shot.
+      if (mode != ImageGenMode.characterPortrait) {
+        _pickedGroupName = null;
+        _pickedGroupDesc = null;
+        _groupShot = false;
+      }
       _ctx = _makeContextForMode(mode);
+      _editablePrompt = '';
+    });
+  }
+
+  /// Name for the portrait context: a whole-cast label, a picked group member,
+  /// else the 1:1 chat character.
+  String? get _activeCharName {
+    if (_groupShot) {
+      return 'the group (${widget.groupCharacters.map((c) => c.name).join(', ')})';
+    }
+    return _pickedGroupName ?? widget.characterName;
+  }
+
+  /// Appearance for the portrait context: all members' appearances for a group
+  /// shot, a picked member's, else the 1:1 character's.
+  String? get _activeCharDesc {
+    if (_groupShot) {
+      return widget.groupCharacters
+          .map((c) => '${c.name}: ${c.description}')
+          .join('\n\n');
+    }
+    return _pickedGroupDesc ?? widget.characterDescription;
+  }
+
+  /// Portrait one chosen group member (reliable — a single subject).
+  void _pickGroupMember(int index) {
+    if (index < 0 || index >= widget.groupCharacters.length) return;
+    setState(() {
+      final m = widget.groupCharacters[index];
+      _pickedGroupName = m.name;
+      _pickedGroupDesc = m.description;
+      _groupShot = false;
+      _activeMode = ImageGenMode.characterPortrait;
+      _ctx = _makeContextForMode(_activeMode);
+      _editablePrompt = '';
+    });
+  }
+
+  /// Attempt the whole cast in one image. Honestly caveated in the UI — vanilla
+  /// diffusion renders multiple specific characters unreliably.
+  void _pickGroupShot() {
+    setState(() {
+      _pickedGroupName = null;
+      _pickedGroupDesc = null;
+      _groupShot = true;
+      _activeMode = ImageGenMode.characterPortrait;
+      _ctx = _makeContextForMode(_activeMode);
       _editablePrompt = '';
     });
   }
@@ -444,7 +509,11 @@ class _ImageStudioState extends State<ImageStudio> {
 
     return StudioView(
       activeMode: _activeMode,
-      characterName: widget.characterName,
+      characterName: _activeCharName,
+      groupCharacters: widget.groupCharacters,
+      groupShotActive: _groupShot,
+      onPickGroupMember: _pickGroupMember,
+      onPickGroupShot: _pickGroupShot,
       selectedStyle: _selectedStyle,
       paradigm: _paradigm,
       prompt: _editablePrompt,
