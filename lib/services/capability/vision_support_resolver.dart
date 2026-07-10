@@ -47,6 +47,12 @@ class VisionSupportResolver {
   final Map<String, VisionSupport> _remoteCache = {};
   final Map<String, GgufVisionInfo?> _ggufCache = {};
 
+  /// Raw provider metadata per '$apiUrl::$modelName' — ONE fetch serves both
+  /// the vision verdict and the tool-calling short-circuit. Misses are cached
+  /// too (null): the fallback runtime probes are the right degraded path
+  /// either way, and [clear] forgets a transient failure.
+  final Map<String, ModelApiCapabilities?> _capsCache = {};
+
   /// 1×1 transparent PNG used by the runtime probe.
   static const String _tinyPngB64 =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9Q'
@@ -56,6 +62,30 @@ class VisionSupportResolver {
   void clear() {
     _remoteCache.clear();
     _ggufCache.clear();
+    _capsCache.clear();
+  }
+
+  /// Raw `/models` capabilities (vision + tool calling) for a remote model,
+  /// fetched once and cached. Answers ONLY for capability-metadata providers
+  /// (OpenRouter / Nano-GPT) — any other host returns null immediately, so
+  /// callers fall back to their runtime probes without a wasted request.
+  Future<ModelApiCapabilities?> capabilitiesForRemote({
+    required String apiUrl,
+    required String apiKey,
+    required String modelName,
+  }) async {
+    if (apiUrl.isEmpty || modelName.isEmpty) return null;
+    if (!isCapabilityMetadataProviderUrl(apiUrl)) return null;
+    final key = '$apiUrl::$modelName';
+    if (_capsCache.containsKey(key)) return _capsCache[key];
+    final caps = await _fetchModelCapabilities(
+      apiUrl: apiUrl,
+      apiKey: apiKey,
+      modelName: modelName,
+      isNanoGpt: isNanoGptUrl(apiUrl),
+    );
+    _capsCache[key] = caps;
+    return caps;
   }
 
   /// Parse (and cache) the vision facts for a local GGUF model file.
@@ -145,22 +175,16 @@ class VisionSupportResolver {
     required String apiKey,
     required String modelName,
   }) async {
-    final host = apiUrl.toLowerCase();
-    final isOpenRouter = host.contains('openrouter.ai');
-    final isNanoGpt = host.contains('nano-gpt');
-
-    // Metadata path for the two providers whose /models describe capabilities.
-    if (isOpenRouter || isNanoGpt) {
-      final caps = await _fetchModelCapabilities(
-        apiUrl: apiUrl,
-        apiKey: apiKey,
-        modelName: modelName,
-        isNanoGpt: isNanoGpt,
-      );
-      // Provider metadata is authoritative when the model entry was found.
-      if (caps != null) return VisionSupport.fromApi(caps);
-      // Entry not found / fetch failed → fall through to the probe.
-    }
+    // Metadata path for the two providers whose /models describe capabilities
+    // (capabilitiesForRemote returns null immediately for every other host,
+    // and caches so the tool-calling short-circuit shares this one fetch).
+    final caps = await capabilitiesForRemote(
+      apiUrl: apiUrl,
+      apiKey: apiKey,
+      modelName: modelName,
+    );
+    // Provider metadata is authoritative when the model entry was found.
+    if (caps != null) return VisionSupport.fromApi(caps);
 
     // Generic OpenAI-compatible / MLX / unknown, or a metadata miss above.
     final probed = await _probeVision(

@@ -40,6 +40,7 @@ class ToolSupportTester {
     required this.isBackendReady,
     required this.isBusy,
     required this.onNotify,
+    this.fetchMetadataToolVerdict,
   });
 
   final ToolTransportProbe probe;
@@ -55,6 +56,16 @@ class ToolSupportTester {
   /// for the local engine's single generation slot.
   final bool Function() isBusy;
   final VoidCallback onNotify;
+
+  /// Provider-metadata answer for "does the current REMOTE model support tool
+  /// calls?" — true/false when OpenRouter/Nano-GPT `/models` metadata lists
+  /// the model, null when it can't answer (local backend, generic host, entry
+  /// miss, fetch failure). When it answers, the auto-test seeds the shared
+  /// probe from it and skips the runtime ping entirely — free and instant.
+  /// Null falls through to the ping, and the pill's tap-to-retest always
+  /// fires the real ping (a live tool call is stronger evidence and may
+  /// overrule stale metadata).
+  final Future<bool?> Function()? fetchMetadataToolVerdict;
 
   bool _testing = false;
   String _lastAutoTestedIdentity = '';
@@ -133,6 +144,33 @@ class ToolSupportTester {
     }
     _lastAutoTestedIdentity = identity;
     // Fire-and-forget; verdict lands on the shared probe and notifies the UI.
-    test();
+    _seedOrTest(identity);
+  }
+
+  /// Metadata first, ping second: when the provider's `/models` metadata can
+  /// answer for this model, seed the shared probe from it (every eval gate
+  /// and the pill then short-circuit with zero requests to the model itself);
+  /// otherwise fall through to the runtime ping exactly as before.
+  Future<void> _seedOrTest(String identity) async {
+    final fetch = fetchMetadataToolVerdict;
+    if (fetch != null) {
+      bool? verdict;
+      try {
+        verdict = await fetch();
+      } catch (e) {
+        debugPrint('[ToolSupport] metadata fetch failed: $e');
+        verdict = null;
+      }
+      // The model may have switched while the metadata fetch ran; a verdict
+      // may also have landed from a pass or a manual test in the meantime.
+      if (getBackendIdentity() != identity) return;
+      if (verdict != null &&
+          probe.supportFor(identity) == ToolCallSupport.untested) {
+        verdict ? probe.markSupported(identity) : probe.markXmlOnly(identity);
+        return;
+      }
+      if (verdict != null) return;
+    }
+    await test();
   }
 }

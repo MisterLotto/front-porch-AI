@@ -130,3 +130,14 @@ class ModelApiCapabilities {
     return const ModelApiCapabilities();
   }
 }
+
+/// True for Nano-GPT hosts, whose `/models` needs `?detailed=true` to surface
+/// the per-model `capabilities` block.
+bool isNanoGptUrl(String apiUrl) => apiUrl.toLowerCase().contains('nano-gpt');
+
+/// True when [apiUrl] points at a provider whose `/models` metadata describes
+/// per-model capabilities (vision, tool calling): OpenRouter or Nano-GPT.
+/// Everything else — generic OpenAI-compatible servers, oMLX at localhost —
+/// has no capability metadata and stays on the runtime probes.
+bool isCapabilityMetadataProviderUrl(String apiUrl) =>
+    apiUrl.toLowerCase().contains('openrouter.ai') || isNanoGptUrl(apiUrl);

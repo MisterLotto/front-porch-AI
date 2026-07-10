@@ -25,6 +25,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 
@@ -2326,6 +2327,20 @@ class ChatService extends ChangeNotifier {
             .isReady,
     isBusy: () => _isGenerating,
     onNotify: notifyListeners,
+    // OpenRouter/Nano-GPT list tool support in their /models metadata, so the
+    // auto-test seeds the probe for free instead of pinging the model. Gated
+    // to the openRouter backend: oMLX runs at localhost (no metadata) and the
+    // resolver returns null for any non-metadata host anyway — those, like
+    // local backends, keep the runtime ping.
+    fetchMetadataToolVerdict: () async {
+      if (_llmProvider?.activeBackend != BackendType.openRouter) return null;
+      final caps = await VisionSupportResolver.instance.capabilitiesForRemote(
+        apiUrl: _storageService.remoteApiUrl,
+        apiKey: _storageService.remoteApiKey,
+        modelName: _storageService.remoteModelName,
+      );
+      return caps?.toolCalling;
+    },
   );
 
   /// The current model's tool-calling verdict (sidebar pill + web facade).

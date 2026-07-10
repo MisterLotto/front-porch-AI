@@ -134,4 +134,38 @@ void main() {
       );
     });
   });
+
+  group('capability metadata host detection (shared helper)', () {
+    test('OpenRouter and Nano-GPT hosts are metadata providers', () {
+      expect(
+        isCapabilityMetadataProviderUrl('https://openrouter.ai/api/v1'),
+        isTrue,
+      );
+      expect(
+        isCapabilityMetadataProviderUrl('https://nano-gpt.com/api/v1'),
+        isTrue,
+      );
+      expect(isCapabilityMetadataProviderUrl('HTTPS://NANO-GPT.com/API/v1'),
+          isTrue);
+    });
+
+    test('generic remotes, oMLX, and localhost are not', () {
+      expect(
+        isCapabilityMetadataProviderUrl('http://localhost:8000/v1'),
+        isFalse,
+      );
+      expect(
+        isCapabilityMetadataProviderUrl('http://192.168.1.20:1234/v1'),
+        isFalse,
+      );
+      expect(isCapabilityMetadataProviderUrl('https://api.openai.com/v1'),
+          isFalse);
+      expect(isCapabilityMetadataProviderUrl(''), isFalse);
+    });
+
+    test('only Nano-GPT needs the detailed models request', () {
+      expect(isNanoGptUrl('https://nano-gpt.com/api/v1'), isTrue);
+      expect(isNanoGptUrl('https://openrouter.ai/api/v1'), isFalse);
+    });
+  });
 }

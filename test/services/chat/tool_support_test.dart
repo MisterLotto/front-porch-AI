@@ -183,6 +183,140 @@ void main() {
       expect(probe.supportFor('Kobold|m2'), ToolCallSupport.supported);
     });
 
+    test(
+      'metadata verdict seeds the probe and skips the runtime ping '
+      '(true → supported, false → unsupported, zero tool-eval calls)',
+      () async {
+        for (final (verdict, expected) in [
+          (true, ToolCallSupport.supported),
+          (false, ToolCallSupport.unsupported),
+        ]) {
+          final probe = ToolTransportProbe();
+          var pings = 0;
+          final tester = ToolSupportTester(
+            probe: probe,
+            fireToolEval: (_, _) async {
+              pings++;
+              return null;
+            },
+            getBackendIdentity: () => 'Remote API|model-x|',
+            isBackendReady: () => true,
+            isBusy: () => false,
+            onNotify: () {},
+            fetchMetadataToolVerdict: () async => verdict,
+          );
+          tester.onBackendMaybeChanged();
+          await Future<void>.delayed(Duration.zero);
+          expect(probe.supportFor('Remote API|model-x|'), expected);
+          expect(pings, 0, reason: 'metadata answered — no ping needed');
+        }
+      },
+    );
+
+    test(
+      'metadata miss (null) falls through to the runtime ping, and a '
+      'throwing fetch is treated as a miss',
+      () async {
+        for (final fetch in <Future<bool?> Function()>[
+          () async => null,
+          () async => throw Exception('metadata endpoint down'),
+        ]) {
+          final probe = ToolTransportProbe();
+          var pings = 0;
+          final tester = ToolSupportTester(
+            probe: probe,
+            fireToolEval: (_, _) async {
+              pings++;
+              return const LlmToolResponse(
+                calls: [
+                  LlmToolCall(name: 'report_ping', arguments: {'ok': true}),
+                ],
+                text: '',
+              );
+            },
+            getBackendIdentity: () => 'Remote API|model-x|',
+            isBackendReady: () => true,
+            isBusy: () => false,
+            onNotify: () {},
+            fetchMetadataToolVerdict: fetch,
+          );
+          tester.onBackendMaybeChanged();
+          await Future<void>.delayed(Duration.zero);
+          expect(pings, 1, reason: 'no metadata answer — ping is the fallback');
+          expect(
+            probe.supportFor('Remote API|model-x|'),
+            ToolCallSupport.supported,
+          );
+        }
+      },
+    );
+
+    test('mid-metadata-fetch model switch records nothing', () async {
+      final probe = ToolTransportProbe();
+      var identity = 'Remote API|model-x|';
+      var pings = 0;
+      final tester = ToolSupportTester(
+        probe: probe,
+        fireToolEval: (_, _) async {
+          pings++;
+          return null;
+        },
+        getBackendIdentity: () => identity,
+        isBackendReady: () => true,
+        isBusy: () => false,
+        onNotify: () {},
+        fetchMetadataToolVerdict: () async {
+          // The user switches models while the metadata fetch runs.
+          identity = 'Remote API|model-y|';
+          return true;
+        },
+      );
+      tester.onBackendMaybeChanged();
+      await Future<void>.delayed(Duration.zero);
+      expect(probe.supportFor('Remote API|model-x|'), ToolCallSupport.untested);
+      expect(probe.supportFor('Remote API|model-y|'), ToolCallSupport.untested);
+      expect(pings, 0);
+    });
+
+    test(
+      'manual force retest fires the real ping and can overrule metadata',
+      () async {
+        final probe = ToolTransportProbe();
+        var pings = 0;
+        final tester = ToolSupportTester(
+          probe: probe,
+          fireToolEval: (_, _) async {
+            pings++;
+            return const LlmToolResponse(
+              calls: [
+                LlmToolCall(name: 'report_ping', arguments: {'ok': true}),
+              ],
+              text: '',
+            );
+          },
+          getBackendIdentity: () => 'Remote API|model-x|',
+          isBackendReady: () => true,
+          isBusy: () => false,
+          onNotify: () {},
+          // Metadata wrongly claims no tool support.
+          fetchMetadataToolVerdict: () async => false,
+        );
+        tester.onBackendMaybeChanged();
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          probe.supportFor('Remote API|model-x|'),
+          ToolCallSupport.unsupported,
+        );
+        // Pill tap: the live tool call wins over stale metadata.
+        await tester.test(force: true);
+        expect(pings, 1);
+        expect(
+          probe.supportFor('Remote API|model-x|'),
+          ToolCallSupport.supported,
+        );
+      },
+    );
+
     test('mid-probe model switch discards the stale verdict', () async {
       final probe = ToolTransportProbe();
       var identity = 'Kobold|m1';

@@ -398,10 +398,10 @@ class _RemoteVisionPillState extends State<RemoteVisionPill> {
   bool _loading = false;
   bool _requested = false;
 
-  bool get _isMetadataProvider {
-    final u = widget.apiUrl.toLowerCase();
-    return u.contains('openrouter.ai') || u.contains('nano-gpt');
-  }
+  // Metadata providers resolve for free (no probe request), so auto-resolving
+  // on init is safe only for them — the shared host check keeps this UI, the
+  // resolver, and the tool-calling short-circuit classifying identically.
+  bool get _isMetadataProvider => isCapabilityMetadataProviderUrl(widget.apiUrl);
 
   @override
   void initState() {
