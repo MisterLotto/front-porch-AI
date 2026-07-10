@@ -31,14 +31,14 @@ import 'package:front_porch_ai/utils/utils.dart';
 class ExpressionPackSetup extends StatefulWidget {
   const ExpressionPackSetup({
     super.key,
-    required this.base768,
+    required this.baseImage,
     required this.characterName,
     required this.onCancel,
     required this.onStart,
     required this.onDescribePortrait,
   });
 
-  final Uint8List base768;
+  final Uint8List baseImage;
   final String characterName;
   final VoidCallback onCancel;
   final void Function({
@@ -101,7 +101,7 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.memory(
-                widget.base768,
+                widget.baseImage,
                 width: 96,
                 height: 96,
                 fit: BoxFit.cover,

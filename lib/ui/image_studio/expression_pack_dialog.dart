@@ -39,26 +39,35 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'expression_pack_grid.dart';
 import 'expression_pack_setup.dart';
 
-/// Decode any crop output and re-emit it as an exactly-768x768 PNG (center
-/// square crop + resize). ComfyUI's img2img inherits its output size from the
-/// reference image, so the base must literally BE 768x768 for every backend
-/// to produce a uniform pack.
-Uint8List? _normalizePackBase(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
+/// Decode the crop output and re-emit it at a diffusion-friendly size that
+/// PRESERVES the source aspect ratio — a portrait avatar yields a portrait
+/// pack instead of being forced square. The long side lands on 768 and both
+/// dimensions snap to multiples of 64, because backends can't generate at
+/// arbitrary pixel sizes and ComfyUI's img2img inherits its output size from
+/// the reference image — the base must literally BE the generation size.
+/// Returns null when the bytes can't be decoded.
+({Uint8List bytes, int width, int height})? _normalizePackBase(Uint8List raw) {
+  final decoded = img.decodeImage(raw);
   if (decoded == null) return null;
-  return img.encodePng(
-    img.copyResizeCropSquare(
-      decoded,
-      size: 768,
-      interpolation: img.Interpolation.cubic,
-    ),
+  final isLandscape = decoded.width >= decoded.height;
+  final scale = 768 / (isLandscape ? decoded.width : decoded.height);
+  int snap(num v) => ((v / 64).round() * 64).clamp(320, 768).toInt();
+  final width = isLandscape ? 768 : snap(decoded.width * scale);
+  final height = isLandscape ? snap(decoded.height * scale) : 768;
+  final resized = img.copyResize(
+    decoded,
+    width: width,
+    height: height,
+    interpolation: img.Interpolation.cubic,
   );
+  return (bytes: img.encodePng(resized), width: width, height: height);
 }
 
 /// The Expression-pack flow: turn one base portrait into a labeled set of
 /// expression avatars via img2img. [launch] runs the pre-flight (backend
-/// guard, base-image resolution, square crop, 768x768 normalization) and then
-/// shows this two-step dialog (setup, then the live generation grid).
+/// guard, base-image resolution, an optional free-form crop, and
+/// aspect-preserving size normalization) and then shows this two-step dialog
+/// (setup, then the live generation grid).
 class ExpressionPackDialog extends StatefulWidget {
   const ExpressionPackDialog._({
     required this.characterDbId,
@@ -66,7 +75,9 @@ class ExpressionPackDialog extends StatefulWidget {
     required this.repository,
     required this.storage,
     required this.imageGen,
-    required this.base768,
+    required this.baseImage,
+    required this.baseWidth,
+    required this.baseHeight,
     required this.basePrompt,
     required this.negativePrompt,
   });
@@ -76,7 +87,12 @@ class ExpressionPackDialog extends StatefulWidget {
   final CharacterRepository repository;
   final StorageService storage;
   final ImageGenService imageGen;
-  final Uint8List base768;
+
+  /// The normalized base portrait; every slot generates at exactly
+  /// [baseWidth]x[baseHeight], so the pack matches the avatar's aspect.
+  final Uint8List baseImage;
+  final int baseWidth;
+  final int baseHeight;
   final String basePrompt;
   final String negativePrompt;
 
@@ -141,17 +157,14 @@ class ExpressionPackDialog extends StatefulWidget {
       return false;
     }
 
-    // Square crop (the user frames the face), then normalize to 768x768 PNG.
-    final cropped = await ImageCropDialog.show(
-      context,
-      imageBytes: base,
-      aspectRatioWidth: 1,
-      aspectRatioHeight: 1,
-    );
+    // Optional free-form crop (frame the face however the art allows — no
+    // forced aspect; card art is rarely square), then normalize to a
+    // diffusion-friendly size that keeps the chosen aspect ratio.
+    final cropped = await ImageCropDialog.show(context, imageBytes: base);
     if (cropped == null || cropped.isEmpty) return false;
-    final base768 = _normalizePackBase(cropped);
+    final normalized = _normalizePackBase(cropped);
     if (!context.mounted) return false;
-    if (base768 == null) {
+    if (normalized == null) {
       await showWarmDialog(
         context,
         title: 'Unreadable image',
@@ -173,7 +186,9 @@ class ExpressionPackDialog extends StatefulWidget {
         repository: repository,
         storage: storage,
         imageGen: imageGen,
-        base768: base768,
+        baseImage: normalized.bytes,
+        baseWidth: normalized.width,
+        baseHeight: normalized.height,
         basePrompt: basePrompt,
         negativePrompt: negativePrompt,
       ),
@@ -234,7 +249,7 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
   bool _importing = false;
 
   /// The base portrait, encoded once and shared by every vision call.
-  late final String _baseB64 = base64Encode(widget.base768);
+  late final String _baseB64 = base64Encode(widget.baseImage);
 
   /// Vision QC controller for the grid; a new run replaces (and disposes) the
   /// previous one. Null until the first "Vision check".
@@ -341,8 +356,8 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
           widget.imageGen.generateImage(
             prompt: prompt,
             negativePrompt: widget.negativePrompt,
-            size: '768x768',
-            referenceImage: widget.base768,
+            size: '${widget.baseWidth}x${widget.baseHeight}',
+            referenceImage: widget.baseImage,
             seed: seed,
             denoise: denoise,
           ),
@@ -424,7 +439,7 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
                   ? SingleChildScrollView(
                       padding: const EdgeInsets.all(20),
                       child: ExpressionPackSetup(
-                        base768: widget.base768,
+                        baseImage: widget.baseImage,
                         characterName: widget.characterName,
                         onCancel: () => Navigator.of(context).pop(false),
                         onStart: _start,
