@@ -4188,3 +4188,10 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `lib/ui/image_studio/expression_pack_dialog.dart` — ImageCropDialog call + import removed; `launch` normalizes the resolved base directly; docs updated (framing alternative: pick a pre-cropped reference image).
 - **Verification:** analyze clean; macOS debug build ✓ (first attempt failed transiently from build-dir contention with the live `flutter run`; retry clean).
 - **Commit:** af33e2c
+
+## 2026-07-10 — oMLX re-route fix (Settings clobbered the shared client) + portrait-describe removed
+- **oMLX fix:** OpenRouterService is the one shared client for Remote API + oMLX; `_autoFetchModels` (on Settings open) and six other UI sites called `configure()` just to target a list-fetch/connection-test, silently re-routing the ACTIVE backend's chat traffic (oMLX → Remote API provider → "Model X is not supported on /v1/chat/completions"). `fetchAvailableModels`/`testConnection` gained explicit apiUrl/apiKey overrides; all seven sites now fetch without touching live state; setup_step's redundant configure+delay deleted. Diagnosed by replaying the app's exact payload against the live oMLX server (which succeeded — proving the app was talking to the wrong host).
+- **Describe removed (maintainer call):** img2img anchors likeness from pixels; the prompt-side description only helps at high variation strengths. Deleted: setup "Portrait grounding" UI, dialog bridge + appearanceDetail plumbing, `describePortrait` + tests, Rawhide mention. Vision check (output QC) stays.
+- **Files:** open_router_service.dart, settings_page.dart, chat_settings_dialog.dart, setup_step.dart; expression_pack_{setup,dialog}.dart, expression_pack_qc.dart, expression_pack_qc_test.dart, docs/Rawhide.md.
+- **Verification:** analyze clean; 26/26 across qc/vision/studio/openrouter-tools suites; macOS debug build ✓.
+- **Commits:** ca7ac4e 5328269 (describe removal, oMLX fix)
