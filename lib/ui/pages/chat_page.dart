@@ -1679,6 +1679,8 @@ class _ChatPageState extends State<ChatPage> {
       context,
       listen: false,
     );
+    // Captured pre-dialog for the Expression-pack import refresh below.
+    final charRepo = Provider.of<CharacterRepository>(context, listen: false);
     Future<void> onSendToChat(Uint8List bytes, String prompt) async {
       final path = await imageGenService.saveImageToDisk(bytes);
       if (path != null) {
@@ -1696,12 +1698,19 @@ class _ChatPageState extends State<ChatPage> {
         characterName: character?.name,
         characterDescription: character?.description,
         characterPersonality: character?.personality,
+        characterDbId: character?.dbId,
         // Group cast for the Subject picker: per-member portrait + a caveated
-        // whole-cast "group shot". Empty for 1:1 chats.
+        // whole-cast "group shot". Empty for 1:1 chats. dbId resolves to the
+        // member's LIBRARY origin (same routing as the Expression Images menu)
+        // so Expression packs land on the shared home, not a throwaway copy.
         groupCharacters: chatService.isGroupMode
             ? [
                 for (final c in chatService.groupCharacters)
-                  (name: c.name, description: c.description),
+                  (
+                    name: c.name,
+                    description: c.description,
+                    dbId: (chatService.originLibraryCardFor(c) ?? c).dbId,
+                  ),
               ]
             : const [],
         scenario: _cleanImageSourceText(character?.scenario ?? ''),
@@ -1719,6 +1728,25 @@ class _ChatPageState extends State<ChatPage> {
         lightingHint: null,
         isGroupNonObserver: isGroupNonObserver,
         currentSpeakerId: currentSpeakerId,
+        // After an Expression-pack import, reload the library card's avatars
+        // and push them onto the live chat card(s) — the same refresh dance
+        // the Expression Images menu case does — so the new expressions show
+        // without reopening the chat.
+        onExpressionsImported: (dbId) async {
+          final fresh = await charRepo.getAvatarImages(dbId);
+          final targets = [
+            ...charRepo.characters,
+            ?character,
+            ...chatService.groupCharacters,
+          ];
+          for (final c in targets) {
+            if (c.dbId == dbId ||
+                chatService.originLibraryCardFor(c)?.dbId == dbId) {
+              c.avatarImages = List<AvatarImage>.from(fresh);
+            }
+          }
+          if (mounted) setState(() {});
+        },
       ),
     );
   }

@@ -244,6 +244,12 @@ class ImageGenService extends ChangeNotifier {
     // have no img2img endpoint here, so they ignore it.
     String? model,
     bool isPortrait = false,
+    // Per-call overrides for the stored seed/denoise settings; used by batch
+    // flows (expression packs) that need a shared fixed seed and fixed denoise
+    // across every image without touching the user's persisted settings.
+    // Remote APIs ignore them (no seed/denoise support on those endpoints).
+    int? seed,
+    double? denoise,
   }) async {
     _isGenerating = true;
     _statusMessage = 'Generating image...';
@@ -301,7 +307,8 @@ class ImageGenService extends ChangeNotifier {
             final (width, height) = _parseSize(imageSize);
             final steps = _storage.imageGenSettings.imageGenSteps;
             final cfgScale = _storage.imageGenSettings.imageGenCfgScale;
-            final seed = _storage.imageGenSettings.imageGenSeed;
+            final effectiveSeed =
+                seed ?? _storage.imageGenSettings.imageGenSeed;
 
             // DT-native advanced knobs (shared sliders still used for steps/cfg/seed/size)
             final sampler = _storage.imageGenSettings.drawThingsSampler;
@@ -309,7 +316,8 @@ class ImageGenService extends ChangeNotifier {
             // Unified img2img denoise. Draw Things only consults this when a
             // reference image is present (pure txt2img ignores it), so it is
             // always safe to pass. Replaces the retired drawThingsStrength knob.
-            final strength = _storage.imageGenSettings.imageGenDenoise;
+            final strength =
+                denoise ?? _storage.imageGenSettings.imageGenDenoise;
             final seedMode = _storage.drawThingsSeedMode;
             final teaCache = _storage.drawThingsTeaCache;
             final cfgZeroStar = _storage.drawThingsCfgZeroStar;
@@ -327,7 +335,7 @@ class ImageGenService extends ChangeNotifier {
               height: height,
               steps: steps,
               cfgScale: cfgScale,
-              seed: seed,
+              seed: effectiveSeed,
               strength: strength,
               shift: shift,
               sampler: sampler,
@@ -381,9 +389,9 @@ class ImageGenService extends ChangeNotifier {
             cfgScale: _storage.imageGenSettings.imageGenCfgScale,
             samplerName: _storage.imageGenSettings.imageGenSampler,
             scheduler: _storage.imageGenSettings.imageGenScheduler,
-            seed: _storage.imageGenSettings.imageGenSeed,
+            seed: seed ?? _storage.imageGenSettings.imageGenSeed,
             referenceImage: referenceImage,
-            denoise: _storage.imageGenSettings.imageGenDenoise,
+            denoise: denoise ?? _storage.imageGenSettings.imageGenDenoise,
           );
         }
       } else if (backend == ImageGenBackend.comfyUi) {
@@ -415,7 +423,7 @@ class ImageGenService extends ChangeNotifier {
             height: height,
             steps: _storage.imageGenSettings.imageGenSteps,
             cfgScale: _storage.imageGenSettings.imageGenCfgScale,
-            seed: _storage.imageGenSettings.imageGenSeed,
+            seed: seed ?? _storage.imageGenSettings.imageGenSeed,
             samplerName: ComfyUiService.normalizeSampler(
               storedSampler,
               available,
@@ -424,7 +432,7 @@ class ImageGenService extends ChangeNotifier {
             loraName: _storage.imageGenSettings.imageGenLora,
             loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
             referenceImageBytes: referenceImage,
-            denoise: _storage.imageGenSettings.imageGenDenoise,
+            denoise: denoise ?? _storage.imageGenSettings.imageGenDenoise,
             onProgress: _updateGenProgress,
           );
         } catch (e) {

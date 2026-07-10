@@ -467,6 +467,8 @@ class _TabFakeImageGenService extends ChangeNotifier
     Uint8List? referenceImage,
     String? model,
     bool isPortrait = false,
+    int? seed,
+    double? denoise,
   }) async => null;
   @override
   Future<String> generateSmartPrompt({

@@ -1,0 +1,376 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
+import 'package:provider/provider.dart';
+
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/expression_pack_service.dart';
+import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
+import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
+
+import 'expression_pack_grid.dart';
+import 'expression_pack_setup.dart';
+
+/// Decode any crop output and re-emit it as an exactly-768x768 PNG (center
+/// square crop + resize). ComfyUI's img2img inherits its output size from the
+/// reference image, so the base must literally BE 768x768 for every backend
+/// to produce a uniform pack.
+Uint8List? _normalizePackBase(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  return img.encodePng(
+    img.copyResizeCropSquare(
+      decoded,
+      size: 768,
+      interpolation: img.Interpolation.cubic,
+    ),
+  );
+}
+
+/// The Expression-pack flow: turn one base portrait into a labeled set of
+/// expression avatars via img2img. [launch] runs the pre-flight (backend
+/// guard, base-image resolution, square crop, 768x768 normalization) and then
+/// shows this two-step dialog (setup, then the live generation grid).
+class ExpressionPackDialog extends StatefulWidget {
+  const ExpressionPackDialog._({
+    required this.characterDbId,
+    required this.characterName,
+    required this.repository,
+    required this.storage,
+    required this.imageGen,
+    required this.base768,
+    required this.basePrompt,
+    required this.negativePrompt,
+  });
+
+  final String characterDbId;
+  final String characterName;
+  final CharacterRepository repository;
+  final StorageService storage;
+  final ImageGenService imageGen;
+  final Uint8List base768;
+  final String basePrompt;
+  final String negativePrompt;
+
+  /// Run the whole flow. Returns true iff a pack was imported.
+  static Future<bool> launch(
+    BuildContext context, {
+    required String characterDbId,
+    required String characterName,
+    required CharacterRepository repository,
+    required Uint8List? candidateBase,
+    required String basePrompt,
+    required String negativePrompt,
+  }) async {
+    // Capture providers before any async gap.
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final imageGen = Provider.of<ImageGenService>(context, listen: false);
+
+    // img2img (which keeps the character recognizable across every emotion)
+    // only exists on the local backends — the remote APIs can't do packs.
+    if (ImageGenBackend.fromKey(storage.imageGenSettings.imageGenBackend) ==
+        ImageGenBackend.remote) {
+      await showWarmDialog(
+        context,
+        title: 'Local backend needed',
+        icon: Icons.theater_comedy,
+        accent: AppColors.formMasterAccent,
+        content: const WarmDialogText(
+          'Expression packs use img2img, which needs a local image backend — '
+          'A1111, ComfyUI, or Draw Things.',
+        ),
+        actions: [warmDialogCancel(context, label: 'Got it')],
+      );
+      return false;
+    }
+
+    // Base portrait: the studio's current result/reference when it has one,
+    // else the character's prime avatar from disk.
+    final base =
+        candidateBase ??
+        await _primeAvatarBytes(
+          repository,
+          storage,
+          characterDbId,
+          characterName,
+        );
+    if (!context.mounted) return false;
+    if (base == null) {
+      await showWarmDialog(
+        context,
+        title: 'No base portrait',
+        icon: Icons.theater_comedy,
+        accent: AppColors.formMasterAccent,
+        content: const WarmDialogText(
+          'Generate or choose a portrait first — the pack is built from a '
+          'base image.',
+        ),
+        actions: [warmDialogCancel(context, label: 'Got it')],
+      );
+      return false;
+    }
+
+    // Square crop (the user frames the face), then normalize to 768x768 PNG.
+    final cropped = await ImageCropDialog.show(
+      context,
+      imageBytes: base,
+      aspectRatioWidth: 1,
+      aspectRatioHeight: 1,
+    );
+    if (cropped == null || cropped.isEmpty) return false;
+    final base768 = _normalizePackBase(cropped);
+    if (!context.mounted) return false;
+    if (base768 == null) {
+      await showWarmDialog(
+        context,
+        title: 'Unreadable image',
+        icon: Icons.broken_image_outlined,
+        content: const WarmDialogText(
+          'That image could not be decoded — try a different portrait.',
+        ),
+        actions: [warmDialogCancel(context, label: 'Got it')],
+      );
+      return false;
+    }
+
+    final imported = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ExpressionPackDialog._(
+        characterDbId: characterDbId,
+        characterName: characterName,
+        repository: repository,
+        storage: storage,
+        imageGen: imageGen,
+        base768: base768,
+        basePrompt: basePrompt,
+        negativePrompt: negativePrompt,
+      ),
+    );
+    return imported == true;
+  }
+
+  /// The prime (else first-on-disk) avatar for [characterDbId], or null when
+  /// the character has no avatar files yet.
+  static Future<Uint8List?> _primeAvatarBytes(
+    CharacterRepository repository,
+    StorageService storage,
+    String characterDbId,
+    String characterName,
+  ) async {
+    final avatars = await repository.getAvatarImages(characterDbId);
+    if (avatars.isEmpty) return null;
+    CharacterCard? card;
+    for (final c in repository.characters) {
+      if (c.dbId == characterDbId) {
+        card = c;
+        break;
+      }
+    }
+    // primeAvatarIndex is 1-based; clamp handles stale indices.
+    final primeIdx = ((card?.primeAvatarIndex ?? 1) - 1).clamp(
+      0,
+      avatars.length - 1,
+    );
+    final dirPath = storage.characterAvatarDir(characterName).path;
+    for (final avatar in [avatars[primeIdx], ...avatars]) {
+      final file = avatar.file(dirPath);
+      if (await file.exists()) return file.readAsBytes();
+    }
+    return null;
+  }
+
+  @override
+  State<ExpressionPackDialog> createState() => _ExpressionPackDialogState();
+}
+
+class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
+  ExpressionPackSession? _session;
+  bool _replaceExisting = true;
+  bool _cancelRequested = false;
+  bool _importing = false;
+
+  @override
+  void dispose() {
+    _session?.cancel();
+    _session?.dispose();
+    super.dispose();
+  }
+
+  void _start({
+    required bool fullSet,
+    required double denoise,
+    required bool replaceExisting,
+  }) {
+    _replaceExisting = replaceExisting;
+    final session = ExpressionPackSession(
+      emotions: fullSet ? kFullExpressionSet : kCuratedExpressionSet,
+      basePrompt: '${widget.basePrompt}, $kExpressionFraming',
+      generate: ({required String prompt, required int seed}) =>
+          widget.imageGen.generateImage(
+            prompt: prompt,
+            negativePrompt: widget.negativePrompt,
+            size: '768x768',
+            referenceImage: widget.base768,
+            seed: seed,
+            denoise: denoise,
+          ),
+    );
+    setState(() => _session = session);
+    unawaited(session.run());
+  }
+
+  Future<void> _import() async {
+    final session = _session!;
+    setState(() => _importing = true);
+    final count = await ExpressionPackImporter.importPack(
+      repository: widget.repository,
+      storage: widget.storage,
+      characterDbId: widget.characterDbId,
+      characterName: widget.characterName,
+      slots: session.slots,
+      replaceSameLabel: _replaceExisting,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Imported $count expressions for ${widget.characterName} — '
+          'expressions enabled',
+        ),
+      ),
+    );
+    Navigator.of(context).pop(true);
+  }
+
+  /// Header X: confirm when a run is in flight (cancel stops after the
+  /// current image; the session is dispose-safe).
+  Future<void> _close() async {
+    final session = _session;
+    if (session != null && session.isRunning) {
+      final stop = await showWarmDialog<bool>(
+        context,
+        title: 'Stop generating?',
+        icon: Icons.stop_circle_outlined,
+        content: const WarmDialogText(
+          'The pack is still generating. Stop after the current image and '
+          'discard the results?',
+        ),
+        actions: [
+          warmDialogCancel(context, label: 'Keep going'),
+          warmDialogConfirm(
+            context,
+            label: 'Stop',
+            destructive: true,
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      );
+      if (stop != true || !mounted) return;
+      session.cancel();
+    }
+    if (mounted) Navigator.of(context).pop(false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = _session;
+    return Dialog(
+      backgroundColor: AppColors.surfaceOf(context),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 720,
+          maxHeight: MediaQuery.of(context).size.height * 0.94,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _header(context),
+            Flexible(
+              child: session == null
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: ExpressionPackSetup(
+                        base768: widget.base768,
+                        characterName: widget.characterName,
+                        onCancel: () => Navigator.of(context).pop(false),
+                        onStart: _start,
+                      ),
+                    )
+                  : ExpressionPackGrid(
+                      session: session,
+                      imageGen: widget.imageGen,
+                      cancelRequested: _cancelRequested,
+                      importing: _importing,
+                      onCancel: () {
+                        setState(() => _cancelRequested = true);
+                        session.cancel();
+                      },
+                      onResume: () {
+                        setState(() => _cancelRequested = false);
+                        unawaited(session.run());
+                      },
+                      onImport: _import,
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderOf(context))),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.theater_comedy, color: AppColors.formMasterAccent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Expression pack — ${widget.characterName}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary(context),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close, color: AppColors.iconSecondary(context)),
+            onPressed: _close,
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -75,6 +75,7 @@ class StudioView extends StatelessWidget {
     required this.onPromptChanged,
     required this.onNegativeChanged,
     required this.onCraftLlm,
+    this.onExpressionPack,
     required this.onGenerate,
     required this.onSave,
     required this.onAccept,
@@ -86,7 +87,8 @@ class StudioView extends StatelessWidget {
 
   final ImageGenMode activeMode;
   final String? characterName;
-  final List<({String name, String description})> groupCharacters;
+  final List<({String name, String description, String? dbId})>
+  groupCharacters;
   final bool groupShotActive;
   final ValueChanged<int>? onPickGroupMember;
   final VoidCallback? onPickGroupShot;
@@ -116,6 +118,10 @@ class StudioView extends StatelessWidget {
   final ValueChanged<String> onPromptChanged;
   final ValueChanged<String> onNegativeChanged;
   final VoidCallback onCraftLlm;
+
+  /// Non-null only when the active subject can take an Expression pack (a
+  /// character portrait with a library home — never group shot or persona).
+  final VoidCallback? onExpressionPack;
   final VoidCallback onGenerate;
   final VoidCallback onSave;
   final VoidCallback onAccept;
@@ -165,6 +171,32 @@ class StudioView extends StatelessWidget {
                     ],
                     const SizedBox(height: 12),
                     ModeInfoCard(mode: activeMode),
+                    if (onExpressionPack != null &&
+                        activeMode == ImageGenMode.characterPortrait) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: isBusy ? null : onExpressionPack,
+                        icon: Icon(
+                          Icons.theater_comedy,
+                          size: 16,
+                          color: AppColors.iconSecondary(context),
+                        ),
+                        label: Text(
+                          'Expression pack…',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary(context),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          side: BorderSide(color: AppColors.borderOf(context)),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     // Generation Settings live above the style box so they're
                     // visible without scrolling; the fold-out stays collapsible.

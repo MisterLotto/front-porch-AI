@@ -28,8 +28,11 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';
 
+import 'expression_pack_dialog.dart';
 import 'studio_helpers.dart';
 import 'studio_view.dart';
+
+part 'studio_prompt_craft.dart';
 
 /// The Image Studio: one shared canvas driven by a **Subject** selector
 /// (Freeform / Character / Your persona). Backend/model/size/steps/CFG/sampler/
@@ -46,10 +49,11 @@ class ImageStudio extends StatefulWidget {
   final String? characterDescription;
   final String? characterPersonality; // signature compat only
 
-  /// Group-chat cast (name + appearance). Empty for 1:1 chats. When non-empty,
-  /// the Subject picker offers a per-member portrait picker plus a caveated
-  /// whole-cast "Group shot".
-  final List<({String name, String description})> groupCharacters;
+  /// Group-chat cast (name + appearance + library id when resolvable). Empty
+  /// for 1:1 chats. When non-empty, the Subject picker offers a per-member
+  /// portrait picker plus a caveated whole-cast "Group shot".
+  final List<({String name, String description, String? dbId})>
+  groupCharacters;
   final String? scenario;
   final String? worldInfo;
   final String? personaName;
@@ -68,6 +72,12 @@ class ImageStudio extends StatefulWidget {
   final String? lightingHint;
   final bool isGroupNonObserver;
   final String? currentSpeakerId;
+
+  /// Library id of the 1:1 character — the Expression-pack import target.
+  final String? characterDbId;
+
+  /// Fires after a pack import so the launcher refreshes the live card.
+  final void Function(String characterDbId)? onExpressionsImported;
 
   const ImageStudio({
     super.key,
@@ -91,6 +101,8 @@ class ImageStudio extends StatefulWidget {
     this.lightingHint,
     this.isGroupNonObserver = false,
     this.currentSpeakerId,
+    this.characterDbId,
+    this.onExpressionsImported,
   });
 
   @override
@@ -106,6 +118,7 @@ class _ImageStudioState extends State<ImageStudio> {
   // Both null/false → fall back to the 1:1 character passed on the widget.
   String? _pickedGroupName;
   String? _pickedGroupDesc;
+  String? _pickedGroupDbId;
   bool _groupShot = false;
   late String _editablePrompt;
   late String _negativeForGen;
@@ -146,32 +159,18 @@ class _ImageStudioState extends State<ImageStudio> {
   }
 
   /// Build a fresh snapshot ctx for the given subject.
-  ImageGenContext _makeContextForMode(ImageGenMode mode) {
-    return ImageGenContext(
-      mode: mode,
-      style: _selectedStyle,
-      paradigm: _paradigm,
-      characterName: _activeCharName,
-      characterDescription: _activeCharDesc,
-      lastMessage: (mode == ImageGenMode.customPrompt
-          ? widget.customPrompt
-          : widget.lastMessage),
-      scenario: widget.scenario,
-      worldInfo: widget.worldInfo,
-      personaName: widget.personaName,
-      personaText: widget.personaText,
-      recentMessages: widget.recentMessages,
-      currentExpression: widget.currentExpression,
-      timeOfDay: widget.timeOfDay,
-      lightingHint: widget.lightingHint,
-      isGroupNonObserver: widget.isGroupNonObserver,
-      currentSpeakerId: widget.currentSpeakerId,
-    );
-  }
+  ImageGenContext _makeContextForMode(ImageGenMode mode) =>
+      _buildStudioContext(
+        widget,
+        mode: mode,
+        style: _selectedStyle,
+        paradigm: _paradigm,
+        characterName: _activeCharName,
+        characterDescription: _activeCharDesc,
+      );
 
   /// Switch subject: rebuild the ctx snapshot and clear the prompt box — no
-  /// bleed between subjects, and no raw-description prefill (the user types or
-  /// taps "Write it for me").
+  /// bleed between subjects, and no raw-description prefill.
   void _selectSubject(ImageGenMode mode) {
     setState(() {
       _activeMode = mode;
@@ -179,6 +178,7 @@ class _ImageStudioState extends State<ImageStudio> {
       if (mode != ImageGenMode.characterPortrait) {
         _pickedGroupName = null;
         _pickedGroupDesc = null;
+        _pickedGroupDbId = null;
         _groupShot = false;
       }
       _ctx = _makeContextForMode(mode);
@@ -206,27 +206,17 @@ class _ImageStudioState extends State<ImageStudio> {
     return _pickedGroupDesc ?? widget.characterDescription;
   }
 
-  /// Portrait one chosen group member (reliable — a single subject).
-  void _pickGroupMember(int index) {
-    if (index < 0 || index >= widget.groupCharacters.length) return;
+  /// Portrait one chosen cast member (reliable — a single subject), or with a
+  /// null [index] the caveated whole-cast "group shot".
+  void _pickGroupSubject(int? index) {
+    final members = widget.groupCharacters;
+    if (index != null && (index < 0 || index >= members.length)) return;
     setState(() {
-      final m = widget.groupCharacters[index];
-      _pickedGroupName = m.name;
-      _pickedGroupDesc = m.description;
-      _groupShot = false;
-      _activeMode = ImageGenMode.characterPortrait;
-      _ctx = _makeContextForMode(_activeMode);
-      _editablePrompt = '';
-    });
-  }
-
-  /// Attempt the whole cast in one image. Honestly caveated in the UI — vanilla
-  /// diffusion renders multiple specific characters unreliably.
-  void _pickGroupShot() {
-    setState(() {
-      _pickedGroupName = null;
-      _pickedGroupDesc = null;
-      _groupShot = true;
+      final m = index == null ? null : members[index];
+      _pickedGroupName = m?.name;
+      _pickedGroupDesc = m?.description;
+      _pickedGroupDbId = m?.dbId;
+      _groupShot = m == null;
       _activeMode = ImageGenMode.characterPortrait;
       _ctx = _makeContextForMode(_activeMode);
       _editablePrompt = '';
@@ -235,50 +225,21 @@ class _ImageStudioState extends State<ImageStudio> {
 
   Future<void> _craftWithLlmIfAvailable() async {
     // Re-query the live LLM at craft time (the launch snapshot may be stale).
-    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
-    final liveLlm = llmProvider.activeService.isReady
-        ? llmProvider.activeService
-        : widget.llmService;
-
-    if (liveLlm == null || !liveLlm.isReady) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'LLM not ready for smart crafting (using static quality)',
-            ),
-            backgroundColor: AppColors.surfaceContainerOf(context),
-          ),
-        );
-      }
-      return;
-    }
+    final liveLlm = _liveStudioLlm(context, widget.llmService, toast: true);
+    if (liveLlm == null) return;
     setState(() {
       _isCrafting = true;
       _error = '';
     });
-
     try {
-      final service = Provider.of<ImageGenService>(context, listen: false);
-      final crafted = await service.generateSmartPrompt(
+      final crafted = await _craftStudioPrompt(
+        widget,
+        service: Provider.of<ImageGenService>(context, listen: false),
+        llm: liveLlm,
         mode: _activeMode,
         style: _selectedStyle,
-        llmService: liveLlm,
-        customPrompt: widget.customPrompt,
-        lastMessage: widget.lastMessage,
         characterName: widget.characterName,
         characterDescription: widget.characterDescription,
-        characterPersonality: widget.characterPersonality,
-        scenario: widget.scenario,
-        worldInfo: widget.worldInfo,
-        personaName: widget.personaName,
-        personaText: widget.personaText,
-        recentMessages: widget.recentMessages,
-        currentExpression: widget.currentExpression,
-        timeOfDay: widget.timeOfDay,
-        lightingHint: widget.lightingHint,
-        isGroupNonObserver: widget.isGroupNonObserver,
-        currentSpeakerId: widget.currentSpeakerId,
         // Box content → guidance the LLM parses in (blank Freeform → scene).
         userInstruction: _editablePrompt.trim().isNotEmpty
             ? _editablePrompt.trim()
@@ -301,6 +262,53 @@ class _ImageStudioState extends State<ImageStudio> {
     }
   }
 
+  /// The library id an Expression pack imports into: the picked member's, else
+  /// the 1:1 character's. Null (group shot/persona/freeform) hides the button.
+  String? get _packTargetDbId {
+    if (_groupShot) return null;
+    if (_activeMode != ImageGenMode.characterPortrait) return null;
+    return _pickedGroupName != null ? _pickedGroupDbId : widget.characterDbId;
+  }
+
+  /// Launch the Expression-pack flow. An empty prompt box gets the same
+  /// crafting as the Craft button (for the active subject); the dialog owns
+  /// the rest: backend guard, base image, crop, generation, import.
+  Future<void> _openExpressionPack() async {
+    final dbId = _packTargetDbId;
+    if (dbId == null) return;
+    final imageGen = Provider.of<ImageGenService>(context, listen: false);
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    var basePrompt = _editablePrompt.trim();
+    if (basePrompt.isEmpty) {
+      // Never throws: generateSmartPrompt has its own static fallback.
+      setState(() => _isCrafting = true);
+      basePrompt = await _craftStudioPrompt(
+        widget,
+        service: imageGen,
+        llm: _liveStudioLlm(context, widget.llmService),
+        mode: ImageGenMode.characterPortrait,
+        style: _selectedStyle,
+        characterName: _activeCharName,
+        characterDescription: _activeCharDesc,
+        // Neutral base: the per-slot emotion modifiers supply ALL the feeling;
+        // a base crafted around the character's live emotion would fight them.
+        currentExpression: 'neutral',
+      );
+      if (!mounted) return;
+      setState(() => _isCrafting = false);
+    }
+    final ok = await ExpressionPackDialog.launch(
+      context,
+      characterDbId: dbId,
+      characterName: _activeCharName ?? '',
+      repository: repo,
+      candidateBase: _currentImageBytes ?? _referenceImageBytes,
+      basePrompt: basePrompt,
+      negativePrompt: _negativeForGen,
+    );
+    if (ok) widget.onExpressionsImported?.call(dbId);
+  }
+
   /// Re-apply the live style suffix to a non-empty prompt so Generate sends the
   /// currently chosen style. No-op on an empty box (avoids glue+style synthesis).
   void _reapplyStyle() {
@@ -314,10 +322,8 @@ class _ImageStudioState extends State<ImageStudio> {
   }
 
   void _updateStyle(String newStyle) {
-    Provider.of<StorageService>(
-      context,
-      listen: false,
-    ).setImageGenStyle(newStyle); // persist global default
+    final storage = Provider.of<StorageService>(context, listen: false);
+    storage.setImageGenStyle(newStyle); // persist global default
     setState(() {
       _selectedStyle = newStyle;
       _reapplyStyle();
@@ -456,22 +462,20 @@ class _ImageStudioState extends State<ImageStudio> {
       croppedBytes,
       characterName: widget.characterName ?? widget.personaName,
     );
-
-    if (mounted) {
-      setState(() => _saving = false);
-      if (path != null) {
-        if (_activeMode == ImageGenMode.userAvatar) {
-          final personaService = Provider.of<UserPersonaService>(
-            context,
-            listen: false,
-          );
-          final updated = personaService.persona.copyWith(avatarPath: path);
-          personaService.updatePersona(updated);
-        }
-        widget.onAccept?.call(path);
-        Navigator.pop(context);
-      }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (path == null) return;
+    if (_activeMode == ImageGenMode.userAvatar) {
+      final personaService = Provider.of<UserPersonaService>(
+        context,
+        listen: false,
+      );
+      personaService.updatePersona(
+        personaService.persona.copyWith(avatarPath: path),
+      );
     }
+    widget.onAccept?.call(path);
+    Navigator.pop(context);
   }
 
   void _restoreFromHistory(
@@ -512,8 +516,8 @@ class _ImageStudioState extends State<ImageStudio> {
       characterName: _activeCharName,
       groupCharacters: widget.groupCharacters,
       groupShotActive: _groupShot,
-      onPickGroupMember: _pickGroupMember,
-      onPickGroupShot: _pickGroupShot,
+      onPickGroupMember: _pickGroupSubject,
+      onPickGroupShot: () => _pickGroupSubject(null),
       selectedStyle: _selectedStyle,
       paradigm: _paradigm,
       prompt: _editablePrompt,
@@ -539,6 +543,7 @@ class _ImageStudioState extends State<ImageStudio> {
       onPromptChanged: _updatePrompt,
       onNegativeChanged: _updateNegative,
       onCraftLlm: _craftWithLlmIfAvailable,
+      onExpressionPack: _packTargetDbId == null ? null : _openExpressionPack,
       onGenerate: _generate,
       onSave: _save,
       onAccept: _accept,
@@ -549,5 +554,3 @@ class _ImageStudioState extends State<ImageStudio> {
     );
   }
 }
-
-// History uses lightweight records for session-local entries (no extra classes).

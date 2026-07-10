@@ -41,7 +41,8 @@ class SubjectPicker extends StatelessWidget {
 
   /// In a group chat, the cast to choose from. When non-empty, the Character
   /// button opens a member picker instead of selecting directly.
-  final List<({String name, String description})> groupCharacters;
+  final List<({String name, String description, String? dbId})>
+  groupCharacters;
 
   final ValueChanged<ImageGenMode>? onChanged;
 
