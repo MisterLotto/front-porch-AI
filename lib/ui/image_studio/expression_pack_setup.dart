@@ -32,17 +32,25 @@ class ExpressionPackSetup extends StatefulWidget {
     super.key,
     required this.baseImage,
     required this.characterName,
+    required this.existingEmotions,
     required this.onCancel,
     required this.onStart,
   });
 
   final Uint8List baseImage;
   final String characterName;
+
+  /// Emotions this character already has images for (drives the default
+  /// "keep what you have, generate only the missing" behavior on second
+  /// runs — e.g. Starter first, Full later).
+  final Set<String> existingEmotions;
+
   final VoidCallback onCancel;
   final void Function({
     required bool fullSet,
     required double denoise,
     required bool replaceExisting,
+    required bool skipExisting,
   })
   onStart;
 
@@ -52,11 +60,20 @@ class ExpressionPackSetup extends StatefulWidget {
 
 class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
   bool _fullSet = false;
+  bool _skipExisting = true;
   // 0.7 default from maintainer field-testing: at 0.5 the img2img anchor
   // dominates and expressions barely move (the face is a small region of an
   // avatar-shaped base); 0.7 changes the face while the base holds identity.
   double _denoise = 0.7;
   bool _replaceExisting = true;
+
+  List<String> get _chosenSet =>
+      _fullSet ? kFullExpressionSet : kCuratedExpressionSet;
+  int get _existingInChosen =>
+      _chosenSet.where(widget.existingEmotions.contains).length;
+  int get _effectiveCount => _skipExisting
+      ? _chosenSet.length - _existingInChosen
+      : _chosenSet.length;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +125,36 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
           emotions: kFullExpressionSet,
           onTap: () => setState(() => _fullSet = true),
         ),
+        if (_existingInChosen > 0) ...[
+          const SizedBox(height: 10),
+          CheckboxListTile(
+            value: _skipExisting,
+            onChanged: (v) => setState(() => _skipExisting = v ?? true),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            activeColor: AppColors.formMasterAccent,
+            title: Text(
+              'Keep the $_existingInChosen you already have — generate only '
+              'the missing ${_chosenSet.length - _existingInChosen}',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 12.5,
+              ),
+            ),
+            subtitle: Text(
+              _skipExisting
+                  ? 'Your existing expression images stay untouched.'
+                  : 'All ${_chosenSet.length} will be regenerated (with '
+                        '"replace existing" on, that overwrites the ones '
+                        'you kept).',
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Text(
           'Variation strength',
@@ -195,13 +242,16 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
             ),
             const SizedBox(width: 10),
             ElevatedButton.icon(
-              onPressed: () => widget.onStart(
-                fullSet: _fullSet,
-                denoise: _denoise,
-                replaceExisting: _replaceExisting,
-              ),
+              onPressed: _effectiveCount == 0
+                  ? null
+                  : () => widget.onStart(
+                      fullSet: _fullSet,
+                      denoise: _denoise,
+                      replaceExisting: _replaceExisting,
+                      skipExisting: _skipExisting,
+                    ),
               icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('Start'),
+              label: Text('Start ($_effectiveCount)'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.formMasterAccent,
                 foregroundColor: AppColors.resolve(

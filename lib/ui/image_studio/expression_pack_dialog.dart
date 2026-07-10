@@ -79,6 +79,7 @@ class ExpressionPackDialog extends StatefulWidget {
     required this.baseHeight,
     required this.basePrompt,
     required this.negativePrompt,
+    required this.existingEmotions,
   });
 
   final String characterDbId;
@@ -94,6 +95,11 @@ class ExpressionPackDialog extends StatefulWidget {
   final int baseHeight;
   final String basePrompt;
   final String negativePrompt;
+
+  /// Emotion labels this character ALREADY has expression images for —
+  /// a second pack run (Starter first, Full later) keeps them by default
+  /// and only generates the missing ones.
+  final Set<String> existingEmotions;
 
   /// Run the whole flow. Returns true iff a pack was imported.
   static Future<bool> launch(
@@ -177,6 +183,15 @@ class ExpressionPackDialog extends StatefulWidget {
       return false;
     }
 
+    // Labels the character already has — lets the setup default to
+    // generating only the MISSING emotions on a second run, instead of
+    // regenerating (and, with replace on, overwriting) the kept ones.
+    final existingEmotions = (await repository.getAvatarImages(characterDbId))
+        .map((a) => (a.label ?? '').toLowerCase())
+        .where((l) => l.isNotEmpty)
+        .toSet();
+    if (!context.mounted) return false;
+
     final imported = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -191,6 +206,7 @@ class ExpressionPackDialog extends StatefulWidget {
         baseHeight: normalized.height,
         basePrompt: basePrompt,
         negativePrompt: negativePrompt,
+        existingEmotions: existingEmotions,
       ),
     );
     return imported == true;
@@ -328,10 +344,18 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
     required bool fullSet,
     required double denoise,
     required bool replaceExisting,
+    required bool skipExisting,
   }) {
     _replaceExisting = replaceExisting;
+    final chosen = fullSet ? kFullExpressionSet : kCuratedExpressionSet;
+    final emotions = skipExisting
+        ? [
+            for (final e in chosen)
+              if (!widget.existingEmotions.contains(e)) e,
+          ]
+        : chosen;
     final session = ExpressionPackSession(
-      emotions: fullSet ? kFullExpressionSet : kCuratedExpressionSet,
+      emotions: emotions,
       basePrompt: '${widget.basePrompt}, $kExpressionFraming',
       negativePrompt: widget.negativePrompt,
       denoise: denoise,
@@ -429,6 +453,7 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
                       child: ExpressionPackSetup(
                         baseImage: widget.baseImage,
                         characterName: widget.characterName,
+                        existingEmotions: widget.existingEmotions,
                         onCancel: () => Navigator.of(context).pop(false),
                         onStart: _start,
                       ),
