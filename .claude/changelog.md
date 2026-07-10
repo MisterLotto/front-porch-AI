@@ -4170,3 +4170,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** `lib/ui/image_studio/expression_pack_dialog.dart` — `_primeAvatarBytes` now ends its chain at `CharacterCard.imagePath` (main card avatar); expression avatars still win when present; error copy updated for the only remaining case (character with no image at all).
 - **Verification:** `flutter analyze` clean; `flutter build macos --debug` ✓.
 - **Commit:** b0edbfd
+
+## 2026-07-10 — oMLX vision pill wrong-server fix + probe unreachable≠verdict + Backend Mode overflow
+- **Why:** maintainer's oMLX Qwen3.6 read "Vision: none" while the live server accepted image input. The oMLX pill probed `remoteApiUrl` (the Remote API section's provider!) instead of oMLX's fixed localhost:8000/v1; separately, any transport-failure probe (connection refused/timeout) was cached as a permanent session-long "no vision"; and the Backend Mode radio labels overflowed at narrow widths.
+- **Files:** `lib/ui/pages/settings_page.dart` — oMLX `RemoteVisionPill` → fixed local URL (no longer auto-resolves; proper on-demand check button); 4 radio labels wrapped in `Flexible` + ellipsis. `lib/services/capability/vision_support_resolver.dart` — `_probeVision` → `Future<bool?>` (null = unreachable, never cached); caching decision moved into `resolveRemote`; dead `_computeRemote` inlined and deleted.
+- **Verification:** analyze clean; capability tests 16/16; macOS debug build ✓.
+- **Commit:** d10e73b
