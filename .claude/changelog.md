@@ -4195,3 +4195,9 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** open_router_service.dart, settings_page.dart, chat_settings_dialog.dart, setup_step.dart; expression_pack_{setup,dialog}.dart, expression_pack_qc.dart, expression_pack_qc_test.dart, docs/Rawhide.md.
 - **Verification:** analyze clean; 26/26 across qc/vision/studio/openrouter-tools suites; macOS debug build ✓.
 - **Commits:** ca7ac4e 5328269 (describe removal, oMLX fix)
+
+## 2026-07-10 — Expression pack: per-slot seeds + emotion-first prompts; QC hardened against blind/sycophantic models
+- **Why:** real-run report — all 28 slots produced the same image (shared seed + shared base + tail emotion phrase ≈ no conditioning difference at CFG 1 turbo defaults) and Vision check approved them (yes/no prompt revealed the expected answer; a server that silently drops images for text-only models could echo "true").
+- **Fixes:** `expression_pack_service.dart` — slot N generates with `(seed+N) & 0x7fffffff` (base image carries identity; per-slot noise lets the face change); emotion modifier moved to the FRONT of the prompt. `expression_pack_qc.dart` — QC prompt no longer names the target; the model must name what it sees and the app compares via `EmotionLabels.nuancedToStandard` + stem heuristic; mismatches carry a `reads as "…"` note.
+- **Tests:** session + QC suites updated/extended — 20/20.
+- **Commit:** c7a1a20
