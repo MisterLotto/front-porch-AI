@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -25,8 +26,11 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/expression_pack_qc.dart';
 import 'package:front_porch_ai/services/expression_pack_service.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
+import 'package:front_porch_ai/services/vision_eval.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
@@ -213,22 +217,110 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
   bool _cancelRequested = false;
   bool _importing = false;
 
+  /// The base portrait, encoded once and shared by every vision call.
+  late final String _baseB64 = base64Encode(widget.base768);
+
+  /// Vision QC controller for the grid; a new run replaces (and disposes) the
+  /// previous one. Null until the first "Vision check".
+  ExpressionPackQc? _qc;
+  bool _resolvingVision = false;
+
   @override
   void dispose() {
     _session?.cancel();
     _session?.dispose();
+    _qc?.cancel();
+    _qc?.dispose();
     super.dispose();
+  }
+
+  /// Resolve whether the active text LLM can see images and hand back the
+  /// vision-eval closure, or explain why not (warm dialog) and return null.
+  /// Only ever called from an explicit user click: for generic
+  /// OpenAI-compatible remotes the resolver's first verdict costs a tiny
+  /// probe request, so this must never run automatically on dialog open.
+  Future<VisionEvalFn?> _resolveVisionFire() async {
+    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
+    final support = await VisionSupportResolver.instance.resolveForActiveLlm(
+      backend: llmProvider.activeBackend,
+      storage: widget.storage,
+    );
+    if (!mounted) return null;
+    if (!support.supported) {
+      await showWarmDialog(
+        context,
+        title: 'No vision model',
+        icon: Icons.visibility_off_outlined,
+        accent: AppColors.formMasterAccent,
+        content: const WarmDialogText(
+          'Your current text model can\'t see images. Local models need a '
+          'vision-capable GGUF with its mmproj loaded (Model Settings → '
+          'Vision); for remote APIs pick a vision-capable model.',
+        ),
+        actions: [warmDialogCancel(context, label: 'Got it')],
+      );
+      return null;
+    }
+    final llm = llmProvider.activeService;
+    return ({required String prompt, required List<String> imagesB64}) =>
+        fireVisionEval(llm: llm, prompt: prompt, imagesB64: imagesB64);
+  }
+
+  /// Grid "Vision check": QC every generated image against the base portrait.
+  /// Advisory only — badges and the explicit "Uncheck flagged" action.
+  Future<void> _runVisionCheck() async {
+    final session = _session;
+    if (session == null || _resolvingVision || (_qc?.isRunning ?? false)) {
+      return;
+    }
+    setState(() => _resolvingVision = true);
+    final fire = await _resolveVisionFire();
+    if (!mounted) return;
+    setState(() => _resolvingVision = false);
+    if (fire == null) return;
+    final previous = _qc;
+    previous?.cancel();
+    final qc = ExpressionPackQc(
+      slots: session.slots,
+      baseImageB64: _baseB64,
+      fire: fire,
+    );
+    setState(() => _qc = qc);
+    // Safe immediate disposal: the grid's ListenableBuilder unsubscribes from
+    // the old controller during the rebuild, and ChangeNotifier explicitly
+    // permits removeListener after dispose.
+    previous?.dispose();
+    unawaited(qc.run());
+  }
+
+  /// Setup "Describe portrait": vision-describe the base portrait so the
+  /// description can ground every slot's prompt. Returns the description,
+  /// '' when the no-vision dialog was already shown (the setup form stays
+  /// quiet), or null when the call itself failed (the form shows its inline
+  /// error).
+  Future<String?> _describeBasePortrait() async {
+    final fire = await _resolveVisionFire();
+    if (fire == null) return '';
+    final description = await describePortrait(imageB64: _baseB64, fire: fire);
+    final trimmed = description?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   void _start({
     required bool fullSet,
     required double denoise,
     required bool replaceExisting,
+    String? appearanceDetail,
   }) {
     _replaceExisting = replaceExisting;
+    // Portrait grounding: the vision model's description of the base portrait
+    // rides between the user's prompt and the framing tail.
+    final grounded = (appearanceDetail == null || appearanceDetail.isEmpty)
+        ? widget.basePrompt
+        : '${widget.basePrompt}, $appearanceDetail';
     final session = ExpressionPackSession(
       emotions: fullSet ? kFullExpressionSet : kCuratedExpressionSet,
-      basePrompt: '${widget.basePrompt}, $kExpressionFraming',
+      basePrompt: '$grounded, $kExpressionFraming',
       generate: ({required String prompt, required int seed}) =>
           widget.imageGen.generateImage(
             prompt: prompt,
@@ -320,6 +412,7 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
                         characterName: widget.characterName,
                         onCancel: () => Navigator.of(context).pop(false),
                         onStart: _start,
+                        onDescribePortrait: _describeBasePortrait,
                       ),
                     )
                   : ExpressionPackGrid(
@@ -327,6 +420,9 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
                       imageGen: widget.imageGen,
                       cancelRequested: _cancelRequested,
                       importing: _importing,
+                      qc: _qc,
+                      resolvingVision: _resolvingVision,
+                      onVisionCheck: _runVisionCheck,
                       onCancel: () {
                         setState(() => _cancelRequested = true);
                         session.cancel();

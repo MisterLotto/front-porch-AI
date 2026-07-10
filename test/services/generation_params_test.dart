@@ -109,6 +109,12 @@ void main() {
       final params = GenerationParams(prompt: 'test');
       expect(params.dynatempRange, isNull);
     });
+
+    test('images defaults to null (text-only user content)', () {
+      final params = GenerationParams(prompt: 'test');
+      expect(params.images, isNull);
+      expect(params.openAiUserContent, 'test');
+    });
   });
 
   // ─── GenerationParams — custom values ──────────────────────────────
@@ -184,6 +190,11 @@ void main() {
     test('accepts custom dynatempRange', () {
       final params = GenerationParams(prompt: 'test', dynatempRange: 0.5);
       expect(params.dynatempRange, 0.5);
+    });
+
+    test('accepts custom images', () {
+      final params = GenerationParams(prompt: 'test', images: ['QUFB']);
+      expect(params.images, ['QUFB']);
     });
 
     test('accepts all fields at once', () {

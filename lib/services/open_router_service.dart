@@ -232,12 +232,13 @@ class OpenRouterService extends LLMService {
     GenerationParams params, {
     required bool stream,
   }) {
-    // Build messages array with proper role separation for chat APIs.
-    final messages = <Map<String, String>>[];
+    // Role-separated messages; user content is a plain string or, when
+    // images ride along, a multimodal array (see openAiUserContent).
+    final messages = <Map<String, Object>>[];
     if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
       messages.add({'role': 'system', 'content': params.systemPrompt!});
     }
-    messages.add({'role': 'user', 'content': params.prompt});
+    messages.add({'role': 'user', 'content': params.openAiUserContent});
 
     // api.openai.com rejects unknown parameters outright, so it keeps the
     // old conservative payload (frequency_penalty approximation, no

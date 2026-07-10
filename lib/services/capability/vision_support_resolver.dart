@@ -17,11 +17,14 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:front_porch_ai/services/capability/model_capabilities.dart';
+import 'package:front_porch_ai/services/llm_provider.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/utils/gguf_vision.dart';
 
 /// Resolves ONE cached vision verdict per backend+model identity, mirroring the
@@ -88,6 +91,53 @@ class VisionSupportResolver {
     );
     _remoteCache[key] = verdict;
     return verdict;
+  }
+
+  /// Vision verdict for the ACTIVE text LLM as configured right now — "can
+  /// the current chat model see images?".
+  ///
+  /// Local backends (kobold / pseudoRemote) are judged from the last used
+  /// GGUF file: embedded projector, or multimodal arch plus a configured
+  /// mmproj that still exists on disk (the same test the Settings projector
+  /// field applies). Known gap: when a .kcpps preset owns the model
+  /// ([StorageService.lastUsedModelPath] empty) or the server was started
+  /// externally, there is no file to interrogate, so the verdict is "none" —
+  /// and KoboldCpp silently ignores images when no projector is loaded
+  /// rather than erroring, so a false negative here degrades gracefully.
+  /// Remote backends (openRouter / omlx) reuse [resolveRemote] (provider
+  /// metadata where available, else the cached 1×1-PNG probe); oMLX rides
+  /// OpenRouterService at its fixed local URL (see LLMProvider).
+  Future<VisionSupport> resolveForActiveLlm({
+    required BackendType backend,
+    required StorageService storage,
+  }) async {
+    switch (backend) {
+      case BackendType.kobold:
+      case BackendType.pseudoRemote:
+        final modelPath = storage.lastUsedModelPath ?? '';
+        if (modelPath.isEmpty || !File(modelPath).existsSync()) {
+          return VisionSupport.none;
+        }
+        final info = await resolveLocalGgufInfo(modelPath);
+        final mmproj = storage.mmprojForModel(modelPath);
+        return VisionSupport.fromGguf(
+          info,
+          mmprojConfigured:
+              mmproj != null && mmproj.isNotEmpty && File(mmproj).existsSync(),
+        );
+      case BackendType.openRouter:
+        return resolveRemote(
+          apiUrl: storage.remoteApiUrl,
+          apiKey: storage.remoteApiKey,
+          modelName: storage.remoteModelName,
+        );
+      case BackendType.omlx:
+        return resolveRemote(
+          apiUrl: 'http://localhost:8000/v1',
+          apiKey: storage.remoteApiKey,
+          modelName: storage.remoteModelName,
+        );
+    }
   }
 
   Future<VisionSupport> _computeRemote({

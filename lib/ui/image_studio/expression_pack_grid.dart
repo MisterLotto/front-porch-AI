@@ -21,14 +21,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/expression_pack_qc.dart';
 import 'package:front_porch_ai/services/expression_pack_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
+import 'expression_pack_qc_ui.dart';
+
 /// Step 2 of the Expression-pack dialog: the live generation grid. One cell
 /// per emotion, generated sequentially by the [ExpressionPackSession]; this
 /// widget just listens and renders (progress header, per-cell keep/re-roll/
-/// retry, and the cancel/resume/import footer supplied by the dialog).
+/// retry, QC badges, and the cancel/resume/vision-check/import footer
+/// supplied by the dialog).
 class ExpressionPackGrid extends StatelessWidget {
   const ExpressionPackGrid({
     super.key,
@@ -36,6 +40,9 @@ class ExpressionPackGrid extends StatelessWidget {
     required this.imageGen,
     required this.cancelRequested,
     required this.importing,
+    required this.qc,
+    required this.resolvingVision,
+    required this.onVisionCheck,
     required this.onCancel,
     required this.onResume,
     required this.onImport,
@@ -45,14 +52,22 @@ class ExpressionPackGrid extends StatelessWidget {
   final ImageGenService imageGen;
   final bool cancelRequested;
   final bool importing;
+
+  /// The dialog-owned Vision QC controller (null until the first check).
+  final ExpressionPackQc? qc;
+  final bool resolvingVision;
+  final VoidCallback onVisionCheck;
   final VoidCallback onCancel;
   final VoidCallback onResume;
   final VoidCallback onImport;
 
   @override
   Widget build(BuildContext context) {
+    final qc = this.qc;
     return ListenableBuilder(
-      listenable: session,
+      // QC verdicts land on the slots via the controller's own notifications,
+      // so the grid re-renders on either source.
+      listenable: qc == null ? session : Listenable.merge([session, qc]),
       builder: (context, _) {
         final total = session.slots.length;
         return Column(
@@ -129,7 +144,20 @@ class ExpressionPackGrid extends StatelessWidget {
         ),
       );
     } else {
+      // Vision QC (advisory): only offered once there are images to check and
+      // no import is writing them out.
+      if (session.doneCount > 0 && !importing) {
+        buttons.add(
+          PackQcFooterControls(
+            session: session,
+            qc: qc,
+            resolvingVision: resolvingVision,
+            onVisionCheck: onVisionCheck,
+          ),
+        );
+      }
       if (session.pendingCount > 0) {
+        if (buttons.isNotEmpty) buttons.add(const SizedBox(width: 10));
         buttons.add(
           OutlinedButton.icon(
             onPressed: onResume,
@@ -288,6 +316,15 @@ class _PackCell extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Image.memory(slot.bytes!, fit: BoxFit.cover),
+            // Vision QC verdict (advisory) — top-left, clear of the keep
+            // checkbox (bottom-left) and re-roll (bottom-right). Re-rolling
+            // resets slot.qc, so stale badges vanish on their own.
+            if (slot.qc != null)
+              Positioned(
+                left: 2,
+                top: 2,
+                child: PackQcBadge(verdict: slot.qc!, emotion: slot.emotion),
+              ),
             Positioned(
               left: 2,
               right: 2,
@@ -295,7 +332,7 @@ class _PackCell extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _overlayChip(
+                  packOverlayChip(
                     context,
                     child: SizedBox(
                       width: 24,
@@ -308,7 +345,7 @@ class _PackCell extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _overlayChip(
+                  packOverlayChip(
                     context,
                     child: IconButton(
                       padding: EdgeInsets.zero,
@@ -366,17 +403,5 @@ class _PackCell extends StatelessWidget {
           ),
         );
     }
-  }
-
-  /// Slightly-tinted rounded backdrop so overlay controls stay legible on any
-  /// generated image.
-  Widget _overlayChip(BuildContext context, {required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceOf(context).withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: child,
-    );
   }
 }

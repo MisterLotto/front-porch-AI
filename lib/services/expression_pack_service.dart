@@ -34,6 +34,26 @@ typedef PackSlotGenerator =
 /// Lifecycle of one emotion slot in an expression pack grid.
 enum ExpressionSlotState { pending, generating, done, failed }
 
+/// Advisory Vision QC verdict for one generated slot ("same person?
+/// expression reads?"), stamped by ExpressionPackQc and rendered as a badge
+/// on the grid.
+class PackQcVerdict {
+  const PackQcVerdict({
+    required this.samePerson,
+    required this.expressionMatches,
+    this.note = '',
+  });
+
+  final bool samePerson;
+  final bool expressionMatches;
+
+  /// Short flaw description from the vision model, or '' when none was
+  /// reported. Tooltip context only — it never affects [pass].
+  final String note;
+
+  bool get pass => samePerson && expressionMatches;
+}
+
 /// One emotion's slot in an expression pack: its generation state, the
 /// resulting image bytes, and whether the user wants to import it.
 class ExpressionSlot {
@@ -49,6 +69,10 @@ class ExpressionSlot {
   bool keep = true;
 
   String? error;
+
+  /// Advisory Vision QC verdict; null = unchecked. Cleared whenever the slot
+  /// regenerates so a stale verdict can't describe a new image.
+  PackQcVerdict? qc;
 }
 
 /// Drives sequential per-emotion generation for an expression pack.
@@ -153,6 +177,8 @@ class ExpressionPackSession extends ChangeNotifier {
   Future<void> _generateSlot(ExpressionSlot slot, int slotSeed) async {
     slot.state = ExpressionSlotState.generating;
     slot.error = null;
+    // A regenerated image invalidates any prior Vision QC verdict.
+    slot.qc = null;
     notifyListeners();
     Uint8List? result;
     String? error;

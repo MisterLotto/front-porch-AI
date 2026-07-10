@@ -53,11 +53,15 @@ Map<String, dynamic> _chatPayload(
   required String modelName,
   required bool stream,
 }) {
-  final messages = <Map<String, String>>[];
+  // Object-valued so the user content can be a plain string (text-only —
+  // byte-identical to the pre-vision payload) or a multimodal array when
+  // GenerationParams.images rides along (KoboldCpp accepts the OpenAI
+  // image_url shape on this endpoint when an mmproj is loaded).
+  final messages = <Map<String, Object>>[];
   if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
     messages.add({'role': 'system', 'content': params.systemPrompt!});
   }
-  messages.add({'role': 'user', 'content': params.prompt});
+  messages.add({'role': 'user', 'content': params.openAiUserContent});
 
   final payload = <String, dynamic>{
     'model': modelName,
