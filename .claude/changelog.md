@@ -7,7 +7,7 @@
 - **3. No strength control + edits came out identical:** the Edit tab hard-coded the edit strength (0.8) with no knob, and a change could come out too subtle to see. Added a **"How much should change?"** slider to the Edit tab (0.30–1.00, Subtle → Strong, default 0.8) that overrides the profile strength via a new `generateImage(editStrength:)` param — turn it up when a change is too subtle.
 - **Tests:** updated the two edit-profile LoRA cases to the no-stack behavior; added `editStrength` to the test mock. Full suite 1981 green.
 - **Verification:** full `flutter analyze` clean; `flutter test` green.
-- **Commit:** (this commit)
+- **Commit:** a873cc4
 
 ## 2026-07-11 — fix(images): the Edit tab pre-loads the current portrait (reported: "can't edit the existing avatar")
 - **Report:** the Image Studio "Edit" tab says "change this portrait", but the Reference photo slot was empty ("Add photo") — the user had to manually upload the character's current avatar before they could edit it. That defeats the point of an Edit-*this*-portrait tab.
