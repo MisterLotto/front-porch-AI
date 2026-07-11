@@ -382,18 +382,17 @@ class ImageGenService extends ChangeNotifier {
             if (refRole == ImageReferenceRole.editConditioning) {
               final profile = resolveEditProfile(
                 editKind: refCapability.editKind,
-                availableLoras: await grpcService.fetchLoras(),
                 userLoraName: loraName.isEmpty ? null : loraName,
                 userLoraWeight: loraWeight,
               );
-              // The user's "how much should change" slider overrides the
-              // profile's default edit strength when provided.
+              // YOUR step count is honored — the edit runs the steps you set
+              // (dtSteps stays = the user's `steps`). The edit model just needs
+              // the right sampler (UniPC) + a moderate guidance to produce an
+              // image at all, so those two come from the recipe; strength is the
+              // "how much should change" slider. No auto-injected LoRA.
               dtStrength = editStrength ?? profile.strength;
-              dtSteps = profile.steps;
               dtCfg = profile.guidance;
               dtShift = profile.shift;
-              // Map the neutral profile to Draw Things' native encoding at the
-              // edge (the profile itself stays backend-agnostic).
               dtSampler = profile.samplerName == kEditSamplerUnipc
                   ? 17 // Sampler.UNIPC_TRAILING
                   : sampler;

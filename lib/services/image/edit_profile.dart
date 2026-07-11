@@ -79,32 +79,16 @@ class EditProfile {
   });
 }
 
-/// Matches a "4-step"/"lightning-4" (or 8-) token in a LoRA file name.
-final RegExp _lightning4Re = RegExp(r'4[ _-]?step|lightning[ _-]?4');
-final RegExp _lightning8Re = RegExp(r'8[ _-]?step|lightning[ _-]?8');
-
-/// Find a Qwen lightning LoRA (fuzzy — must not depend on the maintainer's exact
-/// filename). Prefers a 4-step LoRA, then any qwen lightning. Null when absent.
-String? _findQwenLightningLora(List<String> availableLoras) {
-  String? anyQwenLightning;
-  for (final name in availableLoras) {
-    final s = name.toLowerCase();
-    if (!(s.contains('qwen') && s.contains('lightning'))) continue;
-    anyQwenLightning ??= name;
-    if (_lightning4Re.hasMatch(s)) return name; // preferred fast config
-  }
-  return anyQwenLightning;
-}
-
 /// Resolve the backend-neutral edit recipe.
 ///
-/// [editKind] chooses the recipe (Qwen vs Flux Kontext — never the Qwen
-/// lightning recipe on Kontext). [availableLoras] is whatever the active backend
-/// listed (empty = no lightning available → non-lightning fallback). Any
-/// user-selected LoRA ([userLoraName]/[userLoraWeight]) is merged in.
+/// Provides the two things the edit model NEEDS but a user's txt2img settings
+/// usually get wrong: the sampler (UniPC — qwen-image-edit produces no image on
+/// some samplers) and a moderate guidance. The caller supplies the STEP count
+/// (the user's — they control it) and the strength (the "how much should change"
+/// slider). Any user-selected LoRA rides along AS-IS — the app never auto-injects
+/// a LoRA the user didn't pick (no "lightning" auto-detection).
 EditProfile resolveEditProfile({
   required EditModelKind editKind,
-  required List<String> availableLoras,
   String? userLoraName,
   double? userLoraWeight,
 }) {
@@ -115,9 +99,8 @@ EditProfile resolveEditProfile({
       : const <Map<String, dynamic>>[];
 
   if (editKind == EditModelKind.kontext) {
-    // Flux Kontext: conservative defaults. The maintainer field-tested Qwen, not
-    // Kontext, so these are sane starting points to tune when Kontext is run —
-    // deliberately NOT the Qwen lightning recipe.
+    // Flux Kontext: conservative starting points (field-tested on Qwen, not
+    // Kontext — tune when Kontext is run).
     return EditProfile(
       strength: 1.0,
       steps: 20,
@@ -129,35 +112,9 @@ EditProfile resolveEditProfile({
     );
   }
 
-  // Qwen-Image-Edit (the maintainer's field-tested profile).
-  // Only auto-add the internal lightning speed LoRA when the user HASN'T picked
-  // their own LoRA: stacking the lightning LoRA on top of an arbitrary user LoRA
-  // on the edit model is a known Draw Things hard-fail, and the user's explicit
-  // choice should win (they trade the 4-step speed for their LoRA + full steps).
-  final lightning = userLora.isEmpty
-      ? _findQwenLightningLora(availableLoras)
-      : null;
-  if (lightning != null) {
-    final steps = _lightning8Re.hasMatch(lightning.toLowerCase()) ? 8 : 4;
-    // Don't add the lightning LoRA twice if the user already picked that file.
-    final extras = userLora.where(
-      (l) => (l['file'] as String).toLowerCase() != lightning.toLowerCase(),
-    );
-    return EditProfile(
-      strength: kQwenEditStrength,
-      steps: steps,
-      guidance: 1.0, // guidance with a lightning LoRA
-      samplerName: kEditSamplerUnipc,
-      shift: 3.0,
-      loras: [
-        {'file': lightning, 'weight': 1.0},
-        ...extras,
-      ],
-      usedLightning: true,
-    );
-  }
-
-  // Non-lightning fallback: same strength, more steps, real guidance.
+  // Qwen-Image-Edit: the sampler + guidance the model needs; the user's LoRA
+  // as-is. `steps` here is only a fallback default — the edit path uses the
+  // user's step count.
   return EditProfile(
     strength: kQwenEditStrength,
     steps: 20,

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-11 — fix(images): DT edit — YOUR step count is honored + the auto-LoRA is gone (actually fixing, not reverting)
+- **Reported (and I'd mishandled it):** the maintainer uses their own NSFW LoRA, wants control over the edit's step count, and the edit was failing. I'd gotten tunnel-visioned on the "lightning LoRA" (a maintainer-config concept the recipe auto-detected) and had reverted instead of fixing. Corrected here, grounded in the live logs (UNIPC + moderate guidance worked; the user's DDIM + CFG 6.6 → "produced no images"; 30 steps with no speed LoRA → 5-min timeout).
+- **Fixes:**
+  - **Your steps are honored.** The edit now runs the step count you set (`dtSteps` = the user's `steps`) instead of a forced recipe value. Run a real 30-step edit if you want.
+  - **The auto-lightning LoRA is GONE.** `resolveEditProfile` no longer scans your installed LoRAs for a "qwen lightning" one and force-injects it (that's what hard-forced 4 steps, confused the step count, and stack-failed). Your selected LoRA is passed through AS-IS; the app never injects a LoRA you didn't pick. Removed `_findQwenLightningLora` + the lightning branch (+ the now-unneeded `fetchLoras()` call in the edit path).
+  - **The edit still supplies the two things qwen-image-edit NEEDS** to produce an image at all — the UniPC sampler and a moderate guidance (3.5) — because your DDIM + CFG 6.6 is what yielded "no images." Strength stays the "how much should change" slider.
+  - **Timeout 5 min → 10 min** so a high-step edit on a big/quantized model (qwen-image-edit-i8) doesn't die mid-generation.
+- **Honest limits:** sampler + guidance are still edit-tuned (not yet yours) — if you want those controllable too, they become Edit-tab controls next. And if the LoRA+edit STILL returns "no images" even on UniPC + moderate guidance, that's a Draw Things / qwen-edit-i8 + LoRA-conditioning limit, not the routing.
+- **Tests:** rewrote edit_profile tests for the no-lightning recipe (LoRA passed as-is; a "lightning"-named LoRA is treated like any user LoRA). Full suite 1977 green.
+- **Verification:** `flutter analyze` clean; `flutter test` green; `flutter build macos` ✓.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — REVERT: the "truthful edit" change broke Draw Things editing (the recipe is load-bearing)
 - **What happened:** the "make the Edit tab truthful" change (c31234c) removed the edit recipe so the user's Generation Settings drove the edit. Grok and I assumed steps/sampler/CFG were just quality knobs for an instruction-edit model. The maintainer's live logs proved that WRONG: without the recipe, DT's qwen-image-edit-i8 produced **"Generation produced no images"** (bad config) and, with no LoRA, **timed out at 5 minutes** (30 slow steps instead of the fast 4-step lightning path).
 - **Action:** reverted c31234c (revert commit 82ac42e). Restored `edit_profile.dart` + `resolveEditProfile` + the recipe-driven edit path. The no-LoRA edit works fast again (4-step lightning); the strength slider, real-error surfacing, portrait pre-load, and the LoRA no-stack fix all remain.
