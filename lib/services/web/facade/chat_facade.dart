@@ -63,12 +63,14 @@ class ChatFacade {
       final m = e.value;
       final md = m.activeMetadata;
       final chips = _messageChips(md);
-      // Generated-image messages (from /image or the Studio's "Send to chat"):
-      // expose the basename so the client renders it via the existing
-      // GET /api/image/saved/<name> endpoint (desktop bubble parity).
+      // Generated-image messages (from /image or the Studio's "Send to chat")
+      // and user-attached photos: expose the basename so the client renders
+      // it via the existing GET /api/image/saved/<name> endpoint (both live
+      // in the same images dir — desktop bubble parity).
       String? imageName;
       String? imagePrompt;
-      if (md != null && md['is_generated_image'] == true) {
+      if (md != null &&
+          (md['is_generated_image'] == true || md['is_user_image'] == true)) {
         final ip = md['image_path'];
         if (ip is String) imageName = p.basename(ip);
         final pr = md['image_prompt'];

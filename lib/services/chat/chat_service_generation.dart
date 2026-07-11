@@ -682,15 +682,16 @@ extension ChatServiceGeneration on ChatService {
       _lastAssembledPrompt = '$chatSystemPrompt\n$prompt';
       _lastPromptBudget = {
         'System Prompt': (systemPrompt.length / 4).ceil(),
-        'Lorebook': ((loreBefore.length +
-                    loreAfter.length +
-                    loreAnTop.length +
-                    loreAnBottom.length +
-                    loreExTop.length +
-                    loreExBottom.length +
-                    loreDepthJoined.length) /
-                4)
-            .ceil(),
+        'Lorebook':
+            ((loreBefore.length +
+                        loreAfter.length +
+                        loreAnTop.length +
+                        loreAnBottom.length +
+                        loreExTop.length +
+                        loreExBottom.length +
+                        loreDepthJoined.length) /
+                    4)
+                .ceil(),
         'Persona': (personaBlock.length / 4).ceil(),
         'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
         'Examples': (mesExampleBlock.length / 4).ceil(),
@@ -764,6 +765,47 @@ extension ChatServiceGeneration on ChatService {
         );
       }
 
+      // ── Current-turn photo attachment ─────────────────────────────────
+      // When the triggering user message (the most recent user turn) carries
+      // an attached photo AND the active model can actually see (resolver
+      // verdict: embedded projector / mmproj / vision-capable remote), the
+      // pixels ride along on this turn's OpenAI-style content array.
+      // Regenerate, continue, and every group speaker's turn re-derive this
+      // from the SAME last user message, so all speakers "see" the photo
+      // (1:1/group parity). Blind backends never get the payload — remote
+      // APIs reject unexpected image parts — and rely on the history marker
+      // from _formatHistoryLine instead.
+      List<String>? turnImages;
+      if (_llmProvider != null) {
+        ChatMessage? lastUser;
+        for (var i = _messages.length - 1; i >= 0; i--) {
+          if (_messages[i].isUser) {
+            lastUser = _messages[i];
+            break;
+          }
+        }
+        final md = lastUser?.activeMetadata;
+        final attachedPath = md?['is_user_image'] == true
+            ? md!['image_path'] as String?
+            : null;
+        if (attachedPath != null) {
+          final support = await VisionSupportResolver.instance
+              .resolveForActiveLlm(
+                backend: _llmProvider!.activeBackend,
+                storage: _storageService,
+              );
+          if (support.supported) {
+            try {
+              turnImages = [
+                base64Encode(await File(attachedPath).readAsBytes()),
+              ];
+            } catch (e) {
+              debugPrint('[Vision] cannot read attached photo: $e');
+            }
+          }
+        }
+      }
+
       final genParams = GenerationParams(
         prompt: prompt,
         systemPrompt: chatSystemPrompt,
@@ -796,6 +838,7 @@ extension ChatServiceGeneration on ChatService {
         bannedPhrases: g2.resolveBannedPhrases(_storageService).isNotEmpty
             ? g2.resolveBannedPhrases(_storageService)
             : null,
+        images: turnImages,
       );
 
       // Get streaming response from whichever backend is active

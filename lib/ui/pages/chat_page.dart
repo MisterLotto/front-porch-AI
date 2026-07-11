@@ -44,6 +44,7 @@ import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
+import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 // Old ImageGenDialog removed in Stage 3 (full from-scratch Image Studio).
 // Studio launched below; see lib/ui/image_studio/ and _showImageGenDialog.
@@ -76,6 +77,11 @@ class _ChatPageState extends State<ChatPage> {
   bool _showingGuestDetection = false;
   bool _showingGuestPicker = false;
   bool _showingImageReview = false;
+  // Pending photo attachment for the next user message (bytes already
+  // downscaled + PNG re-encoded by pickChatImageAttachment). visionOk is
+  // null while the capability resolver is still checking the active model.
+  Uint8List? _pendingImageBytes;
+  bool? _pendingImageVisionOk;
   bool? _externalImagesAllowed;
   bool _imageConsentChecked = false;
   TtsService? _ttsService;
@@ -168,16 +174,10 @@ class _ChatPageState extends State<ChatPage> {
           if (HardwareKeyboard.instance.isShiftPressed) {
             return KeyEventResult.ignored; // let the TextField insert a newline
           }
-          // Bare Enter → send message
+          // Bare Enter → send message (shared path with the send button,
+          // so a pending photo attachment rides along here too)
           final chatService = Provider.of<ChatService>(context, listen: false);
-          final text = _controller.text.trim();
-          if (text.isNotEmpty && !chatService.isGenerating) {
-            chatService.sendMessage(text);
-            _controller.clear();
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _scrollToBottom(),
-            );
-          }
+          _sendCurrentMessage(chatService);
           return KeyEventResult.handled;
         }
         // ⌘R (macOS) / Ctrl+R — (re)generate the last AI reply. If the previous
@@ -1826,6 +1826,68 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// Pick a photo for the next message and resolve (non-blocking) whether the
+  /// active model can actually see it — a blind verdict shows a warning on
+  /// the preview chip but never prevents sending, because capability
+  /// detection can't interrogate externally-started servers.
+  Future<void> _attachImage() async {
+    // Capture providers before the async gaps (native picker + isolate decode).
+    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final bytes = await pickChatImageAttachment();
+    if (bytes == null || !mounted) return;
+    setState(() {
+      _pendingImageBytes = bytes;
+      _pendingImageVisionOk = null;
+    });
+    final support = await VisionSupportResolver.instance.resolveForActiveLlm(
+      backend: llmProvider.activeBackend,
+      storage: storage,
+    );
+    // The user may have removed (or sent) the attachment while resolving.
+    if (!mounted || _pendingImageBytes == null) return;
+    setState(() => _pendingImageVisionOk = support.supported);
+  }
+
+  /// Shared send path for the Enter key and the send button: consumes the
+  /// pending photo (saving it into the app's images dir) and hands text +
+  /// image to ChatService. In observer mode the pending photo is NOT
+  /// consumed — director notes are pure instructions and would drop it — so
+  /// it stays attached for the next normal turn.
+  Future<void> _sendCurrentMessage(ChatService chatService) async {
+    final pending = chatService.observerMode ? null : _pendingImageBytes;
+    final text = _controller.text;
+    if ((text.trim().isEmpty && pending == null) ||
+        chatService.isGenerating ||
+        chatService.isGuestBusy) {
+      return;
+    }
+    String? imagePath;
+    if (pending != null) {
+      final imageGen = Provider.of<ImageGenService>(context, listen: false);
+      imagePath = await imageGen.saveImageToDisk(pending);
+      if (imagePath == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not save the attached photo — try again.'),
+            ),
+          );
+        }
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _pendingImageBytes = null;
+          _pendingImageVisionOk = null;
+        });
+      }
+    }
+    chatService.sendMessage(text, imagePath: imagePath);
+    _controller.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
   Widget _buildInputArea(BuildContext context, ChatService chatService) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1970,6 +2032,16 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
             ),
+            // Pending photo attachment preview (remove ✕ + blind-model warning)
+            if (_pendingImageBytes != null)
+              PendingImageChip(
+                bytes: _pendingImageBytes!,
+                visionOk: _pendingImageVisionOk,
+                onRemove: () => setState(() {
+                  _pendingImageBytes = null;
+                  _pendingImageVisionOk = null;
+                }),
+              ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               decoration: BoxDecoration(
@@ -2166,6 +2238,20 @@ class _ChatPageState extends State<ChatPage> {
                       );
                     },
                   ),
+
+                  // Attach a photo to the next message (vision-capable models
+                  // see the pixels; others get the history marker). Hidden in
+                  // observer mode — director notes carry no images.
+                  if (!chatService.observerMode)
+                    IconButton(
+                      icon: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: AppColors.iconSecondary(context),
+                      ),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Attach photo',
+                      onPressed: _attachImage,
+                    ),
 
                   const SizedBox(width: 4),
 
@@ -2420,17 +2506,7 @@ class _ChatPageState extends State<ChatPage> {
                                         ? Colors.amberAccent
                                         : Colors.blueAccent),
                             ),
-                            onPressed: () {
-                              if (_controller.text.isNotEmpty &&
-                                  !chatService.isGenerating &&
-                                  !chatService.isGuestBusy) {
-                                chatService.sendMessage(_controller.text);
-                                _controller.clear();
-                                WidgetsBinding.instance.addPostFrameCallback(
-                                  (_) => _scrollToBottom(),
-                                );
-                              }
-                            },
+                            onPressed: () => _sendCurrentMessage(chatService),
                           ),
                         ),
                 ],

@@ -26,6 +26,7 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/vision_eval.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 
@@ -2323,7 +2324,9 @@ class ChatService extends ChangeNotifier {
     fireToolEval: _fireToolEval,
     getBackendIdentity: () => _evalBackendIdentity,
     isBackendReady: () =>
-        (testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService)
+        (testLlmServiceOverride ??
+                _llmProvider?.activeService ??
+                _koboldService)
             .isReady,
     isBusy: () => _isGenerating,
     onNotify: notifyListeners,
@@ -3422,9 +3425,14 @@ class ChatService extends ChangeNotifier {
         'This is a solitary scene observed from outside the chat.*';
   }
 
-  Future<void> sendMessage(String text) async {
+  /// [imagePath] optionally attaches a photo (already saved into the app's
+  /// images dir by the composer) to this user turn: it renders inline in the
+  /// bubble, rides along as pixels on this turn's generation when the model
+  /// can see (see the GenerationParams.images seam in _generateResponse),
+  /// and is described in the flattened history for later turns.
+  Future<void> sendMessage(String text, {String? imagePath}) async {
     if ((_activeCharacter == null && _activeGroup == null) ||
-        text.trim().isEmpty) {
+        (text.trim().isEmpty && imagePath == null)) {
       return;
     }
     // Don't let a user turn start while forked-in entrances are still playing —
@@ -3443,8 +3451,13 @@ class ChatService extends ChangeNotifier {
     _pendingIdleCue = null;
 
     // ── Slash Command Handling (delegated to leaf) ──────────────────────
+    // Skipped when a photo is attached: an attach makes the intent "send a
+    // message" unambiguous, and consuming the text as a command would
+    // silently orphan the already-saved image file.
     final trimmed = text.trim();
-    if (trimmed.startsWith('/') && _characterRepository != null) {
+    if (imagePath == null &&
+        trimmed.startsWith('/') &&
+        _characterRepository != null) {
       final handled = await _ensureCommandHandler().handle(trimmed);
       if (handled) return;
       // Unknown command — fall through and send as a normal message.
@@ -3463,7 +3476,18 @@ class ChatService extends ChangeNotifier {
     _clearExitUndo();
 
     final senderName = _userPersonaService.persona.name;
-    _messages.add(ChatMessage(text: text, sender: senderName, isUser: true));
+    final userMsg = ChatMessage(
+      text: text,
+      sender: senderName,
+      isUser: true,
+      metadata: imagePath != null
+          ? {'is_user_image': true, 'image_path': imagePath}
+          : null,
+    );
+    // Session token for the post-turn caption write far below — captured NOW
+    // so a chat switch anywhere during the (long) turn voids the stamp+save.
+    final sessionToken = _currentSessionId;
+    _messages.add(userMsg);
     await _saveChat();
     notifyListeners();
 
@@ -3609,6 +3633,36 @@ class ChatService extends ChangeNotifier {
     // above). Let the director decide which guest(s) speak next. Shared with
     // regenerateMainCharacter() so the re-chime gate is identical after a regen.
     await _maybeRunSceneGuestChimeIns(userText: text);
+
+    // ── Auto-caption the attached photo for future-turn history ─────────────
+    // Runs LAST so the caption eval never queues behind (or delays) the main
+    // response or guest turns on the single local Kobold slot. This turn
+    // already saw the actual pixels via GenerationParams.images; the caption
+    // exists so later turns' flattened history can still describe the photo.
+    // Gated on a vision-capable model — a blind model would hallucinate one.
+    if (imagePath != null &&
+        _llmProvider != null &&
+        !_sceneChanged(sessionToken)) {
+      final support = await VisionSupportResolver.instance.resolveForActiveLlm(
+        backend: _llmProvider!.activeBackend,
+        storage: _storageService,
+      );
+      if (support.supported) {
+        final caption = await captionChatImage(
+          llm: _llmProvider!.activeService,
+          imagePath: imagePath,
+        );
+        if (caption != null &&
+            caption.isNotEmpty &&
+            !_sceneChanged(sessionToken)) {
+          userMsg.activeMetadata = {
+            ...?userMsg.activeMetadata,
+            'image_caption': caption,
+          };
+          await _saveChat();
+        }
+      }
+    }
   }
 
   /// Run the Scene Guest director's chime-in gate after a finalized primary/host
