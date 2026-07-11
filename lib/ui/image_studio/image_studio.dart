@@ -484,6 +484,56 @@ class _ImageStudioState extends State<ImageStudio> {
     Navigator.pop(context);
   }
 
+  /// The library (dbId, name) a saved LOOK targets: the picked group member's
+  /// origin, else the 1:1 character. Unlike [_packTargetDbId] it does NOT gate on
+  /// portrait mode — any generated image (a scene, an outfit) can be a look.
+  /// Null for a group shot / persona / no character → the button hides.
+  (String, String)? get _lookTarget {
+    if (_groupShot) return null;
+    final dbId = _pickedGroupName != null
+        ? _pickedGroupDbId
+        : widget.characterDbId;
+    final name = _pickedGroupName ?? widget.characterName;
+    if (dbId == null || name == null) return null;
+    return (dbId, name);
+  }
+
+  bool get _canSaveToGallery => _lookTarget != null;
+
+  /// Save the current result to the character's Avatar Gallery as a look
+  /// (no crop). Create passes no override (uses the Create result); Edit passes
+  /// its own bytes.
+  Future<void> _saveToGallery([Uint8List? bytesOverride]) async {
+    final bytes = bytesOverride ?? _currentImageBytes;
+    final target = _lookTarget;
+    if (bytes == null || target == null) return;
+    final (dbId, name) = target;
+    setState(() => _saving = true);
+    try {
+      await Provider.of<CharacterRepository>(
+        context,
+        listen: false,
+      ).addLook(dbId, name, bytes);
+      // A look is an avatar_images row too, so the existing library-avatars
+      // refresh pushes it onto the live card → the gallery + sidebar chevrons
+      // pick it up without reopening.
+      widget.onExpressionsImported?.call(dbId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved to Avatar Gallery')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save to gallery failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   void _restoreFromHistory(
     ({String prompt, Uint8List bytes, String style}) entry,
   ) {
@@ -561,6 +611,7 @@ class _ImageStudioState extends State<ImageStudio> {
       onVariations: _variations,
       onEditRegen: _editAndRegen,
       onSendToChat: _sendToChat,
+      onSaveToGallery: _canSaveToGallery ? _saveToGallery : null,
       onRestore: _restoreFromHistory,
       showEdit: _studioTab == 1,
       modeTabs: StudioModeTabs(
@@ -572,6 +623,9 @@ class _ImageStudioState extends State<ImageStudio> {
         onSendToChat: widget.onSendToChat,
         onAcceptBytes: hasAcceptAction(_activeMode)
             ? (bytes) => _accept(bytes)
+            : null,
+        onSaveToGalleryBytes: _canSaveToGallery
+            ? (bytes) => _saveToGallery(bytes)
             : null,
         acceptLabel: getAcceptLabel(_activeMode),
       ),

@@ -44,6 +44,10 @@ class EditView extends StatefulWidget {
   /// supports it. Null hides the Accept action.
   final Future<void> Function(Uint8List bytes)? onAcceptBytes;
 
+  /// Save the edit result to the character's Avatar Gallery (a look). Null when
+  /// there's no character context.
+  final Future<void> Function(Uint8List bytes)? onSaveToGalleryBytes;
+
   /// Label for the Accept action (e.g. "Set as portrait").
   final String acceptLabel;
 
@@ -51,6 +55,7 @@ class EditView extends StatefulWidget {
     super.key,
     this.onSendToChat,
     this.onAcceptBytes,
+    this.onSaveToGalleryBytes,
     this.acceptLabel = 'Use image',
   });
 
@@ -195,6 +200,17 @@ class _EditViewState extends State<EditView> {
             _error = '';
           }),
           onSendToChat: widget.onSendToChat == null ? null : _send,
+          onSaveToGallery: widget.onSaveToGalleryBytes == null
+              ? null
+              : () {
+                  final cb = widget.onSaveToGalleryBytes;
+                  final bytes = _resultBytes;
+                  if (cb == null || bytes == null) return;
+                  setState(() => _saving = true);
+                  cb(bytes).whenComplete(() {
+                    if (mounted) setState(() => _saving = false);
+                  });
+                },
         ),
       );
     }

@@ -82,6 +82,7 @@ class StudioView extends StatelessWidget {
     required this.onVariations,
     required this.onEditRegen,
     required this.onSendToChat,
+    this.onSaveToGallery,
     required this.onRestore,
     this.modeTabs,
     this.editBody,
@@ -131,6 +132,7 @@ class StudioView extends StatelessWidget {
   final VoidCallback onVariations;
   final VoidCallback onEditRegen;
   final VoidCallback? onSendToChat;
+  final VoidCallback? onSaveToGallery;
   final ValueChanged<({String prompt, Uint8List bytes, String style})> onRestore;
 
   /// The Create | Edit tab bar, rendered under the header (null = no tabs).
@@ -273,6 +275,7 @@ class StudioView extends StatelessWidget {
                               onVariations: onVariations,
                               onEditRegen: onEditRegen,
                               onSendToChat: onSendToChat,
+                              onSaveToGallery: onSaveToGallery,
                             )
                           : const SizedBox.shrink(),
                     ),

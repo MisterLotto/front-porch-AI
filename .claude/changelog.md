@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Phase 11: "Save to gallery" in the Image Studio (Create + Edit)
+- **Why:** close the loop — generate or **edit** an avatar (the DT editor that already works E2E), then save it straight into the character's Avatar Gallery as a look, so it shows up in the gallery + the sidebar chevrons without a manual upload.
+- **`ResultView`** gains an `onSaveToGallery` button (shown only when there's a character to save onto). Wired through both result surfaces via the existing `onAccept`/`onAcceptBytes` pattern: `StudioView.onSaveToGallery` (Create → `_currentImageBytes`) and `EditView.onSaveToGalleryBytes` (Edit → `_resultBytes`).
+- **`image_studio._saveToGallery`** → `repository.addLook` (no crop, non-destructive), then reuses the launch's live-card avatar-refresh callback (a look is an `avatar_images` row too) so the gallery + chevrons pick it up immediately.
+- **Grok fix — group + mode correctness:** keyed off a new `_lookTarget` resolver (picked group member's LIBRARY origin, else the 1:1 character; any mode) instead of the raw `characterDbId` — so in a group it saves onto the focused member's real library card (not a throwaway id), works from freeform/scene modes (a look isn't portrait-only, unlike an expression pack), and hides for a group shot / persona.
+- **Verification:** full `flutter analyze` clean; image-studio tests green.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Phase 10: the ★ star becomes the exported / Stoop card cover
 - **Why:** finishing the star's two jobs. The "default new-chat avatar" half already shipped with the face-ring foundation (the ring puts the favorite first, so a new/unset chat opens on it). This is the other half — the image baked into the card on export / Stoop upload.
 - **`CharacterRepository.coverImageFileFor(card)`:** resolves the card's cover — the ★ starred avatar (a gallery look OR an expression image, via `AvatarImage.resolveFile`) when set and present on disk, else the library portrait (`imagePath`), else null. One helper every bake/upload path routes through so the star works everywhere; documented to require a hydrated card.
@@ -7,7 +15,7 @@
 - **Grok fix:** the Stoop upload previously early-returned when `imagePath == null`, so a portrait-less card with a starred look couldn't upload — now it gates on the resolved cover instead.
 - **Back-compat:** additive — older apps ignore `favoriteAvatarId` and export `imagePath` as before; a downloaded card's portrait is just the baked cover pixels (no new Stoop field).
 - **Verification:** full `flutter analyze` clean; gallery/repo tests green.
-- **Commit:** (this commit)
+- **Commit:** 61fce5d
 
 ## 2026-07-11 — Avatar Gallery, Phase 9: the ONE unified widget (gallery avatars + expression images), old dialog removed
 - **Why:** "one UI, not 20" — a single warm-porch dialog for every image a character has, absorbing + deleting the old 1260-line glassmorphic `character_avatars_dialog.dart`. Grok-architected (7 files, all < 500 lines) and Grok-reviewed (found + I fixed 3 P0s pre-ship).
