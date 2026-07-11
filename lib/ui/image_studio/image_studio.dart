@@ -28,8 +28,10 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';
 
+import 'edit_view.dart';
 import 'expression_pack_dialog.dart';
 import 'studio_helpers.dart';
+import 'studio_mode_tabs.dart';
 import 'studio_view.dart';
 
 part 'studio_prompt_craft.dart';
@@ -113,6 +115,9 @@ class _ImageStudioState extends State<ImageStudio> {
   // Session state (owned here; no god proliferation).
   late String _selectedStyle;
   late String _paradigm;
+
+  /// 0 = Create, 1 = Edit (the intent tabs).
+  int _studioTab = 0;
 
   // Group-chat subject: the picked cast member, or a whole-cast "group shot".
   // Both null/false → fall back to the 1:1 character passed on the widget.
@@ -444,15 +449,16 @@ class _ImageStudioState extends State<ImageStudio> {
     }
   }
 
-  Future<void> _accept() async {
-    if (_currentImageBytes == null) return;
+  Future<void> _accept([Uint8List? bytesOverride]) async {
+    final bytes = bytesOverride ?? _currentImageBytes;
+    if (bytes == null) return;
     setState(() => _saving = true);
     final service = Provider.of<ImageGenService>(context, listen: false);
 
     // Accept only applies to portrait subjects → crop then save as an avatar.
     final croppedBytes = await ImageCropDialog.show(
       context,
-      imageBytes: _currentImageBytes!,
+      imageBytes: bytes,
     );
     if (croppedBytes == null) {
       if (mounted) setState(() => _saving = false);
@@ -510,6 +516,11 @@ class _ImageStudioState extends State<ImageStudio> {
       context,
       listen: false,
     ).isConfigured;
+    // Any generation (Create OR Edit) flips the shared service busy; fold it in
+    // so the tabs lock and Create can't double-submit while Edit is running.
+    final genBusy = context.select<ImageGenService, bool>(
+      (s) => s.isGenerating,
+    );
 
     return StudioView(
       activeMode: _activeMode,
@@ -528,7 +539,7 @@ class _ImageStudioState extends State<ImageStudio> {
       isCrafting: _isCrafting,
       isGenerating: _isGenerating,
       saving: _saving,
-      isBusy: _isBusy,
+      isBusy: _isBusy || genBusy,
       llmAvailable: widget.llmService != null && widget.llmService!.isReady,
       configured: configured,
       builder: _builder,
@@ -551,6 +562,19 @@ class _ImageStudioState extends State<ImageStudio> {
       onEditRegen: _editAndRegen,
       onSendToChat: _sendToChat,
       onRestore: _restoreFromHistory,
+      showEdit: _studioTab == 1,
+      modeTabs: StudioModeTabs(
+        selected: _studioTab,
+        onChanged: (i) => setState(() => _studioTab = i),
+        enabled: !_isBusy && !genBusy,
+      ),
+      editBody: EditView(
+        onSendToChat: widget.onSendToChat,
+        onAcceptBytes: hasAcceptAction(_activeMode)
+            ? (bytes) => _accept(bytes)
+            : null,
+        acceptLabel: getAcceptLabel(_activeMode),
+      ),
     );
   }
 }

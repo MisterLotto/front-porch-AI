@@ -1,0 +1,450 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/capability/image_reference_role.dart';
+import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/picker_prefs.dart';
+
+import 'result_view.dart';
+import 'settings_panel.dart';
+
+/// The **Edit** tab: keep this exact character, describe the change. Feeds the
+/// same [ImageGenService.generateImage] with `intent: StudioIntent.edit`, so the
+/// reference is read as conditioning (identity pinned) — no denoise slider.
+/// Self-contained (own source/instruction/result state) and reuses [ResultView];
+/// [ImageReferenceResolver] drives whether editing is available at all.
+class EditView extends StatefulWidget {
+  /// Send the edited image to the launching conversation, when there is one.
+  final Future<void> Function(Uint8List bytes, String text)? onSendToChat;
+
+  /// Set the edited image as the avatar (crop → save), when the launch context
+  /// supports it. Null hides the Accept action.
+  final Future<void> Function(Uint8List bytes)? onAcceptBytes;
+
+  /// Label for the Accept action (e.g. "Set as portrait").
+  final String acceptLabel;
+
+  const EditView({
+    super.key,
+    this.onSendToChat,
+    this.onAcceptBytes,
+    this.acceptLabel = 'Use image',
+  });
+
+  @override
+  State<EditView> createState() => _EditViewState();
+}
+
+class _EditViewState extends State<EditView> {
+  final TextEditingController _instructionCtrl = TextEditingController();
+  Uint8List? _sourceBytes;
+  Uint8List? _resultBytes;
+  bool _busy = false;
+  bool _saving = false;
+  String _error = '';
+
+  @override
+  void dispose() {
+    _instructionCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickSource() async {
+    final result = await PickerPrefs.pickFiles(
+      category: PickerPrefs.catImage,
+      dialogTitle: 'Select a photo to edit',
+      type: FileType.image,
+      withData: true,
+    );
+    final bytes = (result != null && result.files.isNotEmpty)
+        ? result.files.first.bytes
+        : null;
+    if (bytes != null && mounted) setState(() => _sourceBytes = bytes);
+  }
+
+  Future<void> _generate() async {
+    final instruction = _instructionCtrl.text.trim();
+    if (_sourceBytes == null || instruction.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = '';
+      _resultBytes = null;
+    });
+    final service = Provider.of<ImageGenService>(context, listen: false);
+    try {
+      final bytes = await service.generateImage(
+        prompt: instruction,
+        referenceImage: _sourceBytes,
+        intent: StudioIntent.edit,
+      );
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _resultBytes = bytes;
+        if (bytes == null) {
+          _error = service.statusMessage.isNotEmpty
+              ? service.statusMessage
+              : 'The edit returned no image.';
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+        });
+      }
+    }
+  }
+
+  Future<void> _saveResult() async {
+    final bytes = _resultBytes;
+    if (bytes == null) return;
+    setState(() => _saving = true);
+    final service = Provider.of<ImageGenService>(context, listen: false);
+    final path = await service.saveImageToDisk(bytes);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (path != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Image saved to $path'),
+          backgroundColor: AppColors.resolve(
+            context,
+            AppColors.logReady,
+            AppColors.lightBorder,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _send() async {
+    final bytes = _resultBytes;
+    if (bytes == null || widget.onSendToChat == null) return;
+    await widget.onSendToChat!(bytes, _instructionCtrl.text.trim());
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Image sent to chat')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final backendKey = context.select<StorageService, String>(
+      (s) => s.imageGenSettings.imageGenBackend,
+    );
+    final model = context.select<StorageService, String>(
+      (s) => s.imageGenSettings.imageGenModel,
+    );
+    final cap = ImageReferenceResolver.resolveForBackend(
+      backend: ImageGenBackend.fromKey(backendKey),
+      modelName: model,
+    );
+    // Lock off the SHARED service so an edit and a Create generation can never
+    // run at once (the studio also disables the Create tab while this is true).
+    final genBusy = context.select<ImageGenService, bool>(
+      (s) => s.isGenerating,
+    );
+
+    if (_resultBytes != null && _error.isEmpty) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: ResultView(
+          imageBytes: _resultBytes!,
+          hasAccept: widget.onAcceptBytes != null,
+          acceptLabel: widget.acceptLabel,
+          isSaving: _saving,
+          onSave: _saveResult,
+          onAccept: () {
+            final cb = widget.onAcceptBytes;
+            final bytes = _resultBytes;
+            if (cb == null || bytes == null) return;
+            setState(() => _saving = true);
+            cb(bytes).whenComplete(() {
+              if (mounted) setState(() => _saving = false);
+            });
+          },
+          onVariations: (_busy || genBusy) ? () {} : _generate,
+          onEditRegen: () => setState(() {
+            _resultBytes = null;
+            _error = '';
+          }),
+          onSendToChat: widget.onSendToChat == null ? null : _send,
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const StudioSettingsPanel(),
+          const SizedBox(height: 16),
+          if (!cap.supportsEdit)
+            _degradeBanner(
+              context,
+              cap.degradeReason ??
+                  'Editing isn’t available for the current image model.',
+            )
+          else ...[
+            _label(context, cap.editMaxImages > 1
+                ? 'Reference photos'
+                : 'Reference photo'),
+            const SizedBox(height: 8),
+            _sourceSlots(context, cap.editMaxImages),
+            const SizedBox(height: 20),
+            _label(context, 'What should change?'),
+            const SizedBox(height: 8),
+            _instructionField(context),
+            const SizedBox(height: 16),
+            _applyButton(context, genBusy),
+          ],
+          if (_busy) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Editing…',
+                    style: TextStyle(color: AppColors.textSecondary(context)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_error.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              _error,
+              style: const TextStyle(color: AppColors.logError, fontSize: 13),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _label(BuildContext context, String text) => Text(
+    text,
+    style: TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.4,
+      color: AppColors.textSecondary(context),
+    ),
+  );
+
+  Widget _sourceSlots(BuildContext context, int max) {
+    return Row(
+      children: [
+        for (int i = 0; i < max; i++)
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            // Only well #0 is wired today; extra wells (when a model accepts
+            // more, Phase 6) show as "soon" until multi-image plumbing lands.
+            child: i == 0 ? _sourceWell(context) : _soonWell(context),
+          ),
+      ],
+    );
+  }
+
+  Widget _sourceWell(BuildContext context) {
+    final has = _sourceBytes != null;
+    return GestureDetector(
+      onTap: _busy ? null : _pickSource,
+      child: Container(
+        width: 96,
+        height: 96,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerOf(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: has ? AppColors.formMasterAccent : AppColors.borderOf(context),
+            width: has ? 1.5 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: has
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.memory(_sourceBytes!, fit: BoxFit.cover),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: GestureDetector(
+                      onTap: _busy
+                          ? null
+                          : () => setState(() => _sourceBytes = null),
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: AppColors.backgroundOf(context)
+                              .withValues(alpha: 0.8),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          size: 14,
+                          color: AppColors.iconSecondary(context),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_a_photo_outlined,
+                    color: AppColors.iconSecondary(context),
+                    size: 24,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Add photo',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textTertiary(context),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _soonWell(BuildContext context) => Container(
+    width: 96,
+    height: 96,
+    decoration: BoxDecoration(
+      color: AppColors.surfaceContainerOf(context),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: AppColors.borderOf(context),
+        style: BorderStyle.solid,
+      ),
+    ),
+    child: Center(
+      child: Text(
+        'soon',
+        style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
+      ),
+    ),
+  );
+
+  Widget _instructionField(BuildContext context) {
+    return TextField(
+      controller: _instructionCtrl,
+      enabled: !_busy,
+      maxLines: 3,
+      minLines: 2,
+      onChanged: (_) => setState(() {}),
+      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14),
+      decoration: InputDecoration(
+        hintText: 'e.g. she’s laughing, standing in a sunlit garden',
+        hintStyle: TextStyle(color: AppColors.textTertiary(context)),
+        filled: true,
+        fillColor: AppColors.surfaceContainerOf(context),
+        contentPadding: const EdgeInsets.all(12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: AppColors.borderOf(context)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: BorderSide(color: AppColors.borderOf(context)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(11),
+          borderSide: const BorderSide(color: AppColors.formMasterAccent),
+        ),
+      ),
+    );
+  }
+
+  Widget _applyButton(BuildContext context, bool genBusy) {
+    final canApply =
+        _sourceBytes != null &&
+        _instructionCtrl.text.trim().isNotEmpty &&
+        !_busy &&
+        !genBusy;
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: canApply ? _generate : null,
+        icon: const Icon(Icons.auto_fix_high, size: 18),
+        label: const Text('Apply change'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.formMasterAccent,
+          foregroundColor: AppColors.textPrimary(context),
+          disabledBackgroundColor: AppColors.surfaceContainerOf(context),
+          disabledForegroundColor: AppColors.textTertiary(context),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  Widget _degradeBanner(BuildContext context, String reason) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerOf(context),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderOf(context)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 18,
+            color: AppColors.iconSecondary(context),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              reason,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -83,6 +83,9 @@ class StudioView extends StatelessWidget {
     required this.onEditRegen,
     required this.onSendToChat,
     required this.onRestore,
+    this.modeTabs,
+    this.editBody,
+    this.showEdit = false,
   });
 
   final ImageGenMode activeMode;
@@ -130,6 +133,15 @@ class StudioView extends StatelessWidget {
   final VoidCallback? onSendToChat;
   final ValueChanged<({String prompt, Uint8List bytes, String style})> onRestore;
 
+  /// The Create | Edit tab bar, rendered under the header (null = no tabs).
+  final Widget? modeTabs;
+
+  /// The Edit tab's body, kept alive alongside Create via an IndexedStack.
+  final Widget? editBody;
+
+  /// True when the Edit tab is active.
+  final bool showEdit;
+
   @override
   Widget build(BuildContext context) {
     final view = currentImageBytes != null && error.isEmpty
@@ -151,8 +163,12 @@ class StudioView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _header(context),
+            ?modeTabs,
             Flexible(
-              child: SingleChildScrollView(
+              child: IndexedStack(
+                index: showEdit ? 1 : 0,
+                children: [
+                  SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,6 +282,9 @@ class StudioView extends StatelessWidget {
                     ],
                   ],
                 ),
+              ),
+                  editBody ?? const SizedBox.shrink(),
+                ],
               ),
             ),
           ],
