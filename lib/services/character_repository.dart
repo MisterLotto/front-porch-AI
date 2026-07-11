@@ -953,6 +953,42 @@ class CharacterRepository extends ChangeNotifier {
     }
   }
 
+  /// Add a gallery LOOK — a plain alternate avatar (a new outfit, a scene), NOT
+  /// an expression image. Non-destructive: written to the character's SEPARATE
+  /// `looks/` folder and tagged [AvatarImage.lookLabel] so it stays out of the
+  /// emotion pipeline. Returns the new avatar id. Deliberately never touches
+  /// `imagePath` — selecting a look (per chat) is the caller's job.
+  Future<String> addLook(
+    String characterId,
+    String characterName,
+    Uint8List imageBytes,
+  ) async {
+    final safeName = characterName
+        .replaceAll(RegExp(r'[^\w\s\-]'), '')
+        .replaceAll(' ', '_');
+    final looksDir = Directory(
+      p.join(_storage.charactersDir.path, safeName, 'looks'),
+    );
+    if (!await looksDir.exists()) {
+      await looksDir.create(recursive: true);
+    }
+    final filename = 'look_${DateTime.now().millisecondsSinceEpoch}.png';
+    await File(p.join(looksDir.path, filename)).writeAsBytes(imageBytes);
+
+    final displayOrder = await _db.countAvatarsForCharacter(characterId);
+    final avatarId = const Uuid().v4();
+    await _db.insertAvatar(
+      AvatarImagesCompanion(
+        id: Value(avatarId),
+        characterId: Value(characterId),
+        filename: Value(filename),
+        label: Value(AvatarImage.lookLabel),
+        displayOrder: Value(displayOrder),
+      ),
+    );
+    return avatarId;
+  }
+
   /// Remove an avatar image for a character.
   Future<void> removeAvatar(String characterId, String avatarId) async {
     try {
