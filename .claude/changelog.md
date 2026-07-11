@@ -5,7 +5,7 @@
 - **Fix:** the Edit view now pre-loads the character's current portrait as the source, so it opens ready to "change this portrait". `EditView.initialSourcePath` (fed from `ImageStudio.characterImagePath` ← `chat_page` `character?.imagePath`) is read in `initState` and seeded into `_sourceBytes` (via `StorageService.resolveCharacterImage`, which handles absolute + relative paths).
 - **Still swappable (maintainer follow-up):** it's a DEFAULT, not a lock — the existing source well already supports tapping the preview to pick an *unrelated* photo and the ✕ to clear back to "Add photo", both untouched. The seed only fills the slot when it's empty (guards against clobbering a photo the user picked during the async load).
 - **Verification:** full `flutter analyze` clean; image-studio tests green; Grok-sanity-checked.
-- **Commit:** (this commit)
+- **Commit:** 8366fef
 
 ## 2026-07-11 — Avatar Gallery, Phase 14: looks in backup / export — verified consistent (no code change)
 - **Finding:** gallery looks are already handled identically to expression avatars and portraits across backup + export, so there's no looks-specific gap to close:
