@@ -12,7 +12,7 @@ import { ChatColorsSettings } from '../components/ChatColorsSettings';
 // providers are first-class so the user chooses "where generation happens" once.
 // `url` (when present) is the fixed API base for that provider — selecting it
 // fills remoteApiUrl. `kind` drives which controls show:
-//   local — host subprocess (KoboldCpp / Pseudo-Remote): managed on the host.
+//   local — host subprocess (KoboldCpp, optionally from a .kcpps preset): managed on the host.
 //   api   — connect to an OpenAI-compatible server (model picker + maybe key).
 interface BackendOption {
   id: string;
@@ -23,7 +23,6 @@ interface BackendOption {
 }
 const BACKEND_OPTIONS: BackendOption[] = [
   { id: 'kobold', label: 'KoboldCpp (local)', backend: 'kobold', kind: 'local' },
-  { id: 'pseudoRemote', label: 'Pseudo-Remote (local server)', backend: 'pseudoRemote', kind: 'local' },
   { id: 'omlx', label: 'oMLX (local API)', backend: 'omlx', url: 'http://localhost:8000/v1', kind: 'api' },
   { id: 'nanogpt', label: 'Nano-GPT', backend: 'openRouter', url: 'https://nano-gpt.com/api/v1', kind: 'api' },
   { id: 'openrouter', label: 'OpenRouter', backend: 'openRouter', url: 'https://openrouter.ai/api/v1', kind: 'api' },
@@ -146,7 +145,7 @@ export function SettingsPage() {
   // the API ones connect to an OpenAI-compatible server.
   const selectedId = currentBackendId();
   const isApi = s.backend === 'openRouter' || s.backend === 'omlx';
-  const isManagedLocal = s.backend === 'kobold' || s.backend === 'pseudoRemote';
+  const isManagedLocal = s.backend === 'kobold';
   const showUrlField = selectedId === 'custom'; // named providers + oMLX have fixed URLs
   const showKeyField = s.backend === 'openRouter'; // oMLX is local — no key
 

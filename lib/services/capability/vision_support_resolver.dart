@@ -32,7 +32,7 @@ import 'package:front_porch_ai/utils/gguf_vision.dart';
 /// available, cache the verdict, tolerate every failure by returning "none").
 ///
 /// Resolution priority:
-///  - Local GGUF (KoboldCpp / PseudoRemote): parse the file — embedded
+///  - Local GGUF (KoboldCpp, incl. .kcpps preset): parse the file — embedded
 ///    projector, or multimodal-arch + configured mmproj.
 ///  - OpenRouter: `architecture.input_modalities` from `/models`.
 ///  - Nano-GPT: `capabilities.vision` from `/models?detailed=true`.
@@ -150,8 +150,8 @@ class VisionSupportResolver {
   /// Vision verdict for the ACTIVE text LLM as configured right now — "can
   /// the current chat model see images?".
   ///
-  /// Local backends (kobold / pseudoRemote) are judged from the GGUF that
-  /// would actually load: the active .kcpps preset's model when the preset
+  /// The local Kobold backend (native or a .kcpps preset) is judged from the
+  /// GGUF that would actually load: the active .kcpps preset's model when the preset
   /// owns one (mirroring the launch priority in settings_page /
   /// ensureManagedBackendIsRunning), else the last picker-chosen model.
   /// Vision needs an embedded projector, or multimodal arch plus an mmproj
@@ -181,7 +181,6 @@ class VisionSupportResolver {
   }) async {
     switch (backend) {
       case BackendType.kobold:
-      case BackendType.pseudoRemote:
         // Launch semantics: when the active preset carries a model that
         // exists, KoboldCpp loads THAT model (--config wins; the picker
         // model only rides along when the preset has none).

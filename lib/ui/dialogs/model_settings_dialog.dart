@@ -602,16 +602,6 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                   ),
                   Expanded(
                     child: _buildToggleButton(
-                      label: 'Pseudo-Remote',
-                      icon: Icons.laptop,
-                      isSelected: backend == BackendType.pseudoRemote,
-                      onTap: () => llmProvider.setActiveBackend(
-                        BackendType.pseudoRemote,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildToggleButton(
                       label: 'Remote API',
                       icon: Icons.cloud,
                       isSelected: backend == BackendType.openRouter,
@@ -639,8 +629,6 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
               child: SingleChildScrollView(
                 child: backend == BackendType.kobold
                     ? _buildLocalSettings()
-                    : backend == BackendType.pseudoRemote
-                    ? _buildPseudoRemoteSettings()
                     : _buildRemoteSettings(isOmLx: backend == BackendType.omlx),
               ),
             ),
@@ -1196,163 +1184,6 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
           ],
         ),
       ],
-    );
-  }
-
-  Widget _buildPseudoRemoteSettings() {
-    final pseudoRemote = Provider.of<PseudoRemoteService>(context);
-    final llmProvider = Provider.of<LLMProvider>(context);
-    final anyRunning = llmProvider.hasAnyManagedProcessRunning;
-    final storage = Provider.of<StorageService>(context);
-    final modelManager = Provider.of<ModelManager>(context);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Configuration Preset (.kcpps)',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary(context),
-          ),
-        ),
-        const SizedBox(height: 8),
-        KcppsSelector(
-          storage: storage,
-          localPresets: _localPresets,
-          hint: 'Required — select a .kcpps preset',
-          onChanged: (val) {
-            storage.setActiveKcppsPath(val);
-            if (val != null &&
-                storage.kcppsHasModel &&
-                storage.kcppsModelFileExists) {
-              setState(() {
-                _selectedModelPath = null;
-              });
-            }
-          },
-          onExternalClear: () {
-            storage.setActiveKcppsPath(null);
-          },
-          onBrowsePicked: (_) {
-            if (storage.kcppsHasModel && storage.kcppsModelFileExists) {
-              setState(() {
-                _selectedModelPath = null;
-              });
-            }
-          },
-          onModelStatusChanged: (_) {
-            setState(() {});
-          },
-        ),
-        const SizedBox(height: 16),
-
-        ModelSelector(
-          models: modelManager.models,
-          selectedModelPath: _selectedModelPath,
-          showManagedByKcpps:
-              storage.kcppsHasModel && storage.kcppsModelFileExists,
-          onChanged: (val) {
-            if (val == null) {
-              setState(() {
-                _selectedModelPath = null;
-              });
-            } else {
-              setState(() {
-                _selectedModelPath = val;
-              });
-              storage.setLastUsedModelPath(val);
-              final savedPreset = storage.modelPresetMap[val];
-              if (savedPreset != null &&
-                  savedPreset.isNotEmpty &&
-                  File(savedPreset).existsSync()) {
-                storage.setActiveKcppsPath(savedPreset);
-              } else {
-                storage.setActiveKcppsPath(null);
-              }
-              _applyAutoConfiguration();
-            }
-          },
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: anyRunning
-                ? () => _stopManagedBackend(context)
-                : (storage.activeKcppsPath == null ||
-                      storage.activeKcppsPath!.isEmpty ||
-                      !(storage.kcppsHasModel &&
-                              storage.kcppsModelFileExists) &&
-                          _selectedModelPath == null)
-                ? null
-                : () => _startPseudoRemote(context),
-            icon: Icon(anyRunning ? Icons.stop : Icons.play_arrow),
-            label: Text(anyRunning ? 'Stop Backend' : 'Start Pseudo-Remote'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: anyRunning
-                  ? Colors.redAccent
-                  : Colors.greenAccent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Process Logs',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary(context),
-          ),
-        ),
-        const SizedBox(height: 8),
-        LogView(logs: pseudoRemote.logs),
-      ],
-    );
-  }
-
-  void _stopManagedBackend(BuildContext context) {
-    Provider.of<LLMProvider>(context, listen: false).stopAllManagedProcesses();
-  }
-
-  Future<void> _startPseudoRemote(BuildContext context) async {
-    final storage = Provider.of<StorageService>(context, listen: false);
-    final backendManager = Provider.of<BackendManager>(context, listen: false);
-    final pseudoRemote = Provider.of<PseudoRemoteService>(
-      context,
-      listen: false,
-    );
-
-    if (backendManager.backendPath == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Backend not found.')));
-      return;
-    }
-    if (storage.activeKcppsPath == null || storage.activeKcppsPath!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a .kcpps preset first.')),
-      );
-      return;
-    }
-
-    // If the preset has no valid model, the user must have selected one manually
-    final overrideModel =
-        (storage.kcppsHasModel && storage.kcppsModelFileExists)
-        ? null
-        : _selectedModelPath;
-
-    await pseudoRemote.start(
-      executablePath: backendManager.backendPath!,
-      kcppsPath: storage.activeKcppsPath!,
-      modelPath: overrideModel,
-      // Only the manually-overridden model has a Flutter-side path to key the
-      // mmproj on; when the preset owns the model there is nothing to look up.
-      mmprojPath: overrideModel != null
-          ? storage.mmprojForModel(overrideModel)
-          : null,
     );
   }
 

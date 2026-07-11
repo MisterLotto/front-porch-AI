@@ -527,23 +527,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _toggleManagedBackend(BuildContext context) async {
     final koboldService = Provider.of<KoboldService>(context, listen: false);
-    final pseudoRemoteService = Provider.of<PseudoRemoteService>(
-      context,
-      listen: false,
-    );
-    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
     final backendManager = Provider.of<BackendManager>(context, listen: false);
 
-    var stopped = false;
     if (koboldService.isRunning || koboldService.isStarting) {
       await koboldService.stopKobold();
-      stopped = true;
+      return;
     }
-    if (pseudoRemoteService.isRunning || pseudoRemoteService.isStarting) {
-      await pseudoRemoteService.stop();
-      stopped = true;
-    }
-    if (stopped) return;
 
     if (backendManager.backendPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -582,36 +571,21 @@ class _SettingsPageState extends State<SettingsPage> {
     storage.setUseMetal(_useMetal);
     storage.setUseRocm(_useRocm);
 
-    if (llmProvider.activeBackend == BackendType.pseudoRemote) {
-      final overrideModel = (!presetOwnsModel || !storage.kcppsModelFileExists)
-          ? _selectedModelPath
-          : null;
-      await pseudoRemoteService.start(
-        executablePath: backendManager.backendPath!,
-        kcppsPath: storage.activeKcppsPath ?? '',
-        modelPath: overrideModel,
-        mmprojPath: overrideModel != null
-            ? storage.mmprojForModel(overrideModel)
-            : null,
-        port: 5001,
-      );
-    } else {
-      final effectiveModel = presetOwnsModel ? '' : _selectedModelPath!;
-      await koboldService.startKobold(
-        backendManager.backendPath!,
-        effectiveModel,
-        kcppsPath: storage.activeKcppsPath,
-        mmprojPath: _selectedModelPath != null
-            ? storage.mmprojForModel(_selectedModelPath!)
-            : null,
-        gpuLayers: gpuLayers,
-        contextSize: contextSize,
-        useVulkan: _useVulkan,
-        useCublas: _useCublas,
-        useMetal: _useMetal,
-        useRocm: _useRocm,
-      );
-    }
+    final effectiveModel = presetOwnsModel ? '' : _selectedModelPath!;
+    await koboldService.startKobold(
+      backendManager.backendPath!,
+      effectiveModel,
+      kcppsPath: storage.activeKcppsPath,
+      mmprojPath: _selectedModelPath != null
+          ? storage.mmprojForModel(_selectedModelPath!)
+          : null,
+      gpuLayers: gpuLayers,
+      contextSize: contextSize,
+      useVulkan: _useVulkan,
+      useCublas: _useCublas,
+      useMetal: _useMetal,
+      useRocm: _useRocm,
+    );
   }
 
   @override
@@ -871,7 +845,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final modelManager = Provider.of<ModelManager>(context);
     final backendManager = Provider.of<BackendManager>(context);
     final koboldService = Provider.of<KoboldService>(context);
-    final pseudoRemoteService = Provider.of<PseudoRemoteService>(context);
     final llmProvider = Provider.of<LLMProvider>(context);
     final theme = Theme.of(context);
 
@@ -945,8 +918,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         final message = switch (val) {
                           BackendType.kobold =>
                             'Switched to local KoboldCPP backend.',
-                          BackendType.pseudoRemote =>
-                            'Switched to Pseudo-Remote backend.',
                           BackendType.openRouter =>
                             'Switched to Remote API backend.',
                           BackendType.omlx => 'Switched to oMLX backend.',
@@ -989,39 +960,6 @@ class _SettingsPageState extends State<SettingsPage> {
                             ],
                           ),
                           value: BackendType.kobold,
-                          enabled: !backendManager.isIntelMac,
-                        ),
-                      ),
-                      Expanded(
-                        child: RadioListTile<BackendType>(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Row(
-                            children: [
-                              Icon(
-                                Icons.laptop,
-                                size: 18,
-                                color: backendManager.isIntelMac
-                                    ? Colors.grey
-                                    : theme.iconTheme.color,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Pseudo-Remote',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: backendManager.isIntelMac
-                                        ? Colors.grey
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          value: BackendType.pseudoRemote,
                           enabled: !backendManager.isIntelMac,
                         ),
                       ),
@@ -1086,14 +1024,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 if (llmProvider.activeBackend == BackendType.kobold)
                   Text(
-                    'Use a local KoboldCPP instance with native API.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey,
-                    ),
-                  )
-                else if (llmProvider.activeBackend == BackendType.pseudoRemote)
-                  Text(
-                    'Runs KoboldCPP locally but communicates via OpenAI-compatible API.',
+                    'Use a local KoboldCPP instance (optionally launched from a '
+                    '.kcpps preset).',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.grey,
                     ),
@@ -1655,16 +1587,11 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ],
 
-          // ── Managed Backend sections (Kobold native or Pseudo-Remote; hidden on Intel Mac) ──
-          // Both managed backends share the same exe + .kcpps configuration UI.
+          // ── Managed Backend section (local KoboldCPP; hidden on Intel Mac) ──
+          // Handles both a plain model file and a .kcpps preset launch.
           if (llmProvider.hasManagedProcess && !backendManager.isIntelMac) ...[
             const SizedBox(height: 24),
-            _buildSectionHeader(
-              llmProvider.activeBackend == BackendType.pseudoRemote
-                  ? 'Pseudo-Remote (KoboldCPP via OpenAI compat)'
-                  : 'Koboldcpp Backend',
-              context,
-            ),
+            _buildSectionHeader('Koboldcpp Backend', context),
             // ... (Existing Backend Logic adapted) ...
             const SizedBox(height: 16),
             Column(
@@ -1766,16 +1693,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     fontSize: 11,
                   ),
                 ),
-                value: llmProvider.activeBackend == BackendType.pseudoRemote
-                    ? storageService.autostartPseudoRemote
-                    : storageService.autostartBackend,
+                value: storageService.autostartBackend,
                 activeTrackColor: Colors.blueAccent,
                 onChanged: (val) {
-                  if (llmProvider.activeBackend == BackendType.pseudoRemote) {
-                    storageService.setAutostartPseudoRemote(val);
-                  } else {
-                    storageService.setAutostartBackend(val);
-                  }
+                  storageService.setAutostartBackend(val);
                 },
               ),
             ),
@@ -1929,22 +1850,14 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 24),
             // Button enabled when: backend path exists AND
-            // (kcpps has valid model OR model selected manually)
-            // For pseudo-remote, also requires a kcpps path.
+            // (kcpps has valid model OR model selected manually).
             ...() {
-              final anyRunning = koboldService.isRunning ||
-                  koboldService.isStarting ||
-                  pseudoRemoteService.isRunning ||
-                  pseudoRemoteService.isStarting;
-              final canStartPseudo =
-                  llmProvider.activeBackend != BackendType.pseudoRemote ||
-                  (storageService.activeKcppsPath != null &&
-                      storageService.activeKcppsPath!.isNotEmpty);
-              final hasModel =
+              final anyRunning =
+                  koboldService.isRunning || koboldService.isStarting;
+              final canStart =
                   (storageService.kcppsHasModel &&
                       storageService.kcppsModelFileExists) ||
                   _selectedModelPath != null;
-              final canStart = canStartPseudo && hasModel;
 
               return [
                 const SizedBox(height: 24),
@@ -1976,12 +1889,8 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 24),
             _buildSectionHeader('Process Logs', context),
             const SizedBox(height: 8),
-            Consumer2<KoboldService, PseudoRemoteService>(
-              builder: (context, ks, prs, child) => LogView(
-                logs: llmProvider.activeBackend == BackendType.pseudoRemote
-                    ? prs.logs
-                    : ks.logs,
-              ),
+            Consumer<KoboldService>(
+              builder: (context, ks, child) => LogView(logs: ks.logs),
             ),
           ], // end hasManagedProcess
         ],
@@ -3410,9 +3319,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 listen: false,
               );
               final storage = Provider.of<StorageService>(ctx, listen: false);
-              final llm = Provider.of<LLMProvider>(ctx, listen: false);
               final canRestart =
-                  llm.activeBackend != BackendType.pseudoRemote &&
                   backendManager.backendPath != null &&
                   storage.lastUsedModelPath != null &&
                   File(storage.lastUsedModelPath!).existsSync();

@@ -29,7 +29,7 @@ import 'package:front_porch_ai/services/llm_service.dart';
 ///
 /// Rides the same OpenAI-compatible chat transports as every other eval:
 /// [GenerationParams.images] renders the user message as a multimodal
-/// content array (KoboldCpp with an mmproj, PseudoRemote, OpenRouter,
+/// content array (KoboldCpp with an mmproj, OpenRouter,
 /// Nano-GPT, vLLM, LM Studio, oMLX all accept it). Uses the standard eval
 /// posture — temp 0.1, reasoning explicitly off so hybrid remotes don't
 /// think through an image check — then drains the stream the way the

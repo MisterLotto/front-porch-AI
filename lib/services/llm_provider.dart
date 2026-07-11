@@ -22,20 +22,21 @@ import 'package:front_porch_ai/services/capability/vision_support_resolver.dart'
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
-import 'package:front_porch_ai/services/pseudo_remote_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
-/// The available backend types.
-enum BackendType { kobold, openRouter, pseudoRemote, omlx }
+/// The available backend types. The former `pseudoRemote` (a local KoboldCpp
+/// launched from a .kcpps preset) was folded into [kobold]: the local backend
+/// launches a preset via `--config` when one is active, so it was a redundant
+/// second path. Presets are now just a launch option of the Kobold backend.
+enum BackendType { kobold, openRouter, omlx }
 
-/// Manages switching between LLM backends (local KoboldCPP, Pseudo-Remote, remote APIs).
+/// Manages switching between LLM backends (local KoboldCPP, remote APIs).
 ///
 /// Sits between ChatService and the actual backend implementations.
 /// Listens to StorageService for config changes and hot-swaps the active service.
 class LLMProvider extends ChangeNotifier {
   final KoboldService _koboldService;
   final OpenRouterService _openRouterService;
-  final PseudoRemoteService _pseudoRemoteService;
   final StorageService _storageService;
   final BackendManager _backendManager;
 
@@ -46,39 +47,28 @@ class LLMProvider extends ChangeNotifier {
     switch (_activeBackend) {
       case BackendType.kobold:
         return _koboldService;
-      case BackendType.pseudoRemote:
-        return _pseudoRemoteService;
       case BackendType.openRouter:
       case BackendType.omlx:
         return _openRouterService;
     }
   }
 
-  /// Whether the currently active backend is the local KoboldCPP native API.
-  /// Pseudo-remote returns false here — it uses the OpenAI protocol,
-  /// so eval logic (concurrent dispatch, remote-style params) matches remote.
+  /// Whether the active backend is the local KoboldCpp instance (native or
+  /// launched from a .kcpps preset). Gates the local niceties — real
+  /// tokenizer counts and prefill perf metrics — and sequential eval dispatch
+  /// (one KoboldCpp generation slot).
   bool get isLocal => _activeBackend == BackendType.kobold;
 
-  /// Whether the active backend manages a local subprocess (kobold or pseudoRemote).
-  bool get hasManagedProcess =>
-      _activeBackend == BackendType.kobold ||
-      _activeBackend == BackendType.pseudoRemote;
+  /// Whether the active backend manages a local subprocess.
+  bool get hasManagedProcess => _activeBackend == BackendType.kobold;
 
-  /// True when any managed process (kobold or pseudoRemote) is currently running.
-  bool get hasAnyManagedProcessRunning =>
-      _koboldService.isRunning || _pseudoRemoteService.isRunning;
+  /// True when the managed process is currently running.
+  bool get hasAnyManagedProcessRunning => _koboldService.isRunning;
 
-  /// Ensures that the simple local Kobold backend is running when the user
-  /// enters a chat.
-  ///
-  /// This provides a good "it just works" experience for normal users.
-  ///
-  /// We deliberately do **not** auto-start the Pseudo-Remote backend here.
-  /// Using .kcpps presets is an advanced/power-user feature and those users
-  /// are expected to start the backend manually.
-  ///
-  /// Safe to call repeatedly — it is a no-op if already running or if the
-  /// current backend is remote / oMLX / Pseudo-Remote.
+  /// Ensures the local Kobold backend is running when the user enters a chat —
+  /// including when a .kcpps preset owns the model. Good "it just works" for
+  /// normal users; safe to call repeatedly (no-op if already running or the
+  /// active backend is remote / oMLX).
   Future<void> ensureManagedBackendIsRunning() async {
     if (!hasManagedProcess || hasAnyManagedProcessRunning) return;
 
@@ -93,9 +83,8 @@ class LLMProvider extends ChangeNotifier {
     }
 
     try {
-      // Only auto-start the simple native Kobold backend.
-      // Pseudo-Remote (.kcpps) is an advanced feature — those users are
-      // expected to start the backend themselves.
+      // Auto-start the local Kobold backend, whether it loads a plain model
+      // file (lastUsedModelPath) or a .kcpps preset that owns its own model.
       if (_activeBackend == BackendType.kobold) {
         final modelPath = _storageService.lastUsedModelPath;
         final hasPresetWithModel =
@@ -128,26 +117,22 @@ class LLMProvider extends ChangeNotifier {
   /// Convenience getters for the underlying services (for UI that needs specifics).
   KoboldService get koboldService => _koboldService;
   OpenRouterService get openRouterService => _openRouterService;
-  PseudoRemoteService get pseudoRemoteService => _pseudoRemoteService;
 
   LLMProvider(
     this._koboldService,
     this._openRouterService,
-    this._pseudoRemoteService,
     this._storageService,
     this._backendManager,
   ) {
     _syncFromStorage();
     _storageService.addListener(_syncFromStorage);
     _koboldService.addListener(_onServiceChanged);
-    _pseudoRemoteService.addListener(_onServiceChanged);
   }
 
   @override
   void dispose() {
     _storageService.removeListener(_syncFromStorage);
     _koboldService.removeListener(_onServiceChanged);
-    _pseudoRemoteService.removeListener(_onServiceChanged);
     super.dispose();
   }
 
@@ -159,12 +144,13 @@ class LLMProvider extends ChangeNotifier {
     final typeStr = _storageService.backendType;
     BackendType newType;
     switch (typeStr) {
-      case 'pseudoRemote':
-        newType = BackendType.pseudoRemote;
       case 'openRouter':
         newType = BackendType.openRouter;
       case 'omlx':
         newType = BackendType.omlx;
+      // 'pseudoRemote' (legacy) falls through to kobold — the preset now runs
+      // under the local Kobold backend. The stored value is rewritten to
+      // 'kobold' by the migration in BackendSettings.load().
       default:
         newType = BackendType.kobold;
     }
@@ -219,8 +205,6 @@ class LLMProvider extends ChangeNotifier {
     _activeBackend = type;
     String persistValue;
     switch (type) {
-      case BackendType.pseudoRemote:
-        persistValue = 'pseudoRemote';
       case BackendType.openRouter:
         persistValue = 'openRouter';
       case BackendType.omlx:
@@ -242,38 +226,10 @@ class LLMProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Stop any running managed processes (kobold and/or pseudoRemote).
+  /// Stop the managed KoboldCpp process if it is running.
   Future<void> stopAllManagedProcesses() async {
     if (_koboldService.isRunning) {
       await _koboldService.stopKobold();
-    }
-    if (_pseudoRemoteService.isRunning) {
-      await _pseudoRemoteService.stop();
-    }
-  }
-
-  /// Start the currently selected managed backend.
-  /// Throws if [BackendType.openRouter] is active (no process to start).
-  Future<void> startActiveManagedProcess({
-    required String executablePath,
-    required String kcppsPath,
-  }) async {
-    switch (_activeBackend) {
-      case BackendType.kobold:
-        // The caller should provide model path etc. via the existing flow.
-        // This method is used by the unified start button in settings.
-        throw UnimplementedError(
-          'Use koboldService.startKobold() directly for local backend.',
-        );
-      case BackendType.pseudoRemote:
-        await _pseudoRemoteService.start(
-          executablePath: executablePath,
-          kcppsPath: kcppsPath,
-        );
-      case BackendType.openRouter:
-        throw Exception('Cannot start a process for the OpenRouter backend.');
-      case BackendType.omlx:
-        throw Exception('Cannot start a process for the oMLX backend.');
     }
   }
 }

@@ -146,7 +146,7 @@ void main() {
       await storage.setActiveKcppsPath(kcpps.path);
 
       final support = await VisionSupportResolver.instance.resolveForActiveLlm(
-        backend: BackendType.pseudoRemote,
+        backend: BackendType.kobold,
         storage: storage,
       );
       expect(support.supported, isTrue);

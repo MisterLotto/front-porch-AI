@@ -4,8 +4,8 @@
 // Tests for the OpenAI tool-calling doors (phase 4 of the Journal):
 // - llm_tool_parsing.dart — response-body → LlmToolResponse (pure)
 // - OpenRouterService.generateWithTools (remote door) and
-//   postOpenAiChatWithTools (the shared LOCAL door KoboldService and
-//   PseudoRemoteService both delegate to) — request shape +
+//   postOpenAiChatWithTools (the shared LOCAL door KoboldService
+//   delegates to) — request shape +
 //   null-on-failure contract, exercised against a real loopback HTTP
 //   server (same pattern as the Stoop relay tests).
 
@@ -180,7 +180,7 @@ void main() {
 
     test('local door (postOpenAiChatWithTools) — same shape, same contract',
         () async {
-      // The shared function KoboldService/PseudoRemoteService delegate to,
+      // The shared function KoboldService delegates to,
       // pointed at the KoboldCpp-style root (no /v1 — the helper appends).
       responseBody = jsonEncode({
         'choices': [
