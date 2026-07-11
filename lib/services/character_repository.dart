@@ -1089,6 +1089,31 @@ class CharacterRepository extends ChangeNotifier {
     await updateCharacter(card);
   }
 
+  /// The file to bake as the character's exported / Stoop card cover: the ★
+  /// starred avatar (a gallery look OR an expression image) when it's set and
+  /// present on disk, else the library portrait (`imagePath`). Null when neither
+  /// resolves. Lets a user pick their best render (an outfit, a mood) as the
+  /// card's face without touching the in-app portrait.
+  ///
+  /// [card] must be a HYDRATED library card (`avatarImages` loaded) for the star
+  /// to resolve — a bare card silently falls back to the portrait. Every PNG
+  /// bake / upload path should route through this so the star works everywhere.
+  File? coverImageFileFor(CharacterCard card) {
+    final favId = card.frontPorchExtensions?.favoriteAvatarId;
+    if (favId != null) {
+      for (final a in card.avatarImages ?? const <AvatarImage>[]) {
+        if (a.id == favId) {
+          final f = a.resolveFile(_storage.characterBaseDir(card.name).path);
+          if (f.existsSync()) return f;
+          break;
+        }
+      }
+    }
+    final img = card.imagePath;
+    if (img == null || img.isEmpty) return null;
+    return _storage.resolveCharacterImage(img);
+  }
+
   /// Set the character's TTS voice (null = global default) and persist.
   Future<void> setTtsVoice(CharacterCard card, String? voiceId) async {
     card.ttsVoice = voiceId;

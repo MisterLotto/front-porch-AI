@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Phase 10: the ★ star becomes the exported / Stoop card cover
+- **Why:** finishing the star's two jobs. The "default new-chat avatar" half already shipped with the face-ring foundation (the ring puts the favorite first, so a new/unset chat opens on it). This is the other half — the image baked into the card on export / Stoop upload.
+- **`CharacterRepository.coverImageFileFor(card)`:** resolves the card's cover — the ★ starred avatar (a gallery look OR an expression image, via `AvatarImage.resolveFile`) when set and present on disk, else the library portrait (`imagePath`), else null. One helper every bake/upload path routes through so the star works everywhere; documented to require a hydrated card.
+- **Wired into** Export PNG (home right-click → `saveCardAsPng(..., cover?.path ?? imagePath)`) and Stoop upload (reads the cover's bytes). Star an outfit or a "joy" render → that's the card's face on The Stoop, without touching the in-app portrait.
+- **Grok fix:** the Stoop upload previously early-returned when `imagePath == null`, so a portrait-less card with a starred look couldn't upload — now it gates on the resolved cover instead.
+- **Back-compat:** additive — older apps ignore `favoriteAvatarId` and export `imagePath` as before; a downloaded card's portrait is just the baked cover pixels (no new Stoop field).
+- **Verification:** full `flutter analyze` clean; gallery/repo tests green.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Phase 9: the ONE unified widget (gallery avatars + expression images), old dialog removed
 - **Why:** "one UI, not 20" — a single warm-porch dialog for every image a character has, absorbing + deleting the old 1260-line glassmorphic `character_avatars_dialog.dart`. Grok-architected (7 files, all < 500 lines) and Grok-reviewed (found + I fixed 3 P0s pre-ship).
 - **New `lib/ui/dialogs/avatar_gallery/`:** `avatar_gallery_dialog.dart` (shell + `showAvatarGallery` entry + add/replace/import flows), `avatar_gallery_controller.dart` (the one mutation surface — all repo calls, reload, delete cascades), `avatar_gallery_io.dart` (pure pick + ZIP-decode), two section widgets (Gallery avatars / Expression images), `avatar_tile.dart` (shared tile: image + ★ + ✕ + badge/ring + tappable caption + Replace-portrait), `emotion_picker.dart`, `avatar_gallery_section_header.dart`.
@@ -9,7 +18,7 @@
 - **Deferred (maintainer-approved this convo):** web parity → stage #13. Flagged: the edit page/dialog no longer offer a portrait/gallery entry (by the maintainer's explicit request) — the home right-click + chat sidebar are the entries, and the create wizard sets the first portrait.
 - **Tests:** +5 `decodeSpritePack` (root, foldered basename, unrecognized, non-image, prefixes); removed the deleted dialog's golden case. Full suite 1981 green.
 - **Verification:** full `flutter analyze` clean; `flutter test` green; `flutter build macos` ✓.
-- **Commit:** (this commit)
+- **Commit:** 4b984eb
 
 ## 2026-07-11 — Avatar Gallery, foundation for the shared ★ star: face-ring generalization + favoriteAvatarId
 - **Why:** groundwork for the unified Avatar Gallery + the one ★ "canonical avatar" star. The maintainer wants the star to point at EITHER a gallery avatar OR an expression image (one star ever) and be both the exported card cover and the default a new chat opens with. Grok's feasibility review was explicit: doing that fully means generalizing the plain-chat selection from "looks only" to "any avatar id" — don't ship a half-version. This is that generalization, done before the widget so nothing is re-touched later. Backward-compatible: with no star set yet (favorite null) the ring is exactly `[portrait, ...looks]` — identical behavior to what shipped.
