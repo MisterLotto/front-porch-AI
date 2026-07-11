@@ -66,7 +66,6 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
-import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
@@ -237,28 +236,6 @@ void main() {
       surface: const Size(560, 620),
       // TextEditingControllers for URL/seed/host/port; fetchImageModels async.
       settle: false,
-    );
-  });
-
-  testWidgets('CharacterAvatarsDialog — 0 avatars, no emotion picker',
-      (tester) async {
-    final repo = FakeCharacterRepository();
-    final storage = FakeStorageService();
-    addTearDown(() {
-      repo.dispose();
-      storage.dispose();
-    });
-
-    await expectThemedGoldens(
-      tester,
-      child: CharacterAvatarsDialog(
-        character: CharacterCard(name: 'Aria Vale'),
-        repository: repo,
-        storage: storage,
-      ),
-      group: 'dialogs_remaining',
-      name: 'character_avatars',
-      surface: const Size(780, 720),
     );
   });
 

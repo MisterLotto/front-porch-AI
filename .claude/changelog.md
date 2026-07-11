@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Phase 9: the ONE unified widget (gallery avatars + expression images), old dialog removed
+- **Why:** "one UI, not 20" — a single warm-porch dialog for every image a character has, absorbing + deleting the old 1260-line glassmorphic `character_avatars_dialog.dart`. Grok-architected (7 files, all < 500 lines) and Grok-reviewed (found + I fixed 3 P0s pre-ship).
+- **New `lib/ui/dialogs/avatar_gallery/`:** `avatar_gallery_dialog.dart` (shell + `showAvatarGallery` entry + add/replace/import flows), `avatar_gallery_controller.dart` (the one mutation surface — all repo calls, reload, delete cascades), `avatar_gallery_io.dart` (pure pick + ZIP-decode), two section widgets (Gallery avatars / Expression images), `avatar_tile.dart` (shared tile: image + ★ + ✕ + badge/ring + tappable caption + Replace-portrait), `emotion_picker.dart`, `avatar_gallery_section_header.dart`.
+- **Shared ★ star** across both sections (one ever): writes `favoriteAvatarId`. **Hide rule** for the expressions section (shows if display-on OR any exist, else a slim add row). Preserves the old dialog's emotion picker, ZIP sprite-pack import, prime (default emotion), per-image emotion labels (drafted, flushed on Done), 30 cap. **Caller-passed mode** (library vs in-chat), always on the origin library card (group-safe).
+- **Entry points reworked:** chat sidebar "Expression Images" → "Avatar Gallery" (in-chat); NEW "Avatar Gallery" in the home right-click menu (library); REMOVED "Tap to change avatar" + the "Expression Images" button from `edit_character_page` + `edit_character_dialog` (avatar now read-only; deleted the dead `_pickAvatar`/`_newAvatarPath`; V2 PNG re-embed on save falls back to `imagePath`). Verified export PNG + Stoop upload read the live `imagePath`, so Replace-portrait needs no re-embed.
+- **Grok P0/P1 fixes:** materialize `frontPorchExtensions` before writing the star (a null ext silently dropped it → ★ wouldn't survive a reopen); `_disposed` guard on `notifyListeners` (open-then-close-fast asserted); always persist prime after a delete that invalidates it (DB could keep a dangling prime); copy `primeAvatarIndex` onto the group member card too; ZIP sprite-pack now matches on the file BASENAME (foldered packs silently matched nothing); `_run` surfaces repo errors as a snackbar; `flushOnDone` routed through `_run`.
+- **Deferred (maintainer-approved this convo):** web parity → stage #13. Flagged: the edit page/dialog no longer offer a portrait/gallery entry (by the maintainer's explicit request) — the home right-click + chat sidebar are the entries, and the create wizard sets the first portrait.
+- **Tests:** +5 `decodeSpritePack` (root, foldered basename, unrecognized, non-image, prefixes); removed the deleted dialog's golden case. Full suite 1981 green.
+- **Verification:** full `flutter analyze` clean; `flutter test` green; `flutter build macos` ✓.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, foundation for the shared ★ star: face-ring generalization + favoriteAvatarId
 - **Why:** groundwork for the unified Avatar Gallery + the one ★ "canonical avatar" star. The maintainer wants the star to point at EITHER a gallery avatar OR an expression image (one star ever) and be both the exported card cover and the default a new chat opens with. Grok's feasibility review was explicit: doing that fully means generalizing the plain-chat selection from "looks only" to "any avatar id" — don't ship a half-version. This is that generalization, done before the widget so nothing is re-touched later. Backward-compatible: with no star set yet (favorite null) the ring is exactly `[portrait, ...looks]` — identical behavior to what shipped.
 - **`favoriteAvatarId`** (`character_card.dart`, `FrontPorchExtensions`): nullable String riding the existing PNG extensions JSON (mirrors `avatarLocked`/`tier` — NO DB schema change, no external-writer risk). Points at an `avatar_images` id (look or expression) or null (= portrait). Serialized null-aware; added to toJson/fromJson/copyWith.
@@ -9,7 +20,7 @@
 - **Fix:** `avatar_repository_test.dart` asserted schema v36; bumped to v37 to match the earlier sessions-column migration (6b6a103) — was a stale failing assertion.
 - **Tests:** rewrote the gallery suite around the ring (buildFaceRing order incl. starred-expression, resolveFaceDisplay incl. portrait sentinel + stale + expression, flipFace) — 25/25; full suite 1976 green.
 - **Verification:** full `flutter analyze` clean; full `flutter test` green.
-- **Commit:** (this commit)
+- **Commit:** dd067d4
 
 ## 2026-07-11 — Avatar Gallery, Stage 4a: Expression Images dialog is look-blind (prereq for look creation)
 - **Why:** the last place looks could leak into the emotion system (Grok's P0/P1 from the Stage 3 review). Landed BEFORE any UI can create a look, so there's never a window where a look shows up as an expression.

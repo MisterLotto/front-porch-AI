@@ -39,6 +39,8 @@ import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
 import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/story_home_view.dart';
+import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
+import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/byaf_import_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/type_delete_dialog.dart';

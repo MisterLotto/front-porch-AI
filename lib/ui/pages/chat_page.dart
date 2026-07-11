@@ -32,7 +32,8 @@ import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
+import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
@@ -2995,26 +2996,27 @@ class _ChatPageState extends State<ChatPage> {
                           ? (chatService.originLibraryCardFor(character) ??
                                 character)
                           : character;
-                      final result = await CharacterAvatarsDialog.show(
+                      await showAvatarGallery(
                         context: context,
                         character: exprTarget,
                         repository: repo,
                         storage: storage,
+                        mode: WardrobeMode.inChat,
+                        chatService: chatService,
                       );
-                      if (result == true) {
-                        // Push the freshly edited library expressions onto the
-                        // live member card so the group reflects them immediately
-                        // (inheritance otherwise skips members already populated).
-                        if (!identical(exprTarget, character)) {
-                          character.avatarImages =
-                              exprTarget.avatarImages == null
-                              ? null
-                              : List<AvatarImage>.from(
-                                  exprTarget.avatarImages!,
-                                );
-                        }
-                        setState(() {});
+                      // Push the freshly edited library images onto the live
+                      // member card so the group reflects them immediately
+                      // (inheritance otherwise skips members already populated).
+                      // The gallery controller keeps exprTarget fresh; copy both
+                      // the image list AND the prime index so the member's
+                      // default-emotion resolution can't lag the library edit.
+                      if (!identical(exprTarget, character)) {
+                        character.avatarImages = exprTarget.avatarImages == null
+                            ? null
+                            : List<AvatarImage>.from(exprTarget.avatarImages!);
+                        character.primeAvatarIndex = exprTarget.primeAvatarIndex;
                       }
+                      if (mounted) setState(() {});
                       break;
                     case 'ui':
                       showDialog(
@@ -3054,8 +3056,8 @@ class _ChatPageState extends State<ChatPage> {
                   PopupMenuItem(
                     value: 'expressions',
                     child: SettingsMenuItem(
-                      icon: Icons.mood_outlined,
-                      label: 'Expression Images',
+                      icon: Icons.photo_library_outlined,
+                      label: 'Avatar Gallery',
                     ),
                   ),
                   PopupMenuItem(
