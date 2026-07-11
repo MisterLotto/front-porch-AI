@@ -258,6 +258,11 @@ class ImageGenService extends ChangeNotifier {
     // No caller passes Edit until the Create/Edit tabs land (Phase 3), so this
     // is dormant and non-breaking today.
     StudioIntent intent = StudioIntent.create,
+    // Edit-only: how strongly the instruction changes the reference (higher =
+    // more change). Overrides the edit profile's default strength when set, so
+    // the Edit tab can offer a "how much should change" control. Ignored outside
+    // the edit path.
+    double? editStrength,
   }) async {
     _isGenerating = true;
     _statusMessage = 'Generating image...';
@@ -381,7 +386,9 @@ class ImageGenService extends ChangeNotifier {
                 userLoraName: loraName.isEmpty ? null : loraName,
                 userLoraWeight: loraWeight,
               );
-              dtStrength = profile.strength;
+              // The user's "how much should change" slider overrides the
+              // profile's default edit strength when provided.
+              dtStrength = editStrength ?? profile.strength;
               dtSteps = profile.steps;
               dtCfg = profile.guidance;
               dtShift = profile.shift;
@@ -421,13 +428,36 @@ class ImageGenService extends ChangeNotifier {
               ),
             );
           } catch (e) {
-            // Sanitize for user display (no full tracebacks, absolute paths, or raw CLI internals)
+            // A "Generation error from CLI: …" means the gRPC server WAS reached
+            // and the generation itself failed (bad LoRA, incompatible model,
+            // etc.) — the old code hid that behind a misleading "check the gRPC
+            // server" message, which made LoRA/edit failures undiagnosable.
+            // Surface the real Draw Things reason (first line, path/length
+            // trimmed); keep the connection hint only for actual connect errors.
             final msg = e.toString();
-            final safe = msg.contains('CLI') || msg.contains('Generation error')
-                ? 'Draw Things generation failed. Check that the gRPC server is enabled in Draw Things and the host/port are correct.'
-                : 'Draw Things connection or generation failed.';
+            const genMarker = 'Generation error from CLI: ';
+            final idx = msg.indexOf(genMarker);
+            String safe;
+            if (idx >= 0) {
+              var detail = msg.substring(idx + genMarker.length).trim();
+              detail = detail.split('\n').first.trim();
+              if (detail.isEmpty || detail == 'null') {
+                detail = 'the backend rejected the request '
+                    '(often an incompatible LoRA or model for editing).';
+              }
+              if (detail.length > 240) detail = '${detail.substring(0, 240)}…';
+              safe = 'Draw Things couldn’t generate: $detail';
+            } else if (msg.contains('CLI returned no parseable') ||
+                msg.contains('connect') ||
+                msg.contains('gRPC') ||
+                msg.contains('timed out')) {
+              safe =
+                  'Draw Things generation failed. Check that the gRPC server is enabled in Draw Things and the host/port are correct.';
+            } else {
+              safe = 'Draw Things connection or generation failed.';
+            }
             _statusMessage = safe;
-            debugPrint('ImageGen: Draw Things error (sanitized for user): $e');
+            debugPrint('ImageGen: Draw Things error: $e');
             _isGenerating = false;
             notifyListeners();
             return null;

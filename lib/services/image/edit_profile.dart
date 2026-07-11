@@ -130,7 +130,13 @@ EditProfile resolveEditProfile({
   }
 
   // Qwen-Image-Edit (the maintainer's field-tested profile).
-  final lightning = _findQwenLightningLora(availableLoras);
+  // Only auto-add the internal lightning speed LoRA when the user HASN'T picked
+  // their own LoRA: stacking the lightning LoRA on top of an arbitrary user LoRA
+  // on the edit model is a known Draw Things hard-fail, and the user's explicit
+  // choice should win (they trade the 4-step speed for their LoRA + full steps).
+  final lightning = userLora.isEmpty
+      ? _findQwenLightningLora(availableLoras)
+      : null;
   if (lightning != null) {
     final steps = _lightning8Re.hasMatch(lightning.toLowerCase()) ? 8 : 4;
     // Don't add the lightning LoRA twice if the user already picked that file.

@@ -42,20 +42,26 @@ void main() {
       expect(p.strength, 0.8);
     });
 
-    test('user LoRA merged alongside the lightning LoRA', () {
+    test('a user LoRA SUPPRESSES the auto lightning LoRA (no stacking — DT '
+        'hard-fails when the lightning LoRA is stacked on a user LoRA)', () {
       final p = resolveEditProfile(
         editKind: EditModelKind.qwenEdit,
         availableLoras: const [ownerLightning4],
         userLoraName: 'my_style_lora.ckpt',
         userLoraWeight: 0.6,
       );
-      expect(p.loras.length, 2);
-      expect(p.loras.first['file'], ownerLightning4);
-      expect(p.loras.last['file'], 'my_style_lora.ckpt');
-      expect(p.loras.last['weight'], 0.6);
+      // Only the user's LoRA; the lightning speed hack is dropped, so the
+      // non-lightning recipe (more steps, real guidance) applies.
+      expect(p.loras.length, 1);
+      expect(p.loras.single['file'], 'my_style_lora.ckpt');
+      expect(p.loras.single['weight'], 0.6);
+      expect(p.usedLightning, isFalse);
+      expect(p.steps, 20);
+      expect(p.guidance, 3.5);
     });
 
-    test('a user LoRA that IS the lightning LoRA is not applied twice', () {
+    test('a user LoRA that IS the lightning LoRA → used as the user LoRA at '
+        'their weight (non-lightning path)', () {
       final p = resolveEditProfile(
         editKind: EditModelKind.qwenEdit,
         availableLoras: const [ownerLightning4],
@@ -64,7 +70,8 @@ void main() {
       );
       expect(p.loras.length, 1);
       expect(p.loras.single['file'], ownerLightning4);
-      expect(p.loras.single['weight'], 1.0); // the profile's weight wins
+      expect(p.loras.single['weight'], 0.5);
+      expect(p.usedLightning, isFalse);
     });
   });
 

@@ -471,6 +471,7 @@ class _TabFakeImageGenService extends ChangeNotifier
     int? seed,
     double? denoise,
     StudioIntent intent = StudioIntent.create,
+    double? editStrength,
   }) async => null;
   @override
   Future<String> generateSmartPrompt({

@@ -77,6 +77,11 @@ class _EditViewState extends State<EditView> {
   bool _saving = false;
   String _error = '';
 
+  /// How strongly the instruction changes the reference (higher = more change).
+  /// Overrides the edit model's default strength. 0.8 is the field-tested Qwen
+  /// default; the user can push it up when a change comes out too subtle.
+  double _strength = 0.8;
+
   @override
   void initState() {
     super.initState();
@@ -135,6 +140,7 @@ class _EditViewState extends State<EditView> {
         prompt: instruction,
         referenceImage: _sourceBytes,
         intent: StudioIntent.edit,
+        editStrength: _strength,
       );
       if (!mounted) return;
       setState(() {
@@ -269,6 +275,8 @@ class _EditViewState extends State<EditView> {
             _label(context, 'What should change?'),
             const SizedBox(height: 8),
             _instructionField(context),
+            const SizedBox(height: 16),
+            _strengthSlider(context),
             const SizedBox(height: 16),
             _applyButton(context, genBusy),
           ],
@@ -436,6 +444,45 @@ class _EditViewState extends State<EditView> {
           borderSide: const BorderSide(color: AppColors.formMasterAccent),
         ),
       ),
+    );
+  }
+
+  Widget _strengthSlider(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _label(context, 'How much should change?'),
+            const Spacer(),
+            Text(
+              _strength <= 0.55
+                  ? 'Subtle'
+                  : _strength >= 0.85
+                  ? 'Strong'
+                  : 'Balanced',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.formMasterAccent,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: _strength,
+          min: 0.3,
+          max: 1.0,
+          divisions: 14,
+          label: _strength.toStringAsFixed(2),
+          onChanged: _busy ? null : (v) => setState(() => _strength = v),
+        ),
+        Text(
+          'Left keeps the reference close; right lets your instruction take over. '
+          'Turn it up if a change comes out too subtle.',
+          style: TextStyle(fontSize: 11.5, color: AppColors.textTertiary(context)),
+        ),
+      ],
     );
   }
 

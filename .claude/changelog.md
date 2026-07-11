@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 — fix(images): DT edit + LoRA no longer fails, real errors surface, and the Edit tab has a strength control
+- **Three reported Edit-path bugs, fixed together:**
+- **1. LoRA + edit failed** ("Draw Things generation failed…"): the edit recipe force-added the internal Qwen **lightning** speed LoRA *on top of* the user's LoRA, and stacking the lightning LoRA on an arbitrary user LoRA on the edit model is a known Draw Things hard-fail. `resolveEditProfile` now **drops the auto lightning LoRA whenever the user has picked their own** — the user's explicit choice wins (they trade the 4-step speed for their LoRA + full steps). Confirmed by Grok as the strongest root cause (only *edit + lightning + user LoRA* fails; edit-alone and create+LoRA both work).
+- **2. The error was misleading:** a "Generation error from CLI: …" (the gRPC server IS reachable, generation failed) was rewritten to the generic "check that the gRPC server is enabled" message, hiding *why* it failed. Now the **real Draw Things reason** is surfaced (first line, trimmed); the connection hint is kept only for actual connect failures.
+- **3. No strength control + edits came out identical:** the Edit tab hard-coded the edit strength (0.8) with no knob, and a change could come out too subtle to see. Added a **"How much should change?"** slider to the Edit tab (0.30–1.00, Subtle → Strong, default 0.8) that overrides the profile strength via a new `generateImage(editStrength:)` param — turn it up when a change is too subtle.
+- **Tests:** updated the two edit-profile LoRA cases to the no-stack behavior; added `editStrength` to the test mock. Full suite 1981 green.
+- **Verification:** full `flutter analyze` clean; `flutter test` green.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — fix(images): the Edit tab pre-loads the current portrait (reported: "can't edit the existing avatar")
 - **Report:** the Image Studio "Edit" tab says "change this portrait", but the Reference photo slot was empty ("Add photo") — the user had to manually upload the character's current avatar before they could edit it. That defeats the point of an Edit-*this*-portrait tab.
 - **Fix:** the Edit view now pre-loads the character's current portrait as the source, so it opens ready to "change this portrait". `EditView.initialSourcePath` (fed from `ImageStudio.characterImagePath` ← `chat_page` `character?.imagePath`) is read in `initState` and seeded into `_sourceBytes` (via `StorageService.resolveCharacterImage`, which handles absolute + relative paths).
