@@ -105,6 +105,8 @@ extension ChatServiceChatEntry on ChatService {
     _currentSessionId = null;
     _summary = '';
     _summaryLastIndex = 0;
+    _selectedLooks
+        .clear(); // fresh 1:1: drop prior chat's per-chat look selection (keep reset blocks in sync)
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric to _isSummaryGenerating; incomplete zeroing... now complete (see CLAUDE.md); see keep-sync + journal_maintenance)
     _isSummaryGenerating =

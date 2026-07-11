@@ -108,6 +108,8 @@ extension ChatServiceSessionManage on ChatService {
         .copy(); // inherit parent's overrides
     _summary = '';
     _summaryLastIndex = 0;
+    _selectedLooks
+        .clear(); // fork starts with no per-chat look selection (keep reset blocks in sync)
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric to generating; fork hygiene + incomplete zeroing now complete)
     _isSummaryGenerating =
@@ -238,6 +240,8 @@ extension ChatServiceSessionManage on ChatService {
     _offeredOrIgnoredGuestNames.clear();
     _summary = '';
     _summaryLastIndex = 0;
+    _selectedLooks
+        .clear(); // fresh 1:1: drop prior chat's per-chat look selection (keep reset blocks in sync)
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; startNew 1:1/ext-seed branch + incomplete zeroing ... now complete)
     _isSummaryGenerating =

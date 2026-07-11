@@ -1001,10 +1001,20 @@ class CharacterRepository extends ChangeNotifier {
           final safeName = char.name
               .replaceAll(RegExp(r'[^\w\s\-]'), '')
               .replaceAll(' ', '_');
-          final avatarDir = Directory(
-            p.join(_storage.charactersDir.path, safeName, 'avatars'),
+          // Looks live in `looks/`, expressions in `avatars/` — pick the right
+          // folder off the row's own label (single-sourced via
+          // AvatarImage.subfolder) so deleting a look doesn't orphan its PNG.
+          final model = AvatarImage(
+            id: avatar.id,
+            characterId: avatar.characterId,
+            filename: avatar.filename,
+            label: avatar.label,
+            displayOrder: avatar.displayOrder,
+            createdAt: avatar.createdAt,
           );
-          final file = File(p.join(avatarDir.path, avatar.filename));
+          final file = File(
+            p.join(_storage.charactersDir.path, safeName, model.subfolder, avatar.filename),
+          );
           if (await file.exists()) {
             await file.delete();
           }

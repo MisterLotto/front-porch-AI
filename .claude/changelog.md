@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Stage 2a: per-chat look selection plumbing (group-parity codec + removeAvatar fix)
+- **Why:** wiring the per-chat "which look is showing" state before the UI. Grok pairing surfaced a real fork (single-id column = 1:1-only, a group gap) and one latent bug.
+- **Group parity by construction (the fork, resolved to "B"):** the shipped `sessions.selected_look_avatar_id` column now holds a JSON **map** `{characterId: lookAvatarId}` instead of one id — so a group chat remembers a distinct look per participant while 1:1 is just a one-entry map. One code path, group first-class from day one, **no new schema** (the column is opaque nullable TEXT; mirrors the existing `group_realism_state` house style). The pure resolver already takes the selected id as an input, so it's unchanged.
+- **Files:**
+  - `lib/services/avatar_gallery.dart` — pure `decodeSelectedLooks(String?)→Map` / `encodeSelectedLooks(Map)→String?` codec. Defensive: null/empty/malformed/non-map/bad-entries all collapse to `{}` and never throw (a corrupt column can't blank the portrait); empty map encodes to `null` so the column clears.
+  - `lib/services/character_repository.dart` — **bug fix:** `removeAvatar` hardcoded the `avatars/` folder, so deleting a *look* (which lives in `looks/`) deleted the DB row but orphaned the PNG forever. Now picks the folder off the row's own label via `AvatarImage.subfolder` (single-sourced), so one delete path serves both — no `removeLook` fork.
+  - `lib/services/chat_service.dart` — `_selectedLooks` map cache (session state), `selectedLookFor(characterId)` getter, `setLookForCharacter(characterId, lookId?)` (RMW + persist via `setSelectedLookForSession` + `notifyListeners`; never touches `imagePath`).
+  - `lib/services/chat/chat_service_session_load.dart` — decode the map on both load paths (`loadSession`, `_loadLastSession`); clear on the 0-session path.
+  - `chat_service_chat_entry.dart` / `chat_service_group_entry.dart` / `chat_service_session_manage.dart` (fork + startNew) — clear `_selectedLooks` on every fresh-start/new-session site (kept in sync with the `_summaryLastIndex` reset discipline) so a prior chat's selection can't bleed.
+- **Tests:** +5 codec cases (group round-trip, 1:1 one-entry, empty→null, garbage/non-map→empty, malformed-entry drop) — 18/18 in the gallery suite.
+- **Verification:** full `flutter analyze` clean.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — fix(vision): let users attach an mmproj to ANY local model (reported by Wally on GitHub)
 
 - **Report:** users with vision-capable local GGUFs (gemma, two qwen finetunes) each had a companion mmproj file but **no way to attach it**. Selecting the LLM gguf showed "This model can't process images" / "Vision: none" with no Browse button; selecting the mmproj file itself as the model detected vision but loaded the projector instead of the LLM.
@@ -4343,7 +4356,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Why:** the gallery's per-chat "which look is showing" needs a session-scoped store. Maintainer explicitly approved adding a nullable column to the externally-written `sessions` table (the safe additive pattern).
 - **Files:** `lib/database/database.dart` — `Sessions.selectedLookAvatarId` (nullable TextColumn); `schemaVersion` 36→37; additive migration `ALTER TABLE sessions ADD COLUMN selected_look_avatar_id TEXT` (nullable, no default — Character Card Forge simply omits it → NULL, safe for a mixed fleet + rollback); `setSelectedLookForSession(sessionId, avatarId?)` partial-write setter (read via existing `getSessionById`). `database.g.dart` regenerated via build_runner.
 - **Verification:** full `flutter analyze` clean. Additive-only per the external-writer contract; no other table touched.
-- **Commit:** (this commit)
+- **Commit:** 6b6a103
 
 ## 2026-07-11 — Avatar Gallery, Stage 1: look data core (pure + additive)
 - **Why:** groundwork for a per-character avatar gallery (Backyard-style) — any image as the sidebar avatar (outfit, scene, Christmas tree), flipped with chevrons in plain chat. Collection is GLOBAL per character; which look shows is PER CHAT. Fed from Edit / Create / upload; the existing destructive "Tap to change avatar" becomes a non-destructive wardrobe.

@@ -37,6 +37,7 @@ import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
@@ -1393,6 +1394,13 @@ class ChatService extends ChangeNotifier {
   String _authorNote = '';
   int _authorNoteStrength = 4;
 
+  // ── Per-chat avatar gallery ("looks") selection ──
+  // {characterId: selectedLookAvatarId} for THIS session, decoded from the
+  // session's selectedLookAvatarId column on load. A map (not one id) so a group
+  // chat remembers a look per participant; 1:1 is just a one-entry map. Reset
+  // per session in loadSession; empty when no session.
+  Map<String, String> _selectedLooks = {};
+
   // ── Chat Summary ──
   String _summary = '';
   int _summaryLastIndex = 0;
@@ -2638,6 +2646,32 @@ class ChatService extends ChangeNotifier {
   bool get isGenerating => _isGenerating;
   bool get isLoadingSession => _isLoadingSession;
   String? get currentSessionId => _currentSessionId;
+
+  /// The per-chat gallery look selected for [characterId] in the active session,
+  /// or null (no look chosen → the character's library face shows). Keyed by the
+  /// character's library id so the same character shares one selection across a
+  /// group cast.
+  String? selectedLookFor(String characterId) => _selectedLooks[characterId];
+
+  /// Set (or clear, when [lookId] is null) the per-chat gallery look for
+  /// [characterId] in the active session, persist the whole map to the session's
+  /// selected-look column, and repaint. Never touches `imagePath` — the library
+  /// face is independent of which look shows in a given chat.
+  Future<void> setLookForCharacter(String characterId, String? lookId) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    if (lookId == null) {
+      _selectedLooks.remove(characterId);
+    } else {
+      _selectedLooks[characterId] = lookId;
+    }
+    notifyListeners();
+    await _db.setSelectedLookForSession(
+      sid,
+      encodeSelectedLooks(_selectedLooks),
+    );
+  }
+
   double get generationProgress => _generationProgress;
   int get tokensGenerated => _tokensGenerated;
   int get maxTokens => _maxTokens;

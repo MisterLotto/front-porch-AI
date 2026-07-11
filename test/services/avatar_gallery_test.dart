@@ -141,6 +141,40 @@ void main() {
     });
   });
 
+  group('decodeSelectedLooks / encodeSelectedLooks (per-chat map codec)', () {
+    test('round-trips a multi-character (group) map', () {
+      const map = {'charA': 'look1', 'charB': 'look2'};
+      final encoded = encodeSelectedLooks(map);
+      expect(decodeSelectedLooks(encoded), map);
+    });
+
+    test('1:1 is just a one-entry map', () {
+      final encoded = encodeSelectedLooks({'charA': 'look1'});
+      expect(decodeSelectedLooks(encoded), {'charA': 'look1'});
+    });
+
+    test('empty map encodes to null (clears the column)', () {
+      expect(encodeSelectedLooks(const {}), isNull);
+    });
+
+    test('null / empty / garbage / non-map all decode to empty, never throw', () {
+      expect(decodeSelectedLooks(null), isEmpty);
+      expect(decodeSelectedLooks(''), isEmpty);
+      expect(decodeSelectedLooks('not json at all'), isEmpty);
+      expect(decodeSelectedLooks('["a","b"]'), isEmpty); // a list, not a map
+      expect(decodeSelectedLooks('"bare-string"'), isEmpty);
+      expect(decodeSelectedLooks('42'), isEmpty);
+    });
+
+    test('drops malformed entries (non-string / empty keys or values)', () {
+      // Mixed value types + empty strings — only the clean entry survives.
+      expect(
+        decodeSelectedLooks('{"charA":"look1","charB":5,"":"x","charC":""}'),
+        {'charA': 'look1'},
+      );
+    });
+  });
+
   group('flipLook (chevron navigation)', () {
     final looks = [_look('a'), _look('b'), _look('c')];
 

@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
 import 'package:front_porch_ai/models/avatar_image.dart';
 
 /// Pure resolution for the per-character avatar GALLERY ("looks"). Kept
@@ -104,6 +106,37 @@ LookDisplay resolveLookDisplay({
 
   return LookDisplay(look: selected, showChevrons: looks.length > 1);
 }
+
+/// Decode the per-chat look selection stored (JSON) in the session's
+/// `selectedLookAvatarId` column into a `{characterId: lookAvatarId}` map.
+///
+/// The map (not a single id) is what lets a GROUP chat remember a distinct look
+/// per participant while 1:1 is just a one-entry map — one code path, group
+/// parity by construction (mirrors the existing `group_realism_state` house
+/// style). Deliberately defensive: null / empty / malformed / non-map / bad
+/// entries all collapse to an empty map and this NEVER throws, so a corrupt
+/// column can't blank the portrait.
+Map<String, String> decodeSelectedLooks(String? raw) {
+  if (raw == null || raw.isEmpty) return <String, String>{};
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) return <String, String>{};
+    final out = <String, String>{};
+    decoded.forEach((k, v) {
+      if (k is String && v is String && k.isNotEmpty && v.isNotEmpty) {
+        out[k] = v;
+      }
+    });
+    return out;
+  } catch (_) {
+    return <String, String>{};
+  }
+}
+
+/// Encode the per-chat look selection map back to JSON for storage. An empty
+/// map encodes to `null` so the column clears (never stores a bare `{}`).
+String? encodeSelectedLooks(Map<String, String> selection) =>
+    selection.isEmpty ? null : jsonEncode(selection);
 
 /// The look id to select when flipping the chevrons by [delta] (+1 next, -1
 /// previous) from the currently [selectedLookId], wrapping around. When the
