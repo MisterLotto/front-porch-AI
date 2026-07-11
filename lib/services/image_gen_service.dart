@@ -28,7 +28,6 @@ import 'package:front_porch_ai/services/grpc/draw_things_grpc_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
-import 'package:front_porch_ai/services/image/edit_profile.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
@@ -364,41 +363,29 @@ class ImageGenService extends ChangeNotifier {
             final loraName = _storage.imageGenSettings.imageGenLora;
             final loraWeight = _storage.imageGenSettings.imageGenLoraWeight;
 
-            // Edit models (Qwen-Image-Edit / Flux Kontext) read the reference as
-            // conditioning, so they need their config PROFILE — NOT the img2img
-            // denoise. The backend-neutral recipe lives out-of-file
-            // (edit_profile.dart) so this god file stays thin.
+            // Same shared LoRA setting the A1111 path uses; DT applies it
+            // natively via the generation config instead of a prompt tag.
+            // Edit models (Qwen-Image-Edit / Flux Kontext) treat the reference as
+            // the image to CHANGE and do the editing from the reference + the
+            // instruction. Everything the user set in Generation Settings —
+            // steps, CFG, sampler, seed, seed-mode, shift, LoRA — is used AS-IS,
+            // so the Edit tab is truthful (what you see runs; you can run a real
+            // 30-step edit). The only edit-specific control is the "how much
+            // should change" strength (default 0.8). No forced recipe / no
+            // auto-lightning LoRA (it hard-constrained steps and stacked-failed).
             var dtStrength = strength;
-            var dtSteps = steps;
-            var dtCfg = cfgScale;
-            var dtShift = shift;
-            var dtSampler = sampler;
-            var dtSeedMode = seedMode;
-            var dtLoras = loraName.isEmpty
+            final dtSteps = steps;
+            final dtCfg = cfgScale;
+            final dtShift = shift;
+            final dtSampler = sampler;
+            final dtSeedMode = seedMode;
+            final dtLoras = loraName.isEmpty
                 ? const <Map<String, dynamic>>[]
                 : [
                     {'file': loraName, 'weight': loraWeight},
                   ];
             if (refRole == ImageReferenceRole.editConditioning) {
-              final profile = resolveEditProfile(
-                editKind: refCapability.editKind,
-                availableLoras: await grpcService.fetchLoras(),
-                userLoraName: loraName.isEmpty ? null : loraName,
-                userLoraWeight: loraWeight,
-              );
-              // The user's "how much should change" slider overrides the
-              // profile's default edit strength when provided.
-              dtStrength = editStrength ?? profile.strength;
-              dtSteps = profile.steps;
-              dtCfg = profile.guidance;
-              dtShift = profile.shift;
-              // Map the neutral profile to Draw Things' native encoding at the
-              // edge (the profile itself stays backend-agnostic).
-              dtSampler = profile.samplerName == kEditSamplerUnipc
-                  ? 17 // Sampler.UNIPC_TRAILING
-                  : sampler;
-              dtSeedMode = 2; // SeedMode.SCALE_ALIKE — DT edit policy
-              dtLoras = profile.loras;
+              dtStrength = editStrength ?? 0.8;
               _statusMessage = refCapability.editKind == EditModelKind.kontext
                   ? 'Editing with Flux Kontext...'
                   : 'Editing with Qwen-Image-Edit...';

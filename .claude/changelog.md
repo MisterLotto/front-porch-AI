@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-11 — fix(images): the Edit tab is now TRUTHFUL — your Generation Settings drive the edit
+- **Report:** "I was under the impression I was running a 30-step image edit pass" — the Edit tab showed the user's Steps=30 / CFG / DDIM, but the edit silently overrode them with a forced recipe (steps 20, or 4 via the auto lightning LoRA; UNIPC sampler; SCALE_ALIKE seed-mode; strength 0.8). So the maintainer couldn't actually test with more steps, and a big edit came out identical (plausibly the forced 4 steps).
+- **Fix:** the edit now uses the user's Generation Settings AS-IS — steps, CFG, sampler, seed, seed-mode, shift, LoRA. What you see runs; you can run a real 30-step edit. The Qwen-Image-Edit model still gets the reference (the image to change) + the instruction and does the editing; the only edit-specific control is the new "How much should change?" strength slider (default 0.8).
+- **Removed the forced edit recipe + the auto-lightning LoRA** (which lied about the step count, hard-forced 4 steps, and stacked-failed with a user LoRA) — deleted `edit_profile.dart` + `resolveEditProfile` + its tests (its only consumer was this path). Users who want the fast lightning path add that LoRA themselves + set 4–8 steps. This SUPERSEDES the profile-side pieces of the previous commit (a873cc4).
+- **Grok-validated:** for an instruction-edit model, steps/CFG/sampler are quality/speed knobs, not edit prerequisites — dropping the recipe made the path truthful (and often better: 30 steps > forced 4), didn't break editing; higher strength ≈ more change is the right mental model.
+- **Verification:** full `flutter analyze` clean; `flutter test` 1973 green.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — fix(images): DT edit + LoRA no longer fails, real errors surface, and the Edit tab has a strength control
 - **Three reported Edit-path bugs, fixed together:**
 - **1. LoRA + edit failed** ("Draw Things generation failed…"): the edit recipe force-added the internal Qwen **lightning** speed LoRA *on top of* the user's LoRA, and stacking the lightning LoRA on an arbitrary user LoRA on the edit model is a known Draw Things hard-fail. `resolveEditProfile` now **drops the auto lightning LoRA whenever the user has picked their own** — the user's explicit choice wins (they trade the 4-step speed for their LoRA + full steps). Confirmed by Grok as the strongest root cause (only *edit + lightning + user LoRA* fails; edit-alone and create+LoRA both work).
