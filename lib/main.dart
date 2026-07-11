@@ -385,11 +385,9 @@ void main(List<String> args) async {
               previous ?? ModelManager(storage, downloadManager),
         ),
         ChangeNotifierProvider(create: (_) => OpenRouterService()),
-        ChangeNotifierProvider(create: (_) => PseudoRemoteService()),
-        ChangeNotifierProxyProvider5<
+        ChangeNotifierProxyProvider4<
           KoboldService,
           OpenRouterService,
-          PseudoRemoteService,
           StorageService,
           BackendManager,
           LLMProvider
@@ -397,28 +395,11 @@ void main(List<String> args) async {
           create: (context) => LLMProvider(
             Provider.of<KoboldService>(context, listen: false),
             Provider.of<OpenRouterService>(context, listen: false),
-            Provider.of<PseudoRemoteService>(context, listen: false),
             Provider.of<StorageService>(context, listen: false),
             Provider.of<BackendManager>(context, listen: false),
           ),
-          update:
-              (
-                context,
-                kobold,
-                openRouter,
-                pseudoRemote,
-                storage,
-                backend,
-                previous,
-              ) =>
-                  previous ??
-                  LLMProvider(
-                    kobold,
-                    openRouter,
-                    pseudoRemote,
-                    storage,
-                    backend,
-                  ),
+          update: (context, kobold, openRouter, storage, backend, previous) =>
+              previous ?? LLMProvider(kobold, openRouter, storage, backend),
         ),
         ChangeNotifierProxyProvider4<
           KoboldService,
@@ -509,21 +490,19 @@ void main(List<String> args) async {
           update: (context, storage, previous) =>
               previous ?? ExpressionClassifierService(storage),
         ),
-        ChangeNotifierProxyProvider4<
+        ChangeNotifierProxyProvider3<
           StorageService,
           BackendManager,
           KoboldService,
-          PseudoRemoteService,
           SetupService
         >(
           create: (context) => SetupService(
             Provider.of<StorageService>(context, listen: false),
             Provider.of<BackendManager>(context, listen: false),
             Provider.of<KoboldService>(context, listen: false),
-            Provider.of<PseudoRemoteService>(context, listen: false),
           ),
-          update: (context, storage, backend, kobold, pseudoRemote, previous) =>
-              previous ?? SetupService(storage, backend, kobold, pseudoRemote),
+          update: (context, storage, backend, kobold, previous) =>
+              previous ?? SetupService(storage, backend, kobold),
         ),
         ChangeNotifierProvider(create: (_) => UpdateService()),
         ChangeNotifierProxyProvider<StorageService, VoiceManager>(
@@ -943,8 +922,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
       debugPrint('AG_DEBUG: Error flushing chat save on window close: $e');
     }
 
-    // Stop managed backends (KoboldCPP + PseudoRemote) BEFORE destroying
-    // the window. This prevents orphaned processes when the app closes.
+    // Stop the managed KoboldCPP backend BEFORE destroying the window. This
+    // prevents an orphaned process when the app closes.
     try {
       final koboldService = Provider.of<KoboldService>(context, listen: false);
       if (koboldService.isRunning) {
@@ -952,17 +931,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
       }
     } catch (e) {
       debugPrint('AG_DEBUG: Error stopping Kobold on window close: $e');
-    }
-    try {
-      final pseudoRemote = Provider.of<PseudoRemoteService>(
-        context,
-        listen: false,
-      );
-      if (pseudoRemote.isRunning) {
-        await pseudoRemote.stop();
-      }
-    } catch (e) {
-      debugPrint('AG_DEBUG: Error stopping PseudoRemote on window close: $e');
     }
 
     // Run pending installer if user deferred the update
@@ -1088,13 +1056,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
                           listen: false,
                         );
                         if (kobold.isRunning) await kobold.stopKobold();
-                      } catch (_) {}
-                      try {
-                        final pseudo = Provider.of<PseudoRemoteService>(
-                          context,
-                          listen: false,
-                        );
-                        if (pseudo.isRunning) await pseudo.stop();
                       } catch (_) {}
                       try {
                         final webServer = Provider.of<WebServerHost>(

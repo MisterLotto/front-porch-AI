@@ -425,9 +425,6 @@ class StorageService extends ChangeNotifier {
   bool get autostartBackend => backendSettings.autostartBackend;
   Future<void> setAutostartBackend(bool v) =>
       backendSettings.setAutostartBackend(v);
-  bool get autostartPseudoRemote => backendSettings.autostartPseudoRemote;
-  Future<void> setAutostartPseudoRemote(bool v) =>
-      backendSettings.setAutostartPseudoRemote(v);
   bool get koboldThinkingModel => backendSettings.koboldThinkingModel;
   Future<void> setKoboldThinkingModel(bool v) =>
       backendSettings.setKoboldThinkingModel(v);

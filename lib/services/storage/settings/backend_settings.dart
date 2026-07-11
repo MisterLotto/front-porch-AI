@@ -36,7 +36,6 @@ class BackendSettings with SettingsBase {
   bool _koboldThinkingModel = false;
 
   bool _autostartBackend = false;
-  bool _autostartPseudoRemote = false;
   String? _lastUsedModelPath;
   String? _activeKcppsPath;
   bool _kcppsHasModel = false;
@@ -62,7 +61,6 @@ class BackendSettings with SettingsBase {
   String get reasoningEffort => _reasoningEffort;
   bool get koboldThinkingModel => _koboldThinkingModel;
   bool get autostartBackend => _autostartBackend;
-  bool get autostartPseudoRemote => _autostartPseudoRemote;
   String? get lastUsedModelPath => _lastUsedModelPath;
   String? get activeKcppsPath => _activeKcppsPath;
   bool get kcppsHasModel => _kcppsHasModel;
@@ -127,8 +125,22 @@ class BackendSettings with SettingsBase {
 
     _autostartBackend =
         prefs?.getBool(k('autostart_backend')) ?? _autostartBackend;
-    _autostartPseudoRemote =
-        prefs?.getBool(k('autostart_pseudo_remote')) ?? _autostartPseudoRemote;
+
+    // ── Migration: the removed 'pseudoRemote' backend is now the local Kobold
+    // backend launching a .kcpps preset. Rewrite the persisted value so nothing
+    // downstream ever sees the dead string, and carry the old
+    // autostart-pseudo-remote intent into the single autostart_backend flag,
+    // then drop the orphaned key.
+    if (_backendType == 'pseudoRemote') {
+      _backendType = 'kobold';
+      prefs?.setString(k('backend_type'), 'kobold');
+      if (prefs?.getBool(k('autostart_pseudo_remote')) ?? false) {
+        _autostartBackend = true;
+        prefs?.setBool(k('autostart_backend'), true);
+      }
+    }
+    prefs?.remove(k('autostart_pseudo_remote'));
+
     _lastUsedModelPath = prefs?.getString(k('last_used_model_path'));
     _activeKcppsPath = prefs?.getString(k('active_kcpps_path'));
 
@@ -201,12 +213,6 @@ class BackendSettings with SettingsBase {
   Future<void> setAutostartBackend(bool value) async {
     _autostartBackend = value;
     await prefs?.setBool(k('autostart_backend'), value);
-    notify();
-  }
-
-  Future<void> setAutostartPseudoRemote(bool value) async {
-    _autostartPseudoRemote = value;
-    await prefs?.setBool(k('autostart_pseudo_remote'), value);
     notify();
   }
 

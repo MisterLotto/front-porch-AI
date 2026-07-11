@@ -32,12 +32,7 @@ class SettingsFacade {
   final StorageService _storage;
   final LLMProvider _llm;
 
-  static const List<String> backends = [
-    'kobold',
-    'pseudoRemote',
-    'openRouter',
-    'omlx',
-  ];
+  static const List<String> backends = ['kobold', 'openRouter', 'omlx'];
 
   Map<String, dynamic> read() {
     final g = _storage.generationSettings;
@@ -166,14 +161,14 @@ class SettingsFacade {
 
   static String _name(BackendType t) => switch (t) {
         BackendType.kobold => 'kobold',
-        BackendType.pseudoRemote => 'pseudoRemote',
         BackendType.openRouter => 'openRouter',
         BackendType.omlx => 'omlx',
       };
 
   static BackendType? _parse(String s) => switch (s) {
         'kobold' => BackendType.kobold,
-        'pseudoRemote' => BackendType.pseudoRemote,
+        // Legacy 'pseudoRemote' now maps to the local Kobold backend.
+        'pseudoRemote' => BackendType.kobold,
         'openRouter' => BackendType.openRouter,
         'omlx' => BackendType.omlx,
         _ => null,

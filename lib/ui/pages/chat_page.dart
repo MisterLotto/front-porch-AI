@@ -1847,8 +1847,7 @@ class _ChatPageState extends State<ChatPage> {
       _pendingImageBlindReason = null;
     });
     final isLocalBackend =
-        llmProvider.activeBackend == BackendType.kobold ||
-        llmProvider.activeBackend == BackendType.pseudoRemote;
+        llmProvider.activeBackend == BackendType.kobold;
     final support = await VisionSupportResolver.instance.resolveForActiveLlm(
       backend: llmProvider.activeBackend,
       storage: storage,

@@ -64,9 +64,7 @@ class FakeLLMProvider extends ChangeNotifier implements LLMProvider {
   bool get isLocal => activeBackend == BackendType.kobold;
 
   @override
-  bool get hasManagedProcess =>
-      activeBackend == BackendType.kobold ||
-      activeBackend == BackendType.pseudoRemote;
+  bool get hasManagedProcess => activeBackend == BackendType.kobold;
 
   @override
   bool get hasAnyManagedProcessRunning => false;

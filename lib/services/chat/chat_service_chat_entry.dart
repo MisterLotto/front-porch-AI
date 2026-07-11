@@ -70,8 +70,8 @@ extension ChatServiceChatEntry on ChatService {
 
     _activeCharacter = character;
 
-    // Auto-start local backend (Kobold or Pseudo-Remote) when entering a chat
-    // so the user never has to manually start it just to talk.
+    // Auto-start the local Kobold backend (native or a .kcpps preset) when
+    // entering a chat so the user never has to manually start it just to talk.
     _llmProvider?.ensureManagedBackendIsRunning();
 
     // If extensions are missing (e.g., app was restarted after DB load that

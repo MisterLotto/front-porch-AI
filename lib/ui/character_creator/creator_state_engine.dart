@@ -936,10 +936,8 @@ extension CreatorEngine on CreatorState {
 
     final estimatedTokens = worldLore.length ~/ 4;
     int freeContextLimit;
-    if ((provider.activeBackend == BackendType.kobold &&
-            provider.koboldService.isReady) ||
-        (provider.activeBackend == BackendType.pseudoRemote &&
-            provider.pseudoRemoteService.isReady)) {
+    if (provider.activeBackend == BackendType.kobold &&
+        provider.koboldService.isReady) {
       freeContextLimit = storage.contextSize - 3000; // leave 3K for generation
     } else {
       freeContextLimit = 120000;
