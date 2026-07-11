@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-11 — fix(vision): let users attach an mmproj to ANY local model (reported by Wally on GitHub)
+
+- **Report:** users with vision-capable local GGUFs (gemma, two qwen finetunes) each had a companion mmproj file but **no way to attach it**. Selecting the LLM gguf showed "This model can't process images" / "Vision: none" with no Browse button; selecting the mmproj file itself as the model detected vision but loaded the projector instead of the LLM.
+- **Root cause (two gates, both fixed):**
+  - `lib/ui/widgets/vision_projector_field.dart` — the "text-only" branch was a dead end (`_note "This model can't process images"`, no picker). The Browse picker only appeared for archs in the conservative `alwaysMultimodalArches` allowlist, so any vision model we didn't recognize (finetunes like "…-heretic", renamed archs, models whose vision config lives only in the mmproj) could never get one attached. Now every non-embedded state shows the picker; only a model with a projector already baked in hides it.
+  - `lib/services/capability/model_capabilities.dart` — `VisionSupport.fromGguf` required `isMultimodal && mmprojConfigured`, so even if the UI had let them pick, the verdict stayed "none" for an unrecognized arch. An explicitly-configured mmproj is now AUTHORITATIVE (`ggufWithMmproj`) regardless of the arch heuristic — the user picked it, KoboldCpp loads `--mmproj`, and the runtime image path already honored it. This flips the pill to "Vision: supported" and makes chat photo attachment work for these models end-to-end.
+- **Not changed:** the arch allowlist stays conservative (we still never falsely tell a pure-text model it "needs an mmproj"); we just stop blocking the user from attaching one.
+- **Tests:** updated the model_capabilities test that pinned the old text-only+mmproj→none behavior; added the end-to-end resolver test for the exact reported case (unrecognized arch + app-mapped mmproj → supported).
+- **Verification:** analyze clean, full suite green.
+- **Commit:** (see git log)
+
 ## 2026-07-11 — fix(chat/caption): hostile-review remediation on the photo-attach + captioner branch
 
 Nine confirmed findings from a high-effort adversarial review, fixed:

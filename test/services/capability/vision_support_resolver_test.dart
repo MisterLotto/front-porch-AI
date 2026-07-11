@@ -207,5 +207,27 @@ void main() {
       expect(support.supported, isTrue);
       expect(support.source, VisionSource.ggufWithMmproj);
     });
+
+    test('unrecognized-arch model + app-mapped mmproj → supported '
+        '(the Wally case: a vision model our allowlist misses)', () async {
+      // Arch NOT in alwaysMultimodalArches and no embedded projector — the
+      // detector calls it text-only. The user attached its companion mmproj;
+      // that must be trusted and enable vision.
+      final model = writeGguf(
+        'qwen3-heretic.gguf',
+        _buildGguf(kv: {'general.architecture': 'qwen3'}),
+      );
+      final mmproj = writeGguf('qwen3-mmproj.gguf', Uint8List.fromList([1, 2]));
+      final storage = await createStorageService();
+      await storage.setLastUsedModelPath(model.path);
+      await storage.setModelMmproj(model.path, mmproj.path);
+
+      final support = await VisionSupportResolver.instance.resolveForActiveLlm(
+        backend: BackendType.kobold,
+        storage: storage,
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.ggufWithMmproj);
+    });
   });
 }
