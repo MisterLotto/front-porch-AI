@@ -10,7 +10,7 @@
 - **Honest limits:** sampler + guidance are still edit-tuned (not yet yours) — if you want those controllable too, they become Edit-tab controls next. And if the LoRA+edit STILL returns "no images" even on UniPC + moderate guidance, that's a Draw Things / qwen-edit-i8 + LoRA-conditioning limit, not the routing.
 - **Tests:** rewrote edit_profile tests for the no-lightning recipe (LoRA passed as-is; a "lightning"-named LoRA is treated like any user LoRA). Full suite 1977 green.
 - **Verification:** `flutter analyze` clean; `flutter test` green; `flutter build macos` ✓.
-- **Commit:** (this commit)
+- **Commit:** 6090b58
 
 ## 2026-07-11 — REVERT: the "truthful edit" change broke Draw Things editing (the recipe is load-bearing)
 - **What happened:** the "make the Edit tab truthful" change (c31234c) removed the edit recipe so the user's Generation Settings drove the edit. Grok and I assumed steps/sampler/CFG were just quality knobs for an instruction-edit model. The maintainer's live logs proved that WRONG: without the recipe, DT's qwen-image-edit-i8 produced **"Generation produced no images"** (bad config) and, with no LoRA, **timed out at 5 minutes** (30 slow steps instead of the fast 4-step lightning path).
