@@ -28,10 +28,19 @@ extension ChatServiceHistory on ChatService {
   /// can never drift). Director notes get bracketed so the AI treats them as
   /// instructions; generated-image messages (empty text + image metadata from
   /// `/image` or the studio's Send to chat) are described briefly instead of
-  /// producing a bare "Sender:" line.
+  /// producing a bare "Sender:" line; user-attached photos are marked (with
+  /// the stored auto-caption once available) so turns after the pixels stop
+  /// riding along still know a photo was shared and what it showed.
   String _formatHistoryLine(ChatMessage m) {
     if (m.characterId == '__director__') {
       return '[Director: ${m.text}]';
+    }
+    if (m.activeMetadata?['is_user_image'] == true) {
+      final caption = (m.activeMetadata?['image_caption'] as String? ?? '')
+          .trim();
+      final attach = '[attaches a photo${caption.isEmpty ? '' : ': $caption'}]';
+      final text = m.text.trim();
+      return '${m.sender}: ${text.isEmpty ? attach : '$text $attach'}';
     }
     if (m.activeMetadata?['is_generated_image'] == true && m.text.isEmpty) {
       final prompt = (m.activeMetadata?['image_prompt'] as String? ?? '')

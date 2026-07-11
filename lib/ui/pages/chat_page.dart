@@ -44,6 +44,8 @@ import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
+import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 // Old ImageGenDialog removed in Stage 3 (full from-scratch Image Studio).
 // Studio launched below; see lib/ui/image_studio/ and _showImageGenDialog.
@@ -76,6 +78,14 @@ class _ChatPageState extends State<ChatPage> {
   bool _showingGuestDetection = false;
   bool _showingGuestPicker = false;
   bool _showingImageReview = false;
+  // Pending photo attachment for the next user message (bytes already
+  // downscaled + PNG re-encoded by pickChatImageAttachment). visionOk is
+  // null while the capability resolver is still checking the active model;
+  // blindReason carries the backend-specific "why" for the chip's
+  // last-resort explanation when the check fails.
+  Uint8List? _pendingImageBytes;
+  bool? _pendingImageVisionOk;
+  String? _pendingImageBlindReason;
   bool? _externalImagesAllowed;
   bool _imageConsentChecked = false;
   TtsService? _ttsService;
@@ -168,16 +178,10 @@ class _ChatPageState extends State<ChatPage> {
           if (HardwareKeyboard.instance.isShiftPressed) {
             return KeyEventResult.ignored; // let the TextField insert a newline
           }
-          // Bare Enter → send message
+          // Bare Enter → send message (shared path with the send button,
+          // so a pending photo attachment rides along here too)
           final chatService = Provider.of<ChatService>(context, listen: false);
-          final text = _controller.text.trim();
-          if (text.isNotEmpty && !chatService.isGenerating) {
-            chatService.sendMessage(text);
-            _controller.clear();
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _scrollToBottom(),
-            );
-          }
+          _sendCurrentMessage(chatService);
           return KeyEventResult.handled;
         }
         // ⌘R (macOS) / Ctrl+R — (re)generate the last AI reply. If the previous
@@ -1826,6 +1830,75 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// Pick a photo for the next message and resolve (non-blocking) whether the
+  /// active model can actually see it — a blind verdict makes the preview
+  /// chip explain why and offer the last-resort Photo Understanding
+  /// workaround, but never prevents sending (capability detection can't
+  /// interrogate externally-started servers).
+  Future<void> _attachImage() async {
+    // Capture providers before the async gaps (native picker + isolate decode).
+    final llmProvider = Provider.of<LLMProvider>(context, listen: false);
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final bytes = await pickChatImageAttachment();
+    if (bytes == null || !mounted) return;
+    setState(() {
+      _pendingImageBytes = bytes;
+      _pendingImageVisionOk = null;
+      _pendingImageBlindReason = null;
+    });
+    final isLocalBackend =
+        llmProvider.activeBackend == BackendType.kobold ||
+        llmProvider.activeBackend == BackendType.pseudoRemote;
+    final support = await VisionSupportResolver.instance.resolveForActiveLlm(
+      backend: llmProvider.activeBackend,
+      storage: storage,
+    );
+    // The user may have removed (or sent) the attachment while resolving.
+    if (!mounted || _pendingImageBytes == null) return;
+    setState(() {
+      _pendingImageVisionOk = support.supported;
+      _pendingImageBlindReason = support.supported
+          ? null
+          : (isLocalBackend
+                ? 'your local model has no vision projector (mmproj) loaded, '
+                      'so it processes text only'
+                : 'the selected API model is text-only and doesn\'t accept '
+                      'images');
+    });
+  }
+
+  /// Shared send path for the Enter key and the send button. Hands text +
+  /// photo BYTES to ChatService, which saves the photo only after its own
+  /// guards pass — so we never save a file for a turn ChatService will drop.
+  /// We mirror every one of sendMessage's silent early-returns here
+  /// (isGenerating / isGuestBusy / entrancesInFlight / no active chat) so the
+  /// pending photo and typed text are preserved for retry rather than
+  /// consumed into the void. In observer mode the photo is NOT consumed —
+  /// director notes are pure instructions and would drop it.
+  void _sendCurrentMessage(ChatService chatService) {
+    final pending = chatService.observerMode ? null : _pendingImageBytes;
+    final text = _controller.text;
+    if ((text.trim().isEmpty && pending == null) ||
+        chatService.isGenerating ||
+        chatService.isGuestBusy ||
+        chatService.isPhotoTurnInFlight ||
+        chatService.entrancesInFlight ||
+        (chatService.activeCharacter == null &&
+            chatService.activeGroup == null)) {
+      return;
+    }
+    chatService.sendMessage(text, imageBytes: pending);
+    if (pending != null) {
+      setState(() {
+        _pendingImageBytes = null;
+        _pendingImageVisionOk = null;
+        _pendingImageBlindReason = null;
+      });
+    }
+    _controller.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
   Widget _buildInputArea(BuildContext context, ChatService chatService) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1969,6 +2042,71 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
               ),
+            ),
+            // Pending photo attachment preview (remove ✕ + blind-model note:
+            // offline-captioner fallback when installed, warning otherwise)
+            if (_pendingImageBytes != null)
+              Builder(
+                builder: (context) {
+                  LocalCaptionService.instance.configure(
+                    Provider.of<StorageService>(
+                      context,
+                      listen: false,
+                    ).rootPath,
+                  );
+                  return PendingImageChip(
+                    bytes: _pendingImageBytes!,
+                    visionOk: _pendingImageVisionOk,
+                    blindReason: _pendingImageBlindReason,
+                    onRemove: () => setState(() {
+                      _pendingImageBytes = null;
+                      _pendingImageVisionOk = null;
+                      _pendingImageBlindReason = null;
+                    }),
+                  );
+                },
+              ),
+            // Offline captioner at work — sending is quiet for a few seconds
+            // while the photo is described, so say what's happening.
+            AnimatedBuilder(
+              animation: LocalCaptionService.instance,
+              builder: (context, _) {
+                if (!LocalCaptionService.instance.isCaptioning) {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  color: AppColors.surfaceContainerOf(context),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.tealAccent,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Reading the photo so the character knows what it '
+                          'shows…',
+                          style: TextStyle(
+                            color: AppColors.textSecondary(context),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -2166,6 +2304,20 @@ class _ChatPageState extends State<ChatPage> {
                       );
                     },
                   ),
+
+                  // Attach a photo to the next message (vision-capable models
+                  // see the pixels; others get the history marker). Hidden in
+                  // observer mode — director notes carry no images.
+                  if (!chatService.observerMode)
+                    IconButton(
+                      icon: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: AppColors.iconSecondary(context),
+                      ),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Attach photo',
+                      onPressed: _attachImage,
+                    ),
 
                   const SizedBox(width: 4),
 
@@ -2420,17 +2572,7 @@ class _ChatPageState extends State<ChatPage> {
                                         ? Colors.amberAccent
                                         : Colors.blueAccent),
                             ),
-                            onPressed: () {
-                              if (_controller.text.isNotEmpty &&
-                                  !chatService.isGenerating &&
-                                  !chatService.isGuestBusy) {
-                                chatService.sendMessage(_controller.text);
-                                _controller.clear();
-                                WidgetsBinding.instance.addPostFrameCallback(
-                                  (_) => _scrollToBottom(),
-                                );
-                              }
-                            },
+                            onPressed: () => _sendCurrentMessage(chatService),
                           ),
                         ),
                 ],

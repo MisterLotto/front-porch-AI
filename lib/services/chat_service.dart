@@ -26,6 +26,8 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/caption/local_caption_service.dart';
+import 'package:front_porch_ai/services/vision_eval.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 
@@ -123,6 +125,7 @@ part 'chat/chat_service_session_manage.dart';
 part 'chat/chat_service_generation.dart';
 part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
+part 'chat/chat_service_photo.dart';
 
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
@@ -279,6 +282,21 @@ class ChatService extends ChangeNotifier {
 
   /// True while a Scene Guest is being created/entered (input is disabled).
   bool get isGuestBusy => _guestBusy;
+
+  /// True while forked-in character entrances are still playing. Exposed so the
+  /// composer can mirror sendMessage's `_entrancesInFlight` early-return and
+  /// avoid consuming (saving/clearing) an attached photo for a turn that
+  /// sendMessage would silently drop. See _sendCurrentMessage.
+  bool get entrancesInFlight => _entrancesInFlight;
+
+  /// True from the start of a photo turn's captioning through the end of its
+  /// send flow. Because the offline caption await (and the post-gen vision
+  /// caption) run while `_isGenerating` is false, this is the guard that keeps
+  /// a second sendMessage from interleaving during those windows — the UI and
+  /// sendMessage entry both check it. Photo turns only; text turns are
+  /// unaffected (they are covered by `_isGenerating`).
+  bool get isPhotoTurnInFlight => _photoTurnInFlight;
+  bool _photoTurnInFlight = false;
 
   /// A guest card image path whose cache the UI should evict (then call
   /// [consumeGuestAvatarEvict]); null when there is nothing to refresh.
@@ -2323,7 +2341,9 @@ class ChatService extends ChangeNotifier {
     fireToolEval: _fireToolEval,
     getBackendIdentity: () => _evalBackendIdentity,
     isBackendReady: () =>
-        (testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService)
+        (testLlmServiceOverride ??
+                _llmProvider?.activeService ??
+                _koboldService)
             .isReady,
     isBusy: () => _isGenerating,
     onNotify: notifyListeners,
@@ -3422,9 +3442,15 @@ class ChatService extends ChangeNotifier {
         'This is a solitary scene observed from outside the chat.*';
   }
 
-  Future<void> sendMessage(String text) async {
+  /// [imageBytes] optionally attaches a photo (already downscaled+PNG-encoded
+  /// by the composer) to this user turn. The bytes are saved to disk HERE,
+  /// after all guards pass, so a guard bail can never orphan a file. The photo
+  /// renders inline in the bubble, rides along as pixels on this turn's
+  /// generation when the model can see (see [buildTurnImages]), and is
+  /// described in the flattened history for later turns.
+  Future<void> sendMessage(String text, {Uint8List? imageBytes}) async {
     if ((_activeCharacter == null && _activeGroup == null) ||
-        text.trim().isEmpty) {
+        (text.trim().isEmpty && imageBytes == null)) {
       return;
     }
     // Don't let a user turn start while forked-in entrances are still playing —
@@ -3433,6 +3459,9 @@ class ChatService extends ChangeNotifier {
     // Likewise, don't race an in-flight Scene Guest creation/entrance (the mint
     // runs a separate LLM call that doesn't set _isGenerating).
     if (_guestBusy) return;
+    // A photo turn's captioning windows run while _isGenerating is false; this
+    // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
+    if (_photoTurnInFlight) return;
     clearSuggestions();
 
     // A new message while an /image prompt review is parked cancels it —
@@ -3443,8 +3472,13 @@ class ChatService extends ChangeNotifier {
     _pendingIdleCue = null;
 
     // ── Slash Command Handling (delegated to leaf) ──────────────────────
+    // Skipped when a photo is attached: an attach makes the intent "send a
+    // message" unambiguous, and consuming the text as a command would drop
+    // the attachment silently.
     final trimmed = text.trim();
-    if (trimmed.startsWith('/') && _characterRepository != null) {
+    if (imageBytes == null &&
+        trimmed.startsWith('/') &&
+        _characterRepository != null) {
       final handled = await _ensureCommandHandler().handle(trimmed);
       if (handled) return;
       // Unknown command — fall through and send as a normal message.
@@ -3462,10 +3496,41 @@ class ChatService extends ChangeNotifier {
     await _commitPendingMemberExit();
     _clearExitUndo();
 
+    // Save the attachment to disk only now that every guard has passed — the
+    // composer passes bytes, not a path, so a guard bail above can't orphan a
+    // file. Null when there are no bytes / the image service isn't wired.
+    final imagePath = await _persistTurnImage(imageBytes);
+
     final senderName = _userPersonaService.persona.name;
-    _messages.add(ChatMessage(text: text, sender: senderName, isUser: true));
+    final userMsg = ChatMessage(
+      text: text,
+      sender: senderName,
+      isUser: true,
+      metadata: imagePath != null
+          ? {'is_user_image': true, 'image_path': imagePath}
+          : null,
+    );
+    // Session token for the caption writes below — captured NOW so a chat
+    // switch anywhere during the (long) turn voids the stamp+save.
+    final sessionToken = _currentSessionId;
+    _messages.add(userMsg);
     await _saveChat();
     notifyListeners();
+
+    // ── Blind-model photo fallback: caption BEFORE generating ───────────────
+    // Vision-capable models return true immediately (their pixels ride along
+    // and their caption runs post-turn); blind models run the offline
+    // captioner so this turn's history already carries the gist. Returns false
+    // when the scene changed during the (multi-second) caption await — abort
+    // rather than run decay/realism/generation against a newly loaded chat.
+    if (imagePath != null) {
+      final stillHere = await runBlindPhotoCaption(
+        userMsg,
+        imagePath,
+        sessionToken,
+      );
+      if (!stillHere) return;
+    }
 
     // Reset the idle timer — user is interacting
     _cancelIdleTimer();
@@ -3608,7 +3673,17 @@ class ChatService extends ChangeNotifier {
     // The primary 1:1 turn is now 100% finalized (response + chip/realism block
     // above). Let the director decide which guest(s) speak next. Shared with
     // regenerateMainCharacter() so the re-chime gate is identical after a regen.
-    await _maybeRunSceneGuestChimeIns(userText: text);
+    // promptText (not raw text) so a photo-only turn feeds the director a
+    // "[shared a photo]" marker instead of an empty user message.
+    await _maybeRunSceneGuestChimeIns(userText: userMsg.promptText);
+
+    // ── Auto-caption the attached photo for future-turn history ─────────────
+    // Vision path only (blind models were captioned pre-gen). Runs LAST so the
+    // eval never delays the response or guest turns; this turn already saw the
+    // pixels, so the caption just lets later turns' history describe the photo.
+    if (imagePath != null) {
+      await runVisionPhotoCaption(userMsg, imagePath, sessionToken);
+    }
   }
 
   /// Run the Scene Guest director's chime-in gate after a finalized primary/host

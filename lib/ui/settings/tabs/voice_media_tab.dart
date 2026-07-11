@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
+import 'package:front_porch_ai/ui/settings/widgets/photo_understanding_card.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
 import 'package:front_porch_ai/ui/settings/widgets/image_gen_enable_section.dart';
 
@@ -908,6 +909,10 @@ class VoiceMediaTab extends StatelessWidget {
               ],
             ),
           ),
+
+          // Self-hiding: renders nothing (header included) until the offline
+          // vision helper is installed — the feature is offered only in chat.
+          const PhotoUnderstandingCard(),
 
           const SizedBox(height: 24),
           const SectionHeader('Expression Images'),

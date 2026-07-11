@@ -150,17 +150,31 @@ class VisionSupportResolver {
   /// Vision verdict for the ACTIVE text LLM as configured right now — "can
   /// the current chat model see images?".
   ///
-  /// Local backends (kobold / pseudoRemote) are judged from the last used
-  /// GGUF file: embedded projector, or multimodal arch plus a configured
-  /// mmproj that still exists on disk (the same test the Settings projector
-  /// field applies). Known gap: when a .kcpps preset owns the model
-  /// ([StorageService.lastUsedModelPath] empty) or the server was started
-  /// externally, there is no file to interrogate, so the verdict is "none" —
-  /// and KoboldCpp silently ignores images when no projector is loaded
-  /// rather than erroring, so a false negative here degrades gracefully.
+  /// Local backends (kobold / pseudoRemote) are judged from the GGUF that
+  /// would actually load: the active .kcpps preset's model when the preset
+  /// owns one (mirroring the launch priority in settings_page /
+  /// ensureManagedBackendIsRunning), else the last picker-chosen model.
+  /// Vision needs an embedded projector, or multimodal arch plus an mmproj
+  /// that exists on disk — from the app's per-model mapping OR the preset's
+  /// own `mmproj` key. Remaining gap: a server started entirely outside the
+  /// app can't be interrogated, so the verdict is "none" — and KoboldCpp
+  /// silently ignores images when no projector is loaded rather than
+  /// erroring, so a false negative there degrades gracefully.
   /// Remote backends (openRouter / omlx) reuse [resolveRemote] (provider
   /// metadata where available, else the cached 1×1-PNG probe); oMLX rides
   /// OpenRouterService at its fixed local URL (see LLMProvider).
+  ///
+  /// Known residual: the local verdict is read from the CONFIGURED model
+  /// (active preset / last picker model), not from whatever a running server
+  /// was actually launched with. If the user changes vision config
+  /// mid-session WITHOUT restarting the backend, this can be a false positive
+  /// (config says vision, server is still the old text model) — pixels are
+  /// sent (KoboldCpp ignores them) and the offline caption fallback is
+  /// skipped. LLMProvider clears this resolver's cache on any model-identity
+  /// change so the verdict at least re-derives from current config; fully
+  /// reconciling config with the live server would require server-state
+  /// tracking the app does not yet have. The normal flow (change model, then
+  /// restart the backend) is unaffected.
   Future<VisionSupport> resolveForActiveLlm({
     required BackendType backend,
     required StorageService storage,
@@ -168,16 +182,28 @@ class VisionSupportResolver {
     switch (backend) {
       case BackendType.kobold:
       case BackendType.pseudoRemote:
-        final modelPath = storage.lastUsedModelPath ?? '';
+        // Launch semantics: when the active preset carries a model that
+        // exists, KoboldCpp loads THAT model (--config wins; the picker
+        // model only rides along when the preset has none).
+        final presetModel = storage.kcppsModelPath;
+        final presetOwnsModel =
+            presetModel != null && File(presetModel).existsSync();
+        final modelPath = presetOwnsModel
+            ? presetModel
+            : (storage.lastUsedModelPath ?? '');
         if (modelPath.isEmpty || !File(modelPath).existsSync()) {
           return VisionSupport.none;
         }
         final info = await resolveLocalGgufInfo(modelPath);
         final mmproj = storage.mmprojForModel(modelPath);
+        final presetMmproj = presetOwnsModel ? storage.kcppsMmprojPath : null;
         return VisionSupport.fromGguf(
           info,
           mmprojConfigured:
-              mmproj != null && mmproj.isNotEmpty && File(mmproj).existsSync(),
+              (mmproj != null &&
+                  mmproj.isNotEmpty &&
+                  File(mmproj).existsSync()) ||
+              (presetMmproj != null && File(presetMmproj).existsSync()),
         );
       case BackendType.openRouter:
         return resolveRemote(
@@ -213,9 +239,7 @@ class VisionSupportResolver {
       final response = await client
           .get(
             uri,
-            headers: {
-              if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-            },
+            headers: {if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey'},
           )
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return null;

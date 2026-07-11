@@ -682,15 +682,16 @@ extension ChatServiceGeneration on ChatService {
       _lastAssembledPrompt = '$chatSystemPrompt\n$prompt';
       _lastPromptBudget = {
         'System Prompt': (systemPrompt.length / 4).ceil(),
-        'Lorebook': ((loreBefore.length +
-                    loreAfter.length +
-                    loreAnTop.length +
-                    loreAnBottom.length +
-                    loreExTop.length +
-                    loreExBottom.length +
-                    loreDepthJoined.length) /
-                4)
-            .ceil(),
+        'Lorebook':
+            ((loreBefore.length +
+                        loreAfter.length +
+                        loreAnTop.length +
+                        loreAnBottom.length +
+                        loreExTop.length +
+                        loreExBottom.length +
+                        loreDepthJoined.length) /
+                    4)
+                .ceil(),
         'Persona': (personaBlock.length / 4).ceil(),
         'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
         'Examples': (mesExampleBlock.length / 4).ceil(),
@@ -764,6 +765,14 @@ extension ChatServiceGeneration on ChatService {
         );
       }
 
+      // ── Current-turn photo attachment ─────────────────────────────────
+      // Turn-scoped in [buildTurnImages]: the photo's pixels ride only on the
+      // response that directly answers the turn it was sent on (fresh turn,
+      // regenerate, first group speaker, or continue of that reply) and never
+      // on a later idle/AFK, group auto-advance, or guest turn. Blind backends
+      // get null and rely on the history marker from _formatHistoryLine.
+      final turnImages = await buildTurnImages(mode);
+
       final genParams = GenerationParams(
         prompt: prompt,
         systemPrompt: chatSystemPrompt,
@@ -796,6 +805,7 @@ extension ChatServiceGeneration on ChatService {
         bannedPhrases: g2.resolveBannedPhrases(_storageService).isNotEmpty
             ? g2.resolveBannedPhrases(_storageService)
             : null,
+        images: turnImages,
       );
 
       // Get streaming response from whichever backend is active

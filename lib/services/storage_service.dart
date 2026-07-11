@@ -395,6 +395,8 @@ class StorageService extends ChangeNotifier {
       backendSettings.setLastUsedModelPath(v);
   bool get kcppsHasModel => backendSettings.kcppsHasModel;
   bool get kcppsModelFileExists => backendSettings.kcppsModelFileExists;
+  String? get kcppsModelPath => backendSettings.kcppsModelPath;
+  String? get kcppsMmprojPath => backendSettings.kcppsMmprojPath;
   bool? get useCublas => backendSettings.useCublas;
   Future<void> setUseCublas(bool? v) => backendSettings.setUseCublas(v);
   bool? get useVulkan => backendSettings.useVulkan;
