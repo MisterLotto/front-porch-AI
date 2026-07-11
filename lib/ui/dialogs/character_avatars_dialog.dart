@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:archive/archive_io.dart';
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/utils/emotion_labels.dart';
@@ -63,7 +64,11 @@ class CharacterAvatarsDialog extends StatefulWidget {
 }
 
 class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
+  // Expression avatars only — this dialog edits emotions. Gallery "looks" are
+  // held aside (never shown/relabeled/deleted here) and re-merged on save so
+  // they survive round-trips through this editor.
   late List<AvatarImage> _avatars;
+  List<AvatarImage> _looks = const [];
   late int _primeIndex;
   bool _saving = false;
   final Map<String, String> _tempLabels = {};
@@ -75,7 +80,9 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
   @override
   void initState() {
     super.initState();
-    _avatars = List.from(widget.character.avatarImages ?? []);
+    final all = widget.character.avatarImages ?? const [];
+    _looks = looksFrom(all);
+    _avatars = expressionsFrom(all);
     _primeIndex = widget.character.primeAvatarIndex;
     for (final avatar in _avatars) {
       _tempLabels[avatar.id] = avatar.label ?? '';
@@ -84,6 +91,17 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
   }
 
   int get _maxAvatars => 30;
+
+  /// Reload from the repo, keeping expression avatars (what this dialog edits)
+  /// split from gallery looks so a look can never appear here, be relabeled into
+  /// an emotion, or deleted. Looks are preserved for the save-back merge.
+  Future<void> _reloadAvatars() async {
+    final all = await widget.repository.getAvatarImages(
+      widget.character.dbId!,
+    );
+    _looks = looksFrom(all);
+    _avatars = expressionsFrom(all);
+  }
   String get _avatarDirPath =>
       widget.storage.characterAvatarDir(widget.character.name).path;
 
@@ -261,9 +279,7 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
         imported++;
       }
 
-      _avatars = await widget.repository.getAvatarImages(
-        widget.character.dbId!,
-      );
+      await _reloadAvatars();
 
       if (mounted) {
         setState(() {});
@@ -331,9 +347,7 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
         '[AvatarsDialog] _saveAvatarToDisk: addAvatar done, reloading',
       );
 
-      _avatars = await widget.repository.getAvatarImages(
-        widget.character.dbId!,
-      );
+      await _reloadAvatars();
       debugPrint(
         '[AvatarsDialog] _saveAvatarToDisk: reloaded ${_avatars.length} avatars',
       );
@@ -379,9 +393,7 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
     try {
       await widget.repository.removeAvatar(widget.character.dbId!, avatarId);
 
-      _avatars = await widget.repository.getAvatarImages(
-        widget.character.dbId!,
-      );
+      await _reloadAvatars();
 
       // Adjust prime index if needed
       if (_avatars.isNotEmpty) {
@@ -437,7 +449,9 @@ class _CharacterAvatarsDialogState extends State<CharacterAvatarsDialog> {
     try {
       await _saveLabels();
       widget.character.primeAvatarIndex = _primeIndex;
-      widget.character.avatarImages = _avatars;
+      // Re-merge looks (which this dialog never touched) so editing expressions
+      // can't drop the character's gallery looks from the in-memory card.
+      widget.character.avatarImages = [..._avatars, ..._looks];
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Stage 4a: Expression Images dialog is look-blind (prereq for look creation)
+- **Why:** the last place looks could leak into the emotion system (Grok's P0/P1 from the Stage 3 review). Landed BEFORE any UI can create a look, so there's never a window where a look shows up as an expression.
+- **Fix (`character_avatars_dialog.dart`):** the dialog now partitions on load — expression avatars go to `_avatars` (what it edits), gallery looks are held aside in `_looks`. Consolidated the three identical `getAvatarImages` reload sites into one look-aware `_reloadAvatars()` helper (net fewer call sites). On save it re-merges `[..._avatars, ..._looks]` so editing expressions can never drop the character's looks from the in-memory card. Looks no longer count against the 30-avatar cap.
+- **Verification:** full `flutter analyze` clean.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Stage 3: sidebar look chevrons + look-blind expression pipeline
 - **Why:** the visible half — flip the sidebar portrait between a character's gallery "looks" (and the canonical library face) with ‹ › chevrons + an "n / N" counter, plain chat only. Reworked after an adversarial Grok review that caught two P0s I'd have shipped.
 - **Sidebar (chat_page.dart `_buildRightSidebar`):** in the expressions-OFF branch, `resolveLookDisplay` overrides the face with the per-chat selected look; `LookChevronBar` (new `lib/ui/chat_components/widgets/look_chevrons.dart`) draws the chevrons bottom-left + counter bottom-center over the portrait. Selection flows through `ChatService.setLookForCharacter` → `notifyListeners`, so the existing `Consumer<ChatService>` repaints (StorageService is `listen:false` there).
