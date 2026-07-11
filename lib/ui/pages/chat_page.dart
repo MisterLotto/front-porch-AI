@@ -45,6 +45,7 @@ import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 // Old ImageGenDialog removed in Stage 3 (full from-scratch Image Studio).
 // Studio launched below; see lib/ui/image_studio/ and _showImageGenDialog.
@@ -2032,16 +2033,70 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               ),
             ),
-            // Pending photo attachment preview (remove ✕ + blind-model warning)
+            // Pending photo attachment preview (remove ✕ + blind-model note:
+            // offline-captioner fallback when installed, warning otherwise)
             if (_pendingImageBytes != null)
-              PendingImageChip(
-                bytes: _pendingImageBytes!,
-                visionOk: _pendingImageVisionOk,
-                onRemove: () => setState(() {
-                  _pendingImageBytes = null;
-                  _pendingImageVisionOk = null;
-                }),
+              Builder(
+                builder: (context) {
+                  LocalCaptionService.instance.configure(
+                    Provider.of<StorageService>(
+                      context,
+                      listen: false,
+                    ).rootPath,
+                  );
+                  return PendingImageChip(
+                    bytes: _pendingImageBytes!,
+                    visionOk: _pendingImageVisionOk,
+                    fallbackAvailable: LocalCaptionService.instance.isInstalled,
+                    onRemove: () => setState(() {
+                      _pendingImageBytes = null;
+                      _pendingImageVisionOk = null;
+                    }),
+                  );
+                },
               ),
+            // Offline captioner at work — sending is quiet for a few seconds
+            // while the photo is described, so say what's happening.
+            AnimatedBuilder(
+              animation: LocalCaptionService.instance,
+              builder: (context, _) {
+                if (!LocalCaptionService.instance.isCaptioning) {
+                  return const SizedBox.shrink();
+                }
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  color: AppColors.surfaceContainerOf(context),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.tealAccent,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Reading the photo so the character knows what it '
+                          'shows…',
+                          style: TextStyle(
+                            color: AppColors.textSecondary(context),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               decoration: BoxDecoration(

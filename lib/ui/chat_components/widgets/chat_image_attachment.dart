@@ -63,16 +63,19 @@ Uint8List? _downscaleToPng(Uint8List raw) {
 
 /// The pending-attachment strip shown above the chat composer: thumbnail,
 /// label, a remove ✕, and — when the capability resolver says the active
-/// model can't see images ([visionOk] false) — a non-blocking warning so the
-/// user knows the character will reply blind. Deliberately never blocks the
-/// send: capability detection can't interrogate externally-started servers,
-/// and KoboldCpp degrades gracefully by ignoring the image.
+/// model can't see images ([visionOk] false) — either an informational note
+/// that the offline Photo Understanding fallback will describe the photo
+/// ([fallbackAvailable]), or a non-blocking warning that the character will
+/// reply blind. Deliberately never blocks the send: capability detection
+/// can't interrogate externally-started servers, and KoboldCpp degrades
+/// gracefully by ignoring the image.
 class PendingImageChip extends StatelessWidget {
   const PendingImageChip({
     super.key,
     required this.bytes,
     required this.visionOk,
     required this.onRemove,
+    this.fallbackAvailable = false,
   });
 
   /// The prepared (downscaled PNG) attachment bytes, used for the thumbnail.
@@ -81,6 +84,10 @@ class PendingImageChip extends StatelessWidget {
   /// Vision verdict for the active model: true = can see, false = blind,
   /// null = still resolving (no warning shown while unknown).
   final bool? visionOk;
+
+  /// Whether the offline captioner (Photo Understanding) is installed and
+  /// will describe the photo to a blind model.
+  final bool fallbackAvailable;
 
   final VoidCallback onRemove;
 
@@ -118,19 +125,28 @@ class PendingImageChip extends StatelessWidget {
                 if (visionOk == false) ...[
                   const SizedBox(height: 2),
                   Row(
-                    children: const [
+                    children: [
                       Icon(
-                        Icons.visibility_off,
+                        fallbackAvailable
+                            ? Icons.description_outlined
+                            : Icons.visibility_off,
                         size: 13,
-                        color: Colors.orangeAccent,
+                        color: fallbackAvailable
+                            ? Colors.tealAccent
+                            : Colors.orangeAccent,
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          "Current model can't see images — the character "
-                          'will reply without seeing it.',
+                          fallbackAvailable
+                              ? "Model can't see images — a detailed text "
+                                    'description will be sent instead.'
+                              : "Current model can't see images — the "
+                                    'character will reply without seeing it.',
                           style: TextStyle(
-                            color: Colors.orangeAccent,
+                            color: fallbackAvailable
+                                ? Colors.tealAccent
+                                : Colors.orangeAccent,
                             fontSize: 11,
                           ),
                         ),

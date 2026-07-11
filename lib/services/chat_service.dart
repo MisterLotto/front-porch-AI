@@ -26,6 +26,7 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/services/vision_eval.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
@@ -3484,12 +3485,40 @@ class ChatService extends ChangeNotifier {
           ? {'is_user_image': true, 'image_path': imagePath}
           : null,
     );
-    // Session token for the post-turn caption write far below — captured NOW
-    // so a chat switch anywhere during the (long) turn voids the stamp+save.
+    // Session token for the caption writes below — captured NOW so a chat
+    // switch anywhere during the (long) turn voids the stamp+save.
     final sessionToken = _currentSessionId;
     _messages.add(userMsg);
     await _saveChat();
     notifyListeners();
+
+    // ── Blind-model photo fallback: caption BEFORE generating ───────────────
+    // When the active model can't see images but the offline Photo
+    // Understanding model is installed, describe the photo now and stamp the
+    // caption onto the message — the history line then carries the gist into
+    // THIS turn's prompt, so even a text-only character reacts to the photo
+    // immediately. (Vision-capable models skip this: the pixels ride along in
+    // GenerationParams.images and their caption runs post-turn instead.)
+    if (imagePath != null && _llmProvider != null) {
+      final support = await VisionSupportResolver.instance.resolveForActiveLlm(
+        backend: _llmProvider!.activeBackend,
+        storage: _storageService,
+      );
+      if (!support.supported) {
+        LocalCaptionService.instance.configure(_storageService.rootPath);
+        final caption = await LocalCaptionService.instance.captionImage(
+          imagePath,
+        );
+        if (caption != null && caption.isNotEmpty) {
+          if (_sceneChanged(sessionToken)) return;
+          userMsg.activeMetadata = {
+            ...?userMsg.activeMetadata,
+            'image_caption': caption,
+          };
+          await _saveChat();
+        }
+      }
+    }
 
     // Reset the idle timer — user is interacting
     _cancelIdleTimer();
