@@ -910,9 +910,8 @@ class VoiceMediaTab extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 24),
-          const SectionHeader('Photo Understanding'),
-          const SizedBox(height: 8),
+          // Self-hiding: renders nothing (header included) until the offline
+          // vision helper is installed — the feature is offered only in chat.
           const PhotoUnderstandingCard(),
 
           const SizedBox(height: 24),

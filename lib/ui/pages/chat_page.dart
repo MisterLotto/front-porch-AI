@@ -80,9 +80,12 @@ class _ChatPageState extends State<ChatPage> {
   bool _showingImageReview = false;
   // Pending photo attachment for the next user message (bytes already
   // downscaled + PNG re-encoded by pickChatImageAttachment). visionOk is
-  // null while the capability resolver is still checking the active model.
+  // null while the capability resolver is still checking the active model;
+  // blindReason carries the backend-specific "why" for the chip's
+  // last-resort explanation when the check fails.
   Uint8List? _pendingImageBytes;
   bool? _pendingImageVisionOk;
+  String? _pendingImageBlindReason;
   bool? _externalImagesAllowed;
   bool _imageConsentChecked = false;
   TtsService? _ttsService;
@@ -1828,9 +1831,10 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   /// Pick a photo for the next message and resolve (non-blocking) whether the
-  /// active model can actually see it — a blind verdict shows a warning on
-  /// the preview chip but never prevents sending, because capability
-  /// detection can't interrogate externally-started servers.
+  /// active model can actually see it — a blind verdict makes the preview
+  /// chip explain why and offer the last-resort Photo Understanding
+  /// workaround, but never prevents sending (capability detection can't
+  /// interrogate externally-started servers).
   Future<void> _attachImage() async {
     // Capture providers before the async gaps (native picker + isolate decode).
     final llmProvider = Provider.of<LLMProvider>(context, listen: false);
@@ -1840,14 +1844,27 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       _pendingImageBytes = bytes;
       _pendingImageVisionOk = null;
+      _pendingImageBlindReason = null;
     });
+    final isLocalBackend =
+        llmProvider.activeBackend == BackendType.kobold ||
+        llmProvider.activeBackend == BackendType.pseudoRemote;
     final support = await VisionSupportResolver.instance.resolveForActiveLlm(
       backend: llmProvider.activeBackend,
       storage: storage,
     );
     // The user may have removed (or sent) the attachment while resolving.
     if (!mounted || _pendingImageBytes == null) return;
-    setState(() => _pendingImageVisionOk = support.supported);
+    setState(() {
+      _pendingImageVisionOk = support.supported;
+      _pendingImageBlindReason = support.supported
+          ? null
+          : (isLocalBackend
+                ? 'your local model has no vision projector (mmproj) loaded, '
+                      'so it processes text only'
+                : 'the selected API model is text-only and doesn\'t accept '
+                      'images');
+    });
   }
 
   /// Shared send path for the Enter key and the send button: consumes the
@@ -1881,6 +1898,7 @@ class _ChatPageState extends State<ChatPage> {
         setState(() {
           _pendingImageBytes = null;
           _pendingImageVisionOk = null;
+          _pendingImageBlindReason = null;
         });
       }
     }
@@ -2038,20 +2056,20 @@ class _ChatPageState extends State<ChatPage> {
             if (_pendingImageBytes != null)
               Builder(
                 builder: (context) {
-                  final storage = Provider.of<StorageService>(
-                    context,
-                    listen: false,
+                  LocalCaptionService.instance.configure(
+                    Provider.of<StorageService>(
+                      context,
+                      listen: false,
+                    ).rootPath,
                   );
-                  LocalCaptionService.instance.configure(storage.rootPath);
                   return PendingImageChip(
                     bytes: _pendingImageBytes!,
                     visionOk: _pendingImageVisionOk,
-                    fallbackAvailable:
-                        storage.photoUnderstandingEnabled &&
-                        LocalCaptionService.instance.isInstalled,
+                    blindReason: _pendingImageBlindReason,
                     onRemove: () => setState(() {
                       _pendingImageBytes = null;
                       _pendingImageVisionOk = null;
+                      _pendingImageBlindReason = null;
                     }),
                   );
                 },

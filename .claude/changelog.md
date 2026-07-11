@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-11 — refactor(caption): change order — Photo Understanding is a last-resort in-chat offer, not a settings feature
+
+- **Maintainer change order:** the enable toggle (added the same day) and the promotional settings card were the wrong shape — this is a worst-case workaround that must be offered ONLY in the exact moment it's needed, "gated on an attempt to process with vision first," with an explanation of what happened and why. Not offered willy-nilly.
+- **Removed entirely:** `photoUnderstandingEnabled` (ImageGenSettings field/getter/setter/load + StorageService passthroughs + both consumer gates + the Switch). Installed = active; the only off is Remove. Grep-verified zero remaining references.
+- **New surface (`PendingImageChip`, now stateful):** when a photo is attached AND the vision check fails (the resolver verdict — which for unknown remote endpoints literally attempts a vision call via its 1×1-PNG probe) AND the helper isn't installed, the chip expands into an explanation block: what happened ("the app checked whether your current model can process images, and it can't"), why (backend-specific reason passed from chat_page: local → "no vision projector (mmproj) loaded"; remote → "the selected API model is text-only"), what will happen (photo sent, character replies blind), then the workaround offer with inline Download (~515 MB) + progress + Cancel + "Not now" (per-attachment dismiss, no persistence — the offer belongs to the moment). Once installed the chip shows only the short teal "description will be sent" note; sending is never blocked.
+- **Settings card demoted to maintenance:** renders NOTHING (header included) unless installed or mid-download; its only jobs are showing a running download and Remove-to-free-space. The chat re-offers if the helper is ever needed again after removal.
+- **Verification:** analyze clean, full suite green, docs (Rawhide.md) rewritten to match the new UX.
+- **Commit:** (see git log)
+
 ## 2026-07-11 — feat(caption): Photo Understanding enable switch (keep the download, skip the pause)
 
 - **Gap flagged by maintainer:** the feature was install-based only — the sole way to turn it off was deleting the 515MB model. Added `photoUnderstandingEnabled` (default ON; `photo_understanding_enabled` pref) in ImageGenSettings + StorageService passthroughs, a Switch on the settings card when installed (with "switched off" status text), and gates at both consumers: the sendMessage pre-generation caption and the attach chip's teal fallback note (which reverts to the amber blind warning when switched off).

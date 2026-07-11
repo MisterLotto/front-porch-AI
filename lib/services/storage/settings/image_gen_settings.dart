@@ -63,7 +63,6 @@ class ImageGenSettings with SettingsBase {
   int _drawThingsSeedMode = 2;
   bool _drawThingsTeaCache = false;
   bool _drawThingsCfgZeroStar = false;
-  bool _photoUnderstandingEnabled = true;
 
   bool get imageGenEnabled => _imageGenEnabled;
   String get imageGenBackend => _imageGenBackend;
@@ -86,12 +85,6 @@ class ImageGenSettings with SettingsBase {
   /// Whether AI-crafted image prompts (the /image command) pause for user
   /// review/editing before being sent to the backend. Default ON.
   bool get imageGenPromptReview => _imageGenPromptReview;
-
-  /// Whether the offline Photo Understanding captioner (when its model is
-  /// installed) describes attached photos to blind text models. Default ON —
-  /// installing the model is the real opt-in; this switch exists so users can
-  /// skip the caption pause without deleting the 515MB download.
-  bool get photoUnderstandingEnabled => _photoUnderstandingEnabled;
 
   String get drawThingsGrpcHost => _drawThingsGrpcHost;
   int get drawThingsGrpcPort => _drawThingsGrpcPort;
@@ -127,8 +120,6 @@ class ImageGenSettings with SettingsBase {
     _imageGenSeed = prefs?.getInt(k('image_gen_seed')) ?? -1;
     _imageGenPromptReview =
         prefs?.getBool(k('image_gen_prompt_review')) ?? true;
-    _photoUnderstandingEnabled =
-        prefs?.getBool(k('photo_understanding_enabled')) ?? true;
 
     _drawThingsGrpcHost =
         prefs?.getString(k('draw_things_grpc_host')) ?? '127.0.0.1';
@@ -144,12 +135,6 @@ class ImageGenSettings with SettingsBase {
   Future<void> setImageGenEnabled(bool value) async {
     _imageGenEnabled = value;
     await prefs?.setBool(k('image_gen_enabled'), value);
-    notify();
-  }
-
-  Future<void> setPhotoUnderstandingEnabled(bool value) async {
-    _photoUnderstandingEnabled = value;
-    await prefs?.setBool(k('photo_understanding_enabled'), value);
     notify();
   }
 
