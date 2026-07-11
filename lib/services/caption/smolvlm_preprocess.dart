@@ -113,9 +113,14 @@ void _writeFrame(
     for (var x = 0; x < validWidth; x++) {
       final p = source.getPixel(x, y);
       final idx = y * _kFrameSide + x;
-      dest[base + idx] = p.r * (2 / 255) - 1;
-      dest[base + planeSize + idx] = p.g * (2 / 255) - 1;
-      dest[base + 2 * planeSize + idx] = p.b * (2 / 255) - 1;
+      // rNormalized/gNormalized/bNormalized are 0..1 REGARDLESS of the source
+      // bit depth. Reading the raw p.r (0..255 for uint8 but 0..65535 for a
+      // uint16 PNG — which package:image preserves through decode/resize/encode)
+      // would feed the vision encoder values in the hundreds and produce a
+      // garbage caption. Map the normalized channel to the model's [-1, 1].
+      dest[base + idx] = p.rNormalized * 2 - 1;
+      dest[base + planeSize + idx] = p.gNormalized * 2 - 1;
+      dest[base + 2 * planeSize + idx] = p.bNormalized * 2 - 1;
     }
   }
 }

@@ -163,6 +163,18 @@ class VisionSupportResolver {
   /// Remote backends (openRouter / omlx) reuse [resolveRemote] (provider
   /// metadata where available, else the cached 1×1-PNG probe); oMLX rides
   /// OpenRouterService at its fixed local URL (see LLMProvider).
+  ///
+  /// Known residual: the local verdict is read from the CONFIGURED model
+  /// (active preset / last picker model), not from whatever a running server
+  /// was actually launched with. If the user changes vision config
+  /// mid-session WITHOUT restarting the backend, this can be a false positive
+  /// (config says vision, server is still the old text model) — pixels are
+  /// sent (KoboldCpp ignores them) and the offline caption fallback is
+  /// skipped. LLMProvider clears this resolver's cache on any model-identity
+  /// change so the verdict at least re-derives from current config; fully
+  /// reconciling config with the live server would require server-state
+  /// tracking the app does not yet have. The normal flow (change model, then
+  /// restart the backend) is unaffected.
   Future<VisionSupport> resolveForActiveLlm({
     required BackendType backend,
     required StorageService storage,

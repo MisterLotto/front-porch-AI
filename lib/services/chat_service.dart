@@ -125,6 +125,7 @@ part 'chat/chat_service_session_manage.dart';
 part 'chat/chat_service_generation.dart';
 part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
+part 'chat/chat_service_photo.dart';
 
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
@@ -281,6 +282,21 @@ class ChatService extends ChangeNotifier {
 
   /// True while a Scene Guest is being created/entered (input is disabled).
   bool get isGuestBusy => _guestBusy;
+
+  /// True while forked-in character entrances are still playing. Exposed so the
+  /// composer can mirror sendMessage's `_entrancesInFlight` early-return and
+  /// avoid consuming (saving/clearing) an attached photo for a turn that
+  /// sendMessage would silently drop. See _sendCurrentMessage.
+  bool get entrancesInFlight => _entrancesInFlight;
+
+  /// True from the start of a photo turn's captioning through the end of its
+  /// send flow. Because the offline caption await (and the post-gen vision
+  /// caption) run while `_isGenerating` is false, this is the guard that keeps
+  /// a second sendMessage from interleaving during those windows — the UI and
+  /// sendMessage entry both check it. Photo turns only; text turns are
+  /// unaffected (they are covered by `_isGenerating`).
+  bool get isPhotoTurnInFlight => _photoTurnInFlight;
+  bool _photoTurnInFlight = false;
 
   /// A guest card image path whose cache the UI should evict (then call
   /// [consumeGuestAvatarEvict]); null when there is nothing to refresh.
@@ -3426,14 +3442,15 @@ class ChatService extends ChangeNotifier {
         'This is a solitary scene observed from outside the chat.*';
   }
 
-  /// [imagePath] optionally attaches a photo (already saved into the app's
-  /// images dir by the composer) to this user turn: it renders inline in the
-  /// bubble, rides along as pixels on this turn's generation when the model
-  /// can see (see the GenerationParams.images seam in _generateResponse),
-  /// and is described in the flattened history for later turns.
-  Future<void> sendMessage(String text, {String? imagePath}) async {
+  /// [imageBytes] optionally attaches a photo (already downscaled+PNG-encoded
+  /// by the composer) to this user turn. The bytes are saved to disk HERE,
+  /// after all guards pass, so a guard bail can never orphan a file. The photo
+  /// renders inline in the bubble, rides along as pixels on this turn's
+  /// generation when the model can see (see [buildTurnImages]), and is
+  /// described in the flattened history for later turns.
+  Future<void> sendMessage(String text, {Uint8List? imageBytes}) async {
     if ((_activeCharacter == null && _activeGroup == null) ||
-        (text.trim().isEmpty && imagePath == null)) {
+        (text.trim().isEmpty && imageBytes == null)) {
       return;
     }
     // Don't let a user turn start while forked-in entrances are still playing —
@@ -3442,6 +3459,9 @@ class ChatService extends ChangeNotifier {
     // Likewise, don't race an in-flight Scene Guest creation/entrance (the mint
     // runs a separate LLM call that doesn't set _isGenerating).
     if (_guestBusy) return;
+    // A photo turn's captioning windows run while _isGenerating is false; this
+    // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
+    if (_photoTurnInFlight) return;
     clearSuggestions();
 
     // A new message while an /image prompt review is parked cancels it —
@@ -3453,10 +3473,10 @@ class ChatService extends ChangeNotifier {
 
     // ── Slash Command Handling (delegated to leaf) ──────────────────────
     // Skipped when a photo is attached: an attach makes the intent "send a
-    // message" unambiguous, and consuming the text as a command would
-    // silently orphan the already-saved image file.
+    // message" unambiguous, and consuming the text as a command would drop
+    // the attachment silently.
     final trimmed = text.trim();
-    if (imagePath == null &&
+    if (imageBytes == null &&
         trimmed.startsWith('/') &&
         _characterRepository != null) {
       final handled = await _ensureCommandHandler().handle(trimmed);
@@ -3476,6 +3496,11 @@ class ChatService extends ChangeNotifier {
     await _commitPendingMemberExit();
     _clearExitUndo();
 
+    // Save the attachment to disk only now that every guard has passed — the
+    // composer passes bytes, not a path, so a guard bail above can't orphan a
+    // file. Null when there are no bytes / the image service isn't wired.
+    final imagePath = await _persistTurnImage(imageBytes);
+
     final senderName = _userPersonaService.persona.name;
     final userMsg = ChatMessage(
       text: text,
@@ -3493,31 +3518,18 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
 
     // ── Blind-model photo fallback: caption BEFORE generating ───────────────
-    // When the active model can't see images but the offline Photo
-    // Understanding model is installed, describe the photo now and stamp the
-    // caption onto the message — the history line then carries the gist into
-    // THIS turn's prompt, so even a text-only character reacts to the photo
-    // immediately. (Vision-capable models skip this: the pixels ride along in
-    // GenerationParams.images and their caption runs post-turn instead.)
-    if (imagePath != null && _llmProvider != null) {
-      final support = await VisionSupportResolver.instance.resolveForActiveLlm(
-        backend: _llmProvider!.activeBackend,
-        storage: _storageService,
+    // Vision-capable models return true immediately (their pixels ride along
+    // and their caption runs post-turn); blind models run the offline
+    // captioner so this turn's history already carries the gist. Returns false
+    // when the scene changed during the (multi-second) caption await — abort
+    // rather than run decay/realism/generation against a newly loaded chat.
+    if (imagePath != null) {
+      final stillHere = await runBlindPhotoCaption(
+        userMsg,
+        imagePath,
+        sessionToken,
       );
-      if (!support.supported) {
-        LocalCaptionService.instance.configure(_storageService.rootPath);
-        final caption = await LocalCaptionService.instance.captionImage(
-          imagePath,
-        );
-        if (caption != null && caption.isNotEmpty) {
-          if (_sceneChanged(sessionToken)) return;
-          userMsg.activeMetadata = {
-            ...?userMsg.activeMetadata,
-            'image_caption': caption,
-          };
-          await _saveChat();
-        }
-      }
+      if (!stillHere) return;
     }
 
     // Reset the idle timer — user is interacting
@@ -3661,36 +3673,16 @@ class ChatService extends ChangeNotifier {
     // The primary 1:1 turn is now 100% finalized (response + chip/realism block
     // above). Let the director decide which guest(s) speak next. Shared with
     // regenerateMainCharacter() so the re-chime gate is identical after a regen.
-    await _maybeRunSceneGuestChimeIns(userText: text);
+    // promptText (not raw text) so a photo-only turn feeds the director a
+    // "[shared a photo]" marker instead of an empty user message.
+    await _maybeRunSceneGuestChimeIns(userText: userMsg.promptText);
 
     // ── Auto-caption the attached photo for future-turn history ─────────────
-    // Runs LAST so the caption eval never queues behind (or delays) the main
-    // response or guest turns on the single local Kobold slot. This turn
-    // already saw the actual pixels via GenerationParams.images; the caption
-    // exists so later turns' flattened history can still describe the photo.
-    // Gated on a vision-capable model — a blind model would hallucinate one.
-    if (imagePath != null &&
-        _llmProvider != null &&
-        !_sceneChanged(sessionToken)) {
-      final support = await VisionSupportResolver.instance.resolveForActiveLlm(
-        backend: _llmProvider!.activeBackend,
-        storage: _storageService,
-      );
-      if (support.supported) {
-        final caption = await captionChatImage(
-          llm: _llmProvider!.activeService,
-          imagePath: imagePath,
-        );
-        if (caption != null &&
-            caption.isNotEmpty &&
-            !_sceneChanged(sessionToken)) {
-          userMsg.activeMetadata = {
-            ...?userMsg.activeMetadata,
-            'image_caption': caption,
-          };
-          await _saveChat();
-        }
-      }
+    // Vision path only (blind models were captioned pre-gen). Runs LAST so the
+    // eval never delays the response or guest turns; this turn already saw the
+    // pixels, so the caption just lets later turns' history describe the photo.
+    if (imagePath != null) {
+      await runVisionPhotoCaption(userMsg, imagePath, sessionToken);
     }
   }
 

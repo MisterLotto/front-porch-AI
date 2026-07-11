@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-11 — fix(chat/caption): hostile-review remediation on the photo-attach + captioner branch
+
+Nine confirmed findings from a high-effort adversarial review, fixed:
+- **Re-entrancy during the caption pause (F1):** `sendMessage`'s offline-caption await runs while `_isGenerating` is false, so a second send interleaved (double decay, overlapping realism evals, two `_generateResponse`). Added `_photoTurnInFlight` (held across both caption awaits by the new leaf; getter `isPhotoTurnInFlight`), checked at sendMessage entry AND in the composer.
+- **Wrong-chat generation on caption failure (F2):** the scene-change guard was nested in the caption-success branch; a null caption after a mid-wait chat switch ran decay/realism/generation against the newly loaded chat. The unified caption path now guards after EVERY await and aborts the turn.
+- **Photo re-ridden on every AI-only turn (F3):** the seam scanned backward for the last user message with no recency gate, so AFK/idle, group auto-advance, and guest turns re-uploaded an hours-old photo (and doubled it with the history marker). New `buildTurnImages(mode)` attaches only on the response that directly answers the turn (fresh/regen/first-speaker, or continue of that reply).
+- **Orphaned file + lost message on unmirrored guards (F4):** the composer saved the photo to disk and cleared state BEFORE sendMessage's `_entrancesInFlight`/no-active-chat guards. `sendMessage` now takes `imageBytes` and saves to disk itself AFTER its guards (`_persistTurnImage`); the composer mirrors all guards (new `entrancesInFlight` getter) so nothing is consumed for a dropped turn.
+- **16-bit PNG garbage (F5):** `_writeFrame` used raw `p.r` (0–65535 for uint16) → ~+256 to the encoder. Now `p.rNormalized` (bit-depth-agnostic 0..1). Verified by the reviewer's runnable reproduction + E2E; not unit-tested (the image package can't synthesize a faithful uint16 PNG in-harness — documented in the test).
+- **Resolver false-positive after mid-session config change (F6):** LLMProvider now clears the capability cache on any model-identity change (backend/URL/model/preset); the residual config-vs-running-server edge (change vision config without restarting) is documented in the resolver.
+- **Blank user turn in realism evals (F7):** photo-only messages showed a bare `Sender:` to the 5 realism eval builders and the guest director. New `ChatMessage.promptText` annotates them (`[shared a photo]` / `[shared a photo: caption]`); wired into all 6 sites.
+- **Prefill tensor leak on ORT exception (F8):** the engine's prefill/vision/embed tensors were outside the try; an ORT throw leaked calloc'd native buffers. One try now spans all allocations with a finally that releases live tensors via nullable tracking (happy-path memory profile unchanged).
+- **Corrupted "What's New" (F9):** a prior edit had glued the 🎭 Expression packs bullet's body onto the photo bullet, deleting its heading from the update dialog. Restored as its own bullet.
+- **Structural cleanup (conventions):** the two duplicated caption blocks + the seam scan were extracted from the `chat_service.dart` god file into a new `chat/chat_service_photo.dart` leaf (one stamp helper, one turn-scoping decision), shrinking the god path instead of growing it.
+- **Not code-fixed (documented):** F10 (silent caption failure surfaces nothing to the user) — lowest-severity PLAUSIBLE; left as a known limitation. macOS/Windows native-lib smoke test still outstanding (Linux-only here; the pinned artifacts were re-proven to load+run on ORT 1.21, the macOS runtime, during review).
+- **Tests:** +4 `ChatMessage.promptText`; full suite green (2005). `flutter analyze` clean, `dart fix` nothing.
+- **Commit:** (see git log)
+
 ## 2026-07-11 — refactor(caption): change order — Photo Understanding is a last-resort in-chat offer, not a settings feature
 
 - **Maintainer change order:** the enable toggle (added the same day) and the promotional settings card were the wrong shape — this is a worst-case workaround that must be offered ONLY in the exact moment it's needed, "gated on an attempt to process with vision first," with an explanation of what happened and why. Not offered willy-nilly.

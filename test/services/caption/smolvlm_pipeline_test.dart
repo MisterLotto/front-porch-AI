@@ -106,6 +106,14 @@ void main() {
       expect(frames.pixelValues[2 * plane], closeTo(-1.0, 1e-4));
     });
 
+    // NOTE: the 16-bit-PNG normalization fix (rNormalized instead of raw p.r)
+    // is intentionally NOT unit-tested here: the image package can't
+    // faithfully synthesize a uint16 PNG in-harness (a constructed uint16
+    // image reads back as zero through encode→decode), so any such test would
+    // be a false guard. The fix is verified by a runnable reproduction (see
+    // the code review notes) and by the env-gated E2E; the 8-bit normalization
+    // test above pins the common path.
+
     test('only the global frame carries padding, mirrored in the mask', () {
       final frames = preprocessForSmolVlm(img.Image(width: 1024, height: 100));
       const plane = 512 * 512;

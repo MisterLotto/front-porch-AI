@@ -1867,42 +1867,34 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  /// Shared send path for the Enter key and the send button: consumes the
-  /// pending photo (saving it into the app's images dir) and hands text +
-  /// image to ChatService. In observer mode the pending photo is NOT
-  /// consumed — director notes are pure instructions and would drop it — so
-  /// it stays attached for the next normal turn.
-  Future<void> _sendCurrentMessage(ChatService chatService) async {
+  /// Shared send path for the Enter key and the send button. Hands text +
+  /// photo BYTES to ChatService, which saves the photo only after its own
+  /// guards pass — so we never save a file for a turn ChatService will drop.
+  /// We mirror every one of sendMessage's silent early-returns here
+  /// (isGenerating / isGuestBusy / entrancesInFlight / no active chat) so the
+  /// pending photo and typed text are preserved for retry rather than
+  /// consumed into the void. In observer mode the photo is NOT consumed —
+  /// director notes are pure instructions and would drop it.
+  void _sendCurrentMessage(ChatService chatService) {
     final pending = chatService.observerMode ? null : _pendingImageBytes;
     final text = _controller.text;
     if ((text.trim().isEmpty && pending == null) ||
         chatService.isGenerating ||
-        chatService.isGuestBusy) {
+        chatService.isGuestBusy ||
+        chatService.isPhotoTurnInFlight ||
+        chatService.entrancesInFlight ||
+        (chatService.activeCharacter == null &&
+            chatService.activeGroup == null)) {
       return;
     }
-    String? imagePath;
+    chatService.sendMessage(text, imageBytes: pending);
     if (pending != null) {
-      final imageGen = Provider.of<ImageGenService>(context, listen: false);
-      imagePath = await imageGen.saveImageToDisk(pending);
-      if (imagePath == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not save the attached photo — try again.'),
-            ),
-          );
-        }
-        return;
-      }
-      if (mounted) {
-        setState(() {
-          _pendingImageBytes = null;
-          _pendingImageVisionOk = null;
-          _pendingImageBlindReason = null;
-        });
-      }
+      setState(() {
+        _pendingImageBytes = null;
+        _pendingImageVisionOk = null;
+        _pendingImageBlindReason = null;
+      });
     }
-    chatService.sendMessage(text, imagePath: imagePath);
     _controller.clear();
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }

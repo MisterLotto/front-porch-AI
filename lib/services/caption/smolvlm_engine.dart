@@ -154,99 +154,111 @@ class SmolVlmEngine {
     int maxNewTokens,
     double repetitionPenalty,
   ) {
-    // ── Vision encode: frames → [F, 64, 960] features ──────────────────
-    final pvT = OrtValueTensor.createTensorWithDataList(frames.pixelValues, [
-      1,
-      frames.frameCount,
-      3,
-      512,
-      512,
-    ]);
-    final pmT = OrtValueTensor.createTensorWithDataList(frames.pixelMask, [
-      1,
-      frames.frameCount,
-      512,
-      512,
-    ]);
-    final vOut = vision.run(ro, {
-      'pixel_values': pvT,
-      'pixel_attention_mask': pmT,
-    });
-    pvT.release();
-    pmT.release();
-    if (vOut.isEmpty || vOut[0] == null) return null;
-    final feats = _flatten3(vOut[0]!.value as List);
-    for (final v in vOut) {
-      v?.release();
-    }
-
-    // ── Prompt embeddings + feature splice ──────────────────────────────
-    final promptIds = buildSmolVlmPromptIds(
-      rows: frames.rows,
-      cols: frames.cols,
-    );
-    final n = promptIds.length;
-    final idsT = OrtValueTensor.createTensorWithDataList(
-      Int64List.fromList(promptIds),
-      [1, n],
-    );
-    final eOut = embed.run(ro, {'input_ids': idsT});
-    idsT.release();
-    if (eOut.isEmpty || eOut[0] == null) return null;
-    final promptEmb = _flatten3(eOut[0]!.value as List);
-    for (final v in eOut) {
-      v?.release();
-    }
-    var featRow = 0;
-    for (var i = 0; i < n; i++) {
-      if (promptIds[i] != kSmolVlmImageToken) continue;
-      promptEmb.setRange(i * _hidden, (i + 1) * _hidden, feats, featRow);
-      featRow += _hidden;
-    }
-    if (featRow != feats.length) {
-      // Grid/prompt mismatch would silently produce garbage — bail instead.
-      return null;
-    }
-
-    // ── Prefill chunk 1: tokens [0, n-2] — KV only, big logits untouched ─
-    final layers = (decoder.inputNames.length - 3) ~/ 2;
-    var past = <String, OrtValue>{
-      for (var i = 0; i < layers; i++) ...{
-        'past_key_values.$i.key': OrtValueTensor.createTensorWithDataList(
-          Float32List(0),
-          [1, _kvHeads, 0, _headDim],
-        ),
-        'past_key_values.$i.value': OrtValueTensor.createTensorWithDataList(
-          Float32List(0),
-          [1, _kvHeads, 0, _headDim],
-        ),
-      },
-    };
-    final chunk1 = OrtValueTensor.createTensorWithDataList(
-      promptEmb.sublist(0, (n - 1) * _hidden),
-      [1, n - 1, _hidden],
-    );
-    var outs = _step(
-      decoder,
-      ro,
-      chunk1,
-      seqLen: n - 1,
-      pastLen: 0,
-      past: past,
-    );
-    chunk1.release();
-    _releaseAll(past.values);
-    outs[0]?.release(); // prefill logits: released without materializing
-    past = _presentsToPast(decoder.outputNames, outs);
-
-    // ── Greedy loop: first fed token is the prompt's last one ────────────
-    var pastLen = n - 1;
+    // Everything below allocates native (calloc'd / ORT-owned) tensors that
+    // isolate death does NOT reclaim, so the whole pipeline runs under one
+    // try whose finally releases whatever is still live — an ORT exception
+    // anywhere (unsupported kernel, OOM) must not leak. Big buffers are held
+    // in nullable locals nulled on eager release, so the happy-path memory
+    // profile (KV cache freed every step) is unchanged and the finally never
+    // double-frees.
+    OrtValueTensor? pvT, pmT, chunk1, stepEmb;
+    var past = <String, OrtValue>{};
     final generated = <int>[];
-    OrtValueTensor? stepEmb = OrtValueTensor.createTensorWithDataList(
-      promptEmb.sublist((n - 1) * _hidden, n * _hidden),
-      [1, 1, _hidden],
-    );
     try {
+      // ── Vision encode: frames → [F, 64, 960] features ──────────────────
+      pvT = OrtValueTensor.createTensorWithDataList(frames.pixelValues, [
+        1,
+        frames.frameCount,
+        3,
+        512,
+        512,
+      ]);
+      pmT = OrtValueTensor.createTensorWithDataList(frames.pixelMask, [
+        1,
+        frames.frameCount,
+        512,
+        512,
+      ]);
+      final vOut = vision.run(ro, {
+        'pixel_values': pvT,
+        'pixel_attention_mask': pmT,
+      });
+      pvT.release();
+      pvT = null;
+      pmT.release();
+      pmT = null;
+      if (vOut.isEmpty || vOut[0] == null) return null;
+      final feats = _flatten3(vOut[0]!.value as List);
+      for (final v in vOut) {
+        v?.release();
+      }
+
+      // ── Prompt embeddings + feature splice ────────────────────────────
+      final promptIds = buildSmolVlmPromptIds(
+        rows: frames.rows,
+        cols: frames.cols,
+      );
+      final n = promptIds.length;
+      final idsT = OrtValueTensor.createTensorWithDataList(
+        Int64List.fromList(promptIds),
+        [1, n],
+      );
+      final eOut = embed.run(ro, {'input_ids': idsT});
+      idsT.release();
+      if (eOut.isEmpty || eOut[0] == null) return null;
+      final promptEmb = _flatten3(eOut[0]!.value as List);
+      for (final v in eOut) {
+        v?.release();
+      }
+      var featRow = 0;
+      for (var i = 0; i < n; i++) {
+        if (promptIds[i] != kSmolVlmImageToken) continue;
+        promptEmb.setRange(i * _hidden, (i + 1) * _hidden, feats, featRow);
+        featRow += _hidden;
+      }
+      if (featRow != feats.length) {
+        // Grid/prompt mismatch would silently produce garbage — bail instead.
+        return null;
+      }
+
+      // ── Prefill chunk 1: tokens [0, n-2] — KV only, big logits untouched ─
+      final layers = (decoder.inputNames.length - 3) ~/ 2;
+      past = {
+        for (var i = 0; i < layers; i++) ...{
+          'past_key_values.$i.key': OrtValueTensor.createTensorWithDataList(
+            Float32List(0),
+            [1, _kvHeads, 0, _headDim],
+          ),
+          'past_key_values.$i.value': OrtValueTensor.createTensorWithDataList(
+            Float32List(0),
+            [1, _kvHeads, 0, _headDim],
+          ),
+        },
+      };
+      chunk1 = OrtValueTensor.createTensorWithDataList(
+        promptEmb.sublist(0, (n - 1) * _hidden),
+        [1, n - 1, _hidden],
+      );
+      var outs = _step(
+        decoder,
+        ro,
+        chunk1,
+        seqLen: n - 1,
+        pastLen: 0,
+        past: past,
+      );
+      chunk1.release();
+      chunk1 = null;
+      _releaseAll(past.values);
+      outs[0]?.release(); // prefill logits: released without materializing
+      past = _presentsToPast(decoder.outputNames, outs);
+
+      // ── Greedy loop: first fed token is the prompt's last one ──────────
+      var pastLen = n - 1;
+      stepEmb = OrtValueTensor.createTensorWithDataList(
+        promptEmb.sublist((n - 1) * _hidden, n * _hidden),
+        [1, 1, _hidden],
+      );
       for (var step = 0; step <= maxNewTokens; step++) {
         outs = _step(
           decoder,
@@ -290,6 +302,9 @@ class SmolVlmEngine {
         stepEmb = tOut[0] as OrtValueTensor;
       }
     } finally {
+      pvT?.release();
+      pmT?.release();
+      chunk1?.release();
       stepEmb?.release();
       _releaseAll(past.values);
     }

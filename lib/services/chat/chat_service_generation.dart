@@ -766,45 +766,12 @@ extension ChatServiceGeneration on ChatService {
       }
 
       // ── Current-turn photo attachment ─────────────────────────────────
-      // When the triggering user message (the most recent user turn) carries
-      // an attached photo AND the active model can actually see (resolver
-      // verdict: embedded projector / mmproj / vision-capable remote), the
-      // pixels ride along on this turn's OpenAI-style content array.
-      // Regenerate, continue, and every group speaker's turn re-derive this
-      // from the SAME last user message, so all speakers "see" the photo
-      // (1:1/group parity). Blind backends never get the payload — remote
-      // APIs reject unexpected image parts — and rely on the history marker
-      // from _formatHistoryLine instead.
-      List<String>? turnImages;
-      if (_llmProvider != null) {
-        ChatMessage? lastUser;
-        for (var i = _messages.length - 1; i >= 0; i--) {
-          if (_messages[i].isUser) {
-            lastUser = _messages[i];
-            break;
-          }
-        }
-        final md = lastUser?.activeMetadata;
-        final attachedPath = md?['is_user_image'] == true
-            ? md!['image_path'] as String?
-            : null;
-        if (attachedPath != null) {
-          final support = await VisionSupportResolver.instance
-              .resolveForActiveLlm(
-                backend: _llmProvider!.activeBackend,
-                storage: _storageService,
-              );
-          if (support.supported) {
-            try {
-              turnImages = [
-                base64Encode(await File(attachedPath).readAsBytes()),
-              ];
-            } catch (e) {
-              debugPrint('[Vision] cannot read attached photo: $e');
-            }
-          }
-        }
-      }
+      // Turn-scoped in [buildTurnImages]: the photo's pixels ride only on the
+      // response that directly answers the turn it was sent on (fresh turn,
+      // regenerate, first group speaker, or continue of that reply) and never
+      // on a later idle/AFK, group auto-advance, or guest turn. Blind backends
+      // get null and rely on the history marker from _formatHistoryLine.
+      final turnImages = await buildTurnImages(mode);
 
       final genParams = GenerationParams(
         prompt: prompt,

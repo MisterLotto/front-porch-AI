@@ -635,7 +635,7 @@ class RealismEvals {
         .take(recentCount)
         .toList()
         .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
+        .map((m) => '${m.sender}: ${m.promptText}')
         .join('\n');
 
     if (getActiveCharacter() == null) {
@@ -735,7 +735,7 @@ class RealismEvals {
         .take(recentCount)
         .toList()
         .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
+        .map((m) => '${m.sender}: ${m.promptText}')
         .join('\n');
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet
@@ -847,7 +847,7 @@ class RealismEvals {
         .take(recentCount)
         .toList()
         .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
+        .map((m) => '${m.sender}: ${m.promptText}')
         .join('\n');
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet.
@@ -885,7 +885,7 @@ class RealismEvals {
         .take(recentCount)
         .toList()
         .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
+        .map((m) => '${m.sender}: ${m.promptText}')
         .join('\n');
     if (getActiveCharacter() == null) {
       // This path requires an active character (the group per-speaker path
@@ -966,7 +966,7 @@ class RealismEvals {
         .take(recentCount)
         .toList()
         .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
+        .map((m) => '${m.sender}: ${m.promptText}')
         .join('\n');
 
     if (getActiveCharacter() == null) {

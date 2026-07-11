@@ -18,6 +18,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/backend_manager.dart';
+import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
@@ -185,11 +186,30 @@ class LLMProvider extends ChangeNotifier {
       '[LLMProvider] Synced from storage: backend=$typeStr, URL=${_storageService.remoteApiUrl}',
     );
 
+    // Drop cached vision/tool-calling verdicts whenever the model identity the
+    // app is pointed at changes — backend type, remote URL/model, or active
+    // preset. Otherwise a switch from a vision model to a text-only one on the
+    // same endpoint keeps reporting the old "supported" verdict, and the photo
+    // attach path trusts it. (Local-model verdicts are re-derived from config
+    // each call, so this mainly guards the remote /models-metadata cache.)
+    final identity =
+        '$typeStr|${_storageService.remoteApiUrl}|'
+        '${_storageService.remoteModelName}|${_storageService.activeKcppsPath}|'
+        '${_storageService.lastUsedModelPath}';
+    if (identity != _lastModelIdentity) {
+      _lastModelIdentity = identity;
+      VisionSupportResolver.instance.clear();
+    }
+
     if (newType != _activeBackend) {
       _activeBackend = newType;
       notifyListeners();
     }
   }
+
+  /// Last model-identity string synced from storage; used to clear stale
+  /// capability verdicts on change (see [_syncFromStorage]).
+  String? _lastModelIdentity;
 
   /// Switch the active backend and persist the choice.
   /// Does NOT start or stop any processes — that is handled by the caller (UI).
