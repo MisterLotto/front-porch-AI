@@ -189,6 +189,12 @@ class Sessions extends Table {
   // User persona linked to this session (v25)
   TextColumn get userPersonaId => text().nullable()();
 
+  /// The gallery "look" (avatar) selected for THIS chat, or null → show the
+  /// character's library face (`imagePath`). Per-chat selection over the global
+  /// look collection. Nullable + additive; the external card tool (Character
+  /// Card Forge) simply omits it (NULL).
+  TextColumn get selectedLookAvatarId => text().nullable()();
+
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
   /// Replaces the old hidden __group_state__ checkpoint message system (clean break in v30).
@@ -1116,7 +1122,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1753,6 +1759,14 @@ class AppDatabase extends _$AppDatabase {
           )
         ''');
       }
+      if (from < 37) {
+        // v36→v37: per-chat avatar-gallery look selection. Nullable, additive,
+        // no default — the external card tool (Character Card Forge) simply
+        // omits it (NULL). Safe for a mixed fleet and a rollback.
+        await customStatement(
+          'ALTER TABLE sessions ADD COLUMN selected_look_avatar_id TEXT',
+        );
+      }
     },
   );
 
@@ -2283,6 +2297,16 @@ class AppDatabase extends _$AppDatabase {
     await bumpSyncVersion();
     return rows > 0;
   }
+
+  /// Set (or clear, with null) the per-chat avatar-gallery look for a session.
+  /// Partial write — touches only [Sessions.selectedLookAvatarId].
+  Future<void> setSelectedLookForSession(String sessionId, String? avatarId) =>
+      patchSession(
+        SessionsCompanion(
+          id: Value(sessionId),
+          selectedLookAvatarId: Value(avatarId),
+        ),
+      );
 
   Future<int> deleteSessionById(String id) async {
     // Hard delete: also delete all messages + journal cards + growth rings in

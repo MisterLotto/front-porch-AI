@@ -4339,12 +4339,18 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Verification:** analyze clean; 21/21; macOS build ✓.
 - **Commit:** 4355bd8
 
+## 2026-07-11 — Avatar Gallery: per-chat selection column (schema v36→v37, maintainer-approved)
+- **Why:** the gallery's per-chat "which look is showing" needs a session-scoped store. Maintainer explicitly approved adding a nullable column to the externally-written `sessions` table (the safe additive pattern).
+- **Files:** `lib/database/database.dart` — `Sessions.selectedLookAvatarId` (nullable TextColumn); `schemaVersion` 36→37; additive migration `ALTER TABLE sessions ADD COLUMN selected_look_avatar_id TEXT` (nullable, no default — Character Card Forge simply omits it → NULL, safe for a mixed fleet + rollback); `setSelectedLookForSession(sessionId, avatarId?)` partial-write setter (read via existing `getSessionById`). `database.g.dart` regenerated via build_runner.
+- **Verification:** full `flutter analyze` clean. Additive-only per the external-writer contract; no other table touched.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Stage 1: look data core (pure + additive)
 - **Why:** groundwork for a per-character avatar gallery (Backyard-style) — any image as the sidebar avatar (outfit, scene, Christmas tree), flipped with chevrons in plain chat. Collection is GLOBAL per character; which look shows is PER CHAT. Fed from Edit / Create / upload; the existing destructive "Tap to change avatar" becomes a non-destructive wardrobe.
 - **Files:** `models/avatar_image.dart` — additive `lookLabel` sentinel `__look__`, `isLook`, `subfolder` (looks/ vs avatars/), and `resolveFile(charBaseDir)` (the single look-aware file resolver). NEW `lib/services/avatar_gallery.dart` — pure: `looksFrom`/`expressionsFrom` (partition looks out of the emotion pipeline — Grok must-fix), `resolveLookDisplay` (plain-chat portrait choice: per-chat selected look → imagePath → first look; stale selection falls back, never blanks), `flipLook` (chevron nav), storage-agnostic (takes the selected id as input). `character_repository.dart` — additive `addLook()` writing to the SEPARATE `characters/<name>/looks/` folder with the `__look__` tag (never touches imagePath). NEW `test/services/avatar_gallery_test.dart` (13 tests).
 - **Design + GO:** designed and GO-gated with Grok 4.5 (global collection / per-chat selection / `__look__` sentinel / `looks/` folder / non-destructive wardrobe via existing "Tap to change avatar"). Owner mockup approved. Stage 1 is additive-only — nothing consumes looks yet, so the expression system + current avatar display are untouched (zero regression risk).
 - **Verification:** full `flutter analyze` clean; 13/13 tests pass. No schema change (reuses `avatar_images`' nullable label). PENDING owner decision before Stage 3: a nullable `sessions.selected_look_avatar_id` column for per-chat selection (sessions is externally-written — needs explicit approval per CLAUDE.md).
-- **Commit:** (this commit)
+- **Commit:** 3b94abc
 
 ## 2026-07-11 — Image-edit feature, Phase 3: Create / Edit tabs in the Image Studio
 - **Why:** surface the edit path as a friendly, intent-based UI. Two tabs — **Create** (make a new portrait; today's flow) and **Edit** (keep this character, describe the change) — never pipeline names. The mockup made real.
