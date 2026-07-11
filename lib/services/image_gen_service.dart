@@ -365,9 +365,11 @@ class ImageGenService extends ChangeNotifier {
             final loraWeight = _storage.imageGenSettings.imageGenLoraWeight;
 
             // Edit models (Qwen-Image-Edit / Flux Kontext) read the reference as
-            // conditioning, so they need their config PROFILE — NOT the img2img
-            // denoise. The backend-neutral recipe lives out-of-file
-            // (edit_profile.dart) so this god file stays thin.
+            // conditioning. The Edit tab keeps its OWN edit-scoped copy of these
+            // knobs (steps/CFG/sampler/shift/seed-mode) so tuning an edit never
+            // clobbers Create's txt2img settings — see edit_profile.dart. This
+            // service is a DUMB PIPE for them: whatever the user set on the Edit
+            // tab is sent verbatim, no silent override.
             var dtStrength = strength;
             var dtSteps = steps;
             var dtCfg = cfgScale;
@@ -380,24 +382,17 @@ class ImageGenService extends ChangeNotifier {
                     {'file': loraName, 'weight': loraWeight},
                   ];
             if (refRole == ImageReferenceRole.editConditioning) {
-              final profile = resolveEditProfile(
-                editKind: refCapability.editKind,
-                userLoraName: loraName.isEmpty ? null : loraName,
-                userLoraWeight: loraWeight,
-              );
-              // YOUR step count is honored — the edit runs the steps you set
-              // (dtSteps stays = the user's `steps`). The edit model just needs
-              // the right sampler (UniPC) + a moderate guidance to produce an
-              // image at all, so those two come from the recipe; strength is the
-              // "how much should change" slider. No auto-injected LoRA.
-              dtStrength = editStrength ?? profile.strength;
-              dtCfg = profile.guidance;
-              dtShift = profile.shift;
-              dtSampler = profile.samplerName == kEditSamplerUnipc
-                  ? 17 // Sampler.UNIPC_TRAILING
-                  : sampler;
-              dtSeedMode = 2; // SeedMode.SCALE_ALIKE — DT edit policy
-              dtLoras = profile.loras;
+              // Every knob the user sees on the Edit tab, honored as-is (the
+              // edit-scoped store is seeded with the field-tested recipe so the
+              // FIRST edit already works — UniPC + moderate CFG — without
+              // clobbering Create). The "how much should change" slider provides
+              // the denoise strength; the user's LoRA rides along unchanged.
+              dtSteps = _storage.editSteps;
+              dtCfg = _storage.editCfgScale;
+              dtSampler = _storage.editSampler;
+              dtShift = _storage.editShift;
+              dtSeedMode = _storage.editSeedMode;
+              dtStrength = editStrength ?? kEditRecommendedStrength;
               _statusMessage = refCapability.editKind == EditModelKind.kontext
                   ? 'Editing with Flux Kontext...'
                   : 'Editing with Qwen-Image-Edit...';

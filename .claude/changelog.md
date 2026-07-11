@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-11 — feat(images): the Edit tab's knobs ACTUALLY drive the edit now (truthful, edit-scoped, no clobber)
+- **Report:** the maintainer got their DT edit working but "had to play around for several generations, I literally had to set 'how much should change' to 1.0." Root cause: on the Edit path the service was **silently overriding** CFG (→3.5), Sampler (→UniPC), Shift (→3.0), SeedMode (→SCALE_ALIKE). Only Steps/Seed/LoRA/strength took effect — so the visible CFG 9.9 + DDIM Trailing in the Advanced panel did **nothing**, and the maintainer burned generations tweaking dead knobs. Their instruction was explicit: "Make the knobs actually work! don't hide them." (Grok consulted twice — design + hostile implementation review.)
+- **Design (Grok's "C-hybrid"): one settings UI, edit-scoped storage, service is a dumb pipe.**
+  - **`edit_profile.dart` demoted** from a runtime override (`resolveEditProfile`/`EditProfile` — deleted) to six pure recipe **defaults** (`kEditRecommendedSamplerInt=17` UniPC, `Cfg=3.5`, `Shift=3.0`, `SeedMode=2`, `Steps=20`, `Strength=1.0`).
+  - **`ImageGenSettings`** gained 5 **edit-scoped** knobs (`editSteps/editCfgScale/editSampler/editShift/editSeedMode`) — own pref keys, seeded from the recipe, **separate from the txt2img knobs** so tuning an edit never clobbers Create. `+ resetEditKnobsToRecommended()`. Delegated on `StorageService`.
+  - **`image_gen_service` edit branch** now reads those edit-scoped values **verbatim** — no override. The user's LoRA still rides as-is; strength is still the slider (`editStrength ?? recommended`).
+  - **`GenerationOptionsTab`** gained `editScoped` (default false → Create + main settings page byte-identical). The Edit tab passes `editScoped: true`, so its Steps/CFG/DT-Sampler/Shift/SeedMode read+write the edit store; Seed/LoRA/backend/model/size/teaCache/cfgZeroStar stay shared.
+  - **Edit tab UX:** strength default **0.8 → 1.0** (multi-change edits were under-driven — a deliberate behavior change), a "Use recommended" one-tap reset (now also resets the local strength slider — Grok caught the honesty gap), and a **non-forcing** warning when Sampler≠UniPC or CFG>5.0 (the "no image" footgun band).
+- **First edit just works:** a fresh install seeds UniPC+3.5 into the edit store, so the first edit produces an image even while the user's global txt2img sampler is DDIM — without touching Create.
+- **Deferred (documented):** Kontext-specific recipe + the Qwen-shaped warning (Kontext is unwired — Phase 5); web parity (tracked Phase 7).
+- **Tests:** rewrote edit_profile tests — lock the 6 consts, prove a fresh `ImageGenSettings` seeds from the recipe, and prove **setting an edit knob never writes the txt2img twin (and vice versa)** — the concrete "no clobber" regression lock.
+- **Files:** `edit_profile.dart`, `storage/settings/image_gen_settings.dart`, `storage_service.dart`, `image_gen_service.dart`, `image_studio/generation_options_tab.dart`, `image_studio/settings_panel.dart`, `image_studio/edit_view.dart`, `test/services/image/edit_profile_test.dart`.
+- **Verification:** full `flutter analyze` clean; image suites (26) + edit_profile (4) green; `flutter build macos` ✓.
+- **Commit:** (pending)
+
 ## 2026-07-11 — fix(images): DT edit — YOUR step count is honored + the auto-LoRA is gone (actually fixing, not reverting)
 - **Reported (and I'd mishandled it):** the maintainer uses their own NSFW LoRA, wants control over the edit's step count, and the edit was failing. I'd gotten tunnel-visioned on the "lightning LoRA" (a maintainer-config concept the recipe auto-detected) and had reverted instead of fixing. Corrected here, grounded in the live logs (UNIPC + moderate guidance worked; the user's DDIM + CFG 6.6 → "produced no images"; 30 steps with no speed LoRA → 5-min timeout).
 - **Fixes:**

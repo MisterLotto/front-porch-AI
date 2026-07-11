@@ -16,112 +16,39 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/services/capability/image_reference_role.dart';
+// The field-tested Draw Things edit recipe (Qwen-Image-Edit-2509/2511-i8).
+//
+// These are DEFAULTS, not overrides. The Edit tab keeps its OWN edit-scoped
+// copy of the Generation Settings (steps / CFG / sampler / shift / seed-mode),
+// separate from the Create/txt2img knobs, so tuning an edit never clobbers the
+// user's txt2img sampler/CFG/steps — the two model families want very
+// different values. On first use that edit-scoped copy is SEEDED from the
+// constants below, and the "Use recommended edit settings" button writes them
+// back. After that, every knob the user sees on the Edit tab is honored
+// verbatim by ImageGenService — nothing here silently rewrites the request.
+//
+// Why these particular values: Qwen-Image-Edit returns a BLANK image ("no
+// images") outside the UniPC sampler + a moderate CFG. A good txt2img combo
+// (DDIM / high CFG) yields nothing on the edit model, which is exactly the
+// footgun these seeds avoid on the first edit.
 
-/// A backend-NEUTRAL edit recipe for instruction-edit models. Every edit-capable
-/// backend consumes the same profile and maps the subset it supports to its own
-/// call — no backend owns its own recipe, so Draw Things gets no special
-/// treatment over ComfyUI/remote. This is a RECIPE (a handful of tuned values),
-/// deliberately NOT a universal generation config: wire-only knobs (seed, size,
-/// seedMode, refiner, teaCache, …) stay out so it can't drift into "everything
-/// one backend can send".
-///
-/// Mapping per backend (values expressed once, here):
-///  - Draw Things: samplerName → its int (e.g. 'unipc' → 17), denoise=strength,
-///    seed-mode fixed to scale-alike at the apply site (DT-only, not in here).
-///  - ComfyUI (Phase 5): reuses the SAME profile via `normalizeSampler` +
-///    KSampler denoise/steps/cfg; a shift node when the graph has one.
-///  - Remote (Phase 5): takes the thin subset its API exposes (usually just the
-///    reference + prompt); ignores the rest.
-///  - A1111: never edits, never calls this.
-///
-/// Pure and deterministic (no I/O; the caller supplies the LoRA list). Qwen
-/// values mirror the maintainer's field-tested `qwen_image_edit_config`
-/// (`tools/dt-grpc-python/client.py`).
+/// Draw Things sampler int for **UniPC Trailing** — the sampler the edit model
+/// needs to produce an image at all (see `_drawThingsSamplers`: 17).
+const int kEditRecommendedSamplerInt = 17;
 
-/// Field-tested Qwen-Image-Edit reference strength (NOT 1.0, NOT img2img denoise).
-const double kQwenEditStrength = 0.8;
+/// Moderate guidance. High CFG makes the edit model produce no image.
+const double kEditRecommendedCfg = 3.5;
 
-/// Canonical sampler id every backend maps from (DT → 17 / UniPC-trailing,
-/// ComfyUI → 'uni_pc' via its normalizer). Never a backend enum/int here.
-const String kEditSamplerUnipc = 'unipc';
+/// Model-family shift. Backends without a shift knob ignore it.
+const double kEditRecommendedShift = 3.0;
 
-/// A resolved, backend-neutral edit recipe.
-class EditProfile {
-  /// Reference/denoise strength (Qwen-Edit: 0.8).
-  final double strength;
-  final int steps;
+/// Draw Things SeedMode SCALE_ALIKE (2) — stable edit result across sizes.
+const int kEditRecommendedSeedMode = 2;
 
-  /// CFG / guidance scale (1.0 with a lightning LoRA, higher without).
-  final double guidance;
+/// A sane step count for a non-lightning edit pass.
+const int kEditRecommendedSteps = 20;
 
-  /// Canonical sampler id (see [kEditSamplerUnipc]) — a backend maps it natively.
-  final String samplerName;
-
-  /// Model-family shift (e.g. 3.0). Backends without a shift knob ignore it.
-  final double shift;
-
-  /// The merged LoRA list — the lightning LoRA (when found) plus any user LoRA.
-  /// Each entry is `{'file': name, 'weight': w}`. Remote typically ignores this.
-  final List<Map<String, dynamic>> loras;
-
-  /// True when a lightning LoRA was found and applied (for status/logging).
-  final bool usedLightning;
-
-  const EditProfile({
-    required this.strength,
-    required this.steps,
-    required this.guidance,
-    required this.samplerName,
-    required this.shift,
-    required this.loras,
-    required this.usedLightning,
-  });
-}
-
-/// Resolve the backend-neutral edit recipe.
-///
-/// Provides the two things the edit model NEEDS but a user's txt2img settings
-/// usually get wrong: the sampler (UniPC — qwen-image-edit produces no image on
-/// some samplers) and a moderate guidance. The caller supplies the STEP count
-/// (the user's — they control it) and the strength (the "how much should change"
-/// slider). Any user-selected LoRA rides along AS-IS — the app never auto-injects
-/// a LoRA the user didn't pick (no "lightning" auto-detection).
-EditProfile resolveEditProfile({
-  required EditModelKind editKind,
-  String? userLoraName,
-  double? userLoraWeight,
-}) {
-  final userLora = (userLoraName != null && userLoraName.isNotEmpty)
-      ? <Map<String, dynamic>>[
-          {'file': userLoraName, 'weight': userLoraWeight ?? 1.0},
-        ]
-      : const <Map<String, dynamic>>[];
-
-  if (editKind == EditModelKind.kontext) {
-    // Flux Kontext: conservative starting points (field-tested on Qwen, not
-    // Kontext — tune when Kontext is run).
-    return EditProfile(
-      strength: 1.0,
-      steps: 20,
-      guidance: 2.5,
-      samplerName: kEditSamplerUnipc,
-      shift: 3.0,
-      loras: userLora,
-      usedLightning: false,
-    );
-  }
-
-  // Qwen-Image-Edit: the sampler + guidance the model needs; the user's LoRA
-  // as-is. `steps` here is only a fallback default — the edit path uses the
-  // user's step count.
-  return EditProfile(
-    strength: kQwenEditStrength,
-    steps: 20,
-    guidance: 3.5,
-    samplerName: kEditSamplerUnipc,
-    shift: 3.0,
-    loras: userLora,
-    usedLightning: false,
-  );
-}
+/// Default for the "How much should change?" slider. Instruction-edits with
+/// multi-change prompts come out under-driven below this, so the default is
+/// "do what I asked"; the user dials DOWN for subtle, identity-preserving edits.
+const double kEditRecommendedStrength = 1.0;

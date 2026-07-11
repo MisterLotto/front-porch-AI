@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/image/edit_profile.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -78,9 +79,10 @@ class _EditViewState extends State<EditView> {
   String _error = '';
 
   /// How strongly the instruction changes the reference (higher = more change).
-  /// Overrides the edit model's default strength. 0.8 is the field-tested Qwen
-  /// default; the user can push it up when a change comes out too subtle.
-  double _strength = 0.8;
+  /// Defaults to "do what I asked" — multi-change instruction edits come out
+  /// under-driven below full strength — and the user dials DOWN for subtle,
+  /// identity-preserving edits. See [kEditRecommendedStrength].
+  double _strength = kEditRecommendedStrength;
 
   @override
   void initState() {
@@ -257,7 +259,9 @@ class _EditViewState extends State<EditView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const StudioSettingsPanel(),
+          const StudioSettingsPanel(editScoped: true),
+          const SizedBox(height: 10),
+          _editRecipeStrip(context),
           const SizedBox(height: 16),
           if (!cap.supportsEdit)
             _degradeBanner(
@@ -506,6 +510,97 @@ class _EditViewState extends State<EditView> {
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
+    );
+  }
+
+  /// A compact strip under the (edit-scoped) Generation Settings that (a) makes
+  /// clear these knobs are edit-only — Create keeps its own — (b) offers a
+  /// one-tap reset to the field-tested edit recipe, and (c) warns, without
+  /// forcing anything, when the sampler/CFG are set to a combo Qwen-Image-Edit
+  /// tends to return a blank image for (the old "no images" footgun).
+  Widget _editRecipeStrip(BuildContext context) {
+    return Consumer<StorageService>(
+      builder: (context, st, _) {
+        final offRecipe =
+            st.editSampler != kEditRecommendedSamplerInt || st.editCfgScale > 5.0;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainerOf(context),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: offRecipe
+                  ? AppColors.logWarn
+                  : AppColors.borderOf(context),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    offRecipe ? Icons.warning_amber_rounded : Icons.tune,
+                    size: 15,
+                    color: offRecipe
+                        ? AppColors.logWarn
+                        : AppColors.iconSecondary(context),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'These settings are just for edits — Create keeps its own.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    // Reset the persisted edit knobs AND the local strength
+                    // slider, so "recommended" is honest end-to-end.
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            st.resetEditKnobsToRecommended();
+                            setState(
+                              () => _strength = kEditRecommendedStrength,
+                            );
+                          },
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Use recommended',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.formMasterAccent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (offRecipe) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Heads up: Qwen-Image-Edit usually needs the UniPC sampler and '
+                  'a moderate CFG (~3.5). Other samplers or a high CFG can return '
+                  'no image at all.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.35,
+                    color: AppColors.textTertiary(context),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 

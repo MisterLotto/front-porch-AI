@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import '../../image/edit_profile.dart';
 import 'settings_base.dart';
 
 /// Image generation (A1111/Draw Things/remote) + Draw Things gRPC settings.
@@ -64,6 +65,17 @@ class ImageGenSettings with SettingsBase {
   bool _drawThingsTeaCache = false;
   bool _drawThingsCfgZeroStar = false;
 
+  // Edit-scoped generation knobs (Image Studio → Edit tab, instruction-edit
+  // models like Qwen-Image-Edit). Kept SEPARATE from the txt2img knobs above so
+  // tuning an edit never clobbers Create's sampler/CFG/steps — the two model
+  // families want very different values. Seeded from the field-tested recipe
+  // (edit_profile.dart) and then honored verbatim; nothing overrides them.
+  int _editSteps = kEditRecommendedSteps;
+  double _editCfgScale = kEditRecommendedCfg;
+  int _editSampler = kEditRecommendedSamplerInt;
+  double _editShift = kEditRecommendedShift;
+  int _editSeedMode = kEditRecommendedSeedMode;
+
   bool get imageGenEnabled => _imageGenEnabled;
   String get imageGenBackend => _imageGenBackend;
   String get localImageGenUrl => _localImageGenUrl;
@@ -93,6 +105,12 @@ class ImageGenSettings with SettingsBase {
   int get drawThingsSeedMode => _drawThingsSeedMode;
   bool get drawThingsTeaCache => _drawThingsTeaCache;
   bool get drawThingsCfgZeroStar => _drawThingsCfgZeroStar;
+
+  int get editSteps => _editSteps;
+  double get editCfgScale => _editCfgScale;
+  int get editSampler => _editSampler;
+  double get editShift => _editShift;
+  int get editSeedMode => _editSeedMode;
 
   void load() {
     _imageGenEnabled = prefs?.getBool(k('image_gen_enabled')) ?? true;
@@ -130,6 +148,16 @@ class ImageGenSettings with SettingsBase {
     _drawThingsTeaCache = prefs?.getBool(k('draw_things_tea_cache')) ?? false;
     _drawThingsCfgZeroStar =
         prefs?.getBool(k('draw_things_cfg_zero_star')) ?? false;
+
+    _editSteps = prefs?.getInt(k('image_gen_edit_steps')) ?? kEditRecommendedSteps;
+    _editCfgScale =
+        prefs?.getDouble(k('image_gen_edit_cfg_scale')) ?? kEditRecommendedCfg;
+    _editSampler =
+        prefs?.getInt(k('draw_things_edit_sampler')) ?? kEditRecommendedSamplerInt;
+    _editShift =
+        prefs?.getDouble(k('draw_things_edit_shift')) ?? kEditRecommendedShift;
+    _editSeedMode =
+        prefs?.getInt(k('draw_things_edit_seed_mode')) ?? kEditRecommendedSeedMode;
   }
 
   Future<void> setImageGenEnabled(bool value) async {
@@ -283,5 +311,47 @@ class ImageGenSettings with SettingsBase {
     _drawThingsCfgZeroStar = value;
     await prefs?.setBool(k('draw_things_cfg_zero_star'), value);
     notify();
+  }
+
+  // Edit-scoped setters (Image Studio → Edit tab). Same clamps as their txt2img
+  // twins; they persist to their own keys so Create's knobs are never touched.
+  Future<void> setEditSteps(int value) async {
+    _editSteps = value.clamp(1, 50);
+    await prefs?.setInt(k('image_gen_edit_steps'), _editSteps);
+    notify();
+  }
+
+  Future<void> setEditCfgScale(double value) async {
+    _editCfgScale = value.clamp(1.0, 20.0);
+    await prefs?.setDouble(k('image_gen_edit_cfg_scale'), _editCfgScale);
+    notify();
+  }
+
+  Future<void> setEditSampler(int value) async {
+    _editSampler = value;
+    await prefs?.setInt(k('draw_things_edit_sampler'), value);
+    notify();
+  }
+
+  Future<void> setEditShift(double value) async {
+    _editShift = value;
+    await prefs?.setDouble(k('draw_things_edit_shift'), value);
+    notify();
+  }
+
+  Future<void> setEditSeedMode(int value) async {
+    _editSeedMode = value;
+    await prefs?.setInt(k('draw_things_edit_seed_mode'), value);
+    notify();
+  }
+
+  /// One-tap "Use recommended edit settings" — writes the field-tested edit
+  /// recipe back into the edit-scoped knobs (never touches the Create knobs).
+  Future<void> resetEditKnobsToRecommended() async {
+    await setEditSteps(kEditRecommendedSteps);
+    await setEditCfgScale(kEditRecommendedCfg);
+    await setEditSampler(kEditRecommendedSamplerInt);
+    await setEditShift(kEditRecommendedShift);
+    await setEditSeedMode(kEditRecommendedSeedMode);
   }
 }

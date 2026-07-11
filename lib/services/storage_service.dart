@@ -374,6 +374,22 @@ class StorageService extends ChangeNotifier {
   Future<void> setDrawThingsCfgZeroStar(bool v) =>
       imageGenSettings.setDrawThingsCfgZeroStar(v);
 
+  // Edit-scoped generation knobs (Image Studio → Edit tab). Separate from the
+  // txt2img knobs so an edit's sampler/CFG/steps never clobber Create's.
+  int get editSteps => imageGenSettings.editSteps;
+  Future<void> setEditSteps(int v) => imageGenSettings.setEditSteps(v);
+  double get editCfgScale => imageGenSettings.editCfgScale;
+  Future<void> setEditCfgScale(double v) =>
+      imageGenSettings.setEditCfgScale(v);
+  int get editSampler => imageGenSettings.editSampler;
+  Future<void> setEditSampler(int v) => imageGenSettings.setEditSampler(v);
+  double get editShift => imageGenSettings.editShift;
+  Future<void> setEditShift(double v) => imageGenSettings.setEditShift(v);
+  int get editSeedMode => imageGenSettings.editSeedMode;
+  Future<void> setEditSeedMode(int v) => imageGenSettings.setEditSeedMode(v);
+  Future<void> resetEditKnobsToRecommended() =>
+      imageGenSettings.resetEditKnobsToRecommended();
+
   // Backend / kobold / remote / launch flags / kcpps (kv + callBuffer here per lift/compat needs; some also on tts/stt)
   String get backendType => backendSettings.backendType;
   Future<void> setBackendType(String v) => backendSettings.setBackendType(v);

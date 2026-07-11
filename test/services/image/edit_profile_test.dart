@@ -1,62 +1,87 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Unit tests for the backend-neutral EditProfile recipe: the edit model's
-// required sampler (UniPC) + moderate guidance + strength, the user's LoRA
-// passed through AS-IS (the app never auto-injects a LoRA the user didn't pick),
-// the distinct Kontext recipe, and that no backend-specific encoding (sampler
-// ints, seedMode) leaks into the neutral type. The STEP count is NOT owned here
-// — the edit path uses the user's chosen steps.
+// The edit recipe is now a set of DEFAULT constants (edit_profile.dart), not a
+// runtime override: the Image Studio Edit tab seeds its OWN edit-scoped copy of
+// the Generation Settings from them, then the service honors whatever the user
+// set verbatim. These tests lock the field-tested values (so a stray edit can't
+// silently change what a first edit does) and prove a fresh ImageGenSettings
+// seeds its edit knobs from the recipe — the footgun-avoiding "first edit just
+// works" guarantee — while leaving the Create/txt2img knobs on their own.
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/image/edit_profile.dart';
+import 'package:front_porch_ai/services/storage/settings/image_gen_settings.dart';
 
 void main() {
-  group('Qwen-Image-Edit recipe', () {
-    test('sampler UniPC + moderate guidance + strength 0.8, no LoRA', () {
-      final p = resolveEditProfile(editKind: EditModelKind.qwenEdit);
-      expect(p.strength, kQwenEditStrength); // 0.8 — NOT 1.0, NOT img2img denoise
-      expect(p.guidance, 3.5);
-      expect(p.shift, 3.0);
-      expect(p.samplerName, kEditSamplerUnipc); // 'unipc' — never a backend int
-      expect(p.usedLightning, isFalse); // no auto lightning LoRA, ever
-      expect(p.loras, isEmpty);
-    });
-
-    test('the user LoRA is passed through as-is (never stacked with anything)', () {
-      final p = resolveEditProfile(
-        editKind: EditModelKind.qwenEdit,
-        userLoraName: 'my_nsfw_lora.ckpt',
-        userLoraWeight: 0.6,
-      );
-      expect(p.loras.length, 1);
-      expect(p.loras.single['file'], 'my_nsfw_lora.ckpt');
-      expect(p.loras.single['weight'], 0.6);
-      expect(p.usedLightning, isFalse);
-    });
-
-    test('a LoRA whose name contains "lightning" is treated like any user LoRA', () {
-      final p = resolveEditProfile(
-        editKind: EditModelKind.qwenEdit,
-        userLoraName: 'qwen_lightning_4step.ckpt',
-        userLoraWeight: 1.0,
-      );
-      // No special-casing — it's just the user's LoRA at their weight.
-      expect(p.loras.single['file'], 'qwen_lightning_4step.ckpt');
-      expect(p.usedLightning, isFalse);
+  group('Edit recipe constants (Qwen-Image-Edit, field-tested)', () {
+    test('the values the model needs to produce an image at all', () {
+      expect(kEditRecommendedSamplerInt, 17); // UniPC Trailing (DT sampler int)
+      expect(kEditRecommendedCfg, 3.5); // moderate — high CFG yields no image
+      expect(kEditRecommendedShift, 3.0);
+      expect(kEditRecommendedSeedMode, 2); // SCALE_ALIKE
+      expect(kEditRecommendedSteps, 20);
+      // "Do what I asked": multi-change edits are under-driven below full.
+      expect(kEditRecommendedStrength, 1.0);
     });
   });
 
-  group('Kontext — distinct recipe', () {
-    test('its own defaults (strength 1.0, guidance 2.5), user LoRA as-is', () {
-      final p = resolveEditProfile(editKind: EditModelKind.kontext);
-      expect(p.usedLightning, isFalse);
-      expect(p.strength, 1.0);
-      expect(p.guidance, 2.5);
-      expect(p.samplerName, kEditSamplerUnipc);
-      expect(p.loras, isEmpty);
+  group('Edit-scoped storage', () {
+    test('a fresh ImageGenSettings seeds its edit knobs from the recipe', () {
+      final s = ImageGenSettings(); // no prefs loaded → field defaults
+      expect(s.editSteps, kEditRecommendedSteps);
+      expect(s.editCfgScale, kEditRecommendedCfg);
+      expect(s.editSampler, kEditRecommendedSamplerInt);
+      expect(s.editShift, kEditRecommendedShift);
+      expect(s.editSeedMode, kEditRecommendedSeedMode);
+    });
+
+    test('edit knobs are SEPARATE from the txt2img knobs (no clobber)', () {
+      final s = ImageGenSettings();
+      // The Create/txt2img defaults are the lightning-friendly low values and
+      // must not be affected by the edit recipe living alongside them.
+      expect(s.imageGenSteps, isNot(kEditRecommendedSteps));
+      expect(s.editSampler, isNot(s.drawThingsSampler));
+    });
+
+    test('setting an edit knob never writes the txt2img twin, and vice versa',
+        () async {
+      final s = ImageGenSettings(); // prefs null → writes only the in-memory field
+      final createSampler = s.drawThingsSampler;
+      final createCfg = s.imageGenCfgScale;
+      final createSteps = s.imageGenSteps;
+      final createShift = s.drawThingsShift;
+      final createSeedMode = s.drawThingsSeedMode;
+
+      await s.setEditSampler(5);
+      await s.setEditCfgScale(9.0);
+      await s.setEditSteps(28);
+      await s.setEditShift(1.5);
+      await s.setEditSeedMode(0);
+
+      // Edit side took the new values...
+      expect(s.editSampler, 5);
+      expect(s.editCfgScale, 9.0);
+      expect(s.editSteps, 28);
+      expect(s.editShift, 1.5);
+      expect(s.editSeedMode, 0);
+      // ...and the Create/txt2img side is untouched.
+      expect(s.drawThingsSampler, createSampler);
+      expect(s.imageGenCfgScale, createCfg);
+      expect(s.imageGenSteps, createSteps);
+      expect(s.drawThingsShift, createShift);
+      expect(s.drawThingsSeedMode, createSeedMode);
+
+      // The reverse: tuning Create leaves the edit knobs alone.
+      await s.setImageGenCfgScale(7.0);
+      expect(s.editCfgScale, 9.0);
+
+      // "Use recommended" restores the edit recipe (and still not Create).
+      await s.resetEditKnobsToRecommended();
+      expect(s.editSampler, kEditRecommendedSamplerInt);
+      expect(s.editCfgScale, kEditRecommendedCfg);
+      expect(s.imageGenCfgScale, 7.0);
     });
   });
 }
