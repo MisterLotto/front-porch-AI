@@ -50,9 +50,20 @@ class VisionSupport {
   /// Pure verdict for a local GGUF, given its parsed [GgufVisionInfo] and
   /// whether a usable mmproj file is currently configured for it.
   ///
-  /// - Embedded projector  → supported ([VisionSource.ggufEmbedded]).
-  /// - Multimodal + mmproj → supported ([VisionSource.ggufWithMmproj]).
-  /// - Multimodal, no mmproj yet, or text-only, or unparseable → not supported.
+  /// - Embedded projector       → supported ([VisionSource.ggufEmbedded]).
+  /// - An mmproj is configured  → supported ([VisionSource.ggufWithMmproj]),
+  ///   regardless of what the arch heuristic thinks (see below).
+  /// - Otherwise                → not supported.
+  ///
+  /// An explicitly-configured mmproj is AUTHORITATIVE and is trusted even when
+  /// [GgufVisionInfo.isMultimodal] is false. The arch check
+  /// ([GgufVisionParser.alwaysMultimodalArches]) is deliberately conservative
+  /// and misses plenty of real vision models — finetunes that rename the arch
+  /// ("…-heretic"), quant variants, and any model whose vision config lives
+  /// entirely in the companion mmproj rather than the main file. A user who
+  /// picked an mmproj file for this model knows it does vision; KoboldCpp loads
+  /// it via `--mmproj` and it works. Gating on the heuristic here is exactly
+  /// what left users unable to enable vision on models we failed to recognize.
   factory VisionSupport.fromGguf(
     GgufVisionInfo? info, {
     required bool mmprojConfigured,
@@ -61,7 +72,7 @@ class VisionSupport {
     if (info.hasEmbeddedProjector) {
       return const VisionSupport(true, VisionSource.ggufEmbedded);
     }
-    if (info.isMultimodal && mmprojConfigured) {
+    if (mmprojConfigured) {
       return const VisionSupport(true, VisionSource.ggufWithMmproj);
     }
     return VisionSupport.none;

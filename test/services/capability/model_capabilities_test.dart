@@ -121,10 +121,20 @@ void main() {
       expect(s.source, VisionSource.none);
     });
 
-    test('text-only → not supported', () {
-      final s =
-          VisionSupport.fromGguf(info(), mmprojConfigured: true);
+    test('not-detected-as-vision arch WITHOUT mmproj → not supported', () {
+      final s = VisionSupport.fromGguf(info(), mmprojConfigured: false);
       expect(s.supported, isFalse);
+    });
+
+    test('an attached mmproj is authoritative even when the arch heuristic '
+        'says text-only → supported (ggufWithMmproj)', () {
+      // Regression: users with a companion mmproj for a model our conservative
+      // arch allowlist doesn't recognize (finetunes, renamed arches) must be
+      // able to enable vision. The explicit mmproj is trusted regardless of
+      // isMultimodal.
+      final s = VisionSupport.fromGguf(info(), mmprojConfigured: true);
+      expect(s.supported, isTrue);
+      expect(s.source, VisionSource.ggufWithMmproj);
     });
 
     test('null info → none', () {

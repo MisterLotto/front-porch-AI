@@ -31,11 +31,15 @@ import 'package:front_porch_ai/utils/gguf_vision.dart';
 /// Optional "Vision projector (mmproj)" control for a local GGUF model.
 ///
 /// Field state is driven by GGUF detection (via [VisionSupportResolver]):
-///  - embedded projector    → greyed, "vision built in" + a collapsed
-///    "use a custom projector" override for power users;
-///  - multimodal, no mmproj  → enabled picker, "add the matching mmproj";
-///  - text-only              → greyed, "this model can't do vision".
-/// A status pill always reflects the resolver's verdict.
+///  - embedded projector    → "vision built in" + a collapsed "use a custom
+///    projector" override for power users;
+///  - multimodal, no mmproj  → picker, "add the matching mmproj";
+///  - not detected as vision → picker anyway, "if it has a companion mmproj,
+///    select it" — the arch heuristic is conservative and misses finetunes /
+///    renamed arches, so the user's mmproj is always the authoritative signal.
+/// A status pill reflects the resolver's verdict (which trusts an attached
+/// mmproj). The picker is only ever hidden when a projector is already baked
+/// into the model file.
 class VisionProjectorField extends StatefulWidget {
   /// The selected local model file, or null (e.g. a preset owns the model).
   final String? modelPath;
@@ -266,8 +270,16 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
       );
     }
 
-    // Text-only.
-    return _note(context, 'This model can’t process images.', muted: true);
+    // Not detected as a vision model. Detection is deliberately conservative
+    // (an arch allowlist), so it misses finetunes, renamed arches, and models
+    // whose vision config lives only in the mmproj. Still offer the picker: if
+    // the user has this model's companion mmproj, attaching it is what enables
+    // vision (KoboldCpp loads it via --mmproj) and flips the pill to supported.
+    return _pickerRow(
+      context,
+      hint: 'No vision detected in this model. If it has a companion mmproj '
+          '(vision) file, select it to enable vision.',
+    );
   }
 
   Widget _pickerRow(BuildContext context, {required String hint}) {
