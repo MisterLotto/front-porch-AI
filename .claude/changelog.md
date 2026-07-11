@@ -1,10 +1,21 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, foundation for the shared ★ star: face-ring generalization + favoriteAvatarId
+- **Why:** groundwork for the unified Avatar Gallery + the one ★ "canonical avatar" star. The maintainer wants the star to point at EITHER a gallery avatar OR an expression image (one star ever) and be both the exported card cover and the default a new chat opens with. Grok's feasibility review was explicit: doing that fully means generalizing the plain-chat selection from "looks only" to "any avatar id" — don't ship a half-version. This is that generalization, done before the widget so nothing is re-touched later. Backward-compatible: with no star set yet (favorite null) the ring is exactly `[portrait, ...looks]` — identical behavior to what shipped.
+- **`favoriteAvatarId`** (`character_card.dart`, `FrontPorchExtensions`): nullable String riding the existing PNG extensions JSON (mirrors `avatarLocked`/`tier` — NO DB schema change, no external-writer risk). Points at an `avatar_images` id (look or expression) or null (= portrait). Serialized null-aware; added to toJson/fromJson/copyWith.
+- **Face ring** (`avatar_gallery.dart`): replaced the look-only `resolveLookDisplay`/`flipLook`/`lookRingPosition`/`LookDisplay` with a uniform ring — `kPortraitFaceId` sentinel + `buildFaceRing({looks, hasImagePath, favorite})` (order: star → portrait → looks, deduped; a starred EXPRESSION joins at slot 0 so it's both the default and chevron-reachable, while non-starred expressions never enter the plain ring — look-blindness preserved) + `flipFace(ring, current, delta)` (plain list cycling) + `resolveFaceDisplay({ring, allImages, selectedFaceId})` → image/position/total/showChevrons.
+- **`LookChevronBar`** decoupled from ring math — now takes a precomputed `position`/`total`.
+- **`chat_page.dart`** plain-chat portrait rewired to build the ring from the (group-origin-resolved) library card's images + its favorite, resolve the face, and flip through it. Per-chat selection now stores face ids (incl. the portrait sentinel) — a superset of the old look-id storage, so any prior selection still resolves.
+- **Fix:** `avatar_repository_test.dart` asserted schema v36; bumped to v37 to match the earlier sessions-column migration (6b6a103) — was a stale failing assertion.
+- **Tests:** rewrote the gallery suite around the ring (buildFaceRing order incl. starred-expression, resolveFaceDisplay incl. portrait sentinel + stale + expression, flipFace) — 25/25; full suite 1976 green.
+- **Verification:** full `flutter analyze` clean; full `flutter test` green.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Stage 4a: Expression Images dialog is look-blind (prereq for look creation)
 - **Why:** the last place looks could leak into the emotion system (Grok's P0/P1 from the Stage 3 review). Landed BEFORE any UI can create a look, so there's never a window where a look shows up as an expression.
 - **Fix (`character_avatars_dialog.dart`):** the dialog now partitions on load — expression avatars go to `_avatars` (what it edits), gallery looks are held aside in `_looks`. Consolidated the three identical `getAvatarImages` reload sites into one look-aware `_reloadAvatars()` helper (net fewer call sites). On save it re-merges `[..._avatars, ..._looks]` so editing expressions can never drop the character's looks from the in-memory card. Looks no longer count against the 30-avatar cap.
 - **Verification:** full `flutter analyze` clean.
-- **Commit:** (this commit)
+- **Commit:** 47b4d79
 
 ## 2026-07-11 — Avatar Gallery, Stage 3: sidebar look chevrons + look-blind expression pipeline
 - **Why:** the visible half — flip the sidebar portrait between a character's gallery "looks" (and the canonical library face) with ‹ › chevrons + an "n / N" counter, plain chat only. Reworked after an adversarial Grok review that caught two P0s I'd have shipped.
@@ -16,7 +27,7 @@
 - **Deferred (tracked, no leak window — looks can't be created until Stage 4):** the Expression Images dialog still loads raw `avatarImages`; it must filter `expressionsFrom` (with a looks-preserving save-back) before look creation ships — first task of the wardrobe stage. Web parity pending an explicit call with the maintainer.
 - **Tests:** +8 (single-look±library-face chevrons, includeLibraryFace ring + stale + empty, lookRingPosition) — 25/25 in the gallery suite.
 - **Verification:** full `flutter analyze` clean.
-- **Commit:** (this commit)
+- **Commit:** 9987858
 
 ## 2026-07-11 — Avatar Gallery, Stage 2a: per-chat look selection plumbing (group-parity codec + removeAvatar fix)
 - **Why:** wiring the per-chat "which look is showing" state before the UI. Grok pairing surfaced a real fork (single-id column = 1:1-only, a group gap) and one latent bug.

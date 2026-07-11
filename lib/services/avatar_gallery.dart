@@ -20,16 +20,20 @@ import 'dart:convert';
 
 import 'package:front_porch_ai/models/avatar_image.dart';
 
-/// Pure resolution for the per-character avatar GALLERY ("looks"). Kept
-/// deliberately free of I/O and of where the per-chat selection is STORED — it
-/// takes the selected-look id as an input — so it's trivially unit-testable and
-/// decoupled from the `sessions` column decision.
+/// Pure resolution for the per-character avatar GALLERY. Kept deliberately free
+/// of I/O and of where the per-chat selection is STORED — it takes the selected
+/// face id as an input — so it's trivially unit-testable.
 ///
-/// Product contract (agreed with the maintainer + Grok): the look COLLECTION is
-/// global per character; which look is SHOWING is per chat. Chevrons appear only
-/// in plain chat (expression images off) when there's more than one look. Looks
-/// never enter the emotion pipeline. Selecting a look must never rewrite the
-/// character's `imagePath` (the library face stays put on the home grid).
+/// Product contract (agreed with the maintainer + Grok): the avatar COLLECTION
+/// is global per character; which face is SHOWING is per chat. In plain chat
+/// (expression images off) the ‹ › chevrons cycle a FACE RING of the portrait +
+/// the gallery looks + (when it's the ★ star) one expression image; chevrons
+/// appear only when the ring has more than one entry. The one ★ star is the
+/// canonical avatar — the ring's default entry and the card cover on export —
+/// and can point at a look OR an expression. Selecting/starring never rewrites
+/// `imagePath` (the library portrait stays put on the home grid). The emotion
+/// pipeline stays look-blind: a non-starred expression never enters the plain
+/// ring, and a look is never picked as an emotion face.
 
 /// The gallery looks among [avatarImages] (isLook), ordered by displayOrder.
 /// Expression images are filtered out.
@@ -43,71 +47,116 @@ List<AvatarImage> looksFrom(List<AvatarImage>? avatarImages) =>
 List<AvatarImage> expressionsFrom(List<AvatarImage>? avatarImages) =>
     (avatarImages ?? const <AvatarImage>[]).where((a) => !a.isLook).toList();
 
-/// What the chat sidebar should show in plain chat, plus whether to offer the
-/// look chevrons.
-class LookDisplay {
-  /// The look to show, or null → fall back to the character's `imagePath`.
-  final AvatarImage? look;
+/// Sentinel face id for the character's library portrait (`imagePath`) inside
+/// the plain-chat face ring / per-chat selection. A real avatar id references a
+/// gallery look or (when starred) an expression image; this marks "the portrait".
+const String kPortraitFaceId = '__portrait__';
 
-  /// Whether to render the ‹ › chevrons (more than one look, plain chat).
-  final bool showChevrons;
-
-  const LookDisplay({required this.look, required this.showChevrons});
-
-  /// Nothing to override (expressions on, or no looks) — caller uses its normal
-  /// portrait/expression path.
-  static const LookDisplay passthrough = LookDisplay(
-    look: null,
-    showChevrons: false,
-  );
-
-  @override
-  bool operator ==(Object other) =>
-      other is LookDisplay &&
-      other.look?.id == look?.id &&
-      other.showChevrons == showChevrons;
-
-  @override
-  int get hashCode => Object.hash(look?.id, showChevrons);
-}
-
-/// Resolve the plain-chat portrait choice.
+/// Build the ordered plain-chat FACE RING the ‹ › chevrons cycle when expression
+/// images are off. Entries are face ids: [kPortraitFaceId] for the portrait, or
+/// an `avatar_images` id for a gallery look (or the starred expression).
 ///
-/// - Expressions ON → [LookDisplay.passthrough]: the emotion pipeline owns the
-///   face, no look, no chevrons.
-/// - Expressions OFF → the per-chat [selectedLookId] if it STILL exists → else
-///   the character's `imagePath` (signalled by [hasImagePath]) → else the first
-///   look. A stale/deleted selection falls through instead of blanking the face.
-///
-/// Chevrons show whenever the ring has more than one selectable face — i.e. the
-/// looks plus the library face (`imagePath`) when present. This matches
-/// [flipLook]'s `includeLibraryFace` ring, so a single look alongside a library
-/// portrait is still reachable (you can toggle between the two).
-LookDisplay resolveLookDisplay({
-  required bool expressionEnabled,
+/// Order = the star first (the default a new/unset chat shows), then the
+/// portrait, then the gallery looks — deduped. The [favorite] (the resolved
+/// starred row, or null for portrait/none) can be a look OR an expression: a
+/// starred expression therefore joins the ring at slot 0, so it's BOTH the
+/// default and reachable by chevron. Non-starred expressions never enter the
+/// plain-chat ring (the display stays look-blind except for the one star the
+/// user explicitly chose).
+List<String> buildFaceRing({
   required List<AvatarImage> looks,
   required bool hasImagePath,
-  String? selectedLookId,
+  AvatarImage? favorite,
 }) {
-  if (expressionEnabled) return LookDisplay.passthrough;
+  final ring = <String>[];
+  void add(String id) {
+    if (id.isNotEmpty && !ring.contains(id)) ring.add(id);
+  }
 
-  AvatarImage? selected;
-  if (selectedLookId != null) {
-    for (final l in looks) {
-      if (l.id == selectedLookId) {
-        selected = l;
+  if (favorite != null) {
+    add(favorite.id); // star leads (default face), look or expression
+  } else if (hasImagePath) {
+    add(kPortraitFaceId);
+  }
+  if (hasImagePath) add(kPortraitFaceId);
+  for (final l in looks) {
+    add(l.id);
+  }
+  return ring;
+}
+
+/// The next face id when flipping [ring] from [currentFaceId] by [delta]
+/// (+1 next, -1 previous), wrapping. A current id that isn't in the ring (stale)
+/// steps in from the appropriate end. Null only when the ring is empty.
+String? flipFace(List<String> ring, String? currentFaceId, int delta) {
+  if (ring.isEmpty) return null;
+  final i = ring.indexOf(currentFaceId ?? '');
+  if (i < 0) return delta >= 0 ? ring.first : ring.last;
+  final n = ring.length;
+  return ring[((i + delta) % n + n) % n];
+}
+
+/// What the plain-chat sidebar should show, resolved from the face [ring] + the
+/// per-chat [selectedFaceId]. [allImages] is the character's full avatar list
+/// (looks + expressions) used to resolve a face id to its image.
+class FaceDisplay {
+  /// The image to show, or null → the portrait (`imagePath`).
+  final AvatarImage? image;
+
+  /// 1-based position in the ring (for the "n / N" counter).
+  final int position;
+
+  /// Ring length (the N in "n / N").
+  final int total;
+
+  /// Whether to render the ‹ › chevrons (more than one face in the ring).
+  final bool showChevrons;
+
+  const FaceDisplay({
+    required this.image,
+    required this.position,
+    required this.total,
+    required this.showChevrons,
+  });
+
+  /// Nothing to override (no ring) — caller shows the portrait, no chevrons.
+  static const FaceDisplay empty = FaceDisplay(
+    image: null,
+    position: 0,
+    total: 0,
+    showChevrons: false,
+  );
+}
+
+/// Resolve the plain-chat face. The current face = [selectedFaceId] if it's
+/// still in the ring, else the ring's first entry (the star / portrait / first
+/// look) — a stale/deleted selection falls through instead of blanking the face.
+/// [kPortraitFaceId] (or any id not found in [allImages]) resolves to the
+/// portrait (null image).
+FaceDisplay resolveFaceDisplay({
+  required List<String> ring,
+  required List<AvatarImage> allImages,
+  String? selectedFaceId,
+}) {
+  if (ring.isEmpty) return FaceDisplay.empty;
+  final current = (selectedFaceId != null && ring.contains(selectedFaceId))
+      ? selectedFaceId
+      : ring.first;
+  AvatarImage? image;
+  if (current != kPortraitFaceId) {
+    for (final a in allImages) {
+      if (a.id == current) {
+        image = a;
         break;
       }
     }
   }
-  // No valid selection: prefer the library face (imagePath); only fall to the
-  // first look when there's no imagePath at all.
-  if (selected == null && !hasImagePath && looks.isNotEmpty) {
-    selected = looks.first;
-  }
-
-  final ringSize = looks.length + (hasImagePath ? 1 : 0);
-  return LookDisplay(look: selected, showChevrons: ringSize > 1);
+  return FaceDisplay(
+    image: image,
+    position: ring.indexOf(current) + 1,
+    total: ring.length,
+    showChevrons: ring.length > 1,
+  );
 }
 
 /// Decode the per-chat look selection stored (JSON) in the session's
@@ -140,50 +189,3 @@ Map<String, String> decodeSelectedLooks(String? raw) {
 /// map encodes to `null` so the column clears (never stores a bare `{}`).
 String? encodeSelectedLooks(Map<String, String> selection) =>
     selection.isEmpty ? null : jsonEncode(selection);
-
-/// The look id to select when flipping the chevrons by [delta] (+1 next, -1
-/// previous) from the currently [selectedLookId], wrapping around. Null → the
-/// character's library face (`imagePath`) should show.
-///
-/// With [includeLibraryFace] (set when the character HAS an `imagePath`), the
-/// ring is `[library face, look0, look1, …]` of N+1 slots, so the chevrons can
-/// always cycle back to the canonical portrait (returns null for that slot).
-/// Without it (no library face), the ring is just the N looks and a flip from a
-/// non-look state steps in from the appropriate end.
-String? flipLook(
-  List<AvatarImage> looks,
-  String? selectedLookId,
-  int delta, {
-  bool includeLibraryFace = false,
-}) {
-  if (looks.isEmpty) return null;
-  if (includeLibraryFace) {
-    final n = looks.length + 1; // slot 0 = library face
-    final atLook = looks.indexWhere((l) => l.id == selectedLookId);
-    final current = (selectedLookId == null || atLook < 0) ? 0 : atLook + 1;
-    final next = ((current + delta) % n + n) % n;
-    return next == 0 ? null : looks[next - 1].id;
-  }
-  final n = looks.length;
-  final current = looks.indexWhere((l) => l.id == selectedLookId);
-  if (current < 0) {
-    // No library face and nothing selected → step in from the appropriate end.
-    return delta >= 0 ? looks.first.id : looks.last.id;
-  }
-  final next = ((current + delta) % n + n) % n;
-  return looks[next].id;
-}
-
-/// 1-based position of the currently shown face in the chevron ring, for the
-/// counter. Mirrors [flipLook]: with [includeLibraryFace] the library face is
-/// slot 1 and looks are 2..N+1; otherwise looks are 1..N. A null or stale
-/// selection resolves to the first shown face (slot 1).
-int lookRingPosition(
-  List<AvatarImage> looks,
-  String? selectedLookId, {
-  bool includeLibraryFace = false,
-}) {
-  final i = looks.indexWhere((l) => l.id == selectedLookId);
-  if (selectedLookId == null || i < 0) return 1;
-  return includeLibraryFace ? i + 2 : i + 1;
-}

@@ -84,69 +84,120 @@ void main() {
     });
   });
 
-  group('resolveLookDisplay (plain-chat portrait choice)', () {
+  group('buildFaceRing (plain-chat face ring order)', () {
     final looks = [_look('l1', order: 0), _look('l2', order: 1)];
 
-    test('expressions ON → passthrough, no look, no chevrons', () {
-      final d = resolveLookDisplay(
-        expressionEnabled: true,
+    test('portrait leads, then looks, when no favorite', () {
+      final ring = buildFaceRing(
         looks: looks,
         hasImagePath: true,
-        selectedLookId: 'l1',
+        favorite: null,
       );
-      expect(d, LookDisplay.passthrough);
-      expect(d.look, isNull);
-      expect(d.showChevrons, isFalse);
+      expect(ring, [kPortraitFaceId, 'l1', 'l2']);
     });
 
-    test('expressions OFF + valid selection → that look; chevrons when >1', () {
-      final d = resolveLookDisplay(
-        expressionEnabled: false,
-        looks: looks,
-        hasImagePath: true,
-        selectedLookId: 'l2',
-      );
-      expect(d.look?.id, 'l2');
-      expect(d.showChevrons, isTrue);
-    });
-
-    test('stale selection → falls back to imagePath (null look), not blank', () {
-      final d = resolveLookDisplay(
-        expressionEnabled: false,
-        looks: looks,
-        hasImagePath: true,
-        selectedLookId: 'deleted-id',
-      );
-      expect(d.look, isNull); // caller shows imagePath
-      expect(d.showChevrons, isTrue);
-    });
-
-    test('no selection + no imagePath → first look', () {
-      final d = resolveLookDisplay(
-        expressionEnabled: false,
+    test('no imagePath → just the looks', () {
+      final ring = buildFaceRing(
         looks: looks,
         hasImagePath: false,
+        favorite: null,
       );
-      expect(d.look?.id, 'l1');
+      expect(ring, ['l1', 'l2']);
     });
 
-    test('single look + library face → chevrons (ring of 2: toggle both)', () {
-      final d = resolveLookDisplay(
-        expressionEnabled: false,
+    test('favorite look leads, deduped, portrait next', () {
+      final ring = buildFaceRing(
+        looks: looks,
+        hasImagePath: true,
+        favorite: _look('l2', order: 1),
+      );
+      expect(ring, ['l2', kPortraitFaceId, 'l1']);
+    });
+
+    test('favorite EXPRESSION joins the ring at slot 0 (reachable + default)', () {
+      final ring = buildFaceRing(
+        looks: looks,
+        hasImagePath: true,
+        favorite: _expr('joy1', 'joy'),
+      );
+      expect(ring, ['joy1', kPortraitFaceId, 'l1', 'l2']);
+    });
+
+    test('single look + portrait → ring of 2', () {
+      final ring = buildFaceRing(
         looks: [_look('only')],
         hasImagePath: true,
-        selectedLookId: 'only',
+        favorite: null,
       );
+      expect(ring, [kPortraitFaceId, 'only']);
+    });
+
+    test('single look, no portrait, no favorite → ring of 1', () {
+      final ring = buildFaceRing(
+        looks: [_look('only')],
+        hasImagePath: false,
+        favorite: null,
+      );
+      expect(ring, ['only']);
+    });
+  });
+
+  group('resolveFaceDisplay (plain-chat face resolution)', () {
+    final looks = [_look('l1', order: 0), _look('l2', order: 1)];
+    final ring = buildFaceRing(looks: looks, hasImagePath: true, favorite: null);
+    // ring == [portrait, l1, l2]
+
+    test('valid selection → that image; chevrons when ring > 1', () {
+      final d = resolveFaceDisplay(
+        ring: ring,
+        allImages: looks,
+        selectedFaceId: 'l2',
+      );
+      expect(d.image?.id, 'l2');
+      expect(d.position, 3);
+      expect(d.total, 3);
       expect(d.showChevrons, isTrue);
     });
 
-    test('single look + NO library face → no chevrons (only one face)', () {
-      final d = resolveLookDisplay(
-        expressionEnabled: false,
-        looks: [_look('only')],
-        hasImagePath: false,
-        selectedLookId: 'only',
+    test('portrait sentinel → null image (caller shows imagePath)', () {
+      final d = resolveFaceDisplay(
+        ring: ring,
+        allImages: looks,
+        selectedFaceId: kPortraitFaceId,
       );
+      expect(d.image, isNull);
+      expect(d.position, 1);
+    });
+
+    test('null / stale selection → ring.first (default), not blank', () {
+      final d = resolveFaceDisplay(
+        ring: ring,
+        allImages: looks,
+        selectedFaceId: 'deleted-id',
+      );
+      expect(d.image, isNull); // ring.first is the portrait
+      expect(d.position, 1);
+    });
+
+    test('resolves a starred EXPRESSION face too', () {
+      final joy = _expr('joy1', 'joy');
+      final exprRing = buildFaceRing(
+        looks: looks,
+        hasImagePath: true,
+        favorite: joy,
+      );
+      final d = resolveFaceDisplay(
+        ring: exprRing,
+        allImages: [joy, ...looks],
+        selectedFaceId: null, // default → the star (slot 0)
+      );
+      expect(d.image?.id, 'joy1');
+      expect(d.position, 1);
+    });
+
+    test('empty ring → empty display', () {
+      final d = resolveFaceDisplay(ring: const [], allImages: looks);
+      expect(d, FaceDisplay.empty);
       expect(d.showChevrons, isFalse);
     });
   });
@@ -185,65 +236,28 @@ void main() {
     });
   });
 
-  group('flipLook (chevron navigation)', () {
-    final looks = [_look('a'), _look('b'), _look('c')];
+  group('flipFace (chevron navigation over the face ring)', () {
+    final ring = [kPortraitFaceId, 'a', 'b', 'c'];
 
-    test('next / prev / wrap (looks-only ring)', () {
-      expect(flipLook(looks, 'a', 1), 'b');
-      expect(flipLook(looks, 'c', 1), 'a'); // wrap forward
-      expect(flipLook(looks, 'a', -1), 'c'); // wrap backward
+    test('next / prev / wrap', () {
+      expect(flipFace(ring, kPortraitFaceId, 1), 'a');
+      expect(flipFace(ring, 'a', 1), 'b');
+      expect(flipFace(ring, 'c', 1), kPortraitFaceId); // wrap forward
+      expect(flipFace(ring, kPortraitFaceId, -1), 'c'); // wrap backward
     });
 
-    test('current isn\'t a look (imagePath showing) → step in from the end', () {
-      expect(flipLook(looks, null, 1), 'a'); // forward → first
-      expect(flipLook(looks, null, -1), 'c'); // backward → last
+    test('can always cycle back to the portrait sentinel', () {
+      expect(flipFace(ring, 'a', -1), kPortraitFaceId);
     });
 
-    test('no looks → null', () {
-      expect(flipLook(const [], 'x', 1), isNull);
+    test('stale current id → steps in from the appropriate end', () {
+      expect(flipFace(ring, 'deleted', 1), kPortraitFaceId); // forward → first
+      expect(flipFace(ring, 'deleted', -1), 'c'); // backward → last
+      expect(flipFace(ring, null, 1), kPortraitFaceId);
     });
 
-    test('includeLibraryFace: ring is [library, a, b, c] and cycles back to '
-        'the library face (null)', () {
-      // From the library face (null): forward → first look, backward → last.
-      expect(flipLook(looks, null, 1, includeLibraryFace: true), 'a');
-      expect(flipLook(looks, null, -1, includeLibraryFace: true), 'c');
-      // From the first look, backward returns to the library face.
-      expect(flipLook(looks, 'a', -1, includeLibraryFace: true), isNull);
-      // From the last look, forward wraps to the library face.
-      expect(flipLook(looks, 'c', 1, includeLibraryFace: true), isNull);
-      // Interior steps stay on looks.
-      expect(flipLook(looks, 'a', 1, includeLibraryFace: true), 'b');
-    });
-
-    test('includeLibraryFace + stale selection → treated as library slot; '
-        'forward lands on the first look', () {
-      expect(flipLook(looks, 'deleted', 1, includeLibraryFace: true), 'a');
-      expect(flipLook(looks, 'deleted', -1, includeLibraryFace: true), 'c');
-    });
-
-    test('includeLibraryFace + no looks → null (nothing to flip to)', () {
-      expect(flipLook(const [], null, 1, includeLibraryFace: true), isNull);
-    });
-  });
-
-  group('lookRingPosition (counter)', () {
-    final looks = [_look('a'), _look('b'), _look('c')];
-
-    test('looks-only ring: 1-based on the selected look', () {
-      expect(lookRingPosition(looks, 'a'), 1);
-      expect(lookRingPosition(looks, 'c'), 3);
-    });
-
-    test('with library face: library is slot 1, looks are 2..N+1', () {
-      expect(lookRingPosition(looks, null, includeLibraryFace: true), 1);
-      expect(lookRingPosition(looks, 'a', includeLibraryFace: true), 2);
-      expect(lookRingPosition(looks, 'c', includeLibraryFace: true), 4);
-    });
-
-    test('null / stale selection resolves to slot 1', () {
-      expect(lookRingPosition(looks, null), 1);
-      expect(lookRingPosition(looks, 'deleted', includeLibraryFace: true), 1);
+    test('empty ring → null', () {
+      expect(flipFace(const [], 'x', 1), isNull);
     });
   });
 }

@@ -18,50 +18,39 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/avatar_image.dart';
-import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// Overlay controls for the avatar GALLERY ("looks"): ‹ › chevrons pinned
-/// bottom-left and a small "n / N" counter centered along the bottom, drawn on
-/// top of the sidebar portrait. Shown only in plain chat (expressions off) when
-/// there's more than one selectable face.
+/// Overlay controls for the avatar gallery: ‹ › chevrons pinned bottom-left and
+/// a small "n / N" counter centered along the bottom, drawn on top of the
+/// sidebar portrait. Shown only in plain chat (expressions off) when there's
+/// more than one face in the ring.
 ///
 /// Placed as the child of a `Positioned.fill` inside the portrait `Stack`.
-/// Pure presentation: it never resolves storage — the parent owns the look list
-/// and the flip callback (which flows through ChatService so the portrait
-/// repaints). Scrim styling mirrors the existing emotion-badge overlay.
+/// Pure presentation: the parent resolves the face ring (via `resolveFaceDisplay`)
+/// and passes the 1-based [position] + [total]; the [onFlip] callback flows
+/// through ChatService so the portrait repaints. Scrim styling mirrors the
+/// existing emotion-badge overlay.
 class LookChevronBar extends StatelessWidget {
   const LookChevronBar({
     super.key,
-    required this.looks,
-    required this.selectedLookId,
-    required this.hasLibraryFace,
+    required this.position,
+    required this.total,
     required this.onFlip,
   });
 
-  /// The character's gallery looks (already filtered + ordered).
-  final List<AvatarImage> looks;
+  /// 1-based position of the current face in the ring (the "n" in "n / N").
+  final int position;
 
-  /// The per-chat selected look id, or null when the library face shows.
-  final String? selectedLookId;
-
-  /// Whether the character has a library face (`imagePath`) — when true it joins
-  /// the ring as slot 1 so the chevrons can cycle back to the canonical portrait.
-  final bool hasLibraryFace;
+  /// Ring length (the "N" in "n / N").
+  final int total;
 
   /// Flip by delta (-1 previous, +1 next). The parent maps this through
-  /// [flipLook] + persists the new selection.
+  /// [flipFace] + persists the new selection.
   final ValueChanged<int> onFlip;
 
   @override
   Widget build(BuildContext context) {
-    final total = looks.length + (hasLibraryFace ? 1 : 0);
-    final pos = lookRingPosition(
-      looks,
-      selectedLookId,
-      includeLibraryFace: hasLibraryFace,
-    );
+    final pos = position;
     // The pills sit on the portrait, so use a dark scrim + always-light
     // foreground in both themes (via resolve, per the theming rule) — same
     // treatment as the emotion-badge overlay next to it.

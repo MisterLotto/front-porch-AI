@@ -2714,14 +2714,15 @@ class _ChatPageState extends State<ChatPage> {
               File? displayFile;
               Widget? fallbackWidget;
 
-              // Gallery "looks" (plain chat only) — populated in the
+              // Gallery face ring (plain chat only) — populated in the
               // expressions-OFF branch below, consumed by the chevron overlay.
-              // lookKey is the LIBRARY character id (looks are global per library
-              // character): in a group the focused member card has a null dbId,
-              // so we resolve the origin library card — same routing the
+              // lookKey is the LIBRARY character id (the collection is global per
+              // library character): in a group the focused member card has a null
+              // dbId, so we resolve the origin library card — same routing the
               // Expression Images editor uses — and never key by an empty string.
-              List<AvatarImage> galleryLooks = const [];
-              String? selectedLookId;
+              List<String> faceRing = const [];
+              int facePosition = 0;
+              int faceTotal = 0;
               String? lookKey;
               bool showLookChevrons = false;
 
@@ -2783,31 +2784,48 @@ class _ChatPageState extends State<ChatPage> {
                   }
                 }
               } else {
-                // Expressions disabled — the plain-chat face. Gallery "looks"
-                // (global per LIBRARY character, chosen PER CHAT) override the
-                // library face here; the chevrons flip between them + the
-                // library face. Resolve the library card so group members (null
-                // dbId) still key by their origin, and their looks come from the
-                // library collection.
+                // Expressions disabled — the plain-chat face. The gallery face
+                // ring (portrait + looks + the ★-starred expression, if any)
+                // drives what shows here; the chevrons flip through it, and the
+                // ★ star is the default. Resolve the library card so group
+                // members (null dbId) still key by their origin and pull the
+                // global collection.
                 final libraryCard = isGroup
                     ? (chat.originLibraryCardFor(character) ?? character)
                     : character;
                 lookKey = libraryCard.dbId;
                 if (lookKey != null && lookKey.isNotEmpty) {
-                  galleryLooks = looksFrom(libraryCard.avatarImages);
-                  selectedLookId = chat.selectedLookFor(lookKey);
-                  final lookDisplay = resolveLookDisplay(
-                    expressionEnabled: false,
-                    looks: galleryLooks,
+                  final allImages =
+                      libraryCard.avatarImages ?? const <AvatarImage>[];
+                  final favId =
+                      libraryCard.frontPorchExtensions?.favoriteAvatarId;
+                  AvatarImage? favorite;
+                  if (favId != null) {
+                    for (final a in allImages) {
+                      if (a.id == favId) {
+                        favorite = a;
+                        break;
+                      }
+                    }
+                  }
+                  faceRing = buildFaceRing(
+                    looks: looksFrom(allImages),
                     hasImagePath: character.imagePath != null,
-                    selectedLookId: selectedLookId,
+                    favorite: favorite,
                   );
-                  showLookChevrons = lookDisplay.showChevrons;
-                  if (lookDisplay.look != null) {
-                    displayFile = lookDisplay.look!.resolveFile(
+                  final faceDisplay = resolveFaceDisplay(
+                    ring: faceRing,
+                    allImages: allImages,
+                    selectedFaceId: chat.selectedLookFor(lookKey),
+                  );
+                  showLookChevrons = faceDisplay.showChevrons;
+                  facePosition = faceDisplay.position;
+                  faceTotal = faceDisplay.total;
+                  if (faceDisplay.image != null) {
+                    displayFile = faceDisplay.image!.resolveFile(
                       storage.characterBaseDir(libraryCard.name).path,
                     );
-                    expressionKey = 'look_${lookDisplay.look!.id}';
+                    expressionKey = 'face_${faceDisplay.image!.id}';
                   } else if (character.imagePath != null) {
                     displayFile = _resolveCharImage(character.imagePath!);
                   }
@@ -2889,23 +2907,22 @@ class _ChatPageState extends State<ChatPage> {
                           ),
                         ),
                       ),
-                    // Gallery look chevrons + counter (plain chat, >1 face).
+                    // Gallery face chevrons + counter (plain chat, >1 face).
                     if (showLookChevrons && lookKey != null)
                       Positioned.fill(
                         child: LookChevronBar(
-                          looks: galleryLooks,
-                          selectedLookId: selectedLookId,
-                          hasLibraryFace: character.imagePath != null,
-                          // Read the current selection LIVE at tap time (not the
+                          position: facePosition,
+                          total: faceTotal,
+                          // Read the current selection LIVE at tap time (not a
                           // captured value) so rapid taps advance step-by-step
                           // instead of all computing from one stale selection.
                           onFlip: (delta) => chat.setLookForCharacter(
                             lookKey!,
-                            flipLook(
-                              galleryLooks,
-                              chat.selectedLookFor(lookKey),
+                            flipFace(
+                              faceRing,
+                              chat.selectedLookFor(lookKey) ??
+                                  (faceRing.isEmpty ? null : faceRing.first),
                               delta,
-                              includeLibraryFace: character.imagePath != null,
                             ),
                           ),
                         ),
