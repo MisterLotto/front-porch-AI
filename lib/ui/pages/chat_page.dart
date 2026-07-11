@@ -1706,6 +1706,7 @@ class _ChatPageState extends State<ChatPage> {
         characterDescription: character?.description,
         characterPersonality: character?.personality,
         characterDbId: character?.dbId,
+        characterImagePath: character?.imagePath,
         // Group cast for the Subject picker: per-member portrait + a caveated
         // whole-cast "group shot". Empty for 1:1 chats. dbId resolves to the
         // member's LIBRARY origin (same routing as the Expression Images menu)

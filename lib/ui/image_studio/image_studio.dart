@@ -78,6 +78,10 @@ class ImageStudio extends StatefulWidget {
   /// Library id of the 1:1 character — the Expression-pack import target.
   final String? characterDbId;
 
+  /// The 1:1 character's current portrait path — pre-loaded as the Edit tab's
+  /// source so "change this portrait" starts from the existing avatar.
+  final String? characterImagePath;
+
   /// Fires after a pack import so the launcher refreshes the live card.
   final void Function(String characterDbId)? onExpressionsImported;
 
@@ -104,6 +108,7 @@ class ImageStudio extends StatefulWidget {
     this.isGroupNonObserver = false,
     this.currentSpeakerId,
     this.characterDbId,
+    this.characterImagePath,
     this.onExpressionsImported,
   });
 
@@ -628,6 +633,9 @@ class _ImageStudioState extends State<ImageStudio> {
             ? (bytes) => _saveToGallery(bytes)
             : null,
         acceptLabel: getAcceptLabel(_activeMode),
+        // Pre-load the current portrait as the edit source (the user can still
+        // swap in an unrelated photo via "Add photo").
+        initialSourcePath: widget.characterImagePath,
       ),
     );
   }

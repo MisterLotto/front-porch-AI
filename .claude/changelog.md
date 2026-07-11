@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-11 — fix(images): the Edit tab pre-loads the current portrait (reported: "can't edit the existing avatar")
+- **Report:** the Image Studio "Edit" tab says "change this portrait", but the Reference photo slot was empty ("Add photo") — the user had to manually upload the character's current avatar before they could edit it. That defeats the point of an Edit-*this*-portrait tab.
+- **Fix:** the Edit view now pre-loads the character's current portrait as the source, so it opens ready to "change this portrait". `EditView.initialSourcePath` (fed from `ImageStudio.characterImagePath` ← `chat_page` `character?.imagePath`) is read in `initState` and seeded into `_sourceBytes` (via `StorageService.resolveCharacterImage`, which handles absolute + relative paths).
+- **Still swappable (maintainer follow-up):** it's a DEFAULT, not a lock — the existing source well already supports tapping the preview to pick an *unrelated* photo and the ✕ to clear back to "Add photo", both untouched. The seed only fills the slot when it's empty (guards against clobbering a photo the user picked during the async load).
+- **Verification:** full `flutter analyze` clean; image-studio tests green; Grok-sanity-checked.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Phase 14: looks in backup / export — verified consistent (no code change)
 - **Finding:** gallery looks are already handled identically to expression avatars and portraits across backup + export, so there's no looks-specific gap to close:
   - **Backup** (`backup_service.dart`) is **DB-only** (copies the SQLite file) — it captures the `avatar_images` rows, INCLUDING the `__look__` rows, exactly like expression-avatar rows. No image *files* are in the backup for any image type; they persist on disk. A restore reverts the rows and the on-disk look files are untouched, so looks survive a restore.

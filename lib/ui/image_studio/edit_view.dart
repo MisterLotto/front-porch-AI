@@ -51,12 +51,18 @@ class EditView extends StatefulWidget {
   /// Label for the Accept action (e.g. "Set as portrait").
   final String acceptLabel;
 
+  /// The character's current portrait path — pre-loaded as the source to edit so
+  /// "Edit → change this portrait" starts from the existing avatar instead of an
+  /// empty "Add photo". Null (persona / group shot) → the user picks a photo.
+  final String? initialSourcePath;
+
   const EditView({
     super.key,
     this.onSendToChat,
     this.onAcceptBytes,
     this.onSaveToGalleryBytes,
     this.acceptLabel = 'Use image',
+    this.initialSourcePath,
   });
 
   @override
@@ -72,9 +78,34 @@ class _EditViewState extends State<EditView> {
   String _error = '';
 
   @override
+  void initState() {
+    super.initState();
+    _seedInitialSource();
+  }
+
+  @override
   void dispose() {
     _instructionCtrl.dispose();
     super.dispose();
+  }
+
+  /// Pre-load the character's current portrait as the source to edit, so the
+  /// Edit tab opens ready to "change this portrait" rather than empty.
+  Future<void> _seedInitialSource() async {
+    final path = widget.initialSourcePath;
+    if (path == null || path.isEmpty) return;
+    try {
+      final storage = Provider.of<StorageService>(context, listen: false);
+      final file = storage.resolveCharacterImage(path);
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        if (mounted && _sourceBytes == null) {
+          setState(() => _sourceBytes = bytes);
+        }
+      }
+    } catch (_) {
+      // Missing/unreadable portrait → the user can still add a photo manually.
+    }
   }
 
   Future<void> _pickSource() async {
