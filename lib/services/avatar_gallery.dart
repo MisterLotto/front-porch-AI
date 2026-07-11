@@ -79,8 +79,10 @@ class LookDisplay {
 ///   the character's `imagePath` (signalled by [hasImagePath]) → else the first
 ///   look. A stale/deleted selection falls through instead of blanking the face.
 ///
-/// Chevrons show whenever there's more than one look in plain chat, regardless
-/// of which source is currently displayed.
+/// Chevrons show whenever the ring has more than one selectable face — i.e. the
+/// looks plus the library face (`imagePath`) when present. This matches
+/// [flipLook]'s `includeLibraryFace` ring, so a single look alongside a library
+/// portrait is still reachable (you can toggle between the two).
 LookDisplay resolveLookDisplay({
   required bool expressionEnabled,
   required List<AvatarImage> looks,
@@ -104,7 +106,8 @@ LookDisplay resolveLookDisplay({
     selected = looks.first;
   }
 
-  return LookDisplay(look: selected, showChevrons: looks.length > 1);
+  final ringSize = looks.length + (hasImagePath ? 1 : 0);
+  return LookDisplay(look: selected, showChevrons: ringSize > 1);
 }
 
 /// Decode the per-chat look selection stored (JSON) in the session's
@@ -139,18 +142,48 @@ String? encodeSelectedLooks(Map<String, String> selection) =>
     selection.isEmpty ? null : jsonEncode(selection);
 
 /// The look id to select when flipping the chevrons by [delta] (+1 next, -1
-/// previous) from the currently [selectedLookId], wrapping around. When the
-/// current selection isn't a look (the `imagePath` is showing), a forward flip
-/// lands on the first look and a backward flip on the last. Null when there are
-/// no looks.
-String? flipLook(List<AvatarImage> looks, String? selectedLookId, int delta) {
+/// previous) from the currently [selectedLookId], wrapping around. Null → the
+/// character's library face (`imagePath`) should show.
+///
+/// With [includeLibraryFace] (set when the character HAS an `imagePath`), the
+/// ring is `[library face, look0, look1, …]` of N+1 slots, so the chevrons can
+/// always cycle back to the canonical portrait (returns null for that slot).
+/// Without it (no library face), the ring is just the N looks and a flip from a
+/// non-look state steps in from the appropriate end.
+String? flipLook(
+  List<AvatarImage> looks,
+  String? selectedLookId,
+  int delta, {
+  bool includeLibraryFace = false,
+}) {
   if (looks.isEmpty) return null;
+  if (includeLibraryFace) {
+    final n = looks.length + 1; // slot 0 = library face
+    final atLook = looks.indexWhere((l) => l.id == selectedLookId);
+    final current = (selectedLookId == null || atLook < 0) ? 0 : atLook + 1;
+    final next = ((current + delta) % n + n) % n;
+    return next == 0 ? null : looks[next - 1].id;
+  }
   final n = looks.length;
   final current = looks.indexWhere((l) => l.id == selectedLookId);
   if (current < 0) {
-    // imagePath is showing → step in from the appropriate end.
+    // No library face and nothing selected → step in from the appropriate end.
     return delta >= 0 ? looks.first.id : looks.last.id;
   }
   final next = ((current + delta) % n + n) % n;
   return looks[next].id;
+}
+
+/// 1-based position of the currently shown face in the chevron ring, for the
+/// counter. Mirrors [flipLook]: with [includeLibraryFace] the library face is
+/// slot 1 and looks are 2..N+1; otherwise looks are 1..N. A null or stale
+/// selection resolves to the first shown face (slot 1).
+int lookRingPosition(
+  List<AvatarImage> looks,
+  String? selectedLookId, {
+  bool includeLibraryFace = false,
+}) {
+  final i = looks.indexWhere((l) => l.id == selectedLookId);
+  if (selectedLookId == null || i < 0) return 1;
+  return includeLibraryFace ? i + 2 : i + 1;
 }

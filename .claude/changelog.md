@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Stage 3: sidebar look chevrons + look-blind expression pipeline
+- **Why:** the visible half — flip the sidebar portrait between a character's gallery "looks" (and the canonical library face) with ‹ › chevrons + an "n / N" counter, plain chat only. Reworked after an adversarial Grok review that caught two P0s I'd have shipped.
+- **Sidebar (chat_page.dart `_buildRightSidebar`):** in the expressions-OFF branch, `resolveLookDisplay` overrides the face with the per-chat selected look; `LookChevronBar` (new `lib/ui/chat_components/widgets/look_chevrons.dart`) draws the chevrons bottom-left + counter bottom-center over the portrait. Selection flows through `ChatService.setLookForCharacter` → `notifyListeners`, so the existing `Consumer<ChatService>` repaints (StorageService is `listen:false` there).
+- **Group-safe selection key (Grok P0):** group member cards carry a null `dbId`, so keying by `character.dbId ?? ''` would have collapsed the whole cast onto one poisoned `''` slot (and the codec drops empty keys, so it wouldn't even round-trip). Now the key is the LIBRARY character id via `originLibraryCardFor` (the same routing Expression Images uses), and looks are read from the library collection; blank keys are refused in `setLookForCharacter`. 1:1 and group both correct.
+- **Look-blind expression pipeline (Grok must-fix):** looks are `avatar_images` rows, so they could be picked/counted as emotion faces. `ExpressionService.resolveExpressionAvatar` now filters `expressionsFrom()` at the top (one place → covers sidebar + full-screen sprite + web facade); chat_page's `hasAvatars`, the prime/neutral fallbacks, and the background-sprite gate use the expression-only list too.
+- **Chevron ring correctness (Grok P1):** `flipLook` gained `includeLibraryFace` (ring = `[library face, look0…]`, so the chevrons can always cycle back to the canonical portrait) + `lookRingPosition` for the counter; `resolveLookDisplay.showChevrons` now keys off RING size (`looks + libraryFace`), so a single look beside a library portrait is still reachable (toggle the two). Live-reads the current selection at tap time so rapid taps advance step-by-step instead of all computing from one stale value.
+- **Storage:** added `StorageService/Directories.characterBaseDir` (single-sources the safe-name rule `characterAvatarDir` had duplicated) so `AvatarImage.resolveFile` can resolve `looks/` files.
+- **Deferred (tracked, no leak window — looks can't be created until Stage 4):** the Expression Images dialog still loads raw `avatarImages`; it must filter `expressionsFrom` (with a looks-preserving save-back) before look creation ships — first task of the wardrobe stage. Web parity pending an explicit call with the maintainer.
+- **Tests:** +8 (single-look±library-face chevrons, includeLibraryFace ring + stale + empty, lookRingPosition) — 25/25 in the gallery suite.
+- **Verification:** full `flutter analyze` clean.
+- **Commit:** (this commit)
+
 ## 2026-07-11 — Avatar Gallery, Stage 2a: per-chat look selection plumbing (group-parity codec + removeAvatar fix)
 - **Why:** wiring the per-chat "which look is showing" state before the UI. Grok pairing surfaced a real fork (single-id column = 1:1-only, a group gap) and one latent bug.
 - **Group parity by construction (the fork, resolved to "B"):** the shipped `sessions.selected_look_avatar_id` column now holds a JSON **map** `{characterId: lookAvatarId}` instead of one id — so a group chat remembers a distinct look per participant while 1:1 is just a one-entry map. One code path, group first-class from day one, **no new schema** (the column is opaque nullable TEXT; mirrors the existing `group_realism_state` house style). The pure resolver already takes the selected id as an input, so it's unchanged.
@@ -11,7 +23,7 @@
   - `chat_service_chat_entry.dart` / `chat_service_group_entry.dart` / `chat_service_session_manage.dart` (fork + startNew) — clear `_selectedLooks` on every fresh-start/new-session site (kept in sync with the `_summaryLastIndex` reset discipline) so a prior chat's selection can't bleed.
 - **Tests:** +5 codec cases (group round-trip, 1:1 one-entry, empty→null, garbage/non-map→empty, malformed-entry drop) — 18/18 in the gallery suite.
 - **Verification:** full `flutter analyze` clean.
-- **Commit:** (this commit)
+- **Commit:** b1c5561
 
 ## 2026-07-11 — fix(vision): let users attach an mmproj to ANY local model (reported by Wally on GitHub)
 

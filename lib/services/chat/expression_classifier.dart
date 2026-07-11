@@ -26,6 +26,7 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/expression_classifier.dart';
@@ -259,8 +260,10 @@ class ExpressionService {
     CharacterCard character, {
     bool rerollIfSame = false,
   }) {
-    final avatars = character.avatarImages;
-    if (avatars == null || avatars.isEmpty) {
+    // Gallery "looks" are stored as avatar rows too — filter them out so a look
+    // can never be chosen (or counted) as an emotion face.
+    final avatars = expressionsFrom(character.avatarImages);
+    if (avatars.isEmpty) {
       return null;
     }
 

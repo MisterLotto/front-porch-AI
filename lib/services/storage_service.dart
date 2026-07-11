@@ -90,6 +90,11 @@ class StorageService extends ChangeNotifier {
   Directory characterAvatarDir(String characterName) =>
       directories.characterAvatarDir(characterName);
 
+  /// The character's private base folder (`avatars/` + `looks/` live under it).
+  /// Used to resolve gallery-look files via [AvatarImage.resolveFile].
+  Directory characterBaseDir(String characterName) =>
+      directories.characterBaseDir(characterName);
+
   Directory get customBackgroundDir => directories.customBackgroundDir;
 
   /// Cache directory for downscaled web-UI avatar thumbnails (derived data).

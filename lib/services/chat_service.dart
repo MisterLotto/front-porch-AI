@@ -2659,7 +2659,9 @@ class ChatService extends ChangeNotifier {
   /// face is independent of which look shows in a given chat.
   Future<void> setLookForCharacter(String characterId, String? lookId) async {
     final sid = _currentSessionId;
-    if (sid == null) return;
+    if (sid == null || characterId.isEmpty) return; // never key by a blank id
+    // decodeSelectedLooks also drops empty keys, so a blank would silently fail
+    // to round-trip; refuse it here so the caller notices instead.
     if (lookId == null) {
       _selectedLooks.remove(characterId);
     } else {

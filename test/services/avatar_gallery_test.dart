@@ -130,11 +130,21 @@ void main() {
       expect(d.look?.id, 'l1');
     });
 
-    test('single look → no chevrons', () {
+    test('single look + library face → chevrons (ring of 2: toggle both)', () {
       final d = resolveLookDisplay(
         expressionEnabled: false,
         looks: [_look('only')],
         hasImagePath: true,
+        selectedLookId: 'only',
+      );
+      expect(d.showChevrons, isTrue);
+    });
+
+    test('single look + NO library face → no chevrons (only one face)', () {
+      final d = resolveLookDisplay(
+        expressionEnabled: false,
+        looks: [_look('only')],
+        hasImagePath: false,
         selectedLookId: 'only',
       );
       expect(d.showChevrons, isFalse);
@@ -178,7 +188,7 @@ void main() {
   group('flipLook (chevron navigation)', () {
     final looks = [_look('a'), _look('b'), _look('c')];
 
-    test('next / prev / wrap', () {
+    test('next / prev / wrap (looks-only ring)', () {
       expect(flipLook(looks, 'a', 1), 'b');
       expect(flipLook(looks, 'c', 1), 'a'); // wrap forward
       expect(flipLook(looks, 'a', -1), 'c'); // wrap backward
@@ -191,6 +201,49 @@ void main() {
 
     test('no looks → null', () {
       expect(flipLook(const [], 'x', 1), isNull);
+    });
+
+    test('includeLibraryFace: ring is [library, a, b, c] and cycles back to '
+        'the library face (null)', () {
+      // From the library face (null): forward → first look, backward → last.
+      expect(flipLook(looks, null, 1, includeLibraryFace: true), 'a');
+      expect(flipLook(looks, null, -1, includeLibraryFace: true), 'c');
+      // From the first look, backward returns to the library face.
+      expect(flipLook(looks, 'a', -1, includeLibraryFace: true), isNull);
+      // From the last look, forward wraps to the library face.
+      expect(flipLook(looks, 'c', 1, includeLibraryFace: true), isNull);
+      // Interior steps stay on looks.
+      expect(flipLook(looks, 'a', 1, includeLibraryFace: true), 'b');
+    });
+
+    test('includeLibraryFace + stale selection → treated as library slot; '
+        'forward lands on the first look', () {
+      expect(flipLook(looks, 'deleted', 1, includeLibraryFace: true), 'a');
+      expect(flipLook(looks, 'deleted', -1, includeLibraryFace: true), 'c');
+    });
+
+    test('includeLibraryFace + no looks → null (nothing to flip to)', () {
+      expect(flipLook(const [], null, 1, includeLibraryFace: true), isNull);
+    });
+  });
+
+  group('lookRingPosition (counter)', () {
+    final looks = [_look('a'), _look('b'), _look('c')];
+
+    test('looks-only ring: 1-based on the selected look', () {
+      expect(lookRingPosition(looks, 'a'), 1);
+      expect(lookRingPosition(looks, 'c'), 3);
+    });
+
+    test('with library face: library is slot 1, looks are 2..N+1', () {
+      expect(lookRingPosition(looks, null, includeLibraryFace: true), 1);
+      expect(lookRingPosition(looks, 'a', includeLibraryFace: true), 2);
+      expect(lookRingPosition(looks, 'c', includeLibraryFace: true), 4);
+    });
+
+    test('null / stale selection resolves to slot 1', () {
+      expect(lookRingPosition(looks, null), 1);
+      expect(lookRingPosition(looks, 'deleted', includeLibraryFace: true), 1);
     });
   });
 }

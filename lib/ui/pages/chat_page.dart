@@ -44,6 +44,7 @@ import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
+import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
@@ -612,8 +613,9 @@ class _ChatPageState extends State<ChatPage> {
                                       }
                                       final char = character;
                                       if (char == null ||
-                                          char.avatarImages == null ||
-                                          char.avatarImages!.isEmpty) {
+                                          expressionsFrom(
+                                            char.avatarImages,
+                                          ).isEmpty) {
                                         return const SizedBox.shrink();
                                       }
                                       final avatar = chat
@@ -2681,9 +2683,11 @@ class _ChatPageState extends State<ChatPage> {
                 listen: false,
               );
               final isExpressionEnabled = storage.expressionEnabled;
-              final hasAvatars =
-                  character.avatarImages != null &&
-                  character.avatarImages!.isNotEmpty;
+              // Expression-only (looks filtered out) so a looks-only character
+              // never trips the expression path, and prime/neutral fallbacks
+              // never resolve to a gallery look.
+              final expressionAvatars = expressionsFrom(character.avatarImages);
+              final hasAvatars = expressionAvatars.isNotEmpty;
 
               File? expressionFile;
               String? expressionKey;
@@ -2710,6 +2714,17 @@ class _ChatPageState extends State<ChatPage> {
               File? displayFile;
               Widget? fallbackWidget;
 
+              // Gallery "looks" (plain chat only) — populated in the
+              // expressions-OFF branch below, consumed by the chevron overlay.
+              // lookKey is the LIBRARY character id (looks are global per library
+              // character): in a group the focused member card has a null dbId,
+              // so we resolve the origin library card — same routing the
+              // Expression Images editor uses — and never key by an empty string.
+              List<AvatarImage> galleryLooks = const [];
+              String? selectedLookId;
+              String? lookKey;
+              bool showLookChevrons = false;
+
               if (expressionFile != null) {
                 displayFile = expressionFile;
               } else if (isExpressionEnabled) {
@@ -2727,17 +2742,17 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   );
                 } else if (fallback == 'prime' && hasAvatars) {
-                  // Show prime avatar
+                  // Show prime avatar (expression-only — never a gallery look).
                   final primeAvatar =
-                      character.avatarImages!
+                      expressionAvatars
                           .where(
                             (a) =>
                                 a.displayOrder + 1 ==
                                 character.primeAvatarIndex,
                           )
                           .isEmpty
-                      ? character.avatarImages!.first
-                      : character.avatarImages!.firstWhere(
+                      ? expressionAvatars.first
+                      : expressionAvatars.firstWhere(
                           (a) =>
                               a.displayOrder + 1 == character.primeAvatarIndex,
                         );
@@ -2749,7 +2764,7 @@ class _ChatPageState extends State<ChatPage> {
                 } else {
                   // 'neutral' or default: show neutral avatar if available, else character image
                   if (hasAvatars) {
-                    final neutralAvatar = character.avatarImages!
+                    final neutralAvatar = expressionAvatars
                         .where((a) => a.label?.toLowerCase() == 'neutral')
                         .toList();
                     if (neutralAvatar.isNotEmpty) {
@@ -2768,8 +2783,35 @@ class _ChatPageState extends State<ChatPage> {
                   }
                 }
               } else {
-                // Expressions disabled, show character image
-                if (character.imagePath != null) {
+                // Expressions disabled — the plain-chat face. Gallery "looks"
+                // (global per LIBRARY character, chosen PER CHAT) override the
+                // library face here; the chevrons flip between them + the
+                // library face. Resolve the library card so group members (null
+                // dbId) still key by their origin, and their looks come from the
+                // library collection.
+                final libraryCard = isGroup
+                    ? (chat.originLibraryCardFor(character) ?? character)
+                    : character;
+                lookKey = libraryCard.dbId;
+                if (lookKey != null && lookKey.isNotEmpty) {
+                  galleryLooks = looksFrom(libraryCard.avatarImages);
+                  selectedLookId = chat.selectedLookFor(lookKey);
+                  final lookDisplay = resolveLookDisplay(
+                    expressionEnabled: false,
+                    looks: galleryLooks,
+                    hasImagePath: character.imagePath != null,
+                    selectedLookId: selectedLookId,
+                  );
+                  showLookChevrons = lookDisplay.showChevrons;
+                  if (lookDisplay.look != null) {
+                    displayFile = lookDisplay.look!.resolveFile(
+                      storage.characterBaseDir(libraryCard.name).path,
+                    );
+                    expressionKey = 'look_${lookDisplay.look!.id}';
+                  } else if (character.imagePath != null) {
+                    displayFile = _resolveCharImage(character.imagePath!);
+                  }
+                } else if (character.imagePath != null) {
                   displayFile = _resolveCharImage(character.imagePath!);
                 }
               }
@@ -2843,6 +2885,27 @@ class _ChatPageState extends State<ChatPage> {
                                   style: const TextStyle(fontSize: 12),
                                 ),
                               ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    // Gallery look chevrons + counter (plain chat, >1 face).
+                    if (showLookChevrons && lookKey != null)
+                      Positioned.fill(
+                        child: LookChevronBar(
+                          looks: galleryLooks,
+                          selectedLookId: selectedLookId,
+                          hasLibraryFace: character.imagePath != null,
+                          // Read the current selection LIVE at tap time (not the
+                          // captured value) so rapid taps advance step-by-step
+                          // instead of all computing from one stale selection.
+                          onFlip: (delta) => chat.setLookForCharacter(
+                            lookKey!,
+                            flipLook(
+                              galleryLooks,
+                              chat.selectedLookFor(lookKey),
+                              delta,
+                              includeLibraryFace: character.imagePath != null,
                             ),
                           ),
                         ),
