@@ -13,7 +13,7 @@
 - **Tests:** rewrote edit_profile tests — lock the 6 consts, prove a fresh `ImageGenSettings` seeds from the recipe, and prove **setting an edit knob never writes the txt2img twin (and vice versa)** — the concrete "no clobber" regression lock.
 - **Files:** `edit_profile.dart`, `storage/settings/image_gen_settings.dart`, `storage_service.dart`, `image_gen_service.dart`, `image_studio/generation_options_tab.dart`, `image_studio/settings_panel.dart`, `image_studio/edit_view.dart`, `test/services/image/edit_profile_test.dart`.
 - **Verification:** full `flutter analyze` clean; image suites (26) + edit_profile (4) green; `flutter build macos` ✓.
-- **Commit:** (pending)
+- **Commit:** 3245ad0
 
 ## 2026-07-11 — fix(images): DT edit — YOUR step count is honored + the auto-LoRA is gone (actually fixing, not reverting)
 - **Reported (and I'd mishandled it):** the maintainer uses their own NSFW LoRA, wants control over the edit's step count, and the edit was failing. I'd gotten tunnel-visioned on the "lightning LoRA" (a maintainer-config concept the recipe auto-detected) and had reverted instead of fixing. Corrected here, grounded in the live logs (UNIPC + moderate guidance worked; the user's DDIM + CFG 6.6 → "produced no images"; 30 steps with no speed LoRA → 5-min timeout).
