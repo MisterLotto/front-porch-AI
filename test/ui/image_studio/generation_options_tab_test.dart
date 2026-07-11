@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -469,6 +470,7 @@ class _TabFakeImageGenService extends ChangeNotifier
     bool isPortrait = false,
     int? seed,
     double? denoise,
+    StudioIntent intent = StudioIntent.create,
   }) async => null;
   @override
   Future<String> generateSmartPrompt({

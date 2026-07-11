@@ -28,6 +28,9 @@ import 'package:front_porch_ai/services/grpc/draw_things_grpc_service.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
+import 'package:front_porch_ai/services/image/edit_profile.dart';
+import 'package:front_porch_ai/services/capability/image_reference_role.dart';
+import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 
 /// Available image generation subjects.
@@ -250,6 +253,11 @@ class ImageGenService extends ChangeNotifier {
     // Remote APIs ignore them (no seed/denoise support on those endpoints).
     int? seed,
     double? denoise,
+    // Which Studio surface asked. Create (default) keeps every existing path
+    // byte-identical; Edit routes an edit-capable model to edit-conditioning.
+    // No caller passes Edit until the Create/Edit tabs land (Phase 3), so this
+    // is dormant and non-breaking today.
+    StudioIntent intent = StudioIntent.create,
   }) async {
     _isGenerating = true;
     _statusMessage = 'Generating image...';
@@ -281,6 +289,31 @@ class ImageGenService extends ChangeNotifier {
       final backend = ImageGenBackend.fromKey(
         _storage.imageGenSettings.imageGenBackend,
       );
+
+      // Resolve what the reference image MEANS for this backend + model (the
+      // single seam). Create keeps today's behavior; Edit routes an edit model
+      // to editConditioning, and refuses honestly when the backend can't edit.
+      final refModelName = model ?? _storage.imageGenSettings.imageGenModel;
+      final refCapability = ImageReferenceResolver.resolveForBackend(
+        backend: backend,
+        modelName: refModelName,
+      );
+      final refCount = (referenceImage != null && referenceImage.isNotEmpty)
+          ? 1
+          : 0;
+      final refRole = routeReference(
+        intent: intent,
+        attachedRefCount: refCount,
+        cap: refCapability,
+      );
+      if (refRole == ImageReferenceRole.unsupported) {
+        _statusMessage =
+            refCapability.degradeReason ??
+            'This backend can’t edit from a photo. Try Create instead.';
+        _isGenerating = false;
+        notifyListeners();
+        return null;
+      }
 
       if (backend == ImageGenBackend.a1111 ||
           backend == ImageGenBackend.drawThings) {
@@ -326,6 +359,45 @@ class ImageGenService extends ChangeNotifier {
             final loraName = _storage.imageGenSettings.imageGenLora;
             final loraWeight = _storage.imageGenSettings.imageGenLoraWeight;
 
+            // Edit models (Qwen-Image-Edit / Flux Kontext) read the reference as
+            // conditioning, so they need their config PROFILE — NOT the img2img
+            // denoise. The backend-neutral recipe lives out-of-file
+            // (edit_profile.dart) so this god file stays thin.
+            var dtStrength = strength;
+            var dtSteps = steps;
+            var dtCfg = cfgScale;
+            var dtShift = shift;
+            var dtSampler = sampler;
+            var dtSeedMode = seedMode;
+            var dtLoras = loraName.isEmpty
+                ? const <Map<String, dynamic>>[]
+                : [
+                    {'file': loraName, 'weight': loraWeight},
+                  ];
+            if (refRole == ImageReferenceRole.editConditioning) {
+              final profile = resolveEditProfile(
+                editKind: refCapability.editKind,
+                availableLoras: await grpcService.fetchLoras(),
+                userLoraName: loraName.isEmpty ? null : loraName,
+                userLoraWeight: loraWeight,
+              );
+              dtStrength = profile.strength;
+              dtSteps = profile.steps;
+              dtCfg = profile.guidance;
+              dtShift = profile.shift;
+              // Map the neutral profile to Draw Things' native encoding at the
+              // edge (the profile itself stays backend-agnostic).
+              dtSampler = profile.samplerName == kEditSamplerUnipc
+                  ? 17 // Sampler.UNIPC_TRAILING
+                  : sampler;
+              dtSeedMode = 2; // SeedMode.SCALE_ALIKE — DT edit policy
+              dtLoras = profile.loras;
+              _statusMessage = refCapability.editKind == EditModelKind.kontext
+                  ? 'Editing with Flux Kontext...'
+                  : 'Editing with Qwen-Image-Edit...';
+              notifyListeners();
+            }
+
             imageBytes = await _generateViaDrawThingsGrpc(
               grpcService: grpcService,
               prompt: prompt,
@@ -333,20 +405,16 @@ class ImageGenService extends ChangeNotifier {
               model: modelCheckpoint,
               width: width,
               height: height,
-              steps: steps,
-              cfgScale: cfgScale,
+              steps: dtSteps,
+              cfgScale: dtCfg,
               seed: effectiveSeed,
-              strength: strength,
-              shift: shift,
-              sampler: sampler,
-              seedMode: seedMode,
+              strength: dtStrength,
+              shift: dtShift,
+              sampler: dtSampler,
+              seedMode: dtSeedMode,
               teaCache: teaCache,
               cfgZeroStar: cfgZeroStar,
-              loras: loraName.isEmpty
-                  ? const []
-                  : [
-                      {'file': loraName, 'weight': loraWeight},
-                    ],
+              loras: dtLoras,
               referenceImage: referenceImage,
               onProgress: (step, total) => _updateGenProgress(
                 total > 0 ? (step / total).clamp(0.0, 1.0) : null,
