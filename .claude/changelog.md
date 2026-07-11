@@ -6,7 +6,7 @@
 - **Removed the forced edit recipe + the auto-lightning LoRA** (which lied about the step count, hard-forced 4 steps, and stacked-failed with a user LoRA) — deleted `edit_profile.dart` + `resolveEditProfile` + its tests (its only consumer was this path). Users who want the fast lightning path add that LoRA themselves + set 4–8 steps. This SUPERSEDES the profile-side pieces of the previous commit (a873cc4).
 - **Grok-validated:** for an instruction-edit model, steps/CFG/sampler are quality/speed knobs, not edit prerequisites — dropping the recipe made the path truthful (and often better: 30 steps > forced 4), didn't break editing; higher strength ≈ more change is the right mental model.
 - **Verification:** full `flutter analyze` clean; `flutter test` 1973 green.
-- **Commit:** (this commit)
+- **Commit:** c31234c
 
 ## 2026-07-11 — fix(images): DT edit + LoRA no longer fails, real errors surface, and the Edit tab has a strength control
 - **Three reported Edit-path bugs, fixed together:**
