@@ -24,8 +24,6 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/services/caption/smolvlm_engine.dart';
-import 'package:front_porch_ai/services/caption/smolvlm_preprocess.dart';
-import 'package:front_porch_ai/services/caption/smolvlm_prompt.dart';
 
 /// Photo Understanding — the fully-offline caption floor for chat photo
 /// attachments when the active text model can't see images: SmolVLM-500M
@@ -64,7 +62,6 @@ class LocalCaptionService extends ChangeNotifier {
   double _downloadProgress = 0;
   String? _lastError;
   bool _cancelRequested = false;
-  SmolVlmVocabDecoder? _vocab;
 
   bool get isDownloading => _downloading;
   bool get isCaptioning => _captioning;
@@ -78,7 +75,6 @@ class LocalCaptionService extends ChangeNotifier {
     final dir = Directory(p.join(rootPath, 'caption_model'));
     if (_dir?.path == dir.path) return;
     _dir = dir;
-    _vocab = null;
   }
 
   File _fileFor(String artifact) =>
@@ -178,7 +174,6 @@ class LocalCaptionService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[LocalCaption] delete failed: $e');
     }
-    _vocab = null;
     notifyListeners();
   }
 
@@ -190,17 +185,13 @@ class LocalCaptionService extends ChangeNotifier {
     _captioning = true;
     notifyListeners();
     try {
-      final bytes = await File(imagePath).readAsBytes();
-      final frames = await compute(decodeAndPreprocessForSmolVlm, bytes);
-      if (frames == null) return null;
-      _vocab ??= SmolVlmVocabDecoder.fromTokenizerJson(
-        await _fileFor('tokenizer.json').readAsString(),
-      );
       final sw = Stopwatch()..start();
+      // The engine spawns its own isolate and does everything there (image
+      // decode, preprocessing, sessions, decode loop) with synchronous
+      // native calls — see SmolVlmEngine for why that's the fast shape.
       final text = await SmolVlmEngine.caption(
-        modelDir: _dir!,
-        frames: frames,
-        vocab: _vocab!,
+        modelDirPath: _dir!.path,
+        imagePath: imagePath,
       );
       debugPrint(
         '[LocalCaption] captioned in ${sw.elapsedMilliseconds}ms: '

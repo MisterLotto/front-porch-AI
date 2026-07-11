@@ -132,11 +132,14 @@ SmolVlmFrames? decodeAndPreprocessForSmolVlm(Uint8List bytes) {
 SmolVlmFrames preprocessForSmolVlm(img.Image source) {
   final (w1, h1) = _rescaleToMaxLen(source.width, source.height, _kLongestEdge);
   final (w2, h2) = _ceilToFrameMultiples(w1, h1);
+  // Linear, not cubic: pure-Dart resampling is a real chunk of caption
+  // latency and the VLM can't tell the difference (the reference's LANCZOS
+  // is a third resampler again — sizes/grids are the part that must match).
   final canvas = img.copyResize(
     source,
     width: w2,
     height: h2,
-    interpolation: img.Interpolation.cubic,
+    interpolation: img.Interpolation.linear,
   );
   final cols = w2 ~/ _kFrameSide;
   final rows = h2 ~/ _kFrameSide;
@@ -166,7 +169,7 @@ SmolVlmFrames preprocessForSmolVlm(img.Image source) {
     canvas,
     width: wg,
     height: hg,
-    interpolation: img.Interpolation.cubic,
+    interpolation: img.Interpolation.linear,
   );
   _writeFrame(pixels, frame, global, wg, hg);
   final maskBase = frame * planeSize;

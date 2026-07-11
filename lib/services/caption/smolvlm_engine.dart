@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -28,12 +29,20 @@ import 'package:front_porch_ai/services/caption/smolvlm_prompt.dart';
 
 /// The raw SmolVLM-500M ONNX inference pipeline: vision encode → embed →
 /// feature splice → prefill → greedy KV-cache decode with a repetition
-/// penalty. Stateless besides the three sessions it opens per call — sessions
-/// are released before returning so the ~600MB of weights never linger in
-/// RAM between captions (they co-exist with a running KoboldCpp).
+/// penalty.
 ///
-/// Native calls go through the plugin's persistent-isolate `runAsync`, so the
-/// UI isolate never blocks. Two perf-critical choices, both deliberate:
+/// The ENTIRE pipeline (image decode, preprocessing, sessions, decode loop)
+/// runs inside one spawned isolate ([caption] is just an `Isolate.run`
+/// wrapper), with SYNCHRONOUS native calls inside it. That one choice is the
+/// speed of this engine: the plugin's `runAsync` pays two cross-isolate
+/// round-trips per generated token (decoder + embed) and that overhead
+/// tripled caption time in practice. In-isolate sync calls put the Dart loop
+/// within ~10% of the equivalent Python/ORT pipeline. The UI isolate never
+/// blocks either way.
+///
+/// Sessions are created per call and released before returning, so the
+/// ~600MB of weights never linger between captions (they co-exist with a
+/// running KoboldCpp). Two further perf-critical choices, both deliberate:
 ///  - the prefill is split so the big [1, N, vocab] logits tensor is never
 ///    materialized on the Dart side (`.value` is lazy; only [1, 1, vocab]
 ///    step logits ever cross the FFI boundary), and
@@ -45,18 +54,50 @@ class SmolVlmEngine {
   static const int _kvHeads = 5;
   static const int _headDim = 64;
 
-  static const _timeout = Duration(minutes: 10);
-
-  /// Caption preprocessed [frames]. [modelDir] must contain the three int8
-  /// graphs + tokenizer.json (LocalCaptionService verifies before calling).
-  /// Returns null on any pipeline failure — callers fall back gracefully.
+  /// Caption the photo at [imagePath] using the model in [modelDir] (the
+  /// three graphs + tokenizer.json; LocalCaptionService verifies presence).
+  /// Runs everything in a spawned isolate; returns null on any failure —
+  /// callers fall back gracefully to the generic marker.
   static Future<String?> caption({
-    required Directory modelDir,
-    required SmolVlmFrames frames,
-    required SmolVlmVocabDecoder vocab,
-    int maxNewTokens = 140,
+    required String modelDirPath,
+    required String imagePath,
+    // 120 bounds the worst-case wait (greedy length varies a lot per image);
+    // the sentence trim below keeps a cap cutoff clean.
+    int maxNewTokens = 120,
     double repetitionPenalty = 1.25,
-  }) async {
+  }) {
+    return Isolate.run(
+      () => _captionInIsolate(
+        modelDirPath,
+        imagePath,
+        maxNewTokens,
+        repetitionPenalty,
+      ),
+    );
+  }
+
+  static String? _captionInIsolate(
+    String modelDirPath,
+    String imagePath,
+    int maxNewTokens,
+    double repetitionPenalty,
+  ) {
+    final sw = Stopwatch()..start();
+    int mark() {
+      final ms = sw.elapsedMilliseconds;
+      sw.reset();
+      return ms;
+    }
+
+    final frames = decodeAndPreprocessForSmolVlm(
+      File(imagePath).readAsBytesSync(),
+    );
+    if (frames == null) return null;
+    final vocab = SmolVlmVocabDecoder.fromTokenizerJson(
+      File(p.join(modelDirPath, 'tokenizer.json')).readAsStringSync(),
+    );
+    final tPrep = mark();
+
     OrtEnv.instance.init();
     final opts = OrtSessionOptions()
       ..setIntraOpNumThreads(math.max(1, Platform.numberOfProcessors - 1));
@@ -64,18 +105,19 @@ class SmolVlmEngine {
     final ro = OrtRunOptions();
     try {
       vision = OrtSession.fromFile(
-        File(p.join(modelDir.path, 'vision_encoder_quantized.onnx')),
+        File(p.join(modelDirPath, 'vision_encoder_quantized.onnx')),
         opts,
       );
       embed = OrtSession.fromFile(
-        File(p.join(modelDir.path, 'embed_tokens_int8.onnx')),
+        File(p.join(modelDirPath, 'embed_tokens_int8.onnx')),
         opts,
       );
       decoder = OrtSession.fromFile(
-        File(p.join(modelDir.path, 'decoder_model_merged_int8.onnx')),
+        File(p.join(modelDirPath, 'decoder_model_merged_int8.onnx')),
         opts,
       );
-      return await _run(
+      final tLoad = mark();
+      final text = _run(
         vision,
         embed,
         decoder,
@@ -85,6 +127,14 @@ class SmolVlmEngine {
         maxNewTokens,
         repetitionPenalty,
       );
+      // Phase timing on stderr-ish debug output — support diagnostics for
+      // "captions are slow on my machine" reports.
+      // ignore: avoid_print
+      print(
+        '[LocalCaption] phases: preprocess ${tPrep}ms | '
+        'sessions ${tLoad}ms | inference ${mark()}ms',
+      );
+      return text;
     } finally {
       ro.release();
       vision?.release();
@@ -94,7 +144,7 @@ class SmolVlmEngine {
     }
   }
 
-  static Future<String?> _run(
+  static String? _run(
     OrtSession vision,
     OrtSession embed,
     OrtSession decoder,
@@ -103,7 +153,7 @@ class SmolVlmEngine {
     SmolVlmVocabDecoder vocab,
     int maxNewTokens,
     double repetitionPenalty,
-  ) async {
+  ) {
     // ── Vision encode: frames → [F, 64, 960] features ──────────────────
     final pvT = OrtValueTensor.createTensorWithDataList(frames.pixelValues, [
       1,
@@ -118,13 +168,13 @@ class SmolVlmEngine {
       512,
       512,
     ]);
-    final vOut = await vision.runAsyncWithTimeout(ro, {
+    final vOut = vision.run(ro, {
       'pixel_values': pvT,
       'pixel_attention_mask': pmT,
-    }, _timeout);
+    });
     pvT.release();
     pmT.release();
-    if (vOut == null || vOut.isEmpty || vOut[0] == null) return null;
+    if (vOut.isEmpty || vOut[0] == null) return null;
     final feats = _flatten3(vOut[0]!.value as List);
     for (final v in vOut) {
       v?.release();
@@ -140,11 +190,9 @@ class SmolVlmEngine {
       Int64List.fromList(promptIds),
       [1, n],
     );
-    final eOut = await embed.runAsyncWithTimeout(ro, {
-      'input_ids': idsT,
-    }, _timeout);
+    final eOut = embed.run(ro, {'input_ids': idsT});
     idsT.release();
-    if (eOut == null || eOut.isEmpty || eOut[0] == null) return null;
+    if (eOut.isEmpty || eOut[0] == null) return null;
     final promptEmb = _flatten3(eOut[0]!.value as List);
     for (final v in eOut) {
       v?.release();
@@ -178,7 +226,7 @@ class SmolVlmEngine {
       promptEmb.sublist(0, (n - 1) * _hidden),
       [1, n - 1, _hidden],
     );
-    var outs = await _step(
+    var outs = _step(
       decoder,
       ro,
       chunk1,
@@ -187,10 +235,6 @@ class SmolVlmEngine {
       past: past,
     );
     chunk1.release();
-    if (outs == null) {
-      _releaseAll(past.values);
-      return null;
-    }
     _releaseAll(past.values);
     outs[0]?.release(); // prefill logits: released without materializing
     past = _presentsToPast(decoder.outputNames, outs);
@@ -204,7 +248,7 @@ class SmolVlmEngine {
     );
     try {
       for (var step = 0; step <= maxNewTokens; step++) {
-        outs = await _step(
+        outs = _step(
           decoder,
           ro,
           stepEmb!,
@@ -214,7 +258,6 @@ class SmolVlmEngine {
         );
         stepEmb.release();
         stepEmb = null;
-        if (outs == null) return null;
         _releaseAll(past.values);
         past = _presentsToPast(decoder.outputNames, outs);
         pastLen += 1;
@@ -241,11 +284,9 @@ class SmolVlmEngine {
           Int64List.fromList([best]),
           [1, 1],
         );
-        final tOut = await embed.runAsyncWithTimeout(ro, {
-          'input_ids': tokT,
-        }, _timeout);
+        final tOut = embed.run(ro, {'input_ids': tokT});
         tokT.release();
-        if (tOut == null || tOut.isEmpty || tOut[0] == null) return null;
+        if (tOut.isEmpty || tOut[0] == null) return null;
         stepEmb = tOut[0] as OrtValueTensor;
       }
     } finally {
@@ -264,14 +305,14 @@ class SmolVlmEngine {
   }
 
   /// One decoder run: [seqLen] embedded tokens against [pastLen] cached ones.
-  static Future<List<OrtValue?>?> _step(
+  static List<OrtValue?> _step(
     OrtSession decoder,
     OrtRunOptions ro,
     OrtValueTensor inputsEmbeds, {
     required int seqLen,
     required int pastLen,
     required Map<String, OrtValue> past,
-  }) async {
+  }) {
     final total = pastLen + seqLen;
     final attnT = OrtValueTensor.createTensorWithDataList(
       Int64List.fromList(List.filled(total, 1)),
@@ -282,12 +323,12 @@ class SmolVlmEngine {
       [1, seqLen],
     );
     try {
-      return await decoder.runAsyncWithTimeout(ro, {
+      return decoder.run(ro, {
         'inputs_embeds': inputsEmbeds,
         'attention_mask': attnT,
         'position_ids': posT,
         ...past,
-      }, _timeout);
+      });
     } finally {
       attnT.release();
       posT.release();

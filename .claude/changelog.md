@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-07-11 — perf(caption): Photo Understanding ~2x faster; size/quant options benchmarked and settled
+
+- **Maintainer concern:** 10–30s per caption and ~515MB felt heavy. Benchmarked every realistic lever on the exact runtime the app bundles (ORT 1.22, same 4-vCPU box, real photo):
+  - **Reference Python pipeline: 6.9s total** with the SHIPPED files → the model was never the bottleneck; the Dart engine's per-token plugin overhead was.
+  - **q4 decoder** (−137MB, +40% t/s): rejected — blows past the stop token and hallucinates specifics (invented remote-button letters). Directly against the "advanced, sees details" requirement.
+  - **q4 vision** (−32MB): rejected — measurably SLOWER than the u8 export (5.2s vs 3.3s).
+  - **SmolVLM-256M** (263MB total, 4.4s): rejected as default — real detail loss ("Two remote controls… near a cat" — missed that there are two cats). Could return later as an explicit "Compact" choice if wanted.
+  - **Verdict: the shipped int8/u8 500M set is already the size/quality sweet spot; the wins were all in our code.**
+- **Engine rework (`smolvlm_engine.dart`):** the whole pipeline (image decode, preprocess, sessions, decode loop) now runs inside ONE spawned isolate (`Isolate.run`) using SYNCHRONOUS plugin calls — the previous `runAsync` shape paid two cross-isolate round-trips per generated token, which tripled caption time. Per-token cost now matches the Python reference (~110ms on the bench box). `LocalCaptionService.captionImage` is a thin wrapper again (its own `compute` preprocess step deleted — the engine isolate owns it), and the engine prints a per-phase timing line (`preprocess | sessions | inference`) for "slow on my machine" support reports.
+- **Preprocess (`smolvlm_preprocess.dart`):** linear instead of cubic resampling (pure-Dart resampling was 3.3s of the total in debug; now 0.5s, and release AOT shrinks it further). Sizes/grids — the part that must match the reference — are untouched; caption quality verified same-or-better on the E2E photo.
+- **Bound the tail:** default `maxNewTokens` 140 → 120 (greedy caption length varies wildly per image; the sentence-boundary trim keeps cutoffs clean).
+- **Measured after (same box, debug-mode `flutter test`):** preprocess 0.5s + sessions 1.8s + inference ~14s at the 120-token worst case — expect ~5–8s worst case and ~2–4s typical on a real desktop in release mode. E2E caption remained detailed and accurate (collar color, cat positions, stripe pattern).
+- **Verification:** `flutter analyze` clean; full suite green (2001); env-gated Dart E2E re-run against the real model after every change.
+- **Commit:** (see git log)
+
 ## 2026-07-11 — feat(chat): Photo Understanding — offline in-process VLM captioner for blind models
 
 - **Feature:** the worst-case rung of the photo ladder: when the active chat model can't see images, an optional ~515MB download (SmolVLM-500M-Instruct, Apache-2.0, official ONNX int8/u8 exports from HuggingFaceTB) captions the attached photo **in-process** via ONNX Runtime — no sidecar changes, no second KoboldCpp, no cloud (both explicitly vetoed by the maintainer). The caption is stamped BEFORE generation so a text-only character reacts to the photo's contents on the first reply.

@@ -160,15 +160,9 @@ Directory? _modelDirFromEnv() {
 
 /// Run the engine directly against an explicit model dir (bypasses the
 /// service's `<root>/caption_model` convention for the env-gated test).
-Future<String?> _captionDirect(Directory modelDir, File image) async {
-  final frames = decodeAndPreprocessForSmolVlm(image.readAsBytesSync());
-  if (frames == null) return null;
-  final vocab = SmolVlmVocabDecoder.fromTokenizerJson(
-    File('${modelDir.path}/tokenizer.json').readAsStringSync(),
-  );
+Future<String?> _captionDirect(Directory modelDir, File image) {
   return SmolVlmEngine.caption(
-    modelDir: modelDir,
-    frames: frames,
-    vocab: vocab,
+    modelDirPath: modelDir.path,
+    imagePath: image.path,
   );
 }
