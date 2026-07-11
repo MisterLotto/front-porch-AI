@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-11 — feat(caption): Photo Understanding enable switch (keep the download, skip the pause)
+
+- **Gap flagged by maintainer:** the feature was install-based only — the sole way to turn it off was deleting the 515MB model. Added `photoUnderstandingEnabled` (default ON; `photo_understanding_enabled` pref) in ImageGenSettings + StorageService passthroughs, a Switch on the settings card when installed (with "switched off" status text), and gates at both consumers: the sendMessage pre-generation caption and the attach chip's teal fallback note (which reverts to the amber blind warning when switched off).
+- **Verification:** analyze clean; storage + caption suites green.
+- **Commit:** (see git log)
+
 ## 2026-07-11 — perf(caption): Photo Understanding ~2x faster; size/quant options benchmarked and settled
 
 - **Maintainer concern:** 10–30s per caption and ~515MB felt heavy. Benchmarked every realistic lever on the exact runtime the app bundles (ORT 1.22, same 4-vCPU box, real photo):

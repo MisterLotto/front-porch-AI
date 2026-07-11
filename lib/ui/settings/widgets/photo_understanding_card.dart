@@ -32,7 +32,8 @@ class PhotoUnderstandingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final storage = Provider.of<StorageService>(context, listen: false);
+    // watch: the enable switch below reflects live storage state.
+    final storage = Provider.of<StorageService>(context);
     final service = LocalCaptionService.instance..configure(storage.rootPath);
     return AnimatedBuilder(
       animation: service,
@@ -64,8 +65,12 @@ class PhotoUnderstandingCard extends StatelessWidget {
                         ),
                         Text(
                           service.isInstalled
-                              ? 'Installed — photos you attach are described '
-                                    'to models that can\'t see images.'
+                              ? (storage.photoUnderstandingEnabled
+                                    ? 'Installed — photos you attach are '
+                                          'described to models that can\'t '
+                                          'see images.'
+                                    : 'Installed but switched off — attached '
+                                          'photos are not described.')
                               : 'When your model can\'t see images, a small '
                                     'offline vision model can describe '
                                     'attached photos so the character still '
@@ -86,7 +91,13 @@ class PhotoUnderstandingCard extends StatelessWidget {
                       onPressed: service.cancelDownload,
                       child: const Text('Cancel'),
                     )
-                  else if (service.isInstalled)
+                  else if (service.isInstalled) ...[
+                    // Keep the download, skip the caption pause when off.
+                    Switch(
+                      value: storage.photoUnderstandingEnabled,
+                      activeThumbColor: AppColors.relationshipAccent,
+                      onChanged: (v) => storage.setPhotoUnderstandingEnabled(v),
+                    ),
                     TextButton.icon(
                       onPressed: service.isCaptioning
                           ? null
@@ -96,8 +107,8 @@ class PhotoUnderstandingCard extends StatelessWidget {
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.redAccent,
                       ),
-                    )
-                  else
+                    ),
+                  ] else
                     ElevatedButton.icon(
                       onPressed: () => service.download(),
                       icon: const Icon(Icons.download, size: 16),

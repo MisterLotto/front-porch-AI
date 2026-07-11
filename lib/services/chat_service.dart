@@ -3504,7 +3504,7 @@ class ChatService extends ChangeNotifier {
         backend: _llmProvider!.activeBackend,
         storage: _storageService,
       );
-      if (!support.supported) {
+      if (!support.supported && _storageService.photoUnderstandingEnabled) {
         LocalCaptionService.instance.configure(_storageService.rootPath);
         final caption = await LocalCaptionService.instance.captionImage(
           imagePath,

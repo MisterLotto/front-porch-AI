@@ -315,6 +315,10 @@ class StorageService extends ChangeNotifier {
   bool get imageGenPromptReview => imageGenSettings.imageGenPromptReview;
   Future<void> setImageGenPromptReview(bool v) =>
       imageGenSettings.setImageGenPromptReview(v);
+  bool get photoUnderstandingEnabled =>
+      imageGenSettings.photoUnderstandingEnabled;
+  Future<void> setPhotoUnderstandingEnabled(bool v) =>
+      imageGenSettings.setPhotoUnderstandingEnabled(v);
   String get imageGenSize => imageGenSettings.imageGenSize;
   Future<void> setImageGenSize(String v) => imageGenSettings.setImageGenSize(v);
   String get imageGenStyle => imageGenSettings.imageGenStyle;

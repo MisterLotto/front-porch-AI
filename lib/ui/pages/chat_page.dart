@@ -2038,16 +2038,17 @@ class _ChatPageState extends State<ChatPage> {
             if (_pendingImageBytes != null)
               Builder(
                 builder: (context) {
-                  LocalCaptionService.instance.configure(
-                    Provider.of<StorageService>(
-                      context,
-                      listen: false,
-                    ).rootPath,
+                  final storage = Provider.of<StorageService>(
+                    context,
+                    listen: false,
                   );
+                  LocalCaptionService.instance.configure(storage.rootPath);
                   return PendingImageChip(
                     bytes: _pendingImageBytes!,
                     visionOk: _pendingImageVisionOk,
-                    fallbackAvailable: LocalCaptionService.instance.isInstalled,
+                    fallbackAvailable:
+                        storage.photoUnderstandingEnabled &&
+                        LocalCaptionService.instance.isInstalled,
                     onRemove: () => setState(() {
                       _pendingImageBytes = null;
                       _pendingImageVisionOk = null;
