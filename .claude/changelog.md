@@ -1,12 +1,19 @@
 # Changelog
 
+## 2026-07-11 — Avatar Gallery, Phase 14: looks in backup / export — verified consistent (no code change)
+- **Finding:** gallery looks are already handled identically to expression avatars and portraits across backup + export, so there's no looks-specific gap to close:
+  - **Backup** (`backup_service.dart`) is **DB-only** (copies the SQLite file) — it captures the `avatar_images` rows, INCLUDING the `__look__` rows, exactly like expression-avatar rows. No image *files* are in the backup for any image type; they persist on disk. A restore reverts the rows and the on-disk look files are untouched, so looks survive a restore.
+  - **Export** — no card format bundles a character's image folder: the PNG card carries a single cover image + JSON (no `avatars/` and no `looks/`), byaf works from the PNG/JSON, and group export handles group-member avatars. Expression images don't travel with a PNG export either, so looks are consistent.
+- **Not done (deliberately out of scope):** making the automatic backup copy image *files* would be a separate "full-image backup" feature affecting ALL character images (portraits + expression avatars + looks), not part of the avatar-gallery work. Flagged for the maintainer.
+- **Verification:** traced `backup_service`, `home_page_transfer` (PNG + group export), `byaf_service`, `v2_card_service`, and the Stoop upload — looks are consistent with every existing image type.
+
 ## 2026-07-11 — Avatar Gallery, Phase 11: "Save to gallery" in the Image Studio (Create + Edit)
 - **Why:** close the loop — generate or **edit** an avatar (the DT editor that already works E2E), then save it straight into the character's Avatar Gallery as a look, so it shows up in the gallery + the sidebar chevrons without a manual upload.
 - **`ResultView`** gains an `onSaveToGallery` button (shown only when there's a character to save onto). Wired through both result surfaces via the existing `onAccept`/`onAcceptBytes` pattern: `StudioView.onSaveToGallery` (Create → `_currentImageBytes`) and `EditView.onSaveToGalleryBytes` (Edit → `_resultBytes`).
 - **`image_studio._saveToGallery`** → `repository.addLook` (no crop, non-destructive), then reuses the launch's live-card avatar-refresh callback (a look is an `avatar_images` row too) so the gallery + chevrons pick it up immediately.
 - **Grok fix — group + mode correctness:** keyed off a new `_lookTarget` resolver (picked group member's LIBRARY origin, else the 1:1 character; any mode) instead of the raw `characterDbId` — so in a group it saves onto the focused member's real library card (not a throwaway id), works from freeform/scene modes (a look isn't portrait-only, unlike an expression pack), and hides for a group shot / persona.
 - **Verification:** full `flutter analyze` clean; image-studio tests green.
-- **Commit:** (this commit)
+- **Commit:** 9be5661
 
 ## 2026-07-11 — Avatar Gallery, Phase 10: the ★ star becomes the exported / Stoop card cover
 - **Why:** finishing the star's two jobs. The "default new-chat avatar" half already shipped with the face-ring foundation (the ring puts the favorite first, so a new/unset chat opens on it). This is the other half — the image baked into the card on export / Stoop upload.
