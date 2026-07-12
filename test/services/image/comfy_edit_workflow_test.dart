@@ -161,6 +161,109 @@ void main() {
       });
     }
   });
+
+  group('resolveComfyEditRequest (workflow selection + values)', () {
+    Map<String, Object?> knobs() => {
+      'workflowId': 'qwen_image_edit',
+      'uploadedWorkflowJson': '',
+      'modelChoices': <String, String>{},
+      'prompt': 'a red coat',
+      'negative': 'blurry',
+      'seed': 7,
+      'steps': 20,
+      'cfg': 3.5,
+      'denoise': 1.0,
+      'shift': 3.0,
+    };
+
+    test('a bundled preset resolves to its template + knob values', () {
+      final r = resolveComfyEditRequest(
+        workflowId: 'qwen_image_edit',
+        uploadedWorkflowJson: '',
+        modelChoices: const {
+          'qwen_image_edit/%MODEL_DIFFUSION%': 'unet.safetensors',
+          'qwen_image_edit/%MODEL_CLIP%': 'clip.safetensors',
+          'qwen_image_edit/%MODEL_VAE%': 'vae.safetensors',
+        },
+        prompt: 'a red coat',
+        negative: 'blurry',
+        seed: 7,
+        steps: 20,
+        cfg: 3.5,
+        denoise: 1.0,
+        shift: 3.0,
+      );
+      expect(r, isNotNull);
+      expect(r!.template, same(kQwenImageEditPreset.template));
+      expect(r.values[ComfyEditTokens.prompt], 'a red coat');
+      expect(r.values['%MODEL_DIFFUSION%'], 'unet.safetensors');
+      // With every slot picked, a full substitute leaves nothing unresolved.
+      final filled = substituteComfyWorkflow(r.template, {
+        ...r.values,
+        ComfyEditTokens.image: 'ref.png',
+      });
+      expect(unresolvedComfyTokens(filled), isEmpty);
+    });
+
+    test('an UNPICKED model slot is left unfilled (guarded downstream)', () {
+      final r = resolveComfyEditRequest(
+        workflowId: 'qwen_image_edit',
+        uploadedWorkflowJson: '',
+        modelChoices: const {}, // nothing picked
+        prompt: 'x', negative: '', seed: 1, steps: 20,
+        cfg: 3.5, denoise: 1.0, shift: 3.0,
+      );
+      expect(r, isNotNull);
+      expect(r!.values.containsKey('%MODEL_DIFFUSION%'), isFalse);
+      final filled = substituteComfyWorkflow(r.template, {
+        ...r.values,
+        ComfyEditTokens.image: 'ref.png',
+      });
+      expect(unresolvedComfyTokens(filled), contains('%MODEL_DIFFUSION%'));
+    });
+
+    test('an unknown workflow id → null', () {
+      final r = resolveComfyEditRequest(
+        workflowId: 'no_such_preset',
+        uploadedWorkflowJson: '',
+        modelChoices: const {},
+        prompt: 'x', negative: '', seed: 1, steps: 20,
+        cfg: 3.5, denoise: 1.0, shift: 3.0,
+      );
+      expect(r, isNull);
+    });
+
+    test('uploaded workflow: valid JSON parses; empty/invalid → null', () {
+      final ok = resolveComfyEditRequest(
+        workflowId: kComfyUploadedWorkflowId,
+        uploadedWorkflowJson: '{"a":{"class_type":"X","inputs":{"t":"%PROMPT%"}}}',
+        modelChoices: const {},
+        prompt: 'hi', negative: '', seed: 1, steps: 20,
+        cfg: 3.5, denoise: 1.0, shift: 3.0,
+      );
+      expect(ok, isNotNull);
+      expect((ok!.template['a'] as Map)['class_type'], 'X');
+
+      expect(
+        resolveComfyEditRequest(
+          workflowId: kComfyUploadedWorkflowId, uploadedWorkflowJson: '',
+          modelChoices: const {}, prompt: 'x', negative: '', seed: 1,
+          steps: 20, cfg: 3.5, denoise: 1.0, shift: 3.0,
+        ),
+        isNull,
+      );
+      expect(
+        resolveComfyEditRequest(
+          workflowId: kComfyUploadedWorkflowId, uploadedWorkflowJson: 'not json',
+          modelChoices: const {}, prompt: 'x', negative: '', seed: 1,
+          steps: 20, cfg: 3.5, denoise: 1.0, shift: 3.0,
+        ),
+        isNull,
+      );
+    });
+
+    test('knobs helper is unused-safe', () => expect(knobs()['seed'], 7));
+  });
 }
 
 List<String> _allStrings(Object? node) {

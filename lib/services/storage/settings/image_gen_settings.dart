@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
 import '../../image/edit_profile.dart';
 import 'settings_base.dart';
 
@@ -76,6 +78,15 @@ class ImageGenSettings with SettingsBase {
   double _editShift = kEditRecommendedShift;
   int _editSeedMode = kEditRecommendedSeedMode;
 
+  // ComfyUI edit: which bundled preset drives an edit (matches a preset id, or
+  // the '__uploaded__' sentinel for a user-supplied workflow), the per-preset
+  // model-slot file choices ("presetId/%TOKEN%" -> filename), and any uploaded
+  // workflow JSON. The DT-flavored edit knobs above still supply steps/CFG/
+  // strength/shift; ComfyUI uses its own sampler/scheduler defaults.
+  String _comfyEditWorkflowId = 'qwen_image_edit'; // == kQwenImageEditPreset.id
+  Map<String, String> _comfyEditModelChoices = {};
+  String _comfyEditUploadedWorkflow = '';
+
   bool get imageGenEnabled => _imageGenEnabled;
   String get imageGenBackend => _imageGenBackend;
   String get localImageGenUrl => _localImageGenUrl;
@@ -111,6 +122,15 @@ class ImageGenSettings with SettingsBase {
   int get editSampler => _editSampler;
   double get editShift => _editShift;
   int get editSeedMode => _editSeedMode;
+
+  String get comfyEditWorkflowId => _comfyEditWorkflowId;
+  Map<String, String> get comfyEditModelChoices =>
+      Map.unmodifiable(_comfyEditModelChoices);
+  String get comfyEditUploadedWorkflow => _comfyEditUploadedWorkflow;
+
+  /// The user's chosen file for a preset's model slot, or null if unpicked.
+  String? comfyEditModelChoice(String presetId, String token) =>
+      _comfyEditModelChoices['$presetId/$token'];
 
   void load() {
     _imageGenEnabled = prefs?.getBool(k('image_gen_enabled')) ?? true;
@@ -158,6 +178,25 @@ class ImageGenSettings with SettingsBase {
         prefs?.getDouble(k('draw_things_edit_shift')) ?? kEditRecommendedShift;
     _editSeedMode =
         prefs?.getInt(k('draw_things_edit_seed_mode')) ?? kEditRecommendedSeedMode;
+
+    _comfyEditWorkflowId =
+        prefs?.getString(k('comfy_edit_workflow_id')) ?? 'qwen_image_edit';
+    _comfyEditModelChoices = _decodeStringMap(
+      prefs?.getString(k('comfy_edit_model_choices')),
+    );
+    _comfyEditUploadedWorkflow =
+        prefs?.getString(k('comfy_edit_uploaded_workflow')) ?? '';
+  }
+
+  static Map<String, String> _decodeStringMap(String? s) {
+    if (s == null || s.isEmpty) return {};
+    try {
+      final m = jsonDecode(s);
+      if (m is Map) {
+        return m.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (_) {}
+    return {};
   }
 
   Future<void> setImageGenEnabled(bool value) async {
@@ -353,5 +392,31 @@ class ImageGenSettings with SettingsBase {
     await setEditSampler(kEditRecommendedSamplerInt);
     await setEditShift(kEditRecommendedShift);
     await setEditSeedMode(kEditRecommendedSeedMode);
+  }
+
+  // ComfyUI edit setters.
+  Future<void> setComfyEditWorkflowId(String value) async {
+    _comfyEditWorkflowId = value;
+    await prefs?.setString(k('comfy_edit_workflow_id'), value);
+    notify();
+  }
+
+  Future<void> setComfyEditModelChoice(
+    String presetId,
+    String token,
+    String file,
+  ) async {
+    _comfyEditModelChoices['$presetId/$token'] = file;
+    await prefs?.setString(
+      k('comfy_edit_model_choices'),
+      jsonEncode(_comfyEditModelChoices),
+    );
+    notify();
+  }
+
+  Future<void> setComfyEditUploadedWorkflow(String json) async {
+    _comfyEditUploadedWorkflow = json;
+    await prefs?.setString(k('comfy_edit_uploaded_workflow'), json);
+    notify();
   }
 }

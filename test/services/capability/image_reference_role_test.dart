@@ -328,13 +328,19 @@ void main() {
       expect(cap.supportsImg2img, isTrue);
     });
 
-    test('ComfyUI + remote: edit off until Phase 5 wires them', () {
+    test('ComfyUI edit is ON (preset-driven, any model); remote still off', () {
+      // ComfyUI edits via a SELECTED workflow (preset or uploaded), not a
+      // detected model name — so edit is offered for ANY model when the backend
+      // is ComfyUI (fine readiness is checked in the Edit tab). Single reference.
       final comfy = ImageReferenceResolver.resolveForBackend(
         backend: ImageGenBackend.comfyUi,
-        modelName: 'qwen-image-edit-2509',
+        modelName: 'anything-at-all',
       );
-      expect(comfy.supportsEdit, isFalse);
+      expect(comfy.supportsEdit, isTrue);
+      expect(comfy.editMaxImages, 1);
+      expect(comfy.editKind, EditModelKind.generic);
       expect(comfy.supportsImg2img, isTrue);
+      expect(comfy.degradeReason, isNull);
 
       final remote = ImageReferenceResolver.resolveForBackend(
         backend: ImageGenBackend.remote,
@@ -344,14 +350,14 @@ void main() {
       expect(remote.supportsImg2img, isFalse);
     });
 
-    test('gated ComfyUI/remote edit models get honest "coming" copy, not '
-        '"try ComfyUI"', () {
-      final comfy = ImageReferenceResolver.resolveForBackend(
-        backend: ImageGenBackend.comfyUi,
+    test('a remote edit model still gets honest "coming" copy', () {
+      // The remote path uses name heuristics (edit isn't wired), so use a name
+      // the detector recognizes as an edit model to reach the "coming" branch.
+      final remote = ImageReferenceResolver.resolveForBackend(
+        backend: ImageGenBackend.remote,
         modelName: 'qwen-image-edit-2509',
       );
-      expect(comfy.degradeReason, contains('coming'));
-      expect(comfy.degradeReason, isNot(contains('Try Draw Things, ComfyUI')));
+      expect(remote.degradeReason, contains('coming'));
     });
   });
 

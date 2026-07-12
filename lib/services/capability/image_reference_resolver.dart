@@ -56,16 +56,17 @@ class ImageReferenceResolver {
           backendEditMaxImages: kDrawThingsEditMaxImages,
         );
       case ImageGenBackend.comfyUi:
-        // Phase 5 wires edit here (uncapped ceiling + a live /object_info node
-        // check). Until then edit is off, with honest "coming" copy so an edit
-        // model on ComfyUI is never told to "try ComfyUI".
-        return resolveCapability(
-          modelName: modelName,
-          backendSupportsImg2img: true,
-          backendEditMaxImages: 0,
-          backendEditUnavailableReason:
-              'Editing on ComfyUI is coming in an update. For now, use Draw '
-              'Things for edits, or Create.',
+        // ComfyUI edits via a SELECTED workflow (a bundled preset or an uploaded
+        // graph), NOT a detected model name — so edit is offered whenever ComfyUI
+        // is the backend, and the fine readiness (required nodes present, model
+        // slots picked) is enforced in the Edit tab (the ✓/⚠ line) and by the
+        // server on submit. editKind is generic: the chosen workflow IS the
+        // recipe. Single reference image (multi-image was dropped).
+        return const ImageReferenceCapability(
+          supportsEdit: true,
+          editMaxImages: 1,
+          supportsImg2img: true,
+          editKind: EditModelKind.generic,
         );
       case ImageGenBackend.remote:
         // Phase 5 wires edit here (useRemoteAllowlist + a per-model ceiling).

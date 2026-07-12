@@ -390,6 +390,24 @@ class StorageService extends ChangeNotifier {
   Future<void> resetEditKnobsToRecommended() =>
       imageGenSettings.resetEditKnobsToRecommended();
 
+  // ComfyUI edit workflow selection + model-slot choices + uploaded workflow.
+  String get comfyEditWorkflowId => imageGenSettings.comfyEditWorkflowId;
+  Future<void> setComfyEditWorkflowId(String v) =>
+      imageGenSettings.setComfyEditWorkflowId(v);
+  Map<String, String> get comfyEditModelChoices =>
+      imageGenSettings.comfyEditModelChoices;
+  String? comfyEditModelChoice(String presetId, String token) =>
+      imageGenSettings.comfyEditModelChoice(presetId, token);
+  Future<void> setComfyEditModelChoice(
+    String presetId,
+    String token,
+    String file,
+  ) => imageGenSettings.setComfyEditModelChoice(presetId, token, file);
+  String get comfyEditUploadedWorkflow =>
+      imageGenSettings.comfyEditUploadedWorkflow;
+  Future<void> setComfyEditUploadedWorkflow(String json) =>
+      imageGenSettings.setComfyEditUploadedWorkflow(json);
+
   // Backend / kobold / remote / launch flags / kcpps (kv + callBuffer here per lift/compat needs; some also on tts/stt)
   String get backendType => backendSettings.backendType;
   Future<void> setBackendType(String v) => backendSettings.setBackendType(v);

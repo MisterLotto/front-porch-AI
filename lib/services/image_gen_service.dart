@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
@@ -29,6 +30,7 @@ import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/image/edit_profile.dart';
+import 'package:front_porch_ai/services/image/comfy_edit_presets.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
@@ -507,26 +509,62 @@ class ImageGenService extends ChangeNotifier {
                   storedScheduler != 'Automatic')
               ? storedScheduler
               : ComfyUiService.schedulerFor(storedSampler);
-          imageBytes = await comfy.generateImage(
-            prompt: prompt,
-            negativePrompt: negativePrompt,
-            model: model ?? _storage.imageGenSettings.imageGenModel,
-            width: width,
-            height: height,
-            steps: _storage.imageGenSettings.imageGenSteps,
-            cfgScale: _storage.imageGenSettings.imageGenCfgScale,
-            seed: seed ?? _storage.imageGenSettings.imageGenSeed,
-            samplerName: ComfyUiService.normalizeSampler(
-              storedSampler,
-              available,
-            ),
-            scheduler: scheduler,
-            loraName: _storage.imageGenSettings.imageGenLora,
-            loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
-            referenceImageBytes: referenceImage,
-            denoise: denoise ?? _storage.imageGenSettings.imageGenDenoise,
-            onProgress: _updateGenProgress,
-          );
+          if (refRole == ImageReferenceRole.editConditioning &&
+              referenceImage != null) {
+            // ComfyUI instruction-edit: run the SELECTED workflow (a bundled
+            // preset or the user's uploaded graph) via the token engine. The
+            // edit-scoped knobs supply steps/CFG/strength(→denoise)/shift; the
+            // sampler/scheduler use ComfyUI-friendly defaults (the DT sampler
+            // int doesn't map cleanly). Model slots come from the user's picks.
+            _statusMessage = 'Editing with ComfyUI...';
+            notifyListeners();
+            final storedSeed = seed ?? _storage.imageGenSettings.imageGenSeed;
+            final req = resolveComfyEditRequest(
+              workflowId: _storage.comfyEditWorkflowId,
+              uploadedWorkflowJson: _storage.comfyEditUploadedWorkflow,
+              modelChoices: _storage.comfyEditModelChoices,
+              prompt: prompt,
+              negative: negativePrompt,
+              seed: storedSeed == -1 ? Random().nextInt(1 << 31) : storedSeed,
+              steps: _storage.editSteps,
+              cfg: _storage.editCfgScale,
+              denoise: editStrength ?? kEditRecommendedStrength,
+              shift: _storage.editShift,
+            );
+            if (req == null) {
+              throw Exception(
+                'No ComfyUI edit workflow is set up. Pick a preset (and its '
+                'models) or upload a workflow in the Edit tab.',
+              );
+            }
+            imageBytes = await comfy.generateImageEdit(
+              referenceImageBytes: referenceImage,
+              workflowTemplate: req.template,
+              tokenValues: req.values,
+              onProgress: _updateGenProgress,
+            );
+          } else {
+            imageBytes = await comfy.generateImage(
+              prompt: prompt,
+              negativePrompt: negativePrompt,
+              model: model ?? _storage.imageGenSettings.imageGenModel,
+              width: width,
+              height: height,
+              steps: _storage.imageGenSettings.imageGenSteps,
+              cfgScale: _storage.imageGenSettings.imageGenCfgScale,
+              seed: seed ?? _storage.imageGenSettings.imageGenSeed,
+              samplerName: ComfyUiService.normalizeSampler(
+                storedSampler,
+                available,
+              ),
+              scheduler: scheduler,
+              loraName: _storage.imageGenSettings.imageGenLora,
+              loraWeight: _storage.imageGenSettings.imageGenLoraWeight,
+              referenceImageBytes: referenceImage,
+              denoise: denoise ?? _storage.imageGenSettings.imageGenDenoise,
+              onProgress: _updateGenProgress,
+            );
+          }
         } catch (e) {
           // Sanitize for user display (mirrors the Draw Things branch).
           final msg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');

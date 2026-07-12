@@ -32,6 +32,8 @@
 // user's. Anyone whose graph differs uses "upload your own workflow", which is
 // the fully-general path. Adding/fixing a preset is one entry in this list.
 
+import 'dart:convert';
+
 import 'comfy_edit_workflow.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 
@@ -319,3 +321,68 @@ const List<ComfyEditPreset> kComfyEditPresets = [
   kQwenImageEditPreset,
   kFluxKontextPreset,
 ];
+
+/// The workflow-id sentinel for "use my uploaded workflow" (power-user path).
+const String kComfyUploadedWorkflowId = '__uploaded__';
+
+/// Find a bundled preset by id (null if unknown / the uploaded sentinel).
+ComfyEditPreset? comfyEditPresetById(String id) {
+  for (final p in kComfyEditPresets) {
+    if (p.id == id) return p;
+  }
+  return null;
+}
+
+/// Resolve the SELECTED ComfyUI edit workflow (a bundled preset OR the user's
+/// uploaded graph) plus the token values from the edit knobs. Returns null when
+/// the selection can't be resolved — an unknown id, or an uploaded workflow that
+/// isn't valid JSON. `%IMAGE%` is filled later by the service after it uploads
+/// the reference; an unpicked model slot is deliberately LEFT unfilled so the
+/// service's placeholder guard surfaces a "pick a model" error. Pure (the caller
+/// supplies every scalar), so it's unit-tested without a backend.
+({Map<String, dynamic> template, Map<String, Object?> values})?
+resolveComfyEditRequest({
+  required String workflowId,
+  required String uploadedWorkflowJson,
+  required Map<String, String> modelChoices,
+  required String prompt,
+  required String negative,
+  required int seed,
+  required int steps,
+  required double cfg,
+  required double denoise,
+  required double shift,
+  String sampler = 'euler',
+  String scheduler = 'simple',
+}) {
+  final values = <String, Object?>{
+    ComfyEditTokens.prompt: prompt,
+    ComfyEditTokens.negative: negative,
+    ComfyEditTokens.seed: seed,
+    ComfyEditTokens.steps: steps,
+    ComfyEditTokens.cfg: cfg,
+    ComfyEditTokens.denoise: denoise,
+    ComfyEditTokens.shift: shift,
+    ComfyEditTokens.sampler: sampler,
+    ComfyEditTokens.scheduler: scheduler,
+  };
+
+  if (workflowId == kComfyUploadedWorkflowId) {
+    if (uploadedWorkflowJson.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(uploadedWorkflowJson);
+      if (decoded is! Map) return null;
+      return (template: decoded.cast<String, dynamic>(), values: values);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final preset = comfyEditPresetById(workflowId);
+  if (preset == null) return null;
+  for (final slot in preset.modelSlots) {
+    final file = modelChoices['$workflowId/${slot.token}'] ?? '';
+    if (file.isNotEmpty) values[slot.token] = file;
+  }
+  return (template: preset.template, values: values);
+}
