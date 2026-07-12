@@ -56,7 +56,9 @@ class CharacterAuthoringFacade {
     return images
         .map((a) => {
               'id': a.id,
-              'label': a.label ?? '',
+              // A look's label is the internal '__look__' sentinel — never show
+              // it as a user-facing caption (isLook already marks looks).
+              'label': a.isLook ? '' : (a.label ?? ''),
               'displayOrder': a.displayOrder,
               'isPrime': a.displayOrder + 1 == card.primeAvatarIndex,
               'isLook': a.isLook,
