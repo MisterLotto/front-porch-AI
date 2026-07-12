@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-07-11 — ux(images): clearer wording for the expression-pack "replace" checkbox
+- **File:** `ui/image_studio/expression_pack_setup.dart`. The checkbox "Replace existing images with the same emotion" was ambiguous (maintainer flagged it). Reworded to **"Replace old images when an emotion is regenerated"** + a sub-line **"Off adds the new one alongside the old."** (two-line label, checkbox top-aligned). Desktop-only (expression packs aren't in the web UI). analyze clean.
+
 ## 2026-07-11 — feat(images): Phase 4 — expression packs use the edit path when an edit model is available
 - **Files:** `expression_prompts.dart`, `expression_pack_service.dart`, `ui/image_studio/expression_pack_dialog.dart` + tests. **Commit:** 65006eb.
 - **What:** when the active backend+model can instruction-edit (DT, or ComfyUI with a Qwen/Kontext workflow), each expression is generated via the EDIT path (identity pinned by the base portrait) instead of img2img; falls back to img2img otherwise (no regression for SD1.5/SDXL/turbo). `expressionEditInstruction(emotion)` DERIVES the edit instruction from the one `kExpressionModifiers` table (no drifting second table). `ExpressionPackSession.editMode` switches `_promptFor` (custom re-roll prompt still wins). The dialog resolves the capability once and passes `intent: StudioIntent.edit` + `editStrength: <strength slider>` when editing. Same session/QC/importer.
