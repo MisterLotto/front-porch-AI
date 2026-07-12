@@ -29,6 +29,9 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';
 
+import 'comfy_edit_panel.dart';
+import 'edit_recipe_strip.dart';
+import 'edit_source_well.dart';
 import 'result_view.dart';
 import 'settings_panel.dart';
 
@@ -83,6 +86,10 @@ class _EditViewState extends State<EditView> {
   /// under-driven below full strength — and the user dials DOWN for subtle,
   /// identity-preserving edits. See [kEditRecommendedStrength].
   double _strength = kEditRecommendedStrength;
+
+  /// Whether the ComfyUI edit setup is runnable (workflow + nodes + models), as
+  /// reported by [ComfyEditPanel]. Ignored for non-ComfyUI backends.
+  bool _comfyReady = false;
 
   @override
   void initState() {
@@ -205,8 +212,9 @@ class _EditViewState extends State<EditView> {
     final model = context.select<StorageService, String>(
       (s) => s.imageGenSettings.imageGenModel,
     );
+    final backend = ImageGenBackend.fromKey(backendKey);
     final cap = ImageReferenceResolver.resolveForBackend(
-      backend: ImageGenBackend.fromKey(backendKey),
+      backend: backend,
       modelName: model,
     );
     // Lock off the SHARED service so an edit and a Create generation can never
@@ -260,8 +268,22 @@ class _EditViewState extends State<EditView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const StudioSettingsPanel(editScoped: true),
-          const SizedBox(height: 10),
-          _editRecipeStrip(context),
+          // Backend-specific edit setup: Draw Things gets its recipe strip;
+          // ComfyUI gets the workflow picker + model dropdowns + readiness.
+          if (backend == ImageGenBackend.drawThings) ...[
+            const SizedBox(height: 10),
+            EditRecipeStrip(
+              busy: _busy || genBusy,
+              onUseRecommended: _useRecommendedEdit,
+            ),
+          ],
+          if (backend == ImageGenBackend.comfyUi) ...[
+            const SizedBox(height: 10),
+            ComfyEditPanel(
+              busy: _busy || genBusy,
+              onReadyChanged: (r) => setState(() => _comfyReady = r),
+            ),
+          ],
           const SizedBox(height: 16),
           if (!cap.supportsEdit)
             _degradeBanner(
@@ -270,11 +292,14 @@ class _EditViewState extends State<EditView> {
                   'Editing isn’t available for the current image model.',
             )
           else ...[
-            _label(context, cap.editMaxImages > 1
-                ? 'Reference photos'
-                : 'Reference photo'),
+            _label(context, 'Reference photo'),
             const SizedBox(height: 8),
-            _sourceSlots(context, cap.editMaxImages),
+            EditSourceWell(
+              bytes: _sourceBytes,
+              busy: _busy,
+              onPick: _pickSource,
+              onClear: () => setState(() => _sourceBytes = null),
+            ),
             const SizedBox(height: 20),
             _label(context, 'What should change?'),
             const SizedBox(height: 8),
@@ -282,7 +307,7 @@ class _EditViewState extends State<EditView> {
             const SizedBox(height: 16),
             _strengthSlider(context),
             const SizedBox(height: 16),
-            _applyButton(context, genBusy),
+            _applyButton(context, genBusy, backend),
           ],
           if (_busy) ...[
             const SizedBox(height: 24),
@@ -318,106 +343,6 @@ class _EditViewState extends State<EditView> {
       fontWeight: FontWeight.w700,
       letterSpacing: 0.4,
       color: AppColors.textSecondary(context),
-    ),
-  );
-
-  Widget _sourceSlots(BuildContext context, int max) {
-    return Row(
-      children: [
-        for (int i = 0; i < max; i++)
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            // Only well #0 is wired today; extra wells (when a model accepts
-            // more, Phase 6) show as "soon" until multi-image plumbing lands.
-            child: i == 0 ? _sourceWell(context) : _soonWell(context),
-          ),
-      ],
-    );
-  }
-
-  Widget _sourceWell(BuildContext context) {
-    final has = _sourceBytes != null;
-    return GestureDetector(
-      onTap: _busy ? null : _pickSource,
-      child: Container(
-        width: 96,
-        height: 96,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerOf(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: has ? AppColors.formMasterAccent : AppColors.borderOf(context),
-            width: has ? 1.5 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: has
-            ? Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.memory(_sourceBytes!, fit: BoxFit.cover),
-                  Positioned(
-                    top: 2,
-                    right: 2,
-                    child: GestureDetector(
-                      onTap: _busy
-                          ? null
-                          : () => setState(() => _sourceBytes = null),
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: AppColors.backgroundOf(context)
-                              .withValues(alpha: 0.8),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.close,
-                          size: 14,
-                          color: AppColors.iconSecondary(context),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.add_a_photo_outlined,
-                    color: AppColors.iconSecondary(context),
-                    size: 24,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Add photo',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textTertiary(context),
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-
-  Widget _soonWell(BuildContext context) => Container(
-    width: 96,
-    height: 96,
-    decoration: BoxDecoration(
-      color: AppColors.surfaceContainerOf(context),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: AppColors.borderOf(context),
-        style: BorderStyle.solid,
-      ),
-    ),
-    child: Center(
-      child: Text(
-        'soon',
-        style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
-      ),
     ),
   );
 
@@ -490,18 +415,27 @@ class _EditViewState extends State<EditView> {
     );
   }
 
-  Widget _applyButton(BuildContext context, bool genBusy) {
+  Widget _applyButton(
+    BuildContext context,
+    bool genBusy,
+    ImageGenBackend backend,
+  ) {
+    // On ComfyUI, Apply waits until the workflow + nodes + models are ready.
+    final comfyBlocked = backend == ImageGenBackend.comfyUi && !_comfyReady;
     final canApply =
         _sourceBytes != null &&
         _instructionCtrl.text.trim().isNotEmpty &&
         !_busy &&
-        !genBusy;
+        !genBusy &&
+        !comfyBlocked;
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: canApply ? _generate : null,
         icon: const Icon(Icons.auto_fix_high, size: 18),
-        label: const Text('Apply change'),
+        label: Text(
+          comfyBlocked ? 'Apply change · finish the setup above' : 'Apply change',
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.formMasterAccent,
           foregroundColor: AppColors.textPrimary(context),
@@ -513,95 +447,12 @@ class _EditViewState extends State<EditView> {
     );
   }
 
-  /// A compact strip under the (edit-scoped) Generation Settings that (a) makes
-  /// clear these knobs are edit-only — Create keeps its own — (b) offers a
-  /// one-tap reset to the field-tested edit recipe, and (c) warns, without
-  /// forcing anything, when the sampler/CFG are set to a combo Qwen-Image-Edit
-  /// tends to return a blank image for (the old "no images" footgun).
-  Widget _editRecipeStrip(BuildContext context) {
-    return Consumer<StorageService>(
-      builder: (context, st, _) {
-        final offRecipe =
-            st.editSampler != kEditRecommendedSamplerInt || st.editCfgScale > 5.0;
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerOf(context),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: offRecipe
-                  ? AppColors.logWarn
-                  : AppColors.borderOf(context),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    offRecipe ? Icons.warning_amber_rounded : Icons.tune,
-                    size: 15,
-                    color: offRecipe
-                        ? AppColors.logWarn
-                        : AppColors.iconSecondary(context),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'These settings are just for edits — Create keeps its own.',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: AppColors.textSecondary(context),
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    // Reset the persisted edit knobs AND the local strength
-                    // slider, so "recommended" is honest end-to-end.
-                    onPressed: _busy
-                        ? null
-                        : () {
-                            st.resetEditKnobsToRecommended();
-                            setState(
-                              () => _strength = kEditRecommendedStrength,
-                            );
-                          },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: const Size(0, 30),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      'Use recommended',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.formMasterAccent,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (offRecipe) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Heads up: Qwen-Image-Edit usually needs the UniPC sampler and '
-                  'a moderate CFG (~3.5). Other samplers or a high CFG can return '
-                  'no image at all.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.35,
-                    color: AppColors.textTertiary(context),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
+  /// Reset the Draw Things edit recipe AND the local strength slider — passed to
+  /// [EditRecipeStrip] because the strip can't see this view's [_strength] state.
+  void _useRecommendedEdit() {
+    Provider.of<StorageService>(context, listen: false)
+        .resetEditKnobsToRecommended();
+    setState(() => _strength = kEditRecommendedStrength);
   }
 
   Widget _degradeBanner(BuildContext context, String reason) {
