@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-11 — feat(images): Phase 4 — expression packs use the edit path when an edit model is available
+- **Files:** `expression_prompts.dart`, `expression_pack_service.dart`, `ui/image_studio/expression_pack_dialog.dart` + tests. **Commit:** 65006eb.
+- **What:** when the active backend+model can instruction-edit (DT, or ComfyUI with a Qwen/Kontext workflow), each expression is generated via the EDIT path (identity pinned by the base portrait) instead of img2img; falls back to img2img otherwise (no regression for SD1.5/SDXL/turbo). `expressionEditInstruction(emotion)` DERIVES the edit instruction from the one `kExpressionModifiers` table (no drifting second table). `ExpressionPackSession.editMode` switches `_promptFor` (custom re-roll prompt still wins). The dialog resolves the capability once and passes `intent: StudioIntent.edit` + `editStrength: <strength slider>` when editing. Same session/QC/importer.
+- **Tests:** editMode prompt-switch + expressionEditInstruction coverage; full expression suite (37) green. analyze clean.
+- **Also this session:** downloading Qwen-Image-Edit fp8 (~28GB: 19GB diffusion + 8.7GB qwen2.5-vl + 0.24GB vae, Apache/ungated) into the maintainer's ComfyUI (`~/ComfyUI-Shared/models/`) to do the real E2E render test (the one thing not yet verified). Then the PR.
+
 ## 2026-07-11 — feat(images): ComfyUI edit — the Edit-tab UI (Stage C2), feature now complete E2E
 - **Files:** `lib/ui/image_studio/comfy_edit_panel.dart` (new), `edit_recipe_strip.dart` (new, extracted), `edit_source_well.dart` (new, extracted), `edit_view.dart` (rewired). **Commit:** 230621d.
 - **What:** the approved mockup made real. `ComfyEditPanel` = workflow picker (Qwen-Image-Edit / Flux Kontext / "Upload your own…"), pick-your-model dropdowns filled LIVE from `/object_info` (`fetchModelFilesFor`), a ✓/⚠ readiness line (`missingEditNodes` → says exactly what's wrong: unreachable / missing node X / pick your models) that gates Apply, and a BYO upload path (validates the graph has %IMAGE%+%PROMPT%). `edit_view` renders EditRecipeStrip (DT) or ComfyEditPanel (ComfyUI) per backend.
