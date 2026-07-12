@@ -171,13 +171,16 @@ label input { margin-top: 6px; }
 .side-nav .nav-item.active { background: rgba(59, 130, 246, 0.14); color: var(--accent); font-weight: 700; }
 .side-nav .nav-icon { font-size: 1.2rem; }
 .side-footer {
-  margin-top: auto; display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 10px 6px 4px;
+  margin-top: auto; display: flex; flex-direction: column; align-items: stretch;
+  gap: 2px; padding: 10px 6px 4px;
 }
-.side-social-link {
-  width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
-  background: var(--surface-2); text-decoration: none; font-size: 1rem;
+/* Full-width labeled row, mirroring the desktop sidebar's Discord item. */
+.side-discord-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 12px; border-radius: 8px;
+  text-decoration: none; color: var(--muted); font-size: 0.95rem;
 }
+.side-discord-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
 .side-logout { text-align: left; padding: 8px 10px; }
 .app-main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
