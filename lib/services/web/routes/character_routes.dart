@@ -62,6 +62,10 @@ class WebCharacterRoutes {
     // Avatar management (specific sub-paths before the bare '<id>' POST).
     router.get('/api/characters/<id>/avatars', _avatars);
     router.post('/api/characters/<id>/avatars', _addAvatar);
+    // Gallery LOOK upload (writes to looks/, look-labeled; never the portrait).
+    router.post('/api/characters/<id>/looks', _addLook);
+    // The ★ favorite avatar (?avatarId=…, empty clears to the portrait).
+    router.post('/api/characters/<id>/favorite', _setFavorite);
     router.get('/api/characters/<id>/avatars/<avatarId>/image', _avatarImage);
     router.post('/api/characters/<id>/avatars/<avatarId>/prime', _setPrime);
     router.post(
@@ -357,6 +361,38 @@ class WebCharacterRoutes {
       id,
       bytes,
       request.url.queryParameters['label'],
+    );
+    if (!ok) return JsonResponse.error(404, 'Character not found');
+    return JsonResponse.ok({'avatars': await auth.avatars(id)});
+  }
+
+  /// Upload a new gallery LOOK image (raw bytes; goes to looks/, look-labeled).
+  Future<shelf.Response> _addLook(shelf.Request request, String id) async {
+    final auth = _authoring;
+    if (auth == null) return JsonResponse.error(503, 'Unavailable');
+    final List<int> bytes;
+    try {
+      bytes = await RequestBody.readBytes(
+        request,
+        maxBytes: RequestBody.uploadMaxBytes,
+      );
+    } catch (_) {
+      return JsonResponse.error(413, 'File too large');
+    }
+    if (bytes.isEmpty) return JsonResponse.badRequest('Empty upload');
+    final ok = await auth.addLook(id, bytes);
+    if (!ok) return JsonResponse.error(404, 'Character not found');
+    return JsonResponse.ok({'avatars': await auth.avatars(id)});
+  }
+
+  /// Set (or clear) the ★ favorite avatar. `?avatarId=<id>`; empty clears to
+  /// the portrait. Pointer only — never mutates the character's imagePath.
+  Future<shelf.Response> _setFavorite(shelf.Request request, String id) async {
+    final auth = _authoring;
+    if (auth == null) return JsonResponse.error(503, 'Unavailable');
+    final ok = await auth.setFavorite(
+      id,
+      request.url.queryParameters['avatarId'],
     );
     if (!ok) return JsonResponse.error(404, 'Character not found');
     return JsonResponse.ok({'avatars': await auth.avatars(id)});
