@@ -90,6 +90,11 @@ class StorageService extends ChangeNotifier {
   Directory characterAvatarDir(String characterName) =>
       directories.characterAvatarDir(characterName);
 
+  /// The character's private base folder (`avatars/` + `looks/` live under it).
+  /// Used to resolve gallery-look files via [AvatarImage.resolveFile].
+  Directory characterBaseDir(String characterName) =>
+      directories.characterBaseDir(characterName);
+
   Directory get customBackgroundDir => directories.customBackgroundDir;
 
   /// Cache directory for downscaled web-UI avatar thumbnails (derived data).
@@ -368,6 +373,40 @@ class StorageService extends ChangeNotifier {
   bool get drawThingsCfgZeroStar => imageGenSettings.drawThingsCfgZeroStar;
   Future<void> setDrawThingsCfgZeroStar(bool v) =>
       imageGenSettings.setDrawThingsCfgZeroStar(v);
+
+  // Edit-scoped generation knobs (Image Studio → Edit tab). Separate from the
+  // txt2img knobs so an edit's sampler/CFG/steps never clobber Create's.
+  int get editSteps => imageGenSettings.editSteps;
+  Future<void> setEditSteps(int v) => imageGenSettings.setEditSteps(v);
+  double get editCfgScale => imageGenSettings.editCfgScale;
+  Future<void> setEditCfgScale(double v) =>
+      imageGenSettings.setEditCfgScale(v);
+  int get editSampler => imageGenSettings.editSampler;
+  Future<void> setEditSampler(int v) => imageGenSettings.setEditSampler(v);
+  double get editShift => imageGenSettings.editShift;
+  Future<void> setEditShift(double v) => imageGenSettings.setEditShift(v);
+  int get editSeedMode => imageGenSettings.editSeedMode;
+  Future<void> setEditSeedMode(int v) => imageGenSettings.setEditSeedMode(v);
+  Future<void> resetEditKnobsToRecommended() =>
+      imageGenSettings.resetEditKnobsToRecommended();
+
+  // ComfyUI edit workflow selection + model-slot choices + uploaded workflow.
+  String get comfyEditWorkflowId => imageGenSettings.comfyEditWorkflowId;
+  Future<void> setComfyEditWorkflowId(String v) =>
+      imageGenSettings.setComfyEditWorkflowId(v);
+  Map<String, String> get comfyEditModelChoices =>
+      imageGenSettings.comfyEditModelChoices;
+  String? comfyEditModelChoice(String presetId, String token) =>
+      imageGenSettings.comfyEditModelChoice(presetId, token);
+  Future<void> setComfyEditModelChoice(
+    String presetId,
+    String token,
+    String file,
+  ) => imageGenSettings.setComfyEditModelChoice(presetId, token, file);
+  String get comfyEditUploadedWorkflow =>
+      imageGenSettings.comfyEditUploadedWorkflow;
+  Future<void> setComfyEditUploadedWorkflow(String json) =>
+      imageGenSettings.setComfyEditUploadedWorkflow(json);
 
   // Backend / kobold / remote / launch flags / kcpps (kv + callBuffer here per lift/compat needs; some also on tts/stt)
   String get backendType => backendSettings.backendType;

@@ -333,7 +333,10 @@ class DrawThingsGrpcService {
           'config': cfg,
           'reference_image_path': ?refImagePath,
         },
-        const Duration(seconds: 300),
+        // 10 min — a high-step edit on a big/quantized edit model (e.g.
+        // qwen-image-edit-i8) at the user's chosen step count is slow; 5 min
+        // was timing those out mid-generation.
+        const Duration(seconds: 600),
         onStderrLine: onProgress == null
             ? null
             : (line) {

@@ -39,6 +39,8 @@ extension ChatServiceGroupEntry on ChatService {
     _authorNoteStrength = 4;
     _summary = '';
     _summaryLastIndex = 0;
+    _selectedLooks
+        .clear(); // fresh group: drop prior chat's per-chat look selection (keep reset blocks in sync)
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; incomplete zeroing... now complete (see CLAUDE.md); see keep-sync + journal_maintenance)
     _isSummaryGenerating =

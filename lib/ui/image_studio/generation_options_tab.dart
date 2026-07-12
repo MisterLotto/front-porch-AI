@@ -42,10 +42,18 @@ class GenerationOptionsTab extends StatefulWidget {
   /// settings panel too would duplicate the control. The standalone image
   /// settings dialog (which has no StylePreview) keeps them.
   final bool showStyleControls;
+
+  /// When true, the per-generation knobs (Steps / CFG / DT Sampler / Shift /
+  /// SeedMode) read and write the EDIT-scoped store instead of the Create
+  /// (txt2img) store, so the Image Studio Edit tab can tune an edit without
+  /// clobbering Create. Everything else (backend, model, size, seed, LoRA) stays
+  /// shared. Default false = the normal Create/settings-page behavior.
+  final bool editScoped;
   const GenerationOptionsTab({
     super.key,
     this.showEnableToggle = true,
     this.showStyleControls = true,
+    this.editScoped = false,
   });
   @override
   State<GenerationOptionsTab> createState() => _GenerationOptionsTabState();
@@ -1072,6 +1080,14 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     StorageService st, {
     required bool isDrawThings,
   }) {
+    // On the Edit tab these knobs are edit-scoped so an edit never clobbers
+    // Create's txt2img settings; everywhere else they are the shared knobs.
+    final editScoped = widget.editScoped;
+    final steps = editScoped ? st.editSteps : st.imageGenSteps;
+    final cfg = editScoped ? st.editCfgScale : st.imageGenCfgScale;
+    final dtSampler = editScoped ? st.editSampler : st.drawThingsSampler;
+    final dtShift = editScoped ? st.editShift : st.drawThingsShift;
+    final dtSeedMode = editScoped ? st.editSeedMode : st.drawThingsSeedMode;
     return [
       Row(
         children: [
@@ -1084,7 +1100,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           ),
           Expanded(
             child: Slider(
-              value: _dragSteps ?? st.imageGenSteps.toDouble(),
+              value: _dragSteps ?? steps.toDouble(),
               min: 5,
               max: 50,
               divisions: 45,
@@ -1093,14 +1109,16 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               onChanged: (v) => setState(() => _dragSteps = v),
               onChangeEnd: (v) {
                 _dragSteps = null;
-                st.setImageGenSteps(v.round());
+                editScoped
+                    ? st.setEditSteps(v.round())
+                    : st.setImageGenSteps(v.round());
               },
             ),
           ),
           SizedBox(
             width: 26,
             child: Text(
-              (_dragSteps ?? st.imageGenSteps.toDouble()).round().toString(),
+              (_dragSteps ?? steps.toDouble()).round().toString(),
               style: TextStyle(
                 color: AppColors.textSecondary(context),
                 fontSize: 9,
@@ -1121,7 +1139,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           ),
           Expanded(
             child: Slider(
-              value: _dragCfgScale ?? st.imageGenCfgScale,
+              value: _dragCfgScale ?? cfg,
               min: 1,
               max: 20,
               divisions: 190,
@@ -1130,14 +1148,14 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               onChanged: (v) => setState(() => _dragCfgScale = v),
               onChangeEnd: (v) {
                 _dragCfgScale = null;
-                st.setImageGenCfgScale(v);
+                editScoped ? st.setEditCfgScale(v) : st.setImageGenCfgScale(v);
               },
             ),
           ),
           SizedBox(
             width: 30,
             child: Text(
-              (_dragCfgScale ?? st.imageGenCfgScale).toStringAsFixed(1),
+              (_dragCfgScale ?? cfg).toStringAsFixed(1),
               style: TextStyle(
                 color: AppColors.textSecondary(context),
                 fontSize: 9,
@@ -1163,7 +1181,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             flex: 3,
             child: isDrawThings
                 ? DropdownButtonFormField<int>(
-                    initialValue: st.drawThingsSampler,
+                    initialValue: dtSampler,
                     dropdownColor: AppColors.surfaceContainerOf(context),
                     style: TextStyle(
                       color: AppColors.textPrimary(context),
@@ -1186,7 +1204,10 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                         )
                         .toList(),
                     onChanged: (v) {
-                      if (v != null) st.setDrawThingsSampler(v);
+                      if (v == null) return;
+                      editScoped
+                          ? st.setEditSampler(v)
+                          : st.setDrawThingsSampler(v);
                     },
                   )
                 : DropdownButtonFormField<String>(
@@ -1338,18 +1359,19 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
             ),
             Expanded(
               child: Slider(
-                value: st.drawThingsShift,
+                value: dtShift,
                 min: 0,
                 max: 10,
                 divisions: 100,
                 activeColor: AppColors.formMasterAccent,
-                onChanged: (v) => st.setDrawThingsShift(v),
+                onChanged: (v) =>
+                    editScoped ? st.setEditShift(v) : st.setDrawThingsShift(v),
               ),
             ),
             SizedBox(
               width: 24,
               child: Text(
-                st.drawThingsShift.toStringAsFixed(1),
+                dtShift.toStringAsFixed(1),
                 style: TextStyle(fontSize: 8),
                 textAlign: TextAlign.end,
               ),
@@ -1366,7 +1388,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               ),
             ),
             DropdownButton<int>(
-              value: st.drawThingsSeedMode,
+              value: dtSeedMode,
               style: TextStyle(fontSize: 9),
               items: const [
                 DropdownMenuItem(
@@ -1387,7 +1409,10 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                 ),
               ],
               onChanged: (v) {
-                if (v != null) st.setDrawThingsSeedMode(v);
+                if (v == null) return;
+                editScoped
+                    ? st.setEditSeedMode(v)
+                    : st.setDrawThingsSeedMode(v);
               },
             ),
             Checkbox(

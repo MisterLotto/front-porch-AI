@@ -60,6 +60,8 @@ extension ChatServiceSessionLoad on ChatService {
       _isGrowthPassRunning =
           false; // growth-pass flag zero in _loadLast empty early return (0-session path hygiene; keep reset blocks in sync)
       _growthStore.invalidate(); // no session — nothing to inject
+      _selectedLooks
+          .clear(); // 0-session: no per-chat look selection (keep reset blocks in sync)
       return;
     }
 
@@ -72,6 +74,7 @@ extension ChatServiceSessionLoad on ChatService {
     _summaryLastIndex = lastSession.summaryLastIndex ?? 0;
     _sessionName = lastSession.name;
     _sessionDescription = lastSession.description;
+    _selectedLooks = decodeSelectedLooks(lastSession.selectedLookAvatarId);
     _parentSessionId = lastSession.parentSession;
     _forkIndex = lastSession.forkIndex;
     // Relationship scalars + migration/tier calc now via service (keeps load parity).
@@ -439,6 +442,7 @@ extension ChatServiceSessionLoad on ChatService {
       await _refreshGrowthCache(); // ring cache scoped to the newly loaded session
       _sessionName = session.name;
       _sessionDescription = session.description;
+      _selectedLooks = decodeSelectedLooks(session.selectedLookAvatarId);
       _parentSessionId = session.parentSession;
       _forkIndex = session.forkIndex;
       // Relationship load + tier calc + legacy migration via service.

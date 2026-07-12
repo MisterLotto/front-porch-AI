@@ -20,8 +20,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/ui/dialogs/character_avatars_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:path/path.dart' as p;
@@ -105,7 +103,6 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   List<String> _tags = [];
   final _tagController = TextEditingController();
   final ValueNotifier<int> _tokenNotifier = ValueNotifier<int>(0);
-  String? _newAvatarPath;
 
   // ── Realism Engine state ──
   bool _realismEnabled = false;
@@ -300,52 +297,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   // ═══════════════════════════════════════════════════════════════
 
   File? get _avatarFile {
-    if (_newAvatarPath != null) return File(_newAvatarPath!);
     final img = widget.character.imagePath;
     if (img == null || img.isEmpty) return null;
     if (p.isAbsolute(img)) return File(img);
     final storage = Provider.of<StorageService>(context, listen: false);
     return File(p.join(storage.charactersDir.path, img));
-  }
-
-  Future<void> _pickAvatar() async {
-    final result = await PickerPrefs.pickFiles(
-      category: PickerPrefs.catImage,
-      type: FileType.image,
-      allowMultiple: false,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final pickedPath = result.files.single.path;
-    if (pickedPath == null) return;
-
-    final imageBytes = await File(pickedPath).readAsBytes();
-    if (!mounted) return;
-
-    final croppedBytes = await ImageCropDialog.show(
-      context,
-      imageBytes: imageBytes,
-    );
-    if (croppedBytes == null || !mounted) return;
-
-    final storage = Provider.of<StorageService>(context, listen: false);
-    final charDir = storage.charactersDir;
-    await charDir.create(recursive: true);
-
-    final safeName = _nameController.text.trim().isNotEmpty
-        ? _nameController.text
-              .trim()
-              .replaceAll(RegExp(r'[^\w\s-]'), '')
-              .replaceAll(RegExp(r'\s+'), '_')
-        : 'avatar';
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final destFilename = '${safeName}_$timestamp.png';
-    final destPath = p.join(charDir.path, destFilename);
-
-    await File(destPath).writeAsBytes(croppedBytes);
-
-    setState(() {
-      _newAvatarPath = destPath;
-    });
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -423,22 +379,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       widget.character.frontPorchExtensions!.ensureStableId();
     }
 
-    // Update avatar if changed — store the *full* absolute path in the
-    // in-memory model (the documented convention). The repository will
-    // extract the basename only when writing to the database for
-    // cross-platform portability. Storing only the basename here used to
-    // cause updateCharacter() to attempt a relative write into the CWD,
-    // which is read-only inside packaged macOS .app bundles (and can be
-    // surprising on other platforms).
-    if (_newAvatarPath != null) {
-      widget.character.imagePath = _newAvatarPath!;
-    }
-
-    // Always embed V2 card data into the PNG to preserve extensions
+    // The portrait is no longer changed from this page (managed in the Avatar
+    // Gallery) — re-embed the V2 card data into the current imagePath PNG to
+    // preserve the edited extensions/fields.
     final storage = Provider.of<StorageService>(context, listen: false);
-    String? targetPngPath = _newAvatarPath;
-    if (targetPngPath == null &&
-        widget.character.imagePath != null &&
+    String? targetPngPath;
+    if (widget.character.imagePath != null &&
         widget.character.imagePath!.isNotEmpty) {
       final img = widget.character.imagePath!;
       targetPngPath = p.isAbsolute(img)
@@ -806,119 +752,44 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Avatar Section ──
+              // ── Avatar (read-only). Portrait + expression images are managed
+              //    in the Avatar Gallery (right-click a character on the home
+              //    grid, or the chat sidebar) — no destructive change here.
               Center(
-                child: GestureDetector(
-                  // Group members keep their group-path avatar in this pass.
-                  onTap: widget.allowAvatarChange ? _pickAvatar : null,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 160,
-                          height: 160,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            color: _bgSurface,
-                            border: Border.all(color: _borderSubtle),
-                            image:
-                                _avatarFile != null && _avatarFile!.existsSync()
-                                ? DecorationImage(
-                                    image: FileImage(_avatarFile!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
-                          ),
-                          child:
-                              (_avatarFile == null ||
-                                  !_avatarFile!.existsSync())
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.person,
-                                      size: 56,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'No avatar',
-                                      style: TextStyle(
-                                        color: Colors.white24,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : null,
-                        ),
-                        Positioned(
-                          bottom: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: _bgDeep, width: 2),
+                child: Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    color: _bgSurface,
+                    border: Border.all(color: _borderSubtle),
+                    image: _avatarFile != null && _avatarFile!.existsSync()
+                        ? DecorationImage(
+                            image: FileImage(_avatarFile!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: (_avatarFile == null || !_avatarFile!.existsSync())
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.person,
+                              size: 56,
+                              color: Colors.white.withValues(alpha: 0.15),
                             ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 16,
-                              color: Colors.white,
+                            const SizedBox(height: 4),
+                            const Text(
+                              'No avatar',
+                              style: TextStyle(
+                                color: Colors.white24,
+                                fontSize: 11,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Tap to change avatar',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final storage = Provider.of<StorageService>(
-                      context,
-                      listen: false,
-                    );
-                    final repo = Provider.of<CharacterRepository>(
-                      context,
-                      listen: false,
-                    );
-                    final result = await CharacterAvatarsDialog.show(
-                      context: context,
-                      character: widget.character,
-                      repository: repo,
-                      storage: storage,
-                    );
-                    if (result == true) {
-                      setState(() {});
-                    }
-                  },
-                  icon: const Icon(Icons.mood, size: 18),
-                  label: const Text('Expression Images'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    side: const BorderSide(color: Colors.white24),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
+                          ],
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(height: 20),

@@ -1877,6 +1877,17 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _selectedLookAvatarIdMeta =
+      const VerificationMeta('selectedLookAvatarId');
+  @override
+  late final GeneratedColumn<String> selectedLookAvatarId =
+      GeneratedColumn<String>(
+        'selected_look_avatar_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _groupRealismStateMeta = const VerificationMeta(
     'groupRealismState',
   );
@@ -1973,6 +1984,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     groupEvolvedScenarios,
     generationSettings,
     userPersonaId,
+    selectedLookAvatarId,
     groupRealismState,
     createdAt,
     updatedAt,
@@ -2376,6 +2388,15 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('selected_look_avatar_id')) {
+      context.handle(
+        _selectedLookAvatarIdMeta,
+        selectedLookAvatarId.isAcceptableOrUnknown(
+          data['selected_look_avatar_id']!,
+          _selectedLookAvatarIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('group_realism_state')) {
       context.handle(
         _groupRealismStateMeta,
@@ -2596,6 +2617,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}user_persona_id'],
       ),
+      selectedLookAvatarId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}selected_look_avatar_id'],
+      ),
       groupRealismState: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}group_realism_state'],
@@ -2669,6 +2694,12 @@ class Session extends DataClass implements Insertable<Session> {
   final String? generationSettings;
   final String? userPersonaId;
 
+  /// The gallery "look" (avatar) selected for THIS chat, or null → show the
+  /// character's library face (`imagePath`). Per-chat selection over the global
+  /// look collection. Nullable + additive; the external card tool (Character
+  /// Card Forge) simply omits it (NULL).
+  final String? selectedLookAvatarId;
+
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
   /// Replaces the old hidden __group_state__ checkpoint message system (clean break in v30).
@@ -2724,6 +2755,7 @@ class Session extends DataClass implements Insertable<Session> {
     required this.groupEvolvedScenarios,
     this.generationSettings,
     this.userPersonaId,
+    this.selectedLookAvatarId,
     required this.groupRealismState,
     required this.createdAt,
     required this.updatedAt,
@@ -2802,6 +2834,9 @@ class Session extends DataClass implements Insertable<Session> {
     if (!nullToAbsent || userPersonaId != null) {
       map['user_persona_id'] = Variable<String>(userPersonaId);
     }
+    if (!nullToAbsent || selectedLookAvatarId != null) {
+      map['selected_look_avatar_id'] = Variable<String>(selectedLookAvatarId);
+    }
     map['group_realism_state'] = Variable<String>(groupRealismState);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2879,6 +2914,9 @@ class Session extends DataClass implements Insertable<Session> {
       userPersonaId: userPersonaId == null && nullToAbsent
           ? const Value.absent()
           : Value(userPersonaId),
+      selectedLookAvatarId: selectedLookAvatarId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(selectedLookAvatarId),
       groupRealismState: Value(groupRealismState),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -2958,6 +2996,9 @@ class Session extends DataClass implements Insertable<Session> {
         json['generationSettings'],
       ),
       userPersonaId: serializer.fromJson<String?>(json['userPersonaId']),
+      selectedLookAvatarId: serializer.fromJson<String?>(
+        json['selectedLookAvatarId'],
+      ),
       groupRealismState: serializer.fromJson<String>(json['groupRealismState']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -3018,6 +3059,7 @@ class Session extends DataClass implements Insertable<Session> {
       'groupEvolvedScenarios': serializer.toJson<String>(groupEvolvedScenarios),
       'generationSettings': serializer.toJson<String?>(generationSettings),
       'userPersonaId': serializer.toJson<String?>(userPersonaId),
+      'selectedLookAvatarId': serializer.toJson<String?>(selectedLookAvatarId),
       'groupRealismState': serializer.toJson<String>(groupRealismState),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -3072,6 +3114,7 @@ class Session extends DataClass implements Insertable<Session> {
     String? groupEvolvedScenarios,
     Value<String?> generationSettings = const Value.absent(),
     Value<String?> userPersonaId = const Value.absent(),
+    Value<String?> selectedLookAvatarId = const Value.absent(),
     String? groupRealismState,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -3135,6 +3178,9 @@ class Session extends DataClass implements Insertable<Session> {
     userPersonaId: userPersonaId.present
         ? userPersonaId.value
         : this.userPersonaId,
+    selectedLookAvatarId: selectedLookAvatarId.present
+        ? selectedLookAvatarId.value
+        : this.selectedLookAvatarId,
     groupRealismState: groupRealismState ?? this.groupRealismState,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -3266,6 +3312,9 @@ class Session extends DataClass implements Insertable<Session> {
       userPersonaId: data.userPersonaId.present
           ? data.userPersonaId.value
           : this.userPersonaId,
+      selectedLookAvatarId: data.selectedLookAvatarId.present
+          ? data.selectedLookAvatarId.value
+          : this.selectedLookAvatarId,
       groupRealismState: data.groupRealismState.present
           ? data.groupRealismState.value
           : this.groupRealismState,
@@ -3324,6 +3373,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('groupEvolvedScenarios: $groupEvolvedScenarios, ')
           ..write('generationSettings: $generationSettings, ')
           ..write('userPersonaId: $userPersonaId, ')
+          ..write('selectedLookAvatarId: $selectedLookAvatarId, ')
           ..write('groupRealismState: $groupRealismState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3380,6 +3430,7 @@ class Session extends DataClass implements Insertable<Session> {
     groupEvolvedScenarios,
     generationSettings,
     userPersonaId,
+    selectedLookAvatarId,
     groupRealismState,
     createdAt,
     updatedAt,
@@ -3435,6 +3486,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.groupEvolvedScenarios == this.groupEvolvedScenarios &&
           other.generationSettings == this.generationSettings &&
           other.userPersonaId == this.userPersonaId &&
+          other.selectedLookAvatarId == this.selectedLookAvatarId &&
           other.groupRealismState == this.groupRealismState &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -3488,6 +3540,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String> groupEvolvedScenarios;
   final Value<String?> generationSettings;
   final Value<String?> userPersonaId;
+  final Value<String?> selectedLookAvatarId;
   final Value<String> groupRealismState;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -3540,6 +3593,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.groupEvolvedScenarios = const Value.absent(),
     this.generationSettings = const Value.absent(),
     this.userPersonaId = const Value.absent(),
+    this.selectedLookAvatarId = const Value.absent(),
     this.groupRealismState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -3593,6 +3647,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.groupEvolvedScenarios = const Value.absent(),
     this.generationSettings = const Value.absent(),
     this.userPersonaId = const Value.absent(),
+    this.selectedLookAvatarId = const Value.absent(),
     this.groupRealismState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -3646,6 +3701,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? groupEvolvedScenarios,
     Expression<String>? generationSettings,
     Expression<String>? userPersonaId,
+    Expression<String>? selectedLookAvatarId,
     Expression<String>? groupRealismState,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -3708,6 +3764,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
         'group_evolved_scenarios': groupEvolvedScenarios,
       if (generationSettings != null) 'generation_settings': generationSettings,
       if (userPersonaId != null) 'user_persona_id': userPersonaId,
+      if (selectedLookAvatarId != null)
+        'selected_look_avatar_id': selectedLookAvatarId,
       if (groupRealismState != null) 'group_realism_state': groupRealismState,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -3763,6 +3821,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String>? groupEvolvedScenarios,
     Value<String?>? generationSettings,
     Value<String?>? userPersonaId,
+    Value<String?>? selectedLookAvatarId,
     Value<String>? groupRealismState,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -3821,6 +3880,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           groupEvolvedScenarios ?? this.groupEvolvedScenarios,
       generationSettings: generationSettings ?? this.generationSettings,
       userPersonaId: userPersonaId ?? this.userPersonaId,
+      selectedLookAvatarId: selectedLookAvatarId ?? this.selectedLookAvatarId,
       groupRealismState: groupRealismState ?? this.groupRealismState,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -3982,6 +4042,11 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (userPersonaId.present) {
       map['user_persona_id'] = Variable<String>(userPersonaId.value);
     }
+    if (selectedLookAvatarId.present) {
+      map['selected_look_avatar_id'] = Variable<String>(
+        selectedLookAvatarId.value,
+      );
+    }
     if (groupRealismState.present) {
       map['group_realism_state'] = Variable<String>(groupRealismState.value);
     }
@@ -4049,6 +4114,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('groupEvolvedScenarios: $groupEvolvedScenarios, ')
           ..write('generationSettings: $generationSettings, ')
           ..write('userPersonaId: $userPersonaId, ')
+          ..write('selectedLookAvatarId: $selectedLookAvatarId, ')
           ..write('groupRealismState: $groupRealismState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -15191,6 +15257,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String> groupEvolvedScenarios,
       Value<String?> generationSettings,
       Value<String?> userPersonaId,
+      Value<String?> selectedLookAvatarId,
       Value<String> groupRealismState,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -15245,6 +15312,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String> groupEvolvedScenarios,
       Value<String?> generationSettings,
       Value<String?> userPersonaId,
+      Value<String?> selectedLookAvatarId,
       Value<String> groupRealismState,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -15488,6 +15556,11 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<String> get userPersonaId => $composableBuilder(
     column: $table.userPersonaId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get selectedLookAvatarId => $composableBuilder(
+    column: $table.selectedLookAvatarId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15751,6 +15824,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get selectedLookAvatarId => $composableBuilder(
+    column: $table.selectedLookAvatarId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get groupRealismState => $composableBuilder(
     column: $table.groupRealismState,
     builder: (column) => ColumnOrderings(column),
@@ -15997,6 +16075,11 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get selectedLookAvatarId => $composableBuilder(
+    column: $table.selectedLookAvatarId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get groupRealismState => $composableBuilder(
     column: $table.groupRealismState,
     builder: (column) => column,
@@ -16086,6 +16169,7 @@ class $$SessionsTableTableManager
                 Value<String> groupEvolvedScenarios = const Value.absent(),
                 Value<String?> generationSettings = const Value.absent(),
                 Value<String?> userPersonaId = const Value.absent(),
+                Value<String?> selectedLookAvatarId = const Value.absent(),
                 Value<String> groupRealismState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -16138,6 +16222,7 @@ class $$SessionsTableTableManager
                 groupEvolvedScenarios: groupEvolvedScenarios,
                 generationSettings: generationSettings,
                 userPersonaId: userPersonaId,
+                selectedLookAvatarId: selectedLookAvatarId,
                 groupRealismState: groupRealismState,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -16192,6 +16277,7 @@ class $$SessionsTableTableManager
                 Value<String> groupEvolvedScenarios = const Value.absent(),
                 Value<String?> generationSettings = const Value.absent(),
                 Value<String?> userPersonaId = const Value.absent(),
+                Value<String?> selectedLookAvatarId = const Value.absent(),
                 Value<String> groupRealismState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -16244,6 +16330,7 @@ class $$SessionsTableTableManager
                 groupEvolvedScenarios: groupEvolvedScenarios,
                 generationSettings: generationSettings,
                 userPersonaId: userPersonaId,
+                selectedLookAvatarId: selectedLookAvatarId,
                 groupRealismState: groupRealismState,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

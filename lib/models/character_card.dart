@@ -120,6 +120,13 @@ class FrontPorchExtensions {
   /// external direct-writer schema.
   String? tier;
 
+  /// The character's starred "canonical avatar": the id of an `avatar_images`
+  /// row (a gallery look OR an expression image) to use as the card cover on
+  /// export and as the default face a new chat opens with. `null` = the portrait
+  /// (`imagePath`). Exactly one at a time. A pointer only — it never mutates
+  /// `imagePath`. Stored inside the PNG extensions (no external-writer schema).
+  String? favoriteAvatarId;
+
   FrontPorchExtensions({
     this.realismEnabled = false,
     this.shortTermBond = 0,
@@ -183,6 +190,7 @@ class FrontPorchExtensions {
     this.currentTask = '',
     this.stableId,
     this.tier,
+    this.favoriteAvatarId,
   });
 
   Map<String, dynamic> toJson() {
@@ -241,6 +249,7 @@ class FrontPorchExtensions {
 
         'current_task': currentTask,
         'tier': ?tier,
+        'favorite_avatar_id': ?favoriteAvatarId,
       },
     };
   }
@@ -312,6 +321,7 @@ class FrontPorchExtensions {
 
       currentTask: realism['current_task'] as String? ?? '',
       tier: realism['tier'] as String?,
+      favoriteAvatarId: realism['favorite_avatar_id'] as String?,
     );
   }
 
@@ -365,6 +375,7 @@ class FrontPorchExtensions {
     String? currentTask,
     String? stableId,
     String? tier,
+    String? favoriteAvatarId,
   }) {
     return FrontPorchExtensions(
       realismEnabled: realismEnabled ?? this.realismEnabled,
@@ -420,6 +431,7 @@ class FrontPorchExtensions {
       currentTask: currentTask ?? this.currentTask,
       stableId: stableId ?? this.stableId,
       tier: tier ?? this.tier,
+      favoriteAvatarId: favoriteAvatarId ?? this.favoriteAvatarId,
     );
   }
 

@@ -40,5 +40,6 @@ export 'overlays/generation_status_bar.dart';
 export 'widgets/chat_image_attachment.dart';
 export 'widgets/eval_pill.dart';
 export 'widgets/generating_image_bubble.dart';
+export 'widgets/look_chevrons.dart';
 export 'widgets/message_jump.dart';
 export 'widgets/settings_menu_item.dart';

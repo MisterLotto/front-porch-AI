@@ -118,10 +118,12 @@ class ExpressionPackSession extends ChangeNotifier {
     required double denoise,
     required PackSlotGenerator generate,
     int? seed, // fixed shared seed; default = random positive int
+    bool editMode = false,
   }) : _basePrompt = basePrompt,
        _negativePrompt = negativePrompt,
        _denoise = denoise,
        _generate = generate,
+       _editMode = editMode,
        // Must be a fixed POSITIVE value: ComfyUI randomizes -1 client-side and
        // A1111 server-side, so sharing a seed across slots requires pinning it.
        _seed = seed ?? Random().nextInt(1 << 31),
@@ -131,6 +133,11 @@ class ExpressionPackSession extends ChangeNotifier {
   final String _negativePrompt;
   final double _denoise;
   final PackSlotGenerator _generate;
+
+  /// When true an instruction-edit model is driving generation, so each slot's
+  /// positive prompt is an EDIT INSTRUCTION off the base portrait (identity kept
+  /// by the reference), not the img2img geometry-tags + base-composition prompt.
+  final bool _editMode;
   final int _seed;
   final List<ExpressionSlot> _slots;
 
@@ -185,6 +192,9 @@ class ExpressionPackSession extends ChangeNotifier {
   String _promptFor(ExpressionSlot slot) {
     final custom = slot.customPrompt;
     if (custom != null && custom.isNotEmpty) return custom;
+    // Edit path: an instruction off the base portrait (identity comes from the
+    // reference image, so no base-composition prompt).
+    if (_editMode) return expressionEditInstruction(slot.emotion);
     final modifier = kExpressionModifiers[slot.emotion] ?? slot.emotion;
     // Emotion first: front tokens get the most conditioning weight, and at
     // turbo-model CFG (~1) a tail phrase was too weak to change the face.

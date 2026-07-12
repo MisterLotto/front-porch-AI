@@ -198,6 +198,7 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
         ),
         const SizedBox(height: 12),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 20,
@@ -210,12 +211,25 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                'Replace existing images with the same emotion',
-                style: TextStyle(
-                  color: AppColors.textSecondary(context),
-                  fontSize: 12.5,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Replace old images when an emotion is regenerated',
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Off adds the new one alongside the old.',
+                    style: TextStyle(
+                      color: AppColors.textTertiary(context),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

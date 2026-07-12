@@ -443,6 +443,24 @@ class CharacterGridCard extends StatelessWidget {
                         ),
                       ),
                       PopupMenuItem(
+                        value: 'avatar_gallery',
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.photo_library_outlined,
+                            color: AppColors.iconSecondary(context),
+                            size: 20,
+                          ),
+                          title: Text(
+                            'Avatar Gallery',
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                            ),
+                          ),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem(
                         value: 'duplicate',
                         child: ListTile(
                           leading: Icon(

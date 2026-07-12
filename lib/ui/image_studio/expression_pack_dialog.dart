@@ -28,6 +28,8 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
+import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/expression_pack_qc.dart';
 import 'package:front_porch_ai/services/expression_pack_service.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
@@ -354,11 +356,20 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
               if (!widget.existingEmotions.contains(e)) e,
           ]
         : chosen;
+    // Edit-first: when the active backend + model can instruction-edit, drive
+    // each emotion through the EDIT path (identity pinned by the base portrait)
+    // instead of img2img. Falls back to img2img automatically otherwise.
+    final settings = widget.storage.imageGenSettings;
+    final editMode = ImageReferenceResolver.resolveForBackend(
+      backend: ImageGenBackend.fromKey(settings.imageGenBackend),
+      modelName: settings.imageGenModel,
+    ).supportsEdit;
     final session = ExpressionPackSession(
       emotions: emotions,
       basePrompt: '${widget.basePrompt}, $kExpressionFraming',
       negativePrompt: widget.negativePrompt,
       denoise: denoise,
+      editMode: editMode,
       generate:
           ({
             required String prompt,
@@ -372,6 +383,10 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
             referenceImage: widget.baseImage,
             seed: seed,
             denoise: denoise,
+            // Edit path when available: the reference is read as conditioning
+            // and the strength slider becomes the edit strength; else img2img.
+            intent: editMode ? StudioIntent.edit : StudioIntent.create,
+            editStrength: editMode ? denoise : null,
           ),
     );
     setState(() => _session = session);
