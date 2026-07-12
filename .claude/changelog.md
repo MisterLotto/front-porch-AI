@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-11 — feat(web): Avatar Gallery (upload-only) for the web/mobile UI
+- **Commits:** 025e2c7 (management), 518ba4d (swipe). **Files:** web facade+routes (character_authoring_facade.dart, character_routes.dart) + web_ui (AvatarManager.tsx, ChatAvatar.tsx, ChatInsight.tsx, styles.css) + rebuilt assets/web_app.
+- **What:** the desktop avatar gallery brought to web as UPLOAD-ONLY (no in-app editing/generation on web — that stays desktop). Backend: new /looks upload (writes looks/ via addLook), look-aware serving (resolveFile), isLook/isFavorite in the avatars list, /favorite setter for the ★. Frontend: character-edit avatar panel is now a two-section gallery (Looks — any image, no crop; Expressions — face-crop + emotion label, packs = several uploads) with a ★ favorite spanning both; the chat insight Portrait became a LookSwiper (chevrons flip portrait↔looks, choice sticks per-character in localStorage, expressions still apply on face 0, 1:1 + desktop only like the existing portrait). Reuses the existing expression-upload endpoint + library_changed WS.
+- **Verified:** flutter analyze clean (web); tsc clean; vite build ✓. Functional/visual check needs the app rebuilt + running (couldn't run vs the maintainer's old-bundle instance; a 2nd instance locks the shared port).
+
 ## 2026-07-11 — feat(images): remote instruction-edit (Nano-GPT + OpenRouter), both verified live
 - **Files:** capability/image_reference_role.dart (remoteEditSpec segment regex), capability/image_reference_resolver.dart (remote edit ON via allowlist, single image), image_gen_service.dart (transport + routing + fixes), + tests. **Commit:** cecdee3.
 - **What:** remote edit turns on for allowlisted edit models (qwen-image-max-edit, nano-banana-edit, glm-image-edit, gpt-image-2, + any "edit"-segment id from the live Nano-GPT list). No new transport methods — the existing generators gained an optional `editImage`: OpenAI-compatible (Nano-GPT/OpenAI) → base64 `imageDataUrl` to `/images/edits`; OpenRouter → `image_url` content part on `/chat/completions`. Remote branch forks on editConditioning; txt2img untouched.
