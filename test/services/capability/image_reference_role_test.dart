@@ -56,6 +56,22 @@ void main() {
           (kind: EditModelKind.generic, maxImages: 1));
     });
 
+    test('segment-style "edit" ids from the live Nano-GPT list resolve', () {
+      // Verified against Nano-GPT /image-models (path-style + suffixed ids).
+      for (final id in const [
+        'bytedance/seedream-v5.0-pro/edit',
+        'pruna-ai/p-image/edit',
+        'microsoft/mai-image-2.5/edit',
+        'fal-ai/bernini-r/edit-image',
+        'step-image-edit-2',
+        'nano-banana-edit',
+        'nano-banana-pro-edit',
+      ]) {
+        expect(remoteEditSpec(id), (kind: EditModelKind.generic, maxImages: 1),
+            reason: id);
+      }
+    });
+
     test('case-insensitive; non-edit ids → null', () {
       expect(remoteEditSpec('QWEN-IMAGE-MAX-EDIT')?.kind,
           EditModelKind.qwenEdit);
@@ -328,7 +344,7 @@ void main() {
       expect(cap.supportsImg2img, isTrue);
     });
 
-    test('ComfyUI edit is ON (preset-driven, any model); remote still off', () {
+    test('ComfyUI edit is ON (preset-driven, any model)', () {
       // ComfyUI edits via a SELECTED workflow (preset or uploaded), not a
       // detected model name — so edit is offered for ANY model when the backend
       // is ComfyUI (fine readiness is checked in the Edit tab). Single reference.
@@ -341,23 +357,25 @@ void main() {
       expect(comfy.editKind, EditModelKind.generic);
       expect(comfy.supportsImg2img, isTrue);
       expect(comfy.degradeReason, isNull);
+    });
 
-      final remote = ImageReferenceResolver.resolveForBackend(
+    test('remote edit is ON for an allowlisted edit model (single image, no '
+        'img2img); a non-edit remote model degrades', () {
+      final edit = ImageReferenceResolver.resolveForBackend(
         backend: ImageGenBackend.remote,
         modelName: 'qwen-image-max-edit',
       );
-      expect(remote.supportsEdit, isFalse);
-      expect(remote.supportsImg2img, isFalse);
-    });
+      expect(edit.supportsEdit, isTrue);
+      expect(edit.editMaxImages, 1); // capped at one reference
+      expect(edit.supportsImg2img, isFalse); // remote never does classic img2img
+      expect(edit.degradeReason, isNull);
 
-    test('a remote edit model still gets honest "coming" copy', () {
-      // The remote path uses name heuristics (edit isn't wired), so use a name
-      // the detector recognizes as an edit model to reach the "coming" branch.
-      final remote = ImageReferenceResolver.resolveForBackend(
+      final plain = ImageReferenceResolver.resolveForBackend(
         backend: ImageGenBackend.remote,
-        modelName: 'qwen-image-edit-2509',
+        modelName: 'gpt-4o', // not an image-edit model
       );
-      expect(remote.degradeReason, contains('coming'));
+      expect(plain.supportsEdit, isFalse);
+      expect(plain.degradeReason, isNotNull);
     });
   });
 

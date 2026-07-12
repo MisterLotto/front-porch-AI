@@ -155,13 +155,23 @@ const Map<String, ({EditModelKind kind, int maxImages})> _remoteEditModels = {
   'bria-fibo-edit': (kind: EditModelKind.generic, maxImages: 1),
 };
 
+/// Matches an "edit" SEGMENT in a provider model id — `-edit`, `/edit`,
+/// `edit-image`, `edit-2`, etc. — but not "edit" buried in another word
+/// ("credit"). Verified against Nano-GPT's live list: `qwen-image-max-edit`,
+/// `glm-image-edit`, `nano-banana-edit`, `nano-banana-pro-edit`,
+/// `step-image-edit-2`, `bytedance/seedream-v5.0-pro/edit`,
+/// `microsoft/mai-image-2.5/edit`, `fal-ai/bernini-r/edit-image`, …
+final RegExp _editSegmentRe = RegExp(r'(?:^|[-_/])edit(?:[-_/]|$)');
+
 /// The edit spec for a remote model ID, or null if it isn't an edit model.
 ({EditModelKind kind, int maxImages})? remoteEditSpec(String modelId) {
   final id = modelId.trim().toLowerCase();
   final hit = _remoteEditModels[id];
   if (hit != null) return hit;
-  // Any provider's "*-edit" model edits at least one image.
-  if (id.endsWith('-edit')) return (kind: EditModelKind.generic, maxImages: 1);
+  // Any provider model with an "edit" segment edits at least one image.
+  if (_editSegmentRe.hasMatch(id)) {
+    return (kind: EditModelKind.generic, maxImages: 1);
+  }
   return null;
 }
 

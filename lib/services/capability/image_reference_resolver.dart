@@ -69,14 +69,17 @@ class ImageReferenceResolver {
           editKind: EditModelKind.generic,
         );
       case ImageGenBackend.remote:
-        // Phase 5 wires edit here (useRemoteAllowlist + a per-model ceiling).
+        // Remote edit is detected from the model ID allowlist (canonical
+        // provider ids, e.g. qwen-image-max-edit / nano-banana-edit), capped at
+        // one reference image. The transport is verified against Nano-GPT's
+        // OpenAI-compatible /images/edits; OpenRouter's chat-completions image
+        // path is wired too (community-verified). A non-edit remote model still
+        // degrades honestly.
         return resolveCapability(
           modelName: modelName,
           backendSupportsImg2img: false,
-          backendEditMaxImages: 0,
-          backendEditUnavailableReason:
-              'Editing with remote models is coming in an update. For now, use '
-              'Draw Things for edits, or Create.',
+          backendEditMaxImages: 1,
+          useRemoteAllowlist: true,
         );
     }
   }

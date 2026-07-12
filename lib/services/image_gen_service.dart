@@ -598,6 +598,17 @@ class ImageGenService extends ChangeNotifier {
         final apiUrl = _storage.backendSettings.remoteApiUrl;
         final apiKey = _storage.backendSettings.remoteApiKey;
 
+        // Remote EDIT when an edit model + a reference are in play: the
+        // instruction (`prompt`) + the reference image go to the provider's edit
+        // shape (OpenAI-compatible /images/edits, or OpenRouter's multimodal
+        // chat). Otherwise the existing txt2img path, untouched.
+        final remoteEdit =
+            refRole == ImageReferenceRole.editConditioning &&
+            referenceImage != null;
+        if (remoteEdit) {
+          _statusMessage = 'Editing with $imageModel...';
+          notifyListeners();
+        }
         if (_isOpenRouterStyle(apiUrl)) {
           imageBytes = await _generateViaOpenRouter(
             apiUrl: apiUrl,
@@ -605,6 +616,7 @@ class ImageGenService extends ChangeNotifier {
             model: imageModel,
             prompt: prompt,
             size: imageSize,
+            editImage: remoteEdit ? referenceImage : null,
           );
         } else {
           imageBytes = await _generateViaOpenAICompat(
@@ -614,6 +626,7 @@ class ImageGenService extends ChangeNotifier {
             prompt: prompt,
             negativePrompt: negativePrompt,
             size: imageSize,
+            editImage: remoteEdit ? referenceImage : null,
           );
         }
       }
@@ -1758,17 +1771,31 @@ class ImageGenService extends ChangeNotifier {
     required String prompt,
     String negativePrompt = '',
     String size = '1024x1024',
+    // When set, this is an EDIT: POST the reference (as a base64 data URI) +
+    // instruction to the OpenAI-compatible /images/edits endpoint instead of
+    // /images/generations. Verified against Nano-GPT (JSON imageDataUrl variant).
+    Uint8List? editImage,
   }) async {
-    final imageEndpoint = '$apiUrl/images/generations';
-    debugPrint('ImageGen: POST $imageEndpoint (model=$model)');
+    final isEdit = editImage != null;
+    final imageEndpoint = isEdit
+        ? '$apiUrl/images/edits'
+        : '$apiUrl/images/generations';
+    debugPrint('ImageGen: POST $imageEndpoint (model=$model, edit=$isEdit)');
     final uri = Uri.parse(imageEndpoint);
-    final payload = <String, dynamic>{
-      'model': model,
-      'prompt': prompt,
-      'n': 1,
-      'size': size,
-      'response_format': 'b64_json',
-    };
+    final payload = isEdit
+        ? <String, dynamic>{
+            'model': model,
+            'prompt': prompt,
+            'imageDataUrl':
+                'data:image/png;base64,${base64Encode(editImage)}',
+          }
+        : <String, dynamic>{
+            'model': model,
+            'prompt': prompt,
+            'n': 1,
+            'size': size,
+            'response_format': 'b64_json',
+          };
 
     final client = http.Client();
     try {
@@ -1790,12 +1817,15 @@ class ImageGenService extends ChangeNotifier {
         try {
           final errBody = jsonDecode(response.body);
           final error = errBody['error'];
-          // Handle both OpenAI format {"error":{"message":"..."}} and
-          // Nano-GPT format {"error":"...","code":"..."}
+          // Handle both OpenAI format {"error":{"message":"..."}} and Nano-GPT
+          // format {"error":"Insufficient balance","message":"Available X,
+          // required Y","code":"insufficient_balance"} — prefer the detailed
+          // top-level message so e.g. a low-balance edit says exactly how much.
           if (error is Map<String, dynamic>) {
             errorMsg = error['message'] as String? ?? errorMsg;
           } else if (error is String) {
-            errorMsg = error;
+            final detail = errBody['message'];
+            errorMsg = (detail is String && detail.isNotEmpty) ? detail : error;
           }
         } catch (_) {}
         throw Exception(errorMsg);
@@ -1827,18 +1857,36 @@ class ImageGenService extends ChangeNotifier {
   }
 
   /// Generate via OpenRouter's chat/completions endpoint with image modality.
+  ///
+  /// When [editImage] is set this is an EDIT: the reference rides as an
+  /// `image_url` content part (base64 data URI) alongside the instruction — the
+  /// only image-edit shape OpenRouter exposes (it has no /images/edits). Wired
+  /// from OpenRouter's documented multimodal image support but NOT verified
+  /// in-house (only Nano-GPT's /images/edits was); community-verified.
   Future<Uint8List> _generateViaOpenRouter({
     required String apiUrl,
     required String apiKey,
     required String model,
     required String prompt,
     String size = '1024x1024',
+    Uint8List? editImage,
   }) async {
     final uri = Uri.parse('$apiUrl/chat/completions');
+    final content = editImage == null
+        ? prompt
+        : [
+            {'type': 'text', 'text': prompt},
+            {
+              'type': 'image_url',
+              'image_url': {
+                'url': 'data:image/png;base64,${base64Encode(editImage)}',
+              },
+            },
+          ];
     final payload = <String, dynamic>{
       'model': model,
       'messages': [
-        {'role': 'user', 'content': prompt},
+        {'role': 'user', 'content': content},
       ],
       'modalities': ['image'],
       'max_tokens': 4096,
@@ -1878,35 +1926,36 @@ class ImageGenService extends ChangeNotifier {
       if (choices.isEmpty) throw Exception('No response choices');
 
       final message = choices[0]['message'] as Map<String, dynamic>;
-      final content = message['content'];
 
-      // OpenRouter may return content as a list with image parts
-      if (content is List) {
-        for (final part in content) {
-          if (part is Map<String, dynamic>) {
-            if (part['type'] == 'image_url') {
-              final imageUrl = part['image_url']?['url'] as String?;
-              if (imageUrl != null) {
-                if (imageUrl.startsWith('data:')) {
-                  // Base64 data URI
-                  final b64 = imageUrl.split(',').last;
-                  return base64Decode(b64);
-                } else {
-                  // Regular URL — download it
-                  final imgResp = await client
-                      .get(Uri.parse(imageUrl))
-                      .timeout(const Duration(seconds: 30));
-                  return imgResp.bodyBytes;
-                }
-              }
-            }
-          }
+      // OpenRouter returns the generated/edited image in message.images:
+      // [{type:'image_url', image_url:{url:'data:...'|'https://...'}}] — VERIFIED
+      // live against a real edit (2026-07). This is where the image actually is;
+      // the `content` shapes below are legacy/other-provider fallbacks.
+      final images = message['images'];
+      if (images is List) {
+        for (final im in images) {
+          if (im is! Map<String, dynamic>) continue;
+          final iu = im['image_url'];
+          final url = iu is Map<String, dynamic> ? iu['url'] as String? : null;
+          if (url != null) return _imageBytesFromUrl(client, url);
         }
       }
 
-      // Fallback: try to extract base64 from string content
+      final content = message['content'];
+      // Fallback: content as a list with image_url parts.
+      if (content is List) {
+        for (final part in content) {
+          if (part is! Map<String, dynamic> || part['type'] != 'image_url') {
+            continue;
+          }
+          final iu = part['image_url'];
+          final url = iu is Map<String, dynamic> ? iu['url'] as String? : null;
+          if (url != null) return _imageBytesFromUrl(client, url);
+        }
+      }
+
+      // Fallback: a bare base64 string in content.
       if (content is String && content.isNotEmpty) {
-        // Check if it's a base64 string
         try {
           return base64Decode(content);
         } catch (_) {
@@ -1918,5 +1967,15 @@ class ImageGenService extends ChangeNotifier {
     } finally {
       client.close();
     }
+  }
+
+  /// Decode an image reference from a chat image part — a `data:` base64 URI, or
+  /// an https URL to download. Shared by the OpenRouter images/content parsing.
+  Future<Uint8List> _imageBytesFromUrl(http.Client client, String url) async {
+    if (url.startsWith('data:')) return base64Decode(url.split(',').last);
+    final r = await client
+        .get(Uri.parse(url))
+        .timeout(const Duration(seconds: 30));
+    return r.bodyBytes;
   }
 }
