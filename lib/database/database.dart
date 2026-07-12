@@ -2060,10 +2060,23 @@ class AppDatabase extends _$AppDatabase {
   Future<Character> getCharacterById(String id) =>
       (select(characters)..where((c) => c.id.equals(id))).getSingle();
 
-  Future<Character?> getCharacterByImagePath(String path) =>
-      (select(characters)
-            ..where((c) => c.imagePath.equals(path) & c.deletedAt.isNull()))
-          .getSingleOrNull();
+  Future<Character?> getCharacterByImagePath(String path) async {
+    // getSingleOrNull() THROWS when two rows share an imagePath — possible for
+    // legacy data, and it aborted the whole JSON migration and wedged the app
+    // on the migration overlay. Tolerate duplicates, but pick DETERMINISTICALLY
+    // (oldest createdAt, then id) rather than a plan-dependent "first" row, so
+    // a duplicate never links chat sessions to a random twin across runs.
+    final rows =
+        await (select(characters)
+              ..where((c) => c.imagePath.equals(path) & c.deletedAt.isNull())
+              ..orderBy([
+                (c) => OrderingTerm(expression: c.createdAt),
+                (c) => OrderingTerm(expression: c.id),
+              ])
+              ..limit(1))
+            .get();
+    return rows.isEmpty ? null : rows.first;
+  }
 
   Future<int> insertCharacter(CharactersCompanion character) async {
     // Ensure UUID is set

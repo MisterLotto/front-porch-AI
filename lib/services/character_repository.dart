@@ -693,6 +693,19 @@ class CharacterRepository extends ChangeNotifier {
 
       // Update in database — store basename only for cross-platform portability
       if (card.dbId != null) {
+        // A rename must carry the avatar-gallery media with it: expression and
+        // look PNGs live under Characters/<safeName>/{avatars,looks}/, keyed on
+        // the CURRENT name at both write and read time. Capture the OLD name
+        // before the DB write so we can move the folder AFTER it — DB-first so
+        // a failed move leaves the (pre-existing) blank-gallery bug (logged),
+        // never the worse split-brain of "DB says new name, files under old".
+        String? oldNameForMove;
+        try {
+          oldNameForMove = (await _db.getCharacterById(card.dbId!)).name;
+        } catch (_) {
+          oldNameForMove = null;
+        }
+
         final dbImagePath = card.imagePath != null
             ? _toBasename(card.imagePath!)
             : null;
@@ -720,6 +733,18 @@ class CharacterRepository extends ChangeNotifier {
             updatedAt: Value(DateTime.now()),
           ),
         );
+
+        // Move the gallery media to match the new name, AFTER the DB commit.
+        // Best-effort: a failure here must not block the rename (the card text
+        // is what the user asked to save) — it only logs, leaving the media
+        // stranded (recoverable) rather than risking loss.
+        if (oldNameForMove != null) {
+          try {
+            await _moveCharacterMediaFolder(oldNameForMove, card.name);
+          } catch (e) {
+            debugPrint('[CharacterRepository] Avatar folder move skipped: $e');
+          }
+        }
       }
 
       // Update the list entry
@@ -987,6 +1012,84 @@ class CharacterRepository extends ChangeNotifier {
       ),
     );
     return avatarId;
+  }
+
+  /// Character-name → on-disk media folder name (same rule used everywhere an
+  /// avatar/look path is built). Centralized so the rename move can't drift
+  /// from the write/read/delete sites.
+  static String _mediaFolderName(String characterName) => characterName
+      .replaceAll(RegExp(r'[^\w\s\-]'), '')
+      .replaceAll(' ', '_');
+
+  /// Move a character's avatar-gallery media folder when a rename changes its
+  /// safe name. Renames the whole dir when the target is free; otherwise merges
+  /// the avatars/ + looks/ files into the existing target.
+  ///
+  /// NON-DESTRUCTIVE by construction: a file whose destination already exists
+  /// (safe-name collision — `Alice`, `Alice!`, `Bob Smith`, `Bob_Smith` all
+  /// map to one folder) is LEFT at the source and logged, never overwritten
+  /// and never deleted. The source tree is only ever pruned by removing files
+  /// this method itself just moved (and then empty dirs) — it never runs a
+  /// blanket recursive delete, so an un-merged file can't be destroyed.
+  /// No-op when the safe name is unchanged or the source is absent.
+  Future<void> _moveCharacterMediaFolder(String oldName, String newName) async {
+    final oldSafe = _mediaFolderName(oldName);
+    final newSafe = _mediaFolderName(newName);
+    if (oldSafe.isEmpty || newSafe.isEmpty || oldSafe == newSafe) return;
+
+    final base = _storage.charactersDir.path;
+    final oldDir = Directory(p.join(base, oldSafe));
+    if (!await oldDir.exists()) return;
+
+    final newDir = Directory(p.join(base, newSafe));
+    if (!await newDir.exists()) {
+      // Target free — try an atomic directory rename first. It fails across
+      // devices / some network FS; fall through to the per-file merge then.
+      try {
+        await oldDir.rename(newDir.path);
+        debugPrint('[CharacterRepository] Moved media $oldSafe → $newSafe');
+        return;
+      } catch (_) {/* fall through to per-file move */}
+    }
+
+    var conflicts = 0;
+    for (final sub in const ['avatars', 'looks']) {
+      final from = Directory(p.join(oldDir.path, sub));
+      if (!await from.exists()) continue;
+      final to = Directory(p.join(newDir.path, sub));
+      if (!await to.exists()) await to.create(recursive: true);
+      await for (final entity in from.list()) {
+        if (entity is! File) continue;
+        final dest = p.join(to.path, p.basename(entity.path));
+        if (await File(dest).exists()) {
+          // Collision: leave the source file untouched (it is NOT lost, just
+          // stranded under the old folder) rather than overwrite or delete.
+          conflicts++;
+          continue;
+        }
+        await entity.rename(dest);
+      }
+      // Only remove the source subfolder if we emptied it (no conflicts left).
+      try {
+        if (await from.exists() && await from.list().isEmpty) {
+          await from.delete();
+        }
+      } catch (_) {}
+    }
+    // Remove the old top-level dir ONLY if nothing remains in it.
+    try {
+      if (await oldDir.exists() && await oldDir.list().isEmpty) {
+        await oldDir.delete();
+      }
+    } catch (_) {}
+    if (conflicts > 0) {
+      debugPrint(
+        '[CharacterRepository] Merged media $oldSafe → $newSafe with '
+        '$conflicts conflict(s) left in place (safe-name collision).',
+      );
+    } else {
+      debugPrint('[CharacterRepository] Merged media $oldSafe → $newSafe');
+    }
   }
 
   /// Remove an avatar image for a character.

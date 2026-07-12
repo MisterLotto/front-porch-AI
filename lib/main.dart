@@ -1403,18 +1403,28 @@ class _MyAppState extends State<MyApp> with WindowListener {
 
     final db = Provider.of<AppDatabase>(context, listen: false);
     final migration = DataMigrationService(db);
-    await migration.migrate(
-      onProgress: (step, current, total) {
-        if (mounted) {
-          setState(() {
-            _migrationStep = step;
-            _migrationCurrent = current;
-            _migrationTotal = total;
-          });
-        }
-        debugPrint('DB Migration [$current/$total]: $step');
-      },
-    );
+    try {
+      await migration.migrate(
+        onProgress: (step, current, total) {
+          if (mounted) {
+            setState(() {
+              _migrationStep = step;
+              _migrationCurrent = current;
+              _migrationTotal = total;
+            });
+          }
+          debugPrint('DB Migration [$current/$total]: $step');
+        },
+      );
+    } catch (e) {
+      // A migration throw must NOT leave _isMigrating true forever (a
+      // full-screen overlay = unusable app) and must NOT re-run every launch
+      // (each retry re-imports characters, worsening the very duplicate-path
+      // condition that can cause the throw). Log, drop the overlay, and let
+      // the app open on whatever migrated so far — the legacy JSON is left in
+      // place, so a fixed future build can retry.
+      debugPrint('[DB Migration] Failed — continuing without it: $e');
+    }
 
     if (mounted) {
       setState(() => _isMigrating = false);

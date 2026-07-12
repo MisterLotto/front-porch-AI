@@ -386,3 +386,39 @@ resolveComfyEditRequest({
   }
   return (template: preset.template, values: values);
 }
+
+/// Pure readiness check for the SELECTED ComfyUI edit workflow: true only when
+/// the selection resolves AND every token except `%IMAGE%` (filled at runtime
+/// after the reference upload) is filled — i.e. the exact condition under which
+/// [generateImageEdit] would NOT throw its unfilled-placeholder error.
+///
+/// Callers that route work to the edit path without the Edit-tab's live
+/// node/model probe (e.g. expression packs) MUST gate on this — ComfyUI's
+/// capability advertises edit unconditionally (it's workflow-gated, not
+/// model-gated), so a plain-checkpoint user with no edit preset configured
+/// would otherwise send every pack slot down the edit path and fail on
+/// unfilled model slots, with no img2img fallback.
+bool comfyEditReady({
+  required String workflowId,
+  required String uploadedWorkflowJson,
+  required Map<String, String> modelChoices,
+}) {
+  final req = resolveComfyEditRequest(
+    workflowId: workflowId,
+    uploadedWorkflowJson: uploadedWorkflowJson,
+    modelChoices: modelChoices,
+    prompt: 'x',
+    negative: '',
+    seed: 0,
+    steps: 1,
+    cfg: 1,
+    denoise: 1,
+    shift: 1,
+  );
+  if (req == null) return false;
+  final graph = substituteComfyWorkflow(req.template, {
+    ...req.values,
+    ComfyEditTokens.image: 'x', // filled for real at runtime; stub it here
+  });
+  return unresolvedComfyTokens(graph).isEmpty;
+}
