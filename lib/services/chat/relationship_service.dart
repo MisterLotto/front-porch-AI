@@ -119,6 +119,16 @@ class RelationshipService {
   final void Function(String charId, Map<String, int> rels)
   setGroupInterCharacterRelationships;
 
+  // Generic per-speaker cadence-counter access (turnsSinceLongTermCheck /
+  // shortTermDeltasSummary / turnsSinceDecayCheck ride the same _groupRealism
+  // entry as the scalars above). Optional: when unwired (tests), the legacy
+  // shared working registers are used — in production ChatService wires these
+  // so each group member grows/decays on their OWN turn count instead of the
+  // whole group's shared cadence (parity with 1:1).
+  final int Function(String charId, String key, {int defaultValue})?
+  getGroupCounter;
+  final void Function(String charId, String key, int value)? setGroupCounter;
+
   // Owned simulation state (moved verbatim from ChatService).
   int _affectionScore = 0;
   int _relationshipTier = 0;
@@ -169,6 +179,8 @@ class RelationshipService {
     required this.setGroupRelationshipTier,
     required this.getGroupLongTermTier,
     required this.setGroupLongTermTier,
+    this.getGroupCounter,
+    this.setGroupCounter,
     required this.getGroupSpatialStance,
     required this.setGroupSpatialStance,
     required this.getGroupInterCharacterRelationships,
@@ -574,6 +586,23 @@ class RelationshipService {
     _relationshipTier = relT != 0 ? relT : _calculateTier(_affectionScore);
     final ltT = getGroupLongTermTier(charId, defaultValue: 0);
     _longTermTier = ltT != 0 ? ltT : _calculateTier(_longTermScore);
+
+    // Per-speaker long-term cadence (parity): each member's growth check runs
+    // on THEIR OWN eval count and THEIR OWN delta history. With the shared
+    // registers, the 5-turn threshold was hit by the whole group's evals and
+    // the long-term bump landed on whichever member happened to be loaded.
+    if (getGroupCounter != null) {
+      _turnsSinceLongTermCheck = getGroupCounter!(
+        charId,
+        'turnsSinceLongTermCheck',
+        defaultValue: 0,
+      );
+      _shortTermDeltasSummary = getGroupCounter!(
+        charId,
+        'shortTermDeltasSummary',
+        defaultValue: 0,
+      );
+    }
   }
 
   /// Write current scalars back into the target group character's _groupRealism
@@ -597,6 +626,20 @@ class RelationshipService {
 
     setGroupRelationshipTier(charId, _relationshipTier);
     setGroupLongTermTier(charId, _longTermTier);
+
+    // Per-speaker long-term cadence counters (see the load-side comment).
+    if (setGroupCounter != null) {
+      setGroupCounter!(
+        charId,
+        'turnsSinceLongTermCheck',
+        _turnsSinceLongTermCheck,
+      );
+      setGroupCounter!(
+        charId,
+        'shortTermDeltasSummary',
+        _shortTermDeltasSummary,
+      );
+    }
   }
 
   // ── Deltas, growth, decay, fixation (verbatim) ─────────────────────────────
@@ -681,11 +724,37 @@ class RelationshipService {
 
   /// Short-term relationship decay (toward 0 by 1 every 10 turns) + hidden
   /// inter-char decay (when under cap). Extracted from _applyMoodDecay body.
+  ///
+  /// Cadence counter: in a group with the counter callbacks wired, the check
+  /// runs on the SPEAKER's own counter (their map entry) — so it is safe to
+  /// call before the scalar load, and each member decays every 10 of THEIR
+  /// OWN turns, exactly like a 1:1 host. Unwired (tests) falls back to the
+  /// legacy shared register.
   void applyShortTermDecay() {
-    _turnsSinceDecayCheck++;
-    if (_turnsSinceDecayCheck >= 10) {
-      if (getIsGroupActive() && !getObserverMode()) {
-        final id = getCurrentSpeakerIdForRealism();
+    final isGroup = getIsGroupActive() && !getObserverMode();
+    final perSpeaker =
+        isGroup && getGroupCounter != null && setGroupCounter != null;
+    final speakerId = isGroup ? getCurrentSpeakerIdForRealism() : '';
+    var turns = perSpeaker
+        ? getGroupCounter!(speakerId, 'turnsSinceDecayCheck', defaultValue: 0)
+        : _turnsSinceDecayCheck;
+    turns++;
+    if (turns < 10) {
+      if (perSpeaker) {
+        setGroupCounter!(speakerId, 'turnsSinceDecayCheck', turns);
+      } else {
+        _turnsSinceDecayCheck = turns;
+      }
+      return;
+    }
+    if (perSpeaker) {
+      setGroupCounter!(speakerId, 'turnsSinceDecayCheck', 0);
+    } else {
+      _turnsSinceDecayCheck = 0;
+    }
+    {
+      if (isGroup) {
+        final id = speakerId;
         final current = getGroupAffectionScore(
           id,
           defaultValue: _affectionScore,
@@ -736,7 +805,6 @@ class RelationshipService {
           debugPrint('[Realism] Short-term decay applied: $_affectionScore');
         }
       }
-      _turnsSinceDecayCheck = 0;
       onNotify();
     }
   }

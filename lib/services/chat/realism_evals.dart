@@ -1060,9 +1060,12 @@ class RealismEvals {
       _parseAndApplyRelationshipDeltas(textForOneShot);
 
       // ── Autonomous Objective ──
+      // (All parses below use textForOneShot — the Director-corrected text.
+      // Parsing the raw pre-verification text silently discarded corrections
+      // for everything except the relationship deltas.)
       final objectiveMatch = RegExp(
         r'"proposed_objective"\s*:\s*"([^"]+)"',
-      ).firstMatch(text);
+      ).firstMatch(textForOneShot);
       if (objectiveMatch != null) {
         final newObj = objectiveMatch.group(1)!.trim();
         if (newObj.toLowerCase() != 'none' && newObj.isNotEmpty) {
@@ -1096,21 +1099,21 @@ class RealismEvals {
       // ── Scene fields ──
       final emotionMatch = RegExp(
         r'"emotion"\s*:\s*"([^"]+)"',
-      ).firstMatch(text);
+      ).firstMatch(textForOneShot);
       if (emotionMatch != null) {
         setCharacterEmotion(emotionMatch.group(1)!.toLowerCase().trim());
       }
 
       final intensityMatch = RegExp(
         r'"emotion_intensity"\s*:\s*"([^"]+)"',
-      ).firstMatch(text);
+      ).firstMatch(textForOneShot);
       if (intensityMatch != null) {
         setEmotionIntensity(intensityMatch.group(1)!.toLowerCase().trim());
       }
 
       final postureMatch = RegExp(
         r'"posture"\s*:\s*"([^"]+)"',
-      ).firstMatch(text);
+      ).firstMatch(textForOneShot);
       if (postureMatch != null) {
         final p = postureMatch.group(1)!.trim();
         relationshipService.setSpatialStance(p);
@@ -1119,12 +1122,34 @@ class RealismEvals {
       relationshipService.updateFixationFromEvalResult(
         (RegExp(
               r'"fixation_topic"\s*:\s*"([^"]+)"',
-            ).firstMatch(text)?.group(1) ??
+            ).firstMatch(textForOneShot)?.group(1) ??
             ''),
         isOneShot: true,
       );
 
-      final reasonMatch = RegExp(r'"reason"\s*:\s*"([^"]*)"').firstMatch(text);
+      // ── Deterministic time clock (parity with the multi-call path) ──
+      // Ticks every turn; fires the hold/new_day eval only when an advance is
+      // due (one extra LLM call per threshold). Without this, one-shot mode
+      // froze the in-game clock forever. Posture on non-advance turns rides
+      // the fused JSON parsed above (oneShotMode skips the posture-only calls).
+      await timeService.evaluateTimeProgressAndPostureIfNeeded(
+        charName: charName,
+        recent: recent,
+        shortTermTierName: relationshipService.shortTermTierName,
+        onChunk: onChunk,
+        fireLLMEval: fireLLMEval,
+        stripThinkBlocks: stripThinkBlocks,
+        extractJsonBool: extractJsonBool,
+        setSpatialStance: relationshipService.setSpatialStance,
+        getCurrentSpatialStance: () => relationshipService.spatialStance,
+        getCharacterEmotion: getCharacterEmotion,
+        getEmotionIntensity: getEmotionIntensity,
+        oneShotMode: true,
+      );
+
+      final reasonMatch = RegExp(
+        r'"reason"\s*:\s*"([^"]*)"',
+      ).firstMatch(textForOneShot);
       debugPrint(
         '[Realism:OneShot] Done — Emotion: ${getCharacterEmotion()} (${getEmotionIntensity()}), '
         'Time: ${timeService.timeOfDay}, Reason: ${reasonMatch?.group(1) ?? 'unknown'}',

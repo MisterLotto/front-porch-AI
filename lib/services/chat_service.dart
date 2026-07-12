@@ -1828,6 +1828,9 @@ class ChatService extends ChangeNotifier {
     },
     setGroupInterCharacterRelationships: (charId, rels) =>
         _setGroupRealismValue(charId, 'relationships', rels),
+    getGroupCounter: (charId, key, {int defaultValue = 0}) =>
+        (_groupRealism[charId]?[key] as num?)?.toInt() ?? defaultValue,
+    setGroupCounter: (charId, key, v) => _setGroupRealismValue(charId, key, v),
   );
 
   // ── Expression label selection / manual / avatar resolve / reclass / ONNX (extracted) ────
@@ -1868,14 +1871,12 @@ class ChatService extends ChangeNotifier {
     setRealismEvalCancelled: (v) => _realismEvalCancelled = v,
     setIsEvaluatingRealism: (v) => _isEvaluatingRealism = v,
     onHandleRealismEvalCancelledDuringOnnx: () async {
-      _messages.add(
-        ChatMessage(
-          text: 'Realism evaluation interrupted, regenerate response to retry',
-          sender: 'Interruption',
-          isUser: false,
-        ),
-      );
-      await _saveChat();
+      // Transient banner only — never a persisted chat message. (The old
+      // 'Interruption' line rode chat history, prompts, RAG, and journal
+      // windows forever; same fix as cancelRealismEval.) This fires during
+      // post-generation ONNX avatar classification, so the reply already
+      // exists — consuming the flag here is correct (nothing to abort).
+      _setGuestStatus('Realism classification interrupted.');
       _realismEvalCancelled = false;
       _isEvaluatingRealism = false;
       notifyListeners();
@@ -3498,6 +3499,11 @@ class ChatService extends ChangeNotifier {
     // A photo turn's captioning windows run while _isGenerating is false; this
     // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
     if (_photoTurnInFlight) return;
+    // Start-of-turn clear: cancelRealismEval only sets this while an eval is
+    // live, and each turn's consumers clear it — but this guarantees a stray
+    // set flag can never bleed into THIS turn and abort a reply the user did
+    // not cancel.
+    _realismEvalCancelled = false;
     clearSuggestions();
 
     // A new message while an /image prompt review is parked cancels it —
@@ -3637,7 +3643,14 @@ class ChatService extends ChangeNotifier {
         _pendingRealismMetadata!['needs_pre_turn_vector'] = preTurnVector;
       }
 
-      _applyMoodDecay();
+      // Short-term bond decay: 1:1 host only. In group mode the speaker isn't
+      // picked yet — the old call here fell back to the FIRST member under
+      // random turn order, so member #1 absorbed everyone's decay. The group
+      // tick now lives per-speaker inside _evaluateRealismForUpcomingSpeaker,
+      // on the pinned speaker's own cadence counter (mirrors needs + nsfw).
+      if (_activeGroup == null) {
+        _applyMoodDecay();
+      }
       // Needs decay for 1:1 always here. For group non-observer, speaker-specific decay
       // (respecting the actual picked speaker for random turn order) is applied inside
       // _evaluateRealismForUpcomingSpeaker after _pickNextGroupCharacter has run.
@@ -4066,8 +4079,9 @@ class ChatService extends ChangeNotifier {
         JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
 
     if (due || eventKick) {
-      _journalMaintenance.eventKickPending = false;
-      // Fire and forget — don't await
+      // Fire and forget — don't await. The pass consumes eventKickPending
+      // itself once it actually starts, so a parked review batch (or an
+      // already-running pass) can't silently eat the kick.
       _journalMaintenance.runMaintenancePass();
     }
   }
@@ -4266,18 +4280,13 @@ class ChatService extends ChangeNotifier {
     _realismEvalCancelled = true;
     notifyListeners();
 
-    // Immediately show interruption message in UI
-    final senderName = _activeCharacter?.name ?? 'Interruption';
-    _messages.add(
-      ChatMessage(
-        text: 'Realism evaluation interrupted, regenerate response to retry',
-        sender: senderName,
-        isUser: false,
-      ),
+    // Transient banner only — NEVER a chat message. The old code appended an
+    // "evaluation interrupted" line attributed to the character, which then
+    // permanently rode chat history, prompts, RAG, and journal windows.
+    _setGuestStatus(
+      'Realism evaluation cancelled — no reply was generated. '
+      'Regenerate (or send again) to retry.',
     );
-    notifyListeners();
-    // Save in background - don't await
-    Future.microtask(() => _saveChat());
 
     final llmService =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;

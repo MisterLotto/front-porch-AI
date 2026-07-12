@@ -161,6 +161,10 @@ class JournalMaintenance {
     // replace what the user hasn't looked at yet); a manual force regen
     // deliberately proposes fresh.
     if (!force && review.hasPendingFor(sessionToken)) return;
+    // Consume the event kick only once a pass actually starts — the caller
+    // used to clear it BEFORE calling, so a pass blocked by a parked review
+    // (or an already-running pass) silently ate the kick.
+    eventKickPending = false;
     // Set synchronously before the first await — the only re-entrancy guard
     // for this fire-and-forget per-turn hook.
     setIsPassRunning(true);
@@ -313,6 +317,19 @@ class JournalMaintenance {
           recap = includeRecap ? parseRecap(text) : null;
         }
         if (ops.isNotEmpty || recap != null) return (ops, recap);
+        if (resp.calls.isNotEmpty) {
+          // It spoke tools; the calls just validated to nothing — an honest
+          // "nothing worth journaling" result, not a transport failure. The
+          // old fall-through branded the backend XML-only (the probe is
+          // shared with growth + every realism eval) and re-fired the whole
+          // pass over the fragile XML path, where local models invent
+          // memories. Mirrors growth's honest-empty handling.
+          return (const <JournalOp>[], null);
+        }
+        // resp non-null but no calls and no usable text: the model answered
+        // without tools — a capability verdict. (A null resp also lands here:
+        // generateWithTools collapses every failure to null, and the probe is
+        // deliberately one-shot per backend identity.)
       }
       probe.markXmlOnly(backend);
       debugPrint('[Journal] Tools unavailable on $backend — using XML');

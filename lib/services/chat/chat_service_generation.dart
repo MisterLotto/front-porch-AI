@@ -88,6 +88,22 @@ extension ChatServiceGeneration on ChatService {
           _activeGroup != null &&
           _realismActiveThisMode) {
         await _evaluateRealismForUpcomingSpeaker(speakingCharacter);
+        // Cancel-aborts-generation, group edition: the dance leaves the
+        // cancel flag set for its caller (1:1's sendMessage has the twin
+        // check). Consume it and abort the turn before any prompt is built.
+        // The entry-state flags must be reset by hand — the normal clears
+        // live in the completion path and the catch, which an early return
+        // skips (the finally below only clears the speaker pin).
+        if (_realismEvalCancelled) {
+          _realismEvalCancelled = false;
+          _isGenerating = false;
+          _isBuffering = false;
+          _generationPhase = GenerationPhase.idle;
+          _generationStartTime = null;
+          await _saveChat();
+          notifyListeners();
+          return;
+        }
       }
 
       // ── System prompt selection (Path B clean hierarchy) ──

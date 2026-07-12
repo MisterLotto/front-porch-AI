@@ -216,6 +216,27 @@ class NeedsSimulation {
     // No buffer state to zero.
   }
 
+  /// THE single per-key decay rule (rate + modifier pipeline + clamp), shared
+  /// by the 1:1 tick, the group tick, and the group per-speaker decay in the
+  /// realism dance — so a group member decays exactly like the same card in a
+  /// 1:1 chat (parity). [vector] is the live map the modifier conditions read;
+  /// pass the map being decayed so later keys see earlier keys' decayed values
+  /// (the historical in-loop semantics).
+  int decayedValueFor(
+    String key,
+    int current,
+    Map<String, int> vector,
+    Map<String, int> customRates,
+  ) {
+    int decay = customRates[key] ?? needDecay[key] ?? 0;
+    for (final mod in decayModifiers) {
+      if (mod.condition(key, vector, this)) {
+        decay = (decay * mod.factor(key, current, this)).round();
+      }
+    }
+    return (current - decay).clamp(0, 100);
+  }
+
   /// Initialize the needs vector from card-specific baseline values.
   ///
   /// Used when starting a new chat so that the character's
@@ -292,10 +313,7 @@ class NeedsSimulation {
 
       for (final key in needKeys) {
         final current = needs[key] ?? 80;
-        int decay = customRates[key] ?? needDecay[key] ?? 0;
-        
-        final next = (current - decay).clamp(0, 100);
-        needs[key] = next;
+        needs[key] = decayedValueFor(key, current, needs, customRates);
       }
       setGroupNeeds(sid, needs);
       return;
@@ -305,15 +323,7 @@ class NeedsSimulation {
     for (final key in needKeys) {
       final current = _vector[key];
       if (current == null) continue;
-      int decay = customRates[key] ?? needDecay[key] ?? 0;
-
-      for (final mod in decayModifiers) {
-        if (mod.condition(key, _vector, this)) {
-          decay = (decay * mod.factor(key, current, this)).round();
-        }
-      }
-      final next = (current - decay).clamp(0, 100);
-      _vector[key] = next;
+      _vector[key] = decayedValueFor(key, current, _vector, customRates);
     }
 
     // (no buffer tickdown)

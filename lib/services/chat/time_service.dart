@@ -55,10 +55,11 @@ import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
 ///   stays thin in god.
 /// - Pre-turn time advance (the LLM hold eval inside physical) is delegated
 ///   via evaluateTimeProgressAndPostureIfNeeded (called from existing
-///   _evaluatePhysicalStateCall); no new private methods added to god.
-///   (Time clock tick/hold/new_day only in normal physical path; oneShot paths
-///   bypass to posture + log only per pre-extract design + strict One-shot vs
-///   Normal Path Parity contract for time deltas.)
+///   _evaluatePhysicalStateCall, and from the one-shot eval with
+///   oneShotMode: true — clock tick + hold/new_day eval only, posture rides
+///   the fused JSON; this keeps the One-shot vs Normal Path Parity contract
+///   for time deltas, which the old posture-only bypass silently broke by
+///   never ticking the clock).
 /// - Capture/restore sites, drift save sites, and the ~10 "keep reset blocks
 ///   in sync" sites call service helpers (reset/seed/load/restore) + tightened
 ///   comments now list /time alongside needs/chaos/relationship/expression.
@@ -74,7 +75,9 @@ import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
 /// time injection only thin wrapper here; full builders in step 8.
 /// OOC feeding realism cross only manual + integrations.
 /// aug exercising only passive/qualified (resets hit by pre-existing startNew/setActive etc).
-/// oneShot vs normal time parity: advance/hold only in normal physical (oneShot posture+log; dispatch preserved).
+/// oneShot vs normal time parity: both paths tick the clock and run the
+/// hold/new_day eval when an advance is due (oneShotMode skips only the
+/// posture-only calls — posture rides the fused one-shot JSON).
 class TimeService {
   final VoidCallback onNotify;
   final Future<void> Function() onSaveChat;
@@ -479,9 +482,17 @@ class TimeService {
     required String Function() getCurrentSpatialStance,
     required String Function() getCharacterEmotion,
     required String Function() getEmotionIntensity,
+    bool oneShotMode = false,
   }) async {
+    // oneShotMode: called from the fused one-shot eval, whose JSON already
+    // carries posture — so the posture-only LLM paths are skipped and only the
+    // deterministic clock tick + the advance-eligible hold/new_day eval run
+    // (one extra call per [turnsPerTimePeriod] turns). Without this, one-shot
+    // mode never ticked the clock at all and time froze forever — violating
+    // the strict One-shot vs Normal Path Parity contract for Time.
     // ── Time-based evaluation (only if passage of time is enabled) ───────────
     if (!_passageOfTimeEnabled) {
+      if (oneShotMode) return; // posture already set from the fused JSON
       // ── Passage of time disabled — only evaluate posture ───────────────────
       final currentPostureCtx = getCurrentSpatialStance().isNotEmpty
           ? 'Recent position reference: $charName was "${getCurrentSpatialStance()}". '
@@ -629,6 +640,9 @@ class TimeService {
           '[Realism:Time] Eval error, auto-advanced to $_timeOfDay: $e',
         );
       }
+    } else if (oneShotMode) {
+      // Not yet eligible — the fused one-shot JSON already set posture; the
+      // clock tick above is all this turn needs. No extra LLM call.
     } else {
       // Not yet eligible — grab posture only
       final emotionCtx = getCharacterEmotion().isNotEmpty

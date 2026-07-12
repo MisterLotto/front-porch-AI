@@ -183,6 +183,10 @@ class GrowthService {
     if (sessionToken == null) return;
     if (getIsPassRunning()) return;
     if (!force && review.hasPendingFor(sessionToken)) return;
+    // Consume the event kick only once a pass actually starts — the caller
+    // used to clear it BEFORE calling, so a pass blocked by a parked review
+    // (or an already-running pass) silently ate the kick.
+    eventKickPending = false;
     setIsPassRunning(true);
     onNotify();
 
@@ -372,6 +376,10 @@ class GrowthService {
           // "no growth" result, not a transport failure.
           return const [];
         }
+        // Non-null response, no calls, no usable text: the model answered
+        // without tools — a capability verdict. (A null resp also lands
+        // here: generateWithTools collapses every failure to null, and the
+        // probe is deliberately one-shot per backend identity.)
       }
       probe.markXmlOnly(backend);
       debugPrint('[Growth] Tools unavailable on $backend — using XML');

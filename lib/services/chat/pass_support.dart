@@ -179,6 +179,11 @@ Future<String?> fireStructuredEval({
       if (isCancelled?.call() ?? false) return null;
       // A dead/unreachable backend is a connectivity problem, not a verdict
       // on the MODEL's tool support — don't brand it unsupported for the run.
+      // NOTE: transient failures (timeout/5xx) can't be distinguished here yet
+      // because generateWithTools collapses ALL failures to null instead of
+      // throwing — so a transient hiccup on the first probe still brands the
+      // backend XML-only for the session. Fixing that needs generateWithTools
+      // to surface transient errors; deferred out of the 1.0 stability freeze.
       backendUnreachable = looksLikeBackendUnreachable(e);
     }
     if (!backendUnreachable) {
