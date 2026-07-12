@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-11 — feat(images): remote instruction-edit (Nano-GPT + OpenRouter), both verified live
+- **Files:** capability/image_reference_role.dart (remoteEditSpec segment regex), capability/image_reference_resolver.dart (remote edit ON via allowlist, single image), image_gen_service.dart (transport + routing + fixes), + tests. **Commit:** cecdee3.
+- **What:** remote edit turns on for allowlisted edit models (qwen-image-max-edit, nano-banana-edit, glm-image-edit, gpt-image-2, + any "edit"-segment id from the live Nano-GPT list). No new transport methods — the existing generators gained an optional `editImage`: OpenAI-compatible (Nano-GPT/OpenAI) → base64 `imageDataUrl` to `/images/edits`; OpenRouter → `image_url` content part on `/chat/completions`. Remote branch forks on editConditioning; txt2img untouched.
+- **Verified live** with the maintainer's own keys (driven via throwaway scripts BEFORE building): both providers returned clean identity-preserving edits (library→beach) on a real portrait. Two bugs the tests caught + fixed: (1) surface Nano-GPT's detailed balance message ("Available X, required Y") not just "Insufficient balance"; (2) OpenRouter returns the image in `message.images`, but the parser only read `content` — now reads message.images first (also repairs existing OpenRouter txt2img). Consolidated decode into `_imageBytesFromUrl`.
+- **Phase 5 COMPLETE** (ComfyUI edit + remote edit both done). analyze clean; 103 capability/image tests green.
+
 ## 2026-07-11 — ux(images): clearer wording for the expression-pack "replace" checkbox
 - **File:** `ui/image_studio/expression_pack_setup.dart`. The checkbox "Replace existing images with the same emotion" was ambiguous (maintainer flagged it). Reworded to **"Replace old images when an emotion is regenerated"** + a sub-line **"Off adds the new one alongside the old."** (two-line label, checkbox top-aligned). Desktop-only (expression packs aren't in the web UI). analyze clean.
 
