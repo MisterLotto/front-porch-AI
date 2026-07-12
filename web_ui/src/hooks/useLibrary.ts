@@ -152,6 +152,12 @@ export function useLibrary() {
       if (e.event === 'library_changed') {
         if (timer) clearTimeout(timer);
         timer = setTimeout(reload, 400);
+      } else if (e.event === 'connected') {
+        // (Re)connected — a `library_changed` may have fired while the socket
+        // was down (phone sleep, blip). Refetch immediately so the grid can't
+        // stay frozen on a stale snapshot until the next unrelated change.
+        if (timer) clearTimeout(timer);
+        reload();
       }
     });
     socket.connect();

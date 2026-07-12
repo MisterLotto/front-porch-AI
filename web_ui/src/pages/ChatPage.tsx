@@ -209,6 +209,15 @@ export function ChatPage() {
         );
       } else if (e.event === 'chat_updated' || e.event === 'generating') {
         scheduleRefresh();
+      } else if (e.event === 'connected') {
+        // (Re)connected. The socket may have been down (phone sleep, network
+        // blip) while the desktop finished a generation or edited the chat, so
+        // events were missed — refetch to heal. Also drop any stale partial
+        // streaming buffer: if a `done` was missed, the leftover partial would
+        // render as a ghost bubble AND the next generation would append onto
+        // it (setStreaming(prev => prev + …)), garbling the live reply.
+        setStreaming('');
+        void refresh();
       }
     });
     socket.connect();
