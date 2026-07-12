@@ -324,6 +324,23 @@ button.ghost { background: transparent; border-color: var(--border); }
    shows in the Mood stat row), and the Chat insight drawer goes full-screen. */
 [data-layout="phone"] .portrait-wrap { display: none; }
 [data-layout="phone"] .stats-drawer { width: 100%; max-width: none; }
+/* Look swiper: chevrons over the sidebar portrait to flip between uploaded looks */
+.portrait-swiper { position: relative; align-self: center; width: 100%; max-width: 240px; }
+.portrait-chevron {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 44px; border: none; border-radius: 8px; cursor: pointer;
+  background: rgba(15, 23, 42, 0.5); color: #fff; font-size: 1.3rem; line-height: 1;
+  display: flex; align-items: center; justify-content: center; opacity: 0.8;
+}
+.portrait-chevron.left { left: 5px; }
+.portrait-chevron.right { right: 5px; }
+.portrait-chevron:hover { opacity: 1; background: rgba(15, 23, 42, 0.72); }
+.portrait-dots {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  font-size: 0.64rem; padding: 1px 8px; border-radius: 999px;
+  background: rgba(15, 23, 42, 0.6); color: #fff;
+}
+[data-layout="phone"] .portrait-swiper { display: none; }
 
 /* ── Unified cast bar ─────────────────────────────────────────── */
 .cast-bar { border-bottom: 1px solid var(--border); background: var(--surface); padding: 6px 10px; }
