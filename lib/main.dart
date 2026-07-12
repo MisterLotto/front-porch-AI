@@ -763,8 +763,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
     await _reinitializeAfterImport();
   }
 
-  Future<void> _reinitializeAfterImport() async {
-    if (!mounted) return;
+  /// Rebinds every DB-holding service to a fresh AppDatabase instance and
+  /// reloads them. Returns false when the rebind could not run/complete —
+  /// callers that just closed the old instance (import, restore) must treat
+  /// false as "the app needs a restart", not as success.
+  Future<bool> _reinitializeAfterImport() async {
+    if (!mounted) return false;
 
     try {
       final oldDb = Provider.of<AppDatabase>(context, listen: false);
@@ -798,8 +802,10 @@ class _MyAppState extends State<MyApp> with WindowListener {
       await personaService.reload();
       await groupRepo.reload();
       await worldRepo.loadWorlds();
+      return true;
     } catch (e) {
       debugPrint('[DB] Reinitialize after import failed: $e');
+      return false;
     }
   }
 
@@ -1352,18 +1358,37 @@ class _MyAppState extends State<MyApp> with WindowListener {
         });
       }
 
-      // Re-open the database
-      await AppDatabase.instance();
+      // Re-open AND rebind: restoreBackup closed the old AppDatabase, but every
+      // repository/service captured that instance at startup. Without the same
+      // rebind+reload the import flow uses, the app dismisses this overlay and
+      // then throws "database was closed" on every action until a restart.
+      final rebound = await _reinitializeAfterImport();
 
       if (mounted) {
-        setState(() => _isMigrating = false);
+        if (rebound) {
+          setState(() => _isMigrating = false);
+        } else {
+          // The backup IS safely on disk — only the live rewiring failed.
+          // Never dismiss as success: every DB action would fail confusingly.
+          setState(() {
+            _migrationStep =
+                'Backup restored. Please close and reopen Front Porch AI '
+                'to finish.';
+          });
+        }
       }
 
       debugPrint('[DB] Backup restored successfully from: ${backup.path}');
     } catch (e) {
       debugPrint('[DB] Backup restore failed: $e');
+      // The old DB may already be closed — dismissing the overlay would leave
+      // a half-dead app that looks fine. Keep it up with an honest message.
       if (mounted) {
-        setState(() => _isMigrating = false);
+        setState(() {
+          _migrationStep =
+              'Restore failed. Please close and reopen Front Porch AI, '
+              'then try another backup.';
+        });
       }
     }
   }

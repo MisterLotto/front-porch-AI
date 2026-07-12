@@ -190,6 +190,37 @@ extension ChatServiceSpeakerObjectives on ChatService {
     return _realismStateInjection.buildRealismStateInjection();
   }
 
+  /// Group-aware wrapper for [_restoreRealismStateFromMessage]. In a group the
+  /// snapshot belongs to the message's SPEAKER, so the restore must go through
+  /// their _groupRealism entry (load → restore scalars → save) — a bare scalar
+  /// restore is overwritten by the next per-speaker load while the map keeps
+  /// the un-reverted values (the swipe/delete "time travel does nothing in
+  /// groups" bug). 1:1 restores the scalars directly, unchanged. No-ops when
+  /// the group speaker can't be resolved (renamed/removed member): restoring
+  /// into the wrong member's entry would corrupt that member's state.
+  void _restoreRealismStateForSpeaker(ChatMessage msg) {
+    if (_activeGroup == null) {
+      _restoreRealismStateFromMessage(msg);
+      return;
+    }
+    final idx = _groupCharacters.indexWhere((c) => c.name == msg.sender);
+    if (idx < 0) return;
+    final sid = _getCharacterIdFromCard(_groupCharacters[idx]);
+    if (sid.isEmpty) return;
+    final hadStoredNeeds = _getGroupNeeds(sid).isNotEmpty;
+    final state = msg.activeMetadata?['realism_state'];
+    final stampHasNeeds = state is Map && state['needs'] is Map;
+    _loadGroupRealismIntoScalars(sid);
+    _restoreRealismStateFromMessage(msg);
+    if (!hadStoredNeeds && !stampHasNeeds) {
+      // The load's initializeFresh() filled the scalar vector for a member
+      // with no needs history, and the stamp carries none either — clear it
+      // so the save below can't materialize invented needs into their entry.
+      _needsSimulation.restoreFromSnapshot(const {'vector': <String, int>{}});
+    }
+    _saveScalarsIntoGroupRealism(sid);
+  }
+
   void _restoreRealismStateFromMessage(ChatMessage? msg) {
     if (msg == null) return;
 

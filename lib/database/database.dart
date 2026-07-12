@@ -783,12 +783,6 @@ class AppDatabase extends _$AppDatabase {
   /// The directory containing the database files.
   static String? get dbDirPath => _dbDir;
 
-  /// Flush WAL (Write-Ahead Log) to the main database file.
-  /// Call this before uploading the .db file to ensure it's self-contained.
-  Future<void> checkpoint() async {
-    await customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-  }
-
   /// Run a fast integrity check on the database.
   /// Returns `true` if the database is healthy, `false` if corruption is detected.
   Future<bool> integrityCheck() async {
@@ -873,6 +867,10 @@ class AppDatabase extends _$AppDatabase {
         'nsfw_cooldown_enabled INTEGER NOT NULL DEFAULT 0',
         'cooldown_turns_remaining INTEGER NOT NULL DEFAULT 0',
         'cooldown_turns_total INTEGER NOT NULL DEFAULT 0',
+        // v37 — per-chat avatar-gallery look selection. The onUpgrade ALTER is
+        // silent-catch (duplicate-column on rollback/dual-run), so this list is
+        // what guarantees the column exists if that first ALTER ever failed.
+        'selected_look_avatar_id TEXT',
       ],
       'group_members': [
         // Per current GroupMembers Dart definition + created_at (to match the repair-path CREATE TABLE).
@@ -1762,10 +1760,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 37) {
         // v36→v37: per-chat avatar-gallery look selection. Nullable, additive,
         // no default — the external card tool (Character Card Forge) simply
-        // omits it (NULL). Safe for a mixed fleet and a rollback.
-        await customStatement(
-          'ALTER TABLE sessions ADD COLUMN selected_look_avatar_id TEXT',
-        );
+        // omits it (NULL). Guarded because drift rewrites user_version even
+        // when an OLDER binary opens a newer DB (rollback / dual-run), so this
+        // step can legally re-run against a DB that already has the column —
+        // unguarded, that throws "duplicate column" on every launch.
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN selected_look_avatar_id TEXT',
+          );
+        } catch (_) {}
       }
     },
   );

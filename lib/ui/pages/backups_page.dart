@@ -222,7 +222,10 @@ class _BackupsPageState extends State<BackupsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          path != null ? 'Backup created successfully' : 'No database to back up',
+          path != null
+              ? 'Backup created successfully'
+              : 'Backup could not be created — the database may be busy or '
+                    'the disk full. Try again in a moment.',
         ),
       ),
     );

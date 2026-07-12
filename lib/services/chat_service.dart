@@ -3865,8 +3865,9 @@ class ChatService extends ChangeNotifier {
   void _syncRealismStateForSwipe(ChatMessage msg, int oldIndex, int newIndex) {
     if (!_realismEnabled) return;
 
-    // Natively restore the frozen runtime variables for the selected alternate timeline
-    _restoreRealismStateFromMessage(msg);
+    // Natively restore the frozen runtime variables for the selected alternate
+    // timeline — in groups, into the swiped speaker's own _groupRealism entry.
+    _restoreRealismStateForSpeaker(msg);
   }
 
   Future<void> continueGeneration() async {
@@ -3964,10 +3965,13 @@ class ChatService extends ChangeNotifier {
       // Time-travel rollback for realism when deleting a character message.
       // Restore from the new last message if it has a snapshot, regardless
       // of whether this was the last message. This ensures needs state
-      // (and all realism fields) reset to their previous saved values.
+      // (and all realism fields) reset to their previous saved values — in
+      // groups, inside the NEW LAST speaker's own _groupRealism entry. Known
+      // limitation (pre-existing): the DELETED speaker's map entry is not
+      // rolled back; their deltas stand until their next stamped restore.
       if (_messages.isNotEmpty) {
         final newLast = _messages.last;
-        _restoreRealismStateFromMessage(newLast);
+        _restoreRealismStateForSpeaker(newLast);
       }
 
       await _saveChat();
