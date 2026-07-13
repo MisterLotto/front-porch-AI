@@ -1165,7 +1165,12 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           ),
         ],
       ),
-      Row(
+      // In EDIT mode the string sampler (ComfyUI/A1111) is hidden: the ComfyUI
+      // edit preset bakes its own sampler, and picking one here only clobbered
+      // the Create-tab sampler while doing nothing to the edit. The DrawThings
+      // int sampler stays — it IS edit-scoped (setEditSampler below).
+      if (isDrawThings || !editScoped)
+        Row(
         children: [
           Expanded(
             flex: 2,
@@ -1244,9 +1249,11 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
       ),
       // Scheduler (noise schedule) — a real quality lever on A1111 and ComfyUI.
       // Draw Things has no separate scheduler concept, so it's hidden there.
+      // Hidden in EDIT mode too: the ComfyUI edit preset controls it, so a
+      // choice here only clobbered the Create-tab scheduler (same as sampler).
       // 'Automatic' means the backend decides (A1111 default / sampler-derived
       // for ComfyUI); the fetched list is server-specific.
-      if (!isDrawThings)
+      if (!isDrawThings && !editScoped)
         Row(
           children: [
             Expanded(

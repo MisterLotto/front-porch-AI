@@ -305,8 +305,13 @@ class _EditViewState extends State<EditView> {
             const SizedBox(height: 8),
             _instructionField(context),
             const SizedBox(height: 16),
-            _strengthSlider(context),
-            const SizedBox(height: 16),
+            // Remote instruction-edit ignores a strength value (the provider
+            // edit APIs take prompt + image only), so don't show a knob that
+            // does nothing. DrawThings / ComfyUI edits DO consume it.
+            if (backend != ImageGenBackend.remote) ...[
+              _strengthSlider(context),
+              const SizedBox(height: 16),
+            ],
             _applyButton(context, genBusy, backend),
           ],
           if (_busy) ...[
