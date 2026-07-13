@@ -104,53 +104,53 @@ class NeedsSimulation {
 
   static const Map<String, List<String>> needSteppedText = {
     'hunger': [
-      '''A violent stomach cramp doubles her over. She is genuinely starving — vision swimming, knees weak, barely able to stay upright. The hunger has become a real physical crisis.''',
-      '''Sharp, gnawing cramps twist through her. She feels light-headed and shaky, and her thoughts keep drifting uncontrollably to food. She is struggling to focus on anything else.''',
-      '''Her stomach feels painfully hollow and tight. A constant, distracting ache that makes her restless and short-tempered. She keeps thinking about when she might be able to eat.''',
-      '''A steady, empty feeling sits in her stomach. Her thoughts occasionally wander toward food and she feels a bit distracted or low-energy.''',
-      '''A quiet, background emptiness in her stomach. It is not urgent, but she is aware of it and would welcome a chance to eat soon.''',
+      '''A violent stomach cramp doubles them over. They are genuinely starving — vision swimming, knees weak, barely able to stay upright. The hunger has become a real physical crisis.''',
+      '''Sharp, gnawing cramps twist through them. They feel light-headed and shaky, and their thoughts keep drifting uncontrollably to food. They are struggling to focus on anything else.''',
+      '''Their stomach feels painfully hollow and tight. A constant, distracting ache that makes them restless and short-tempered. They keep thinking about when they might be able to eat.''',
+      '''A steady, empty feeling sits in their stomach. Their thoughts occasionally wander toward food and they feel a bit distracted or low-energy.''',
+      '''A quiet, background emptiness in their stomach. It is not urgent, but they are aware of it and would welcome a chance to eat soon.''',
     ],
     'bladder': [
-      '''She loses control completely. A sudden, hot rush — she is wetting herself right now in the current scene. The humiliation is immediate and overwhelming.''',
-      '''She is fighting with everything she has not to lose control. Thighs pressed tight, constantly shifting, voice tight with strain. She is very close to having an accident.''',
-      '''A strong, insistent pressure has built up. She is visibly uncomfortable and keeps looking for a polite way to excuse herself soon.''',
-      '''A steady, distracting pressure low in her belly. She feels the need more and more and would like to find a bathroom before too long.''',
-      '''A faint but persistent urge to use the restroom sits at the back of her mind, making her slightly restless.''',
+      '''They lose control completely. A sudden, hot rush — they are wetting themselves right now in the current scene. The humiliation is immediate and overwhelming.''',
+      '''They are fighting with everything they have not to lose control. Thighs pressed tight, constantly shifting, voice tight with strain. They are very close to having an accident.''',
+      '''A strong, insistent pressure has built up. They are visibly uncomfortable and keep looking for a polite way to excuse themselves soon.''',
+      '''A steady, distracting pressure low in their belly. They feel the need more and more and would like to find a bathroom before too long.''',
+      '''A faint but persistent urge to use the restroom sits at the back of their mind, making them slightly restless.''',
     ],
     'energy': [
-      '''Her body gives out completely. Mid-sentence her eyes flutter and she collapses — slumping to the floor or into {{user}}'s arms, fully unconscious from exhaustion.''',
-      '''She is barely staying awake. Head nodding, speech slow and heavy, eyes unfocused. She may drift off at any moment.''',
-      '''A heavy, crushing tiredness has settled over her. Every movement feels like effort and her thoughts are slow. She desperately wants to rest.''',
-      '''A deep weariness is weighing on her. She moves a little slower and seems less animated than usual, clearly running low on energy.''',
-      '''A comfortable, heavy tiredness sits behind her eyes. She would happily curl up and rest if the opportunity arose.''',
+      '''Their body gives out completely. Mid-sentence their eyes flutter and they collapse — slumping to the floor or into {{user}}'s arms, fully unconscious from exhaustion.''',
+      '''They are barely staying awake. Head nodding, speech slow and heavy, eyes unfocused. They may drift off at any moment.''',
+      '''A heavy, crushing tiredness has settled over them. Every movement feels like effort and their thoughts are slow. They desperately want to rest.''',
+      '''A deep weariness is weighing on them. They move a little slower and seem less animated than usual, clearly running low on energy.''',
+      '''A comfortable, heavy tiredness sits behind their eyes. They would happily curl up and rest if the opportunity arose.''',
     ],
     'social': [
-      '''The loneliness has become overwhelming. She feels hollow and raw, on the edge of breaking down if she cannot have real, meaningful connection with someone soon.''',
-      '''She feels painfully isolated. The lack of real connection is starting to hurt, and she may become unusually quiet, clingy, or emotionally fragile.''',
-      '''A deep ache for genuine connection sits in her chest. Casual interaction feels hollow and she keeps seeking more meaningful moments or closeness.''',
-      '''She is feeling the absence of real companionship. She seems a little more eager for meaningful conversation or physical closeness than usual.''',
-      '''A quiet, gentle craving for real connection makes her a bit more warm and attentive than normal.''',
+      '''The loneliness has become overwhelming. They feel hollow and raw, on the edge of breaking down if they cannot have real, meaningful connection with someone soon.''',
+      '''They feel painfully isolated. The lack of real connection is starting to hurt, and they may become unusually quiet, clingy, or emotionally fragile.''',
+      '''A deep ache for genuine connection sits in their chest. Casual interaction feels hollow and they keep seeking more meaningful moments or closeness.''',
+      '''They are feeling the absence of real companionship. They seem a little more eager for meaningful conversation or physical closeness than usual.''',
+      '''A quiet, gentle craving for real connection makes them a bit more warm and attentive than normal.''',
     ],
     'fun': [
-      '''The boredom has become torturous. She feels dangerously restless and may suddenly do something reckless or wildly inappropriate just to feel *something* again.''',
-      '''She is deeply restless and bored out of her mind. She fidgets constantly and will suggest almost anything to break the monotony.''',
-      '''A heavy restlessness has settled over her. Everything feels dull and she keeps looking for any excuse to do something more stimulating.''',
-      '''She is noticeably bored and fidgety. The current situation feels flat and she is actively hoping for a change of pace.''',
-      '''A mild restlessness makes her a little more eager for something fun or different to happen.''',
+      '''The boredom has become torturous. They feel dangerously restless and may suddenly do something reckless or wildly inappropriate just to feel *something* again.''',
+      '''They are deeply restless and bored out of their mind. They fidget constantly and will suggest almost anything to break the monotony.''',
+      '''A heavy restlessness has settled over them. Everything feels dull and they keep looking for any excuse to do something more stimulating.''',
+      '''They are noticeably bored and fidgety. The current situation feels flat and they are actively hoping for a change of pace.''',
+      '''A mild restlessness makes them a little more eager for something fun or different to happen.''',
     ],
     'hygiene': [
-      '''She feels filthy and overwhelmed by it. The grime or smell is so strong it is making her physically uncomfortable and self-conscious to the point of distress.''',
-      '''She feels genuinely dirty and is very aware of it. She keeps wanting to cover herself or pull away from contact until she can clean up.''',
-      '''A persistent feeling of being grimy clings to her. She is self-conscious and keeps thinking about when she can wash or change.''',
-      '''She is starting to feel noticeably unkempt. A quiet discomfort with her own state makes her want to freshen up soon.''',
-      '''A faint, background sense of being a little grubby makes her mildly self-conscious.''',
+      '''They feel filthy and overwhelmed by it. The grime or smell is so strong it is making them physically uncomfortable and self-conscious to the point of distress.''',
+      '''They feel genuinely dirty and are very aware of it. They keep wanting to cover themselves or pull away from contact until they can clean up.''',
+      '''A persistent feeling of being grimy clings to them. They are self-conscious and keep thinking about when they can wash or change.''',
+      '''They are starting to feel noticeably unkempt. A quiet discomfort with their own state makes them want to freshen up soon.''',
+      '''A faint, background sense of being a little grubby makes them mildly self-conscious.''',
     ],
     'comfort': [
-      '''The physical discomfort has become unbearable. She cannot stay like this any longer and will do whatever it takes to find relief, even if it disrupts everything else happening.''',
-      '''Her body is in real distress — too hot, too cold, cramped, or aching badly. She is constantly shifting and struggling to focus on anything else.''',
-      '''A strong physical discomfort is wearing on her. She keeps adjusting her position or environment, clearly unable to settle.''',
-      '''She is noticeably uncomfortable. A persistent physical irritation (temperature, pressure, stiffness) makes it hard for her to fully relax.''',
-      '''A mild but persistent physical discomfort sits in the background, making her slightly restless.''',
+      '''The physical discomfort has become unbearable. They cannot stay like this any longer and will do whatever it takes to find relief, even if it disrupts everything else happening.''',
+      '''Their body is in real distress — too hot, too cold, cramped, or aching badly. They are constantly shifting and struggling to focus on anything else.''',
+      '''A strong physical discomfort is wearing on them. They keep adjusting their position or environment, clearly unable to settle.''',
+      '''They are noticeably uncomfortable. A persistent physical irritation (temperature, pressure, stiffness) makes it hard for them to fully relax.''',
+      '''A mild but persistent physical discomfort sits in the background, making them slightly restless.''',
     ],
   };
 
@@ -463,10 +463,10 @@ class NeedsSimulation {
   String getUrgencyPrefixForStep(int effectiveStep) {
     return switch (effectiveStep) {
       0 => 'CATASTROPHIC — this has already happened and must be roleplayed immediately.',
-      1 => 'CRITICAL — she is in real, urgent distress from this need.',
-      2 => 'Strong need — this is heavily weighing on her and affecting her focus.',
-      3 => 'Noticeable need — this is a clear background pressure on her mood and attention.',
-      _ => 'Mild background sensation — this is subtly coloring her state.',
+      1 => 'CRITICAL — they are in real, urgent distress from this need.',
+      2 => 'Strong need — this is heavily weighing on them and affecting their focus.',
+      3 => 'Noticeable need — this is a clear background pressure on their mood and attention.',
+      _ => 'Mild background sensation — this is subtly coloring their state.',
     };
   }
 
@@ -481,7 +481,7 @@ class NeedsSimulation {
         .where((e) => e.key != topKey && getNeedStep(e.key, e.value) <= 4)
         .firstOrNull;
     if (secondary == null) return '';
-    return ' (She is also feeling the ${secondary.key} need.)';
+    return ' (They are also feeling the ${secondary.key} need.)';
   }
 
   /// Returns the lowest 1-2 needs that should receive background state text this turn

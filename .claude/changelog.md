@@ -4643,3 +4643,8 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Tests:** new coverage — bladder@0 fires + floors to 85; social/fun@0 do NOT fire; hygiene@0 suppressed for enjoys-low. Full suite 2020 green; analyze clean.
 - **Note/follow-up:** the NON-catastrophe stepped distress texts (~35 lines) are still gendered "she" — pre-existing; a full de-gendering pass is a separate cleanup.
 - **Commit hash:** (pending)
+
+## 2026-07-13 (UTC) — De-gender the needs prompt text + pull catastrophe/hygiene from update notes
+- **De-gendering** (`needs_simulation.dart`): the ~35 stepped needs-distress texts (7 needs × 5 steps), the urgency prefixes, and the secondary-need note were all written as "she/her/herself" — the last gendered generic-character prompt text in the realism engine (every other realism/needs/chaos/injection prompt file was already neutral or macro-based). Rewritten to singular-they with correct verb agreement. No behavior change — prompt wording only. Verified no tests referenced the old strings; full suite green.
+- **Docs:** removed the catastrophe + enjoys-low-hygiene bullets from `docs/Rawhide.md` (they feed the in-app "Update Available" dialog and are mature-content features that shouldn't be headlined there).
+- **Commit hash:** (pending)
