@@ -160,29 +160,64 @@ class NeedsSimulation {
   /// bad", so reusing it after the step inversion would describe a freshly-
   /// scrubbed character as "feeling filthy" — the exact opposite of the truth.
   /// This list is worst-first like the others (index 0 = scrubbed unbearably
-  /// clean → index 4 = only faintly too fresh), describing distress at being
-  /// too clean and a craving to get grubby/musky again.
+  /// clean → index 4 = only faintly too fresh). This is an ODOR/MUSK preference
+  /// ONLY: the character is soothed by their own unwashed body scent and put off
+  /// by feeling soap-clean. It is NOT a drive to make a mess — no seeking dirt,
+  /// mud, or filth acts (a character once dumped a mop bucket over herself off
+  /// the old wording). The distress is missing their natural scent; the comfort
+  /// is simply remaining unwashed and musky. Neutral voice (they/them).
   static const List<String> hygieneSteppedTextWhenEnjoysLow = [
-    '''Scrubbed pink and reeking of soap, she feels stripped bare and wrong — her comforting musk scoured completely away. It is deeply unsettling to her; she is agitated and self-conscious, craving to sweat, get grimy, and smell like herself again as soon as possible.''',
-    '''She feels uncomfortably clean — too soft, too fragrant, her natural scent washed thin. It puts her on edge, and she keeps wanting to work up a real sweat or get properly dirty again.''',
-    '''A freshly-washed cleanness clings to her that she dislikes. She feels a little exposed without her usual musk and would happily get her hands dirty.''',
-    '''She is starting to feel a touch too clean and fussy, and part of her misses the comfortable grime.''',
-    '''A faint just-washed freshness lingers that she finds mildly unsatisfying.''',
+    '''Scrubbed and scentless in a way that feels wrong on their skin — their familiar musk scoured completely away. It leaves them exposed and on edge, quietly wishing they still smelled like themselves. (This is about missing their own natural scent, not about seeking out filth.)''',
+    '''Uncomfortably fresh — too soft, too soapy, their natural scent washed thin. The absence of their usual body musk puts them off-balance; they'd rather not have washed so thoroughly.''',
+    '''Still a little too clean for their taste. Without their familiar musk they feel oddly self-conscious, as if something comforting is missing.''',
+    '''Starting to feel a touch over-scrubbed; part of them misses the settled, lived-in comfort of their own unwashed scent.''',
+    '''A faint just-washed freshness lingers that they find mildly unsatisfying next to their natural musk.''',
   ];
 
+  // Mandatory "this just happened" events fired when a HARD-EVENT need bottoms
+  // out (≤0). Neutral voice (they/them). Each line carries its OWN observable
+  // evidence, so the injection wrapper stays generic (no bladder-centric list).
+  // Deliberately NO social/fun entries — those are moods, not discrete events
+  // (the old "fun=0 → do something dangerous/sexual/chaotic" line was a model-
+  // derailment vector); they max out as intense distress in the stepped text
+  // instead. Hygiene is skipped entirely for "enjoys low hygiene" characters
+  // (for them 0 hygiene is comfort, not a crisis).
   static const Map<String, String> needCatastropheText = {
-    'hunger': '''A violent stomach cramp drops her to her knees or against {{user}}. She hasn't eaten in far too long; her blood sugar crashes and she nearly faints or becomes too weak to stand. The hunger has turned into a real physical emergency.''',
-    'bladder': '''She loses control completely. A sudden, hot, unstoppable rush — she is wetting herself right now, in the current scene, in front of {{user}} or anyone present. The fabric darkens, liquid runs down her legs, the smell fills the air, and her face is a mask of horror and humiliation. The accident is happening / has just happened.''',
-    'energy': '''Her body simply shuts down. Mid-sentence her eyes roll back and she collapses — slumping to the floor, onto furniture, or into {{user}}'s arms — completely unconscious from exhaustion. She is out cold and will not wake for some time.''',
-    'social': '''The isolation finally breaks her. She bursts into tears or a raw, desperate plea for real connection, unable to pretend any longer that she is okay alone.''',
-    'fun': '''The boredom has driven her to something reckless or wildly inappropriate — she does something dangerous, sexual, or chaotic purely to feel *anything* again.''',
-    'hygiene': '''The accumulated grime and smell finally overwhelm her. She gags, tears up, or has a small breakdown about how disgusting she feels, refusing further contact until she can wash.''',
-    'comfort': '''The physical misery becomes too much. She cries out, pushes away from whatever is hurting her (the chair, the ropes, the position, the temperature), and demands — or takes — immediate relief no matter what else is happening in the scene.''',
+    'hunger':
+        '''Starvation buckles them — they sag, grey-faced and unsteady, and have to catch themselves on the nearest support just to stay upright. Their body has hit its limit and it shows.''',
+    'bladder':
+        '''Their control gives out. It's happening right now, in the scene — a hot, unstoppable release, fabric darkening, a spreading wet patch, the smell of it. The accident is occurring this instant, not a warning or a near-miss.''',
+    'energy':
+        '''Exhaustion drops them mid-action — their knees buckle and they collapse, briefly blacking out as they slump to the floor or the nearest surface. They come to a few seconds later, dazed and groggy, barely able to keep their eyes open or form a clear thought.''',
+    'hygiene':
+        '''Their own grime and body odor turn undeniable this turn — sharp enough that they notice it on their own skin, or the people around them visibly react to it. It's an unmistakable, distracting presence in the scene.''',
+    'comfort':
+        '''The strain becomes unbearable — the cramped position, the temperature, the pressure, the restraint, whatever is causing it. They have to shift, break contact with the source, or otherwise ease it; they can't simply hold still through it any longer.''',
   };
 
+  /// Recovery floor by need CLASS after a catastrophe (no magic per-need +N):
+  ///   body-reset — a physiological event that (partly) empties the meter:
+  ///     bladder (just went → nearly empty), hunger (stabilized, not fed),
+  ///     energy (came to groggy, NOT a full rest — user said collapse-and-groggy,
+  ///     not fall-asleep).
+  ///   crisis-vent — a behavioral/sensory peak with only partial relief:
+  ///     hygiene, comfort (the moment passes; nothing was actually cleaned/fixed).
   static const Map<String, int> needPostCatastropheFloor = {
-    'hunger': 70, 'bladder': 85, 'energy': 65, 'social': 60, 'fun': 55, 'hygiene': 70, 'comfort': 70,
+    'bladder': 85,
+    'hunger': 70,
+    'energy': 65,
+    'hygiene': 55,
+    'comfort': 60,
   };
+
+  /// The only needs that fire a hard catastrophe (see [needCatastropheText]).
+  static const List<String> catastropheNeeds = [
+    'bladder',
+    'energy',
+    'hunger',
+    'comfort',
+    'hygiene',
+  ];
 
   // Decay modifiers (non-buffer ones retained; afterglow_damp and suppression-conditioned ones removed or simplified).
   static final List<DecayModifier> decayModifiers = <DecayModifier>[
@@ -326,11 +361,41 @@ class NeedsSimulation {
       _vector[key] = decayedValueFor(key, current, _vector, customRates);
     }
 
-    // (no buffer tickdown)
-    // (no catas in this simplified tick for brevity; full catas can be re-added if needed from stepped thresholds)
+    // Fire a catastrophe if any hard-event need bottomed out this tick.
+    applyCatastropheIfNeeded();
 
     onSaveChat();
     onNotify();
+  }
+
+  /// When a hard-event need has bottomed out (≤0) this turn, arm ONE mandatory
+  /// catastrophe (the worst such need) for the prompt builder and lift that
+  /// need to its recovery floor so it can't instantly re-fire. Operates on the
+  /// live [_vector] — the 1:1 host's (called from [tickDecay]), or a group
+  /// speaker's after their scalars are loaded (called from the realism dance),
+  /// so 1:1 and group behave identically. Hygiene is skipped for "enjoys low
+  /// hygiene" characters (0 hygiene is comfort, not a crisis, for them).
+  void applyCatastropheIfNeeded() {
+    if (!getNeedsSimEnabled() || !getRealismEnabled()) return;
+    if (_pendingCatastrophe != null) return; // one pending event at a time
+    final enjoysLow = getEnjoysLowHygiene();
+    String? worst;
+    int worstVal = 1; // only needs at 0 or below qualify
+    for (final key in catastropheNeeds) {
+      if (key == 'hygiene' && enjoysLow) continue;
+      final v = _vector[key];
+      if (v == null) continue;
+      if (v <= 0 && v < worstVal) {
+        worstVal = v;
+        worst = key;
+      }
+    }
+    if (worst == null) return;
+    _pendingCatastrophe = needCatastropheText[worst];
+    _vector[worst] = needPostCatastropheFloor[worst] ?? 50;
+    debugPrint(
+      '[Realism:Needs] ⚠️ CATASTROPHE armed for $worst → floor ${_vector[worst]}',
+    );
   }
 
   // applyLongGenerationNeedsDecay, getInjectionEffectiveStep, and other buffer-aware helpers simplified or removed.

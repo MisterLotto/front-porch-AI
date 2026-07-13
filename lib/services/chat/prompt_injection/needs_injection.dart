@@ -80,15 +80,17 @@ class NeedsInjection {
       final desc = (eff <= 4 && steppedList.isNotEmpty)
           ? steppedList[eff.clamp(0, 4)]
           : (invertHygiene
-              ? 'content and at ease in her own grime and musk'
+              ? 'at ease in their own unwashed body scent — comfortable being musky and not freshly scrubbed'
               : 'comfortable / no significant drive');
       final tag = (eff >= 5)
           ? 'sated'
           : needsSimulation.getUrgencyPrefixForStep(eff).replaceAll(' — ', ' — ').replaceAll('this is ', '');
       // Flag the inverted semantics explicitly so the model doesn't "correct"
-      // the apparent contradiction of a high number reading as distress.
+      // the apparent contradiction of a high number reading as distress. Scope
+      // it hard to an ODOR preference — the old wording let models stage active
+      // self-soiling (a character dumped a mop bucket over herself).
       final label = invertHygiene
-          ? 'hygiene: $value/100 (this character LIKES being unwashed — a HIGH number here is unwelcome to her, a LOW number is comfort)'
+          ? 'hygiene: $value/100 (this character is comforted by being unwashed and musky — LOW = content in their own natural scent, HIGH = too soap-clean, which they dislike. They do NOT seek dirt, mud, mess, or deliberately soil themselves; it is purely about their own body odor)'
           : '$key: $value/100';
       return '$label — $tag: $desc';
     }

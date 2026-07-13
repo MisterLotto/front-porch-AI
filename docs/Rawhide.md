@@ -4,6 +4,9 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 💥 **Needs "catastrophes" are back — push a character to the edge and their body gives out** — let a need bottom out to zero and something real happens in the very next reply: run someone completely out of energy and they collapse and briefly black out (then come to groggy — no more falling asleep and derailing the scene); zero bladder and they have an accident right there; starve them and they buckle. It fires the same way in solo and group chats. Emotional needs (social/fun) stay as intense moods rather than forced drama.
+- 🧼 **"Enjoys low hygiene" characters are about musk, not mess** — this trait now means a character is comfortable being unwashed and put off by being scrubbed soap-clean — an odor/scent thing. It will no longer make them actively make a mess of themselves (no more dumping dirty water on themselves to get filthy).
+
 - 🧠 **Reasoning models now think on KoboldCpp too** — the "Request Reasoning" switch used to be hidden (and quietly did nothing) when you ran a local KoboldCpp model. Now it's available for local thinking models like Qwen3, sends the right request, and shows the model's thinking as a collapsible block under the reply — just like the remote APIs.
 - ⚙️ **The General settings tab is whole again** — the Chat Font picker and the Realism Mode toggles were accidentally replaced with placeholder text in a past cleanup. They're back and working.
 - 🖼️ **Your generated images land in the right chat** — if you use /image and switch to another conversation while it renders, the finished picture no longer drops into the wrong chat; you'll get a heads-up to reopen the original chat instead.

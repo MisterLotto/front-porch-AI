@@ -471,19 +471,20 @@ extension ChatServiceGeneration on ChatService {
         // (thin delegation to author_note_builder per step 8; state/CRUD in god)
         objectiveBlock = _getObjectiveInjection();
 
-        // Mandatory Needs Catastrophe (Phase 2 stepping) — when a need hit 0 during
-        // the previous decay tick, we force the AI to roleplay the disaster right now.
+        // Mandatory Needs Catastrophe — when a hard-event need hit 0 during the
+        // decay tick, the character's body/state fails in a specific way and the
+        // reply must open on it. The narrative carries its own evidence, so this
+        // wrapper stays generic: firm but short (heavy "YOU MUST" walls read as
+        // jailbreak-fight energy and can backfire), and it never puppets {{user}}.
         if (_needsSimulation.pendingCatastrophe != null) {
           needsCatastropheBlock =
-              '[MANDATORY CATASTROPHIC NEED EVENT — THIS HAS ALREADY OCCURRED THIS TURN:\n'
+              '[SCENE EVENT — CANON, happening this turn]\n'
               '${_needsSimulation.pendingCatastrophe}\n'
-              'You MUST narrate the immediate physical sensations, the visible evidence '
-              '(wet patch/puddle on clothes or floor, her collapsing or fainting, smell, '
-              'mortified/embarrassed expression, how {{user}} and anyone else present reacts), '
-              'and the emotional/social aftermath in the very first 1-2 paragraphs. '
-              'This is not optional, not a suggestion, and not something the character "might" do — '
-              'the event is canon and has just happened or is happening right now. '
-              'Do not fade to black, do not ask for permission, do not skip it.]\n';
+              'Open the reply with this event as it happens; do not skip it, '
+              'soften it to a near-miss, or fade past it. Narrate only what this '
+              'specific event makes observable, then let the scene continue from '
+              'its consequences. Do NOT decide {{user}}\'s actions, words, or '
+              'feelings — write only {{char}} and the surroundings.]\n';
           // Consume it for this generation
           _needsSimulation.consumePendingCatastrophe();
         }

@@ -104,6 +104,12 @@ extension ChatServiceRealismDance on ChatService {
 
       // Now load the post-decay state into scalars for the remainder of the speaker eval + prompt injection.
       _loadGroupRealismIntoScalars(charId);
+
+      // Catastrophe check on THIS speaker's just-loaded vector — 1:1 parity
+      // (the 1:1 host runs this inside tickDecay). Persist the recovery floor
+      // back to the speaker's group entry so it sticks.
+      _needsSimulation.applyCatastropheIfNeeded();
+      _setGroupNeeds(sidForDecay, Map<String, int>.from(_needsSimulation.vector));
     } else if (_activeGroup != null) {
       // Group speaker (observer mode or needs-off): load this speaker's persisted
       // group realism state into the scalar fields the eval will read and mutate.
