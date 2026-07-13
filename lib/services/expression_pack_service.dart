@@ -318,33 +318,63 @@ class ExpressionPackImporter {
         .toList();
     if (kept.isEmpty) return 0;
 
+    // Which existing same-label avatars a "replace" would supersede. Captured
+    // now but NOT deleted yet — see the write-then-delete ordering below.
+    var toRemove = const <String>[];
     if (replaceSameLabel) {
       final existing = await repository.getAvatarImages(characterDbId);
       final labels = kept.map((s) => s.emotion.toLowerCase()).toSet();
-      for (final avatar in existing) {
-        if (labels.contains(avatar.label?.toLowerCase())) {
-          await repository.removeAvatar(characterDbId, avatar.id);
-        }
+      toRemove = [
+        for (final a in existing)
+          if (labels.contains(a.label?.toLowerCase())) a.id,
+      ];
+    }
+
+    // Safe-replace ordering: write ALL new images FIRST, and only once every
+    // one has landed do we delete the old same-label ones. The old code
+    // deleted first, so an addAvatar failure mid-loop (disk full, permissions)
+    // destroyed the existing pack and left a half-written one. On failure now
+    // we roll back the partial new adds — the old pack stays fully intact.
+    // (Not a DB transaction: the failure mode shifts from "lost pack" to, at
+    // worst, a leftover duplicate-labelled old image if a delete below fails —
+    // a cosmetic dup, not data loss.)
+    final addedIds = <String>[];
+    try {
+      for (final slot in kept) {
+        // Strictly sequential awaits: addAvatar filenames are
+        // millisecond-stamped, so parallel adds could collide.
+        addedIds.add(
+          await repository.addAvatar(
+            characterDbId,
+            characterName,
+            slot.bytes!,
+            slot.emotion,
+          ),
+        );
       }
-      // No prime-index adjustment here on purpose: CharacterRepository's
-      // removeAvatar performs none, and the avatars dialog only clamps its
-      // local UI copy after a removal without persisting it — we match that
-      // existing behavior exactly.
+    } catch (_) {
+      for (final id in addedIds) {
+        try {
+          await repository.removeAvatar(characterDbId, id);
+        } catch (_) {}
+      }
+      rethrow;
     }
 
-    var imported = 0;
-    for (final slot in kept) {
-      // Strictly sequential awaits: addAvatar filenames are
-      // millisecond-stamped, so parallel adds could collide.
-      await repository.addAvatar(
-        characterDbId,
-        characterName,
-        slot.bytes!,
-        slot.emotion,
-      );
-      imported++;
+    // All new images are safely on disk — now remove the superseded old ones.
+    // Best-effort per id: a single failed delete must not abort the loop (that
+    // would strand MORE duplicates) — log and continue so we clear as many as
+    // possible. (No prime-index adjustment on purpose: removeAvatar performs
+    // none and the avatars dialog only clamps its local UI copy — match that.)
+    for (final id in toRemove) {
+      try {
+        await repository.removeAvatar(characterDbId, id);
+      } catch (e) {
+        debugPrint('[ExpressionPack] replace: failed to remove old $id: $e');
+      }
     }
 
+    final imported = addedIds.length;
     if (imported > 0 && !storage.expressionEnabled) {
       await storage.setExpressionEnabled(true);
     }

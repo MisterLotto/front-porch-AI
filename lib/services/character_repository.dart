@@ -932,7 +932,9 @@ class CharacterRepository extends ChangeNotifier {
   }
 
   /// Add a new avatar image for a character.
-  Future<void> addAvatar(
+  /// Add a labeled expression avatar (goes to `avatars/`). Returns the new
+  /// avatar id so callers can roll back a partial batch on failure.
+  Future<String> addAvatar(
     String characterId,
     String characterName,
     Uint8List imageBytes,
@@ -972,6 +974,7 @@ class CharacterRepository extends ChangeNotifier {
         ),
       );
       debugPrint('[CharacterRepository] addAvatar: DB insert done');
+      return avatarId;
     } catch (e) {
       debugPrint('[CharacterRepository] addAvatar: ERROR: $e');
       rethrow;

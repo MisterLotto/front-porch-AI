@@ -99,9 +99,41 @@ class DrawThingsGrpcService {
           stderrBuf.writeln(line);
           onStderrLine?.call(line);
         });
-    final exitCode = await process.exitCode.timeout(timeout);
-    final stdoutStr = await stdoutFut;
-    await stderrFut;
+    final int exitCode;
+    final String stdoutStr;
+    try {
+      exitCode = await process.exitCode.timeout(timeout);
+      stdoutStr = await stdoutFut;
+      await stderrFut;
+    } on TimeoutException {
+      // The CLI (and the Draw Things render it drives) is wedged. KILL the
+      // subprocess so it stops holding the GPU + gRPC stream — otherwise the
+      // next generation queues behind it and also times out, a compounding
+      // failure the user could only clear by killing processes by hand. Then
+      // drain the stdout/stderr futures so their stream subscriptions don't
+      // leak, and rethrow so the caller surfaces the timeout.
+      process.kill(); // SIGTERM
+      // Escalate to SIGKILL if it ignores SIGTERM within a short grace — a
+      // GPU-wait can swallow SIGTERM, and the whole point is to free the GPU.
+      unawaited(
+        process.exitCode
+            .timeout(
+              const Duration(seconds: 3),
+              onTimeout: () {
+                process.kill(ProcessSignal.sigkill);
+                return -1;
+              },
+            )
+            .catchError((_) => -1),
+      );
+      unawaited(stdoutFut.catchError((_) => ''));
+      unawaited(stderrFut.catchError((_) {}));
+      debugPrint(
+        'DrawThingsGrpcService: CLI op=${request['op']} timed out after '
+        '${timeout.inSeconds}s — killed the subprocess.',
+      );
+      rethrow;
+    }
     final stderrStr = stderrBuf.toString();
 
     final filteredErr = stderrStr
