@@ -29,20 +29,29 @@ import 'package:front_porch_ai/utils/gguf_vision.dart';
 
 /// Resolves ONE cached vision verdict per backend+model identity, mirroring the
 /// tool-calling capability probe pattern (resolve with the best signal
-/// available, cache the verdict, tolerate every failure by returning "none").
+/// available, cache only definitive verdicts, degrade every failure to
+/// "unknown" rather than a false "none").
 ///
 /// Resolution priority:
 ///  - Local GGUF (KoboldCpp, incl. .kcpps preset): parse the file — embedded
 ///    projector, or multimodal-arch + configured mmproj.
 ///  - OpenRouter: `architecture.input_modalities` from `/models`.
 ///  - Nano-GPT: `capabilities.vision` from `/models?detailed=true`.
-///  - Generic OpenAI-compatible / MLX / unknown: a tiny runtime image probe.
+///  - LM Studio: `type == "vlm"` / `capabilities` from `/api/v0/models`
+///    (tried opportunistically on every non-metadata host; other servers 404
+///    it in milliseconds and fall through).
+///  - Generic OpenAI-compatible / MLX / unknown: a runtime image probe.
 ///
 /// A process-wide singleton so a verdict computed in Settings is reused
 /// everywhere without re-reading the file or re-hitting the network.
 class VisionSupportResolver {
   VisionSupportResolver._();
   static final VisionSupportResolver instance = VisionSupportResolver._();
+
+  /// Seam for tests to substitute a mock HTTP client; production code always
+  /// uses real clients created per request.
+  @visibleForTesting
+  http.Client Function() httpClientFactory = http.Client.new;
 
   final Map<String, VisionSupport> _remoteCache = {};
   final Map<String, GgufVisionInfo?> _ggufCache = {};
@@ -53,10 +62,15 @@ class VisionSupportResolver {
   /// either way, and [clear] forgets a transient failure.
   final Map<String, ModelApiCapabilities?> _capsCache = {};
 
-  /// 1×1 transparent PNG used by the runtime probe.
-  static const String _tinyPngB64 =
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9Q'
-      'DwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  /// 64×64 solid-gray PNG (132 bytes) used by the runtime probe. Deliberately
+  /// NOT a 1×1: several vision preprocessors enforce a minimum image size
+  /// (Qwen2-VL rejects anything under its 28-px patch factor, SigLIP-based
+  /// stacks have similar floors), so a degenerate probe image made genuinely
+  /// vision-capable local models error out and get branded "no vision".
+  static const String _probePngB64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAS0lEQVR42u3PMQ0A'
+      'AAwDoEqv9ErYvQQckD4XAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB'
+      'AQEBAQEBAQEBAQEBAYHLAB8+AWnmfUycAAAAAElFTkSuQmCC';
 
   /// Clear all cached verdicts (e.g. after the user swaps models/backends).
   void clear() {
@@ -78,11 +92,17 @@ class VisionSupportResolver {
     if (!isCapabilityMetadataProviderUrl(apiUrl)) return null;
     final key = '$apiUrl::$modelName';
     if (_capsCache.containsKey(key)) return _capsCache[key];
+    final isNanoGpt = isNanoGptUrl(apiUrl);
+    final base = apiUrl.endsWith('/')
+        ? apiUrl.substring(0, apiUrl.length - 1)
+        : apiUrl;
     final caps = await _fetchModelCapabilities(
-      apiUrl: apiUrl,
+      uri: Uri.parse(isNanoGpt ? '$base/models?detailed=true' : '$base/models'),
       apiKey: apiKey,
       modelName: modelName,
-      isNanoGpt: isNanoGptUrl(apiUrl),
+      parse: isNanoGpt
+          ? ModelApiCapabilities.fromNanoGptEntry
+          : ModelApiCapabilities.fromOpenRouterEntry,
     );
     _capsCache[key] = caps;
     return caps;
@@ -105,10 +125,11 @@ class VisionSupportResolver {
   /// Resolve vision for an OpenAI-compatible remote backend, choosing the best
   /// signal for the provider inferred from [apiUrl].
   ///
-  /// A probe that never REACHED the server (connection refused, timeout) is
-  /// not a verdict: it returns none for now but is NOT cached, so the next
-  /// ask retries — otherwise checking a moment before the server was up
-  /// branded the model "no vision" for the rest of the session.
+  /// Only definitive verdicts are cached. Anything that says nothing about
+  /// vision — server unreachable, probe timeout while the model is still
+  /// loading, an error mentioning neither images nor vision — resolves to
+  /// [VisionSupport.unknown] and is retried on the next ask; caching those
+  /// used to brand vision models "none" for the rest of the session.
   Future<VisionSupport> resolveRemote({
     required String apiUrl,
     required String apiKey,
@@ -133,13 +154,33 @@ class VisionSupportResolver {
       return verdict;
     }
 
+    // LM Studio serves authoritative per-model metadata (`type: "vlm"`) at
+    // /api/v0/models on the same origin as /v1 — free, instant, and correct
+    // even while the model is NOT loaded (the probe can't be either of those).
+    // Non-LM-Studio hosts 404 this and fall through to the probe.
+    final lmUri = lmStudioRestModelsUri(apiUrl);
+    if (!isCapabilityMetadataProviderUrl(apiUrl) && lmUri != null) {
+      final lmCaps = await _fetchModelCapabilities(
+        uri: lmUri,
+        apiKey: apiKey,
+        modelName: modelName,
+        parse: ModelApiCapabilities.fromLmStudioEntry,
+        timeout: const Duration(seconds: 6),
+      );
+      if (lmCaps != null) {
+        final verdict = VisionSupport.fromApi(lmCaps);
+        _remoteCache[key] = verdict;
+        return verdict;
+      }
+    }
+
     // Generic OpenAI-compatible / MLX / unknown, or a metadata miss above.
     final probed = await _probeVision(
       apiUrl: apiUrl,
       apiKey: apiKey,
       modelName: modelName,
     );
-    if (probed == null) return VisionSupport.none; // unreachable — don't cache
+    if (probed == null) return VisionSupport.unknown; // no verdict — no cache
     final verdict = probed
         ? const VisionSupport(true, VisionSource.probe)
         : VisionSupport.none;
@@ -219,28 +260,25 @@ class VisionSupportResolver {
     }
   }
 
-  /// Fetch `/models` (detailed for Nano-GPT) and parse the matching entry.
-  /// Returns null when the entry can't be found or the request fails.
+  /// Fetch a models listing from [uri] and [parse] the entry matching
+  /// [modelName]. One implementation serves OpenRouter, Nano-GPT, and
+  /// LM Studio — only the URL and the per-entry parser differ. Returns null
+  /// when the entry can't be found or the request fails.
   Future<ModelApiCapabilities?> _fetchModelCapabilities({
-    required String apiUrl,
+    required Uri uri,
     required String apiKey,
     required String modelName,
-    required bool isNanoGpt,
+    required ModelApiCapabilities Function(Map<dynamic, dynamic>) parse,
+    Duration timeout = const Duration(seconds: 15),
   }) async {
-    final client = http.Client();
+    final client = httpClientFactory();
     try {
-      final base = apiUrl.endsWith('/')
-          ? apiUrl.substring(0, apiUrl.length - 1)
-          : apiUrl;
-      final uri = Uri.parse(
-        isNanoGpt ? '$base/models?detailed=true' : '$base/models',
-      );
       final response = await client
           .get(
             uri,
             headers: {if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey'},
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(timeout);
       if (response.statusCode != 200) return null;
 
       final body = jsonDecode(response.body);
@@ -251,29 +289,31 @@ class VisionSupportResolver {
         final id =
             (entry['id'] ?? entry['name'] ?? entry['model'])?.toString() ?? '';
         if (id != modelName) continue;
-        return isNanoGpt
-            ? ModelApiCapabilities.fromNanoGptEntry(entry)
-            : ModelApiCapabilities.fromOpenRouterEntry(entry);
+        return parse(entry);
       }
       return null;
     } catch (e) {
-      debugPrint('[VisionResolver] metadata fetch failed: $e');
+      debugPrint('[VisionResolver] metadata fetch failed ($uri): $e');
       return null;
     } finally {
       client.close();
     }
   }
 
-  /// Send a tiny image via `/chat/completions` and treat a non-error response
-  /// as acceptance. Returns null when the request never reached the server
-  /// (connection refused, timeout) — "unreachable" is a connectivity fact,
-  /// not a capability verdict, and must not be cached as "no vision".
+  /// Send a small test image via `/chat/completions` and treat a non-error
+  /// response as acceptance. Only 200 (yes) or a 4xx whose body names
+  /// images/vision (no) are verdicts. EVERYTHING else returns null — server
+  /// unreachable, timeout (local servers JIT-load the model on first request,
+  /// which can take minutes for a 12B), 404 model-id mismatch, "no model
+  /// loaded", 5xx engine hiccups. Those are connectivity/state facts, not
+  /// capability facts, and treating them as "no vision" is exactly what made
+  /// vision models show "Vision: none".
   Future<bool?> _probeVision({
     required String apiUrl,
     required String apiKey,
     required String modelName,
   }) async {
-    final client = http.Client();
+    final client = httpClientFactory();
     try {
       final base = apiUrl.endsWith('/')
           ? apiUrl.substring(0, apiUrl.length - 1)
@@ -290,7 +330,7 @@ class VisionSupportResolver {
               {'type': 'text', 'text': 'ok'},
               {
                 'type': 'image_url',
-                'image_url': {'url': 'data:image/png;base64,$_tinyPngB64'},
+                'image_url': {'url': 'data:image/png;base64,$_probePngB64'},
               },
             ],
           },
@@ -305,7 +345,9 @@ class VisionSupportResolver {
             },
             body: jsonEncode(payload),
           )
-          .timeout(const Duration(seconds: 20));
+          // Generous on purpose: a local server may be JIT-loading the model
+          // off disk before it can answer the very first request.
+          .timeout(const Duration(seconds: 75));
 
       if (response.statusCode == 200) return true;
       // A 4xx that names images/vision/modality means the model rejected the
@@ -319,7 +361,11 @@ class VisionSupportResolver {
           return false;
         }
       }
-      return false;
+      debugPrint(
+        '[VisionResolver] probe inconclusive '
+        '(${response.statusCode}): ${response.body}',
+      );
+      return null;
     } catch (e) {
       debugPrint('[VisionResolver] probe unreachable/failed: $e');
       return null;

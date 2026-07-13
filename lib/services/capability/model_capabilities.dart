@@ -35,6 +35,11 @@ enum VisionSource {
 
   /// No vision support detected.
   none,
+
+  /// No verdict could be reached (server unreachable, model still loading,
+  /// or an error that says nothing about vision). NOT the same as [none]:
+  /// unknown verdicts are never cached and the UI offers a retry.
+  unknown,
 }
 
 /// A single cached verdict on whether a backend+model can accept images.
@@ -46,6 +51,15 @@ class VisionSupport {
 
   /// The universal "no vision" verdict.
   static const VisionSupport none = VisionSupport(false, VisionSource.none);
+
+  /// "Could not determine" — treated as unsupported by consumers (images
+  /// degrade to the offline caption path, which is safe either way), but
+  /// rendered distinctly in the UI and never cached, so a transient failure
+  /// can't brand a vision model "none" for the rest of the session.
+  static const VisionSupport unknown = VisionSupport(
+    false,
+    VisionSource.unknown,
+  );
 
   /// Pure verdict for a local GGUF, given its parsed [GgufVisionInfo] and
   /// whether a usable mmproj file is currently configured for it.
@@ -106,7 +120,9 @@ class ModelApiCapabilities {
   ///
   /// Vision: `architecture.input_modalities` contains `"image"`.
   /// Tools:  `supported_parameters` contains `"tools"`.
-  factory ModelApiCapabilities.fromOpenRouterEntry(Map<dynamic, dynamic> entry) {
+  factory ModelApiCapabilities.fromOpenRouterEntry(
+    Map<dynamic, dynamic> entry,
+  ) {
     bool vision = false;
     final arch = entry['architecture'];
     if (arch is Map) {
@@ -140,6 +156,28 @@ class ModelApiCapabilities {
     }
     return const ModelApiCapabilities();
   }
+
+  /// Parse an LM Studio `/api/v0/models` entry (the REST API LM Studio serves
+  /// on the same port as its OpenAI-compatible `/v1`).
+  ///
+  /// Vision: `type` is `"vlm"` (how LM Studio itself decides to show the eye
+  /// icon), or — on newer builds — the `capabilities` list contains
+  /// `"vision"`. Tools: the `capabilities` list contains `"tool_use"`.
+  /// This is authoritative and works even while the model is NOT loaded,
+  /// which the runtime image probe can never do.
+  factory ModelApiCapabilities.fromLmStudioEntry(Map<dynamic, dynamic> entry) {
+    final caps = entry['capabilities'];
+    final capList = caps is List
+        ? caps.map((e) => e.toString().toLowerCase()).toList()
+        : const <String>[];
+    final vision =
+        entry['type']?.toString().toLowerCase() == 'vlm' ||
+        capList.contains('vision');
+    return ModelApiCapabilities(
+      vision: vision,
+      toolCalling: capList.contains('tool_use'),
+    );
+  }
 }
 
 /// True for Nano-GPT hosts, whose `/models` needs `?detailed=true` to surface
@@ -152,3 +190,28 @@ bool isNanoGptUrl(String apiUrl) => apiUrl.toLowerCase().contains('nano-gpt');
 /// has no capability metadata and stays on the runtime probes.
 bool isCapabilityMetadataProviderUrl(String apiUrl) =>
     apiUrl.toLowerCase().contains('openrouter.ai') || isNanoGptUrl(apiUrl);
+
+/// LM Studio's REST models endpoint for an OpenAI-compatible base URL, or
+/// null when one can't be derived. LM Studio serves `/api/v0/models` on the
+/// same origin as `/v1`, so `http://localhost:1234/v1` →
+/// `http://localhost:1234/api/v0/models`. A trailing `/v1` segment is
+/// replaced; any other path shape gets `/api/v0/models` appended to the
+/// origin's path. Non-LM-Studio servers simply 404 this and callers fall
+/// back to the runtime probe.
+Uri? lmStudioRestModelsUri(String apiUrl) {
+  final uri = Uri.tryParse(apiUrl.trim());
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+  var path = uri.path;
+  while (path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+  if (path.toLowerCase().endsWith('/v1')) {
+    path = path.substring(0, path.length - 3);
+  }
+  return Uri(
+    scheme: uri.scheme,
+    host: uri.host,
+    port: uri.hasPort ? uri.port : null,
+    path: '$path/api/v0/models',
+  );
+}

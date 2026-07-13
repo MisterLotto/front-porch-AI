@@ -65,10 +65,79 @@ void main() {
     });
   });
 
+  group('ModelApiCapabilities.fromLmStudioEntry', () {
+    test('type "vlm" means vision (how LM Studio marks its eye icon)', () {
+      final caps = ModelApiCapabilities.fromLmStudioEntry({
+        'id': 'google/gemma-4-12b-qat',
+        'type': 'vlm',
+        'state': 'loaded',
+      });
+      expect(caps.vision, isTrue);
+    });
+
+    test('capabilities list is honored on newer builds', () {
+      final caps = ModelApiCapabilities.fromLmStudioEntry({
+        'id': 'some/vision-model',
+        'type': 'llm', // older field disagrees; capabilities wins
+        'capabilities': ['vision', 'tool_use'],
+      });
+      expect(caps.vision, isTrue);
+      expect(caps.toolCalling, isTrue);
+    });
+
+    test('plain text model has neither', () {
+      final caps = ModelApiCapabilities.fromLmStudioEntry({
+        'id': 'text-model',
+        'type': 'llm',
+        'capabilities': <String>[],
+      });
+      expect(caps.vision, isFalse);
+      expect(caps.toolCalling, isFalse);
+    });
+
+    test('tolerates missing/malformed fields', () {
+      final caps = ModelApiCapabilities.fromLmStudioEntry({'id': 'x'});
+      expect(caps.vision, isFalse);
+      expect(caps.toolCalling, isFalse);
+    });
+  });
+
+  group('lmStudioRestModelsUri', () {
+    test('replaces a trailing /v1 with /api/v0/models', () {
+      expect(
+        lmStudioRestModelsUri('http://localhost:1234/v1').toString(),
+        'http://localhost:1234/api/v0/models',
+      );
+    });
+
+    test('handles trailing slash and no /v1 suffix', () {
+      expect(
+        lmStudioRestModelsUri('http://localhost:1234/v1/').toString(),
+        'http://localhost:1234/api/v0/models',
+      );
+      expect(
+        lmStudioRestModelsUri('http://192.168.1.5:1234').toString(),
+        'http://192.168.1.5:1234/api/v0/models',
+      );
+    });
+
+    test('unparseable / schemeless input returns null', () {
+      expect(lmStudioRestModelsUri(''), isNull);
+      expect(lmStudioRestModelsUri('localhost:1234'), isNull);
+    });
+  });
+
+  group('VisionSupport.unknown', () {
+    test('is unsupported for consumers but distinct from none', () {
+      expect(VisionSupport.unknown.supported, isFalse);
+      expect(VisionSupport.unknown.source, VisionSource.unknown);
+      expect(VisionSupport.unknown.source, isNot(VisionSource.none));
+    });
+  });
+
   group('VisionSupport.fromApi', () {
     test('vision-capable caps → supported via apiMetadata', () {
-      final s =
-          VisionSupport.fromApi(const ModelApiCapabilities(vision: true));
+      final s = VisionSupport.fromApi(const ModelApiCapabilities(vision: true));
       expect(s.supported, isTrue);
       expect(s.source, VisionSource.apiMetadata);
     });
@@ -87,12 +156,11 @@ void main() {
       bool embedded = false,
       bool multimodal = false,
       String arch = 'llama',
-    }) =>
-        GgufVisionInfo(
-          architecture: arch,
-          hasEmbeddedProjector: embedded,
-          isMultimodal: multimodal,
-        );
+    }) => GgufVisionInfo(
+      architecture: arch,
+      hasEmbeddedProjector: embedded,
+      isMultimodal: multimodal,
+    );
 
     test('embedded projector → supported (ggufEmbedded)', () {
       final s = VisionSupport.fromGguf(
@@ -155,8 +223,10 @@ void main() {
         isCapabilityMetadataProviderUrl('https://nano-gpt.com/api/v1'),
         isTrue,
       );
-      expect(isCapabilityMetadataProviderUrl('HTTPS://NANO-GPT.com/API/v1'),
-          isTrue);
+      expect(
+        isCapabilityMetadataProviderUrl('HTTPS://NANO-GPT.com/API/v1'),
+        isTrue,
+      );
     });
 
     test('generic remotes, oMLX, and localhost are not', () {
@@ -168,8 +238,10 @@ void main() {
         isCapabilityMetadataProviderUrl('http://192.168.1.20:1234/v1'),
         isFalse,
       );
-      expect(isCapabilityMetadataProviderUrl('https://api.openai.com/v1'),
-          isFalse);
+      expect(
+        isCapabilityMetadataProviderUrl('https://api.openai.com/v1'),
+        isFalse,
+      );
       expect(isCapabilityMetadataProviderUrl(''), isFalse);
     });
 
