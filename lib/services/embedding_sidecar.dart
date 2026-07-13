@@ -316,12 +316,16 @@ class EmbeddingSidecar extends ChangeNotifier {
     _statusMessage = 'Stopping...';
     notifyListeners();
 
-    _process!.kill(ProcessSignal.sigterm);
+    // Capture the handle in a local: the exitCode `.then` handler nulls
+    // `_process` when the process exits, so a process that dies exactly at the
+    // 5s boundary would null-crash the `_process!.kill(sigkill)` below.
+    final proc = _process!;
+    proc.kill(ProcessSignal.sigterm);
     try {
-      await _process!.exitCode.timeout(const Duration(seconds: 5));
+      await proc.exitCode.timeout(const Duration(seconds: 5));
     } catch (_) {
       // Force kill if SIGTERM didn't work
-      _process!.kill(ProcessSignal.sigkill);
+      proc.kill(ProcessSignal.sigkill);
     }
     _process = null;
     _isRunning = false;

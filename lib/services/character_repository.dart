@@ -371,6 +371,32 @@ class CharacterRepository extends ChangeNotifier {
       }
     }
 
+    // Delete the avatar-gallery media folder (Characters/<safeName>/ holding
+    // avatars/ + looks/) — the PNG is already hard-deleted above, so leaving
+    // this behind just leaks gallery images on disk (a full pack is ~28 files)
+    // for every deleted character. Best-effort; name-keyed like the write path.
+    try {
+      final safeName = _mediaFolderName(character.name);
+      // Only delete when NO other character shares this folder — sanitized
+      // names collide ("A!" and "A" → same folder), and nuking a shared folder
+      // would take another character's gallery with it. When ambiguous, leave
+      // it (a small disk leak) rather than risk cross-character data loss.
+      final shared = _characters.any(
+        (c) =>
+            c.dbId != character.dbId && _mediaFolderName(c.name) == safeName,
+      );
+      if (safeName.isNotEmpty && !shared) {
+        final mediaDir = Directory(
+          p.join(_storage.charactersDir.path, safeName),
+        );
+        if (await mediaDir.exists()) {
+          await mediaDir.delete(recursive: true);
+        }
+      }
+    } catch (e) {
+      debugPrint('[CharacterRepository] delete media folder failed: $e');
+    }
+
     // Remove any linked world
     if (worldRepo != null) {
       final linkedWorld = worldRepo.worlds
