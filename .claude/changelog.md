@@ -6,7 +6,7 @@
 - **Fix:** resolveRemote now tries LM Studio's `/api/v0/models` REST metadata first for non-OpenRouter/Nano hosts (instant, token-free, works while the model is still loading; other servers 404 and fall through); the probe uses a 64×64 PNG (132 B), a 75s timeout, and only returns a verdict on 200 (yes) or a 4xx naming images/vision (no) — everything else is a new `VisionSupport.unknown` (`VisionSource.unknown`), never cached, rendered as "Vision: could not check" with a Retry button. `_fetchModelCapabilities` generalized (uri + parser) so all three metadata providers share one fetch impl. Consumers treat unknown as unsupported (safe offline-caption degradation); chat_page + expression pack dialog wordings distinguish "couldn't check" from "text-only".
 - **New methods:** `ModelApiCapabilities.fromLmStudioEntry`, `lmStudioRestModelsUri` (top-level helper). **Deleted:** `_RemoteVisionPillState._requested` (dead after retry rework). Test seam: `httpClientFactory` (`@visibleForTesting`).
 - **Verification:** analyze clean (3 pre-existing deprecation infos in unrelated files); full test suite green incl. 7 new MockClient resolver tests (LM Studio vlm/llm, probe verdict semantics, unknown-not-cached retry, OpenRouter path untouched) + LM Studio entry/URL parsing tests. `dart fix` clean, `dart format` applied.
-- **Commit hash:** 04ed6f1
+- **Commit hash:** 7391506
 
 ## 2026-07-11 — feat(web): Avatar Gallery (upload-only) for the web/mobile UI
 - **Commits:** 025e2c7 (management), 518ba4d (swipe). **Files:** web facade+routes (character_authoring_facade.dart, character_routes.dart) + web_ui (AvatarManager.tsx, ChatAvatar.tsx, ChatInsight.tsx, styles.css) + rebuilt assets/web_app.
