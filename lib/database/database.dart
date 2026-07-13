@@ -715,41 +715,53 @@ class AppDatabase extends _$AppDatabase {
     // The copy is gated by the import dialog — it only happens after the
     // user has seen the dialog and chosen Import (or skipped the dialog
     // entirely for non-pre-release builds).
+    // Best-effort: a failed copy (disk full, permissions, a second instance
+    // holding the file) must NOT abort startup with no window — fall through
+    // and open whatever DB exists; the import dialog can retry the copy later.
     if (isPreRelease && !file.existsSync()) {
-      final prefs = await SharedPreferences.getInstance();
-      final shown = prefs.getBool('beta_stable_import_shown') ?? false;
-      if (shown) {
-        // Dialog has been shown — respect the user's choice
-        final skipped = prefs.getBool('beta_stable_import_skipped') ?? false;
-        if (!skipped) {
-          final prodFile = File(p.join(dbDir, 'front_porch.db'));
-          if (prodFile.existsSync()) {
-            debugPrint(
-              '[DB] Pre-release build — copying production DB to beta DB',
-            );
-            await prodFile.copy(file.path);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final shown = prefs.getBool('beta_stable_import_shown') ?? false;
+        if (shown) {
+          // Dialog has been shown — respect the user's choice
+          final skipped = prefs.getBool('beta_stable_import_skipped') ?? false;
+          if (!skipped) {
+            final prodFile = File(p.join(dbDir, 'front_porch.db'));
+            if (prodFile.existsSync()) {
+              debugPrint(
+                '[DB] Pre-release build — copying production DB to beta DB',
+              );
+              await prodFile.copy(file.path);
+            }
           }
+        } else {
+          // Dialog not yet shown — defer to the import dialog which will
+          // show after the first frame and trigger the copy manually.
+          debugPrint(
+            '[DB] Pre-release build — import dialog pending, skipping copy',
+          );
         }
-      } else {
-        // Dialog not yet shown — defer to the import dialog which will
-        // show after the first frame and trigger the copy manually.
-        debugPrint(
-          '[DB] Pre-release build — import dialog pending, skipping copy',
-        );
+      } catch (e) {
+        debugPrint('[DB] Beta DB seed copy failed (non-fatal): $e');
       }
     }
 
     // For stable builds: reunify beta DB into production if both exist.
     // This is a one-time operation on the first 0.9.0 stable launch.
     // Steps 1-2 run here (backup + promote). Steps 3-5 (diff + import)
-    // run later in main.dart with a UI overlay.
-    if (!isPreRelease &&
-        await DbReunificationService.needsReunification(dbDir)) {
-      debugPrint(
-        '[DB] Reunification needed — backing up and promoting beta DB',
-      );
-      await DbReunificationService.createBackups(dbDir);
-      await DbReunificationService.promoteBetaDb(dbDir);
+    // run later in main.dart with a UI overlay. Guarded: a reunification I/O
+    // failure must not brick launch — retry next start on whatever DB opens.
+    try {
+      if (!isPreRelease &&
+          await DbReunificationService.needsReunification(dbDir)) {
+        debugPrint(
+          '[DB] Reunification needed — backing up and promoting beta DB',
+        );
+        await DbReunificationService.createBackups(dbDir);
+        await DbReunificationService.promoteBetaDb(dbDir);
+      }
+    } catch (e) {
+      debugPrint('[DB] Reunification failed (non-fatal, will retry): $e');
     }
 
     _dbPath = file.path;

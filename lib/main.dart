@@ -132,6 +132,67 @@ void _ignoreSigpipe() {
   }
 }
 
+/// Last-resort screen shown when the database can't be opened at startup (disk
+/// full, no write permission, or another copy of the app holding the file).
+/// Deliberately self-contained — it runs before the theme/AppColors exist, so
+/// it hardcodes a dark bootstrap palette rather than depend on any provider.
+class _DbInitErrorApp extends StatelessWidget {
+  const _DbInitErrorApp({required this.details});
+
+  final String details;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.storage_rounded,
+                  color: Colors.orangeAccent,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Front Porch AI couldn't open its database",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'This is usually a full disk, missing write permission, or '
+                  'another copy of Front Porch AI already running. Free up '
+                  'space, close any other copies, then reopen the app.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  details,
+                  textAlign: TextAlign.center,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
@@ -168,12 +229,25 @@ void main(List<String> args) async {
     debugPrint('Fatal error during file consolidation: $e');
   }
 
-  // Initialize database
-  final db = await AppDatabase.instance();
-  final needsMigration = !await DataMigrationService.isMigrated();
-
-  // Run integrity check before anything else touches the DB
-  final dbHealthy = await db.integrityCheck();
+  // Initialize database. This is the last thing that can die BEFORE any window
+  // exists — a disk-full/permissions failure, or a second copy of the app
+  // holding the file (the documented dual-run case), would otherwise exit the
+  // process silently ("app won't launch, no message"). Guard it and, on a
+  // hard failure, show a minimal error window instead of nothing.
+  // (NativeDatabase.createInBackground opens lazily, so a bad/locked file
+  // surfaces at the first query — integrityCheck — not at instance().)
+  final AppDatabase db;
+  final bool needsMigration;
+  final bool dbHealthy;
+  try {
+    db = await AppDatabase.instance();
+    needsMigration = !await DataMigrationService.isMigrated();
+    dbHealthy = await db.integrityCheck();
+  } catch (e, st) {
+    debugPrint('[DB] FATAL: could not open the database: $e\n$st');
+    runApp(_DbInitErrorApp(details: e.toString()));
+    return;
+  }
   _MyAppState._dbHealthy = dbHealthy;
 
   // Purge rows that were soft-deleted more than 30 days ago
