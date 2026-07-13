@@ -175,7 +175,15 @@ extension ChatServiceChatEntry on ChatService {
         // Seed Realism Engine state from V2.5 card extensions (new conversations only)
         if (_activeCharacter!.frontPorchExtensions != null) {
           final ext = _activeCharacter!.frontPorchExtensions!;
-          _realismEnabled = ext.realismEnabled;
+          // Global "Enable Realism Mode" default is an OR override (not a gate
+          // like passage-of-time): its whole purpose is to force realism ON for
+          // imported cards (Chub/V2 PNG/BYAF) that carry no realism setup, so
+          // the engine reads the room + generates baselines without the user
+          // editing every card. Defaults false, so card behavior is unchanged
+          // until the user opts in globally.
+          _realismEnabled =
+              ext.realismEnabled ||
+              _storageService.realismSettings.realismDefault;
           // Card-seed bypass (rec 1 from PR #47): use seedFromCardV2OrExt (plain .clamp only,
           // no _migrate*) because V2.5 cards + creator UI author shortTermBond/longTermBond on the
           // *current* ±300 scale (see models/character_card.dart:31-32 + FrontPorchExtensions).
@@ -202,7 +210,11 @@ extension ChatServiceChatEntry on ChatService {
           _characterEmotion = ext.characterEmotion;
           _emotionIntensity = ext.emotionIntensity;
           _nsfwService.seedFromV2OrExt(
-            nsfwCooldownEnabled: ext.nsfwCooldownEnabled,
+            // Same OR-override rationale as realism above: a globally-enabled
+            // NSFW cooldown applies to imported cards too.
+            nsfwCooldownEnabled:
+                ext.nsfwCooldownEnabled ||
+                _storageService.realismSettings.nsfwCooldownDefault,
           );
           _chaosModeService.seedFromGroupOrExt(ext.chaosModeEnabled, false);
           _needsSimEnabled = ext.needsSimEnabled;

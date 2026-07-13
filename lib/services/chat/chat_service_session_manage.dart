@@ -299,7 +299,13 @@ extension ChatServiceSessionManage on ChatService {
       final extSeed =
           _activeCharacter!.frontPorchExtensions ?? FrontPorchExtensions();
 
-      _realismEnabled = extSeed.realismEnabled;
+      // Global "Enable Realism Mode" default is an OR override so imported
+      // cards (no realism setup) get realism + baseline generation without the
+      // user editing each card. Defaults false → no change until opted in.
+      // Mirrors the setActiveCharacter fresh-seed path (chat_entry).
+      _realismEnabled =
+          extSeed.realismEnabled ||
+          _storageService.realismSettings.realismDefault;
       // Card-seed bypass (rec 1 from PR #47; keeps startNewChat parity with setActive ext seed):
       // use seedFromCardV2OrExt (plain .clamp only, no _migrate*) because V2.5 cards + creator
       // author on current ±300 scale. (The old "Migration + seed" comment + call was the source
@@ -344,7 +350,10 @@ extension ChatServiceSessionManage on ChatService {
       _characterEmotion = extSeed.characterEmotion;
       _emotionIntensity = extSeed.emotionIntensity;
       _nsfwService.seedFromV2OrExt(
-        nsfwCooldownEnabled: extSeed.nsfwCooldownEnabled,
+        // OR-override for consistency with realism above (imported cards).
+        nsfwCooldownEnabled:
+            extSeed.nsfwCooldownEnabled ||
+            _storageService.realismSettings.nsfwCooldownDefault,
       );
       _chaosModeService.seedFromGroupOrExt(extSeed.chaosModeEnabled, false);
       _needsSimEnabled = extSeed.needsSimEnabled;
