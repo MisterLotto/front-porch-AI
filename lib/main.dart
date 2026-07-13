@@ -869,6 +869,14 @@ class _MyAppState extends State<MyApp> with WindowListener {
       groupRepo.updateDatabase(newDb);
       worldRepo.updateDatabase(newDb);
       Provider.of<ChatService>(context, listen: false).updateDatabase(newDb);
+      // Rebind the web server + Porch Stories too (same gap the storage-path
+      // move had) — otherwise after an import/restore they keep the closed DB
+      // and web logins / story queries fail until an app restart.
+      Provider.of<StoryRepository>(
+        context,
+        listen: false,
+      ).updateDatabase(newDb);
+      Provider.of<WebServerHost>(context, listen: false).setDatabase(newDb);
 
       await charRepo.loadCharacters();
       await charRepo.cleanOrphanedPngs();

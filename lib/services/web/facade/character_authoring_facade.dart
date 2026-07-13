@@ -72,12 +72,16 @@ class CharacterAuthoringFacade {
   Future<bool> addAvatar(String id, List<int> bytes, String? label) async {
     final card = await _repo.getCharacterCardById(id);
     if (card == null) return false;
-    await _repo.addAvatar(
-      id,
-      card.name,
-      Uint8List.fromList(bytes),
-      (label != null && label.trim().isEmpty) ? null : label,
-    );
+    // Reject the internal look sentinel as an expression label — an upload with
+    // ?label=__look__ would write the file to avatars/ but mark the row a look
+    // (AvatarImage.isLook), so it resolves/deletes from the wrong folder: a
+    // broken tile + an orphaned PNG. Treat it as unlabeled.
+    final clean = (label == null ||
+            label.trim().isEmpty ||
+            label.trim() == AvatarImage.lookLabel)
+        ? null
+        : label;
+    await _repo.addAvatar(id, card.name, Uint8List.fromList(bytes), clean);
     return true;
   }
 
@@ -93,7 +97,29 @@ class CharacterAuthoringFacade {
   Future<bool> removeAvatar(String id, String avatarId) async {
     final card = await _repo.getCharacterCardById(id);
     if (card == null) return false;
+    // Cascade to match desktop (avatar_gallery_controller.remove): capture
+    // whether this avatar was the ★ favorite (export cover / default face)
+    // and/or the prime BEFORE deleting, then heal both pointers after — the
+    // web path previously left a dangling favorite id and a prime index still
+    // pointing at the deleted expression.
+    final wasFavorite = card.frontPorchExtensions?.favoriteAvatarId == avatarId;
+    final before = await _repo.getAvatarImages(id);
+    final removed = before.where((a) => a.id == avatarId).firstOrNull;
+    final removedPrimeIdx = removed != null ? removed.displayOrder + 1 : -1;
+
     await _repo.removeAvatar(id, avatarId);
+
+    if (wasFavorite) await setFavorite(id, null); // → portrait
+    if (card.primeAvatarIndex == removedPrimeIdx) {
+      final remaining =
+          (await _repo.getAvatarImages(id)).where((a) => !a.isLook).toList()
+            ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+      final newPrime = remaining.isNotEmpty
+          ? remaining.first.displayOrder + 1
+          : 1;
+      await _repo.setPrimeAvatar(id, newPrime);
+      card.primeAvatarIndex = newPrime;
+    }
     return true;
   }
 

@@ -343,6 +343,17 @@ class _SettingsPageState extends State<SettingsPage> {
             context,
             listen: false,
           ).updateDatabase(newDb);
+          // Rebind the web server + Porch Stories too — they held the closed
+          // pre-move DB, so after a storage move remote users were dropped and
+          // couldn't log back in, and story queries threw, until an app restart.
+          Provider.of<StoryRepository>(
+            context,
+            listen: false,
+          ).updateDatabase(newDb);
+          Provider.of<WebServerHost>(
+            context,
+            listen: false,
+          ).setDatabase(newDb);
           // Reload data from the new DB location
           await Provider.of<CharacterRepository>(
             context,
@@ -919,7 +930,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           BackendType.kobold =>
                             'Switched to local KoboldCPP backend.',
                           BackendType.openRouter =>
-                            'Switched to Remote API backend.',
+                            'Switched to OpenAI-Compatible API backend.',
                           BackendType.omlx => 'Switched to oMLX backend.',
                         };
                         ScaffoldMessenger.of(
@@ -977,7 +988,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               const SizedBox(width: 6),
                               const Flexible(
                                 child: Text(
-                                  'Remote API',
+                                  'OpenAI-Compatible API',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(fontSize: 13),
@@ -1039,7 +1050,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   )
                 else
                   Text(
-                    'Connect to OpenRouter, Nano-GPT, or any OpenAI-compatible API.',
+                    'Any OpenAI-compatible API — remote (OpenRouter, Nano-GPT) '
+                    'or a local server (LM Studio, vLLM). Set the URL below.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.grey,
                     ),
@@ -1087,13 +1099,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         storageService: storageService,
                         context: context,
                       ),
-                      if (Platform.isMacOS)
-                        _buildApiPresetChip(
-                          label: '🍎 oMLX',
-                          url: 'http://localhost:8000/v1',
-                          storageService: storageService,
-                          context: context,
-                        ),
+                      // No oMLX chip here on purpose: oMLX has its own dedicated
+                      // Backend Mode radio above (with oMLX-specific handling),
+                      // so a second way to reach it through the generic client
+                      // was a redundant, subtly-different path. Use the radio.
                     ],
                   ),
                   const SizedBox(height: 16),

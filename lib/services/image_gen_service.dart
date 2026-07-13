@@ -266,6 +266,17 @@ class ImageGenService extends ChangeNotifier {
     // the edit path.
     double? editStrength,
   }) async {
+    // Reentrancy guard: this service holds a SINGLE shared _isGenerating /
+    // _statusMessage / _genPreview / _genProgress. Two overlapping calls (the
+    // classic case: the WebUI image panel + the desktop Studio, or /image while
+    // a Studio gen runs) would clobber each other's status and progress, the
+    // first to finish would flip _isGenerating false and unlock the other
+    // mid-flight, and on Draw Things both would spawn CLI jobs against one GPU.
+    // Refuse the second start rather than corrupt the first.
+    if (_isGenerating) {
+      debugPrint('[ImageGen] generateImage refused — a generation is running.');
+      return null;
+    }
     _isGenerating = true;
     _statusMessage = 'Generating image...';
     _lastGeneratedImage = null;

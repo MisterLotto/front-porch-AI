@@ -44,6 +44,13 @@ class StorageService extends ChangeNotifier {
   final Completer<void> _initCompleter = Completer<void>();
   Future<void> get initialized => _initCompleter.future;
 
+  /// True when the persisted data directory was unwritable at startup and we
+  /// fell back to the default root FOR THIS SESSION (the bad path is NOT
+  /// overwritten in prefs, so a re-plugged drive is retried next launch). The
+  /// UI reads this to warn "your data folder was unavailable" instead of the
+  /// user silently seeing an empty/relocated library.
+  bool rootUnavailableFellBack = false;
+
   SharedPreferences? _prefs;
   String? _rootPath;
   String? _customModelsPath;
@@ -677,13 +684,36 @@ class StorageService extends ChangeNotifier {
     }
     _binDir = Directory(path.join(_rootPath!, 'koboldcpp_bin'));
 
-    // Ensure directories exist
-    await chatsDir.create(recursive: true);
-    await modelsDir.create(recursive: true);
-    await worldsDir.create(recursive: true);
-    await charactersDir.create(recursive: true);
-    await groupsDir.create(recursive: true);
-    await customBackgroundDir.create(recursive: true);
+    // Ensure directories exist. A bad persisted root_path (unplugged external
+    // drive, revoked permission, a NAS that's offline) would throw here — and
+    // because _init is fire-and-forget, that left _initCompleter hanging
+    // FOREVER, so anything awaiting `initialized` (e.g. the web-server
+    // autostart) blocked and the app came up half-initialized. Fall back to the
+    // default root so a moved-away data dir can't wedge startup.
+    Future<void> makeDirs() async {
+      await chatsDir.create(recursive: true);
+      await modelsDir.create(recursive: true);
+      await worldsDir.create(recursive: true);
+      await charactersDir.create(recursive: true);
+      await groupsDir.create(recursive: true);
+      await customBackgroundDir.create(recursive: true);
+    }
+
+    try {
+      await makeDirs();
+    } catch (e) {
+      debugPrint('[Storage] ⚠ root "$_rootPath" is unwritable ($e) — falling '
+          'back to the default data directory for this session (the setting is '
+          'NOT overwritten; it retries next launch).');
+      rootUnavailableFellBack = true;
+      _rootPath = defaultRoot;
+      _binDir = Directory(path.join(_rootPath!, 'koboldcpp_bin'));
+      try {
+        await makeDirs();
+      } catch (e2) {
+        debugPrint('[Storage] default root also unwritable: $e2');
+      }
+    }
 
     // Stage 7: initialize domain settings (plain classes) + load (moved from god)
     // Single notify surface preserved (see plan "Why not multiple ChangeNotifiers").
