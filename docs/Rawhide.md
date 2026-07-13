@@ -4,6 +4,12 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🧠 **Reasoning models now think on KoboldCpp too** — the "Request Reasoning" switch used to be hidden (and quietly did nothing) when you ran a local KoboldCpp model. Now it's available for local thinking models like Qwen3, sends the right request, and shows the model's thinking as a collapsible block under the reply — just like the remote APIs.
+- ⚙️ **The General settings tab is whole again** — the Chat Font picker and the Realism Mode toggles were accidentally replaced with placeholder text in a past cleanup. They're back and working.
+- 🖼️ **Your generated images land in the right chat** — if you use /image and switch to another conversation while it renders, the finished picture no longer drops into the wrong chat; you'll get a heads-up to reopen the original chat instead.
+- 🎨 **Draw Things won't get stuck anymore** — if a Draw Things image generation times out, the app now cleanly stops it instead of leaving it holding your GPU and jamming the next generation.
+- 🛟 **Regenerating an expression pack can't wipe your old one** — replacing a character's expression set now writes all the new images first and only then clears the old ones, so a failure partway through can never leave you with a half-deleted pack.
+
 - ⏱️ **Time keeps flowing in One-Shot mode** — if you use the faster "One-Shot" realism setting, the in-story clock now advances through the day like it always should have (it used to freeze on the starting time). Bonus: last-second personality corrections now stick in One-Shot mode too.
 - 👥 **Group chats feel their needs and bonds just like solo chats** — characters in a group now get hungry, tired, and emotionally close on their own personal rhythm, exactly as they do one-on-one. Before, group members could drift out of sync — one character quietly soaking up everyone's mood changes, or getting hungry at the wrong rate. Regenerating, swiping, and deleting messages in a group also no longer nudge a character's feelings the wrong way.
 - 🛑 **The "Cancel" button on realism actually cancels now** — hitting cancel while the realism engine is thinking stops the reply cleanly instead of pushing on, and it no longer drops a stray "evaluation interrupted" line into your chat that stuck around forever.
