@@ -175,8 +175,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Reasoning toggle (only for Remote API)
-                    if (isRemote) ...[
+                    // Reasoning toggle — all backends. KoboldCpp honors
+                    // thinking too now (native chat_template_kwargs +
+                    // reasoning_effort in openai_chat_stream.dart), so this is
+                    // no longer remote-only.
+                    ...[
                       const Text(
                         'Reasoning',
                         style: TextStyle(

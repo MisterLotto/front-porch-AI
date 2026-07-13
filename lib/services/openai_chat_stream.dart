@@ -93,19 +93,36 @@ Map<String, dynamic> _chatPayload(
       'banned_tokens': params.bannedPhrases,
   };
 
-  if (params.reasoningEnabled || params.reasoningMaxTokens != null) {
-    final reasoning = <String, dynamic>{'enabled': params.reasoningEnabled};
-    if (params.reasoningEnabled) {
-      reasoning['effort'] = params.reasoningEffort;
-    }
-    if (params.reasoningMaxTokens != null) {
-      reasoning['max_tokens'] = params.reasoningMaxTokens;
-    }
-    if (!params.reasoningEnabled) {
-      reasoning['exclude'] = true;
-    }
-    payload['reasoning'] = reasoning;
-  }
+  // KoboldCpp reasoning controls (v1.111+). Kobold IGNORES the OpenRouter-style
+  // `reasoning:{enabled,effort}` object (verified against its release notes /
+  // koboldcpp.py), so the old payload here was a silent no-op — the "Request
+  // Reasoning" toggle did nothing on the local backend. Use Kobold's native
+  // fields instead:
+  //   • chat_template_kwargs.enable_thinking — the Jinja on/off switch (needs a
+  //     Jinja chat template; per-request kwargs merge over launch defaults).
+  //   • reasoning_effort — think-token budget (none|low|medium|high); the app's
+  //     effort strings map 1:1.
+  //   • encapsulate_thinking:false — keep <think>…</think> inside `content` so
+  //     the app's existing think-tag parser + "Thought for Xs" UI capture it.
+  //     Modern Kobold otherwise splits thinking into `reasoning_content`, which
+  //     the local stream reader doesn't consume, so thinking would vanish.
+  // Unknown fields are ignored by older Kobold, so this is version-safe. The
+  // OpenRouter path keeps its own object in open_router_service.
+  //
+  // ALWAYS emit an explicit decision — the app owns the setting, and the UI
+  // says reasoning "off" discards thinking. If we only sent fields when ON, a
+  // thinking model launched with thinking on would keep thinking despite the
+  // toggle being off (the same silent no-op, inverted). reasoningMaxTokens==0
+  // is the Continue/eval hard-suppress signal.
+  final thinkOn =
+      params.reasoningEnabled && params.reasoningMaxTokens != 0;
+  payload['chat_template_kwargs'] = {'enable_thinking': thinkOn};
+  payload['reasoning_effort'] = thinkOn
+      ? (params.reasoningEffort.isEmpty ? 'high' : params.reasoningEffort)
+      : 'none';
+  // Keep <think>…</think> in `content` (for the app's parser) only when we
+  // actually want thinking; harmless to omit when off.
+  if (thinkOn) payload['encapsulate_thinking'] = false;
 
   if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
     payload['stop'] = params.stopSequences!.take(4).toList();

@@ -3721,61 +3721,61 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Reasoning (remote-only) ────────────────────────────────────
-          if (isRemote) ...[
-            _buildSectionHeader('Reasoning', context),
-            const SizedBox(height: 8),
+          // ── Reasoning (thinking models — local KoboldCpp & remote) ─────
+          // Not gated by backend: KoboldCpp honors thinking too (via native
+          // chat_template_kwargs.enable_thinking + reasoning_effort — see
+          // openai_chat_stream.dart). Only applies to reasoning-capable models.
+          _buildSectionHeader('Reasoning', context),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'Request Reasoning',
+                style: TextStyle(color: AppColors.textPrimary(context)),
+              ),
+              const Spacer(),
+              Switch(
+                value: storage.reasoningEnabled,
+                onChanged: (val) => storage.setReasoningEnabled(val),
+              ),
+            ],
+          ),
+          if (storage.reasoningEnabled)
             Row(
               children: [
-                const Text(
-                  'Request Reasoning',
-                  style: TextStyle(color: Colors.white),
+                Text(
+                  'Effort Level',
+                  style: TextStyle(color: AppColors.textSecondary(context)),
                 ),
                 const Spacer(),
-                Switch(
-                  value: storage.reasoningEnabled,
-                  onChanged: (val) => storage.setReasoningEnabled(val),
-                  activeTrackColor: Colors.blueAccent,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardOf(context),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: storage.reasoningEffort,
+                      dropdownColor: AppColors.cardOf(context),
+                      style: TextStyle(color: AppColors.textPrimary(context)),
+                      items: const [
+                        DropdownMenuItem(value: 'low', child: Text('Low')),
+                        DropdownMenuItem(
+                          value: 'medium',
+                          child: Text('Medium'),
+                        ),
+                        DropdownMenuItem(value: 'high', child: Text('High')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) storage.setReasoningEffort(val);
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
-            if (storage.reasoningEnabled)
-              Row(
-                children: [
-                  const Text(
-                    'Effort Level',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: storage.reasoningEffort,
-                        dropdownColor: Theme.of(context).cardColor,
-                        style: const TextStyle(color: Colors.white),
-                        items: const [
-                          DropdownMenuItem(value: 'low', child: Text('Low')),
-                          DropdownMenuItem(
-                            value: 'medium',
-                            child: Text('Medium'),
-                          ),
-                          DropdownMenuItem(value: 'high', child: Text('High')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) storage.setReasoningEffort(val);
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 24),
-          ],
+          const SizedBox(height: 24),
 
           // ── Generation Parameters ──────────────────────────────────────
           _buildSectionHeader('Generation Parameters', context),
