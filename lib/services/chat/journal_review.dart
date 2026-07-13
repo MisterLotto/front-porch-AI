@@ -191,17 +191,25 @@ class JournalReview {
   /// without writing anything.
   Future<void> apply() async {
     final batch = _pending;
-    _pending = null;
     if (batch == null) return;
     if (getSessionId() != batch.sessionId) {
+      _pending = null;
       onNotify();
       return;
     }
+    // Keep _pending SET during the writes: that's what makes hasPendingFor()
+    // still block a competing auto-pass (_maybeRunJournalPass), so a generation
+    // finishing mid-apply can't reprocess the same window into duplicate cards.
+    // Advance the cursor + clear _pending only AFTER every write succeeds, so a
+    // write failure leaves the batch intact for retry instead of silently
+    // abandoning accepted proposals (the earlier "advance first" version fixed
+    // the race but introduced that loss).
     for (final owner in batch.owners) {
       await applyOwnerProposals(batch.sessionId, owner);
     }
     if (batch.recap != null && batch.recapAccepted) setRecap(batch.recap!);
     setCursor(batch.cursorTarget);
+    _pending = null;
     await onSaveChat();
     onNotify();
     debugPrint('[Journal] ✓ Review applied (${batch.totalProposals} proposal(s))');

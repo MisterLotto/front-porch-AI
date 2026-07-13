@@ -188,6 +188,14 @@ extension ChatServiceReprocess on ChatService {
       if (isGroupNonObs && sid != null && sid.isNotEmpty) {
         _saveScalarsIntoGroupRealism(sid);
       }
+      // Drop the impersonation. The group per-character state is already saved
+      // to _groupRealism above; leaving _activeCharacter pointed at the
+      // impersonated speaker leaked their card into everything that reads
+      // _activeCharacter (verifier flags, needs strength, decay rates) until
+      // the next dance overwrote it. Unconditional (not `!= null`-guarded): in
+      // a pure group preActiveChar IS null and must be restored to null; for
+      // 1:1 the dance never ran so this restores the same char (a no-op).
+      _activeCharacter = preActiveChar;
       _isVerifyingRealism = false;
       _pendingRealismMetadata = null;
     } else {

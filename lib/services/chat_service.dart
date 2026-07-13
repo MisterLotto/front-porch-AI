@@ -3973,18 +3973,57 @@ class ChatService extends ChangeNotifier {
 
   void deleteMessage(int index) async {
     if (index >= 0 && index < _messages.length) {
+      final deleted = _messages[index];
       _messages.removeAt(index);
+
+      // Keep the journal/memory cursor aligned. _summaryLastIndex is the
+      // EXCLUSIVE start of the un-journaled window (== count of journaled
+      // messages), so only a delete strictly BELOW it (index < cursor, i.e. a
+      // journaled message) shifts the boundary down by one; deleting the
+      // message AT the cursor removes an un-journaled one and leaves the
+      // boundary where it is. Without this, receipts drift by one per deletion.
+      // (Growth uses a DB-backed per-session cursor; it re-reads its stored
+      // index on the next pass.)
+      if (_summaryLastIndex > index) {
+        _summaryLastIndex = (_summaryLastIndex - 1).clamp(0, _messages.length);
+      }
 
       // Time-travel rollback for realism when deleting a character message.
       // Restore from the new last message if it has a snapshot, regardless
       // of whether this was the last message. This ensures needs state
       // (and all realism fields) reset to their previous saved values — in
-      // groups, inside the NEW LAST speaker's own _groupRealism entry. Known
-      // limitation (pre-existing): the DELETED speaker's map entry is not
-      // rolled back; their deltas stand until their next stamped restore.
+      // groups, inside the NEW LAST speaker's own _groupRealism entry.
       if (_messages.isNotEmpty) {
         final newLast = _messages.last;
         _restoreRealismStateForSpeaker(newLast);
+      }
+
+      // Group: also roll back the DELETED speaker's OWN _groupRealism entry to
+      // their previous stamped turn — otherwise that member's bond/trust/needs
+      // deltas from the removed message stand forever (the state machine only
+      // rewinds whoever is now last). Guards:
+      //   • the deleted message must itself carry a realism_state — otherwise
+      //     it applied no deltas and rewinding would INVENT older history;
+      //   • the sender name must be unambiguous in the roster — restore resolves
+      //     by name (_restoreRealismStateForSpeaker), so with two same-named
+      //     members it could rewind the wrong one; skip that rare case rather
+      //     than corrupt state;
+      //   • skip when the deleted speaker is already the new-last (handled
+      //     above) or has no earlier stamped turn.
+      if (_activeGroup != null &&
+          !deleted.isUser &&
+          deleted.sender != 'System' &&
+          deleted.activeMetadata?['realism_state'] is Map &&
+          _groupCharacters.where((c) => c.name == deleted.sender).length == 1 &&
+          (_messages.isEmpty || _messages.last.sender != deleted.sender)) {
+        for (int i = _messages.length - 1; i >= 0; i--) {
+          final m = _messages[i];
+          if (m.sender == deleted.sender &&
+              m.activeMetadata?['realism_state'] is Map) {
+            _restoreRealismStateForSpeaker(m);
+            break;
+          }
+        }
       }
 
       await _saveChat();

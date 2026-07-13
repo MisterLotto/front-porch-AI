@@ -1273,14 +1273,10 @@ extension ChatServiceGeneration on ChatService {
           if (_activeGroup != null &&
               !_observerMode &&
               finalResponse.isNotEmpty) {
-            final lastSpeaker = _messages.isNotEmpty
-                ? _messages.last.sender
-                : '';
-            final speakerCard = _groupCharacters.firstWhere(
-              (c) => c.name == lastSpeaker,
-              orElse: () => _groupCharacters.first,
-            );
-            final speakerId = _getCharacterIdFromCard(speakerCard);
+            // Use the ACTUAL speaker of this turn, not a by-name lookup with a
+            // first-member fallback — duplicate display names would otherwise
+            // route this member's inter-character feelings to the wrong card.
+            final speakerId = _getCharacterIdFromCard(speakingCharacter);
             if (speakerId.isNotEmpty) {
               _relationshipService
                   .updateInterCharacterFeelingsFromRecentExchange(speakerId);
@@ -1345,12 +1341,10 @@ extension ChatServiceGeneration on ChatService {
               !_observerMode &&
               finalResponse.isNotEmpty &&
               _messages.isNotEmpty) {
-            final lastSender = _messages.last.sender;
-            final speakerCard = _groupCharacters.firstWhere(
-              (c) => c.name == lastSender,
-              orElse: () => _groupCharacters.first,
-            );
-            final sid = _getCharacterIdFromCard(speakerCard);
+            // The ACTUAL speaker of this turn — not a by-name lookup with a
+            // first-member fallback (duplicate display names would persist the
+            // critical scalar save to the wrong member's _groupRealism entry).
+            final sid = _getCharacterIdFromCard(speakingCharacter);
             if (sid.isNotEmpty) {
               _saveScalarsIntoGroupRealism(sid);
             }
