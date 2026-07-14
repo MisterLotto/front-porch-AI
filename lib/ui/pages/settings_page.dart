@@ -35,11 +35,10 @@ import 'package:front_porch_ai/services/web/web_server_host.dart';
 import 'package:front_porch_ai/ui/dialogs/web_access_setup_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/rocm_guidance_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/database_cleanup_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/generate_kcpps_dialog.dart';
 
-import 'package:front_porch_ai/ui/settings/dialogs/model_search_dialog.dart';
 import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
 import 'package:front_porch_ai/ui/settings/tabs/generation_tab.dart';
+import 'package:front_porch_ai/ui/settings/tabs/backend_tab.dart';
 
 import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
 import 'package:front_porch_ai/ui/settings/widgets/web_login_section.dart';
@@ -73,10 +72,9 @@ class _SettingsPageState extends State<SettingsPage> {
   final TextEditingController _bannedPhrasesController =
       TextEditingController();
 
-  // Remote API state
+  // Remote API state (the fetched model list is shared with the Voice tab;
+  // the fetch/check spinners now live in the extracted backend sections).
   List<RemoteModelInfo> _availableModels = [];
-  bool _isFetchingModels = false;
-  bool _isCheckingConnection = false;
 
   // Local Preset state
   List<File> _localPresets = [];
@@ -646,7 +644,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() => _dragCallBuffer = v),
                   availableModels: _availableModels,
                 ),
-                _buildBackendTab(context),
+                _backendTab(),
                 _buildAdvancedTab(context),
               ],
             ),
@@ -852,1059 +850,113 @@ class _SettingsPageState extends State<SettingsPage> {
   // full lift + AppColors exclusive + shared state via ctor; body deleted as part of task).
   // See lib/ui/settings/tabs/voice_media_tab.dart
 
-  Widget _buildBackendTab(BuildContext context) {
+  /// Backend tab: thin wrapper that wires the extracted [BackendTab] widget
+  /// with the page's shared launch state. The auto-select-first-model default
+  /// and every state-mutating callback are the original _buildBackendTab
+  /// closures, moved here verbatim so launch behavior is unchanged.
+  Widget _backendTab() {
     final storageService = Provider.of<StorageService>(context);
     final modelManager = Provider.of<ModelManager>(context);
-    final backendManager = Provider.of<BackendManager>(context);
-    final koboldService = Provider.of<KoboldService>(context);
-    final llmProvider = Provider.of<LLMProvider>(context);
-    final theme = Theme.of(context);
 
-    // Auto-select first model if none selected and models exist
-    // Skip when a kcpps preset with a valid model is active (use "Managed by kcpps")
+    // Auto-select first model if none selected and models exist. Skip when a
+    // kcpps preset with a valid model is active (use "Managed by kcpps").
     if (_selectedModelPath == null &&
         modelManager.models.isNotEmpty &&
         !(storageService.kcppsHasModel &&
             storageService.kcppsModelFileExists)) {
       _selectedModelPath = modelManager.models.first.path;
     }
-
     // Warm architecture info for the (possibly just auto-selected) model so
-    // the first Auto-Configure or gauge update in this section is accurate.
+    // the first Auto-Configure or gauge update is accurate.
     if (_selectedModelPath != null) {
-      modelManager.getModelArchitectureInfo(
-        _selectedModelPath!,
-      ); // fire-and-forget
+      modelManager.getModelArchitectureInfo(_selectedModelPath!);
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('Backend Mode', context),
-          const SizedBox(height: 8),
-          // Intel Mac warning banner
-          if (backendManager.isIntelMac) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    size: 20,
-                    color: Colors.orange,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Local inference is not supported on Intel Macs. Only Remote API mode is available.',
-                      style: TextStyle(fontSize: 12, color: Colors.orange[200]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RadioGroup<BackendType>(
-                  groupValue: llmProvider.activeBackend,
-                  onChanged: (val) async {
-                    if (val != null) {
-                      await llmProvider.setActiveBackend(val);
-                      if (mounted) {
-                        final message = switch (val) {
-                          BackendType.kobold =>
-                            'Switched to local KoboldCPP backend.',
-                          BackendType.openRouter =>
-                            'Switched to OpenAI-Compatible API backend.',
-                          BackendType.omlx => 'Switched to oMLX backend.',
-                        };
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text(message)));
-                      }
-                    }
-                  },
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: RadioListTile<BackendType>(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Row(
-                            children: [
-                              Icon(
-                                Icons.computer,
-                                size: 18,
-                                color: backendManager.isIntelMac
-                                    ? Colors.grey
-                                    : theme.iconTheme.color,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Local (KoboldCPP)',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: backendManager.isIntelMac
-                                        ? Colors.grey
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          value: BackendType.kobold,
-                          enabled: !backendManager.isIntelMac,
-                        ),
-                      ),
-                      Expanded(
-                        child: RadioListTile<BackendType>(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Row(
-                            children: [
-                              Icon(
-                                Icons.cloud,
-                                size: 18,
-                                color: theme.iconTheme.color,
-                              ),
-                              const SizedBox(width: 6),
-                              const Flexible(
-                                child: Text(
-                                  'OpenAI-Compatible API',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ),
-                          value: BackendType.openRouter,
-                        ),
-                      ),
-                      Expanded(
-                        child: RadioListTile<BackendType>(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Row(
-                            children: [
-                              Icon(
-                                Icons.apple,
-                                size: 18,
-                                color: Platform.isMacOS
-                                    ? theme.iconTheme.color
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'oMLX',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Platform.isMacOS ? null : Colors.grey,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          value: BackendType.omlx,
-                          enabled: Platform.isMacOS,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (llmProvider.activeBackend == BackendType.kobold)
-                  Text(
-                    'Use a local KoboldCPP instance (optionally launched from a '
-                    '.kcpps preset).',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey,
-                    ),
-                  )
-                else if (llmProvider.activeBackend == BackendType.omlx)
-                  Text(
-                    'Local LLM inference via oMLX on Apple Silicon. Requires oMLX running on port 8000.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey,
-                    ),
-                  )
-                else
-                  Text(
-                    'Any OpenAI-compatible API — remote (OpenRouter, Nano-GPT) '
-                    'or a local server (LM Studio, vLLM). Set the URL below.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey,
-                    ),
-                  ),
-              ],
-            ),
-          ),
+    return BackendTab(
+      apiUrlController: _remoteApiUrlController,
+      apiKeyController: _remoteApiKeyController,
+      availableModels: _availableModels,
+      onModelsFetched: (m) => setState(() => _availableModels = m),
+      selectedModelPath: _selectedModelPath,
+      localPresets: _localPresets,
+      onModelSelected: (val) {
+        if (val == null) {
+          setState(() {
+            _selectedModelPath = null;
+          });
+        } else {
+          setState(() {
+            _selectedModelPath = val;
+          });
+          storageService.setLastUsedModelPath(val);
+          final savedPreset = storageService.modelPresetMap[val];
+          if (savedPreset != null &&
+              savedPreset.isNotEmpty &&
+              File(savedPreset).existsSync()) {
+            storageService.setActiveKcppsPath(savedPreset);
+          } else {
+            storageService.setActiveKcppsPath(null);
+          }
 
-          // ── Remote API Configuration ──
-          if (llmProvider.activeBackend == BackendType.openRouter) ...[
-            const SizedBox(height: 24),
-            _buildSectionHeader('API Configuration', context),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Quick-connect presets
-                  Text('Quick Connect', style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      _buildApiPresetChip(
-                        label: '🖥️ LM Studio',
-                        url: 'http://localhost:1234/v1',
-                        storageService: storageService,
-                        context: context,
-                      ),
-                      _buildApiPresetChip(
-                        label: '🌐 OpenRouter',
-                        url: 'https://openrouter.ai/api/v1',
-                        storageService: storageService,
-                        context: context,
-                      ),
-                      _buildApiPresetChip(
-                        label: '⚡ Nano-GPT',
-                        url: 'https://nano-gpt.com/api/v1',
-                        storageService: storageService,
-                        context: context,
-                      ),
-                      // No oMLX chip here on purpose: oMLX has its own dedicated
-                      // Backend Mode radio above (with oMLX-specific handling),
-                      // so a second way to reach it through the generic client
-                      // was a redundant, subtly-different path. Use the radio.
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text('API URL', style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 4),
-                  TextFormField(
-                    controller: _remoteApiUrlController,
-                    decoration: InputDecoration(
-                      hintText: 'https://openrouter.ai/api/v1',
-                      filled: true,
-                      fillColor: theme.scaffoldBackgroundColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
-                    onChanged: (val) =>
-                        storageService.setRemoteApiUrl(val.trim()),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('API Key', style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 4),
-                  TextFormField(
-                    controller: _remoteApiKeyController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      hintText: 'sk-or-...',
-                      filled: true,
-                      fillColor: theme.scaffoldBackgroundColor,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      suffixIcon: const Icon(Icons.key, size: 18),
-                    ),
-                    onChanged: (val) =>
-                        storageService.setRemoteApiKey(val.trim()),
-                  ),
-                  const SizedBox(height: 12),
-                  // ── Check Connection Button ──
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isCheckingConnection
-                          ? null
-                          : () async {
-                              setState(() => _isCheckingConnection = true);
-                              final openRouter = Provider.of<OpenRouterService>(
-                                context,
-                                listen: false,
-                              );
-                              final result = await openRouter.testConnection(
-                                apiUrl: storageService.remoteApiUrl,
-                                apiKey: storageService.remoteApiKey,
-                              );
-                              if (mounted) {
-                                setState(() => _isCheckingConnection = false);
-                                final isSuccess = result.contains('successful');
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Row(
-                                      children: [
-                                        Icon(
-                                          isSuccess
-                                              ? Icons.check_circle
-                                              : Icons.error,
-                                          color: isSuccess
-                                              ? Colors.greenAccent
-                                              : Colors.redAccent,
-                                          size: 18,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(child: Text(result)),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                      icon: _isCheckingConnection
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.wifi_tethering, size: 18),
-                      label: Text(
-                        _isCheckingConnection
-                            ? 'Checking...'
-                            : 'Check Connection',
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent.withValues(
-                          alpha: 0.8,
-                        ),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  // ── Model Selection ──
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Model', style: theme.textTheme.bodySmall),
-                      TextButton.icon(
-                        onPressed: _isFetchingModels
-                            ? null
-                            : () async {
-                                setState(() => _isFetchingModels = true);
-                                final openRouter =
-                                    Provider.of<OpenRouterService>(
-                                      context,
-                                      listen: false,
-                                    );
-                                final models = await openRouter
-                                    .fetchAvailableModels(
-                                      apiUrl: storageService.remoteApiUrl,
-                                      apiKey: storageService.remoteApiKey,
-                                    );
-                                if (mounted) {
-                                  setState(() {
-                                    _availableModels = models;
-                                    _isFetchingModels = false;
-                                  });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        models.isEmpty
-                                            ? 'No models found. Check your API URL and key.'
-                                            : 'Found ${models.length} available models.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        icon: _isFetchingModels
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.refresh, size: 16),
-                        label: Text(
-                          _isFetchingModels ? 'Loading...' : 'Refresh Models',
-                        ),
-                        style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  if (_availableModels.isNotEmpty)
-                    InkWell(
-                      onTap: () => showModelSearchDialog(
-                        context,
-                        storageService,
-                        _availableModels,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: theme.dividerColor),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    storageService.remoteModelName.isNotEmpty
-                                        ? storageService.remoteModelName
-                                        : 'Tap to select a model...',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color:
-                                          storageService
-                                              .remoteModelName
-                                              .isNotEmpty
-                                          ? null
-                                          : Colors.grey,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (storageService
-                                      .remoteModelName
-                                      .isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Builder(
-                                      builder: (context) {
-                                        final match = _availableModels
-                                            .where(
-                                              (m) =>
-                                                  m.id ==
-                                                  storageService
-                                                      .remoteModelName,
-                                            )
-                                            .toList();
-                                        if (match.isEmpty) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        return Text(
-                                          match.first.pricingLabel,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey[500],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            Icon(
-                              Icons.arrow_drop_down,
-                              color: Colors.grey[500],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    TextFormField(
-                      initialValue: storageService.remoteModelName,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. nousresearch/hermes-3-llama-3.1-405b',
-                        filled: true,
-                        fillColor: theme.scaffoldBackgroundColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        suffixIcon: const Icon(Icons.smart_toy, size: 18),
-                      ),
-                      onChanged: (val) =>
-                          storageService.setRemoteModelName(val.trim()),
-                    ),
-                  // Vision-capability pill for the selected remote model.
-                  // OpenRouter / Nano-GPT resolve automatically from free
-                  // /models metadata; generic backends expose a manual "Check
-                  // vision" button so the runtime probe never costs a token
-                  // unasked.
-                  if (storageService.remoteModelName.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: RemoteVisionPill(
-                        apiUrl: storageService.remoteApiUrl,
-                        apiKey: storageService.remoteApiKey,
-                        modelName: storageService.remoteModelName,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.blue.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Colors.blue,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Works with OpenRouter, Nano-GPT, or any OpenAI-compatible endpoint.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          // Eagerly warm the GGUF architecture + KV cache so that
+          // Auto-Configure (and the live VRAM gauge) get accurate
+          // nLayers / bytes-per-layer on the first click instead of
+          // falling back to weaker heuristics.
+          modelManager.getModelArchitectureInfo(val); // fire-and-forget
+
+          _applyAutoConfiguration(silent: true);
+        }
+      },
+      onVisionChanged: () => setState(() {}),
+      onScanPresets: _scanLocalPresets,
+      onKcppsChanged: (val) {
+        storageService.setActiveKcppsPath(val);
+        if (_selectedModelPath != null && val != null) {
+          storageService.setModelPreset(_selectedModelPath!, val);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Preset saved for model: ${p.basename(_selectedModelPath!)}',
               ),
             ),
-          ],
-
-          // ── oMLX Configuration (macOS only, minimal) ──
-          if (llmProvider.activeBackend == BackendType.omlx) ...[
-            const SizedBox(height: 24),
-            _buildSectionHeader('oMLX Configuration', context),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Model picker
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Model', style: theme.textTheme.bodySmall),
-                      TextButton.icon(
-                        onPressed: _isFetchingModels
-                            ? null
-                            : () async {
-                                setState(() => _isFetchingModels = true);
-                                final openRouter =
-                                    Provider.of<OpenRouterService>(
-                                      context,
-                                      listen: false,
-                                    );
-                                final models = await openRouter
-                                    .fetchAvailableModels(
-                                      apiUrl: 'http://localhost:8000/v1',
-                                      apiKey: storageService.remoteApiKey,
-                                    );
-                                if (mounted) {
-                                  setState(() {
-                                    _availableModels = models;
-                                    _isFetchingModels = false;
-                                  });
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        models.isEmpty
-                                            ? 'No models found. Make sure oMLX is running and has models loaded.'
-                                            : 'Found ${models.length} available models.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        icon: _isFetchingModels
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.refresh, size: 16),
-                        label: Text(
-                          _isFetchingModels ? 'Loading...' : 'Fetch Models',
-                        ),
-                        style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  if (_availableModels.isNotEmpty)
-                    InkWell(
-                      onTap: () => showModelSearchDialog(
-                        context,
-                        storageService,
-                        _availableModels,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.scaffoldBackgroundColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: theme.dividerColor),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                storageService.remoteModelName.isNotEmpty
-                                    ? storageService.remoteModelName
-                                    : 'Tap to select a model...',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color:
-                                      storageService.remoteModelName.isNotEmpty
-                                      ? null
-                                      : Colors.grey,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Icon(
-                              Icons.arrow_drop_down,
-                              color: Colors.grey[500],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    TextFormField(
-                      initialValue: storageService.remoteModelName,
-                      decoration: InputDecoration(
-                        hintText: 'e.g. mlx-community/Llama-3-8B-Instruct',
-                        filled: true,
-                        fillColor: theme.scaffoldBackgroundColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        suffixIcon: const Icon(Icons.smart_toy, size: 18),
-                      ),
-                      onChanged: (val) =>
-                          storageService.setRemoteModelName(val.trim()),
-                    ),
-                  // Vision-capability pill for the selected remote model.
-                  // OpenRouter / Nano-GPT resolve automatically from free
-                  // /models metadata; generic backends expose a manual "Check
-                  // vision" button so the runtime probe never costs a token
-                  // unasked.
-                  if (storageService.remoteModelName.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      // oMLX lives at its fixed local URL — probing the
-                      // Remote API URL here asked the WRONG server (e.g.
-                      // OpenRouter) about an oMLX model and always said none.
-                      child: RemoteVisionPill(
-                        apiUrl: 'http://localhost:8000/v1',
-                        apiKey: storageService.remoteApiKey,
-                        modelName: storageService.remoteModelName,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.blue.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Colors.blue,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'oMLX runs locally on your Mac. Install via brew install jundot/omlx/omlx and run omlx serve.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Managed Backend section (local KoboldCPP; hidden on Intel Mac) ──
-          // Handles both a plain model file and a .kcpps preset launch.
-          if (llmProvider.hasManagedProcess && !backendManager.isIntelMac) ...[
-            const SizedBox(height: 24),
-            _buildSectionHeader('Koboldcpp Backend', context),
-            // ... (Existing Backend Logic adapted) ...
-            const SizedBox(height: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (backendManager.error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Text(
-                      backendManager.error!,
-                      style: const TextStyle(color: Colors.redAccent),
-                    ),
-                  ),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            backendManager.backendPath != null
-                                ? 'Status: Ready${backendManager.localVersionDisplay.isNotEmpty ? ' (${backendManager.localVersionDisplay})' : ''}'
-                                : 'Status: Missing',
-                            style: TextStyle(
-                              color: backendManager.backendPath != null
-                                  ? Colors.green
-                                  : Colors.orange,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (backendManager.backendPath != null)
-                            Text(
-                              backendManager.backendPath!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontSize: 10,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (backendManager.isDownloading ||
-                        backendManager.isCheckingVersion)
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      ElevatedButton(
-                        onPressed: backendManager.backendPath == null
-                            ? () => backendManager.downloadBackend()
-                            : backendManager.versionError != null ||
-                                  backendManager.remoteVersion == null
-                            ? () => backendManager.checkForUpdates()
-                            : backendManager.isUpdateAvailable
-                            ? () => backendManager.downloadBackend()
-                            : null,
-                        child: Text(
-                          backendManager.backendPath == null
-                              ? 'Download'
-                              : backendManager.versionError != null
-                              ? 'Check (failed)'
-                              : backendManager.remoteVersion == null
-                              ? 'Check for Updates'
-                              : backendManager.isUpdateAvailable
-                              ? 'Update to v${backendManager.remoteVersion}'
-                              : 'Up to date',
-                        ),
-                      ),
-                  ],
-                ),
-                if (backendManager.isDownloading)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: LinearProgressIndicator(
-                      value: backendManager.downloadProgress,
-                    ),
-                  ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SwitchListTile(
-                title: const Text(
-                  'Auto-start model on launch',
-                  style: TextStyle(fontSize: 14),
-                ),
-                subtitle: Text(
-                  'Automatically load the last used model when the app starts',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 11,
-                  ),
-                ),
-                value: storageService.autostartBackend,
-                activeTrackColor: Colors.blueAccent,
-                onChanged: (val) {
-                  storageService.setAutostartBackend(val);
-                },
-              ),
-            ),
-
-            const SizedBox(height: 24),
-            _buildSectionHeader('Model Selection', context),
-            const SizedBox(height: 16),
-            ModelSelector(
-              models: modelManager.models,
-              selectedModelPath: _selectedModelPath,
-              showManagedByKcpps:
-                  storageService.kcppsHasModel &&
-                  storageService.kcppsModelFileExists,
-              onChanged: (val) {
-                if (val == null) {
-                  setState(() {
-                    _selectedModelPath = null;
-                  });
-                } else {
-                  setState(() {
-                    _selectedModelPath = val;
-                  });
-                  storageService.setLastUsedModelPath(val);
-                  final savedPreset = storageService.modelPresetMap[val];
-                  if (savedPreset != null &&
-                      savedPreset.isNotEmpty &&
-                      File(savedPreset).existsSync()) {
-                    storageService.setActiveKcppsPath(savedPreset);
-                  } else {
-                    storageService.setActiveKcppsPath(null);
-                  }
-
-                  // Eagerly warm the GGUF architecture + KV cache so that
-                  // Auto-Configure (and the live VRAM gauge) get accurate
-                  // nLayers / bytes-per-layer on the first click instead of
-                  // falling back to weaker heuristics.
-                  modelManager.getModelArchitectureInfo(val); // fire-and-forget
-
-                  _applyAutoConfiguration(silent: true);
-                }
-              },
-            ),
-
-            // Vision projector (mmproj) for the selected model — the same
-            // field the chat Model Settings dialog shows, surfaced here too
-            // because this page is where users actually pick the model.
-            // Self-hides when a preset owns the model; greys out for
-            // text-only / vision-built-in GGUFs. Applied on next start.
-            const SizedBox(height: 12),
-            VisionProjectorField(
-              modelPath: _selectedModelPath,
-              storage: storageService,
-              onChanged: () => setState(() {}),
-            ),
-
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildSectionHeader('Configuration Preset', context),
-                TextButton.icon(
-                  onPressed: _scanLocalPresets,
-                  icon: const Icon(Icons.refresh, size: 14),
-                  label: const Text('Rescan', style: TextStyle(fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white54,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 0,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            KcppsSelector(
-              storage: storageService,
-              localPresets: _localPresets,
-              hint: 'None (Use App Settings)',
-              onChanged: (val) {
-                storageService.setActiveKcppsPath(val);
-                if (_selectedModelPath != null && val != null) {
-                  storageService.setModelPreset(_selectedModelPath!, val);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Preset saved for model: ${p.basename(_selectedModelPath!)}',
-                      ),
-                    ),
-                  );
-                } else if (_selectedModelPath != null && val == null) {
-                  storageService.setModelPreset(_selectedModelPath!, '');
-                }
-                if (val != null &&
-                    storageService.kcppsHasModel &&
-                    storageService.kcppsModelFileExists) {
-                  setState(() {
-                    _selectedModelPath = null;
-                  });
-                }
-              },
-              onExternalClear: () {
-                storageService.setActiveKcppsPath(null);
-                if (_selectedModelPath != null) {
-                  storageService.setModelPreset(_selectedModelPath!, '');
-                }
-              },
-              onBrowsePicked: (path) {
-                if (_selectedModelPath != null) {
-                  storageService.setModelPreset(_selectedModelPath!, path);
-                }
-                _scanLocalPresets();
-                if (storageService.kcppsHasModel &&
-                    storageService.kcppsModelFileExists) {
-                  setState(() {
-                    _selectedModelPath = null;
-                  });
-                }
-              },
-              onModelStatusChanged: (_) {
-                setState(() {});
-              },
-            ),
-
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final result = await showDialog<bool>(
-                    context: context,
-                    builder: (_) => const GenerateKcppsDialog(),
-                  );
-                  if (result == true) {
-                    _scanLocalPresets();
-                    setState(() {});
-                  }
-                },
-                icon: const Icon(Icons.auto_fix_high, size: 18),
-                label: const Text('Generate KCPPS Config...'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary(context),
-                  side: BorderSide(
-                    color: AppColors.borderOf(context),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Button enabled when: backend path exists AND
-            // (kcpps has valid model OR model selected manually).
-            ...() {
-              final anyRunning =
-                  koboldService.isRunning || koboldService.isStarting;
-              final canStart =
-                  (storageService.kcppsHasModel &&
-                      storageService.kcppsModelFileExists) ||
-                  _selectedModelPath != null;
-
-              return [
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: anyRunning
-                        ? () => _toggleManagedBackend(context)
-                        : backendManager.backendPath == null || !canStart
-                            ? null
-                            : () => _toggleManagedBackend(context),
-                    icon: Icon(
-                      anyRunning ? Icons.stop : Icons.play_arrow,
-                    ),
-                    label: Text(
-                      anyRunning ? 'Stop Backend' : 'Start Backend',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: anyRunning
-                          ? Colors.red.withValues(alpha: 0.8)
-                          : Colors.green.withValues(alpha: 0.8),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                    ),
-                  ),
-                ),
-              ];
-            }(),
-            const SizedBox(height: 24),
-            _buildSectionHeader('Process Logs', context),
-            const SizedBox(height: 8),
-            Consumer<KoboldService>(
-              builder: (context, ks, child) => LogView(logs: ks.logs),
-            ),
-          ], // end hasManagedProcess
-        ],
-      ),
+          );
+        } else if (_selectedModelPath != null && val == null) {
+          storageService.setModelPreset(_selectedModelPath!, '');
+        }
+        if (val != null &&
+            storageService.kcppsHasModel &&
+            storageService.kcppsModelFileExists) {
+          setState(() {
+            _selectedModelPath = null;
+          });
+        }
+      },
+      onKcppsExternalClear: () {
+        storageService.setActiveKcppsPath(null);
+        if (_selectedModelPath != null) {
+          storageService.setModelPreset(_selectedModelPath!, '');
+        }
+      },
+      onKcppsBrowsePicked: (path) {
+        if (_selectedModelPath != null) {
+          storageService.setModelPreset(_selectedModelPath!, path);
+        }
+        _scanLocalPresets();
+        if (storageService.kcppsHasModel &&
+            storageService.kcppsModelFileExists) {
+          setState(() {
+            _selectedModelPath = null;
+          });
+        }
+      },
+      onKcppsModelStatusChanged: (_) {
+        setState(() {});
+      },
+      onGenerateKcppsDone: () {
+        _scanLocalPresets();
+        setState(() {});
+      },
+      onToggleBackend: () => _toggleManagedBackend(context),
     );
   }
 
@@ -3590,73 +2642,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // _showDeletePromptDialog extracted to lib/ui/settings/dialogs/prompt_delete_dialog.dart (Stage 5); deletion part of task.
 
-  // showModelSearchDialog extracted to lib/ui/settings/dialogs/model_search_dialog.dart (Stage 5); deletion part of task.
-  // Note: callers updated to pass availableModels list (see backend/general use sites if needed).
-  // remnant of extracted showModelSearchDialog deleted; floating code removed as part of syntax repair post deletion.
-
-  Widget _buildApiPresetChip({
-    required String label,
-    required String url,
-    required StorageService storageService,
-    required BuildContext context,
-  }) {
-    final isActive = storageService.remoteApiUrl == url;
-    return ActionChip(
-      label: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          color: isActive ? Colors.white : Colors.white70,
-        ),
-      ),
-      backgroundColor: isActive ? Colors.indigo : const Color(0xFF2D3748),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isActive ? Colors.indigoAccent : Colors.white24,
-        ),
-      ),
-      onPressed: () async {
-        // Always preserve the API key in storage - just change the URL
-        // LM Studio won't use an API key since it's local, and when we switch
-        // back to Nano-GPT/OpenRouter, the key will still be there.
-        storageService.setRemoteApiUrl(url);
-        _remoteApiUrlController.text = url;
-
-        // setRemoteApiUrl above already triggered LLMProvider's storage sync,
-        // which applies the live config per active backend; the picker fetch
-        // targets the new URL explicitly instead of clobbering live state.
-        final openRouter = Provider.of<OpenRouterService>(
-          context,
-          listen: false,
-        );
-        setState(() => _isFetchingModels = true);
-        try {
-          final models = await openRouter.fetchAvailableModels(
-            apiUrl: url,
-            apiKey: storageService.remoteApiKey,
-          );
-          if (mounted) {
-            setState(() {
-              _availableModels = models;
-              _isFetchingModels = false;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  models.isEmpty
-                      ? '$label connected — no models found yet.'
-                      : '$label connected — found ${models.length} models.',
-                ),
-              ),
-            );
-          }
-        } catch (_) {
-          if (mounted) setState(() => _isFetchingModels = false);
-        }
-      },
-    );
-  }
 
 }
 
