@@ -20,6 +20,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:front_porch_ai/services/chat/stop_sequences.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
@@ -125,7 +126,14 @@ Map<String, dynamic> _chatPayload(
       : 'none';
 
   if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
-    payload['stop'] = params.stopSequences!.take(4).toList();
+    // This transport only ever talks to KoboldCpp (managed local +
+    // pseudo-remote), which maps `stop` onto its native stop_sequence
+    // machinery (stop_token_max = 256 since v1.77; 16 is a safe floor for
+    // older builds). The old OpenAI-spec take(4) meant the shipped default
+    // stops filled every slot and custom/name stops never reached the server
+    // — the client-side trim hid it while the server generated on. The list
+    // arrives priority-ordered (stop_sequences.dart).
+    payload['stop'] = params.stopSequences!.take(kMaxLocalServerStops).toList();
   }
   return payload;
 }

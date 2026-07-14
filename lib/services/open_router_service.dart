@@ -308,7 +308,10 @@ class OpenRouterService extends LLMService {
 
     // Add stop sequences if present
     if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
-      // OpenAI API supports max 4 stop sequences
+      // Remote providers commonly hard-cap `stop` at 4 (OpenAI spec). The
+      // list arrives priority-ordered (stop_sequences.dart) so these 4 are
+      // the most important — user stops first, then custom, then names. The
+      // client-side mid-stream trim enforces the rest of the list.
       payload['stop'] = params.stopSequences!.take(4).toList();
     }
     return payload;

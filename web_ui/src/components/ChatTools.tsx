@@ -182,8 +182,14 @@ export function ChatTools({
             </>
           )}
           <Toggle label="Journal (memories + recap)" value={t.memory.journalEnabled} onChange={(v) => settings({ journalEnabled: v })} />
-          {t.memory.journalEnabled && (
+          {t.memory.journalEnabled ? (
             <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
+          ) : (
+            <p className="muted small">
+              Journal off: long-term memory AND the &quot;Where we are&quot; recap are
+              paused — the character only remembers what still fits in the
+              context window.
+            </p>
           )}
         </div>
       </details>

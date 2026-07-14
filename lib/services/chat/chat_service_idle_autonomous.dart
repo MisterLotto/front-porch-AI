@@ -143,20 +143,24 @@ extension ChatServiceIdleAutonomous on ChatService {
           'This is a solitary scene observed from outside the chat.*';
     }
 
-    // Full autonomous cue with needs data
+    // Full autonomous cue with needs data — words only, like every other
+    // generation-facing surface (spec §5d): a raw "(41/100)" here was the
+    // last place a meter could leak into prose ("my hunger at 41…").
     final lowNeeds = _needsSimulation.getLowNeedsForInjection(
       _needsSimulation.vector,
+      enjoysLowHygieneOverride: enjoysLowHygiene,
     );
     String needsStr = '';
     if (lowNeeds.isNotEmpty) {
       needsStr = lowNeeds
           .map((n) {
-            final desc = n.value <= 20
-                ? 'low'
-                : n.value <= 35
-                ? 'getting low'
-                : 'noticeable';
-            return '${n.key} is $desc (${n.value}/100)';
+            final desc = switch (n.effectiveStep) {
+              0 || 1 => 'urgently pressing',
+              2 => 'weighing heavily',
+              3 => 'noticeably felt',
+              _ => 'starting to stir',
+            };
+            return '${n.key} is $desc';
           })
           .join(', ');
     }

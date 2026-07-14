@@ -102,55 +102,63 @@ class NeedsSimulation {
 
   static const List<int> needStepUpperBounds = [0, 15, 30, 45, 65];
 
+  /// Stepped background prose per need, worst-first (index 0 = crisis → 4 =
+  /// mild). PRONOUN-FREE by design (docs/design/prompt-state-injection.md §3):
+  /// these lines render directly inside the composed state block right after a
+  /// header that names the character ("Hunger: [line]"), so gendered or
+  /// generic pronouns here would clash with the named, gendered header on
+  /// small models (the "their stomach… she said" template-paste read). Keep
+  /// any new lines pronoun-free participial/nominal phrases for the same
+  /// reason. ({{user}} macros are fine — the block is macro-resolved.)
   static const Map<String, List<String>> needSteppedText = {
     'hunger': [
-      '''A violent stomach cramp doubles them over. They are genuinely starving — vision swimming, knees weak, barely able to stay upright. The hunger has become a real physical crisis.''',
-      '''Sharp, gnawing cramps twist through them. They feel light-headed and shaky, and their thoughts keep drifting uncontrollably to food. They are struggling to focus on anything else.''',
-      '''Their stomach feels painfully hollow and tight. A constant, distracting ache that makes them restless and short-tempered. They keep thinking about when they might be able to eat.''',
-      '''A steady, empty feeling sits in their stomach. Their thoughts occasionally wander toward food and they feel a bit distracted or low-energy.''',
-      '''A quiet, background emptiness in their stomach. It is not urgent, but they are aware of it and would welcome a chance to eat soon.''',
+      '''Doubled over by a violent stomach cramp — genuinely starving: vision swimming, knees weak, barely able to stay upright. The hunger has become a real physical crisis.''',
+      '''Sharp, gnawing hunger cramps; light-headed and shaky, thoughts drifting uncontrollably to food, focus on anything else a real struggle.''',
+      '''Stomach painfully hollow and tight — a constant, distracting ache; restless, short-tempered, thoughts keep returning to when the next meal might come.''',
+      '''A steady, empty feeling in the stomach; thoughts occasionally wander toward food — a bit distracted and low-energy.''',
+      '''A quiet, background emptiness in the stomach — not urgent, but noticeable; a chance to eat soon would be welcome.''',
     ],
     'bladder': [
-      '''They lose control completely. A sudden, hot rush — they are wetting themselves right now in the current scene. The humiliation is immediate and overwhelming.''',
-      '''They are fighting with everything they have not to lose control. Thighs pressed tight, constantly shifting, voice tight with strain. They are very close to having an accident.''',
-      '''A strong, insistent pressure has built up. They are visibly uncomfortable and keep looking for a polite way to excuse themselves soon.''',
-      '''A steady, distracting pressure low in their belly. They feel the need more and more and would like to find a bathroom before too long.''',
-      '''A faint but persistent urge to use the restroom sits at the back of their mind, making them slightly restless.''',
+      '''Control gives out completely — a sudden hot rush, an accident happening right now in the current scene; the humiliation is immediate and overwhelming.''',
+      '''Fighting with everything not to lose control — thighs pressed tight, constant shifting, voice tight with strain; an accident is very close.''',
+      '''A strong, insistent pressure has built up — visibly uncomfortable, watching for a polite way to slip away soon.''',
+      '''A steady, distracting pressure low in the belly; the need keeps growing — a bathroom before too long would be a relief.''',
+      '''A faint but persistent urge to use the restroom sits at the back of the mind, bringing slight restlessness.''',
     ],
     'energy': [
-      '''Their body gives out completely. Mid-sentence their eyes flutter and they collapse — slumping to the floor or into {{user}}'s arms, fully unconscious from exhaustion.''',
-      '''They are barely staying awake. Head nodding, speech slow and heavy, eyes unfocused. They may drift off at any moment.''',
-      '''A heavy, crushing tiredness has settled over them. Every movement feels like effort and their thoughts are slow. They desperately want to rest.''',
-      '''A deep weariness is weighing on them. They move a little slower and seem less animated than usual, clearly running low on energy.''',
-      '''A comfortable, heavy tiredness sits behind their eyes. They would happily curl up and rest if the opportunity arose.''',
+      '''The body gives out completely — eyes flutter mid-sentence and collapse follows, slumping to the floor or into {{user}}'s arms, fully unconscious from exhaustion.''',
+      '''Barely staying awake — head nodding, speech slow and heavy, eyes unfocused; sleep could take over at any moment.''',
+      '''A heavy, crushing tiredness; every movement takes effort and thoughts run slow — rest is desperately wanted.''',
+      '''A deep weariness — movements a little slower, noticeably less animated than usual, clearly running low on energy.''',
+      '''A comfortable, heavy tiredness behind the eyes; curling up to rest would be welcome if the chance arose.''',
     ],
     'social': [
-      '''The loneliness has become overwhelming. They feel hollow and raw, on the edge of breaking down if they cannot have real, meaningful connection with someone soon.''',
-      '''They feel painfully isolated. The lack of real connection is starting to hurt, and they may become unusually quiet, clingy, or emotionally fragile.''',
-      '''A deep ache for genuine connection sits in their chest. Casual interaction feels hollow and they keep seeking more meaningful moments or closeness.''',
-      '''They are feeling the absence of real companionship. They seem a little more eager for meaningful conversation or physical closeness than usual.''',
-      '''A quiet, gentle craving for real connection makes them a bit more warm and attentive than normal.''',
+      '''Overwhelming loneliness — hollow and raw, on the edge of breaking down without real, meaningful connection soon.''',
+      '''Painfully isolated; the lack of real connection is starting to hurt — unusually quiet, clingy, or emotionally fragile.''',
+      '''A deep ache for genuine connection sits in the chest; casual interaction feels hollow — meaningful moments and closeness keep being sought.''',
+      '''Feeling the absence of real companionship — a little more eager than usual for meaningful conversation or physical closeness.''',
+      '''A quiet, gentle craving for real connection — a touch warmer and more attentive than normal.''',
     ],
     'fun': [
-      '''The boredom has become torturous. They feel dangerously restless and may suddenly do something reckless or wildly inappropriate just to feel *something* again.''',
-      '''They are deeply restless and bored out of their mind. They fidget constantly and will suggest almost anything to break the monotony.''',
-      '''A heavy restlessness has settled over them. Everything feels dull and they keep looking for any excuse to do something more stimulating.''',
-      '''They are noticeably bored and fidgety. The current situation feels flat and they are actively hoping for a change of pace.''',
-      '''A mild restlessness makes them a little more eager for something fun or different to happen.''',
+      '''Torturous boredom — dangerously restless, liable to do something reckless or wildly inappropriate just to feel *something* again.''',
+      '''Deeply restless and thoroughly bored — constant fidgeting, ready to suggest almost anything to break the monotony.''',
+      '''A heavy restlessness has settled in; everything feels dull — any excuse for something more stimulating keeps being sought.''',
+      '''Noticeably bored and fidgety; the current situation feels flat — actively hoping for a change of pace.''',
+      '''A mild restlessness — a little more eager than usual for something fun or different to happen.''',
     ],
     'hygiene': [
-      '''They feel filthy and overwhelmed by it. The grime or smell is so strong it is making them physically uncomfortable and self-conscious to the point of distress.''',
-      '''They feel genuinely dirty and are very aware of it. They keep wanting to cover themselves or pull away from contact until they can clean up.''',
-      '''A persistent feeling of being grimy clings to them. They are self-conscious and keep thinking about when they can wash or change.''',
-      '''They are starting to feel noticeably unkempt. A quiet discomfort with their own state makes them want to freshen up soon.''',
-      '''A faint, background sense of being a little grubby makes them mildly self-conscious.''',
+      '''Filthy and overwhelmed by it — the grime or smell strong enough to cause physical discomfort and self-consciousness to the point of distress.''',
+      '''Genuinely dirty and very aware of it — an urge to cover up or pull away from contact until there's a chance to clean up.''',
+      '''A persistent grimy feeling clings — self-conscious, thoughts keep returning to washing or changing.''',
+      '''Starting to feel noticeably unkempt — a quiet discomfort, wanting to freshen up soon.''',
+      '''A faint background sense of being a little grubby — mildly self-conscious about it.''',
     ],
     'comfort': [
-      '''The physical discomfort has become unbearable. They cannot stay like this any longer and will do whatever it takes to find relief, even if it disrupts everything else happening.''',
-      '''Their body is in real distress — too hot, too cold, cramped, or aching badly. They are constantly shifting and struggling to focus on anything else.''',
-      '''A strong physical discomfort is wearing on them. They keep adjusting their position or environment, clearly unable to settle.''',
-      '''They are noticeably uncomfortable. A persistent physical irritation (temperature, pressure, stiffness) makes it hard for them to fully relax.''',
-      '''A mild but persistent physical discomfort sits in the background, making them slightly restless.''',
+      '''Unbearable physical discomfort — impossible to stay like this any longer; relief will be sought no matter what it disrupts.''',
+      '''The body is in real distress — too hot, too cold, cramped, or aching badly; constant shifting, focus on anything else a struggle.''',
+      '''A strong physical discomfort wears on — constant adjusting of position or surroundings, clearly unable to settle.''',
+      '''Noticeably uncomfortable — a persistent physical irritation (temperature, pressure, stiffness) making it hard to fully relax.''',
+      '''A mild but persistent physical discomfort in the background, bringing slight restlessness.''',
     ],
   };
 
@@ -165,13 +173,14 @@ class NeedsSimulation {
   /// by feeling soap-clean. It is NOT a drive to make a mess — no seeking dirt,
   /// mud, or filth acts (a character once dumped a mop bucket over herself off
   /// the old wording). The distress is missing their natural scent; the comfort
-  /// is simply remaining unwashed and musky. Neutral voice (they/them).
+  /// is simply remaining unwashed and musky. Pronoun-free like
+  /// [needSteppedText] (rendered right after a named header).
   static const List<String> hygieneSteppedTextWhenEnjoysLow = [
-    '''Scrubbed and scentless in a way that feels wrong on their skin — their familiar musk scoured completely away. It leaves them exposed and on edge, quietly wishing they still smelled like themselves. (This is about missing their own natural scent, not about seeking out filth.)''',
-    '''Uncomfortably fresh — too soft, too soapy, their natural scent washed thin. The absence of their usual body musk puts them off-balance; they'd rather not have washed so thoroughly.''',
-    '''Still a little too clean for their taste. Without their familiar musk they feel oddly self-conscious, as if something comforting is missing.''',
-    '''Starting to feel a touch over-scrubbed; part of them misses the settled, lived-in comfort of their own unwashed scent.''',
-    '''A faint just-washed freshness lingers that they find mildly unsatisfying next to their natural musk.''',
+    '''Scrubbed and scentless in a way that feels wrong on the skin — the familiar musk scoured completely away; exposed and on edge, quietly wishing that natural scent were back. (This is about missing a natural body scent, never about seeking out filth.)''',
+    '''Uncomfortably fresh — too soft, too soapy, the natural scent washed thin; its absence is off-putting, that thorough wash already regretted.''',
+    '''Still a little too clean for comfort — without the familiar musk comes an odd self-consciousness, as if something comforting were missing.''',
+    '''Starting to feel a touch over-scrubbed; the settled, lived-in comfort of an unwashed natural scent is quietly missed.''',
+    '''A faint just-washed freshness lingers — mildly unsatisfying next to the natural musk.''',
   ];
 
   // Mandatory "this just happened" events fired when a HARD-EVENT need bottoms
@@ -460,54 +469,44 @@ class NeedsSimulation {
     return step;
   }
 
-  String getUrgencyPrefixForStep(int effectiveStep) {
-    return switch (effectiveStep) {
-      0 => 'CATASTROPHIC — this has already happened and must be roleplayed immediately.',
-      1 => 'CRITICAL — they are in real, urgent distress from this need.',
-      2 => 'Strong need — this is heavily weighing on them and affecting their focus.',
-      3 => 'Noticeable need — this is a clear background pressure on their mood and attention.',
-      _ => 'Mild background sensation — this is subtly coloring their state.',
-    };
-  }
-
-  String getSecondaryLowNeedNote(
-    List<MapEntry<String, int>> sorted,
-    String topKey,
-    int effectiveStep,
-  ) {
-    // Relaxed to <=4 to match the new progressive early-hint policy (mild step-4 now visible).
-    if (effectiveStep < 1 || effectiveStep > 4) return '';
-    final secondary = sorted
-        .where((e) => e.key != topKey && getNeedStep(e.key, e.value) <= 4)
-        .firstOrNull;
-    if (secondary == null) return '';
-    return ' (They are also feeling the ${secondary.key} need.)';
-  }
-
-  /// Returns the lowest 1-2 needs that should receive background state text this turn
-  /// (those whose effective step is 4 or lower, i.e. mild or worse after enjoys inversion).
-  /// Always worst-first. Both 1:1 and group paths use this for consistent selection and
-  /// so slow-decaying needs (Comfort, Hygiene) can appear even when not the absolute lowest.
-  /// This revives the progressive early subtle hints (step 4 "Mild background sensation...")
-  /// while still preventing constant high-value noise.
+  /// Returns the lowest (worst) needs that should receive background state
+  /// text this turn — those whose effective step is 4 or lower (mild or worse
+  /// after the enjoys-low-hygiene inversion), worst-first, capped at 3. Both
+  /// 1:1 and group paths use this for consistent selection, and so
+  /// slow-decaying needs (Comfort, Hygiene) can appear even when not the
+  /// absolute lowest. Sated needs never surface (words-only salience gating,
+  /// docs/design/prompt-state-injection.md §3).
+  ///
+  /// [enjoysLowHygieneOverride] MUST carry the specific speaker's flag in
+  /// group chats (same reason as [getInjectionEffectiveStep]) — without it the
+  /// hygiene inversion reads the shared active-character flag and one
+  /// filthy-loving member corrupts every other member's need SELECTION, not
+  /// just its wording.
   List<({String key, int value, int effectiveStep})> getLowNeedsForInjection(
-      Map<String, int> vector) {
+    Map<String, int> vector, {
+    bool? enjoysLowHygieneOverride,
+  }) {
     if (vector.isEmpty) return const [];
-    final entries = vector.entries.toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
-
-    final result = <({String key, int value, int effectiveStep})>[];
-    for (final e in entries) {
-      final eff = getInjectionEffectiveStep(e.key, e.value);
-      if (eff <= 4) {
-        result.add((key: e.key, value: e.value, effectiveStep: eff));
-        if (result.length >= 2) break;
-      }
-    }
-    return result;
+    // Rank by EFFECTIVE step, not raw value: for an enjoys-low-hygiene
+    // character the distressed hygiene value is a HIGH number, so a raw-value
+    // sort would rank their most urgent need last and let milder needs crowd
+    // it out of the cap.
+    final ranked = [
+      for (final e in vector.entries)
+        (
+          key: e.key,
+          value: e.value,
+          effectiveStep: getInjectionEffectiveStep(
+            e.key,
+            e.value,
+            enjoysLowHygieneOverride: enjoysLowHygieneOverride,
+          ),
+        ),
+    ]..sort((a, b) {
+        final byStep = a.effectiveStep.compareTo(b.effectiveStep);
+        return byStep != 0 ? byStep : a.value.compareTo(b.value);
+      });
+    return ranked.where((e) => e.effectiveStep <= 4).take(3).toList();
   }
 
-  String getPostCrashSuffixIfRelevant(String topKey) {
-    return '';
-  }
 }

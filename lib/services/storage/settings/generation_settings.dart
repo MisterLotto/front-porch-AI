@@ -51,7 +51,11 @@ class GenerationSettings with SettingsBase {
   double _xtcProbability = 0.0;
   int _maxLength = 1024;
   int _minLength = 0;
-  List<String> _stopSequences = [
+  /// Shipped default stop strings. Public + const so the prioritized stop
+  /// builder (lib/services/chat/stop_sequences.dart) can tell user-added
+  /// custom stops (higher priority) apart from these defaults (lowest
+  /// priority) — the stored list holds both mixed together.
+  static const List<String> kDefaultStopSequences = [
     "\nUser:",
     "\n###",
     "\nScenario:",
@@ -65,6 +69,8 @@ class GenerationSettings with SettingsBase {
     "\n[Note:",
     "\n{Note:",
   ];
+
+  List<String> _stopSequences = List.of(kDefaultStopSequences);
 
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;

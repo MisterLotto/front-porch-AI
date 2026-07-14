@@ -183,10 +183,10 @@ extension ChatServiceSpeakerObjectives on ChatService {
   }
 
   String _getRealismStateInjection() {
-    // Thin delegation to the new central realism state composer.
-    // This is the single source of the grouped "Speaker Internal State" block
-    // that the model receives (metrics first + guidance). Replaces the old
-    // manual 8-builder concat.
+    // Thin delegation to the words-only state composer — the single source of
+    // the "[How <Name> is right now: …]" block the model receives (salience-
+    // gated natural language, no simulation scalars; see
+    // docs/design/prompt-state-injection.md §3).
     return _realismStateInjection.buildRealismStateInjection();
   }
 

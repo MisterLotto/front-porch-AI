@@ -282,18 +282,18 @@ extension ChatServiceImpersonate on ChatService {
           "$impersonateInstruction"
           "$suffix";
 
-      // Stop sequences: character names only (not user — we ARE the user)
+      // Stop sequences: character names only (not user — we ARE the user).
+      // Same prioritized builder as the main generation path — no second
+      // stop-assembly path (spec §5e).
       final g = _sessionGenSettings;
-      final stopSequences = {
-        ...g.resolveStopSequences(_storageService).toSet(),
-      };
-      if (_activeGroup != null) {
-        for (final ch in _groupCharacters) {
-          stopSequences.add('\n${ch.name}:');
-        }
-      } else {
-        stopSequences.add('\n${_activeCharacter!.name}:');
-      }
+      final stopList = buildPrioritizedStops(
+        configured: g.resolveStopSequences(_storageService),
+        userName: userName,
+        impersonating: true,
+        characterNames: _activeGroup != null
+            ? _groupCharacters.map((c) => c.name).toList()
+            : [_activeCharacter!.name],
+      );
 
       final llmService =
           testLlmServiceOverride ??
@@ -316,7 +316,7 @@ extension ChatServiceImpersonate on ChatService {
             : null,
         xtcThreshold: g.resolveXtcThreshold(_storageService),
         xtcProbability: g.resolveXtcProbability(_storageService),
-        stopSequences: stopSequences.toList(),
+        stopSequences: stopList,
         reasoningEnabled: false,
         reasoningEffort: g.resolveReasoningEffort(_storageService),
         bannedPhrases: g.resolveBannedPhrases(_storageService).isNotEmpty

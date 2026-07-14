@@ -62,6 +62,7 @@ import 'package:front_porch_ai/services/chat/cast_detector.dart';
 import 'package:front_porch_ai/services/chat/scene_guest_director.dart';
 import 'package:front_porch_ai/services/chat/scene_guest_factory.dart';
 import 'package:front_porch_ai/services/chat/needs_simulation.dart';
+import 'package:front_porch_ai/services/chat/stop_sequences.dart';
 import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
 import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
@@ -1669,9 +1670,6 @@ class ChatService extends ChangeNotifier {
     getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
     getGroupCharacters: () => _groupCharacters,
     getActiveCharacter: () => _activeCharacter,
-    getShortTermTierName: () => _relationshipService.shortTermTierName,
-    getLongTermTierName: () => _relationshipService.longTermTierName,
-    getMoodLabel: () => moodLabel,
     getShouldTrackInterCharacterRelationships: () =>
         _shouldTrackInterCharacterRelationships,
     getGroupInt: _getGroupInt,
@@ -1682,27 +1680,19 @@ class ChatService extends ChangeNotifier {
 
   late final _emotionInjection = EmotionInjection(
     getRealismEnabled: () => _realismEnabled,
-    getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
-    getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
-    getGroupCharacters: () => _groupCharacters,
-    getActiveCharacter: () => _activeCharacter,
     getCharacterEmotion: () => _characterEmotion,
     getEmotionIntensity: () => _emotionIntensity,
-    getCharacterIdFromCard: _getCharacterIdFromCard,
   );
 
   late final _behavioralInjection = BehavioralInjection(
     relationshipService: _relationshipService,
     getRealismEnabled: () => _realismEnabled,
-    getActiveCharacter: () => _activeCharacter,
   );
 
   late final _timeInjection = TimeInjection(timeService: _timeService);
 
   late final _nsfwInjection = NsfwInjection(
     nsfwService: _nsfwService,
-    needsSimulation: _needsSimulation,
-    relationshipService: _relationshipService,
     getRealismEnabled: () => _realismEnabled,
     getActiveCharacter: () => _activeCharacter,
     getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
@@ -1718,13 +1708,11 @@ class ChatService extends ChangeNotifier {
 
   late final _needsInjection = NeedsInjection(
     needsSimulation: _needsSimulation,
-    nsfwService: _nsfwService,
     getNeedsSimEnabled: () => _needsSimEnabled,
     getRealismEnabled: () => _realismEnabled,
     getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
     getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
     getGroupCharacters: () => _groupCharacters,
-    getActiveCharacter: () => _activeCharacter,
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getGroupNeeds: _getGroupNeeds,
     getCharacterIdFromCard: _getCharacterIdFromCard,
@@ -1741,10 +1729,6 @@ class ChatService extends ChangeNotifier {
     behavioralInjection: _behavioralInjection,
     nsfwInjection: _nsfwInjection,
     needsInjection: _needsInjection,
-    needsSimulation: _needsSimulation,
-    relationshipService: _relationshipService,
-    timeService: _timeService,
-    nsfwService: _nsfwService,
     getRealismEnabled: () => _realismEnabled,
     getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
     getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
@@ -3747,8 +3731,8 @@ class ChatService extends ChangeNotifier {
   // ── Prompt Injection Builders (thins only; full in lib/services/chat/prompt_injection/* step 8) ──
 
   // The individual _get* thins for relationship/emotion/time/behavioral/nsfw are no longer used
-  // for main prompt assembly — the new _realismStateInjection composer owns the full
-  // grouped "Speaker Internal State" output (see realism_state_injection.dart).
+  // for main prompt assembly — the _realismStateInjection composer owns the words-only
+  // "[How <Name> is right now: …]" block (see realism_state_injection.dart + design doc).
   // The sub-builders themselves are still instantiated and passed to the composer.
   // Chance Time remains separate (it is not part of the per-turn realism state bundle).
 

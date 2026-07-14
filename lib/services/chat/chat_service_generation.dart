@@ -340,10 +340,11 @@ extension ChatServiceGeneration on ChatService {
         }
       }
 
-      // Build summary block if available
+      // Build summary block if available. Role frame (spec §6): the recap is
+      // the plot spine; the journal carries feelings; RAG carries exact lines.
       String summaryBlock = '';
       if (_summary.isNotEmpty) {
-        summaryBlock = '[Summary of events so far: $_summary]\n';
+        summaryBlock = '[The story so far: $_summary]\n';
       }
 
       // The Journal — the upcoming speaker's pinned + hot memory cards, with
@@ -383,8 +384,15 @@ extension ChatServiceGeneration on ChatService {
         // the output with "Rachel:" or the speaker name.
         // CRITICAL RULE: Strictly forbid the model from writing *anything* for {{user}} (actions, dialogue, thoughts, "he said", "you feel", etc.).
         // This is a cardinal sin in AI RP. Only extend the provided partial text from the current speaker's POV and voice.
+        // The user's name is interpolated directly (not {{user}}): this rule
+        // rides the suffix together with the partial message text, and running
+        // the macro resolver over user/model-authored content would
+        // double-process any {{...}} it happens to contain. Sanitized so a
+        // name carrying brackets/newlines can't break the [rule] framing.
+        final safeUser = userName.replaceAll(RegExp(r'[\n\r\[\]]'), ' ').trim();
+        final ruleUser = safeUser.isEmpty ? 'the user' : safeUser;
         suffix =
-            "\n[CRITICAL RULE: The text below is an incomplete response from the *current speaker only*. You MUST ONLY generate more text that continues *this exact response* in the speaker's voice, style, and perspective. NEVER write any dialogue, actions, thoughts, narration, or descriptions for {{user}} or from {{user}}'s point of view. NEVER add new speaker labels or switch characters. Only append to the text below. Stop if it would require {{user}} content.]\n" +
+            "\n[CRITICAL RULE: The text below is an incomplete response from the *current speaker only*. You MUST ONLY generate more text that continues *this exact response* in the speaker's voice, style, and perspective. NEVER write any dialogue, actions, thoughts, narration, or descriptions for $ruleUser or from $ruleUser's point of view. NEVER add new speaker labels or switch characters. Only append to the text below. Stop if it would require $ruleUser content.]\n" +
             partial;
       }
 
@@ -447,6 +455,7 @@ extension ChatServiceGeneration on ChatService {
       String objectiveBlock = '';
       String needsCatastropheBlock = '';
       int droppedMessages = 0;
+      int historyBudget = 0;
 
       // Ensure the popped message is always restored, even if prompt assembly throws
       try {
@@ -454,13 +463,16 @@ extension ChatServiceGeneration on ChatService {
 
         // ── Context Shift: budget-aware history trimming ──
 
-        // Realism / internal state block — now produced by a single dedicated composer
-        // (lib/services/chat/prompt_injection/realism_state_injection.dart).
-        // It groups *all* the live scalars (needs with x/100, bond/trust, emotion, time,
-        // arousal, spatial, etc.) under one clear, number-first header + collation guidance.
-        // This is the main place the model "sees" the current character state for consistency.
+        // Realism / internal state block — the words-only composer
+        // (lib/services/chat/prompt_injection/realism_state_injection.dart):
+        // salience-gated natural language only, no simulation scalars. Macro-
+        // resolved HERE (spec §5a) — the fragments carry {{user}}, and this
+        // block previously reached the model with the braces literal.
         if (_realismActiveThisMode) {
-          realismBlock = _getRealismStateInjection();
+          final rawRealism = _getRealismStateInjection();
+          realismBlock = rawRealism.isEmpty
+              ? ''
+              : _macroResolver.resolve(rawRealism, macroCtx, section: 'realism');
         }
 
         // Chance Time injection — independent of realism mode
@@ -477,14 +489,19 @@ extension ChatServiceGeneration on ChatService {
         // wrapper stays generic: firm but short (heavy "YOU MUST" walls read as
         // jailbreak-fight energy and can backfire), and it never puppets {{user}}.
         if (_needsSimulation.pendingCatastrophe != null) {
-          needsCatastropheBlock =
-              '[SCENE EVENT — CANON, happening this turn]\n'
-              '${_needsSimulation.pendingCatastrophe}\n'
-              'Open the reply with this event as it happens; do not skip it, '
-              'soften it to a near-miss, or fade past it. Narrate only what this '
-              'specific event makes observable, then let the scene continue from '
-              'its consequences. Do NOT decide {{user}}\'s actions, words, or '
-              'feelings — write only {{char}} and the surroundings.]\n';
+          // Macro-resolved (spec §5a): previously the {{user}}/{{char}}
+          // placeholders in this wrapper reached the model literally.
+          needsCatastropheBlock = _macroResolver.resolve(
+            '[SCENE EVENT — CANON, happening this turn]\n'
+            '${_needsSimulation.pendingCatastrophe}\n'
+            'Open the reply with this event as it happens; do not skip it, '
+            'soften it to a near-miss, or fade past it. Narrate only what this '
+            'specific event makes observable, then let the scene continue from '
+            'its consequences. Do NOT decide {{user}}\'s actions, words, or '
+            'feelings — write only {{char}} and the surroundings.]\n',
+            macroCtx,
+            section: 'realism',
+          );
           // Consume it for this generation
           _needsSimulation.consumePendingCatastrophe();
         }
@@ -523,7 +540,7 @@ extension ChatServiceGeneration on ChatService {
         final generationReserve =
             _sessionGenSettings.resolveMaxLength(_storageService) +
             50; // +50 safety margin
-        final historyBudget = contextBudget - fixedTokens - generationReserve;
+        historyBudget = contextBudget - fixedTokens - generationReserve;
 
         if (historyBudget > 0) {
           final result = await _buildChatHistoryWithBudget(
@@ -640,11 +657,66 @@ extension ChatServiceGeneration on ChatService {
               includedMemories.add('- ${m.content}');
             }
             if (includedMemories.isNotEmpty) {
-              memoriesBlock =
-                  '[Earlier in this conversation (already happened, do not revisit):\n${includedMemories.join('\n')}]\n';
-              debugPrint(
-                '[RAG:Chat] ✅ Injecting ${includedMemories.length}/${memories.length} memories (~$usedTokens tokens, budget: $memoryBudget)',
-              );
+              // Role frame (spec §6): RAG = exact earlier lines, reference
+              // only — the journal outranks it on feelings, the recap on plot.
+              String buildBlock(List<String> mems) =>
+                  '[Exact earlier lines from this chat (already happened — '
+                  'reference only, do not revisit):\n${mems.join('\n')}]\n';
+              memoriesBlock = buildBlock(includedMemories);
+
+              // Budget accounting fix (spec §5f): memories were previously
+              // injected WITHOUT being counted — history had already filled
+              // its budget, so every RAG turn overshot the context and the
+              // server trimmed the prompt head (the character card). Real-
+              // count the block, trim trailing memories if the chars/4
+              // estimates undershot the cap, then re-walk history with the
+              // remainder so fixed + history + memories + reserve <= context.
+              // Trim can go all the way to EMPTY: a single retrieved memory
+              // larger than the whole memory budget must drop the block
+              // entirely rather than ship over budget (review finding — the
+              // packing loop above always admits the first memory).
+              // JOINT cap (review finding): memories must fit the memory
+              // budget AND leave a strictly positive history remainder —
+              // memories are paid for out of the SAME space history uses, so
+              // a block that survives only by starving history re-opens the
+              // overshoot this fix exists to close. Trim goes all the way to
+              // EMPTY (a lone oversize memory is dropped, never shipped over
+              // budget). historyBudget <= 0 means the fixed sections already
+              // fill the context — no room for memories at all.
+              int memTokens = await _countTokens(memoriesBlock);
+              while (memTokens > 0 &&
+                  (memTokens > memoryBudget ||
+                      historyBudget - memTokens <= 0)) {
+                includedMemories.removeLast();
+                memoriesBlock = includedMemories.isEmpty
+                    ? ''
+                    : buildBlock(includedMemories);
+                memTokens = memoriesBlock.isEmpty
+                    ? 0
+                    : await _countTokens(memoriesBlock);
+              }
+              if (memTokens > 0) {
+                // Re-walk history with the remainder (strictly positive here;
+                // _buildChatHistoryWithBudget treats <= 0 as UNLIMITED) so
+                // fixed + history + memories + reserve <= context.
+                final rebudget = await _buildChatHistoryWithBudget(
+                  historyBudget - memTokens,
+                  depthLore: loreDepth,
+                );
+                history = rebudget.history;
+                // Keep the retrieval's inContextStart lag (spec: messages
+                // evicted by this second walk become retrievable next turn);
+                // the budget map below reports the final dropped count.
+                droppedMessages = rebudget.droppedCount;
+                debugPrint(
+                  '[RAG:Chat] ✅ Injecting ${includedMemories.length}/${memories.length} memories ($memTokens tokens real, budget: $memoryBudget)',
+                );
+              } else {
+                debugPrint(
+                  '[RAG:Chat] ⚠ Dropped all ${memories.length} memories — no '
+                  'room inside the context budget this turn',
+                );
+              }
             }
           } else {
             debugPrint('[RAG:Chat] No relevant memories found for this turn');
@@ -727,17 +799,11 @@ extension ChatServiceGeneration on ChatService {
       // Remove zero-value entries
       _lastPromptBudget.removeWhere((_, v) => v == 0);
 
-      // Stop sequences: include character names, and user name (except when impersonating)
+      // Stop sequences, priority-ordered (stop_sequences.dart) so transports
+      // that cap the server-side list keep the most important entries: user
+      // stops, then custom stops, then character names, then defaults. The
+      // client-side mid-stream trim below always enforces the FULL list.
       final g2 = _sessionGenSettings;
-      final stopSequences = {
-        ...g2.resolveStopSequences(_storageService).toSet(),
-      };
-
-      // In impersonate mode the model IS the user, so don't stop on user name
-      if (mode != GenerationMode.impersonate) {
-        stopSequences.add('\nUser:');
-        stopSequences.add('\n${_userPersonaService.persona.name}:');
-      }
 
       // For Continue mode, do *not* stop on the current speaker's name.
       // This lets the model produce long, natural extensions of the existing message
@@ -750,20 +816,34 @@ extension ChatServiceGeneration on ChatService {
         continueSpeakerName = _messages.last.sender;
       }
 
+      // Group rosters are rotated so the soonest next speakers come first —
+      // they are the likeliest voices the model bleeds into, so their name
+      // stops must survive a capped transport.
+      List<String> stopCharacterNames;
       if (_activeGroup != null) {
-        for (final ch in _groupCharacters) {
-          if (continueSpeakerName != null && ch.name == continueSpeakerName) {
-            continue;
-          }
-          stopSequences.add('\n${ch.name}:');
-        }
+        final names = _groupCharacters.map((c) => c.name).toList();
+        // Rotate by IDENTITY, not display name — duplicate display names
+        // would lock onto the first twin and rotate around the wrong seat
+        // (review finding). Name lookup only as a fallback.
+        var idx = _groupCharacters.indexWhere(
+          (c) => identical(c, speakingCharacter),
+        );
+        if (idx < 0) idx = names.indexOf(speakingCharacter.name);
+        stopCharacterNames = idx >= 0
+            ? [...names.sublist(idx + 1), ...names.sublist(0, idx + 1)]
+            : names;
       } else {
-        final cur = _activeCharacter!.name;
-        if (continueSpeakerName == null || cur != continueSpeakerName) {
-          stopSequences.add('\n$cur:');
-        }
+        stopCharacterNames = [_activeCharacter!.name];
       }
-      final stopList = stopSequences.toList();
+
+      final stopList = buildPrioritizedStops(
+        configured: g2.resolveStopSequences(_storageService),
+        userName: _userPersonaService.persona.name,
+        // In impersonate mode the model IS the user, so don't stop on user name
+        impersonating: mode == GenerationMode.impersonate,
+        characterNames: stopCharacterNames,
+        continueSpeakerName: continueSpeakerName,
+      );
 
       // Get the active LLM service (local or remote)
       final llmService =

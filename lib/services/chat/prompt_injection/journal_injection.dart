@@ -108,8 +108,13 @@ class JournalInjection {
     }
     if (lines.isEmpty) return '';
 
+    // Role frame (docs/design/prompt-state-injection.md §6): the journal is
+    // the FEELINGS channel — when a card covers the same moment as the recap
+    // or a retrieved transcript line, the feelings here are the truer guide.
     return "[$characterName's private journal — personal memories from this "
-        'chat, in their own words. These shape how they feel and behave:\n'
+        'chat, in their own words. These shape how they feel and behave, and '
+        'when they cover the same moments as the story recap or earlier '
+        'lines, the feelings here are the truer guide:\n'
         '${lines.join('\n')}\n]\n';
   }
 
