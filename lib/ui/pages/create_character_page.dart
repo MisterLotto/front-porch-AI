@@ -193,7 +193,11 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         ),
         title: Row(
           children: [
-            const Icon(Icons.person_add, color: Colors.blueAccent, size: 22),
+            const Icon(
+              Icons.person_add,
+              color: AppColors.formMasterAccent,
+              size: 22,
+            ),
             const SizedBox(width: 8),
             const Text('Create Character'),
             const Spacer(),
@@ -264,7 +268,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
     final isCurrent = _currentStep == step;
 
     final dotColor = isActive
-        ? AppColors.resolve(context, Colors.blueAccent, Colors.blue.shade700)
+        ? AppColors.porchAmberOf(context)
         : AppColors.surfaceContainerOf(context);
 
     final borderColor = isCurrent
@@ -323,7 +327,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         ? Colors.redAccent
         : estimatedTokens > 2000
         ? Colors.orangeAccent
-        : Colors.blueAccent;
+        : AppColors.formMasterAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -430,16 +434,8 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                 ),
                 label: Text(nextText, style: const TextStyle(fontSize: 16)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.resolve(
-                    context,
-                    Colors.blueAccent,
-                    Colors.blue.shade700,
-                  ),
-                  foregroundColor: AppColors.resolve(
-                    context,
-                    Colors.white,
-                    Colors.black87,
-                  ),
+                  backgroundColor: AppColors.porchAmberOf(context),
+                  foregroundColor: AppColors.onChaosAccent,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -604,7 +600,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     onPressed: () => _addTag(_tagController.text),
                     icon: const Icon(
                       Icons.add_circle,
-                      color: Colors.blueAccent,
+                      color: AppColors.formMasterAccent,
                     ),
                     tooltip: 'Add tag',
                   ),
@@ -810,7 +806,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Add Greeting'),
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.blueAccent,
+                      foregroundColor: AppColors.formMasterAccent,
                     ),
                   ),
                 ],
@@ -914,8 +910,8 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Add Entry'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.formMasterAccent,
+                      foregroundColor: AppColors.onChaosAccent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -984,7 +980,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
           color: entry.constant
               ? Colors.amberAccent.withValues(alpha: 0.3)
               : entry.enabled
-              ? Colors.blueAccent.withValues(alpha: 0.2)
+              ? AppColors.formMasterAccent.withValues(alpha: 0.2)
               : AppColors.borderOf(context).withValues(alpha: 0.5),
         ),
       ),
@@ -999,7 +995,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                 color: entry.constant
                     ? Colors.amberAccent
                     : entry.enabled
-                    ? Colors.blueAccent
+                    ? AppColors.formMasterAccent
                     : Colors.white38,
               ),
               const SizedBox(width: 6),
@@ -1041,13 +1037,13 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.1),
+                    color: AppColors.formMasterAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     'Depth ${entry.stickyDepth}',
                     style: const TextStyle(
-                      color: Colors.blueAccent,
+                      color: AppColors.formMasterAccent,
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1066,8 +1062,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                       _updateTokenEstimate();
                     });
                   },
-                  activeTrackColor: Colors.blueAccent.withValues(alpha: 0.5),
-                  activeThumbColor: Colors.blueAccent,
+                  activeTrackColor: AppColors.formMasterAccent.withValues(
+                    alpha: 0.5,
+                  ),
+                  activeThumbColor: AppColors.formMasterAccent,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
@@ -1340,8 +1338,11 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                       icon: const Icon(Icons.add_photo_alternate, size: 18),
                       label: const Text('Add Image'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blueAccent,
-                        side: BorderSide(color: Colors.blueAccent, width: 1.5),
+                        foregroundColor: AppColors.formMasterAccent,
+                        side: BorderSide(
+                          color: AppColors.formMasterAccent,
+                          width: 1.5,
+                        ),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 12,
@@ -1826,10 +1827,12 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withValues(alpha: 0.1),
+                      color: AppColors.formMasterAccent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                        color: AppColors.formMasterAccent.withValues(
+                          alpha: 0.3,
+                        ),
                       ),
                     ),
                     child: Column(
@@ -1840,13 +1843,13 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                             Icon(
                               Icons.psychology,
                               size: 14,
-                              color: Colors.blueAccent,
+                              color: AppColors.formMasterAccent,
                             ),
                             SizedBox(width: 6),
                             Text(
                               'Realism Engine',
                               style: TextStyle(
-                                color: Colors.blueAccent,
+                                color: AppColors.formMasterAccent,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1992,14 +1995,14 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     children: [
                       const Icon(
                         Icons.menu_book,
-                        color: Colors.blueAccent,
+                        color: AppColors.formMasterAccent,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
                       const Text(
                         'Lorebook Entries',
                         style: TextStyle(
-                          color: Colors.blueAccent,
+                          color: AppColors.formMasterAccent,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),
@@ -2023,7 +2026,9 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                         color: AppColors.cardOf(context),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.blueAccent.withValues(alpha: 0.2),
+                          color: AppColors.formMasterAccent.withValues(
+                            alpha: 0.2,
+                          ),
                         ),
                       ),
                       child: Column(
@@ -2042,7 +2047,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                             Text(
                               'Keys: ${entry.key}',
                               style: const TextStyle(
-                                color: Colors.blueAccent,
+                                color: AppColors.formMasterAccent,
                                 fontSize: 11,
                               ),
                             ),
@@ -2084,7 +2089,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
           Text(
             label,
             style: const TextStyle(
-              color: Colors.blueAccent,
+              color: AppColors.formMasterAccent,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -2111,7 +2116,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.blueAccent),
+                borderSide: const BorderSide(color: AppColors.formMasterAccent),
               ),
               contentPadding: const EdgeInsets.all(14),
             ),
@@ -2363,13 +2368,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: AppColors.resolve(
-            context,
-            Colors.blueAccent,
-            Colors.blue.shade700,
-          ),
-        ),
+        borderSide: BorderSide(color: AppColors.porchAmberOf(context)),
       ),
       contentPadding: const EdgeInsets.all(14),
     );

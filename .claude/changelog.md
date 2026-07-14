@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-14 — feat(theme): blueAccent → porch amber sweep, cluster 1 (character create/edit)
+- **Files:** create_character_page (24), edit_character_page (25), edit_character_dialog (14), character_creator/ (9 files) + 22 regenerated golden PNGs + docs.
+- **What:** first of a 4-cluster sweep retiring the ~225 remaining raw `Colors.blueAccent` chrome accents. Rules: icons/text/borders/section accents → `AppColors.formMasterAccent`; washes → `formMasterAccent.withValues`; solid ElevatedButton backgrounds → amber bg + `onChaosAccent` dark ink (white-on-amber unreadable); brightness-aware `resolve(context, blueAccent, blue.shade700)` → `porchAmberOf(context)`. One misleading local `blue` var renamed to `accent`. Colors only — no logic/layout changes; nothing semantic touched (no userBubble; no info/link blues existed here).
+- **Process:** applied via 4 parallel subagents (one per file/dir) under a strict rulebook, then personally reviewed every diff (verified button-contrast pairing, no stray blue, defensible judgment calls) + combined `flutter analyze` clean.
+- **Goldens:** 22 baselines shifted (creator steps, edit_character dialog, create_character page, manual creator steps); regenerated on Flutter 3.41.1 and verified passing.
+- **Remaining:** clusters 2 (settings dialogs ~70), 3 (chat components ~35), 4 (widgets ~50 + a CI grep-gate to reject new blueAccent).
+- **Commit hash:** 790a4bf (code) + ece9719 (goldens).
+
 ## 2026-07-14 — feat(theme): warm the shared formMasterAccent (blue → porch amber)
 - **Files:** `lib/ui/theme/app_colors.dart` (the const), 6 Image-Studio/dialog buttons (foreground → onChaosAccent), 6 regenerated golden PNGs, `docs/Rawhide.md`.
 - **What:** quick centralized win in the app-wide warm-porch effort. `AppColors.formMasterAccent` (the generic primary accent used by ~30 files: Image Studio, avatar gallery, form/dialog icons, badges, borders, primary buttons) was still `Colors.blueAccent`. Flipped the single const to `porchAmber` — warms all ~89 usages at once. Because porch amber is a light-ish accent, the six places that use it as a solid ElevatedButton background had their foreground switched from a light color (textPrimary / Colors.white) to `onChaosAccent` (near-black ink) so labels stay readable on amber in both light and dark (white-on-amber was too low-contrast).
