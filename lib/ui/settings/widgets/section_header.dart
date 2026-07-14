@@ -41,11 +41,7 @@ class SectionHeader extends StatelessWidget {
             fontWeight: FontWeight.bold,
             color: accent,
           ) ??
-          TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: accent,
-          ),
+          TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accent),
     );
   }
 }
