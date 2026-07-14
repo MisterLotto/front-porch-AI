@@ -49,7 +49,15 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     final phase = cs.generationPhase;
     // Live per-request progress straight from the managed backend's console
     // (null / stale for remote backends — the label falls back gracefully).
-    final kobold = context.watch<KoboldService>();
+    // The Provider is optional by design: widget tests (and any embedding
+    // without the app-level tree) render the estimate-based fallback instead
+    // of crashing.
+    KoboldService? kobold;
+    try {
+      kobold = context.watch<KoboldService>();
+    } on ProviderNotFoundException {
+      kobold = null;
+    }
 
     final (
       String label,
@@ -209,10 +217,13 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     if (phase == GenerationPhase.prefilling) {
       // Determinate whenever the managed backend's console gave us real
       // numbers — the prompt pass stops being a black box.
-      final fraction = context
-          .read<KoboldService>()
-          .liveProgress
-          .promptFraction();
+      KoboldService? kobold;
+      try {
+        kobold = context.read<KoboldService>();
+      } on ProviderNotFoundException {
+        kobold = null;
+      }
+      final fraction = kobold?.liveProgress.promptFraction();
       if (fraction != null) {
         return LinearProgressIndicator(
           value: fraction,
@@ -233,7 +244,7 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
 
   (String, Color, IconData, bool) _prefillLabel(
     ChatService cs,
-    KoboldService kobold,
+    KoboldService? kobold,
   ) {
     final elapsed = cs.prefillElapsedSeconds;
     final elapsedStr = elapsed >= 1 ? ' (${elapsed.toInt()}s)' : '';
@@ -245,8 +256,8 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
         ? 'journal pass'
         : (cs.isGrowthPassRunning ? 'growth pass' : null);
 
-    final live = kobold.liveProgress;
-    if (live.isFresh && live.promptTotal > 0) {
+    final live = kobold?.liveProgress;
+    if (live != null && live.isFresh && live.promptTotal > 0) {
       final pct = ((live.promptFraction() ?? 0) * 100).toInt();
       final counts =
           '${_fmtTokens(live.promptCurrent)} / ${_fmtTokens(live.promptTotal)} tokens';
