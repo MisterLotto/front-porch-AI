@@ -268,11 +268,7 @@ class _ExpressionPackSetupState extends State<ExpressionPackSetup> {
               label: Text('Start ($_effectiveCount)'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.formMasterAccent,
-                foregroundColor: AppColors.resolve(
-                  context,
-                  Colors.white,
-                  Colors.white,
-                ),
+                foregroundColor: AppColors.onChaosAccent,
               ),
             ),
           ],
