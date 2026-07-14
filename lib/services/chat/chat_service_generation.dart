@@ -571,16 +571,24 @@ extension ChatServiceGeneration on ChatService {
         plan.add(id: 'summary', label: 'Summary', text: summaryBlock);
         plan.add(id: 'journal', label: 'Journal', text: journalBlock);
         plan.add(
-          id: 'memories',
-          label: 'Retrieved Memories',
-          text: '',
-          counted: false, // budget-fitted by the RAG joint cap below
-        );
-        plan.add(
           id: 'history',
           label: 'Chat History',
           text: '',
           counted: false, // budget-fitted against fixedCountText
+        );
+        // Retrieved memories sit AFTER the transcript (Phase 3, measured):
+        // retrieval changes this block every turn, and a changing block
+        // BEFORE the history rewrote the prompt's middle each turn — a full
+        // re-prefill of the whole transcript on every model (ContextShift
+        // can't fix a middle edit). Measured on Gemma-4-31B (SWA): 2.62s →
+        // 0.40s mean prompt-process, ~15s → ~1.2s wall on typical turns.
+        // The echo risk of sitting nearer the generation point is carried by
+        // the block's own framing ("reference only, do not revisit").
+        plan.add(
+          id: 'memories',
+          label: 'Retrieved Memories',
+          text: '',
+          counted: false, // budget-fitted by the RAG joint cap below
         );
         plan.add(
           id: 'post_history',
@@ -742,8 +750,10 @@ extension ChatServiceGeneration on ChatService {
             if (includedMemories.isNotEmpty) {
               // Role frame (spec §6): RAG = exact earlier lines, reference
               // only — the journal outranks it on feelings, the recap on plot.
+              // Leading '\n' because this now follows the history transcript,
+              // whose last line carries no trailing newline.
               String buildBlock(List<String> mems) =>
-                  '[Exact earlier lines from this chat (already happened — '
+                  '\n[Exact earlier lines from this chat (already happened — '
                   'reference only, do not revisit):\n${mems.join('\n')}]\n';
               memoriesBlock = buildBlock(includedMemories);
 

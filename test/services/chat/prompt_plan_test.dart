@@ -72,8 +72,10 @@ PromptPlan buildGenerationShapedPlan({
   plan.add(id: 'start', text: '<START>\n');
   plan.add(id: 'summary', label: 'Summary', text: summaryBlock);
   plan.add(id: 'journal', label: 'Journal', text: journalBlock);
-  plan.add(id: 'memories', label: 'Retrieved Memories', text: '', counted: false);
   plan.add(id: 'history', label: 'Chat History', text: '', counted: false);
+  // Phase 3 (measured): memories follow the transcript — see the placement
+  // comment in chat_service_generation.dart.
+  plan.add(id: 'memories', label: 'Retrieved Memories', text: '', counted: false);
   plan.add(id: 'post_history', label: 'Post-History', text: postHistoryBlock);
   plan.add(id: 'lore.an_top', label: 'Lorebook', text: loreAnTop);
   plan.add(id: 'author_note', label: 'Author\'s Note', text: authorNoteBlock);
@@ -104,7 +106,7 @@ void main() {
     // join('\n')), so history gluing straight into the post-history block is
     // FAITHFUL to the legacy concatenation, not a fixture artifact.
     plan.section('history').text = 'Sam: hello\nAlice: hey there';
-    plan.section('memories').text = '[Exact earlier lines: - x]\n';
+    plan.section('memories').text = '\n[Exact earlier lines: - x]\n';
     plan.section('idle_cue').text = '\n*idle*';
 
     // The legacy chatSystemPrompt concatenation, verbatim shape.
@@ -113,14 +115,16 @@ void main() {
         "Scenario: a porch at dusk\n[LXT]\n<START>\nAlice: hi\n[LXB]\n";
     expect(plan.systemText, legacySystem);
 
-    // The legacy prompt concatenation, verbatim shape (depth lore NOT
-    // rendered — it is spliced into history by the budget walk).
+    // The canonical prompt shape (depth lore NOT rendered — it is spliced
+    // into history by the budget walk). One DELIBERATE delta vs the legacy
+    // concatenation: retrieved memories follow the transcript (Phase 3
+    // placement, measured — see chat_service_generation.dart).
     const legacyPrompt =
         "<START>\n"
         "[The story so far: things happened]\n"
         "[journal]\n"
-        "[Exact earlier lines: - x]\n"
         "Sam: hello\nAlice: hey there"
+        "\n[Exact earlier lines: - x]\n"
         "PHI\n"
         "[ANT]\n"
         "[Author's Note: be cozy]\n"

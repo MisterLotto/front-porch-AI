@@ -172,10 +172,40 @@ keeps its flow — only the string-building and counting collapse into the plan.
 "spokes on a wheel" piece: every feature contributes a named spoke; the hub renders them all, and
 a new feature CANNOT be bolted on outside the contract.
 
-## 8. Out of scope (Phase 3+, separate approval)
+## 8. Phase 3 — cache work (MEASURED 2026-07-14, shipped)
 
-KV-cache work (chunked history trimming, RAG placement A/B, chance-time placement A/B — all
-measured with prefill timings); remote multi-turn role mapping; any journal/RAG dedup smarts.
+Measured on the maintainer's own hardware/models via the managed KoboldCpp binary (port 5199,
+ctx 8192, --jinja, max_tokens=1 probes, `/api/extra/perf` last_process), simulating the app's
+exact request shape over 8 consecutive full-context turns:
+
+**8a. Chunked history trimming (SHIPPED — `kHistoryTrimChunk = 8` in chat_service_history.dart).**
+Dropping one oldest message per turn shifted the prompt prefix every turn. Quantizing the drop
+point up to a chunk boundary keeps the prefix byte-stable for up to 8 turns. Results (mean warm
+prompt-process per turn): Gemma-4-31B Q8 (SWA — ContextShift impossible): **2.42s → 0.44s
+(5.5×)**; wall per non-eviction turn **~14s → ~0.9s**. mini-magnum-12B Q6 (shift-capable):
+0.05s → 0.02s (2.5× — ContextShift already absorbed most of the scroll there). Stateless
+(boundary derived from the drop index), so regen/swipe/reload land on the same boundary.
+
+**8b. RAG placement (SHIPPED — memories section moved AFTER the transcript).** Retrieval changes
+the block every turn; before the history it rewrote the prompt's MIDDLE each turn — a full
+transcript re-prefill on every model class (a middle edit defeats ContextShift too). Measured on
+Gemma-4-31B with chunked trimming active in both arms: **2.62s → 0.40s mean prompt-process
+(6.5×), ~15s → ~1.2s wall on typical turns**. Echo risk is carried by the Phase-1 framing
+("already happened — reference only, do not revisit"); the block gained a leading newline since
+history carries no trailing one. Thanks to §7 this was a section reorder in the plan.
+
+**8c. Chance Time placement A/B (NOT moved — still post-suffix).** Its metric is response
+*quality* (does a weak model react to the event more reliably before vs after the name cue), not
+prefill timing — it fires rarely so cache impact is nil. Protocol when a human judge is
+available: same chat, same event, 10 regens per placement on a ≤13B model; score "reacted in
+first paragraph / mentioned mechanics / ignored". Until then the documented recency choice
+stands.
+
+## 8.5 Still out of scope (needs separate approval)
+
+Remote multi-turn role mapping; journal/RAG dedup smarts; journal hot-set order stabilization
+(its reordering breaks the prefix only when mood shifts between passes — much rarer than
+retrieval).
 
 ## 9. Verification
 
