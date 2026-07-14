@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
 
 class ChatSettingsDialog extends StatefulWidget {
@@ -184,7 +185,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         'Reasoning',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
+                          color: AppColors.formMasterAccent,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -201,7 +202,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                               setState(() => _gen.reasoningEnabled = val);
                               _save();
                             },
-                            activeTrackColor: Colors.blueAccent,
+                            activeTrackColor: AppColors.formMasterAccent,
                           ),
                         ],
                       ),
@@ -279,7 +280,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         'oMLX Model',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
+                          color: AppColors.formMasterAccent,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -397,7 +398,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       'Generation',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
+                        color: AppColors.formMasterAccent,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -623,7 +624,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                             setState(() => _gen.dynamicTempEnabled = val);
                             _save();
                           },
-                          activeTrackColor: Colors.blueAccent,
+                          activeTrackColor: AppColors.formMasterAccent,
                         ),
                       ],
                     ),
@@ -648,7 +649,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       'Stop Sequences',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
+                        color: AppColors.formMasterAccent,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -693,7 +694,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                 IconButton(
                                   icon: const Icon(
                                     Icons.add_circle,
-                                    color: Colors.blueAccent,
+                                    color: AppColors.formMasterAccent,
                                   ),
                                   onPressed: () {
                                     if (_stopSequenceController
@@ -757,7 +758,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                             'Banned Phrases',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: Colors.blueAccent,
+                              color: AppColors.formMasterAccent,
                             ),
                           ),
                           const SizedBox(width: 6),

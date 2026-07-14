@@ -358,13 +358,13 @@ class _PromptEngineeringTabState extends State<_PromptEngineeringTab> {
                 // ── Group System Prompt ─────────────────────────────────────
                 const Row(
                   children: [
-                    Icon(Icons.code, size: 16, color: Colors.blueAccent),
+                    Icon(Icons.code, size: 16, color: AppColors.formMasterAccent),
                     SizedBox(width: 6),
                     Text(
                       'Group System Prompt',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.blueAccent,
+                        color: AppColors.formMasterAccent,
                         fontSize: 13,
                       ),
                     ),
@@ -406,7 +406,7 @@ class _PromptEngineeringTabState extends State<_PromptEngineeringTab> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.blueAccent),
+                      borderSide: const BorderSide(color: AppColors.formMasterAccent),
                     ),
                     contentPadding: const EdgeInsets.all(10),
                   ),

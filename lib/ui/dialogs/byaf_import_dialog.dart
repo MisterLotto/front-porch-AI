@@ -19,6 +19,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Result from the BYAF import dialog.
 class ByafImportResult {
@@ -60,7 +61,7 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
               children: [
                 const Icon(
                   Icons.archive_outlined,
-                  color: Colors.blueAccent,
+                  color: AppColors.formMasterAccent,
                   size: 24,
                 ),
                 const SizedBox(width: 10),
@@ -173,7 +174,7 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                         'Persona',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
+                          color: AppColors.formMasterAccent,
                           fontSize: 13,
                         ),
                       ),
@@ -206,7 +207,7 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                         'First Message',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
+                          color: AppColors.formMasterAccent,
                           fontSize: 13,
                         ),
                       ),
@@ -280,10 +281,10 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blueAccent.withValues(alpha: 0.1),
+                          color: AppColors.formMasterAccent.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: Colors.blueAccent.withValues(alpha: 0.3),
+                            color: AppColors.formMasterAccent.withValues(alpha: 0.3),
                           ),
                         ),
                         child: CheckboxListTile(
@@ -293,7 +294,7 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                           title: Text(
                             'Import chat history (${preview.messages.length} messages)',
                             style: const TextStyle(
-                              color: Colors.blueAccent,
+                              color: AppColors.formMasterAccent,
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
@@ -305,8 +306,8 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                               fontSize: 11,
                             ),
                           ),
-                          activeColor: Colors.blueAccent,
-                          checkColor: Colors.white,
+                          activeColor: AppColors.formMasterAccent,
+                          checkColor: AppColors.onChaosAccent,
                           contentPadding: EdgeInsets.zero,
                           controlAffinity: ListTileControlAffinity.leading,
                           dense: true,
@@ -348,8 +349,8 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
                   icon: const Icon(Icons.download, size: 18),
                   label: const Text('Import Character'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppColors.formMasterAccent,
+                    foregroundColor: AppColors.onChaosAccent,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 12,
