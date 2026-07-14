@@ -450,12 +450,13 @@ extension ChatServiceGeneration on ChatService {
 
       // Declare variables before try block so they're accessible after finally
       String history = '';
-      String realismBlock = '';
-      String chanceTimeBlock = '';
-      String objectiveBlock = '';
-      String needsCatastropheBlock = '';
       int droppedMessages = 0;
       int historyBudget = 0;
+      // The wheel hub (spec §7): every prompt section registers here once;
+      // the system message, user message, fixed-token count, and Context
+      // Viewer budget map all render from this ONE list. Built inside the
+      // try (blocks must exist first), used through the rest of the turn.
+      PromptPlan? promptPlan;
 
       // Ensure the popped message is always restored, even if prompt assembly throws
       try {
@@ -468,6 +469,7 @@ extension ChatServiceGeneration on ChatService {
         // salience-gated natural language only, no simulation scalars. Macro-
         // resolved HERE (spec §5a) — the fragments carry {{user}}, and this
         // block previously reached the model with the braces literal.
+        String realismBlock = '';
         if (_realismActiveThisMode) {
           final rawRealism = _getRealismStateInjection();
           realismBlock = rawRealism.isEmpty
@@ -476,18 +478,19 @@ extension ChatServiceGeneration on ChatService {
         }
 
         // Chance Time injection — independent of realism mode
-        chanceTimeBlock = _getChanceTimeInjection();
+        final chanceTimeBlock = _getChanceTimeInjection();
 
         // Objective injection — always injected regardless of realism mode
         // Must sit in a fixed prompt section so it is NEVER trimmed by the budget system.
         // (thin delegation to author_note_builder per step 8; state/CRUD in god)
-        objectiveBlock = _getObjectiveInjection();
+        final objectiveBlock = _getObjectiveInjection();
 
         // Mandatory Needs Catastrophe — when a hard-event need hit 0 during the
         // decay tick, the character's body/state fails in a specific way and the
         // reply must open on it. The narrative carries its own evidence, so this
         // wrapper stays generic: firm but short (heavy "YOU MUST" walls read as
         // jailbreak-fight energy and can backfire), and it never puppets {{user}}.
+        String needsCatastropheBlock = '';
         if (_needsSimulation.pendingCatastrophe != null) {
           // Macro-resolved (spec §5a): previously the {{user}}/{{char}}
           // placeholders in this wrapper reached the model literally.
@@ -506,34 +509,113 @@ extension ChatServiceGeneration on ChatService {
           _needsSimulation.consumePendingCatastrophe();
         }
 
-        // Calculate token cost of all fixed sections to determine chat history budget.
-        // Every lore bucket is counted here — including @depth entries, which
-        // are spliced into history later WITHOUT re-counting, so the context
-        // math stays exact.
-        final fixedContent =
-            "$systemPrompt\n"
-            "$loreBefore"
-            "$personaBlock\n"
-            "$loreAfter"
-            "$userPersonaBlock"
-            "Scenario: $scenario\n"
-            "$loreExTop"
-            "$mesExampleBlock"
-            "$loreExBottom"
-            "<START>\n"
-            "$summaryBlock"
-            "$journalBlock"
-            "$postHistoryBlock"
-            "$loreAnTop"
-            "$authorNoteBlock"
-            "$loreAnBottom"
-            "$loreDepthJoined"
-            "$objectiveBlock"
-            "$realismBlock"
-            "$needsCatastropheBlock"
-            "$suffix"
-            "$chanceTimeBlock";
-        final fixedTokens = await _countTokens(fixedContent);
+        // Register every section with the plan, in render order. This ONE
+        // list is what the system message, user message, fixed-token count,
+        // and Context Viewer budget map are all rendered from — every lore
+        // bucket is counted (including @depth entries, which are spliced
+        // into history later WITHOUT re-counting, via rendered:false), and
+        // history/memories are budget-fitted afterwards (counted:false).
+        final plan = promptPlan = PromptPlan();
+        // ── system message ──
+        plan.add(
+          id: 'system',
+          label: 'System Prompt',
+          inSystem: true,
+          text: '$systemPrompt\n',
+        );
+        plan.add(
+          id: 'lore.before',
+          label: 'Lorebook',
+          inSystem: true,
+          text: loreBefore,
+        );
+        plan.add(
+          id: 'persona',
+          label: 'Persona',
+          inSystem: true,
+          text: '$personaBlock\n',
+        );
+        plan.add(
+          id: 'lore.after',
+          label: 'Lorebook',
+          inSystem: true,
+          text: loreAfter,
+        );
+        plan.add(id: 'user_persona', inSystem: true, text: userPersonaBlock);
+        plan.add(
+          id: 'scenario',
+          label: 'Scenario',
+          inSystem: true,
+          text: 'Scenario: $scenario\n',
+        );
+        plan.add(
+          id: 'lore.ex_top',
+          label: 'Lorebook',
+          inSystem: true,
+          text: loreExTop,
+        );
+        plan.add(
+          id: 'examples',
+          label: 'Examples',
+          inSystem: true,
+          text: mesExampleBlock,
+        );
+        plan.add(
+          id: 'lore.ex_bottom',
+          label: 'Lorebook',
+          inSystem: true,
+          text: loreExBottom,
+        );
+        // ── user message (transcript + tail) ──
+        plan.add(id: 'start', text: '<START>\n');
+        plan.add(id: 'summary', label: 'Summary', text: summaryBlock);
+        plan.add(id: 'journal', label: 'Journal', text: journalBlock);
+        plan.add(
+          id: 'memories',
+          label: 'Retrieved Memories',
+          text: '',
+          counted: false, // budget-fitted by the RAG joint cap below
+        );
+        plan.add(
+          id: 'history',
+          label: 'Chat History',
+          text: '',
+          counted: false, // budget-fitted against fixedCountText
+        );
+        plan.add(
+          id: 'post_history',
+          label: 'Post-History',
+          text: postHistoryBlock,
+        );
+        plan.add(id: 'lore.an_top', label: 'Lorebook', text: loreAnTop);
+        plan.add(
+          id: 'author_note',
+          label: 'Author\'s Note',
+          text: authorNoteBlock,
+        );
+        plan.add(id: 'lore.an_bottom', label: 'Lorebook', text: loreAnBottom);
+        plan.add(
+          id: 'lore.depth',
+          label: 'Lorebook',
+          text: loreDepthJoined,
+          rendered: false, // spliced into the history lines, paid for here
+        );
+        plan.add(id: 'objectives', label: 'Objectives', text: objectiveBlock);
+        plan.add(id: 'realism', label: 'Realism Mode', text: realismBlock);
+        plan.add(
+          id: 'catastrophe',
+          label: 'Needs Catastrophe',
+          text: needsCatastropheBlock,
+        );
+        plan.add(
+          id: 'idle_cue',
+          text: '',
+          counted: false, // set after budgeting; rides the +50 reserve margin
+        );
+        plan.add(id: 'suffix', text: suffix);
+        plan.add(id: 'chance_time', text: chanceTimeBlock);
+
+        final fixedTokens = await _countTokens(plan.fixedCountText);
         final contextBudget = _sessionGenSettings.resolveContextSize(
           _storageService,
         );
@@ -566,15 +648,16 @@ extension ChatServiceGeneration on ChatService {
         }
       }
 
+      final plan = promptPlan;
       if (mode == GenerationMode.continue_) {
         // Drop the needs/realism/relationship/chaos/objective/catastrophe state injections
         // for Continue. Per user request: the continue prompt should be straight existing
         // messages (the plain history transcript + the partial text to continue from).
         // The runtime state blocks make the continuation feel injected and discordant.
-        realismBlock = '';
-        chanceTimeBlock = '';
-        objectiveBlock = '';
-        needsCatastropheBlock = '';
+        plan.section('realism').text = '';
+        plan.section('chance_time').text = '';
+        plan.section('objectives').text = '';
+        plan.section('catastrophe').text = '';
         // Also skip RAG "earlier memories" for pure straight continuation.
         droppedMessages = 0;
       }
@@ -742,62 +825,26 @@ extension ChatServiceGeneration on ChatService {
         suffix = '\n${speakingCharacter.name}: *';
       }
 
-      // Every backend now speaks the OpenAI chat protocol (local KoboldCpp via
-      // its /v1/chat/completions door), so always send the system content as a
-      // proper 'system' role message and the transcript as the 'user' message —
+      // Sync the late-filled sections, then render everything from the plan.
+      // Every backend speaks the OpenAI chat protocol (local KoboldCpp via
+      // its /v1/chat/completions door), so the system zone rides a proper
+      // 'system' role message and the transcript zone the 'user' message —
       // the server applies the model's instruct template server-side.
-      final chatSystemPrompt =
-          "$systemPrompt\n$loreBefore$personaBlock\n$loreAfter$userPersonaBlock"
-          "Scenario: $scenario\n$loreExTop$mesExampleBlock$loreExBottom";
+      plan.section('history').text = history;
+      plan.section('memories').text = memoriesBlock;
+      plan.section('idle_cue').text = idleCue != null ? '\n$idleCue' : '';
+      plan.section('suffix').text = suffix;
 
-      final prompt =
-          "<START>\n"
-          "$summaryBlock"
-          "$journalBlock"
-          "$memoriesBlock"
-          "$history"
-          "$postHistoryBlock"
-          "$loreAnTop"
-          "$authorNoteBlock"
-          "$loreAnBottom"
-          "$objectiveBlock"
-          "$realismBlock"
-          "$needsCatastropheBlock"
-          "${idleCue != null ? '\n$idleCue' : ''}"
-          "$suffix"
-          "$chanceTimeBlock";
+      final chatSystemPrompt = plan.systemText;
+      final prompt = plan.userText;
 
-      // Track prompt budget for context viewer (always show full prompt)
-      _lastAssembledPrompt = '$chatSystemPrompt\n$prompt';
+      // Context viewer: full prompt + per-section budget, straight from the
+      // plan (no third hand-built copy to drift).
+      _lastAssembledPrompt = plan.fullText;
       _lastPromptBudget = {
-        'System Prompt': (systemPrompt.length / 4).ceil(),
-        'Lorebook':
-            ((loreBefore.length +
-                        loreAfter.length +
-                        loreAnTop.length +
-                        loreAnBottom.length +
-                        loreExTop.length +
-                        loreExBottom.length +
-                        loreDepthJoined.length) /
-                    4)
-                .ceil(),
-        'Persona': (personaBlock.length / 4).ceil(),
-        'Scenario': ('Scenario: $scenario'.length / 4).ceil(),
-        'Examples': (mesExampleBlock.length / 4).ceil(),
-        'Summary': (summaryBlock.length / 4).ceil(),
-        'Journal': (journalBlock.length / 4).ceil(),
-        'Retrieved Memories': (memoriesBlock.length / 4).ceil(),
-        'Chat History': (history.length / 4).ceil(),
-        'Post-History': (postHistoryBlock.length / 4).ceil(),
-        'Author\'s Note': (authorNoteBlock.length / 4).ceil(),
-        'Objectives': (objectiveBlock.length / 4).ceil(),
-        'Realism Mode': (realismBlock.length / 4).ceil(),
-        if (needsCatastropheBlock.isNotEmpty)
-          'Needs Catastrophe': (needsCatastropheBlock.length / 4).ceil(),
+        ...plan.budgetEstimates(),
         if (droppedMessages > 0) 'Dropped Messages': droppedMessages,
       };
-      // Remove zero-value entries
-      _lastPromptBudget.removeWhere((_, v) => v == 0);
 
       // Stop sequences, priority-ordered (stop_sequences.dart) so transports
       // that cap the server-side list keep the most important entries: user

@@ -226,25 +226,28 @@ extension ChatServiceImpersonate on ChatService {
           'Keep the response natural, and consistent with the scene.]\n';
 
       // ── Context Shift: budget-aware history trimming ──
-      final fixedContent =
-          "$systemPrompt\n"
-          "$loreBefore"
-          "$personaBlock\n"
-          "$loreAfter"
-          "$userPersonaBlock"
-          "Scenario: $scenario\n"
-          "$loreExTop"
-          "$mesExampleBlock"
-          "$loreExBottom"
-          "<START>\n"
-          "$postHistoryBlock"
-          "$loreAnTop"
-          "$authorNoteBlock"
-          "$loreAnBottom"
-          "$loreDepthJoined"
-          "$impersonateInstruction"
-          "$suffix";
-      final fixedTokens = await _countTokens(fixedContent);
+      // Same single-source PromptPlan as the main generation path (spec §7):
+      // one section list renders the system text, user text, and fixed count.
+      final plan = PromptPlan();
+      plan.add(id: 'system', inSystem: true, text: '$systemPrompt\n');
+      plan.add(id: 'lore.before', inSystem: true, text: loreBefore);
+      plan.add(id: 'persona', inSystem: true, text: '$personaBlock\n');
+      plan.add(id: 'lore.after', inSystem: true, text: loreAfter);
+      plan.add(id: 'user_persona', inSystem: true, text: userPersonaBlock);
+      plan.add(id: 'scenario', inSystem: true, text: 'Scenario: $scenario\n');
+      plan.add(id: 'lore.ex_top', inSystem: true, text: loreExTop);
+      plan.add(id: 'examples', inSystem: true, text: mesExampleBlock);
+      plan.add(id: 'lore.ex_bottom', inSystem: true, text: loreExBottom);
+      plan.add(id: 'start', text: '<START>\n');
+      plan.add(id: 'history', text: '', counted: false);
+      plan.add(id: 'post_history', text: postHistoryBlock);
+      plan.add(id: 'lore.an_top', text: loreAnTop);
+      plan.add(id: 'author_note', text: authorNoteBlock);
+      plan.add(id: 'lore.an_bottom', text: loreAnBottom);
+      plan.add(id: 'lore.depth', text: loreDepthJoined, rendered: false);
+      plan.add(id: 'impersonate', text: impersonateInstruction);
+      plan.add(id: 'suffix', text: suffix);
+      final fixedTokens = await _countTokens(plan.fixedCountText);
       final contextBudget = _sessionGenSettings.resolveContextSize(
         _storageService,
       );
@@ -266,21 +269,11 @@ extension ChatServiceImpersonate on ChatService {
       }
 
       // Every backend now speaks the OpenAI chat protocol (local KoboldCpp via
-      // its /v1/chat/completions door), so always send the system content as a
-      // proper 'system' role message and the transcript as the 'user' message.
-      final chatSystemPrompt =
-          "$systemPrompt\n$loreBefore$personaBlock\n$loreAfter$userPersonaBlock"
-          "Scenario: $scenario\n$loreExTop$mesExampleBlock$loreExBottom";
-
-      final prompt =
-          "<START>\n"
-          "$history"
-          "$postHistoryBlock"
-          "$loreAnTop"
-          "$authorNoteBlock"
-          "$loreAnBottom"
-          "$impersonateInstruction"
-          "$suffix";
+      // its /v1/chat/completions door), so the plan's system zone rides a
+      // proper 'system' role message and the transcript zone the 'user' one.
+      plan.section('history').text = history;
+      final chatSystemPrompt = plan.systemText;
+      final prompt = plan.userText;
 
       // Stop sequences: character names only (not user — we ARE the user).
       // Same prioritized builder as the main generation path — no second

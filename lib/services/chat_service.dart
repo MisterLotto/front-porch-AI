@@ -62,6 +62,7 @@ import 'package:front_porch_ai/services/chat/cast_detector.dart';
 import 'package:front_porch_ai/services/chat/scene_guest_director.dart';
 import 'package:front_porch_ai/services/chat/scene_guest_factory.dart';
 import 'package:front_porch_ai/services/chat/needs_simulation.dart';
+import 'package:front_porch_ai/services/chat/prompt_plan.dart';
 import 'package:front_porch_ai/services/chat/stop_sequences.dart';
 import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
 import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
