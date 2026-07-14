@@ -168,7 +168,7 @@ label input { margin-top: 6px; }
   font-size: 0.95rem; color: var(--muted);
 }
 .side-nav .nav-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
-.side-nav .nav-item.active { background: rgba(59, 130, 246, 0.14); color: var(--accent); font-weight: 700; }
+.side-nav .nav-item.active { background: rgba(244, 162, 89, 0.14); color: var(--accent); font-weight: 700; }
 .side-nav .nav-icon { font-size: 1.2rem; }
 .side-footer {
   margin-top: auto; display: flex; flex-direction: column; align-items: stretch;
@@ -232,7 +232,7 @@ button.ghost { background: transparent; border-color: var(--border); }
 .card-head h3 { margin: 0; }
 .badge {
   font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;
-  background: rgba(59, 130, 246, 0.18); color: var(--accent);
+  background: rgba(244, 162, 89, 0.18); color: var(--accent);
   padding: 2px 8px; border-radius: 999px;
 }
 .steps { margin: 8px 0 12px; padding-left: 18px; color: var(--muted); font-size: 0.9rem; }
@@ -470,7 +470,7 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
   cursor: pointer; font: inherit;
 }
 .mp-option:hover { background: var(--surface-2); }
-.mp-option.selected { background: rgba(59, 130, 246, 0.14); }
+.mp-option.selected { background: rgba(244, 162, 89, 0.14); }
 .mp-name { font-size: 0.85rem; }
 .mp-meta { font-size: 0.7rem; }
 .mp-inline-error { color: var(--danger); font-size: 0.75rem; margin: 4px 0 0; }
@@ -1042,7 +1042,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .rec-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .rec-chip {
   font-size: 0.72rem; padding: 4px 10px; border-radius: 999px; cursor: pointer;
-  background: rgba(59, 130, 246, 0.14); color: var(--accent); border: 1px solid var(--border);
+  background: rgba(244, 162, 89, 0.14); color: var(--accent); border: 1px solid var(--border);
 }
 .rec-chip:hover { filter: brightness(1.2); }
 .mono-path { font-family: var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; }

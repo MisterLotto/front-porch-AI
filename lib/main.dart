@@ -36,6 +36,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart'; // Keep original import for MainLayout
 import 'package:front_porch_ai/app_version.dart';
@@ -1073,11 +1074,28 @@ class _MyAppState extends State<MyApp> with WindowListener {
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             brightness: isDark ? Brightness.dark : Brightness.light,
-            primarySwatch: Colors.blue,
+            // Warm-porch app-wide accent: seed the Material 3 color scheme from
+            // porch amber (was primarySwatch: Colors.blue) so every default
+            // control — switches, sliders, buttons, progress bars, the text
+            // cursor, tab indicators — warms up to match the chat sidebar and
+            // the web UI (whose --accent is already porch amber). The scheme's
+            // surfaces are pinned back to the app's existing slate/warm-paper
+            // grounds so only the ACCENT roles change, not the backgrounds.
+            colorScheme:
+                ColorScheme.fromSeed(
+                  seedColor: AppColors.porchAmber,
+                  brightness: isDark ? Brightness.dark : Brightness.light,
+                ).copyWith(
+                  primary: isDark
+                      ? AppColors.porchAmber
+                      : AppColors.porchAmberLight,
+                  onPrimary: isDark ? AppColors.onChaosAccent : Colors.white,
+                  surface: isDark ? AppColors.surface : AppColors.lightSurface,
+                ),
             scaffoldBackgroundColor: isDark
-                ? const Color(0xFF0F172A)
-                : const Color(0xFFF8F4ED), // warmer paper
-            cardColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                ? AppColors.background
+                : AppColors.lightBackground, // warmer paper
+            cardColor: isDark ? AppColors.card : AppColors.lightCard,
             textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme)
                 .apply(
                   bodyColor: isDark ? Colors.white : Colors.black87,
