@@ -189,6 +189,8 @@ export function ChatPage() {
                 busyWith: e.busyWith ?? null,
                 promptCur: e.promptCur ?? null,
                 promptTotal: e.promptTotal ?? null,
+                promptDone: !!e.promptDone,
+                estFraction: e.estFraction ?? null,
                 genCur: e.genCur ?? null,
                 genTotal: e.genTotal ?? null,
               }

@@ -102,8 +102,12 @@ class WebServerHost extends ChangeNotifier {
   // Truthful generation-status relay (parity with the desktop status bar):
   // live prompt-reading progress parsed from the managed KoboldCpp console +
   // which background pass is holding the single local slot. Listens on BOTH
-  // the ChatService (phase flips) and the KoboldService (live counts).
+  // the ChatService (phase flips) and the KoboldService (live counts), plus
+  // a 1s heartbeat timer: console lines arrive only once per BATCH, so
+  // between them no notifier fires and the interpolated fraction would
+  // freeze on web without the tick.
   VoidCallback? _genStatusListener;
+  Timer? _genStatusTicker;
   bool _wasBroadcastingGenStatus = false;
   DateTime _lastGenStatusSent = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -305,6 +309,17 @@ class WebServerHost extends ChangeNotifier {
         _wasBroadcastingGenStatus = true;
         final live = kobold.liveProgress;
         final fresh = live.isFresh;
+        // Server-side interpolation between per-batch console lines (same
+        // math as the desktop bar) so web clients get a moving fraction
+        // without doing their own estimation.
+        final perfSpeed = chatService.lastPerfData?['last_process_speed'];
+        final estFraction = fresh
+            ? live.estimatedPromptFraction(
+                tokensPerSecond: (perfSpeed is num && perfSpeed > 0)
+                    ? perfSpeed.toDouble()
+                    : null,
+              )
+            : null;
         streamHub.broadcast({
           'event': 'gen_status',
           'active': true,
@@ -314,6 +329,8 @@ class WebServerHost extends ChangeNotifier {
               : (chatService.isGrowthPassRunning ? 'growth' : null),
           'promptCur': fresh ? live.promptCurrent : null,
           'promptTotal': fresh ? live.promptTotal : null,
+          'promptDone': fresh && (live.promptFraction() ?? 0) >= 1.0,
+          'estFraction': estFraction,
           'genCur': fresh ? live.genCurrent : null,
           'genTotal': fresh ? live.genTotal : null,
         });
@@ -322,6 +339,12 @@ class WebServerHost extends ChangeNotifier {
       _genStatusListener = onGenStatus;
       chatService.addListener(onGenStatus);
       kobold.addListener(onGenStatus);
+      // Heartbeat: keeps the interpolated fraction moving between console
+      // lines. Cheap no-op whenever nothing is generating.
+      _genStatusTicker = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => onGenStatus(),
+      );
     }
 
     // Image generation live progress → web clients: percent + (when the
@@ -601,6 +624,8 @@ class WebServerHost extends ChangeNotifier {
       _koboldService?.removeListener(_genStatusListener!);
       _genStatusListener = null;
     }
+    _genStatusTicker?.cancel();
+    _genStatusTicker = null;
     _wasBroadcastingGenStatus = false;
     if (_imageProgressListener != null) {
       _imageGenService?.removeListener(_imageProgressListener!);

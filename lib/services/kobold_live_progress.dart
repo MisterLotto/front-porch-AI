@@ -108,4 +108,30 @@ class KoboldLiveProgress {
   bool get isFresh =>
       updatedAt != null &&
       DateTime.now().difference(updatedAt!) < const Duration(seconds: 120);
+
+  /// Smooth, honest estimate of prompt progress BETWEEN console lines.
+  ///
+  /// Kobold prints one progress line per BATCH, so with --batchsize 8192 a
+  /// ~10K prompt yields just "(0 / 9900)" and "(9900 / 9900)" — the raw
+  /// fraction jumps 0% → 100% with nothing in between (reported by the
+  /// maintainer). Between anchors we advance the last REAL count by the
+  /// backend's measured prefill speed, capped below the next unconfirmed
+  /// token so the bar never claims completion the console hasn't printed.
+  /// Returns 1.0 only when a console line actually said so.
+  double? estimatedPromptFraction({
+    double? tokensPerSecond,
+    DateTime? now,
+  }) {
+    final raw = promptFraction();
+    if (raw == null) return null;
+    if (raw >= 1.0) return 1.0;
+    if (tokensPerSecond == null || tokensPerSecond <= 0 || updatedAt == null) {
+      return raw;
+    }
+    final dt =
+        (now ?? DateTime.now()).difference(updatedAt!).inMilliseconds / 1000.0;
+    final est = promptCurrent + tokensPerSecond * dt;
+    final capped = est.clamp(0, promptTotal - 1).toDouble();
+    return (capped / promptTotal).clamp(0.0, 0.99);
+  }
 }

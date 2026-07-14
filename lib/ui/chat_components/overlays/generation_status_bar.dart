@@ -32,7 +32,9 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
   @override
   void initState() {
     super.initState();
-    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    // 250ms so the interpolated prompt-token counter visibly ticks between
+    // the backend's per-batch console lines (tiny widget, cheap rebuild).
+    _elapsedTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -216,14 +218,17 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     }
     if (phase == GenerationPhase.prefilling) {
       // Determinate whenever the managed backend's console gave us real
-      // numbers — the prompt pass stops being a black box.
+      // numbers — the prompt pass stops being a black box. Interpolated
+      // between per-batch console lines (see _prefillLabel).
       KoboldService? kobold;
       try {
         kobold = context.read<KoboldService>();
       } on ProviderNotFoundException {
         kobold = null;
       }
-      final fraction = kobold?.liveProgress.promptFraction();
+      final fraction = kobold?.liveProgress.estimatedPromptFraction(
+        tokensPerSecond: _prefillSpeed(cs),
+      );
       if (fraction != null) {
         return LinearProgressIndicator(
           value: fraction,
@@ -258,15 +263,29 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
 
     final live = kobold?.liveProgress;
     if (live != null && live.isFresh && live.promptTotal > 0) {
-      final pct = ((live.promptFraction() ?? 0) * 100).toInt();
+      // Console lines arrive once per BATCH (with --batchsize 8192 a ~10K
+      // prompt prints only two), so the displayed fraction interpolates
+      // between real anchors using the backend's measured prefill speed —
+      // otherwise the bar jumps 0% → 100% and just sits there (maintainer
+      // report). Raw 100% means the console really said so.
+      final rawDone = (live.promptFraction() ?? 0) >= 1.0;
+      final estFraction =
+          live.estimatedPromptFraction(tokensPerSecond: _prefillSpeed(cs)) ??
+          0;
+      final pct = (estFraction * 100).toInt();
+      final estTokens = rawDone
+          ? live.promptTotal
+          : (live.promptTotal * estFraction).round();
+      // Exact live-ticking counts ("8,347 / 9,912") — the user asked to watch
+      // the tokens count up, not just a percent.
       final counts =
-          '${_fmtTokens(live.promptCurrent)} / ${_fmtTokens(live.promptTotal)} tokens';
+          '${_fmtExact(estTokens)} / ${_fmtExact(live.promptTotal)} tokens';
       if (busyWith != null) {
         // Whatever Kobold is chewing on right now is the BACKGROUND call;
         // our reply is queued behind it.
         final stage = live.genTotal > 0
             ? 'writing (${live.genCurrent} tokens)'
-            : 'reading $counts ($pct%)';
+            : (rawDone ? 'finishing up' : 'reading $counts ($pct%)');
         return (
           'Waiting — $busyWith is using the model: $stage$elapsedStr',
           color,
@@ -274,7 +293,7 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
           false,
         );
       }
-      if (live.genTotal == 0 || (live.promptFraction() ?? 0) < 1.0) {
+      if (!rawDone) {
         return (
           'Reading prompt — $counts ($pct%)$elapsedStr',
           color,
@@ -282,13 +301,14 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
           false,
         );
       }
-      // Prompt done, decode running, but no token has reached us yet — on
-      // the solo path that decode IS our own reply warming up (buffering /
-      // suppressed thinking / first-token latency), so say so. Only a
-      // busyWith flag above marks the slot as genuinely someone else's
-      // (review finding: "earlier call" here mislabeled every normal reply).
+      // Prompt fully read. If decode is running but no token has reached us
+      // yet, that decode IS our own reply warming up (buffering / suppressed
+      // thinking / first-token latency) — only a busyWith flag above marks
+      // the slot as genuinely someone else's.
       return (
-        'Starting the reply — ${live.genCurrent} tokens written$elapsedStr',
+        live.genTotal > 0
+            ? 'Starting the reply — ${live.genCurrent} tokens written$elapsedStr'
+            : 'Prompt read — starting the reply…$elapsedStr',
         color,
         Icons.bolt_rounded,
         false,
@@ -328,6 +348,19 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     if (n >= 10000) return '${(n / 1000).toStringAsFixed(0)}K';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return '$n';
+  }
+
+  /// Exact count with thousands separators (8,347) for the live ticker.
+  String _fmtExact(int n) => n.toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+$)'),
+    (m) => '${m[1]},',
+  );
+
+  /// The backend's measured prefill speed (t/s) from the perf poll — the
+  /// anchor for interpolating progress between per-batch console lines.
+  double? _prefillSpeed(ChatService cs) {
+    final speed = cs.lastPerfData?['last_process_speed'];
+    return (speed is num && speed > 0) ? speed.toDouble() : null;
   }
 
   (String, Color, IconData, bool) _thinkingLabel(ChatService cs) {

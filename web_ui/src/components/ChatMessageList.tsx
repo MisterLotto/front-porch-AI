@@ -16,20 +16,24 @@ import { type Message } from './chatTypes';
 
 /// Truthful generation status (desktop status-bar parity): live prompt-reading
 /// counts from the managed local backend + which background pass holds the
-/// single local slot. Null fields = no live data (remote backend).
+/// single local slot. Null fields = no live data (remote backend). The server
+/// interpolates estFraction between the backend's per-batch console lines and
+/// flags promptDone only when the console confirmed completion.
 export type GenStatus = {
   phase: string;
   busyWith: string | null;
   promptCur: number | null;
   promptTotal: number | null;
+  promptDone: boolean;
+  estFraction: number | null;
   genCur: number | null;
   genTotal: number | null;
 };
 
-function fmtTokens(n: number): string {
-  if (n >= 10000) return `${Math.round(n / 1000)}K`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return `${n}`;
+/// Exact count with thousands separators ("8,347") — a live ticker, not just
+/// a percent (maintainer request).
+function fmtExact(n: number): string {
+  return n.toLocaleString('en-US');
 }
 
 /// Mirror of the desktop status-bar wording so both surfaces tell the same
@@ -37,31 +41,43 @@ function fmtTokens(n: number): string {
 function genStatusLabel(s: GenStatus): { label: string; fraction: number | null } {
   const hasLive = s.promptTotal != null && s.promptTotal > 0;
   const fraction = hasLive
-    ? Math.min(1, (s.promptCur ?? 0) / (s.promptTotal as number))
+    ? (s.estFraction ?? Math.min(1, (s.promptCur ?? 0) / (s.promptTotal as number)))
     : null;
+  const estTokens = hasLive
+    ? (s.promptDone
+        ? (s.promptTotal as number)
+        : Math.round((s.promptTotal as number) * (fraction ?? 0)))
+    : 0;
+  const counts = hasLive
+    ? `${fmtExact(estTokens)} / ${fmtExact(s.promptTotal as number)} tokens`
+    : '';
   if (s.busyWith) {
     const pass = s.busyWith === 'journal' ? 'journal pass' : 'growth pass';
     if (hasLive) {
       const stage =
         (s.genTotal ?? 0) > 0
           ? `writing (${s.genCur} tokens)`
-          : `reading ${fmtTokens(s.promptCur ?? 0)} / ${fmtTokens(s.promptTotal as number)} tokens (${Math.round((fraction ?? 0) * 100)}%)`;
+          : s.promptDone
+            ? 'finishing up'
+            : `reading ${counts} (${Math.round((fraction ?? 0) * 100)}%)`;
       return { label: `Waiting — ${pass} is using the model: ${stage}`, fraction };
     }
     return { label: `Waiting — ${pass} is using the model…`, fraction: null };
   }
-  if (hasLive && ((s.genTotal ?? 0) === 0 || (fraction ?? 0) < 1)) {
+  if (hasLive && !s.promptDone) {
     return {
-      label: `Reading prompt — ${fmtTokens(s.promptCur ?? 0)} / ${fmtTokens(s.promptTotal as number)} tokens (${Math.round((fraction ?? 0) * 100)}%)`,
+      label: `Reading prompt — ${counts} (${Math.round((fraction ?? 0) * 100)}%)`,
       fraction,
     };
   }
   if (hasLive) {
-    // Prompt done + decode running + no streamed token yet: on the solo path
-    // that decode IS our reply warming up — only busyWith marks someone
-    // else's work (desktop parity, review finding).
+    // Prompt fully read. A running decode with no streamed token yet IS our
+    // reply warming up — only busyWith marks someone else's work.
     return {
-      label: `Starting the reply — ${s.genCur} tokens written`,
+      label:
+        (s.genTotal ?? 0) > 0
+          ? `Starting the reply — ${s.genCur} tokens written`
+          : 'Prompt read — starting the reply…',
       fraction: 1,
     };
   }

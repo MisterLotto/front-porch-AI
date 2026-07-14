@@ -40,6 +40,10 @@ export type WsEvent = {
   busyWith?: string | null;
   promptCur?: number | null;
   promptTotal?: number | null;
+  // Console lines arrive per BATCH; the server interpolates between them
+  // (estFraction) and flags when the console confirmed completion.
+  promptDone?: boolean;
+  estFraction?: number | null;
   genCur?: number | null;
   genTotal?: number | null;
 };

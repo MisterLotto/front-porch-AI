@@ -81,6 +81,31 @@ void main() {
     expect(p.genTotal, 40);
   });
 
+  test('estimatedPromptFraction interpolates between per-batch lines and '
+      'never claims completion the console has not printed', () {
+    final p = KoboldLiveProgress();
+    final t0 = DateTime.now();
+    p.ingest('Processing Prompt [BATCH] (0 / 10000 tokens)', now: t0);
+    // 5s later at 400 t/s the estimate is ~2000 tokens = 20%.
+    final est = p.estimatedPromptFraction(
+      tokensPerSecond: 400,
+      now: t0.add(const Duration(seconds: 5)),
+    );
+    expect(est, closeTo(0.2, 0.01));
+    // A wild overestimate is capped below 100% — completion only comes from
+    // a real console line.
+    final capped = p.estimatedPromptFraction(
+      tokensPerSecond: 400,
+      now: t0.add(const Duration(minutes: 1)),
+    );
+    expect(capped, lessThanOrEqualTo(0.99));
+    // No speed anchor → raw fraction, no guessing.
+    expect(p.estimatedPromptFraction(tokensPerSecond: null, now: t0), 0.0);
+    // A real completion line reports exactly 1.0.
+    p.ingest('Processing Prompt [BATCH] (10000 / 10000 tokens)', now: t0);
+    expect(p.estimatedPromptFraction(tokensPerSecond: 400, now: t0), 1.0);
+  });
+
   test('non-progress chunks change nothing', () {
     final p = KoboldLiveProgress();
     expect(p.ingest('llama_context: n_batch = 8320'), isFalse);
