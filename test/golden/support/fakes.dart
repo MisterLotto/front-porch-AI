@@ -31,6 +31,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
+import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
@@ -249,6 +250,11 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   final int prefillPromptTokens;
   @override
   final Map<String, dynamic>? lastPerfData;
+
+  /// No live backend source in goldens → the status bar renders its
+  /// estimate-based fallback labels (pixel-stable regardless of backend).
+  @override
+  LiveGenProgress? get activeLiveProgress => null;
 
   // Realism-processing overlay surface.
   @override
