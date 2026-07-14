@@ -7,11 +7,11 @@
 // bracket tag varies by build).
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:front_porch_ai/services/kobold_live_progress.dart';
+import 'package:front_porch_ai/services/live_gen_progress.dart';
 
 void main() {
   test('parses batch-glued Processing Prompt updates, last match wins', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     final changed = p.ingest(
       'Processing Prompt [BATCH] (0 / 284 tokens)'
       'Processing Prompt [BATCH] (284 / 284 tokens)',
@@ -23,7 +23,7 @@ void main() {
   });
 
   test('accepts [BLAS], other tags, and tagless variants', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     p.ingest('Processing Prompt [BLAS] (512 / 2123 tokens)');
     expect(p.promptCurrent, 512);
     expect(p.promptTotal, 2123);
@@ -33,7 +33,7 @@ void main() {
   });
 
   test('Generating lines mark the prompt pass complete and track decode', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     p.ingest('Processing Prompt [BATCH] (512 / 900 tokens)');
     p.ingest('Generating (3 / 40 tokens)Generating (4 / 40 tokens)');
     expect(p.promptCurrent, 900); // decode implies prompt finished
@@ -42,7 +42,7 @@ void main() {
   });
 
   test('a new request resets stale decode counts', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     p.ingest('Processing Prompt [BATCH] (900 / 900 tokens)');
     p.ingest('Generating (40 / 40 tokens)');
     // Next request starts from 0 with a different total.
@@ -55,7 +55,7 @@ void main() {
 
   test('same-size cache-fast-forwarded prompt still resets decode counts '
       '(review finding: it can open at "(N / N)")', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     p.ingest('Processing Prompt [BATCH] (2000 / 2000 tokens)');
     p.ingest('Generating (40 / 40 tokens)');
     // Request B: identical size, prefill fully cache-hit — first line is
@@ -67,7 +67,7 @@ void main() {
 
   test('a progress line split across two chunks still matches (carry), and a '
       'consumed line never re-fires to zero live decode counts', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     p.ingest('Processing Prompt [BATCH] (512 / 21');
     expect(p.promptTotal, 0); // partial — nothing matched yet
     p.ingest('23 tokens)');
@@ -83,7 +83,7 @@ void main() {
 
   test('estimatedPromptFraction interpolates between per-batch lines and '
       'never claims completion the console has not printed', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     final t0 = DateTime.now();
     p.ingest('Processing Prompt [BATCH] (0 / 10000 tokens)', now: t0);
     // 5s later at 400 t/s the estimate is ~2000 tokens = 20%.
@@ -107,14 +107,27 @@ void main() {
   });
 
   test('non-progress chunks change nothing', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     expect(p.ingest('llama_context: n_batch = 8320'), isFalse);
     expect(p.promptFraction(), isNull);
   });
 
+  test('LM Studio runtime line: cumulative tokens + exact fraction → counts '
+      '(captured shape)', () {
+    final p = LiveGenProgress();
+    final hit = p.ingestLmStudioRuntimeLine(
+      'slot update_slots: id  2 | task 46 | prompt processing progress, '
+      'n_tokens = 512, batch.n_tokens = 512, progress = 0.168754',
+    );
+    expect(hit, isTrue);
+    expect(p.promptCurrent, 512);
+    expect(p.promptTotal, (512 / 0.168754).round()); // ≈ 3034
+    expect(p.ingestLmStudioRuntimeLine('srv update: cache state'), isFalse);
+  });
+
   test('staleness: old data stops reporting a fraction, but the window is '
       'wide enough for big-batch gaps between progress lines', () {
-    final p = KoboldLiveProgress();
+    final p = LiveGenProgress();
     p.ingest(
       'Processing Prompt (10 / 100 tokens)',
       now: DateTime.now().subtract(const Duration(seconds: 60)),
@@ -123,7 +136,7 @@ void main() {
     expect(p.promptFraction(), isNotNull);
     expect(p.isFresh, isTrue);
 
-    final stale = KoboldLiveProgress();
+    final stale = LiveGenProgress();
     stale.ingest(
       'Processing Prompt (10 / 100 tokens)',
       now: DateTime.now().subtract(const Duration(minutes: 5)),

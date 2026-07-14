@@ -287,13 +287,15 @@ class WebServerHost extends ChangeNotifier {
     }
 
     // Truthful generation status → web clients (parity with the desktop
-    // status bar): live prompt-reading counts parsed from the managed
-    // KoboldCpp console, plus which background pass (journal/growth) is
-    // holding the single local slot. Throttled to ~2.5/s; one final
-    // {active:false} dismisses the line. Remote backends simply never have
-    // fresh live counts, so clients fall back to their plain indicator.
+    // status bar): live prompt-reading counts from the ACTIVE backend's
+    // source (Kobold console, oMLX admin-stats poll, LM Studio runtime log
+    // — resolved by chatService.activeLiveProgress), plus which background
+    // pass (journal/growth) or queued request is holding the slot.
+    // Throttled to ~2.5/s; one final {active:false} dismisses the line.
+    // Plain remote backends never have fresh live counts, so clients fall
+    // back to their plain indicator.
     final kobold = _koboldService;
-    if (streamHub != null && chatService != null && kobold != null) {
+    if (streamHub != null && chatService != null) {
       void onGenStatus() {
         final generating = chatService.isGenerating;
         if (!generating) {
@@ -307,11 +309,11 @@ class WebServerHost extends ChangeNotifier {
         if (now.difference(_lastGenStatusSent).inMilliseconds < 400) return;
         _lastGenStatusSent = now;
         _wasBroadcastingGenStatus = true;
-        final live = kobold.liveProgress;
-        final fresh = live.isFresh;
-        // Server-side interpolation between per-batch console lines (same
-        // math as the desktop bar) so web clients get a moving fraction
-        // without doing their own estimation.
+        final live = chatService.activeLiveProgress;
+        final fresh = live != null && live.isFresh;
+        // Server-side interpolation between per-batch updates (same math as
+        // the desktop bar) so web clients get a moving fraction without
+        // doing their own estimation.
         final perfSpeed = chatService.lastPerfData?['last_process_speed'];
         final estFraction = fresh
             ? live.estimatedPromptFraction(
@@ -327,6 +329,9 @@ class WebServerHost extends ChangeNotifier {
           'busyWith': chatService.isSummaryGenerating
               ? 'journal'
               : (chatService.isGrowthPassRunning ? 'growth' : null),
+          // Backend-reported queue depth — NOT attributable (may be someone
+          // waiting on us), so clients state it neutrally (review finding).
+          'queued': fresh ? live.waitingCount : 0,
           'promptCur': fresh ? live.promptCurrent : null,
           'promptTotal': fresh ? live.promptTotal : null,
           'promptDone': fresh && (live.promptFraction() ?? 0) >= 1.0,
@@ -338,7 +343,9 @@ class WebServerHost extends ChangeNotifier {
 
       _genStatusListener = onGenStatus;
       chatService.addListener(onGenStatus);
-      kobold.addListener(onGenStatus);
+      // Kobold pushes console updates through notifyListeners; the polled
+      // sources (oMLX / LM Studio) ride the 1s heartbeat below instead.
+      kobold?.addListener(onGenStatus);
       // Heartbeat: keeps the interpolated fraction moving between console
       // lines. Cheap no-op whenever nothing is generating.
       _genStatusTicker = Timer.periodic(

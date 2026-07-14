@@ -22,7 +22,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/kobold_binary_version.dart';
-import 'package:front_porch_ai/services/kobold_live_progress.dart';
+import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/openai_chat_stream.dart';
@@ -47,10 +47,10 @@ class KoboldService extends ChangeNotifier
   Timer? _readinessProbe;
 
   /// Ground-truth per-request progress parsed from the managed process's own
-  /// console output (see kobold_live_progress.dart) — what the status bar
+  /// console output (see live_gen_progress.dart) — what the status bar
   /// shows instead of a black box. Covers WHATEVER request Kobold is working
   /// on, including queued background passes.
-  final KoboldLiveProgress liveProgress = KoboldLiveProgress();
+  final LiveGenProgress liveProgress = LiveGenProgress();
   DateTime _lastLiveNotify = DateTime.fromMillisecondsSinceEpoch(0);
 
   bool get isRunning => _isRunning;

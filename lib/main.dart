@@ -492,9 +492,15 @@ void main(List<String> args) async {
             );
             // Wire LLMProvider and CharacterRepository immediately at creation time
             chatService.setDatabase(db);
-            chatService.setLLMProvider(
-              Provider.of<LLMProvider>(context, listen: false),
+            final llmProviderForChat = Provider.of<LLMProvider>(
+              context,
+              listen: false,
             );
+            chatService.setLLMProvider(llmProviderForChat);
+            // Lets the live-status sources (oMLX poller) gate their polling
+            // on an actual generation being in flight.
+            llmProviderForChat.isGenerationActive = () =>
+                chatService.isGenerating;
             chatService.setCharacterRepository(
               Provider.of<CharacterRepository>(context, listen: false),
             );
@@ -520,9 +526,13 @@ void main(List<String> args) async {
           },
           update: (context, kobold, persona, storage, worldRepo, previous) {
             if (previous != null) {
-              previous.setLLMProvider(
-                Provider.of<LLMProvider>(context, listen: false),
+              final llmProviderForChat = Provider.of<LLMProvider>(
+                context,
+                listen: false,
               );
+              previous.setLLMProvider(llmProviderForChat);
+              llmProviderForChat.isGenerationActive = () =>
+                  previous.isGenerating;
               previous.setCharacterRepository(
                 Provider.of<CharacterRepository>(context, listen: false),
               );
@@ -543,9 +553,13 @@ void main(List<String> args) async {
               worldRepo,
             );
             chatService.setDatabase(db);
-            chatService.setLLMProvider(
-              Provider.of<LLMProvider>(context, listen: false),
+            final llmProviderLate = Provider.of<LLMProvider>(
+              context,
+              listen: false,
             );
+            chatService.setLLMProvider(llmProviderLate);
+            llmProviderLate.isGenerationActive = () =>
+                chatService.isGenerating;
             chatService.setCharacterRepository(
               Provider.of<CharacterRepository>(context, listen: false),
             );

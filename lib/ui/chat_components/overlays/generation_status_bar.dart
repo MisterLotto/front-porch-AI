@@ -11,7 +11,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
@@ -49,17 +48,6 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
   Widget build(BuildContext context) {
     final cs = widget.chatService;
     final phase = cs.generationPhase;
-    // Live per-request progress straight from the managed backend's console
-    // (null / stale for remote backends — the label falls back gracefully).
-    // The Provider is optional by design: widget tests (and any embedding
-    // without the app-level tree) render the estimate-based fallback instead
-    // of crashing.
-    KoboldService? kobold;
-    try {
-      kobold = context.watch<KoboldService>();
-    } on ProviderNotFoundException {
-      kobold = null;
-    }
 
     final (
       String label,
@@ -77,7 +65,7 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
         Icons.build_rounded,
         false,
       ),
-      GenerationPhase.prefilling => _prefillLabel(cs, kobold),
+      GenerationPhase.prefilling => _prefillLabel(cs),
       GenerationPhase.thinking => _thinkingLabel(cs),
       GenerationPhase.buffering => (
         'Buffering tokens...',
@@ -217,16 +205,10 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
       );
     }
     if (phase == GenerationPhase.prefilling) {
-      // Determinate whenever the managed backend's console gave us real
-      // numbers — the prompt pass stops being a black box. Interpolated
-      // between per-batch console lines (see _prefillLabel).
-      KoboldService? kobold;
-      try {
-        kobold = context.read<KoboldService>();
-      } on ProviderNotFoundException {
-        kobold = null;
-      }
-      final fraction = kobold?.liveProgress.estimatedPromptFraction(
+      // Determinate whenever the active backend gave us real numbers — the
+      // prompt pass stops being a black box. Interpolated between per-batch
+      // updates (see _prefillLabel).
+      final fraction = cs.activeLiveProgress?.estimatedPromptFraction(
         tokensPerSecond: _prefillSpeed(cs),
       );
       if (fraction != null) {
@@ -247,21 +229,24 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     );
   }
 
-  (String, Color, IconData, bool) _prefillLabel(
-    ChatService cs,
-    KoboldService? kobold,
-  ) {
+  (String, Color, IconData, bool) _prefillLabel(ChatService cs) {
     final elapsed = cs.prefillElapsedSeconds;
     final elapsedStr = elapsed >= 1 ? ' (${elapsed.toInt()}s)' : '';
     const color = Color(0xFFF97316);
 
     // The single-slot local backend serializes requests, so our reply can be
-    // stuck behind a background pass. Name the wait truthfully.
+    // stuck behind a background pass — app-side knowledge, safely
+    // attributable. A backend-reported queue (oMLX waiting[]) is NOT
+    // attributable (it may be someone waiting on us), so it is stated as a
+    // neutral fact instead (review finding: attributing it was invertible).
+    final live = cs.activeLiveProgress;
     final String? busyWith = cs.isSummaryGenerating
         ? 'journal pass'
         : (cs.isGrowthPassRunning ? 'growth pass' : null);
+    final queueNote = (live != null && live.isFresh && live.waitingCount > 0)
+        ? ' — ${live.waitingCount} request${live.waitingCount == 1 ? '' : 's'} queued'
+        : '';
 
-    final live = kobold?.liveProgress;
     if (live != null && live.isFresh && live.promptTotal > 0) {
       // Console lines arrive once per BATCH (with --batchsize 8192 a ~10K
       // prompt prints only two), so the displayed fraction interpolates
@@ -295,7 +280,7 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
       }
       if (!rawDone) {
         return (
-          'Reading prompt — $counts ($pct%)$elapsedStr',
+          'Reading prompt — $counts ($pct%)$elapsedStr$queueNote',
           color,
           Icons.memory_rounded,
           false,
@@ -307,8 +292,8 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
       // the slot as genuinely someone else's.
       return (
         live.genTotal > 0
-            ? 'Starting the reply — ${live.genCurrent} tokens written$elapsedStr'
-            : 'Prompt read — starting the reply…$elapsedStr',
+            ? 'Starting the reply — ${live.genCurrent} tokens written$elapsedStr$queueNote'
+            : 'Prompt read — starting the reply…$elapsedStr$queueNote',
         color,
         Icons.bolt_rounded,
         false,

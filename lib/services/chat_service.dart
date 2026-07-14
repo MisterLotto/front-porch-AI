@@ -64,6 +64,7 @@ import 'package:front_porch_ai/services/chat/scene_guest_factory.dart';
 import 'package:front_porch_ai/services/chat/needs_simulation.dart';
 import 'package:front_porch_ai/services/chat/prompt_plan.dart';
 import 'package:front_porch_ai/services/chat/stop_sequences.dart';
+import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
 import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
@@ -2430,6 +2431,13 @@ class ChatService extends ChangeNotifier {
 
   /// Cached KoboldCPP performance data from last /api/extra/perf poll.
   Map<String, dynamic>? get lastPerfData => _lastPerfData;
+
+  /// The active backend's live generation progress (truthful status bar):
+  /// Kobold console counts, oMLX admin-stats poll, or LM Studio's runtime
+  /// log — null for plain remote APIs, which expose no prefill data. Thin
+  /// delegation; source selection lives in LLMProvider.activeLiveProgress.
+  LiveGenProgress? get activeLiveProgress =>
+      _llmProvider?.activeLiveProgress ?? _koboldService.liveProgress;
 
   /// Estimated prompt token count for the current generation (for progress display).
   int get prefillPromptTokens => _prefillPromptTokens;
