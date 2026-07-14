@@ -465,7 +465,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                               model.id,
                               style: TextStyle(
                                 color: isSelected
-                                    ? Colors.blueAccent
+                                    ? AppColors.formMasterAccent
                                     : AppColors.textPrimary(context),
                                 fontSize: 13,
                                 fontWeight: isSelected
@@ -513,7 +513,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                             trailing: isSelected
                                 ? const Icon(
                                     Icons.check_circle,
-                                    color: Colors.blueAccent,
+                                    color: AppColors.formMasterAccent,
                                     size: 18,
                                   )
                                 : null,
@@ -649,7 +649,9 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blueAccent : Colors.transparent,
+          color: isSelected
+              ? AppColors.formMasterAccent
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -659,7 +661,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
               icon,
               size: 14,
               color: isSelected
-                  ? Colors.white
+                  ? AppColors.onChaosAccent
                   : AppColors.textSecondary(context),
             ),
             const SizedBox(width: 4),
@@ -667,7 +669,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
               label,
               style: TextStyle(
                 color: isSelected
-                    ? Colors.white
+                    ? AppColors.onChaosAccent
                     : AppColors.textSecondary(context),
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 fontSize: 12,
@@ -1018,8 +1020,8 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                         : 'Start Backend'),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.formMasterAccent,
+              foregroundColor: AppColors.onChaosAccent,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),
@@ -1039,18 +1041,27 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
             padding: const EdgeInsets.all(10),
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.12),
+              color: AppColors.formMasterAccent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: AppColors.formMasterAccent.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.apple, color: Colors.blueAccent, size: 16),
+                const Icon(
+                  Icons.apple,
+                  color: AppColors.formMasterAccent,
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'oMLX mode on Apple Silicon. URL fixed to http://localhost:8000/v1. oMLX must be running (`omlx serve`). Model name below is used for generation.',
-                    style: TextStyle(fontSize: 11, color: Colors.blueAccent),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.formMasterAccent,
+                    ),
                   ),
                 ),
               ],
@@ -1156,14 +1167,14 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.onChaosAccent,
                         ),
                       )
                     : const Icon(Icons.wifi_tethering),
                 label: Text(_isTesting ? 'Testing...' : 'Test Connection'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.formMasterAccent,
+                  foregroundColor: AppColors.onChaosAccent,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
