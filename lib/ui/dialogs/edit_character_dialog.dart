@@ -398,9 +398,9 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
               color: AppColors.surfaceContainerOf(context),
               child: TabBar(
                 controller: _tabController,
-                labelColor: Colors.blueAccent,
+                labelColor: AppColors.formMasterAccent,
                 unselectedLabelColor: AppColors.textSecondary(context),
-                indicatorColor: Colors.blueAccent,
+                indicatorColor: AppColors.formMasterAccent,
                 tabs: const [
                   Tab(text: 'Details'),
                   Tab(text: 'Lorebook'),
@@ -445,8 +445,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                     icon: const Icon(Icons.save),
                     label: const Text('Save Changes'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.formMasterAccent,
+                      foregroundColor: AppColors.onChaosAccent,
                     ),
                   ),
                 ],
@@ -625,7 +625,9 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                     tag,
                     style: const TextStyle(fontSize: 12, color: Colors.white),
                   ),
-                  backgroundColor: Colors.blueAccent.withValues(alpha: 0.25),
+                  backgroundColor: AppColors.formMasterAccent.withValues(
+                    alpha: 0.25,
+                  ),
                   deleteIconColor: Colors.white54,
                   onDeleted: () => setState(() => _tags.remove(tag)),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -675,7 +677,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
               IconButton(
                 icon: const Icon(
                   Icons.add_circle,
-                  color: Colors.blueAccent,
+                  color: AppColors.formMasterAccent,
                   size: 22,
                 ),
                 tooltip: 'Add tag',
@@ -1154,8 +1156,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Add Entry'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.formMasterAccent,
+                  foregroundColor: AppColors.onChaosAccent,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
@@ -1172,8 +1174,8 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                 icon: const Icon(Icons.cloud_upload, size: 16),
                 label: const Text('Import'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColors.formMasterAccent,
+                  foregroundColor: AppColors.onChaosAccent,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
@@ -1250,7 +1252,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
           color: entry.constant
               ? Colors.amberAccent.withValues(alpha: 0.3)
               : entry.enabled
-              ? Colors.blueAccent.withValues(alpha: 0.15)
+              ? AppColors.formMasterAccent.withValues(alpha: 0.15)
               : AppColors.borderOf(context).withValues(alpha: 0.5),
         ),
       ),
@@ -1265,7 +1267,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                 color: entry.constant
                     ? Colors.amberAccent
                     : entry.enabled
-                    ? Colors.blueAccent
+                    ? AppColors.formMasterAccent
                     : Colors.white38,
               ),
               const SizedBox(width: 6),
@@ -1307,13 +1309,13 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.1),
+                    color: AppColors.formMasterAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     'Trigger Depth ${entry.stickyDepth}',
                     style: const TextStyle(
-                      color: Colors.blueAccent,
+                      color: AppColors.formMasterAccent,
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1331,8 +1333,10 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
                       entry.enabled = val;
                     });
                   },
-                  activeTrackColor: Colors.blueAccent.withValues(alpha: 0.5),
-                  activeThumbColor: Colors.blueAccent,
+                  activeTrackColor: AppColors.formMasterAccent.withValues(
+                    alpha: 0.5,
+                  ),
+                  activeThumbColor: AppColors.formMasterAccent,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
@@ -1436,7 +1440,7 @@ class _EditCharacterDialogState extends State<EditCharacterDialog>
               ),
               value: isSelected,
               checkColor: Colors.black,
-              activeColor: Colors.blueAccent,
+              activeColor: AppColors.formMasterAccent,
               onChanged: (val) {
                 setState(() {
                   if (val == true) {
