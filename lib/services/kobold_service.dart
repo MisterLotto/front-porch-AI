@@ -324,12 +324,32 @@ class KoboldService extends ChangeNotifier
       // evaluation). Higher = faster context loading, more VRAM. Default 512.
       // Large-VRAM users (24 GB+) benefit from 1024\u20132048.
       if (_storageService.blasBatchSize != 512) {
-        // Only pass the flag when non-default so KoboldCPP\u2019s built-in default
-        // applies for users who haven\u2019t changed this setting.
-        args.addAll([
-          '--blasbatchsize',
-          _storageService.blasBatchSize.toString(),
-        ]);
+        final batch = _storageService.blasBatchSize;
+        if (batch > 4096) {
+          // KoboldCpp's CLI rejects anything above 4096 \u2014 but that cap is
+          // launcher-only (an argparse `choices` list); the engine itself has
+          // no upper clamp for GGUF models and sets n_ubatch = n_batch from
+          // whatever arrives. Values loaded from a --config file are applied
+          // with setattr AFTER argument parsing \u2014 no choices validation \u2014 and
+          // Kobold's loader is explicitly designed so CLI flags override
+          // config keys, so this one-key config carries ONLY the batch size
+          // while every other flag stays authoritative on the CLI. If a
+          // future build hardens config validation, the worst case is the
+          // key failing to apply (Kobold runs at its default batch instead
+          // of refusing to start, which is what the raw CLI flag did).
+          final overrides = File(
+            path.join(
+              path.dirname(executablePath),
+              'fpai_batch_override.kcpps',
+            ),
+          );
+          await overrides.writeAsString(jsonEncode({'batchsize': batch}));
+          args.addAll(['--config', overrides.path]);
+        } else {
+          // Only pass the flag when non-default so KoboldCPP's built-in
+          // default applies for users who haven't changed this setting.
+          args.addAll(['--blasbatchsize', batch.toString()]);
+        }
       }
     }
 
