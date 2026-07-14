@@ -46,6 +46,7 @@ import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
+import 'package:front_porch_ai/services/capability/model_capabilities.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
@@ -1850,8 +1851,7 @@ class _ChatPageState extends State<ChatPage> {
       _pendingImageVisionOk = null;
       _pendingImageBlindReason = null;
     });
-    final isLocalBackend =
-        llmProvider.activeBackend == BackendType.kobold;
+    final isLocalBackend = llmProvider.activeBackend == BackendType.kobold;
     final support = await VisionSupportResolver.instance.resolveForActiveLlm(
       backend: llmProvider.activeBackend,
       storage: storage,
@@ -1862,11 +1862,15 @@ class _ChatPageState extends State<ChatPage> {
       _pendingImageVisionOk = support.supported;
       _pendingImageBlindReason = support.supported
           ? null
-          : (isLocalBackend
-                ? 'your local model has no vision projector (mmproj) loaded, '
-                      'so it processes text only'
-                : 'the selected API model is text-only and doesn\'t accept '
-                      'images');
+          : (support.source == VisionSource.unknown
+                ? 'vision support couldn\'t be verified (the server didn\'t '
+                      'answer the check), so the photo is described offline '
+                      'instead'
+                : (isLocalBackend
+                      ? 'your local model has no vision projector (mmproj) '
+                            'loaded, so it processes text only'
+                      : 'the selected API model is text-only and doesn\'t '
+                            'accept images'));
     });
   }
 
@@ -3014,7 +3018,8 @@ class _ChatPageState extends State<ChatPage> {
                         character.avatarImages = exprTarget.avatarImages == null
                             ? null
                             : List<AvatarImage>.from(exprTarget.avatarImages!);
-                        character.primeAvatarIndex = exprTarget.primeAvatarIndex;
+                        character.primeAvatarIndex =
+                            exprTarget.primeAvatarIndex;
                       }
                       if (mounted) setState(() {});
                       break;

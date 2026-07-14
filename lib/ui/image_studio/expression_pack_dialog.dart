@@ -27,6 +27,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/capability/model_capabilities.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
@@ -297,15 +298,21 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
     );
     if (!mounted) return null;
     if (!support.supported) {
+      final unknown = support.source == VisionSource.unknown;
       await showWarmDialog(
         context,
-        title: 'No vision model',
+        title: unknown ? 'Couldn\'t check vision' : 'No vision model',
         icon: Icons.visibility_off_outlined,
         accent: AppColors.formMasterAccent,
-        content: const WarmDialogText(
-          'Your current text model can\'t see images. Local models need a '
-          'vision-capable GGUF with its mmproj loaded (Model Settings → '
-          'Vision); for remote APIs pick a vision-capable model.',
+        content: WarmDialogText(
+          unknown
+              ? 'The model server didn\'t answer the vision check (it may '
+                    'still be loading the model). Make sure it\'s running '
+                    'with your model loaded, then try again.'
+              : 'Your current text model can\'t see images. Local models '
+                    'need a vision-capable GGUF with its mmproj loaded '
+                    '(Model Settings → Vision); for remote APIs pick a '
+                    'vision-capable model.',
         ),
         actions: [warmDialogCancel(context, label: 'Got it')],
       );

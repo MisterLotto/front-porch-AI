@@ -89,7 +89,9 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
       return;
     }
     setState(() => _loading = true);
-    final info = await VisionSupportResolver.instance.resolveLocalGgufInfo(path);
+    final info = await VisionSupportResolver.instance.resolveLocalGgufInfo(
+      path,
+    );
     if (!mounted) return;
     setState(() {
       _info = info;
@@ -218,7 +220,8 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
     if (info == null) {
       return _pickerRow(
         context,
-        hint: 'Could not read this model. Add an mmproj if it is a vision model.',
+        hint:
+            'Could not read this model. Add an mmproj if it is a vision model.',
       );
     }
 
@@ -226,7 +229,10 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _note(context, 'Vision is built into this model — no projector needed.'),
+          _note(
+            context,
+            'Vision is built into this model — no projector needed.',
+          ),
           const SizedBox(height: 6),
           InkWell(
             onTap: () =>
@@ -235,9 +241,7 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _showCustomOverride
-                      ? Icons.expand_less
-                      : Icons.expand_more,
+                  _showCustomOverride ? Icons.expand_less : Icons.expand_more,
                   size: 16,
                   color: AppColors.iconSecondary(context),
                 ),
@@ -277,7 +281,8 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
     // vision (KoboldCpp loads it via --mmproj) and flips the pill to supported.
     return _pickerRow(
       context,
-      hint: 'No vision detected in this model. If it has a companion mmproj '
+      hint:
+          'No vision detected in this model. If it has a companion mmproj '
           '(vision) file, select it to enable vision.',
     );
   }
@@ -303,19 +308,19 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
                 mmproj == null
                     ? 'No projector selected'
                     : (exists
-                        ? p.basename(mmproj)
-                        : '${p.basename(mmproj)} (missing)'),
+                          ? p.basename(mmproj)
+                          : '${p.basename(mmproj)} (missing)'),
                 style: TextStyle(
                   fontSize: 12,
                   color: mmproj == null
                       ? AppColors.textTertiary(context)
                       : (exists
-                          ? AppColors.textPrimary(context)
-                          : AppColors.resolve(
-                              context,
-                              Colors.redAccent,
-                              Colors.red.shade700,
-                            )),
+                            ? AppColors.textPrimary(context)
+                            : AppColors.resolve(
+                                context,
+                                Colors.redAccent,
+                                Colors.red.shade700,
+                              )),
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -358,13 +363,17 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
   }
 }
 
-/// Shared "Vision: supported / none" pill, driven by a resolver verdict.
+/// Shared "Vision: supported / none / unknown" pill, driven by a resolver
+/// verdict. "Unknown" (server unreachable, model still loading, inconclusive
+/// error) is rendered distinctly so a failed CHECK never reads as a
+/// definitive "this model can't see".
 Widget visionStatusPill(BuildContext context, VisionSupport support) {
   final green = AppColors.resolve(
     context,
     Colors.greenAccent,
     Colors.green.shade700,
   );
+  final unknown = support.source == VisionSource.unknown;
   final color = support.supported ? green : AppColors.textTertiary(context);
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -374,12 +383,10 @@ Widget visionStatusPill(BuildContext context, VisionSupport support) {
       border: Border.all(color: color.withValues(alpha: 0.4)),
     ),
     child: Text(
-      support.supported ? 'Vision: supported' : 'Vision: none',
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-        color: color,
-      ),
+      support.supported
+          ? 'Vision: supported'
+          : (unknown ? 'Vision: could not check' : 'Vision: none'),
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
     ),
   );
 }
@@ -408,12 +415,12 @@ class RemoteVisionPill extends StatefulWidget {
 class _RemoteVisionPillState extends State<RemoteVisionPill> {
   VisionSupport? _support;
   bool _loading = false;
-  bool _requested = false;
 
   // Metadata providers resolve for free (no probe request), so auto-resolving
   // on init is safe only for them — the shared host check keeps this UI, the
   // resolver, and the tool-calling short-circuit classifying identically.
-  bool get _isMetadataProvider => isCapabilityMetadataProviderUrl(widget.apiUrl);
+  bool get _isMetadataProvider =>
+      isCapabilityMetadataProviderUrl(widget.apiUrl);
 
   @override
   void initState() {
@@ -427,7 +434,6 @@ class _RemoteVisionPillState extends State<RemoteVisionPill> {
     if (oldWidget.modelName != widget.modelName ||
         oldWidget.apiUrl != widget.apiUrl) {
       _support = null;
-      _requested = false;
       if (widget.modelName.isNotEmpty && _isMetadataProvider) _resolve();
     }
   }
@@ -435,7 +441,6 @@ class _RemoteVisionPillState extends State<RemoteVisionPill> {
   Future<void> _resolve() async {
     setState(() {
       _loading = true;
-      _requested = true;
     });
     final support = await VisionSupportResolver.instance.resolveRemote(
       apiUrl: widget.apiUrl,
@@ -477,28 +482,38 @@ class _RemoteVisionPillState extends State<RemoteVisionPill> {
       );
     }
 
-    if (_support != null) return visionStatusPill(context, _support!);
-
-    // Generic backend and not yet requested → offer a manual (probe) check.
-    if (!_requested) {
-      return TextButton.icon(
-        onPressed: _resolve,
-        icon: Icon(
-          Icons.visibility_outlined,
-          size: 16,
-          color: AppColors.iconSecondary(context),
-        ),
-        label: Text(
-          'Check vision support',
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.textSecondary(context),
-          ),
-        ),
-        style: TextButton.styleFrom(padding: EdgeInsets.zero),
-      );
+    final support = _support;
+    if (support != null && support.source != VisionSource.unknown) {
+      return visionStatusPill(context, support);
     }
 
-    return const SizedBox.shrink();
+    // Not yet requested (generic backend), or the last check was
+    // inconclusive (server unreachable / model still loading) → offer a
+    // manual check. Unknown verdicts are never cached, so retrying re-probes.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (support != null) ...[
+          visionStatusPill(context, support),
+          const SizedBox(width: 8),
+        ],
+        TextButton.icon(
+          onPressed: _resolve,
+          icon: Icon(
+            Icons.visibility_outlined,
+            size: 16,
+            color: AppColors.iconSecondary(context),
+          ),
+          label: Text(
+            support == null ? 'Check vision support' : 'Retry check',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary(context),
+            ),
+          ),
+          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+        ),
+      ],
+    );
   }
 }

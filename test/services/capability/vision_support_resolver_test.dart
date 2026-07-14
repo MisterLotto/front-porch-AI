@@ -15,6 +15,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:front_porch_ai/services/capability/model_capabilities.dart';
@@ -228,6 +230,306 @@ void main() {
       );
       expect(support.supported, isTrue);
       expect(support.source, VisionSource.ggufWithMmproj);
+    });
+  });
+
+  group('resolveRemote — LM Studio / generic OpenAI-compatible hosts', () {
+    const lmUrl = 'http://localhost:1234/v1';
+    const model = 'google/gemma-4-12b-qat';
+
+    tearDown(() {
+      VisionSupportResolver.instance.httpClientFactory = http.Client.new;
+      VisionSupportResolver.instance.clear();
+    });
+
+    /// Install a MockClient; [onProbe] handles POST /chat/completions,
+    /// [onRestModels] handles GET /api/v0/models (LM Studio), and
+    /// [onOmlxStatus] handles GET /v1/models/status (oMLX). A null handler
+    /// → 404, like any server without that extension.
+    void mockServer({
+      http.Response Function(http.Request)? onRestModels,
+      http.Response Function(http.Request)? onOmlxStatus,
+      http.Response Function(http.Request)? onProbe,
+      void Function(String path)? onRequest,
+    }) {
+      VisionSupportResolver.instance.httpClientFactory = () => MockClient((
+        request,
+      ) async {
+        onRequest?.call(request.url.path);
+        if (request.url.path.endsWith('/api/v0/models')) {
+          return onRestModels?.call(request) ?? http.Response('Not Found', 404);
+        }
+        if (request.url.path.endsWith('/v1/models/status')) {
+          return onOmlxStatus?.call(request) ?? http.Response('Not Found', 404);
+        }
+        if (request.url.path.endsWith('/chat/completions')) {
+          return onProbe?.call(request) ??
+              http.Response('unexpected probe', 500);
+        }
+        return http.Response('Not Found', 404);
+      });
+    }
+
+    String lmModels({required String type, List<String>? capabilities}) =>
+        jsonEncode({
+          'object': 'list',
+          'data': [
+            {
+              'id': model,
+              'object': 'model',
+              'type': type,
+              'state': 'not-loaded',
+              'capabilities': ?capabilities,
+            },
+          ],
+        });
+
+    test('LM Studio REST says vlm → supported WITHOUT firing the probe '
+        '(works even while the model is not loaded)', () async {
+      final paths = <String>[];
+      mockServer(
+        onRestModels: (_) => http.Response(lmModels(type: 'vlm'), 200),
+        onRequest: paths.add,
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: lmUrl,
+        apiKey: '',
+        modelName: model,
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.apiMetadata);
+      expect(paths.any((p) => p.endsWith('/chat/completions')), isFalse);
+    });
+
+    test('LM Studio REST says llm (text-only) → none, and cached', () async {
+      var restHits = 0;
+      mockServer(
+        onRestModels: (_) {
+          restHits++;
+          return http.Response(lmModels(type: 'llm'), 200);
+        },
+      );
+      final first = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: lmUrl,
+        apiKey: '',
+        modelName: model,
+      );
+      final second = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: lmUrl,
+        apiKey: '',
+        modelName: model,
+      );
+      expect(first.supported, isFalse);
+      expect(first.source, VisionSource.none);
+      expect(second.source, VisionSource.none);
+      expect(restHits, 1, reason: 'definitive verdicts are cached');
+    });
+
+    test('a /api/v0/models entry WITHOUT type/capabilities is not trusted '
+        '— falls through instead of caching a false none', () async {
+      mockServer(
+        // Matching entry, but no discriminating field (not really LM Studio).
+        onRestModels: (_) => http.Response(
+          jsonEncode({
+            'data': [
+              {'id': model, 'object': 'model'},
+            ],
+          }),
+          200,
+        ),
+        onProbe: (_) => http.Response('{"choices":[]}', 200),
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: lmUrl,
+        apiKey: '',
+        modelName: model,
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.probe);
+    });
+
+    test('oMLX status says vlm → supported WITHOUT firing the probe '
+        '(the probe is untrustworthy on oMLX: it can 200 while silently '
+        'dropping images)', () async {
+      final paths = <String>[];
+      mockServer(
+        onOmlxStatus: (_) => http.Response(
+          jsonEncode({
+            'data': [
+              {
+                'id': 'mlx-community/Qwen2-VL-7B',
+                'engine_type': 'vlm',
+                'config_model_type': 'qwen2_vl',
+                'loaded': true,
+              },
+            ],
+          }),
+          200,
+        ),
+        onRequest: paths.add,
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'mlx-community/Qwen2-VL-7B',
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.apiMetadata);
+      expect(paths.any((p) => p.endsWith('/chat/completions')), isFalse);
+    });
+
+    test('oMLX status says llm → definitive none, probe never fires '
+        '(a silent-200 can no longer fake vision support)', () async {
+      final paths = <String>[];
+      mockServer(
+        onOmlxStatus: (_) => http.Response(
+          jsonEncode({
+            'models': [
+              {'id': 'mlx-community/Llama-3-8B', 'engine_type': 'llm'},
+            ],
+          }),
+          200,
+        ),
+        // A text model on oMLX might accept the probe with 200 anyway —
+        // metadata must win before that lie is ever consulted.
+        onProbe: (_) => http.Response('{"choices":[]}', 200),
+        onRequest: paths.add,
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'mlx-community/Llama-3-8B',
+      );
+      expect(support.supported, isFalse);
+      expect(support.source, VisionSource.none);
+      expect(paths.any((p) => p.endsWith('/chat/completions')), isFalse);
+    });
+
+    test('oMLX status entry without a type signal → probe decides '
+        '(tri-state fall-through)', () async {
+      mockServer(
+        onOmlxStatus: (_) => http.Response(
+          jsonEncode({
+            'data': [
+              {'id': 'some-model', 'loaded': true},
+            ],
+          }),
+          200,
+        ),
+        onProbe: (_) => http.Response(
+          '{"error":"model does not support image input"}',
+          400,
+        ),
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'some-model',
+      );
+      expect(support.supported, isFalse);
+      expect(support.source, VisionSource.none);
+    });
+
+    test(
+      'no REST endpoint (vLLM etc.) + probe 200 → supported via probe',
+      () async {
+        mockServer(onProbe: (_) => http.Response('{"choices":[]}', 200));
+        final support = await VisionSupportResolver.instance.resolveRemote(
+          apiUrl: 'http://localhost:8000/v1',
+          apiKey: '',
+          modelName: 'some-model',
+        );
+        expect(support.supported, isTrue);
+        expect(support.source, VisionSource.probe);
+      },
+    );
+
+    test('probe 400 naming images → definitive none', () async {
+      mockServer(
+        onProbe: (_) =>
+            http.Response('{"error":"Model does not support images"}', 400),
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'text-model',
+      );
+      expect(support.supported, isFalse);
+      expect(support.source, VisionSource.none);
+    });
+
+    test(
+      'probe error that says NOTHING about vision (404 model mismatch, '
+      '500 engine hiccup) → unknown, NOT cached, retry can succeed',
+      () async {
+        mockServer(
+          onProbe: (_) => http.Response('{"error":"No models loaded"}', 404),
+        );
+        final first = await VisionSupportResolver.instance.resolveRemote(
+          apiUrl: 'http://localhost:8000/v1',
+          apiKey: '',
+          modelName: 'some-model',
+        );
+        expect(first.supported, isFalse);
+        expect(
+          first.source,
+          VisionSource.unknown,
+          reason: 'an inconclusive error must not read as "no vision"',
+        );
+
+        // Server recovers (model finished loading) — the retry must re-probe
+        // because unknown was never cached, and now succeed.
+        mockServer(onProbe: (_) => http.Response('{"choices":[]}', 200));
+        final second = await VisionSupportResolver.instance.resolveRemote(
+          apiUrl: 'http://localhost:8000/v1',
+          apiKey: '',
+          modelName: 'some-model',
+        );
+        expect(second.supported, isTrue);
+        expect(second.source, VisionSource.probe);
+      },
+    );
+
+    test('server fully unreachable → unknown, not cached', () async {
+      VisionSupportResolver.instance.httpClientFactory = () =>
+          MockClient((_) async => throw const SocketException('refused'));
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: lmUrl,
+        apiKey: '',
+        modelName: model,
+      );
+      expect(support.source, VisionSource.unknown);
+    });
+
+    test('OpenRouter metadata path is untouched: input_modalities decide, '
+        'no LM Studio REST call, no probe', () async {
+      final paths = <String>[];
+      VisionSupportResolver.instance.httpClientFactory = () =>
+          MockClient((request) async {
+            paths.add(request.url.path);
+            return http.Response(
+              jsonEncode({
+                'data': [
+                  {
+                    'id': 'anthropic/claude-3.5-sonnet',
+                    'architecture': {
+                      'input_modalities': ['text', 'image'],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          });
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'https://openrouter.ai/api/v1',
+        apiKey: 'sk-or-x',
+        modelName: 'anthropic/claude-3.5-sonnet',
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.apiMetadata);
+      expect(paths.any((p) => p.contains('/api/v0/models')), isFalse);
+      expect(paths.any((p) => p.endsWith('/chat/completions')), isFalse);
     });
   });
 }
