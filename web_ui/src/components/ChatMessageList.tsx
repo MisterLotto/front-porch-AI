@@ -22,6 +22,7 @@ import { type Message } from './chatTypes';
 export type GenStatus = {
   phase: string;
   busyWith: string | null;
+  queued: number;
   promptCur: number | null;
   promptTotal: number | null;
   promptDone: boolean;
@@ -39,6 +40,10 @@ function fmtExact(n: number): string {
 /// Mirror of the desktop status-bar wording so both surfaces tell the same
 /// truth about the wait.
 function genStatusLabel(s: GenStatus): { label: string; fraction: number | null } {
+  // Backend queue depth is a neutral fact — never attributed (may be
+  // someone waiting on us).
+  const queueNote =
+    s.queued > 0 ? ` — ${s.queued} request${s.queued === 1 ? '' : 's'} queued` : '';
   const hasLive = s.promptTotal != null && s.promptTotal > 0;
   const fraction = hasLive
     ? (s.estFraction ?? Math.min(1, (s.promptCur ?? 0) / (s.promptTotal as number)))
@@ -66,7 +71,7 @@ function genStatusLabel(s: GenStatus): { label: string; fraction: number | null 
   }
   if (hasLive && !s.promptDone) {
     return {
-      label: `Reading prompt — ${counts} (${Math.round((fraction ?? 0) * 100)}%)`,
+      label: `Reading prompt — ${counts} (${Math.round((fraction ?? 0) * 100)}%)${queueNote}`,
       fraction,
     };
   }
@@ -76,8 +81,8 @@ function genStatusLabel(s: GenStatus): { label: string; fraction: number | null 
     return {
       label:
         (s.genTotal ?? 0) > 0
-          ? `Starting the reply — ${s.genCur} tokens written`
-          : 'Prompt read — starting the reply…',
+          ? `Starting the reply — ${s.genCur} tokens written${queueNote}`
+          : `Prompt read — starting the reply…${queueNote}`,
       fraction: 1,
     };
   }

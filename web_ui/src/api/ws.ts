@@ -38,6 +38,8 @@ export type WsEvent = {
   // pass (journal/growth) is holding the single local slot.
   phase?: string;
   busyWith?: string | null;
+  // Backend-reported queue depth (oMLX) — stated neutrally, never attributed.
+  queued?: number;
   promptCur?: number | null;
   promptTotal?: number | null;
   // Console lines arrive per BATCH; the server interpolates between them

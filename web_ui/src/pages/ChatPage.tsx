@@ -187,6 +187,7 @@ export function ChatPage() {
             ? {
                 phase: e.phase ?? '',
                 busyWith: e.busyWith ?? null,
+                queued: e.queued ?? 0,
                 promptCur: e.promptCur ?? null,
                 promptTotal: e.promptTotal ?? null,
                 promptDone: !!e.promptDone,
