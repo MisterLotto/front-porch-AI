@@ -96,9 +96,27 @@ lib/
 │   │   ├── sidebar/             # Chat sidebar tab sections (memory, realism, chaos, nsfw, scene time)
 │   │   └── widgets/             # Granular interactive chat buttons and pills
 │   ├── layout/main_layout.dart  # Main shell with sidebar + content area
-│   ├── pages/                   # Screen pages (chat_page, home_page, settings_page, etc.)
+│   ├── pages/                   # Screen pages (chat_page, home_page, etc.)
+│   │   ├── settings_page.dart          # Settings shell only (~400 LOC): tab scaffold, state,
+│   │   │                               #   `rebuildState(fn)` public setState bridge for the parts
+│   │   ├── settings_page.controls.dart # `part of` — generation/sampler control builders
+│   │   ├── settings_page.advanced.dart # `part of` — advanced/experimental settings
+│   │   ├── settings_page.hardware.dart # `part of` — hardware/VRAM detection UI
+│   │   ├── settings_page.gpu.dart      # `part of` — GPU layer/offload UI
+│   │   └── settings_page.launch.dart   # `part of` — backend launch/args UI
+│   ├── settings/                # Settings screen, extracted from the old god file (all < 500 LOC
+│   │   │                        #   except voice_media_tab; extend these, don't regrow settings_page)
+│   │   ├── tabs/                # One file per Settings tab: general_tab, generation_tab,
+│   │   │   │                    #   backend_tab, voice_media_tab
+│   │   │   └── backend/         # Backend tab sections: backend_mode_selector, remote_api_section,
+│   │   │                        #   omlx_section, managed_backend_section
+│   │   ├── dialogs/             # Settings-local dialogs: color_picker, model_search, prompt_save/delete
+│   │   └── widgets/             # Settings-local widgets: section_header, slider_setting, color_row,
+│   │                            #   api_preset_chip, image_gen_enable_section, photo_understanding_card,
+│   │                            #   web_login_section
 │   ├── dialogs/                 # Modal dialogs
-│   ├── theme/app_colors.dart    # Central theme definitions and dark/light color helpers
+│   ├── theme/app_colors.dart    # Central theme + warm-porch palette (porchAmber/formMasterAccent/
+│   │                            #   onChaosAccent/porchAmberOf); dark/light color helpers
 │   └── widgets/                 # Reusable layout widgets (inputs, cards, sliders, dropdowns, etc.)
 └── utils/                       # Helpers (emotion_labels, vram_estimator, gguf_parser, etc.)
 ```
@@ -274,6 +292,7 @@ The user has **no ability to read or evaluate Dart code**. The following rules a
 - **UI consistency for creation wizards** (mandatory): All "Create X" flows must use the **same top-bar step indicator pattern** and linear progression as `create_character_page.dart` (horizontal step dots + labels + connecting lines in the AppBar, `AnimatedSwitcher` driven by a `_currentStep` int, `_buildNavButtons` at the bottom). Do not invent side menus, tab bars, or free-jumping section lists for wizards.
 - **Compilation gate after any structural change or major refactor** (non-negotiable): After deleting methods, large refactors, or changes to `home_page.dart`/`main.dart`/service init/widget trees, run a full `flutter analyze` (and ideally `flutter build macos` or `flutter run -d macos`) **before** claiming completion. "It looks good" is not sufficient. Leave the tree in a runnable state.
 - **All widgets, dialogs, menus, toggles, cards, and surfaces must honor the AppColors system** (non-negotiable): Use `AppColors` from `lib/ui/theme/app_colors.dart` exclusively. Prefer helpers — `backgroundOf/cardOf/surfaceOf/surfaceContainerOf(context)`, `textPrimary/Secondary/Tertiary(context)`, `iconPrimary/Secondary(context)`, `borderOf(context)`, and `AppColors.resolve(context, dark, light)` for custom accents. Hard-coded `Color(0xFF...)` or raw `Colors.whiteXX`/`Colors.blackXX` are forbidden in new or refactored UI (except the few semantic accent constants that already have light variants in AppColors).
+- **Warm-porch accent standard for every new widget, button, icon, border, spinner, and surface** (non-negotiable, CI-enforced): The app has ONE warm-porch accent palette. Any new or refactored chrome accent MUST use `AppColors.formMasterAccent` (the const primary amber) or `AppColors.porchAmberOf(context)` (brightness-aware), with `AppColors.onChaosAccent` (near-black ink) as the foreground on any solid amber fill (white-on-amber is unreadable). **Raw `Colors.blueAccent` is banned** — the whole ~225-site cool-blue chrome set was retired to porch amber (see `.claude/changelog.md` "blueAccent → porch amber sweep" clusters 1–4). Do not reintroduce cool-blue (or any other off-palette) chrome for new buttons/toggles/cards/menus. **Verification (mandatory):** the `theme-lint` CI job (`.github/workflows/ci.yml`) fails any PR that *adds* a raw `Colors.blueAccent` line under `lib/**/*.dart`; after adding UI, also grep your diff for stray `Colors.blueAccent`/`Colors.blue`/off-palette hex. **Only exception:** a genuinely *semantic* color (a status/indicator/legend hue whose meaning depends on being non-amber — e.g. Realism trust chips, live-call status colors, the lorebook "always-on vs enabled" 2-state markers) may stay off-palette **only when the maintainer explicitly requests/approves it in the current conversation**, and it MUST carry a trailing `// theme-keep: <reason>` comment (the CI gate's allow-list marker). Absent explicit approval, warm it.
 - **Destructive git operations on files are forbidden without explicit approval** (data loss risk): **Never** run `git checkout -- <file>`, `git restore <file>`, `git checkout HEAD -- <file>`, `git checkout <commit> -- <file>`, or anything that discards uncommitted local changes. Work is frequently done to files without immediate commits; these commands silently destroy it. Allowed only if the human explicitly authorizes the exact command in the current conversation. Prefer `git diff`, saving a patch (`git diff > /tmp/backup.patch`), or `git stash push -m "temp" -- <file>` (only when confirmed safe). If a file seems to need a destructive checkout to recover, **stop and ask** instead of acting.
 
 **Hygiene Summary Requirement**: At the end of any response involving non-trivial changes, include a short "Hygiene Summary" covering:

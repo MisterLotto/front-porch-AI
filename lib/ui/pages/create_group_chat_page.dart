@@ -1324,11 +1324,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                   children: [
                     Icon(
                       Icons.chat_bubble_outline,
-                      color: AppColors.resolve(
-                        context,
-                        Colors.blueAccent,
-                        Colors.blue.shade700,
-                      ),
+                      color: AppColors.porchAmberOf(context),
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -1337,11 +1333,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.resolve(
-                          context,
-                          Colors.blueAccent,
-                          Colors.blue.shade700,
-                        ),
+                        color: AppColors.porchAmberOf(context),
                       ),
                     ),
                   ],

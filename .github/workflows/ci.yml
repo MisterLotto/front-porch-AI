@@ -148,6 +148,47 @@ jobs:
           npm test
         working-directory: web_ui
 
+  theme-lint:
+    name: Theme lint (no new raw blueAccent)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # needed for git diff against base branch
+
+      - name: Reject newly-added raw Colors.blueAccent
+        run: |
+          # The app has a single warm-porch palette. Raw `Colors.blueAccent`
+          # chrome was fully retired in favour of AppColors.formMasterAccent /
+          # AppColors.porchAmberOf(context). This gate keeps it retired: it only
+          # inspects lines *added* in this PR/push (existing deliberate semantic
+          # uses — trust chips, call-status colors, lorebook state badges — are
+          # grandfathered as diff context and never re-scanned).
+          #
+          # Base-branch resolution mirrors the analyze job:
+          #   - pull_request: github.base_ref is the target (e.g. Rawhide)
+          #   - push:         github.ref_name is the branch pushed to
+          BASE_BRANCH="${{ github.base_ref || github.ref_name || 'Rawhide' }}"
+
+          ADDED=$(git diff --diff-filter=ACM "origin/$BASE_BRANCH...HEAD" -- 'lib/**/*.dart' \
+            | grep -E '^\+' | grep -vE '^\+\+\+' \
+            | grep 'Colors\.blueAccent' \
+            | grep -v 'theme-keep' || true)
+
+          if [ -n "$ADDED" ]; then
+            echo "::error::New raw Colors.blueAccent introduced — the app uses the warm-porch palette."
+            echo ""
+            echo "Use AppColors.formMasterAccent (const) or AppColors.porchAmberOf(context) instead."
+            echo "If this is a DELIBERATE semantic color (e.g. a status/indicator hue, not chrome),"
+            echo "append a trailing '// theme-keep: <reason>' comment on the same line to allow it."
+            echo ""
+            echo "Offending added line(s):"
+            echo "$ADDED"
+            exit 1
+          fi
+          echo "No new raw Colors.blueAccent introduced. ✔"
+
   golden:
     name: Widget Golden Tests
     runs-on: ubuntu-latest
