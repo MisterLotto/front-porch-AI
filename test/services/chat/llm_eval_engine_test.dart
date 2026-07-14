@@ -149,7 +149,6 @@ LlmEvalEngine createTestLlmEvalEngine({
     getMessages: () => messages,
     getLlmService: () => fakeLlm,
     getIsLocal: () => false,
-    getKoboldThinkingModel: () => false,
     getKoboldService: () => null,
     reconnectIfAlive: () async {},
     ensureServerIdle: () async {},
@@ -215,7 +214,6 @@ void main() {
         getMessages: () => [],
         getLlmService: () => _FakeLlmService((p) => Stream.value('{}')),
         getIsLocal: () => false,
-        getKoboldThinkingModel: () => false,
         getKoboldService: () => null,
         reconnectIfAlive: () async {},
         ensureServerIdle: () async {},
@@ -292,7 +290,6 @@ void main() {
             return Stream.value('{"hunger_delta": 3}');
           }),
           getIsLocal: () => false,
-          getKoboldThinkingModel: () => false,
           getKoboldService: () => null,
           reconnectIfAlive: () async {},
           ensureServerIdle: () async {},
@@ -381,7 +378,6 @@ void main() {
             return Stream.value('{"hunger_delta":1}');
           }),
           getIsLocal: () => true,
-          getKoboldThinkingModel: () => true,
           getKoboldService: () => null,
           reconnectIfAlive: () async {},
           ensureServerIdle: () async {},

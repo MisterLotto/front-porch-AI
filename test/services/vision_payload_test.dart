@@ -165,8 +165,10 @@ void main() {
       expect(r.containsKey('reasoning'), isFalse); // no OpenRouter object
       expect(r['chat_template_kwargs'], {'enable_thinking': true});
       expect(r['reasoning_effort'], 'high');
-      // Keep <think>…</think> in `content` so the app's think parser sees it.
-      expect(r['encapsulate_thinking'], false);
+      // No encapsulate_thinking: in --jinja mode Kobold returns reasoning in the
+      // standard reasoning_content field (which streamOpenAiChat now consumes),
+      // so we no longer force thinking to stay inline in `content`.
+      expect(r.containsKey('encapsulate_thinking'), isFalse);
     });
   });
 

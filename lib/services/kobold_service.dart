@@ -333,6 +333,22 @@ class KoboldService extends ChangeNotifier
       }
     }
 
+    // ── Jinja chat templates ─────────────────────────────────────────────────
+    // Run each model's OWN embedded chat template server-side instead of
+    // KoboldCpp's built-in AutoGuess string adapter. This is what lets a model's
+    // `chat_template_kwargs` (notably enable_thinking) actually take effect —
+    // without --jinja, Kobold discards that field, so reasoning/thinking models
+    // whose template defaults to suppressed (Gemma-4-class channel reasoners)
+    // never think, and the "Request Reasoning" toggle is a no-op locally.
+    // Applied to BOTH launch paths (preset .kcpps and standard) since both drive
+    // the shared /v1/chat/completions transport. Safe as a global default: if a
+    // model's embedded template is missing or malformed, KoboldCpp automatically
+    // falls back to its heuristic adapter (verified — the server still starts and
+    // answers), so this never blocks a model from loading. Plain --jinja keeps
+    // tool calls on the non-jinja path (unchanged); --jinja_tools is intentionally
+    // NOT used.
+    args.add('--jinja');
+
     // ── Vision projector (mmproj) ────────────────────────────────────────────
     // A multimodal model whose projector is NOT baked into the GGUF (it ships in
     // a separate mmproj file) can actually see images only when KoboldCpp is

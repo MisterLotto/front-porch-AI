@@ -21,6 +21,7 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/remote_model_info.dart';
 
 // RemoteModelInfo lived here for years — re-export so importers keep working.
@@ -340,13 +341,15 @@ class OpenRouterService extends LLMService {
     final client = http.Client();
     _activeClient = client;
     try {
-      final response = await client
-          .post(
-            Uri.parse('$_apiUrl/chat/completions'),
-            headers: _chatHeaders,
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 120));
+      // No wall-clock timeout: a tool/eval call (incl. local oMLX via this same
+      // client) can legitimately run long on a slow model or reasoning pass. A
+      // dead connection throws (handled → null) and Cancel aborts, so a fixed
+      // cap only killed working calls.
+      final response = await client.post(
+        Uri.parse('$_apiUrl/chat/completions'),
+        headers: _chatHeaders,
+        body: jsonEncode(payload),
+      );
       if (response.statusCode != 200) {
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -381,18 +384,28 @@ class OpenRouterService extends LLMService {
 
     final client = http.Client();
     _activeClient = client;
-    bool hasYieldedReasoningStart = false;
-    bool hasYieldedReasoningEnd = false;
     // Only wrap reasoning in <think> tags when the app explicitly requested it.
     // Some models (e.g. Qwen on LM Studio) send the entire response as
     // reasoning_content even when reasoning wasn't requested — wrapping those
-    // in <think> tags would hide the response entirely.
-    final wrapThinking = params.reasoningEnabled;
+    // in <think> tags would hide the response entirely. The shared wrapper is
+    // the same one the local KoboldCpp path uses (see streamOpenAiChat), so the
+    // two transports emit identical <think>…</think> framing.
+    //
+    // The arming condition here is bare `reasoningEnabled` (vs the local path's
+    // `reasoningEnabled && reasoningMaxTokens != 0`), and that is correct, not an
+    // oversight: this backend suppresses reasoning REQUEST-side via the
+    // `reasoning:{exclude:true}` object whenever `!reasoningEnabled` (see the
+    // payload builder), so the provider returns no reasoning to wrap. Every
+    // suppress path (Continue, evals) sets reasoningEnabled=false anyway, so the
+    // two predicates are equivalent in practice.
+    final wrapper = ReasoningTagWrapper(wrap: params.reasoningEnabled);
 
     try {
-      final response = await client
-          .send(request)
-          .timeout(const Duration(seconds: 120));
+      // No wall-clock timeout on the streamed reply (incl. local oMLX): a long
+      // reasoning/thinking generation streams for as long as it needs. A crashed
+      // connection ends the stream / throws (handled) and Cancel aborts, so the
+      // fixed cap only ever killed working generations.
+      final response = await client.send(request);
 
       if (response.statusCode != 200) {
         final body = await response.stream.bytesToString();
@@ -418,11 +431,8 @@ class OpenRouterService extends LLMService {
           if (line.isEmpty) continue;
           if (line == 'data: [DONE]' || line == 'data:[DONE]') {
             // Close reasoning block if still open
-            if (wrapThinking &&
-                hasYieldedReasoningStart &&
-                !hasYieldedReasoningEnd) {
-              yield '</think>\n';
-            }
+            final tail = wrapper.finish();
+            if (tail.isNotEmpty) yield tail;
             return;
           }
           if (!line.startsWith('data:')) continue;
@@ -443,31 +453,16 @@ class OpenRouterService extends LLMService {
             if (reasoning != null &&
                 reasoning is String &&
                 reasoning.isNotEmpty) {
-              if (wrapThinking) {
-                if (!hasYieldedReasoningStart) {
-                  yield '<think>';
-                  hasYieldedReasoningStart = true;
-                }
-                yield reasoning;
-              } else {
-                // Reasoning wasn't requested (e.g. forced off for Continue to match SillyTavern behavior).
-                // Discard it entirely instead of yielding as content. This prevents thinking text
-                // from leaking into the visible character response even if the model/provider
-                // still emits some reasoning deltas.
-              }
+              final out = wrapper.onReasoning(reasoning);
+              if (out.isNotEmpty) yield out;
               continue;
             }
 
-            // Handle regular content — close reasoning block first if needed
+            // Handle regular content — closes an open reasoning block first
             final content = delta['content'];
             if (content != null && content is String && content.isNotEmpty) {
-              if (wrapThinking &&
-                  hasYieldedReasoningStart &&
-                  !hasYieldedReasoningEnd) {
-                yield '</think>\n';
-                hasYieldedReasoningEnd = true;
-              }
-              yield content;
+              final out = wrapper.onContent(content);
+              if (out.isNotEmpty) yield out;
             }
           } catch (_) {
             // Skip malformed chunks
@@ -492,15 +487,13 @@ class OpenRouterService extends LLMService {
               if (reasoning != null &&
                   reasoning is String &&
                   reasoning.isNotEmpty) {
-                // Only yield if we actually requested/wrapped reasoning.
-                // Otherwise discard (SillyTavern-style strict handling for unrequested reasoning).
-                if (wrapThinking) {
-                  yield reasoning;
-                }
+                final out = wrapper.onReasoning(reasoning);
+                if (out.isNotEmpty) yield out;
               }
               final content = delta['content'];
               if (content != null && content is String && content.isNotEmpty) {
-                yield content;
+                final out = wrapper.onContent(content);
+                if (out.isNotEmpty) yield out;
               }
             }
           } catch (_) {}
@@ -508,9 +501,8 @@ class OpenRouterService extends LLMService {
       }
 
       // Close reasoning block if stream ended without [DONE]
-      if (wrapThinking && hasYieldedReasoningStart && !hasYieldedReasoningEnd) {
-        yield '</think>\n';
-      }
+      final tail = wrapper.finish();
+      if (tail.isNotEmpty) yield tail;
     } finally {
       _activeClient = null;
       client.close();

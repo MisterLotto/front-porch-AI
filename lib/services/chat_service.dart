@@ -1789,8 +1789,6 @@ class ChatService extends ChangeNotifier {
     getIsLocal: () => testLlmServiceOverride != null
         ? testIsLocalOverride
         : (_llmProvider?.isLocal ?? false),
-    getKoboldThinkingModel: () =>
-        _storageService.backendSettings.koboldThinkingModel,
     getKoboldService: () => _llmProvider?.koboldService,
     reconnectIfAlive: () async {
       final k = _llmProvider?.koboldService;

@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 
 /// Streams an OpenAI-compatible `/v1/chat/completions` response token by token.
 ///
@@ -93,36 +94,35 @@ Map<String, dynamic> _chatPayload(
       'banned_tokens': params.bannedPhrases,
   };
 
-  // KoboldCpp reasoning controls (v1.111+). Kobold IGNORES the OpenRouter-style
+  // KoboldCpp reasoning controls. Kobold IGNORES the OpenRouter-style
   // `reasoning:{enabled,effort}` object (verified against its release notes /
-  // koboldcpp.py), so the old payload here was a silent no-op — the "Request
-  // Reasoning" toggle did nothing on the local backend. Use Kobold's native
-  // fields instead:
-  //   • chat_template_kwargs.enable_thinking — the Jinja on/off switch (needs a
-  //     Jinja chat template; per-request kwargs merge over launch defaults).
+  // koboldcpp.py), so we use Kobold's native fields:
+  //   • chat_template_kwargs.enable_thinking — the model's own Jinja on/off
+  //     switch. This ONLY takes effect because the managed backend now launches
+  //     with `--jinja` (see kobold_service.dart), which makes Kobold execute the
+  //     GGUF's embedded chat template instead of its built-in string adapter —
+  //     without it, this field is silently discarded and thinking never fires.
   //   • reasoning_effort — think-token budget (none|low|medium|high); the app's
   //     effort strings map 1:1.
-  //   • encapsulate_thinking:false — keep <think>…</think> inside `content` so
-  //     the app's existing think-tag parser + "Thought for Xs" UI capture it.
-  //     Modern Kobold otherwise splits thinking into `reasoning_content`, which
-  //     the local stream reader doesn't consume, so thinking would vanish.
-  // Unknown fields are ignored by older Kobold, so this is version-safe. The
-  // OpenRouter path keeps its own object in open_router_service.
+  // We deliberately do NOT send `encapsulate_thinking:false` anymore. In jinja
+  // mode Kobold splits the model's thinking into the standard `reasoning_content`
+  // field and leaves `content` as the clean final answer — the SAME shape the
+  // OpenRouter/oMLX path returns. streamOpenAiChat consumes reasoning_content and
+  // re-wraps it in <think>…</think> via the shared ReasoningTagWrapper, so both
+  // transports converge on one parser. (encapsulate_thinking:false was the old
+  // hack that kept thinking in `content`, but it only understood <think> tags;
+  // channel-format reasoners like Gemma-4 dumped raw channel markers instead.)
   //
-  // ALWAYS emit an explicit decision — the app owns the setting, and the UI
-  // says reasoning "off" discards thinking. If we only sent fields when ON, a
-  // thinking model launched with thinking on would keep thinking despite the
-  // toggle being off (the same silent no-op, inverted). reasoningMaxTokens==0
-  // is the Continue/eval hard-suppress signal.
+  // ALWAYS emit an explicit decision — the app owns the setting, and the UI says
+  // reasoning "off" discards thinking. enable_thinking:false genuinely suppresses
+  // it in jinja mode (verified). reasoningMaxTokens==0 is the Continue/eval
+  // hard-suppress signal.
   final thinkOn =
       params.reasoningEnabled && params.reasoningMaxTokens != 0;
   payload['chat_template_kwargs'] = {'enable_thinking': thinkOn};
   payload['reasoning_effort'] = thinkOn
       ? (params.reasoningEffort.isEmpty ? 'high' : params.reasoningEffort)
       : 'none';
-  // Keep <think>…</think> in `content` (for the app's parser) only when we
-  // actually want thinking; harmless to omit when off.
-  if (thinkOn) payload['encapsulate_thinking'] = false;
 
   if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
     payload['stop'] = params.stopSequences!.take(4).toList();
@@ -152,13 +152,16 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
   final client = http.Client();
   registerClient?.call(client);
   try {
-    final response = await client
-        .post(
-          Uri.parse('$baseUrl/v1/chat/completions'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(payload),
-        )
-        .timeout(const Duration(seconds: 120));
+    // No wall-clock timeout: a tool/eval call against a local model can take
+    // as long as the generation legitimately needs (a slow model, a large
+    // token budget, or a reasoning pass). A dead/crashed backend closes the
+    // socket (which throws and is handled), and the user's Cancel aborts an
+    // in-flight call — so a fixed cap only ever killed work that was fine.
+    final response = await client.post(
+      Uri.parse('$baseUrl/v1/chat/completions'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
     if (response.statusCode != 200) {
       debugPrint(
         '[OpenAiChat] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -186,6 +189,15 @@ Stream<String> streamOpenAiChat(
   final uri = Uri.parse('$baseUrl/v1/chat/completions');
   final payload = _chatPayload(params, modelName: modelName, stream: true);
 
+  // In jinja mode Kobold splits thinking into `reasoning_content`; re-wrap it in
+  // <think>…</think> for the app's parser. Armed only when thinking was actually
+  // requested (matches the payload's `thinkOn`) so an off toggle / the Continue
+  // + eval suppress path (reasoningMaxTokens==0) discards any stray reasoning
+  // rather than leaking it into the visible reply.
+  final wrapper = ReasoningTagWrapper(
+    wrap: params.reasoningEnabled && params.reasoningMaxTokens != 0,
+  );
+
   final request = http.Request('POST', uri);
   request.headers['Content-Type'] = 'application/json';
   request.body = jsonEncode(payload);
@@ -194,9 +206,12 @@ Stream<String> streamOpenAiChat(
   registerClient?.call(client);
 
   try {
-    final response = await client
-        .send(request)
-        .timeout(const Duration(seconds: 120));
+    // No wall-clock timeout on the streamed reply. Token streaming can run as
+    // long as the model needs — a long reasoning/thinking block especially —
+    // and capping total time just killed working generations. A crashed backend
+    // closes the socket (the stream ends / throws and is handled) and the user's
+    // Cancel aborts mid-stream, so the fixed 120s cap only ever hurt.
+    final response = await client.send(request);
 
     if (response.statusCode != 200) {
       final body = await response.stream.bytesToString();
@@ -216,7 +231,11 @@ Stream<String> streamOpenAiChat(
         final line = buffer.substring(0, idx).trim();
         buffer = buffer.substring(idx + 1);
         if (line.isEmpty) continue;
-        if (line == 'data: [DONE]' || line == 'data:[DONE]') return;
+        if (line == 'data: [DONE]' || line == 'data:[DONE]') {
+          final tail = wrapper.finish();
+          if (tail.isNotEmpty) yield tail;
+          return;
+        }
         if (!line.startsWith('data:')) continue;
         final data = line.startsWith('data: ')
             ? line.substring(6)
@@ -226,13 +245,26 @@ Stream<String> streamOpenAiChat(
           final choice = json['choices']?[0];
           final delta = choice?['delta'];
           if (delta == null) continue;
+          // Reasoning tokens first (jinja-mode Kobold uses reasoning_content;
+          // tolerate 'reasoning' too). A delta carrying reasoning is consumed
+          // and never also treated as content, mirroring the OpenRouter path.
+          final reasoning = delta['reasoning_content'] ?? delta['reasoning'];
+          if (reasoning != null && reasoning is String && reasoning.isNotEmpty) {
+            final out = wrapper.onReasoning(reasoning);
+            if (out.isNotEmpty) yield out;
+            continue;
+          }
           final content = delta['content'];
           if (content != null && content is String && content.isNotEmpty) {
-            yield content;
+            final out = wrapper.onContent(content);
+            if (out.isNotEmpty) yield out;
           }
         } catch (_) {}
       }
     }
+    // Stream closed without an explicit [DONE]: close an open reasoning block.
+    final tail = wrapper.finish();
+    if (tail.isNotEmpty) yield tail;
   } finally {
     onDone?.call();
     client.close();

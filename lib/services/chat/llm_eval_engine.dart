@@ -171,7 +171,6 @@ class LlmEvalEngine {
   // LLM readiness + cancel (honors test overrides via live closure in god)
   final LLMService Function() getLlmService;
   final bool Function() getIsLocal;
-  final bool Function() getKoboldThinkingModel;
   final KoboldService? Function() getKoboldService;
   final Future<void> Function() reconnectIfAlive;
   final Future<void> Function() ensureServerIdle;
@@ -211,7 +210,6 @@ class LlmEvalEngine {
     this.getBackendIdentity,
     required this.getLlmService,
     required this.getIsLocal,
-    required this.getKoboldThinkingModel,
     required this.getKoboldService,
     required this.reconnectIfAlive,
     required this.ensureServerIdle,
