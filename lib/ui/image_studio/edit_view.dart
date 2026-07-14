@@ -443,7 +443,7 @@ class _EditViewState extends State<EditView> {
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.formMasterAccent,
-          foregroundColor: AppColors.textPrimary(context),
+          foregroundColor: AppColors.onChaosAccent,
           disabledBackgroundColor: AppColors.surfaceContainerOf(context),
           disabledForegroundColor: AppColors.textTertiary(context),
           padding: const EdgeInsets.symmetric(vertical: 14),
