@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-14 — feat(theme): blueAccent → porch amber sweep, cluster 2 (settings/config dialogs)
+- **Files:** all of `lib/ui/dialogs/` (12 files, ~87 sites) + 20 regenerated golden PNGs + docs.
+- **What:** second cluster of the blueAccent retirement — tts_settings (27), model_settings (9), chat_settings (8), byaf_import (8), ui_settings (8), user_persona (7), image_crop (6), voice_browser (5), group_settings (3), background_settings (3), database_cleanup (2), context_viewer (1). Same rulebook (icons/text/borders/actives → formMasterAccent; washes → withValues; solid buttons → amber + onChaosAccent ink; one oMLX info banner warmed to match its chrome). Plus 3 contrast follow-ups the button-foreground rule didn't cover: white in-button spinners on the amber Test-Connection and Crop&Save buttons and the amber-checkbox checkmark → onChaosAccent dark ink.
+- **Kept blue (data/semantic):** the "Blue" swatches in persona/group color palettes and the context-viewer prompt-section legend (all Color(0xFF3B82F6) hex), plus neutral blueGrey.
+- **Process:** 4 parallel subagents under the strict rulebook, then every diff reviewed by hand (verified button+spinner+checkmark contrast, palette/legend preservation, combined analyze clean). Goldens: 20 baselines regenerated on Flutter 3.41.1, verified passing.
+- **Remaining:** clusters 3 (chat components + main.dart update dialog ~35) and 4 (widgets ~50 + CI grep-gate).
+- **Commit hash:** 9b7c1a8 (code) + a04d748 (goldens).
+
 ## 2026-07-14 — feat(theme): blueAccent → porch amber sweep, cluster 1 (character create/edit)
 - **Files:** create_character_page (24), edit_character_page (25), edit_character_dialog (14), character_creator/ (9 files) + 22 regenerated golden PNGs + docs.
 - **What:** first of a 4-cluster sweep retiring the ~225 remaining raw `Colors.blueAccent` chrome accents. Rules: icons/text/borders/section accents → `AppColors.formMasterAccent`; washes → `formMasterAccent.withValues`; solid ElevatedButton backgrounds → amber bg + `onChaosAccent` dark ink (white-on-amber unreadable); brightness-aware `resolve(context, blueAccent, blue.shade700)` → `porchAmberOf(context)`. One misleading local `blue` var renamed to `accent`. Colors only — no logic/layout changes; nothing semantic touched (no userBubble; no info/link blues existed here).
