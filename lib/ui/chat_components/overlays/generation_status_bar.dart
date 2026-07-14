@@ -11,6 +11,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
@@ -46,6 +47,9 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
   Widget build(BuildContext context) {
     final cs = widget.chatService;
     final phase = cs.generationPhase;
+    // Live per-request progress straight from the managed backend's console
+    // (null / stale for remote backends — the label falls back gracefully).
+    final kobold = context.watch<KoboldService>();
 
     final (
       String label,
@@ -63,7 +67,7 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
         Icons.build_rounded,
         false,
       ),
-      GenerationPhase.prefilling => _prefillLabel(cs),
+      GenerationPhase.prefilling => _prefillLabel(cs, kobold),
       GenerationPhase.thinking => _thinkingLabel(cs),
       GenerationPhase.buffering => (
         'Buffering tokens...',
@@ -202,6 +206,22 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
         ),
       );
     }
+    if (phase == GenerationPhase.prefilling) {
+      // Determinate whenever the managed backend's console gave us real
+      // numbers — the prompt pass stops being a black box.
+      final fraction = context
+          .read<KoboldService>()
+          .liveProgress
+          .promptFraction();
+      if (fraction != null) {
+        return LinearProgressIndicator(
+          value: fraction,
+          minHeight: 4,
+          backgroundColor: AppColors.borderOf(context).withValues(alpha: 0.08),
+          valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+        );
+      }
+    }
     return LinearProgressIndicator(
       minHeight: 4,
       backgroundColor: Colors.white.withValues(alpha: 0.08),
@@ -211,18 +231,65 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     );
   }
 
-  (String, Color, IconData, bool) _prefillLabel(ChatService cs) {
+  (String, Color, IconData, bool) _prefillLabel(
+    ChatService cs,
+    KoboldService kobold,
+  ) {
     final elapsed = cs.prefillElapsedSeconds;
     final elapsedStr = elapsed >= 1 ? ' (${elapsed.toInt()}s)' : '';
+    const color = Color(0xFFF97316);
+
+    // The single-slot local backend serializes requests, so our reply can be
+    // stuck behind a background pass. Name the wait truthfully.
+    final String? busyWith = cs.isSummaryGenerating
+        ? 'journal pass'
+        : (cs.isGrowthPassRunning ? 'growth pass' : null);
+
+    final live = kobold.liveProgress;
+    if (live.isFresh && live.promptTotal > 0) {
+      final pct = ((live.promptFraction() ?? 0) * 100).toInt();
+      final counts =
+          '${_fmtTokens(live.promptCurrent)} / ${_fmtTokens(live.promptTotal)} tokens';
+      if (busyWith != null) {
+        // Whatever Kobold is chewing on right now is the BACKGROUND call;
+        // our reply is queued behind it.
+        final stage = live.genTotal > 0
+            ? 'writing (${live.genCurrent} tokens)'
+            : 'reading $counts ($pct%)';
+        return (
+          'Waiting — $busyWith is using the model: $stage$elapsedStr',
+          color,
+          Icons.hourglass_top_rounded,
+          false,
+        );
+      }
+      if (live.genTotal == 0 || (live.promptFraction() ?? 0) < 1.0) {
+        return (
+          'Reading prompt — $counts ($pct%)$elapsedStr',
+          color,
+          Icons.memory_rounded,
+          false,
+        );
+      }
+      // Prompt done, decode running, but no token has reached us yet — on
+      // the solo path that decode IS our own reply warming up (buffering /
+      // suppressed thinking / first-token latency), so say so. Only a
+      // busyWith flag above marks the slot as genuinely someone else's
+      // (review finding: "earlier call" here mislabeled every normal reply).
+      return (
+        'Starting the reply — ${live.genCurrent} tokens written$elapsedStr',
+        color,
+        Icons.bolt_rounded,
+        false,
+      );
+    }
+
+    // No live console data (remote backend, or nothing printed yet): keep the
+    // estimate-based label.
     final promptTokens = cs.prefillPromptTokens;
     String tokenStr = '';
     if (promptTokens > 0) {
-      if (promptTokens >= 1000) {
-        tokenStr =
-            '~${(promptTokens / 1000).toStringAsFixed(promptTokens >= 10000 ? 0 : 1)}K tokens';
-      } else {
-        tokenStr = '~$promptTokens tokens';
-      }
+      tokenStr = '~${_fmtTokens(promptTokens)} tokens';
     }
     final perf = cs.lastPerfData;
     String speedStr = '';
@@ -240,12 +307,16 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
       if (speedStr.isNotEmpty) speedStr,
     ];
     final detail = parts.isNotEmpty ? ' — ${parts.join(', ')}' : '';
-    return (
-      'Processing prompt$elapsedStr$detail',
-      const Color(0xFFF97316),
-      Icons.memory_rounded,
-      false,
-    );
+    final label = busyWith != null
+        ? 'Waiting — $busyWith is using the model$elapsedStr'
+        : 'Processing prompt$elapsedStr$detail';
+    return (label, color, Icons.memory_rounded, false);
+  }
+
+  String _fmtTokens(int n) {
+    if (n >= 10000) return '${(n / 1000).toStringAsFixed(0)}K';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
   }
 
   (String, Color, IconData, bool) _thinkingLabel(ChatService cs) {

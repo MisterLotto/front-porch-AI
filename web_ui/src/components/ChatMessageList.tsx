@@ -14,6 +14,61 @@ import { MessageActions } from './MessageActions';
 import { type CastMember } from './CastBar';
 import { type Message } from './chatTypes';
 
+/// Truthful generation status (desktop status-bar parity): live prompt-reading
+/// counts from the managed local backend + which background pass holds the
+/// single local slot. Null fields = no live data (remote backend).
+export type GenStatus = {
+  phase: string;
+  busyWith: string | null;
+  promptCur: number | null;
+  promptTotal: number | null;
+  genCur: number | null;
+  genTotal: number | null;
+};
+
+function fmtTokens(n: number): string {
+  if (n >= 10000) return `${Math.round(n / 1000)}K`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return `${n}`;
+}
+
+/// Mirror of the desktop status-bar wording so both surfaces tell the same
+/// truth about the wait.
+function genStatusLabel(s: GenStatus): { label: string; fraction: number | null } {
+  const hasLive = s.promptTotal != null && s.promptTotal > 0;
+  const fraction = hasLive
+    ? Math.min(1, (s.promptCur ?? 0) / (s.promptTotal as number))
+    : null;
+  if (s.busyWith) {
+    const pass = s.busyWith === 'journal' ? 'journal pass' : 'growth pass';
+    if (hasLive) {
+      const stage =
+        (s.genTotal ?? 0) > 0
+          ? `writing (${s.genCur} tokens)`
+          : `reading ${fmtTokens(s.promptCur ?? 0)} / ${fmtTokens(s.promptTotal as number)} tokens (${Math.round((fraction ?? 0) * 100)}%)`;
+      return { label: `Waiting — ${pass} is using the model: ${stage}`, fraction };
+    }
+    return { label: `Waiting — ${pass} is using the model…`, fraction: null };
+  }
+  if (hasLive && ((s.genTotal ?? 0) === 0 || (fraction ?? 0) < 1)) {
+    return {
+      label: `Reading prompt — ${fmtTokens(s.promptCur ?? 0)} / ${fmtTokens(s.promptTotal as number)} tokens (${Math.round((fraction ?? 0) * 100)}%)`,
+      fraction,
+    };
+  }
+  if (hasLive) {
+    // Prompt done + decode running + no streamed token yet: on the solo path
+    // that decode IS our reply warming up — only busyWith marks someone
+    // else's work (desktop parity, review finding).
+    return {
+      label: `Starting the reply — ${s.genCur} tokens written`,
+      fraction: 1,
+    };
+  }
+  if (s.phase === 'thinking') return { label: 'Model is thinking…', fraction: null };
+  return { label: 'Processing prompt…', fraction: null };
+}
+
 export function ChatMessageList({
   messages,
   castById,
@@ -21,6 +76,7 @@ export function ChatMessageList({
   lastIndex,
   busy,
   streaming,
+  genStatus,
   scrollRef,
   canSpeak,
   editIndex,
@@ -42,6 +98,7 @@ export function ChatMessageList({
   lastIndex: number;
   busy: boolean;
   streaming: string;
+  genStatus: GenStatus | null;
   scrollRef: RefObject<HTMLDivElement>;
   canSpeak: boolean;
   editIndex: number | null;
@@ -146,6 +203,25 @@ export function ChatMessageList({
               </div>
             )}
             {rest && <MessageContent text={rest} />}
+          </div>
+        );
+      })()}
+      {!streaming && genStatus && (() => {
+        // Before the first token arrives, name the wait truthfully instead of
+        // showing nothing: real prompt-reading progress from the local
+        // backend, or which background pass is holding the slot.
+        const { label, fraction } = genStatusLabel(genStatus);
+        return (
+          <div className="bubble ai streaming gen-status" aria-live="polite">
+            <span className="muted small">{label}</span>
+            {fraction != null && (
+              <div className="gen-status-track">
+                <div
+                  className="gen-status-fill"
+                  style={{ width: `${Math.round(fraction * 100)}%` }}
+                />
+              </div>
+            )}
           </div>
         );
       })()}

@@ -580,6 +580,21 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .bubble.user { align-self: flex-end; background: var(--chat-user-bubble); color: var(--chat-user-text); border-bottom-right-radius: 4px; }
 .bubble.ai { align-self: flex-start; background: var(--chat-ai-bubble); color: var(--chat-ai-text); border-bottom-right-radius: 16px; border-bottom-left-radius: 4px; }
 .bubble.streaming { opacity: 0.85; }
+/* Truthful pre-token generation status (desktop status-bar parity): real
+   prompt-reading progress instead of a silent wait. Porch-amber track. */
+.bubble.gen-status { display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
+.gen-status-track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  overflow: hidden;
+}
+.gen-status-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 300ms ease;
+}
 /* RP text coloring (parity with desktop AppColors.dialogue / action): "quoted
    dialogue" → amber, *actions* → italic blue, **emphasis** → bold blue. Applied
    to BOTH bubbles (desktop colors user + AI alike); the user can recolor the user

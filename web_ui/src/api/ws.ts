@@ -32,6 +32,16 @@ export type WsEvent = {
   // when the image backend streams one; `progress`/`generating` above carry
   // the percent and lifecycle.
   preview?: string;
+  // `gen_status` event (truthful generation status, desktop status-bar
+  // parity): live prompt-reading counts parsed from the managed KoboldCpp
+  // console (`active` above carries the lifecycle), plus which background
+  // pass (journal/growth) is holding the single local slot.
+  phase?: string;
+  busyWith?: string | null;
+  promptCur?: number | null;
+  promptTotal?: number | null;
+  genCur?: number | null;
+  genTotal?: number | null;
 };
 
 export class ChatSocket {

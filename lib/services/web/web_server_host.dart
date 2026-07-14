@@ -29,6 +29,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/hardware_service.dart';
+import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
@@ -72,6 +73,7 @@ class WebServerHost extends ChangeNotifier {
   ModelManager? _modelManager;
   HardwareService? _hardwareService;
   ImageGenService? _imageGenService;
+  KoboldService? _koboldService;
   TtsService? _ttsService;
   SttService? _sttService;
   StoryRepository? _storyRepository;
@@ -96,6 +98,14 @@ class WebServerHost extends ChangeNotifier {
   VoidCallback? _imageProgressListener;
   bool _wasImageGenerating = false;
   DateTime _lastImageProgressSent = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // Truthful generation-status relay (parity with the desktop status bar):
+  // live prompt-reading progress parsed from the managed KoboldCpp console +
+  // which background pass is holding the single local slot. Listens on BOTH
+  // the ChatService (phase flips) and the KoboldService (live counts).
+  VoidCallback? _genStatusListener;
+  bool _wasBroadcastingGenStatus = false;
+  DateTime _lastGenStatusSent = DateTime.fromMillisecondsSinceEpoch(0);
 
   // Near-instant library live-sync: one debounced listener attached to the
   // CharacterRepository, FolderService and GroupChatRepository (all
@@ -159,6 +169,7 @@ class WebServerHost extends ChangeNotifier {
       _hardwareService = service;
   void setImageGenService(ImageGenService service) =>
       _imageGenService = service;
+  void setKoboldService(KoboldService service) => _koboldService = service;
   void setTtsService(TtsService service) => _ttsService = service;
   void setSttService(SttService service) => _sttService = service;
   void setStoryRepository(StoryRepository repo) => _storyRepository = repo;
@@ -269,6 +280,48 @@ class WebServerHost extends ChangeNotifier {
 
       _realismListener = onProcessing;
       chatService.addListener(onProcessing);
+    }
+
+    // Truthful generation status → web clients (parity with the desktop
+    // status bar): live prompt-reading counts parsed from the managed
+    // KoboldCpp console, plus which background pass (journal/growth) is
+    // holding the single local slot. Throttled to ~2.5/s; one final
+    // {active:false} dismisses the line. Remote backends simply never have
+    // fresh live counts, so clients fall back to their plain indicator.
+    final kobold = _koboldService;
+    if (streamHub != null && chatService != null && kobold != null) {
+      void onGenStatus() {
+        final generating = chatService.isGenerating;
+        if (!generating) {
+          if (_wasBroadcastingGenStatus) {
+            _wasBroadcastingGenStatus = false;
+            streamHub.broadcast({'event': 'gen_status', 'active': false});
+          }
+          return;
+        }
+        final now = DateTime.now();
+        if (now.difference(_lastGenStatusSent).inMilliseconds < 400) return;
+        _lastGenStatusSent = now;
+        _wasBroadcastingGenStatus = true;
+        final live = kobold.liveProgress;
+        final fresh = live.isFresh;
+        streamHub.broadcast({
+          'event': 'gen_status',
+          'active': true,
+          'phase': chatService.generationPhase.name,
+          'busyWith': chatService.isSummaryGenerating
+              ? 'journal'
+              : (chatService.isGrowthPassRunning ? 'growth' : null),
+          'promptCur': fresh ? live.promptCurrent : null,
+          'promptTotal': fresh ? live.promptTotal : null,
+          'genCur': fresh ? live.genCurrent : null,
+          'genTotal': fresh ? live.genTotal : null,
+        });
+      }
+
+      _genStatusListener = onGenStatus;
+      chatService.addListener(onGenStatus);
+      kobold.addListener(onGenStatus);
     }
 
     // Image generation live progress → web clients: percent + (when the
@@ -543,6 +596,12 @@ class WebServerHost extends ChangeNotifier {
       _realismListener = null;
     }
     _wasEvaluatingRealism = false;
+    if (_genStatusListener != null) {
+      _chatService?.removeListener(_genStatusListener!);
+      _koboldService?.removeListener(_genStatusListener!);
+      _genStatusListener = null;
+    }
+    _wasBroadcastingGenStatus = false;
     if (_imageProgressListener != null) {
       _imageGenService?.removeListener(_imageProgressListener!);
       _imageProgressListener = null;

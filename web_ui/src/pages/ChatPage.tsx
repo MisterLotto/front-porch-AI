@@ -9,7 +9,7 @@ import { CastBar, type CastMember } from '../components/CastBar';
 import { CharacterPicker } from '../components/CharacterPicker';
 import { ProcessingOverlay, NO_PROCESSING, type Processing } from '../components/ProcessingOverlay';
 import { SmartImg } from '../components/ChatAvatar';
-import { ChatMessageList } from '../components/ChatMessageList';
+import { ChatMessageList, type GenStatus } from '../components/ChatMessageList';
 import { ChatComposer } from '../components/ChatComposer';
 import { ChatInsight } from '../components/ChatInsight';
 import { ConversationsDrawer, type SessionSummary } from '../components/ConversationsDrawer';
@@ -69,6 +69,7 @@ export function ChatPage() {
   // (null = indeterminate) + the latest preview frame data URL when the
   // backend streams one. Null = no image generating.
   const [imageProg, setImageProg] = useState<{ progress: number | null; preview: string | null } | null>(null);
+  const [genStatus, setGenStatus] = useState<GenStatus | null>(null);
   // Realism/Objective engine overlay, driven by the `processing` WS event.
   const [processing, setProcessing] = useState<Processing>(NO_PROCESSING);
   // Resizable insight sidebar (desktop) — width persists across sessions.
@@ -176,7 +177,23 @@ export function ChatPage() {
         // two are identical text, so it swaps seamlessly with no flash/gap (the
         // old order cleared the bubble, leaving the message blank until the GET
         // returned ~100-300ms later).
+        setGenStatus(null);
         void refresh().finally(() => setStreaming(''));
+      } else if (e.event === 'gen_status') {
+        // Truthful generation status (desktop status-bar parity): live
+        // prompt-reading progress + which background pass holds the slot.
+        setGenStatus(
+          e.active
+            ? {
+                phase: e.phase ?? '',
+                busyWith: e.busyWith ?? null,
+                promptCur: e.promptCur ?? null,
+                promptTotal: e.promptTotal ?? null,
+                genCur: e.genCur ?? null,
+                genTotal: e.genTotal ?? null,
+              }
+            : null,
+        );
       } else if (e.event === 'processing') {
         setProcessing(
           e.active
@@ -216,7 +233,10 @@ export function ChatPage() {
         // streaming buffer: if a `done` was missed, the leftover partial would
         // render as a ghost bubble AND the next generation would append onto
         // it (setStreaming(prev => prev + …)), garbling the live reply.
+        // Same for the gen-status bubble — a missed {active:false} would
+        // strand it forever.
         setStreaming('');
+        setGenStatus(null);
         void refresh();
       }
     });
@@ -473,6 +493,7 @@ export function ChatPage() {
           lastIndex={lastIndex}
           busy={state.isGenerating}
           streaming={streaming}
+          genStatus={state.isGenerating ? genStatus : null}
           scrollRef={scrollRef}
           canSpeak={!!voice?.ttsEnabled}
           editIndex={editIndex}

@@ -22,6 +22,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/kobold_binary_version.dart';
+import 'package:front_porch_ai/services/kobold_live_progress.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/openai_chat_stream.dart';
@@ -45,11 +46,29 @@ class KoboldService extends ChangeNotifier
   String? _executablePath;
   Timer? _readinessProbe;
 
+  /// Ground-truth per-request progress parsed from the managed process's own
+  /// console output (see kobold_live_progress.dart) — what the status bar
+  /// shows instead of a black box. Covers WHATEVER request Kobold is working
+  /// on, including queued background passes.
+  final KoboldLiveProgress liveProgress = KoboldLiveProgress();
+  DateTime _lastLiveNotify = DateTime.fromMillisecondsSinceEpoch(0);
+
   bool get isRunning => _isRunning;
   bool get isStarting => _isStarting;
   List<String> get logs => List.unmodifiable(_logs);
   String get modelLoadingStatus => _modelLoadingStatus;
   bool get modelReady => _modelReady;
+
+  /// Feed a console chunk to [liveProgress]; notify at most every 150ms
+  /// (Generating lines arrive once per token).
+  void _ingestLiveProgress(String data) {
+    if (!liveProgress.ingest(data)) return;
+    final now = DateTime.now();
+    if (now.difference(_lastLiveNotify).inMilliseconds >= 150) {
+      _lastLiveNotify = now;
+      notifyListeners();
+    }
+  }
 
   /// Consume the one-shot "model just loaded" notification flag.
   /// Returns true exactly once after each model load, for UI notifications
@@ -410,6 +429,7 @@ class KoboldService extends ChangeNotifier
           .listen((data) {
             _addLog(data);
             _parseLoadingStatus(data);
+            _ingestLiveProgress(data);
           });
 
       _process!.stderr
@@ -425,6 +445,7 @@ class KoboldService extends ChangeNotifier
               if (cleanData != '.' && cleanData != '..' && cleanData != '...') {
                 _addLog(cleanData);
                 _parseLoadingStatus(cleanData);
+                _ingestLiveProgress(cleanData);
               }
             }
           });

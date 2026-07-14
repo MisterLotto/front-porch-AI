@@ -692,6 +692,9 @@ void main(List<String> args) async {
             host.setChatService(
               Provider.of<ChatService>(context, listen: false),
             );
+            host.setKoboldService(
+              Provider.of<KoboldService>(context, listen: false),
+            );
             host.setCharacterRepository(
               Provider.of<CharacterRepository>(context, listen: false),
             );
