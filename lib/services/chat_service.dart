@@ -128,6 +128,8 @@ part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
 part 'chat/chat_service_idle_autonomous.dart';
+part 'chat/chat_service_greeting.dart';
+part 'chat/chat_service_prompt_blocks.dart';
 
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
@@ -2996,26 +2998,6 @@ class ChatService extends ChangeNotifier {
   /// using [EmotionLabels.nuancedToStandard].
   // (currentExpressionLabel / resolveExpressionAvatar / setManualExpression @Dep shims excised; use expressionService; main wiring note: update main if using the removed setExpressionClassifierService shim)
 
-  void setAuthorNote(String note, {int? strength}) {
-    _authorNote = note;
-    if (strength != null) _authorNoteStrength = strength;
-    _saveChat();
-    notifyListeners();
-  }
-
-  /// Build the Author's Note block with strength-modulated wrapper text.
-  /// Strength 1–3: subtle suggestion, 4–7: standard, 8–10: urgent directive.
-  String _buildAuthorNoteBlock() {
-    if (_authorNote.isEmpty) return '';
-    if (_authorNoteStrength <= 3) {
-      return '[Author\'s Note (gentle suggestion): $_authorNote]\n';
-    } else if (_authorNoteStrength <= 7) {
-      return '[Author\'s Note: $_authorNote]\n';
-    } else {
-      return '[Author\'s Note (IMPORTANT — apply immediately): $_authorNote]\n';
-    }
-  }
-
   /// Set the CharacterRepository so group mode can look up characters.
   void setCharacterRepository(CharacterRepository repo) {
     if (identical(_characterRepository, repo)) return;
@@ -3047,38 +3029,6 @@ class ChatService extends ChangeNotifier {
   /// (creation, home taps, fork, etc.) without every caller having to pass the repo.
   void setGroupChatRepository(GroupChatRepository repo) {
     _groupChatRepository = repo;
-  }
-
-  /// Build the user persona block for the generation prompt.
-  /// The user's self-description is ground truth. (What the character has
-  /// *learned* about the user now lives in her per-chat Journal cards —
-  /// injected separately via journal_injection — not here.)
-  Future<String> _buildUserPersonaBlock(String userName) async {
-    final persona = _userPersonaService.persona;
-    final personaText = persona.persona.trim();
-    final safeUserName = userName.replaceAll(RegExp(r'[\n\r"]'), ' ').trim();
-
-    final buf = StringBuffer();
-    // ALWAYS establish the user's identity by NAME — even with no persona text.
-    // Otherwise the model only sees "$userName:" history labels and invents a
-    // generic descriptor ("the boy"/"the girl") for the human. (Previously this
-    // returned '' entirely when the persona had no description.)
-    if (personaText.isNotEmpty) {
-      final safePersonaText = personaText
-          .replaceAll(RegExp(r'[\n\r"]'), ' ')
-          .trim();
-      buf.writeln("$safeUserName's Persona: $safePersonaText");
-    } else {
-      buf.writeln('$safeUserName is the human you are talking with.');
-    }
-    // The model HAS the name above — nudge it to actually use it instead of
-    // reaching for a generic epithet for the human.
-    buf.writeln(
-      'Always refer to $safeUserName by name; never substitute a generic '
-      'descriptor like "the boy", "the girl", or "the user".',
-    );
-    buf.writeln();
-    return buf.toString();
   }
 
   /// Set the LLMProvider after construction (to break circular dependency in provider tree).
@@ -3167,164 +3117,6 @@ class ChatService extends ChangeNotifier {
       }
     } catch (_) {}
     return {};
-  }
-
-  /// Evaluates emotion + relationship baseline from the greeting message only.
-  /// Runs once per new session, silently in the background.
-  Future<void> _runPostGreetingEval() async {
-    if (!_realismEnabled || _activeCharacter == null) return;
-    _greetingEvalPending = false; // consume the pending flag
-    debugPrint('[Realism] Running post-greeting baseline eval...');
-    _isProcessingGreeting = true;
-    notifyListeners();
-    try {
-      await Future.wait([
-        // delegates to _llmEvalEngine (step 9 thins; full bodies excised)
-        _evaluateEmotionalStateCall(),
-        Future.delayed(
-          _kEvalDispatchStagger,
-          () => _evaluateRelationshipCall(),
-        ),
-      ]);
-
-      if (_realismEvalCancelled) {
-        debugPrint('[Realism] Post-greeting eval cancelled');
-        _realismEvalCancelled = false;
-        return;
-      }
-
-      // Check for cancellation after each eval
-      if (_realismEvalCancelled) {
-        debugPrint('[Realism] Post-greeting eval cancelled');
-        _realismEvalCancelled =
-            false; // Reset the flag so future messages can proceed
-        return;
-      }
-
-      // Store initial emotion in metadata on the greeting message itself
-      if (_messages.isNotEmpty) {
-        _messages.first.activeMetadata ??= {};
-        if (_characterEmotion.isNotEmpty) {
-          _messages.first.activeMetadata!['emotion_label'] = _characterEmotion;
-          _messages.first.activeMetadata!['realism_state'] =
-              _captureRealismState();
-        }
-      }
-      await _saveChat();
-      notifyListeners();
-      debugPrint(
-        '[Realism] Post-greeting baseline: emotion=$_characterEmotion, bond=${_relationshipService.affectionScore}, trust=${_relationshipService.trustLevel}',
-      );
-    } catch (e) {
-      debugPrint('[Realism] Post-greeting eval failed: $e');
-    } finally {
-      _isProcessingGreeting = false;
-      notifyListeners();
-    }
-  }
-
-  /// Retroactive baseline eval — fires when Realism is enabled mid-conversation
-  /// with no prior state captured. Evaluates the full visible message history
-  /// so the engine catches up on emotion, bond, and scene state.
-  Future<void> _runRetroactiveBaselineEval() async {
-    if (!_realismEnabled || _activeCharacter == null) return;
-    debugPrint(
-      '[Realism] Running retroactive baseline scan (${_messages.length} messages)...',
-    );
-    _isProcessingGreeting = true; // reuse the greeting overlay
-    notifyListeners();
-    try {
-      if (_storageService.realismSettings.realismOneShotEval) {
-        await _evaluateOneShotCall(); // step 10 thin (full in realism_evals)
-
-        // Check for cancellation after one-shot eval
-        if (_realismEvalCancelled) {
-          debugPrint('[Realism] Retroactive scan cancelled');
-          _realismEvalCancelled =
-              false; // Reset the flag so future messages can proceed
-          return;
-        }
-      } else {
-        await Future.wait([
-          _evaluateRelationshipCall(),
-          Future.delayed(
-            _kEvalDispatchStagger,
-            () => _evaluateEmotionalStateCall(),
-          ),
-          Future.delayed(
-            _kEvalDispatchStagger * 2,
-            () => _evaluatePhysicalStateCall(),
-          ),
-          Future.delayed(
-            _kEvalDispatchStagger * 3,
-            () => _evaluateNarrativeCall(),
-          ),
-        ]);
-
-        if (_realismEvalCancelled) {
-          debugPrint('[Realism] Retroactive scan cancelled');
-          _realismEvalCancelled = false;
-          return;
-        }
-      }
-
-      // Stamp the baseline on the most recent message so it persists
-      if (_messages.isNotEmpty) {
-        _messages.last.activeMetadata ??= {};
-        _messages.last.activeMetadata!['emotion_label'] = _characterEmotion;
-        _messages.last.activeMetadata!['realism_state'] =
-            _captureRealismState();
-      }
-      await _saveChat();
-      notifyListeners();
-      debugPrint(
-        '[Realism] Retroactive scan complete: emotion=$_characterEmotion, bond=${_relationshipService.affectionScore}, trust=${_relationshipService.trustLevel}',
-      );
-    } catch (e) {
-      debugPrint('[Realism] Retroactive baseline scan failed: $e');
-    } finally {
-      _isProcessingGreeting = false;
-      notifyListeners();
-    }
-  }
-
-  /// Cycle the first message through alternate greetings
-  Future<void> cycleGreeting(int direction) async {
-    if (_activeCharacter == null || _messages.isEmpty) return;
-    final allGreetings = _activeCharacter!.allGreetings;
-    if (allGreetings.length <= 1) return;
-
-    _greetingIndex = (_greetingIndex + direction) % allGreetings.length;
-    if (_greetingIndex < 0) _greetingIndex += allGreetings.length;
-
-    // Replace the first message text
-    final greeting = allGreetings[_greetingIndex];
-    _messages[0] = ChatMessage(
-      text: _buildFirstMessage(_activeCharacter!, greetingText: greeting),
-      sender: _activeCharacter!.name,
-      isUser: false,
-    );
-
-    await _saveChat();
-    notifyListeners();
-
-    // Re-run baseline eval for the new greeting (skip pre-seeded V2.5 cards)
-    if (_realismActiveThisMode &&
-        _activeCharacter!.frontPorchExtensions == null) {
-      _runPostGreetingEval();
-    }
-  }
-
-  String _buildFirstMessage(CharacterCard character, {String? greetingText}) {
-    String msg = greetingText ?? character.firstMessage;
-    return _macroResolver.resolve(
-      msg,
-      MacroContext(
-        userName: _userPersonaService.persona.name,
-        characterName: character.name,
-      ),
-      section: 'firstMessage',
-    );
   }
 
   /// [imageBytes] optionally attaches a photo (already downscaled+PNG-encoded
