@@ -37,10 +37,12 @@ import 'package:front_porch_ai/utils/gguf_vision.dart';
 ///    projector, or multimodal-arch + configured mmproj.
 ///  - OpenRouter: `architecture.input_modalities` from `/models`.
 ///  - Nano-GPT: `capabilities.vision` from `/models?detailed=true`.
-///  - LM Studio: `type == "vlm"` / `capabilities` from `/api/v0/models`
-///    (tried opportunistically on every non-metadata host; other servers 404
-///    it in milliseconds and fall through).
-///  - Generic OpenAI-compatible / MLX / unknown: a runtime image probe.
+///  - LM Studio: `type == "vlm"` / `capabilities` from `/api/v0/models`.
+///  - oMLX: `engine_type == "vlm"` from `/v1/models/status`.
+///    (Both extension endpoints are tried opportunistically on every
+///    non-metadata host; other servers 404 them in milliseconds and fall
+///    through.)
+///  - Generic OpenAI-compatible / unknown: a runtime image probe.
 ///
 /// A process-wide singleton so a verdict computed in Settings is reused
 /// everywhere without re-reading the file or re-hitting the network.
@@ -96,14 +98,16 @@ class VisionSupportResolver {
     final base = apiUrl.endsWith('/')
         ? apiUrl.substring(0, apiUrl.length - 1)
         : apiUrl;
-    final caps = await _fetchModelCapabilities(
+    final entry = await _fetchModelEntry(
       uri: Uri.parse(isNanoGpt ? '$base/models?detailed=true' : '$base/models'),
       apiKey: apiKey,
       modelName: modelName,
-      parse: isNanoGpt
-          ? ModelApiCapabilities.fromNanoGptEntry
-          : ModelApiCapabilities.fromOpenRouterEntry,
     );
+    final caps = entry == null
+        ? null
+        : (isNanoGpt
+              ? ModelApiCapabilities.fromNanoGptEntry(entry)
+              : ModelApiCapabilities.fromOpenRouterEntry(entry));
     _capsCache[key] = caps;
     return caps;
   }
@@ -154,27 +158,58 @@ class VisionSupportResolver {
       return verdict;
     }
 
-    // LM Studio serves authoritative per-model metadata (`type: "vlm"`) at
-    // /api/v0/models on the same origin as /v1 — free, instant, and correct
-    // even while the model is NOT loaded (the probe can't be either of those).
-    // Non-LM-Studio hosts 404 this and fall through to the probe.
-    final lmUri = lmStudioRestModelsUri(apiUrl);
-    if (!isCapabilityMetadataProviderUrl(apiUrl) && lmUri != null) {
-      final lmCaps = await _fetchModelCapabilities(
-        uri: lmUri,
-        apiKey: apiKey,
-        modelName: modelName,
-        parse: ModelApiCapabilities.fromLmStudioEntry,
-        timeout: const Duration(seconds: 6),
-      );
-      if (lmCaps != null) {
-        final verdict = VisionSupport.fromApi(lmCaps);
-        _remoteCache[key] = verdict;
-        return verdict;
+    // Local-server extension endpoints, tried opportunistically before the
+    // probe — free, instant, and correct even while the model is NOT loaded
+    // (the probe can't be either of those). Servers without the extension
+    // 404 it in milliseconds and fall through.
+    if (!isCapabilityMetadataProviderUrl(apiUrl)) {
+      // LM Studio: /api/v0/models, `type: "vlm"` is exactly how LM Studio
+      // decides to show its own eye icon. Only trusted when the entry
+      // actually carries the discriminating field.
+      final lmUri = originEndpointUri(apiUrl, 'api/v0/models');
+      if (lmUri != null) {
+        final entry = await _fetchModelEntry(
+          uri: lmUri,
+          apiKey: apiKey,
+          modelName: modelName,
+          timeout: const Duration(seconds: 6),
+        );
+        if (entry != null &&
+            (entry['type'] != null || entry['capabilities'] != null)) {
+          final verdict = VisionSupport.fromApi(
+            ModelApiCapabilities.fromLmStudioEntry(entry),
+          );
+          _remoteCache[key] = verdict;
+          return verdict;
+        }
+      }
+
+      // oMLX: /v1/models/status, `engine_type: "vlm"`. Load-bearing here:
+      // oMLX can return HTTP 200 while silently DROPPING images (observed
+      // upstream), so a probe "yes" is untrustworthy — the server's own
+      // engine type is the only signal that says whether pixels will
+      // actually be processed. Tri-state: an entry without a type signal
+      // falls through to the probe instead of concluding anything.
+      final omlxUri = originEndpointUri(apiUrl, 'v1/models/status');
+      if (omlxUri != null) {
+        final entry = await _fetchModelEntry(
+          uri: omlxUri,
+          apiKey: apiKey,
+          modelName: modelName,
+          timeout: const Duration(seconds: 6),
+        );
+        final omlxCaps = entry == null
+            ? null
+            : omlxCapabilitiesFromStatusEntry(entry);
+        if (omlxCaps != null) {
+          final verdict = VisionSupport.fromApi(omlxCaps);
+          _remoteCache[key] = verdict;
+          return verdict;
+        }
       }
     }
 
-    // Generic OpenAI-compatible / MLX / unknown, or a metadata miss above.
+    // Generic OpenAI-compatible / unknown, or a metadata miss above.
     final probed = await _probeVision(
       apiUrl: apiUrl,
       apiKey: apiKey,
@@ -202,7 +237,7 @@ class VisionSupportResolver {
   /// silently ignores images when no projector is loaded rather than
   /// erroring, so a false negative there degrades gracefully.
   /// Remote backends (openRouter / omlx) reuse [resolveRemote] (provider
-  /// metadata where available, else the cached 1×1-PNG probe); oMLX rides
+  /// metadata where available, else the cached image probe); oMLX rides
   /// OpenRouterService at its fixed local URL (see LLMProvider).
   ///
   /// Known residual: the local verdict is read from the CONFIGURED model
@@ -260,15 +295,17 @@ class VisionSupportResolver {
     }
   }
 
-  /// Fetch a models listing from [uri] and [parse] the entry matching
-  /// [modelName]. One implementation serves OpenRouter, Nano-GPT, and
-  /// LM Studio — only the URL and the per-entry parser differ. Returns null
-  /// when the entry can't be found or the request fails.
-  Future<ModelApiCapabilities?> _fetchModelCapabilities({
+  /// Fetch a models listing from [uri] and return the RAW entry matching
+  /// [modelName] (parsing is the caller's job — providers differ). One
+  /// implementation serves OpenRouter, Nano-GPT, LM Studio, and oMLX.
+  /// Tolerates every listing shape seen in the wild: `{data: [...]}` (OpenAI
+  /// convention), `{models: [...]}`, a bare top-level list, or a map keyed by
+  /// model id. Returns null when the entry can't be found or the request
+  /// fails.
+  Future<Map<dynamic, dynamic>?> _fetchModelEntry({
     required Uri uri,
     required String apiKey,
     required String modelName,
-    required ModelApiCapabilities Function(Map<dynamic, dynamic>) parse,
     Duration timeout = const Duration(seconds: 15),
   }) async {
     final client = httpClientFactory();
@@ -282,14 +319,24 @@ class VisionSupportResolver {
       if (response.statusCode != 200) return null;
 
       final body = jsonDecode(response.body);
-      final data =
-          (body is Map ? body['data'] : null) as List<dynamic>? ?? const [];
-      for (final entry in data) {
+      final List<dynamic> entries;
+      if (body is List) {
+        entries = body;
+      } else if (body is Map) {
+        final keyed = body[modelName];
+        if (keyed is Map) return keyed;
+        final data = body['data'];
+        final models = body['models'];
+        entries = data is List ? data : (models is List ? models : const []);
+      } else {
+        return null;
+      }
+      for (final entry in entries) {
         if (entry is! Map) continue;
         final id =
             (entry['id'] ?? entry['name'] ?? entry['model'])?.toString() ?? '';
         if (id != modelName) continue;
-        return parse(entry);
+        return entry;
       }
       return null;
     } catch (e) {

@@ -242,11 +242,13 @@ void main() {
       VisionSupportResolver.instance.clear();
     });
 
-    /// Install a MockClient; [onProbe] handles POST /chat/completions and
-    /// [onRestModels] handles GET /api/v0/models (null → 404, like any
-    /// non-LM-Studio server).
+    /// Install a MockClient; [onProbe] handles POST /chat/completions,
+    /// [onRestModels] handles GET /api/v0/models (LM Studio), and
+    /// [onOmlxStatus] handles GET /v1/models/status (oMLX). A null handler
+    /// → 404, like any server without that extension.
     void mockServer({
       http.Response Function(http.Request)? onRestModels,
+      http.Response Function(http.Request)? onOmlxStatus,
       http.Response Function(http.Request)? onProbe,
       void Function(String path)? onRequest,
     }) {
@@ -256,6 +258,9 @@ void main() {
         onRequest?.call(request.url.path);
         if (request.url.path.endsWith('/api/v0/models')) {
           return onRestModels?.call(request) ?? http.Response('Not Found', 404);
+        }
+        if (request.url.path.endsWith('/v1/models/status')) {
+          return onOmlxStatus?.call(request) ?? http.Response('Not Found', 404);
         }
         if (request.url.path.endsWith('/chat/completions')) {
           return onProbe?.call(request) ??
@@ -318,6 +323,111 @@ void main() {
       expect(first.source, VisionSource.none);
       expect(second.source, VisionSource.none);
       expect(restHits, 1, reason: 'definitive verdicts are cached');
+    });
+
+    test('a /api/v0/models entry WITHOUT type/capabilities is not trusted '
+        '— falls through instead of caching a false none', () async {
+      mockServer(
+        // Matching entry, but no discriminating field (not really LM Studio).
+        onRestModels: (_) => http.Response(
+          jsonEncode({
+            'data': [
+              {'id': model, 'object': 'model'},
+            ],
+          }),
+          200,
+        ),
+        onProbe: (_) => http.Response('{"choices":[]}', 200),
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: lmUrl,
+        apiKey: '',
+        modelName: model,
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.probe);
+    });
+
+    test('oMLX status says vlm → supported WITHOUT firing the probe '
+        '(the probe is untrustworthy on oMLX: it can 200 while silently '
+        'dropping images)', () async {
+      final paths = <String>[];
+      mockServer(
+        onOmlxStatus: (_) => http.Response(
+          jsonEncode({
+            'data': [
+              {
+                'id': 'mlx-community/Qwen2-VL-7B',
+                'engine_type': 'vlm',
+                'config_model_type': 'qwen2_vl',
+                'loaded': true,
+              },
+            ],
+          }),
+          200,
+        ),
+        onRequest: paths.add,
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'mlx-community/Qwen2-VL-7B',
+      );
+      expect(support.supported, isTrue);
+      expect(support.source, VisionSource.apiMetadata);
+      expect(paths.any((p) => p.endsWith('/chat/completions')), isFalse);
+    });
+
+    test('oMLX status says llm → definitive none, probe never fires '
+        '(a silent-200 can no longer fake vision support)', () async {
+      final paths = <String>[];
+      mockServer(
+        onOmlxStatus: (_) => http.Response(
+          jsonEncode({
+            'models': [
+              {'id': 'mlx-community/Llama-3-8B', 'engine_type': 'llm'},
+            ],
+          }),
+          200,
+        ),
+        // A text model on oMLX might accept the probe with 200 anyway —
+        // metadata must win before that lie is ever consulted.
+        onProbe: (_) => http.Response('{"choices":[]}', 200),
+        onRequest: paths.add,
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'mlx-community/Llama-3-8B',
+      );
+      expect(support.supported, isFalse);
+      expect(support.source, VisionSource.none);
+      expect(paths.any((p) => p.endsWith('/chat/completions')), isFalse);
+    });
+
+    test('oMLX status entry without a type signal → probe decides '
+        '(tri-state fall-through)', () async {
+      mockServer(
+        onOmlxStatus: (_) => http.Response(
+          jsonEncode({
+            'data': [
+              {'id': 'some-model', 'loaded': true},
+            ],
+          }),
+          200,
+        ),
+        onProbe: (_) => http.Response(
+          '{"error":"model does not support image input"}',
+          400,
+        ),
+      );
+      final support = await VisionSupportResolver.instance.resolveRemote(
+        apiUrl: 'http://localhost:8000/v1',
+        apiKey: '',
+        modelName: 'some-model',
+      );
+      expect(support.supported, isFalse);
+      expect(support.source, VisionSource.none);
     });
 
     test(

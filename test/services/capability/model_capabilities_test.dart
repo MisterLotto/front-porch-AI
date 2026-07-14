@@ -102,28 +102,77 @@ void main() {
     });
   });
 
-  group('lmStudioRestModelsUri', () {
-    test('replaces a trailing /v1 with /api/v0/models', () {
+  group('originEndpointUri', () {
+    test('replaces a trailing /v1 with the extension path (LM Studio)', () {
       expect(
-        lmStudioRestModelsUri('http://localhost:1234/v1').toString(),
+        originEndpointUri(
+          'http://localhost:1234/v1',
+          'api/v0/models',
+        ).toString(),
         'http://localhost:1234/api/v0/models',
+      );
+    });
+
+    test('derives the oMLX status endpoint (keeps its /v1 prefix)', () {
+      expect(
+        originEndpointUri(
+          'http://localhost:8000/v1',
+          'v1/models/status',
+        ).toString(),
+        'http://localhost:8000/v1/models/status',
       );
     });
 
     test('handles trailing slash and no /v1 suffix', () {
       expect(
-        lmStudioRestModelsUri('http://localhost:1234/v1/').toString(),
+        originEndpointUri(
+          'http://localhost:1234/v1/',
+          'api/v0/models',
+        ).toString(),
         'http://localhost:1234/api/v0/models',
       );
       expect(
-        lmStudioRestModelsUri('http://192.168.1.5:1234').toString(),
+        originEndpointUri(
+          'http://192.168.1.5:1234',
+          'api/v0/models',
+        ).toString(),
         'http://192.168.1.5:1234/api/v0/models',
       );
     });
 
     test('unparseable / schemeless input returns null', () {
-      expect(lmStudioRestModelsUri(''), isNull);
-      expect(lmStudioRestModelsUri('localhost:1234'), isNull);
+      expect(originEndpointUri('', 'api/v0/models'), isNull);
+      expect(originEndpointUri('localhost:1234', 'api/v0/models'), isNull);
+    });
+  });
+
+  group('omlxCapabilitiesFromStatusEntry (tri-state)', () {
+    test('engine_type vlm → vision', () {
+      final caps = omlxCapabilitiesFromStatusEntry({
+        'id': 'mlx-community/Qwen2-VL-7B',
+        'engine_type': 'vlm',
+        'loaded': true,
+      });
+      expect(caps, isNotNull);
+      expect(caps!.vision, isTrue);
+    });
+
+    test('engine_type llm → definitively no vision', () {
+      final caps = omlxCapabilitiesFromStatusEntry({
+        'id': 'mlx-community/Llama-3-8B',
+        'engine_type': 'llm',
+      });
+      expect(caps, isNotNull);
+      expect(caps!.vision, isFalse);
+    });
+
+    test('no type signal → null (caller must fall through to probe, '
+        'never conclude "no vision")', () {
+      expect(omlxCapabilitiesFromStatusEntry({'id': 'x'}), isNull);
+      expect(
+        omlxCapabilitiesFromStatusEntry({'id': 'x', 'engine_type': 'jang'}),
+        isNull,
+      );
     });
   });
 

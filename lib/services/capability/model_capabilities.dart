@@ -191,14 +191,15 @@ bool isNanoGptUrl(String apiUrl) => apiUrl.toLowerCase().contains('nano-gpt');
 bool isCapabilityMetadataProviderUrl(String apiUrl) =>
     apiUrl.toLowerCase().contains('openrouter.ai') || isNanoGptUrl(apiUrl);
 
-/// LM Studio's REST models endpoint for an OpenAI-compatible base URL, or
-/// null when one can't be derived. LM Studio serves `/api/v0/models` on the
-/// same origin as `/v1`, so `http://localhost:1234/v1` →
-/// `http://localhost:1234/api/v0/models`. A trailing `/v1` segment is
-/// replaced; any other path shape gets `/api/v0/models` appended to the
-/// origin's path. Non-LM-Studio servers simply 404 this and callers fall
-/// back to the runtime probe.
-Uri? lmStudioRestModelsUri(String apiUrl) {
+/// A provider-extension endpoint derived from an OpenAI-compatible base URL,
+/// or null when one can't be derived. Strips a trailing `/v1` segment and
+/// appends [endpointPath], so `http://localhost:1234/v1` with
+/// `api/v0/models` → `http://localhost:1234/api/v0/models` (LM Studio's REST
+/// models listing) and `http://localhost:8000/v1` with `v1/models/status` →
+/// `http://localhost:8000/v1/models/status` (oMLX's per-model status).
+/// Servers without the extension simply 404 it and callers fall back to the
+/// runtime probe.
+Uri? originEndpointUri(String apiUrl, String endpointPath) {
   final uri = Uri.tryParse(apiUrl.trim());
   if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
   var path = uri.path;
@@ -212,6 +213,33 @@ Uri? lmStudioRestModelsUri(String apiUrl) {
     scheme: uri.scheme,
     host: uri.host,
     port: uri.hasPort ? uri.port : null,
-    path: '$path/api/v0/models',
+    path: '$path/$endpointPath',
   );
+}
+
+/// Tri-state vision verdict from an oMLX `/v1/models/status` entry, or null
+/// when the entry carries no usable type signal (then the caller must fall
+/// through to the runtime probe rather than concluding anything).
+///
+/// oMLX auto-detects each model as LLM or VLM (users can override) and its
+/// server processes images ONLY for engine_type "vlm" — for anything else
+/// images are dropped, so the server's own type field is ground truth for
+/// whether an attached photo will actually be seen. This matters doubly for
+/// oMLX because it can return HTTP 200 while silently ignoring images, which
+/// makes the runtime probe untrustworthy in the "yes" direction.
+ModelApiCapabilities? omlxCapabilitiesFromStatusEntry(
+  Map<dynamic, dynamic> entry,
+) {
+  final engineType = (entry['engine_type'] ?? entry['type'])
+      ?.toString()
+      .toLowerCase();
+  switch (engineType) {
+    case 'vlm':
+      return const ModelApiCapabilities(vision: true);
+    case 'llm':
+    case 'text':
+      return const ModelApiCapabilities();
+    default:
+      return null;
+  }
 }
