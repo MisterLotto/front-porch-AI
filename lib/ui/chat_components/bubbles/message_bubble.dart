@@ -263,7 +263,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                         duration: const Duration(seconds: 1),
                                         backgroundColor:
                                             widget.senderColor ??
-                                            Colors.blueAccent,
+                                            AppColors.porchAmberOf(context),
                                       ),
                                     );
                                   }
@@ -333,7 +333,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                                                       ? tts.generationProgress
                                                       : null,
                                                   strokeWidth: 2,
-                                                  color: Colors.blueAccent,
+                                                  color: AppColors.porchAmberOf(
+                                                    context,
+                                                  ),
                                                 ),
                                               ),
                                               if (tts.generationProgress > 0)
@@ -979,7 +981,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         backgroundColor: AppColors.surfaceOf(context),
         title: Row(
           children: const [
-            Icon(Icons.call_split, color: Colors.blueAccent, size: 22),
+            Icon(Icons.call_split, color: AppColors.formMasterAccent, size: 22),
             SizedBox(width: 8),
             Text('Fork Conversation'),
           ],
@@ -1011,7 +1013,10 @@ class _MessageBubbleState extends State<MessageBubble> {
             },
             icon: Icon(Icons.call_split, size: 18),
             label: const Text('Fork'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.formMasterAccent,
+              foregroundColor: AppColors.onChaosAccent,
+            ),
           ),
         ],
       ),
@@ -1802,8 +1807,14 @@ class _MessageBubbleState extends State<MessageBubble> {
               chatService.editMessage(index, controller.text);
               Navigator.of(context).pop();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            child: const Text('Save', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.formMasterAccent,
+              foregroundColor: AppColors.onChaosAccent,
+            ),
+            child: const Text(
+              'Save',
+              style: TextStyle(color: AppColors.onChaosAccent),
+            ),
           ),
         ],
       ),

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-14 — feat(theme): blueAccent → porch amber sweep, cluster 3 (chat components)
+- **Files:** `lib/ui/chat_components/bubbles/message_bubble.dart` (5 chrome sites), `lib/ui/chat_components/bubbles/external_image_widget.dart` (1). Plus `lib/main.dart` migration/update-overlay accents (12 sites) already landed separately as commit 123d674.
+- **What:** third cluster. Warmed only the *primary-action chrome* in the chat bubble surface: the group "X responds next" snackbar fallback bg → `porchAmberOf(context)`, the TTS generation progress spinner → `porchAmberOf(context)`, the Fork-Conversation dialog icon + button and the Edit-message Save button → `formMasterAccent` bg + `onChaosAccent` ink, and the external-image loading spinner → `formMasterAccent`.
+- **Chat bubbles untouched (hard guardrail):** no bubble fill, `userBubble`, sender color, or bubble text color was changed — the user explicitly required bubbles stay as-is. Verified by golden test (MessageBubble user/plain/realism-chips all pass with 0 diff on Flutter 3.41.1).
+- **Kept blue (semantic, deliberate):** the Realism indicator **trust chips** (blue = positive trust) in `message_bubble.dart`, the matching **Trust eval pills** in `realism_processing_overlay.dart`, and the multi-color RAG-setup InfoRow icons — all part of intentional per-dimension color-coding, not standardizable chrome. Warming them would break the indicator legend.
+- **Goldens:** none regenerated — changes touch only transient/interactive states (snackbar, dialogs, spinners) outside the static golden captures; the 3 MessageBubble baselines pass unchanged.
+- **Remaining:** cluster 4 (widgets ~50 + `create_group_chat_page` + a CI grep-gate rejecting new raw `Colors.blueAccent`).
+- **Commit hash:** 9cd6f69 (code+docs) + 123d674 (main.dart).
+
 ## 2026-07-14 — feat(theme): blueAccent → porch amber sweep, cluster 2 (settings/config dialogs)
 - **Files:** all of `lib/ui/dialogs/` (12 files, ~87 sites) + 20 regenerated golden PNGs + docs.
 - **What:** second cluster of the blueAccent retirement — tts_settings (27), model_settings (9), chat_settings (8), byaf_import (8), ui_settings (8), user_persona (7), image_crop (6), voice_browser (5), group_settings (3), background_settings (3), database_cleanup (2), context_viewer (1). Same rulebook (icons/text/borders/actives → formMasterAccent; washes → withValues; solid buttons → amber + onChaosAccent ink; one oMLX info banner warmed to match its chrome). Plus 3 contrast follow-ups the button-foreground rule didn't cover: white in-button spinners on the amber Test-Connection and Crop&Save buttons and the amber-checkbox checkmark → onChaosAccent dark ink.

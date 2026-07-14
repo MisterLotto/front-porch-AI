@@ -1351,7 +1351,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                                       Icon(
                                         Icons.restore,
                                         size: 18,
-                                        color: Colors.blueAccent.shade100,
+                                        color: AppColors.porchAmber,
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
@@ -1547,14 +1547,14 @@ class _MyAppState extends State<MyApp> with WindowListener {
                   height: 80,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.blueAccent.shade700, Colors.purpleAccent],
+                      colors: [AppColors.porchAmberLight, AppColors.porchAmber],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                        color: AppColors.formMasterAccent.withValues(alpha: 0.3),
                         blurRadius: 24,
                         spreadRadius: 4,
                       ),
@@ -1591,7 +1591,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                 Text(
                   _migrationStep,
                   style: TextStyle(
-                    color: Colors.blueAccent.shade100,
+                    color: AppColors.porchAmber,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1607,7 +1607,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                     minHeight: 8,
                     backgroundColor: Colors.white.withValues(alpha: 0.1),
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      Colors.blueAccent.shade200,
+                      AppColors.formMasterAccent,
                     ),
                   ),
                 ),
@@ -1833,8 +1833,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.blueAccent.shade700,
-                        Colors.cyanAccent.shade400,
+                        AppColors.porchAmberLight,
+                        AppColors.porchAmber,
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -1842,7 +1842,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                        color: AppColors.formMasterAccent.withValues(alpha: 0.3),
                         blurRadius: 24,
                         spreadRadius: 4,
                       ),
@@ -1884,7 +1884,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                       color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: Colors.blueAccent.withValues(alpha: 0.3),
+                        color: AppColors.formMasterAccent.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -1918,7 +1918,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                                 const Text(
                                   '• ',
                                   style: TextStyle(
-                                    color: Colors.blueAccent,
+                                    color: AppColors.formMasterAccent,
                                     fontSize: 13,
                                   ),
                                 ),
@@ -1965,8 +1965,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
                               ),
                               label: const Text('Import'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blueAccent,
-                                foregroundColor: Colors.white,
+                                backgroundColor: AppColors.formMasterAccent,
+                                foregroundColor: AppColors.onChaosAccent,
                               ),
                             ),
                           ],
@@ -1979,7 +1979,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                   Text(
                     _reunifyStep,
                     style: TextStyle(
-                      color: Colors.blueAccent.shade100,
+                      color: AppColors.porchAmber,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1995,7 +1995,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
                       minHeight: 8,
                       backgroundColor: Colors.white.withValues(alpha: 0.1),
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.blueAccent.shade200,
+                        AppColors.formMasterAccent,
                       ),
                     ),
                   ),
