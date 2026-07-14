@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Full-screen voice call overlay.
 ///
@@ -472,8 +473,8 @@ class _CallOverlayState extends State<CallOverlay>
           _buildControlButton(
             icon: Icons.send,
             label: 'Send',
-            color: Colors.blueAccent,
-            backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
+            color: AppColors.formMasterAccent,
+            backgroundColor: AppColors.formMasterAccent.withValues(alpha: 0.15),
             size: 64,
             onTap: () => sttService.stopAndSendCallTranscription(),
           ),

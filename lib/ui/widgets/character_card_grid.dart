@@ -304,7 +304,7 @@ class CharacterCardGrid extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.drive_file_move,
-                    color: Colors.blueAccent.withValues(alpha: 0.7),
+                    color: AppColors.formMasterAccent.withValues(alpha: 0.7),
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -330,8 +330,8 @@ class CharacterCardGrid extends StatelessWidget {
                     icon: const Icon(Icons.drive_file_move, size: 18),
                     label: const Text('Move to Folder'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.formMasterAccent,
+                      foregroundColor: AppColors.onChaosAccent,
                       disabledBackgroundColor: AppColors.resolve(
                         context,
                         Colors.white10,

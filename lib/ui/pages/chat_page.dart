@@ -1325,7 +1325,7 @@ class _ChatPageState extends State<ChatPage> {
                             ? const Icon(
                                 Icons.call_split,
                                 size: 18,
-                                color: Colors.blueAccent,
+                                color: AppColors.formMasterAccent,
                               )
                             : null,
                         title: Text(
@@ -1361,7 +1361,7 @@ class _ChatPageState extends State<ChatPage> {
                                 '↳ Branched at message #${(s['fork_index'] ?? 0) + 1}',
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: Colors.blueAccent,
+                                  color: AppColors.formMasterAccent,
                                 ),
                               ),
                           ],
@@ -1547,8 +1547,14 @@ class _ChatPageState extends State<ChatPage> {
               Navigator.of(ctx).pop();
               onSaved();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            child: const Text('Save', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.formMasterAccent,
+              foregroundColor: AppColors.onChaosAccent,
+            ),
+            child: const Text(
+              'Save',
+              style: TextStyle(color: AppColors.onChaosAccent),
+            ),
           ),
         ],
       ),
@@ -2402,7 +2408,7 @@ class _ChatPageState extends State<ChatPage> {
                             height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.blueAccent,
+                              color: AppColors.formMasterAccent,
                             ),
                           ),
                         );
@@ -2577,7 +2583,7 @@ class _ChatPageState extends State<ChatPage> {
                                   ? AppColors.iconSecondary(context)
                                   : (chatService.observerMode
                                         ? Colors.amberAccent
-                                        : Colors.blueAccent),
+                                        : AppColors.porchAmberOf(context)),
                             ),
                             onPressed: () => _sendCurrentMessage(chatService),
                           ),
