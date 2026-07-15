@@ -55,6 +55,40 @@ class LiveGenProgress {
   /// attribute the wait (review finding: attribution here was invertible).
   int waitingCount = 0;
 
+  /// The source-side id of the request this display is latched onto (oMLX
+  /// `request_id`). The poller pins the FIRST request it sees and follows it
+  /// until the server stops reporting it — without the pin, two concurrent
+  /// requests (our reply + a queued helper pass) alternate entries across
+  /// polls and the bar ping-pongs between two unrelated fractions
+  /// (maintainer report, 2026-07-14).
+  String? sourceRequestId;
+
+  /// Display ratchet: the highest fraction already SHOWN for the current
+  /// prompt pass. Interpolation runs ahead of the per-batch truth by design;
+  /// when a real sample lands BELOW the extrapolated display, the bar must
+  /// hold still until reality catches up — never slide backwards. Reset only
+  /// when a genuinely new pass starts.
+  double _shownFraction = 0;
+
+  /// Bumped every time a new prompt pass begins (ratchet reset). The desktop
+  /// bar keys its tween on this so an honest pass restart REBUILDS the bar at
+  /// the new fraction instead of animating backwards through the old one
+  /// (review finding: a 350ms reverse sweep per pass reset would re-create
+  /// the very motion this fix removes).
+  int passEpoch = 0;
+
+  /// A genuinely new prompt pass: previous decode counts must never linger,
+  /// the display ratchet restarts, and tween consumers re-key. Called from
+  /// the new-pass detections below and by the oMLX poller when its request
+  /// pin REBINDS (a cache-hit successor can open with counts so close to its
+  /// predecessor's that count-based detection alone cannot see the seam).
+  void beginNewPass() {
+    genCurrent = 0;
+    genTotal = 0;
+    _shownFraction = 0;
+    passEpoch++;
+  }
+
   /// Zero everything — called when a source stops so a backend switch (or
   /// return within the freshness window) can't show a prior request's
   /// counts.
@@ -66,6 +100,9 @@ class LiveGenProgress {
     updatedAt = null;
     waitingCount = 0;
     hintTokensPerSecond = null;
+    sourceRequestId = null;
+    _shownFraction = 0;
+    passEpoch++;
     _carry = '';
   }
 
@@ -79,12 +116,17 @@ class LiveGenProgress {
 
   /// Direct write for polled sources (oMLX). Any prompt write invalidates
   /// stale decode counts from a previous request when the pass is new.
+  ///
+  /// New-pass detection tolerates small TOTAL drift: LM Studio's total is
+  /// reconstructed from a rounded fraction (`tokens / progress`) and wobbles
+  /// by a token or two between lines — without the tolerance every wobble
+  /// counted as a "new request", resetting the display ratchet mid-pass.
   void setPromptProgress(int current, int total, {DateTime? now}) {
     if (total <= 0) return;
-    if (current < promptCurrent || total != promptTotal) {
-      genCurrent = 0;
-      genTotal = 0;
-    }
+    final tolerance = (total * 0.02).ceil().clamp(2, 64);
+    final newPass =
+        current < promptCurrent || (total - promptTotal).abs() > tolerance;
+    if (newPass) beginNewPass();
     promptCurrent = current.clamp(0, total);
     promptTotal = total;
     updatedAt = now ?? DateTime.now();
@@ -111,8 +153,16 @@ class LiveGenProgress {
       // (a same-size, cache-fast-forwarded prompt can open at "(N / N)").
       genCurrent = 0;
       genTotal = 0;
-      promptCurrent = int.parse(p.group(1)!);
-      promptTotal = int.parse(p.group(2)!);
+      final current = int.parse(p.group(1)!);
+      final total = int.parse(p.group(2)!);
+      // Kobold console counts are exact — any regression or total change IS
+      // a new pass, so the display ratchet restarts honestly at its start.
+      if (current < promptCurrent || total != promptTotal) {
+        _shownFraction = 0;
+        passEpoch++;
+      }
+      promptCurrent = current;
+      promptTotal = total;
       lastMatchEnd = p.end;
       changed = true;
     }
@@ -175,21 +225,37 @@ class LiveGenProgress {
   /// last REAL count advances at the measured prefill speed, capped below
   /// the next unconfirmed token so the bar never claims completion the
   /// source hasn't reported. Returns 1.0 only when a source really said so.
+  ///
+  /// MONOTONIC per pass (the display ratchet): extrapolation can run ahead
+  /// of the per-batch truth, and before the ratchet the next real sample
+  /// yanked the bar backwards — a visible forward/backward "ping-pong" every
+  /// poll (maintainer report, oMLX). Now the shown fraction only ever climbs
+  /// or holds within one prompt pass; overshoot reads as the bar pausing
+  /// until the real count catches up. A new pass resets the ratchet.
   double? estimatedPromptFraction({
     double? tokensPerSecond,
     DateTime? now,
   }) {
     final raw = promptFraction();
     if (raw == null) return null;
-    if (raw >= 1.0) return 1.0;
-    final tps = tokensPerSecond ?? hintTokensPerSecond;
-    if (tps == null || tps <= 0 || updatedAt == null) {
-      return raw;
+    double result;
+    if (raw >= 1.0) {
+      result = 1.0;
+    } else {
+      final tps = tokensPerSecond ?? hintTokensPerSecond;
+      if (tps == null || tps <= 0 || updatedAt == null) {
+        result = raw;
+      } else {
+        final dt =
+            (now ?? DateTime.now()).difference(updatedAt!).inMilliseconds /
+            1000.0;
+        final est = promptCurrent + tps * dt;
+        final capped = est.clamp(0, promptTotal - 1).toDouble();
+        result = (capped / promptTotal).clamp(0.0, 0.99);
+      }
     }
-    final dt =
-        (now ?? DateTime.now()).difference(updatedAt!).inMilliseconds / 1000.0;
-    final est = promptCurrent + tps * dt;
-    final capped = est.clamp(0, promptTotal - 1).toDouble();
-    return (capped / promptTotal).clamp(0.0, 0.99);
+    if (result < _shownFraction) return _shownFraction;
+    _shownFraction = result;
+    return result;
   }
 }

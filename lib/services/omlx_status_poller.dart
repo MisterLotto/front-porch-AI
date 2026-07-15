@@ -53,6 +53,7 @@ class OmlxStatusPoller {
   Timer? _timer;
   String? _adminBase;
   bool _requestInFlight = false;
+  bool _wasActive = false;
 
   /// [apiUrl] is the OpenAI-style base the app is configured with
   /// (e.g. `http://localhost:8000/v1`); the admin API lives beside it.
@@ -70,7 +71,14 @@ class OmlxStatusPoller {
 
   Future<void> _poll() async {
     final base = _adminBase;
-    if (base == null || !isActive() || _requestInFlight) return;
+    final active = isActive();
+    // A generation just started: clear the previous one's counts, pin, and
+    // ratchet so the bar can never open on a stale ~99% from the last
+    // request (review finding — the stale window lasted until the first
+    // real sample arrived).
+    if (active && !_wasActive) progress.reset();
+    _wasActive = active;
+    if (base == null || !active || _requestInFlight) return;
     _requestInFlight = true;
     try {
       final resp = await http
@@ -102,27 +110,54 @@ void applyOmlxStats(dynamic stats, LiveGenProgress progress) {
     progress.hintTokensPerSecond = avgPrefill.toDouble();
   }
 
-  // Multi-model note: first prefilling/generating entry wins — oMLX exposes
-  // no request/model correlation to attribute entries to OUR request, and
-  // the app drives a single chat model. A helper model's background work
-  // could briefly win the display; accepted limitation (review-noted).
-  Map? prefill;
-  Map? generating;
+  final prefills = <Map>[];
+  final gens = <Map>[];
   var waiting = 0;
   for (final m in models) {
     if (m is! Map) continue;
-    prefill ??= (m['prefilling'] as List?)
-        ?.whereType<Map>()
-        .firstOrNull;
-    generating ??= (m['generating'] as List?)
-        ?.whereType<Map>()
-        .firstOrNull;
+    prefills.addAll((m['prefilling'] as List?)?.whereType<Map>() ?? const []);
+    gens.addAll((m['generating'] as List?)?.whereType<Map>() ?? const []);
     waiting += (m['waiting'] as List?)?.length ?? 0;
   }
 
   progress.waitingCount = waiting;
 
+  // Request pinning: entries carry request_id, so latch onto ONE request and
+  // follow it across polls (prefill → decode) until the server stops
+  // reporting it. Without the pin, two in-flight requests (our reply + a
+  // queued helper pass) alternate firstOrNull wins and the bar ping-pongs
+  // between two unrelated fractions (maintainer report, 2026-07-14). Only
+  // when the pinned request is gone does the display move on — one honest
+  // restart per request, never per poll.
+  Map? entryFor(List<Map> list, String? id) => id == null
+      ? null
+      : list.where((e) => e['request_id']?.toString() == id).firstOrNull;
+
+  Map? prefill = entryFor(prefills, progress.sourceRequestId);
+  Map? generating = entryFor(gens, progress.sourceRequestId);
+  if (prefill == null && generating == null) {
+    prefill = prefills.firstOrNull;
+    generating = prefill == null ? gens.firstOrNull : null;
+    final previous = progress.sourceRequestId;
+    final next = ((prefill ?? generating)?['request_id'])?.toString();
+    // Pin REBIND = a different request now owns the display. Count-based
+    // new-pass detection alone can miss the seam (a cache-hit successor can
+    // open with counts nearly identical to its predecessor's finish), which
+    // would let the old request's decode counts and ratchet leak into the
+    // new one (review finding) — so the rebind itself declares the new pass.
+    if (next != null && previous != null && next != previous) {
+      progress.beginNewPass();
+    }
+    progress.sourceRequestId = next;
+  }
+
   if (prefill != null) {
+    // The entry's own live speed beats the server-lifetime average for
+    // interpolation: the average mixes cache-hit instant prefills and other
+    // models, which made the extrapolated bar overshoot (then stall on the
+    // ratchet) far more than needed.
+    final speed = (prefill['speed'] as num?)?.toDouble();
+    if (speed != null && speed > 0) progress.hintTokensPerSecond = speed;
     final processed = (prefill['processed'] as num?)?.toInt() ?? 0;
     final total = (prefill['total'] as num?)?.toInt() ?? 0;
     if (total > 0) progress.setPromptProgress(processed, total);

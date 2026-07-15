@@ -207,16 +207,29 @@ class _GenerationStatusBarState extends State<GenerationStatusBar> {
     if (phase == GenerationPhase.prefilling) {
       // Determinate whenever the active backend gave us real numbers — the
       // prompt pass stops being a black box. Interpolated between per-batch
-      // updates (see _prefillLabel).
+      // updates (see _prefillLabel), monotonic per pass (the ratchet in
+      // LiveGenProgress), and tweened here so the 250ms rebuild ticks glide
+      // instead of stepping.
       final fraction = cs.activeLiveProgress?.estimatedPromptFraction(
         tokensPerSecond: _prefillSpeed(cs),
       );
       if (fraction != null) {
-        return LinearProgressIndicator(
-          value: fraction,
-          minHeight: 4,
-          backgroundColor: AppColors.borderOf(context).withValues(alpha: 0.08),
-          valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+        return TweenAnimationBuilder<double>(
+          // Keyed on the pass epoch: an honest pass restart rebuilds the bar
+          // AT the new fraction instead of sweeping backwards through the
+          // old one — backwards motion is the exact bug this bar had.
+          key: ValueKey(cs.activeLiveProgress?.passEpoch ?? 0),
+          tween: Tween<double>(end: fraction),
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+          builder: (context, animated, _) => LinearProgressIndicator(
+            value: animated.clamp(0.0, 1.0),
+            minHeight: 4,
+            backgroundColor: AppColors.borderOf(
+              context,
+            ).withValues(alpha: 0.08),
+            valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+          ),
         );
       }
     }

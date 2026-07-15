@@ -86,6 +86,8 @@ void main() {
     final p = LiveGenProgress();
     final t0 = DateTime.now();
     p.ingest('Processing Prompt [BATCH] (0 / 10000 tokens)', now: t0);
+    // No speed anchor → raw fraction, no guessing.
+    expect(p.estimatedPromptFraction(tokensPerSecond: null, now: t0), 0.0);
     // 5s later at 400 t/s the estimate is ~2000 tokens = 20%.
     final est = p.estimatedPromptFraction(
       tokensPerSecond: 400,
@@ -99,11 +101,98 @@ void main() {
       now: t0.add(const Duration(minutes: 1)),
     );
     expect(capped, lessThanOrEqualTo(0.99));
-    // No speed anchor → raw fraction, no guessing.
-    expect(p.estimatedPromptFraction(tokensPerSecond: null, now: t0), 0.0);
     // A real completion line reports exactly 1.0.
     p.ingest('Processing Prompt [BATCH] (10000 / 10000 tokens)', now: t0);
     expect(p.estimatedPromptFraction(tokensPerSecond: 400, now: t0), 1.0);
+  });
+
+  test('display ratchet: a real sample landing below the extrapolated display '
+      'holds the bar instead of yanking it backwards (the oMLX ping-pong)', () {
+    final p = LiveGenProgress();
+    final t0 = DateTime.now();
+    p.setPromptProgress(2000, 10000, now: t0);
+    // Interpolation runs ahead: shown ≈ 45% while the truth is 20%.
+    final ahead = p.estimatedPromptFraction(
+      tokensPerSecond: 500,
+      now: t0.add(const Duration(seconds: 5)),
+    )!;
+    expect(ahead, closeTo(0.45, 0.01));
+    // Next poll's REAL count (3000/10000 = 30%) is below what was shown —
+    // the display must hold at 45%, not snap back.
+    final t1 = t0.add(const Duration(seconds: 6));
+    p.setPromptProgress(3000, 10000, now: t1);
+    expect(p.estimatedPromptFraction(tokensPerSecond: null, now: t1), ahead);
+    // Reality catches up and passes the ratchet → display climbs again.
+    final t2 = t0.add(const Duration(seconds: 12));
+    p.setPromptProgress(6000, 10000, now: t2);
+    expect(
+      p.estimatedPromptFraction(tokensPerSecond: null, now: t2),
+      closeTo(0.6, 0.001),
+    );
+  });
+
+  test('a new prompt pass resets the ratchet so the bar restarts honestly',
+      () {
+    final p = LiveGenProgress();
+    final t0 = DateTime.now();
+    p.setPromptProgress(9000, 10000, now: t0);
+    expect(
+      p.estimatedPromptFraction(tokensPerSecond: null, now: t0),
+      closeTo(0.9, 0.001),
+    );
+    // A different request begins (regressed count, new total): the ratchet
+    // must NOT pin the new bar at the old request's 90%.
+    p.setPromptProgress(100, 4000, now: t0.add(const Duration(seconds: 1)));
+    expect(
+      p.estimatedPromptFraction(
+        tokensPerSecond: null,
+        now: t0.add(const Duration(seconds: 1)),
+      ),
+      closeTo(0.025, 0.001),
+    );
+  });
+
+  test('passEpoch bumps on new pass and on reset — the tween re-key signal',
+      () {
+    final p = LiveGenProgress();
+    final e0 = p.passEpoch;
+    p.setPromptProgress(100, 4000);
+    final e1 = p.passEpoch; // first write = new pass (total 0 → 4000)
+    expect(e1, greaterThan(e0));
+    p.setPromptProgress(2000, 4000);
+    expect(p.passEpoch, e1); // same pass — no bump
+    p.setPromptProgress(50, 9000);
+    expect(p.passEpoch, greaterThan(e1)); // regression + new total
+    final e2 = p.passEpoch;
+    p.reset();
+    expect(p.passEpoch, greaterThan(e2));
+  });
+
+  test('LM Studio total wobble (rounded-fraction reconstruction) is the same '
+      'pass — no decode reset, no ratchet reset', () {
+    final p = LiveGenProgress();
+    final t0 = DateTime.now();
+    p.ingestLmStudioRuntimeLine(
+      'slot update_slots: id 2 | task 46 | prompt processing progress, '
+      'n_tokens = 512, batch.n_tokens = 512, progress = 0.168754',
+      now: t0,
+    ); // total ≈ 3034
+    final shown = p.estimatedPromptFraction(
+      tokensPerSecond: 300,
+      now: t0.add(const Duration(seconds: 3)),
+    )!;
+    // Second line reconstructs a slightly different total (≈ 3037) — within
+    // tolerance, same pass: the display never moves backwards.
+    p.ingestLmStudioRuntimeLine(
+      'slot update_slots: id 2 | task 46 | prompt processing progress, '
+      'n_tokens = 1024, batch.n_tokens = 512, progress = 0.337175',
+      now: t0.add(const Duration(seconds: 4)),
+    );
+    final next = p.estimatedPromptFraction(
+      tokensPerSecond: null,
+      now: t0.add(const Duration(seconds: 4)),
+    )!;
+    expect(next, greaterThanOrEqualTo(shown));
   });
 
   test('non-progress chunks change nothing', () {
