@@ -50,7 +50,11 @@ class BackendSettings with SettingsBase {
   int _blasBatchSize = 512;
   int _gpuId = 0;
   int _gpuLayers = 0;
-  int _contextSize = 8192;
+  // 16384 (was 8192): modern models all serve 16k+, and the 2048-token
+  // generation reserve (generation_settings.dart) plus lorebooks/journal
+  // left an 8k window tight on chat history. Users with a saved value
+  // keep theirs; this only seeds fresh installs.
+  int _contextSize = 16384;
   int _kvQuantizationLevel = 0;
 
   String get backendType => _backendType;

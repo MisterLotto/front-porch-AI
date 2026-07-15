@@ -52,7 +52,11 @@ class GenerationSettings with SettingsBase {
   // model back then — now that samplers are delivered, defaulting it ON would
   // surprise-activate it. Users who explicitly set a value keep theirs.
   double _xtcProbability = 0.0;
-  int _maxLength = 1024;
+  // 2048 (was 1024): thinking models spend their reasoning stream against
+  // this same cap, so 1024 could leave a heavy thinker a truncated one-liner.
+  // The generation reserve subtracts this from the history budget, which the
+  // 16k default context (backend_settings.dart) absorbs comfortably.
+  int _maxLength = 2048;
   int _minLength = 0;
   /// Shipped default stop strings. Public + const so the prioritized stop
   /// builder (lib/services/chat/stop_sequences.dart) can tell user-added

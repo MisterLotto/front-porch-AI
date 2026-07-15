@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🧠 **Roomier defaults: 16k context and 2048-token replies** — fresh installs now start with a 16,384-token context window (was 8,192) and up to 2,048 tokens per reply (was 1,024). Modern models handle 16k without breaking a sweat, and thinking models spend their reasoning against the reply cap — at the old 1,024 a heavy thinker could burn the whole budget mid-thought and hand you a truncated one-liner. If you ever set your own values, nothing changes for you — this only upgrades what new setups begin with. (VRAM estimates in the model manager now assume the 16k default too, so "will it fit" verdicts stay honest.)
+
 - 🔁 **Repetition checking looks much further back now** — the repeat-penalty window defaulted to just 64 tokens (about fifty words), so anything your character said two paragraphs ago could repeat penalty-free. The default is now 1024 tokens, and the sliders (desktop and web) go up to 2048. If you ever saved your own value, yours is untouched — this only upgrades the default.
 
 - 🎛️ **XTC and DRY only show where they work** — those two samplers are KoboldCpp-only, but their sliders sat in Generation Settings (with a small "local models only" note) no matter which backend you were on. They now appear only when the KoboldCpp backend is active — on oMLX or a remote API they're simply gone, in the app and on the web, so the settings you see are the settings that do something.

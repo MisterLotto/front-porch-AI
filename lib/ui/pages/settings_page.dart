@@ -68,7 +68,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _gpuLayersController = TextEditingController(text: '0');
-  final _contextSizeController = TextEditingController(text: '8192');
+  final _contextSizeController = TextEditingController(text: '16384');
   double? _dragContextSize;
   double? _dragCallBuffer;
   final _apiController = TextEditingController();

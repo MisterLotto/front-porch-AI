@@ -238,7 +238,7 @@ extension _SettingsGpuControls on _SettingsPageState {
     StorageService storageService,
     Color accent,
   ) {
-    final currentVal = int.tryParse(_contextSizeController.text) ?? 4096;
+    final currentVal = int.tryParse(_contextSizeController.text) ?? 16384;
     // Map context size to slider position.
     final presets = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
     int closestIdx = 0;

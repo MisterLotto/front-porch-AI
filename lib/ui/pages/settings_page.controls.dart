@@ -406,7 +406,7 @@ extension _SettingsLaunchControls on _SettingsPageState {
     }
 
     final gpuLayers = int.tryParse(_gpuLayersController.text) ?? 0;
-    final contextSize = int.tryParse(_contextSizeController.text) ?? 4096;
+    final contextSize = int.tryParse(_contextSizeController.text) ?? 16384;
 
     storage.setGpuLayers(gpuLayers);
     storage.setContextSize(contextSize);

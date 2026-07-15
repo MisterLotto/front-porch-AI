@@ -241,7 +241,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
 
     storage.setLastUsedModelPath(_selectedModelPath);
     storage.setGpuLayers(int.tryParse(_gpuLayersController.text) ?? 0);
-    storage.setContextSize(int.tryParse(_contextSizeController.text) ?? 8192);
+    storage.setContextSize(int.tryParse(_contextSizeController.text) ?? 16384);
     storage.setUseCublas(_useCublas);
     storage.setUseVulkan(_useVulkan);
     storage.setUseMetal(_useMetal);
@@ -268,7 +268,7 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
           ? storage.mmprojForModel(_selectedModelPath!)
           : null,
       gpuLayers: int.tryParse(_gpuLayersController.text) ?? 0,
-      contextSize: int.tryParse(_contextSizeController.text) ?? 8192,
+      contextSize: int.tryParse(_contextSizeController.text) ?? 16384,
       useVulkan: _useVulkan,
       useCublas: _useCublas,
       useMetal: _useMetal,
