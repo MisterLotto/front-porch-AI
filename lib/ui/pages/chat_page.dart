@@ -512,7 +512,18 @@ class _ChatPageState extends State<ChatPage> {
         final isGroup = chatService.isGroupMode;
 
         if (character == null && !isGroup) {
-          return const Center(child: Text('No character selected.'));
+          // Scaffold, not a bare Center: without a Material ancestor the Text
+          // renders in the red/yellow debug style on a black void — which is
+          // exactly what users saw when a bug landed them here.
+          return Scaffold(
+            backgroundColor: AppColors.backgroundOf(context),
+            body: Center(
+              child: Text(
+                'No character selected.',
+                style: TextStyle(color: AppColors.textSecondary(context)),
+              ),
+            ),
+          );
         }
 
         return Stack(

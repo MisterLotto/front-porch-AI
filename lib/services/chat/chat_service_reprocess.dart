@@ -71,11 +71,16 @@ extension ChatServiceReprocess on ChatService {
     // Snapshot the *active* live state *before* any historical/target prepare (for strict historical meta-only)
     final Map<String, int> preOpLive;
     String? preOpActiveSid;
-    CharacterCard? preActiveChar;
+    // Captured in BOTH modes, because every restore below is unconditional.
+    // A group-only capture left this null for 1:1 chats, so the isLast
+    // success path nulled the active character on every successful 1:1
+    // reprocess: the chat page fell back to "No character selected." and the
+    // trailing _saveChat no-oped (its null-character guard), dropping the
+    // reprocess result. In a pure group this still correctly captures null.
+    final CharacterCard? preActiveChar = _activeCharacter;
     if (isGroupNonObs) {
       preOpActiveSid = _getCurrentSpeakerIdForRealism();
       preOpLive = Map<String, int>.from(_getGroupNeeds(preOpActiveSid));
-      preActiveChar = _activeCharacter;
     } else {
       preOpLive = Map<String, int>.from(_needsSimulation.vector);
     }
@@ -129,9 +134,9 @@ extension ChatServiceReprocess on ChatService {
       } else {
         _needsSimulation.restoreFromSnapshot({'vector': preOpLive});
       }
-      if (preActiveChar != null) {
-        _activeCharacter = preActiveChar;
-      }
+      // Unconditional: in a pure group the pre-op state IS null and the
+      // impersonation must be dropped even on failure.
+      _activeCharacter = preActiveChar;
       if (isLast) {
         _isVerifyingRealism = false;
         _pendingRealismMetadata = null;
@@ -194,7 +199,8 @@ extension ChatServiceReprocess on ChatService {
       // _activeCharacter (verifier flags, needs strength, decay rates) until
       // the next dance overwrote it. Unconditional (not `!= null`-guarded): in
       // a pure group preActiveChar IS null and must be restored to null; for
-      // 1:1 the dance never ran so this restores the same char (a no-op).
+      // 1:1 the capture above grabbed the current character, so this is the
+      // no-op it always claimed to be.
       _activeCharacter = preActiveChar;
       _isVerifyingRealism = false;
       _pendingRealismMetadata = null;
@@ -208,9 +214,7 @@ extension ChatServiceReprocess on ChatService {
       } else if (!isGroupNonObs) {
         _needsSimulation.restoreFromSnapshot({'vector': preOpLive});
       }
-      if (preActiveChar != null) {
-        _activeCharacter = preActiveChar;
-      }
+      _activeCharacter = preActiveChar;
       _pendingRealismMetadata = null;
     }
     await _saveChat();
@@ -255,14 +259,14 @@ extension ChatServiceReprocess on ChatService {
       sid = _getCharacterIdFromCard(targetSpeakerCard);
     }
 
-    // Snapshot pre-op active for strict !isLast rollback (no live mutation)
-    CharacterCard? preActiveChar;
+    // Snapshot pre-op active for the restores below (both modes — see the
+    // matching capture note in manualReprocessNeeds).
+    final CharacterCard? preActiveChar = _activeCharacter;
     Map<String, int> preOpLive = {};
     String? preOpSid;
     if (isGroupNonObs) {
       preOpSid = _getCurrentSpeakerIdForRealism();
       preOpLive = Map<String, int>.from(_getGroupNeeds(preOpSid));
-      preActiveChar = _activeCharacter;
     } else {
       preOpLive = Map<String, int>.from(_needsSimulation.vector);
     }
@@ -311,6 +315,10 @@ extension ChatServiceReprocess on ChatService {
       if (isGroupNonObs && sid != null && sid.isNotEmpty) {
         _saveScalarsIntoGroupRealism(sid);
       }
+      // Drop the impersonation set by the dance above — same leak (and same
+      // fix) as manualReprocessNeeds' isLast path; this flow was missed when
+      // that one was fixed. No-op for 1:1 (no dance ran).
+      _activeCharacter = preActiveChar;
     } else {
       // Historical meta-only: rollback live + char, do not persist to group for this op
       if (isGroupNonObs && preOpSid != null && preOpSid.isNotEmpty) {
@@ -318,7 +326,7 @@ extension ChatServiceReprocess on ChatService {
       } else if (!isGroupNonObs) {
         _needsSimulation.restoreFromSnapshot({'vector': preOpLive});
       }
-      if (preActiveChar != null) _activeCharacter = preActiveChar;
+      _activeCharacter = preActiveChar;
     }
 
     await _saveChat();
