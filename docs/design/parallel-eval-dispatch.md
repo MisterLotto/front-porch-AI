@@ -159,6 +159,6 @@ group wraps it in the same load/save-scalars dance as today.
    APIs (small politeness cap for rate limits); oMLX flows uncapped.
 3. Objective cadence: STAYS every turn — keeps quests in tune with the story.
    (Instead of cadence, staleness is handled by graceful retirement: a step
-   that comes back NO kStaleCheckRetireAfter(=8) consecutive times is treated
+   that comes back NO kStaleCheckRetireAfter(=4) consecutive times is treated
    as overtaken by events and the quest advances — shipped same day in
    objective_proposal.dart.)

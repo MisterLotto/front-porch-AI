@@ -319,8 +319,9 @@ class ObjectiveProposal {
 
   /// Consecutive NO verdicts before a stuck step/objective is retired as
   /// "overtaken by events" (checks run every user turn with realism on, so
-  /// this is ~8 turns of the story having moved past it).
-  static const int kStaleCheckRetireAfter = 8;
+  /// this is ~4 turns of the story having moved past it — maintainer tuned
+  /// down from 8: a step the plot left behind should not linger).
+  static const int kStaleCheckRetireAfter = 4;
 
   /// Consecutive-miss counters keyed `objectiveId|currentTask`. In-memory by
   /// design (see the retirement comment in the verdict loop).

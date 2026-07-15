@@ -4,7 +4,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
-- 🎯 **Stuck quest steps retire themselves** — if the story has clearly moved past a quest step (the completion check keeps saying "not done" turn after turn while the plot sails on), that step no longer blocks the quest line forever. After 8 straight misses it's treated as overtaken by events, the step is checked off, and the character is free to move to the next step — or dream up a new goal if that quest is finished.
+- 🎯 **Stuck quest steps retire themselves** — if the story has clearly moved past a quest step (the completion check keeps saying "not done" turn after turn while the plot sails on), that step no longer blocks the quest line forever. After 4 straight misses it's treated as overtaken by events, the step is checked off, and the character is free to move to the next step — or dream up a new goal if that quest is finished.
 
 - 🎯 **Quest checking went from minutes to seconds on local models** — after each reply, the app asks the model whether your character's quest steps were completed. It was asking about EACH quest in a separate full request (re-reading the same conversation every time), and on "thinking" models it let the model silently reason at length before answering a simple yes/no. All quests are now checked in one single request, with thinking switched off for it — on a big local thinking model that's the difference between a 4-minute "Objectives" spinner and a few seconds, with the same verdicts.
 
