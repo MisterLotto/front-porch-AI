@@ -4,7 +4,7 @@
 - **Files:** `test/golden/support/fakes.dart` (+`modelCatalog`/`modelCatalogLoading`/`refreshModelCatalog` on FakeLLMProvider, + open_router_service import).
 - **Why:** ChatSettingsDialog now kicks `refreshModelCatalog()` on open (706c183); the golden fake routes unknown members through a throwing noSuchMethod → `ChatSettingsDialog — local backend` golden red in the docker gate. Same grow-the-fake precedent as cb3aec7 (activeLiveProgress).
 - **Process note (honest record):** the gate WAS run before the push of c98aa32 but my chained command pushed despite the red — process violation, self-caught within minutes; this fix follows immediately. GitHub CI on c98aa32 is expected red on the golden job; this commit heals it.
-- **Commit hash:** (backfilled)
+- **Commit hash:** e10b048
 
 ## 2026-07-15 — perf(objectives): completion checks batched into ONE call + reasoning off — minutes → seconds on local thinking models
 - **Files:** `lib/services/chat/objective_proposal.dart` (`checkTaskCompletionInBackground`: was one full LLM round-trip PER active objective, each re-paying prefill on the same 8-message context, awaited synchronously before the reply generates; now already-finished quests retire with zero tokens, every remaining verdict rides ONE numbered-list call parsed as "1: YES/NO" lines — forgiving regex, unparsed = NO so a confused model can never wrongly complete a quest, single-item fallback keeps the historical loose contains('YES'); `reasoningEnabled:false` + `reasoningMaxTokens:0` per the LlmEvalEngine recipe so thinking models (user runs Qwen3.6-40B-Thinking) stop burning up to 2,000 reasoning tokens at ~5 tok/s per verdict; one truncated raw-response debug log per batch for diagnosability), `docs/Rawhide.md`.
