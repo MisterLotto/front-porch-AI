@@ -4956,3 +4956,8 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** lib/services/storage/settings/{generation_settings,backend_settings}.dart, lib/ui/dialogs/{model_settings_dialog,generate_kcpps_dialog}.dart, lib/ui/pages/settings_page{,.controls,.gpu}.dart, lib/utils/vram_estimator.dart, lib/ui/widgets/hf_model_card.dart, docs/Rawhide.md, chat_settings goldens
 - **Reason:** Maintainer-requested default bumps: contextSize 8192→16384 (modern models + generation reserve + journal left 8k tight) and maxLength 1024→2048 (thinking models spend reasoning against the cap → truncated replies). Swept 7 stale fallback sites still assuming old defaults (incl. VRAM estimator + HF card fit badges). Saved user values untouched. Web reads defaults from Dart server — no web change.
 - **Commit:** bfd13f3
+
+## 2026-07-15 (UTC) — 1:1 manual needs reprocess black-screen + dropped save
+- **Files:** lib/services/chat/chat_service_reprocess.dart, lib/services/chat/needs_impact_evaluator.dart, lib/ui/pages/chat_page.dart, docs/Rawhide.md
+- **Reason:** Regression from 6d3b0a9: unconditional post-op restore of preActiveChar with group-only capture → every successful 1:1 last-message reprocess nulled _activeCharacter (black "No character selected." screen) and _saveChat no-oped (result dropped). Fixed by unconditional capture in reprocess + revert; also closed 3 group-side impersonation leaks (failure path, historical paths, revert isLast). Themed the null-character fallback; removed duplicate eval debugPrint. Grok-reviewed.
+- **Commit:** 46b70c4
