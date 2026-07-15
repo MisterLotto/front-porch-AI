@@ -306,13 +306,13 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
     final apiUrl = llmProvider.activeBackend == BackendType.omlx
         ? 'http://localhost:8000/v1'
         : _apiUrlController.text.trim();
-    // Ensure the service has the latest config
-    openRouter.configure(
+    // Override form — NEVER configure() the live service just to probe
+    // (that silently re-routes active chat traffic; see the service's own
+    // fetchAvailableModels doc note).
+    final result = await openRouter.testConnection(
       apiUrl: apiUrl,
       apiKey: _apiKeyController.text.trim(),
-      modelName: _modelNameController.text.trim(),
     );
-    final result = await openRouter.testConnection();
     if (mounted) {
       setState(() {
         _isTesting = false;
@@ -322,18 +322,18 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
   }
 
   Future<void> _showModelPicker() async {
-    // Ensure the service has the latest config before fetching.
-    // Force localhost:8000/v1 when oMLX backend is selected (model picker is used for oMLX too).
+    // Resolve the target from the backend selected AT TAP TIME — after an
+    // oMLX ↔ Remote toggle the picker must ask the NEWLY selected provider
+    // (maintainer bug: it choked asking the remote provider with the stale
+    // pre-toggle configuration). Uses the override-form fetch so the live
+    // service config is never mutated by a mere list browse (the old
+    // configure()-then-fetch pattern silently re-routed active chat traffic
+    // AND carried the previous backend's model name into the new provider).
     final openRouter = Provider.of<OpenRouterService>(context, listen: false);
     final llmProvider = Provider.of<LLMProvider>(context, listen: false);
     final apiUrl = llmProvider.activeBackend == BackendType.omlx
         ? 'http://localhost:8000/v1'
         : _apiUrlController.text.trim();
-    openRouter.configure(
-      apiUrl: apiUrl,
-      apiKey: _apiKeyController.text.trim(),
-      modelName: _modelNameController.text.trim(),
-    );
 
     // Show loading dialog
     if (!mounted) return;
@@ -345,7 +345,10 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
 
     List<RemoteModelInfo> models;
     try {
-      models = await openRouter.fetchAvailableModels();
+      models = await openRouter.fetchAvailableModels(
+        apiUrl: apiUrl,
+        apiKey: _apiKeyController.text.trim(),
+      );
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // dismiss loading
