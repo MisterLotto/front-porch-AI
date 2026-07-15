@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-15 — docs(design): parallel eval dispatch design v1 (docs/design/parallel-eval-dispatch.md)
+- **What:** design-only doc for overlapping per-turn LLM calls on concurrency-capable backends (oMLX up to 8 parallel gens — proven on the maintainer's dashboard; remote APIs), Kobold pinned sequential. Built on a full pipeline map (all 9 per-turn calls, gates, read/mutate sets, dependency edges; every eval funnels through fireLLMEval/fireToolEval — the cap insertion point). Core: gather-then-apply — EvalDispatcher semaphore per backend, fetch/apply split with (epoch, session, speaker) scene-token validation, applies in FIXED order for 1:1↔group parity. 4 phases; Phase 1 also fixes the LIVE bug found today: needs-impact apply has no epoch/session re-check after its await → switching chats mid-eval can bleed the old chat's needs deltas into the new chat.
+- **Commit hash:** (backfilled)
+
 ## 2026-07-15 — test(golden): FakeLLMProvider implements the model-catalog surface (heals the golden the model-catalog commit broke)
 - **Files:** `test/golden/support/fakes.dart` (+`modelCatalog`/`modelCatalogLoading`/`refreshModelCatalog` on FakeLLMProvider, + open_router_service import).
 - **Why:** ChatSettingsDialog now kicks `refreshModelCatalog()` on open (706c183); the golden fake routes unknown members through a throwing noSuchMethod → `ChatSettingsDialog — local backend` golden red in the docker gate. Same grow-the-fake precedent as cb3aec7 (activeLiveProgress).
