@@ -45,6 +45,7 @@ import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/world.dart' as world_model;
 import 'package:front_porch_ai/services/llm_provider.dart';
+import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
@@ -69,6 +70,19 @@ class FakeLLMProvider extends ChangeNotifier implements LLMProvider {
 
   @override
   bool get hasAnyManagedProcessRunning => false;
+
+  // Model catalog surface (ChatSettingsDialog kicks refreshModelCatalog on
+  // open and renders modelCatalog/loading for non-kobold backends) — same
+  // grow-the-fake precedent as FakeChatService.activeLiveProgress.
+  @override
+  List<RemoteModelInfo> get modelCatalog => const [];
+
+  @override
+  bool get modelCatalogLoading => false;
+
+  @override
+  Future<List<RemoteModelInfo>> refreshModelCatalog({bool force = false}) =>
+      Future.value(const []);
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
