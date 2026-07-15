@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-15 — feat(objectives): stale steps retire gracefully after 8 consecutive misses; design doc updated with maintainer decisions
+- **Files:** `lib/services/chat/objective_proposal.dart` (in-memory consecutive-miss counter keyed `objectiveId|currentTask`, reset on YES or key change; at `kStaleCheckRetireAfter`=8 the item is treated as done — same side-effect path as a YES verdict, no parallel machinery; restart merely delays retirement), `docs/design/parallel-eval-dispatch.md` (§6 decisions: late chips approved; NO client cap for oMLX — its own UX owns parallelism, evals queue server-side at parallel=1; objective cadence stays every-turn), `docs/Rawhide.md`.
+- **Why:** maintainer hit a quest step the story had moved past — it returned NO forever, blocking the quest line and the primary slot.
+- **Commit hash:** (backfilled)
+
 ## 2026-07-15 — docs(design): parallel eval dispatch design v1 (docs/design/parallel-eval-dispatch.md)
 - **What:** design-only doc for overlapping per-turn LLM calls on concurrency-capable backends (oMLX up to 8 parallel gens — proven on the maintainer's dashboard; remote APIs), Kobold pinned sequential. Built on a full pipeline map (all 9 per-turn calls, gates, read/mutate sets, dependency edges; every eval funnels through fireLLMEval/fireToolEval — the cap insertion point). Core: gather-then-apply — EvalDispatcher semaphore per backend, fetch/apply split with (epoch, session, speaker) scene-token validation, applies in FIXED order for 1:1↔group parity. 4 phases; Phase 1 also fixes the LIVE bug found today: needs-impact apply has no epoch/session re-check after its await → switching chats mid-eval can bleed the old chat's needs deltas into the new chat.
 - **Commit hash:** cb25c00

@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🎯 **Stuck quest steps retire themselves** — if the story has clearly moved past a quest step (the completion check keeps saying "not done" turn after turn while the plot sails on), that step no longer blocks the quest line forever. After 8 straight misses it's treated as overtaken by events, the step is checked off, and the character is free to move to the next step — or dream up a new goal if that quest is finished.
+
 - 🎯 **Quest checking went from minutes to seconds on local models** — after each reply, the app asks the model whether your character's quest steps were completed. It was asking about EACH quest in a separate full request (re-reading the same conversation every time), and on "thinking" models it let the model silently reason at length before answering a simple yes/no. All quests are now checked in one single request, with thinking switched off for it — on a big local thinking model that's the difference between a 4-minute "Objectives" spinner and a few seconds, with the same verdicts.
 
 - 🔄 **Switching backends now refreshes the model list by itself** — going from oMLX to a remote API (or back) used to leave the previous provider's models sitting in the chat-side model dropdown with no way to refresh them. The app now pings the newly selected provider for its model list the moment you switch, the dropdown works for remote APIs too (it was oMLX-only), and — a quiet bug this uncovered — the per-chat model choice you make in Chat Settings now genuinely drives generation (it was being saved but silently ignored; every reply used the global model).

@@ -84,9 +84,9 @@ speculative work); Kobold multiuser.
 Three primitives, added at the existing choke points — no call-site rewrite:
 
 **P1. EvalDispatcher (concurrency cap).** A small semaphore owned by
-LLMProvider, capability-derived: `kobold → 1`, `omlx → min(3, serverMax)`,
-`openRouter → 3` (remote rate-limit friendly), all user-tunable in Advanced
-settings. `fireLLMEval` and `fireToolEval` acquire it. Kobold's existing
+LLMProvider, capability-derived: `kobold → 1` (structural), `omlx → NO cap`
+(the oMLX server's own UX owns parallelism — §6 decision), `openRouter → 3`
+(politeness cap for cloud rate limits). `fireLLMEval` and `fireToolEval` acquire it. Kobold's existing
 `waitForIdle` stays (belt over braces at cap=1). This makes today's implicit
 behavior explicit and safe before anything new overlaps.
 
@@ -148,10 +148,17 @@ group wraps it in the same load/save-scalars dance as today.
   objective check got this 0e6243f; audit the pack for stragglers in
   Phase 1).
 
-## 6. Open questions for the maintainer
+## 6. Maintainer decisions (2026-07-15)
 
-1. Phase 3 trades "turn fully settled when spinner ends" for perceived speed —
-   chips/panels may update a few seconds after the reply. Acceptable?
-2. Default oMLX cap: 3 (conservative) or user's 8? Recommend 3 + slider.
-3. Should the objective check's cadence ALSO drop to every-2-3-messages
-   (option 4 from the earlier menu) once it overlaps the pack anyway?
+1. Late chips: APPROVED — Phase 3 may land needs chips a few seconds after
+   the reply.
+2. oMLX cap: NONE client-side — oMLX's own UX controls parallelism (user
+   sets 1..8 there); if the server is at parallel=1 our evals simply queue
+   server-side. "We shouldn't try to override another app's setup." The
+   dispatcher therefore caps ONLY kobold (1, structural) and remote cloud
+   APIs (small politeness cap for rate limits); oMLX flows uncapped.
+3. Objective cadence: STAYS every turn — keeps quests in tune with the story.
+   (Instead of cadence, staleness is handled by graceful retirement: a step
+   that comes back NO kStaleCheckRetireAfter(=8) consecutive times is treated
+   as overtaken by events and the quest advances — shipped same day in
+   objective_proposal.dart.)

@@ -317,6 +317,15 @@ class ObjectiveProposal {
     }
   }
 
+  /// Consecutive NO verdicts before a stuck step/objective is retired as
+  /// "overtaken by events" (checks run every user turn with realism on, so
+  /// this is ~8 turns of the story having moved past it).
+  static const int kStaleCheckRetireAfter = 8;
+
+  /// Consecutive-miss counters keyed `objectiveId|currentTask`. In-memory by
+  /// design (see the retirement comment in the verdict loop).
+  final Map<String, int> _staleCheckCounts = {};
+
   Future<void> checkTaskCompletionInBackground() async {
     if (getIsCheckingCompletion() || getActiveObjectives().isEmpty) return;
     setIsCheckingCompletion(true);
@@ -431,11 +440,35 @@ class ObjectiveProposal {
 
       for (var i = 0; i < pending.length; i++) {
         final (obj, tasks, currentTask) = pending[i];
-        final done = verdicts[i + 1] ?? false;
+        var done = verdicts[i + 1] ?? false;
         debugPrint(
           '[Objective] Completion check for "${obj.objective}${currentTask != null ? ' - $currentTask' : ''}": ${done ? 'YES' : 'NO'}',
         );
-        if (!done) continue;
+        // Stale-step retirement (maintainer request 2026-07-15): a step the
+        // story has moved past can come back NO forever and block the whole
+        // quest line (the primary slot never frees). After
+        // [kStaleCheckRetireAfter] CONSECUTIVE misses of the SAME item, treat
+        // it as overtaken by events and let the quest advance. Counter is
+        // in-memory on purpose: a restart merely delays retirement by a few
+        // turns, and nothing leaks into the DB or panels.
+        final staleKey = '${obj.id}|${currentTask ?? ''}';
+        if (done) {
+          _staleCheckCounts.remove(staleKey);
+        } else {
+          final misses = (_staleCheckCounts[staleKey] ?? 0) + 1;
+          if (misses >= kStaleCheckRetireAfter) {
+            _staleCheckCounts.remove(staleKey);
+            done = true;
+            debugPrint(
+              '[Objective] Step overtaken by events after $misses stale '
+              'checks — retiring gracefully: '
+              '"${currentTask ?? obj.objective}"',
+            );
+          } else {
+            _staleCheckCounts[staleKey] = misses;
+            continue;
+          }
+        }
         anyCompleted = true;
         if (currentTask != null) {
           // Use thin cb (god impl) for best-effort task mutation (find uncompleted by desc, set completed:true, json+db update + load). Matches god toggleTask pattern exactly. Task vs taskless now both have side effects covered (taskless deact cb).
