@@ -6,7 +6,7 @@
 - **Infra verified for 1.0:** `apt.frontporchai.app` (install.sh, dists/stable/Release, Packages, front-porch-ai.gpg) and `rpm.frontporchai.app` (front-porch-ai.repo, repodata/repomd.xml) all live and self-referencing the new host; old `apt.dreamersai.art` still dual-serves for existing installs. Rawhide's `release.yml` already publishes to the new hosts (main's stale copy is irrelevant — release.yml runs from the tag's tree, which becomes Rawhide's).
 - **1.0 blockers found:** (1) main's **guarded** `README.md` still shows `apt/rpm.dreamersai.art` install commands + `app.dreamersai.art/privacy.html` — must be edited ON MAIN before the real promotion (the guard preserves it by design); (2) `docs/main.md` needs the 1.0 stable "What's New" written on main.
 - **Verification:** `flutter analyze --no-fatal-warnings --no-fatal-infos` clean (0 issues).
-- **Commit hash:** (this commit)
+- **Commit hash:** 62f6507
 
 ## 2026-07-14 — refactor(chat): extract the Realism/Needs/Chaos runtime controls from the chat_service god file (step 4)
 - **Files:** new `lib/services/chat/chat_service_controls.dart` (312 LOC) + `lib/services/chat_service.dart` (part directive; −283 LOC, 4076 → 3793).
