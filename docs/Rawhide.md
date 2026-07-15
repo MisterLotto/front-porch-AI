@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🎛️ **XTC and DRY only show where they work** — those two samplers are KoboldCpp-only, but their sliders sat in Generation Settings (with a small "local models only" note) no matter which backend you were on. They now appear only when the KoboldCpp backend is active — on oMLX or a remote API they're simply gone, in the app and on the web, so the settings you see are the settings that do something.
+
 - 📸 **Fixed: a manually-attached vision projector was being ignored for some models** — if you gave a model vision by browsing to its mmproj file, but the model's own metadata couldn't be read by the app, photo attachments were wrongly blocked with "your local model has no vision projector (mmproj) loaded" — even though the projector WAS loaded and the model could genuinely see. Your browsed projector is now always trusted. (Thanks Wally for the report — and no, it wasn't the reasoning update; that was a coincidence of timing.)
 
 - 🎯 **Stuck quest steps retire themselves** — if the story has clearly moved past a quest step (the completion check keeps saying "not done" turn after turn while the plot sails on), that step no longer blocks the quest line forever. After 4 straight misses it's treated as overtaken by events, the step is checked off, and the character is free to move to the next step — or dream up a new goal if that quest is finished.

@@ -368,48 +368,54 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         _save();
                       },
                     ),
-                    SliderWithInput(
-                      label: 'XTC Threshold',
-                      value: _gen.resolveXtcThreshold(storage),
-                      min: 0.0,
-                      max: 0.5,
-                      divisions: 50,
-                      tooltip:
-                          'Exclude Top Choices — removes the most obvious/cliché word choices. Lower = stronger effect. Try 0.1 for more creative writing. (Local models only.)',
-                      context: context,
-                      onChanged: (val) {
-                        setState(() => _gen.xtcThreshold = val);
-                        _save();
-                      },
-                    ),
-                    SliderWithInput(
-                      label: 'XTC Probability',
-                      value: _gen.resolveXtcProbability(storage),
-                      min: 0.0,
-                      max: 1.0,
-                      divisions: 20,
-                      tooltip:
-                          'How often XTC activates. 0 = never, 1 = always. Try 0.5 for a balance between creativity and coherence. (Local models only.)',
-                      context: context,
-                      onChanged: (val) {
-                        setState(() => _gen.xtcProbability = val);
-                        _save();
-                      },
-                    ),
-                    SliderWithInput(
-                      label: 'DRY Strength',
-                      value: _gen.resolveDryMultiplier(storage),
-                      min: 0.0,
-                      max: 3.0,
-                      divisions: 60,
-                      tooltip:
-                          'DRY ("Don\'t Repeat Yourself") — the modern anti-repetition sampler; catches repeated phrases, not just words. 0 = off, 0.8 is the usual dose. (Local models only.)',
-                      context: context,
-                      onChanged: (val) {
-                        setState(() => _gen.dryMultiplier = val);
-                        _save();
-                      },
-                    ),
+                    // XTC and DRY are llama.cpp samplers — only the
+                    // KoboldCpp backend honors them, so they are hidden
+                    // (not just annotated) on oMLX/remote (maintainer
+                    // request 2026-07-15).
+                    if (llmProvider.activeBackend == BackendType.kobold) ...[
+                      SliderWithInput(
+                        label: 'XTC Threshold',
+                        value: _gen.resolveXtcThreshold(storage),
+                        min: 0.0,
+                        max: 0.5,
+                        divisions: 50,
+                        tooltip:
+                            'Exclude Top Choices — removes the most obvious/cliché word choices. Lower = stronger effect. Try 0.1 for more creative writing.',
+                        context: context,
+                        onChanged: (val) {
+                          setState(() => _gen.xtcThreshold = val);
+                          _save();
+                        },
+                      ),
+                      SliderWithInput(
+                        label: 'XTC Probability',
+                        value: _gen.resolveXtcProbability(storage),
+                        min: 0.0,
+                        max: 1.0,
+                        divisions: 20,
+                        tooltip:
+                            'How often XTC activates. 0 = never, 1 = always. Try 0.5 for a balance between creativity and coherence.',
+                        context: context,
+                        onChanged: (val) {
+                          setState(() => _gen.xtcProbability = val);
+                          _save();
+                        },
+                      ),
+                      SliderWithInput(
+                        label: 'DRY Strength',
+                        value: _gen.resolveDryMultiplier(storage),
+                        min: 0.0,
+                        max: 3.0,
+                        divisions: 60,
+                        tooltip:
+                            'DRY ("Don\'t Repeat Yourself") — the modern anti-repetition sampler; catches repeated phrases, not just words. 0 = off, 0.8 is the usual dose.',
+                        context: context,
+                        onChanged: (val) {
+                          setState(() => _gen.dryMultiplier = val);
+                          _save();
+                        },
+                      ),
+                    ],
                     SliderWithInput(
                       label: 'Max Output Tokens',
                       value: _gen.resolveMaxLength(storage).toDouble(),

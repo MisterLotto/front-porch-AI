@@ -232,10 +232,14 @@ export function SettingsPage() {
           onChange={(v) => patchGen({ repeatPenalty: v })} />
         <SliderField label="Rep pen tokens" value={s.generation.repeatPenaltyTokens} min={0} max={512} step={1}
           onChange={(v) => patchGen({ repeatPenaltyTokens: Math.round(v) })} />
+        {/* XTC is a llama.cpp sampler — only the KoboldCpp backend honors it,
+            so it is hidden entirely on oMLX/remote (desktop parity). */}
+        {s.backend === 'kobold' && (<>
         <SliderField label="XTC threshold" value={s.generation.xtcThreshold} min={0} max={0.5} step={0.01}
           onChange={(v) => patchGen({ xtcThreshold: v })} />
         <SliderField label="XTC probability" value={s.generation.xtcProbability} min={0} max={1} step={0.05}
           onChange={(v) => patchGen({ xtcProbability: v })} />
+        </>)}
         <SliderField label="Max output tokens" value={s.generation.maxLength} min={16} max={16384} step={16}
           onChange={(v) => patchGen({ maxLength: Math.round(v) })} />
         <SliderField label="Min output tokens" value={s.generation.minLength} min={0} max={512} step={1}
