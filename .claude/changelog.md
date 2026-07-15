@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-14 — chore(version): baked-in dev version 0.9.8.0.1 → 1.0.0 (screenshot prep for the 1.0 cycle)
+- **Files:** `lib/app_version.dart` (the `appVersion` constant only).
+- **Why:** the maintainer is taking the 1.0 screenshots from `flutter run`, and the source-run version string is this constant (CI overwrites it at build time, so the committed value had been stale at 0.9.8.0.1 since the 0.9.8 cycle). Screenshots should show the real 1.0 string.
+- **Safety:** `isPreRelease`/`isNightlyBuild` are DERIVED from marker substrings (-beta/-rc/rawhide/…); neither 0.9.8.0.1 nor 1.0.0 carries a marker, so data dir (FrontPorchAI/), db file, and pref keys are all unchanged. Bonus: dev runs stop getting the "Update Available" nag (1.0.0 outranks the newest published release). Release builds are unaffected — CI stamps the version from the tag.
+- **Verification:** flutter analyze clean; no test or code references the old literal.
+- **Commit hash:** (backfilled)
+
 ## 2026-07-14 — perf(prompt): recap + Journal move below the transcript — the last per-turn cache-busters (audit finding #4 remainder)
 - **Files:** `lib/services/chat/chat_service_generation.dart` (summary/journal `plan.add` moved after history+memories; summaryBlock gains leading `\n`; placement comment), `lib/services/chat/prompt_injection/journal_injection.dart` (frame carries its own leading `\n`, anti-echo clause "Not new messages…", class doc updated), `test/services/chat/prompt_plan_test.dart` (byte-parity expectations updated for the deliberate delta; NEW `KV-cache prefix stability` test locks that recap/journal/memories changes cannot touch the prompt before/through the transcript), `docs/Rawhide.md` (user-facing bullet).
 - **Why (user report, oMLX dashboard 6.3% cache efficiency):** the Journal block re-sorts with the speaker's mood and re-warms cold cards EVERY turn, and the recap rewrites every journal pass; both sat BEFORE the transcript, so every turn rewrote the prompt's head → full re-prefill of the whole conversation on all local backends (prefix caches need byte-identical heads; ~45 s prompt-reading on a 31B at 190 tok/s with a full context). Same mechanism as the shipped Phase-3 memories move (measured 2.62 s → 0.40 s prompt-process on Gemma-4-31B).
