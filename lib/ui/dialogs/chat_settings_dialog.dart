@@ -16,14 +16,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
-import 'package:front_porch_ai/services/open_router_service.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
@@ -40,8 +38,6 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   late final TextEditingController _bannedPhrasesController;
   late ChatGenerationSettings _gen;
   bool _initialised = false;
-  List<RemoteModelInfo> _omlxModels = [];
-  bool _isFetchingOmLxModels = false;
 
   @override
   void didChangeDependencies() {
@@ -54,6 +50,14 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
         text: _gen.resolveBannedPhrases(storage).join('\n'),
       );
       _initialised = true;
+      // Populate the model dropdown for the ACTIVE provider on open — the
+      // catalog is identity-guarded, so this is a no-op when it is already
+      // current and a real fetch after a backend switch (maintainer report:
+      // the dropdown kept oMLX's models after switching to a remote API).
+      final llmProvider = Provider.of<LLMProvider>(context, listen: false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) llmProvider.refreshModelCatalog();
+      });
     }
   }
 
@@ -273,12 +277,17 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       const SizedBox(height: 8),
                     ],
 
-                    // oMLX Model Selection (macOS only)
-                    if (Platform.isMacOS &&
-                        llmProvider.activeBackend == BackendType.omlx) ...[
-                      const Text(
-                        'oMLX Model',
-                        style: TextStyle(
+                    // Model selection — oMLX AND remote APIs. Reads the
+                    // provider-level catalog, which auto-refetches on backend
+                    // switch, so this list always belongs to the ACTIVE
+                    // provider (it used to be oMLX-gated and hold oMLX's
+                    // models after a switch to OpenRouter/Nano-GPT).
+                    if (llmProvider.activeBackend != BackendType.kobold) ...[
+                      Text(
+                        llmProvider.activeBackend == BackendType.omlx
+                            ? 'oMLX Model'
+                            : 'Model',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: AppColors.formMasterAccent,
                         ),
@@ -287,57 +296,84 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       Row(
                         children: [
                           Expanded(
-                            child: _omlxModels.isEmpty
-                                ? Text(
-                                    'No models loaded',
+                            child: Builder(
+                              builder: (context) {
+                                final catalog = llmProvider.modelCatalog;
+                                if (catalog.isEmpty) {
+                                  return Text(
+                                    llmProvider.modelCatalogLoading
+                                        ? 'Fetching models…'
+                                        : 'No models found — is the provider '
+                                              'reachable?',
                                     style: TextStyle(
                                       color: Colors.white.withValues(
                                         alpha: 0.4,
                                       ),
                                       fontSize: 12,
                                     ),
-                                  )
-                                : Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF374151),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        value:
-                                            _gen.remoteModelName ??
-                                            storage.remoteModelName,
-                                        dropdownColor: const Color(0xFF374151),
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                  );
+                                }
+                                final current =
+                                    _gen.remoteModelName ??
+                                    storage.remoteModelName;
+                                // A model saved for the PREVIOUS provider may
+                                // not exist in this catalog — show it as a
+                                // hint instead of crashing the dropdown.
+                                final known = catalog.any(
+                                  (m) => m.id == current,
+                                );
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF374151),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: known ? current : null,
+                                      hint: Text(
+                                        current.isEmpty
+                                            ? 'Select a model…'
+                                            : current,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.5,
+                                          ),
                                         ),
-                                        isExpanded: true,
-                                        items: _omlxModels
-                                            .map(
-                                              (m) => DropdownMenuItem(
-                                                value: m.id,
-                                                child: Text(m.id),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: (val) {
-                                          if (val != null) {
-                                            setState(
-                                              () => _gen.remoteModelName = val,
-                                            );
-                                            _save();
-                                          }
-                                        },
                                       ),
+                                      dropdownColor: const Color(0xFF374151),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                      ),
+                                      isExpanded: true,
+                                      items: catalog
+                                          .map(
+                                            (m) => DropdownMenuItem(
+                                              value: m.id,
+                                              child: Text(m.id),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(
+                                            () => _gen.remoteModelName = val,
+                                          );
+                                          _save();
+                                        }
+                                      },
                                     ),
                                   ),
+                                );
+                              },
+                            ),
                           ),
                           const SizedBox(width: 8),
                           IconButton(
-                            icon: _isFetchingOmLxModels
+                            icon: llmProvider.modelCatalogLoading
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
@@ -351,37 +387,25 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                     size: 20,
                                     color: Colors.white70,
                                   ),
-                            onPressed: _isFetchingOmLxModels
+                            onPressed: llmProvider.modelCatalogLoading
                                 ? null
-                                : () async {
-                                    setState(
-                                      () => _isFetchingOmLxModels = true,
-                                    );
-                                    final openRouter =
-                                        Provider.of<OpenRouterService>(
-                                          context,
-                                          listen: false,
-                                        );
-                                    final models = await openRouter
-                                        .fetchAvailableModels(
-                                          apiUrl: 'http://localhost:8000/v1',
-                                          apiKey: storage.remoteApiKey,
-                                        );
-                                    if (mounted) {
-                                      setState(() {
-                                        _omlxModels = models;
-                                        _isFetchingOmLxModels = false;
-                                      });
-                                    }
-                                  },
-                            tooltip: 'Fetch models from oMLX',
+                                : () =>
+                                      llmProvider.refreshModelCatalog(
+                                        force: true,
+                                      ),
+                            tooltip: 'Refresh model list',
                           ),
                         ],
                       ),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
-                          'Select a model loaded in oMLX. Fetch models if the list is empty.',
+                          llmProvider.activeBackend == BackendType.omlx
+                              ? 'Models loaded in oMLX. The list refreshes '
+                                    'automatically when you switch backends.'
+                              : 'Models from your remote provider. The list '
+                                    'refreshes automatically when you switch '
+                                    'backends.',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.4),
                             fontSize: 12,

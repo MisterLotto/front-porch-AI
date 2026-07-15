@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async' show unawaited;
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -195,6 +197,84 @@ class LLMProvider extends ChangeNotifier {
   KoboldService get koboldService => _koboldService;
   OpenRouterService get openRouterService => _openRouterService;
 
+  // ── Backend-aware model catalog ────────────────────────────────────────
+  // The list every model dropdown reads. Auto-refetched whenever the active
+  // backend (or the remote URL/key behind it) changes, so switching oMLX ↔
+  // Remote API pings the newly selected provider immediately instead of
+  // leaving the previous provider's models on screen until a manual refresh
+  // (maintainer report, 2026-07-14: the chat-side dropdown kept oMLX's local
+  // models after switching to OpenRouter/Nano-GPT).
+  List<RemoteModelInfo> _modelCatalog = const [];
+  String? _catalogIdentity;
+  String? _catalogFetchInFlight;
+
+  List<RemoteModelInfo> get modelCatalog => _modelCatalog;
+  bool get modelCatalogLoading => _catalogFetchInFlight != null;
+
+  /// What the catalog is FOR right now: backend + the URL/key that feed it.
+  /// Null for the local Kobold backend (its models are GGUF files on disk,
+  /// picked through the Model Hub — no HTTP catalog exists).
+  String? get _liveCatalogIdentity {
+    switch (_activeBackend) {
+      case BackendType.kobold:
+        return null;
+      case BackendType.omlx:
+        return 'omlx|http://localhost:8000/v1|${_storageService.remoteApiKey}';
+      case BackendType.openRouter:
+        return 'openRouter|${_storageService.remoteApiUrl}|'
+            '${_storageService.remoteApiKey}';
+    }
+  }
+
+  /// Fetch the active provider's model list if the cached one is for a
+  /// different backend/URL/key (or [force]). Uses the explicit-override fetch
+  /// so the live chat configuration is never mutated. A result that arrives
+  /// after ANOTHER switch is discarded — the last selected backend wins.
+  Future<List<RemoteModelInfo>> refreshModelCatalog({bool force = false}) async {
+    final identity = _liveCatalogIdentity;
+    if (identity == null) {
+      if (_modelCatalog.isNotEmpty || _catalogIdentity != null) {
+        _modelCatalog = const [];
+        _catalogIdentity = null;
+        notifyListeners();
+      }
+      return const [];
+    }
+    if (!force && identity == _catalogIdentity && _modelCatalog.isNotEmpty) {
+      return _modelCatalog;
+    }
+    // Dedupe per TARGET, not globally: a fetch for this same identity is
+    // already running → let it land. A fetch for a DIFFERENT identity (the
+    // user just switched backends mid-fetch) must NOT block this one — a
+    // global single-flight here skipped the new backend's fetch entirely and
+    // left the catalog stuck empty until the next settings write (review
+    // finding). The last-selected-wins publish guard below keeps a late
+    // stale result from clobbering the fresh one.
+    if (_catalogFetchInFlight == identity && !force) return _modelCatalog;
+    _catalogFetchInFlight = identity;
+    notifyListeners();
+    try {
+      final url = _activeBackend == BackendType.omlx
+          ? 'http://localhost:8000/v1'
+          : _storageService.remoteApiUrl;
+      final models = await _openRouterService.fetchAvailableModels(
+        apiUrl: url,
+        apiKey: _storageService.remoteApiKey,
+      );
+      if (identity == _liveCatalogIdentity) {
+        _modelCatalog = models;
+        _catalogIdentity = models.isEmpty ? null : identity;
+      }
+      return models;
+    } catch (e) {
+      debugPrint('[LLMProvider] model catalog fetch failed: $e');
+      return const [];
+    } finally {
+      if (_catalogFetchInFlight == identity) _catalogFetchInFlight = null;
+      notifyListeners();
+    }
+  }
+
   LLMProvider(
     this._koboldService,
     this._openRouterService,
@@ -277,6 +357,11 @@ class LLMProvider extends ChangeNotifier {
       _syncLiveStatusSources();
       notifyListeners();
     }
+
+    // Keep the model catalog pointed at the selected provider. Identity-
+    // guarded internally, so repeated syncs with nothing changed are no-ops;
+    // fire-and-forget so storage listeners never await network.
+    unawaited(refreshModelCatalog());
   }
 
   /// Last model-identity string synced from storage; used to clear stale

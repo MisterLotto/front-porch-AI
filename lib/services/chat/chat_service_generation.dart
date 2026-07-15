@@ -937,6 +937,21 @@ extension ChatServiceGeneration on ChatService {
         _llmProvider!.openRouterService.configure(
           modelName: _storageService.sttSettings.callModelName,
         );
+      } else if (_sessionGenSettings.remoteModelName != null &&
+          _llmProvider != null &&
+          !_llmProvider!.isLocal) {
+        // Per-chat model override (the chat-settings dropdown). Same
+        // swap-then-restore mechanism as call mode — the existing restore
+        // sites fire on completion, partial save, and error alike. Until
+        // now this override was WRITTEN by the dialog but never read at
+        // generation time (resolveRemoteModelName had no call sites), so
+        // the dropdown was silently decorative.
+        _originalModelName = _llmProvider!.openRouterService.modelName;
+        _llmProvider!.openRouterService.configure(
+          modelName: _sessionGenSettings.resolveRemoteModelName(
+            _storageService,
+          ),
+        );
       }
 
       // ── Current-turn photo attachment ─────────────────────────────────
