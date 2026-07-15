@@ -5,7 +5,7 @@
 - **Fix:** `model_settings_dialog.dart` — `_showModelPicker` and `_testConnection` now use the override-form `fetchAvailableModels(apiUrl:, apiKey:)` / `testConnection(apiUrl:, apiKey:)` resolved from the backend selected AT TAP TIME; the live service config is never mutated by a browse/probe.
 - **Removed (full plumbing, zero remnants):** Chat Settings' model section + auto-populate kick; `ChatGenerationSettings.remoteModelName` (+ `resolveRemoteModelName`, hasOverrides term, to/fromJson — old session JSON keys are simply ignored); the generation-side per-chat model swap from 706c183; LLMProvider's `modelCatalog`/`refreshModelCatalog` + `_syncFromStorage` hook (consumer-less after the removals); FakeLLMProvider's catalog members. Existing chats that carried the phantom override stop counting it toward the "Custom" badge.
 - **Verification:** analyze clean; 1,783 tests pass (services + models). Gate + push follow.
-- **Commit hash:** (backfilled)
+- **Commit hash:** 580299a
 
 ## 2026-07-15 — fix(vision): a browsed mmproj is authoritative even when the GGUF metadata fails to parse (Wally's Discord report)
 - **Files:** `lib/services/capability/model_capabilities.dart` (`VisionSupport.fromGguf`: the `info == null` bail-out moved BELOW the `mmprojConfigured` check — a parser exception in `resolveLocalGgufInfo` (nulled + session-cached) was silencing the user's explicitly browsed projector), `test/services/capability/model_capabilities_test.dart` (2 regression tests for the null-info × mmproj matrix; DELETED the old `null info → none` test that locked the bug).
