@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-14 — docs(screenshots): 1.0 screenshot refresh — the four canonical shots retaken on the warm-porch UI
+- **Files:** `docs/screenshots/home_new.png` (home grid, v1.0.0, Porch Night group + SFW showcase row), `chat.png` (1:1 chat with the full Realism sidebar — bond/trust/lust meters, needs, day strip), `group_chat_new.png` (Porch Night group chat: per-message chips, member strip, member needs card), `Porch_stories_book.png` (reader on an interior prose spread). All resized to 1920 w via sips; every replaced file dated Mar/Apr (pre-warm-porch).
+- **Why these four names:** they are the only screenshots the README (hero) and the website reference — `website/build.mjs` converts `docs/screenshots/*.png` → the site's `/screenshots/*.jpg`, so this one commit feeds both surfaces. The promotion carries them to main, fixing the stale stable-README hero (runbook checklist item).
+- **Staging provenance (honest record):** the group chat was staged by direct DB insert (group `Porch Night` + 3 member rows + 1 session + 7 authored messages with engine-plausible metadata — the same write path Character Card Forge uses; full DB backup at `backups/front_porch.db.pre-group-fluff-20260714T192245`). Home-grid ordering was staged by bumping `created_at` on 11 SFW cards (originals saved to `backups/import-dates-restore-20260714.json` for exact restore). The app rendered everything itself; no image editing.
+- **Commit hash:** (backfilled)
+
 ## 2026-07-14 — chore(version): baked-in dev version 0.9.8.0.1 → 1.0.0 (screenshot prep for the 1.0 cycle)
 - **Files:** `lib/app_version.dart` (the `appVersion` constant only).
 - **Why:** the maintainer is taking the 1.0 screenshots from `flutter run`, and the source-run version string is this constant (CI overwrites it at build time, so the committed value had been stale at 0.9.8.0.1 since the 0.9.8 cycle). Screenshots should show the real 1.0 string.
