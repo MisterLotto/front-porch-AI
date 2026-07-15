@@ -4951,3 +4951,8 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** test/golden/widget/_goldens/dialogs_more/chat_settings.{dark,light}.png
 - **Reason:** Rep Pen Tokens slider max 512→2048 + default 64→1024 (33515cf) legitimately moved the slider thumb/value pill in the ChatSettingsDialog golden; regenerated in the fpai-golden docker image so pixels match the Linux CI runner. Diff verified slider-row-only.
 - **Commit:** d4aa8dd
+
+## 2026-07-14 (UTC) — default context 16k + max output 2048
+- **Files:** lib/services/storage/settings/{generation_settings,backend_settings}.dart, lib/ui/dialogs/{model_settings_dialog,generate_kcpps_dialog}.dart, lib/ui/pages/settings_page{,.controls,.gpu}.dart, lib/utils/vram_estimator.dart, lib/ui/widgets/hf_model_card.dart, docs/Rawhide.md, chat_settings goldens
+- **Reason:** Maintainer-requested default bumps: contextSize 8192→16384 (modern models + generation reserve + journal left 8k tight) and maxLength 1024→2048 (thinking models spend reasoning against the cap → truncated replies). Swept 7 stale fallback sites still assuming old defaults (incl. VRAM estimator + HF card fit badges). Saved user values untouched. Web reads defaults from Dart server — no web change.
+- **Commit:** bfd13f3
