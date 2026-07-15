@@ -334,21 +334,18 @@ class ObjectiveProposal {
           .map((m) => '${m.sender}: ${m.text}')
           .join('\n');
 
-      // Check sequentially so no "time skips"
+      // Collect every item needing an LLM verdict, retiring already-finished
+      // quests without spending a single token on them. (A lingering
+      // completed primary blocked the character from proposing their next
+      // main quest; also self-heals quests stuck from before that fix.)
+      final pending = <(dynamic obj, List<dynamic> tasks, String? task)>[];
       for (final obj in getActiveObjectives()) {
         final tasks = tasksForObjective(obj);
         final currentTask = tasks
             .where((t) => t['completed'] != true)
             .map((t) => t['description'] as String)
             .firstOrNull;
-
         if (currentTask == null && tasks.isNotEmpty) {
-          // Every task is already done — the quest itself is complete. Retire
-          // it: a lingering completed primary blocked the character from ever
-          // proposing their next main quest (proposals only claim the primary
-          // slot when none is active) and its finished task list cluttered the
-          // panel. Also self-heals quests stuck in this state from before the
-          // fix existed.
           anyCompleted = true;
           await deactivateObjective(obj.id);
           await loadActiveObjectives();
@@ -357,68 +354,112 @@ class ObjectiveProposal {
           );
           continue;
         }
+        pending.add((obj, tasks, currentTask));
+      }
+      if (pending.isEmpty) return;
 
-        final evalTarget = currentTask != null
-            ? 'Task to evaluate: "$currentTask"\n'
-            : 'Objective to evaluate: "${obj.objective}"\n';
-        final promptType = currentTask != null ? 'task' : 'objective';
-
-        final prompt =
-            'You are evaluating whether a roleplay $promptType has been completed based on recent conversation. '
-            'Be generous in your assessment — if the events in the conversation show the $promptType has been '
-            'accomplished, partially fulfilled, or naturally resolved, answer YES.\n\n'
-            'Objective Context: "${obj.objective}"\n'
-            '$evalTarget\n'
-            'Recent conversation:\n$contextText\n\n'
-            'Has this $promptType been completed or effectively resolved? Answer only YES or NO:';
-
-        final params = GenerationParams(
-          prompt: prompt,
-          maxLength: 2000,
-          temperature: 0.1,
-          stopSequences: [],
+      // ONE batched call for every objective (was one FULL LLM round-trip
+      // per objective, each re-paying prefill on the same 8-message context —
+      // 3 active quests on a 31B local model meant minutes of spinner before
+      // the reply could even start; maintainer report 2026-07-15). Verdicts
+      // come back as numbered YES/NO lines; anything unparsed counts as NO,
+      // so a confused model can never wrongly complete a quest.
+      final itemLines = <String>[];
+      for (var i = 0; i < pending.length; i++) {
+        final (obj, _, task) = pending[i];
+        itemLines.add(
+          task != null
+              ? '${i + 1}. Objective: "${obj.objective}" — Task to evaluate: "$task"'
+              : '${i + 1}. Objective to evaluate: "${obj.objective}"',
         );
+      }
+      final prompt =
+          'You are evaluating whether roleplay tasks/objectives have been '
+          'completed based on recent conversation. Be generous in your '
+          'assessment — if the events in the conversation show an item has '
+          'been accomplished, partially fulfilled, or naturally resolved, '
+          'answer YES for it.\n\n'
+          'Recent conversation:\n$contextText\n\n'
+          'Evaluate EACH item below. Reply with ONLY one line per item, in '
+          'order, formatted exactly as "1: YES" or "1: NO" — no explanations.\n'
+          '${itemLines.join('\n')}';
 
-        String responseText = '';
-        await for (final chunk in llmService.generateStream(params)) {
-          responseText += chunk;
-        }
+      final params = GenerationParams(
+        prompt: prompt,
+        // Reasoning OFF (same recipe as LlmEvalEngine/Journal): thinking
+        // models were burning up to 2,000 tokens at local decode speed to
+        // reason about YES/NO verdicts — the bulk of the multi-minute
+        // objective stall on a 31B (maintainer report 2026-07-15).
+        // reasoningMaxTokens: 0 forces the disable block onto remote
+        // ":thinking" hybrids too. maxLength stays generous as headroom for
+        // models that leak reasoning anyway (stripThinkBlocks cleans it).
+        maxLength: 2000,
+        temperature: 0.1,
+        reasoningEnabled: false,
+        reasoningMaxTokens: 0,
+        stopSequences: [],
+      );
 
-        // Strip &lt;think&gt;...&lt;/think&gt; blocks (and unclosed ones). Thinking models can
-        // emit long internal reasoning before the final YES/NO. maxLength bumped
-        // to 2000 to accommodate.
-        responseText = stripThinkBlocks(responseText);
+      String responseText = '';
+      await for (final chunk in llmService.generateStream(params)) {
+        responseText += chunk;
+      }
+      responseText = stripThinkBlocks(responseText);
+      // One raw log per batch so a parse failure or surprise YES is
+      // diagnosable (review finding: verdict-only logging hid them).
+      final rawPreview = responseText.replaceAll('\n', ' / ');
+      debugPrint(
+        '[Objective] Batched verdicts raw: '
+        '"${rawPreview.length > 300 ? rawPreview.substring(0, 300) : rawPreview}"',
+      );
 
+      // Forgiving parse (local-model floor): "1: YES", "1. YES", "1) yes"…
+      final verdicts = <int, bool>{};
+      for (final m in RegExp(
+        r'^\s*(\d+)\s*[:.)\-]\s*(YES|NO)\b',
+        multiLine: true,
+        caseSensitive: false,
+      ).allMatches(responseText)) {
+        verdicts[int.parse(m.group(1)!)] =
+            m.group(2)!.toUpperCase() == 'YES';
+      }
+      // Single-item fallback keeps the historical loose behavior when a
+      // model ignores the numbering entirely.
+      if (verdicts.isEmpty && pending.length == 1) {
+        verdicts[1] = responseText.toUpperCase().contains('YES');
+      }
+
+      for (var i = 0; i < pending.length; i++) {
+        final (obj, tasks, currentTask) = pending[i];
+        final done = verdicts[i + 1] ?? false;
         debugPrint(
-          '[Objective] Completion check for "${obj.objective}${currentTask != null ? ' - $currentTask' : ''}": $responseText',
+          '[Objective] Completion check for "${obj.objective}${currentTask != null ? ' - $currentTask' : ''}": ${done ? 'YES' : 'NO'}',
         );
-
-        if (responseText.toUpperCase().contains('YES')) {
-          anyCompleted = true;
-          if (currentTask != null) {
-            // Use thin cb (god impl) for best-effort task mutation (find uncompleted by desc, set completed:true, json+db update + load). Matches god toggleTask pattern exactly. Task vs taskless now both have side effects covered (taskless deact cb).
-            await markTaskCompleted(obj, currentTask);
-            // currentTask was the only open task left → the whole quest is
-            // finished. Retire it now so the primary slot frees up this turn
-            // instead of waiting for the next check pass.
-            if (tasks.where((t) => t['completed'] != true).length <= 1) {
-              await deactivateObjective(obj.id);
-              debugPrint(
-                '[Objective] Final task done — quest retired: ${obj.objective}',
-              );
-            }
-            await loadActiveObjectives();
-            debugPrint(
-              '[Objective] Task completed (via god thin mark): $currentTask',
-            );
-          } else {
-            // It was a taskless objective that got completed!
+        if (!done) continue;
+        anyCompleted = true;
+        if (currentTask != null) {
+          // Use thin cb (god impl) for best-effort task mutation (find uncompleted by desc, set completed:true, json+db update + load). Matches god toggleTask pattern exactly. Task vs taskless now both have side effects covered (taskless deact cb).
+          await markTaskCompleted(obj, currentTask);
+          // currentTask was the only open task left → the whole quest is
+          // finished. Retire it now so the primary slot frees up this turn
+          // instead of waiting for the next check pass.
+          if (tasks.where((t) => t['completed'] != true).length <= 1) {
             await deactivateObjective(obj.id);
-            await loadActiveObjectives();
             debugPrint(
-              '[Objective] Taskless objective naturally completed: ${obj.objective}',
+              '[Objective] Final task done — quest retired: ${obj.objective}',
             );
           }
+          await loadActiveObjectives();
+          debugPrint(
+            '[Objective] Task completed (via god thin mark): $currentTask',
+          );
+        } else {
+          // It was a taskless objective that got completed!
+          await deactivateObjective(obj.id);
+          await loadActiveObjectives();
+          debugPrint(
+            '[Objective] Taskless objective naturally completed: ${obj.objective}',
+          );
         }
       }
     } catch (e) {
