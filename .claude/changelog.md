@@ -5,7 +5,7 @@
 - **Diagnosis trail (honest record):** first hypothesis was `--jinja` breaking multimodal templating — WRONG; Wally's follow-up screenshot showed the app's own detection verdict ("no vision projector loaded"), which never touches the server. Verified the launch path DOES pass the browsed mmproj (`llm_provider.dart:179` + settings launch sites), so vision worked server-side while the verdict blocked the image client-side. The reasoning update was coincidental timing.
 - **Threshold tweak in the same push:** `kStaleCheckRetireAfter` 8 → 4 (2f53edd, maintainer tuning).
 - **Verification:** analyze clean; all 79 capability tests pass. Grok review deliberately skipped: two-line guard reorder whose spec is the factory's own pre-existing doc comment ("An explicitly-configured mmproj is AUTHORITATIVE"), with direct regression tests — below the non-trivial bar.
-- **Commit hash:** (backfilled)
+- **Commit hash:** 749ae0b
 
 ## 2026-07-15 — feat(objectives): stale steps retire gracefully after 8 consecutive misses; design doc updated with maintainer decisions
 - **Files:** `lib/services/chat/objective_proposal.dart` (in-memory consecutive-miss counter keyed `objectiveId|currentTask`, reset on YES or key change; at `kStaleCheckRetireAfter`=8 the item is treated as done — same side-effect path as a YES verdict, no parallel machinery; restart merely delays retirement), `docs/design/parallel-eval-dispatch.md` (§6 decisions: late chips approved; NO client cap for oMLX — its own UX owns parallelism, evals queue server-side at parallel=1; objective cadence stays every-turn), `docs/Rawhide.md`.
