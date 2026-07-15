@@ -21,8 +21,8 @@ PromptPlan buildGenerationShapedPlan({
   String loreExTop = '[LXT]\n',
   String mesExampleBlock = '<START>\nAlice: hi\n',
   String loreExBottom = '[LXB]\n',
-  String summaryBlock = '[The story so far: things happened]\n',
-  String journalBlock = '[journal]\n',
+  String summaryBlock = '\n[The story so far: things happened]\n',
+  String journalBlock = '\n[journal]\n',
   String postHistoryBlock = 'PHI\n',
   String loreAnTop = '[ANT]\n',
   String authorNoteBlock = "[Author's Note: be cozy]\n",
@@ -70,12 +70,14 @@ PromptPlan buildGenerationShapedPlan({
     text: loreExBottom,
   );
   plan.add(id: 'start', text: '<START>\n');
+  plan.add(id: 'history', label: 'Chat History', text: '', counted: false);
+  // Phase 3 (measured) + the audit-#4 remainder: memories, the recap, and
+  // the journal ALL follow the transcript — see the placement comment in
+  // chat_service_generation.dart (volatile blocks before history force a
+  // full re-prefill on every local backend).
+  plan.add(id: 'memories', label: 'Retrieved Memories', text: '', counted: false);
   plan.add(id: 'summary', label: 'Summary', text: summaryBlock);
   plan.add(id: 'journal', label: 'Journal', text: journalBlock);
-  plan.add(id: 'history', label: 'Chat History', text: '', counted: false);
-  // Phase 3 (measured): memories follow the transcript — see the placement
-  // comment in chat_service_generation.dart.
-  plan.add(id: 'memories', label: 'Retrieved Memories', text: '', counted: false);
   plan.add(id: 'post_history', label: 'Post-History', text: postHistoryBlock);
   plan.add(id: 'lore.an_top', label: 'Lorebook', text: loreAnTop);
   plan.add(id: 'author_note', label: 'Author\'s Note', text: authorNoteBlock);
@@ -116,15 +118,18 @@ void main() {
     expect(plan.systemText, legacySystem);
 
     // The canonical prompt shape (depth lore NOT rendered — it is spliced
-    // into history by the budget walk). One DELIBERATE delta vs the legacy
+    // into history by the budget walk). TWO DELIBERATE deltas vs the legacy
     // concatenation: retrieved memories follow the transcript (Phase 3
-    // placement, measured — see chat_service_generation.dart).
+    // placement, measured), and the recap + journal follow them too (audit
+    // finding #4's remainder — both blocks change between turns, and a
+    // changing block before history forces a full re-prefill on local
+    // backends). See the placement comment in chat_service_generation.dart.
     const legacyPrompt =
         "<START>\n"
-        "[The story so far: things happened]\n"
-        "[journal]\n"
         "Sam: hello\nAlice: hey there"
         "\n[Exact earlier lines: - x]\n"
+        "\n[The story so far: things happened]\n"
+        "\n[journal]\n"
         "PHI\n"
         "[ANT]\n"
         "[Author's Note: be cozy]\n"
@@ -143,8 +148,8 @@ void main() {
     const legacyFixed =
         "$legacySystem"
         "<START>\n"
-        "[The story so far: things happened]\n"
-        "[journal]\n"
+        "\n[The story so far: things happened]\n"
+        "\n[journal]\n"
         "PHI\n"
         "[ANT]\n"
         "[Author's Note: be cozy]\n"
@@ -203,5 +208,37 @@ void main() {
     final plan = PromptPlan();
     plan.add(id: 'a', text: 'x');
     expect(() => plan.add(id: 'a', text: 'y'), throwsStateError);
+  });
+
+  test('KV-cache prefix stability: per-turn-volatile blocks (recap, journal, '
+      'memories) never touch the prompt before the transcript', () {
+    const historyText = 'Sam: hello\nAlice: hey there';
+    // Everything a local backend's prefix cache sees up THROUGH the
+    // transcript — this must be byte-identical between turns or the whole
+    // history re-prefills (the ~15s-per-reply failure mode on 30B models).
+    String prefixThroughHistory(PromptPlan plan) {
+      final user = plan.userText;
+      final end = user.indexOf(historyText);
+      expect(end, isNot(-1));
+      return '${plan.systemText}\n${user.substring(0, end + historyText.length)}';
+    }
+
+    final turnA = buildGenerationShapedPlan(
+      summaryBlock: '\n[The story so far: chapter one]\n',
+      journalBlock: '\n[journal: sad memories first]\n',
+    );
+    turnA.section('history').text = historyText;
+    turnA.section('memories').text = '\n[Exact earlier lines: - x]\n';
+
+    // Next turn: mood re-sorted the journal, the pass rewrote the recap,
+    // retrieval swapped the memories. The prefix must not move.
+    final turnB = buildGenerationShapedPlan(
+      summaryBlock: '\n[The story so far: chapter two, much longer now]\n',
+      journalBlock: '\n[journal: joyful memories first, resurfaced card]\n',
+    );
+    turnB.section('history').text = historyText;
+    turnB.section('memories').text = '\n[Exact earlier lines: - y - z]\n';
+
+    expect(prefixThroughHistory(turnA), prefixThroughHistory(turnB));
   });
 }

@@ -342,9 +342,16 @@ extension ChatServiceGeneration on ChatService {
 
       // Build summary block if available. Role frame (spec §6): the recap is
       // the plot spine; the journal carries feelings; RAG carries exact lines.
+      // Leading \n: post-transcript blocks carry their own separator because
+      // history has no trailing newline (same convention as memoriesBlock).
+      // The "not new prose" clause is the recap's anti-echo guard for its
+      // post-transcript seat (Grok review: a bare recap right before the
+      // reply is narrative-continue bait — models restate it).
       String summaryBlock = '';
       if (_summary.isNotEmpty) {
-        summaryBlock = '[The story so far: $_summary]\n';
+        summaryBlock =
+            '\n[The story so far (a recap for memory — not new prose; do '
+            'not continue or restate it): $_summary]\n';
       }
 
       // The Journal — the upcoming speaker's pinned + hot memory cards, with
@@ -568,8 +575,6 @@ extension ChatServiceGeneration on ChatService {
         );
         // ── user message (transcript + tail) ──
         plan.add(id: 'start', text: '<START>\n');
-        plan.add(id: 'summary', label: 'Summary', text: summaryBlock);
-        plan.add(id: 'journal', label: 'Journal', text: journalBlock);
         plan.add(
           id: 'history',
           label: 'Chat History',
@@ -590,6 +595,21 @@ extension ChatServiceGeneration on ChatService {
           text: '',
           counted: false, // budget-fitted by the RAG joint cap below
         );
+        // The recap and the Journal ALSO sit after the transcript (audit
+        // finding #4's remainder, same mechanism as memories above): the
+        // journal block re-sorts with the speaker's mood and re-warms cold
+        // cards EVERY turn, and the recap rewrites every journal pass — as
+        // pre-history sections they rewrote the prompt's head, forcing a
+        // full re-prefill of the whole transcript on every local backend
+        // (KoboldCpp, oMLX, LM Studio; prefix caches need byte-identical
+        // heads). Post-history, mood re-ordering is cache-free. Render order
+        // memories → recap → journal puts the feelings channel closest to
+        // the generation point, matching its "truer guide" role frame.
+        // Their fixed-count slot is unchanged (history/memories are excluded
+        // from fixedCountText); the only fixed-count delta is each block's
+        // new separator newline (≤1 token), so history budgeting is intact.
+        plan.add(id: 'summary', label: 'Summary', text: summaryBlock);
+        plan.add(id: 'journal', label: 'Journal', text: journalBlock);
         plan.add(
           id: 'post_history',
           label: 'Post-History',

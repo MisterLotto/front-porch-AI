@@ -26,8 +26,10 @@ import '../journal_store.dart';
 /// The Journal — prompt injection builder (docs/design/journal-memory.md
 /// §4.5). Tenth sibling of the prompt_injection builders: renders the
 /// upcoming speaker's pinned + hot memory cards (with their felt emotions)
-/// into a token-budgeted block injected right after the recap (summaryBlock)
-/// in transcript assembly.
+/// into a token-budgeted block injected right after the recap (summaryBlock),
+/// which itself follows the transcript + retrieved memories (post-history
+/// placement — this block re-sorts with mood every turn, and a changing block
+/// BEFORE the history would force a full re-prefill on local backends).
 ///
 /// Phase 2 emotional physics live here on the read side: the hot set is
 /// pinned cards plus cards above the cold threshold, ordered by heat with a
@@ -111,10 +113,15 @@ class JournalInjection {
     // Role frame (docs/design/prompt-state-injection.md §6): the journal is
     // the FEELINGS channel — when a card covers the same moment as the recap
     // or a retrieved transcript line, the feelings here are the truer guide.
-    return "[$characterName's private journal — personal memories from this "
-        'chat, in their own words. These shape how they feel and behave, and '
-        'when they cover the same moments as the story recap or earlier '
-        'lines, the feelings here are the truer guide:\n'
+    // Leading \n: this block renders AFTER the transcript (which has no
+    // trailing newline), so like memoriesBlock it carries its own separator;
+    // the "not new messages" clause is the anti-echo guard for sitting near
+    // the generation point.
+    return "\n[$characterName's private journal — personal memories from "
+        'this chat, in their own words. Not new messages, and nothing here '
+        'needs a reply. These shape how they feel and behave, and when they '
+        'cover the same moments as the story recap or the lines above, the '
+        'feelings here are the truer guide:\n'
         '${lines.join('\n')}\n]\n';
   }
 
