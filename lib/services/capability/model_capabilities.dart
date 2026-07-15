@@ -82,10 +82,17 @@ class VisionSupport {
     GgufVisionInfo? info, {
     required bool mmprojConfigured,
   }) {
-    if (info == null) return VisionSupport.none;
-    if (info.hasEmbeddedProjector) {
+    if (info?.hasEmbeddedProjector ?? false) {
       return const VisionSupport(true, VisionSource.ggufEmbedded);
     }
+    // The doc-comment promise above must hold even when the main GGUF's
+    // metadata failed to parse entirely (info == null — resolveLocalGgufInfo
+    // nulls on any parser exception and caches that for the session). The
+    // old null-first bail-out silently discarded the user's browsed mmproj
+    // for exactly the models the Browse button exists for: the launch path
+    // still loaded the projector (vision worked server-side!) while this
+    // verdict said "no vision projector loaded" and the app refused to send
+    // the image (community report, 2026-07-14).
     if (mmprojConfigured) {
       return const VisionSupport(true, VisionSource.ggufWithMmproj);
     }

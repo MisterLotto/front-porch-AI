@@ -243,6 +243,24 @@ void main() {
       expect(s.supported, isFalse);
     });
 
+    test('UNPARSEABLE gguf (info == null) + attached mmproj → still supported '
+        '(the browsed projector is authoritative)', () {
+      // Regression (community report 2026-07-14): resolveLocalGgufInfo nulls
+      // on any parser exception and caches it, and the old null-first
+      // bail-out then discarded the user's browsed mmproj — the app refused
+      // to send images while the launch path had loaded the projector and
+      // the server could genuinely see. A parse failure must never silence
+      // an explicit user attachment.
+      final s = VisionSupport.fromGguf(null, mmprojConfigured: true);
+      expect(s.supported, isTrue);
+      expect(s.source, VisionSource.ggufWithMmproj);
+    });
+
+    test('unparseable gguf without mmproj → not supported', () {
+      final s = VisionSupport.fromGguf(null, mmprojConfigured: false);
+      expect(s.supported, isFalse);
+    });
+
     test('an attached mmproj is authoritative even when the arch heuristic '
         'says text-only → supported (ggufWithMmproj)', () {
       // Regression: users with a companion mmproj for a model our conservative
@@ -254,12 +272,6 @@ void main() {
       expect(s.source, VisionSource.ggufWithMmproj);
     });
 
-    test('null info → none', () {
-      expect(
-        VisionSupport.fromGguf(null, mmprojConfigured: true).supported,
-        isFalse,
-      );
-    });
   });
 
   group('capability metadata host detection (shared helper)', () {
