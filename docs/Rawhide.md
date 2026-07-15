@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🔁 **Repetition checking looks much further back now** — the repeat-penalty window defaulted to just 64 tokens (about fifty words), so anything your character said two paragraphs ago could repeat penalty-free. The default is now 1024 tokens, and the sliders (desktop and web) go up to 2048. If you ever saved your own value, yours is untouched — this only upgrades the default.
+
 - 🎛️ **XTC and DRY only show where they work** — those two samplers are KoboldCpp-only, but their sliders sat in Generation Settings (with a small "local models only" note) no matter which backend you were on. They now appear only when the KoboldCpp backend is active — on oMLX or a remote API they're simply gone, in the app and on the web, so the settings you see are the settings that do something.
 
 - 📸 **Fixed: a manually-attached vision projector was being ignored for some models** — if you gave a model vision by browsing to its mmproj file, but the model's own metadata couldn't be read by the app, photo attachments were wrongly blocked with "your local model has no vision projector (mmproj) loaded" — even though the projector WAS loaded and the model could genuinely see. Your browsed projector is now always trusted. (Thanks Wally for the report — and no, it wasn't the reasoning update; that was a coincidence of timing.)

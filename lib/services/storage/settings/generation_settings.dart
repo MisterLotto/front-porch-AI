@@ -36,7 +36,10 @@ class GenerationSettings with SettingsBase {
   int _topK = 0; // 0 = disabled (both KoboldCpp and remote APIs treat it so)
   double _temperature = 0.7;
   double _repeatPenalty = 1.1;
-  int _repeatPenaltyTokens = 64;
+  // Penalty look-back window. 1024 per community standard (360–2048);
+  // the old 64 (~50 words) let anything two paragraphs back repeat
+  // penalty-free (defaults audit, maintainer-approved 2026-07-15).
+  int _repeatPenaltyTokens = 1024;
   // DRY anti-repetition (KoboldCpp only). 0 = off; ~0.8 is the usual dose.
   double _dryMultiplier = 0.0;
   bool _dynamicTempEnabled = false;

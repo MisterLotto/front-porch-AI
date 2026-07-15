@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-15 — tweak(defaults): repeatPenaltyTokens 64 → 1024; slider max 512 → 2048 on all three surfaces (maintainer-approved from the defaults audit)
+- **Files:** `lib/services/storage/settings/generation_settings.dart` (default + rationale comment), `lib/ui/settings/tabs/generation_tab.dart` + `lib/ui/dialogs/chat_settings_dialog.dart` (max 2048, divisions 256), `web_ui/src/pages/SettingsPage.tsx` (max 2048, step 8) + `assets/web_app` rebuilt.
+- **Semantics:** only the DEFAULT changes — an explicitly persisted value always wins (`prefs ?? default`). NOTE: the maintainer's own prefs carry an explicit 512, so his setup keeps 512 until he moves the slider himself (told directly). The audit's second flag (topP 0.9 stacked on minP 0.1) was NOT approved and is unchanged.
+- **Verification:** analyze clean; 1,783 model+service tests pass (the 64s in chat_generation_settings_test are explicit fixture values, not the default — untouched).
+- **Commit hash:** (backfilled)
+
 ## 2026-07-15 — feat(settings): XTC/DRY sliders gated behind the KoboldCpp backend (all 3 surfaces) + defaults audit
 - **Files:** `lib/ui/settings/tabs/generation_tab.dart` + `lib/ui/dialogs/chat_settings_dialog.dart` (XTC threshold/probability + DRY strength wrapped in `activeBackend == kobold` collection-ifs; "(Local models only.)" tooltip suffixes dropped as now redundant), `web_ui/src/pages/SettingsPage.tsx` (XTC pair gated on `s.backend === 'kobold'` — web parity; NOTE: web never had a DRY slider, pre-existing parity gap logged), `assets/web_app/*` rebuilt via npm run build.
 - **Defaults audit (maintainer asked "are they sane?"):** temp 0.7 ✓, minP 0.1 ✓, topK 0 (off) ✓, repeatPenalty 1.1 ✓, XTC off ✓, DRY off ✓, maxLength 1024 ✓, default system prompt solid. TWO flags raised to the maintainer, NOT changed without his call: (1) `repeatPenaltyTokens = 64` is a very short penalty window (community standard 360–2048; the global slider even caps at 512) — recommended 1024 default + slider max raise; (2) minP 0.1 stacked with topP 0.9 double-truncates — cleaner to ship topP 1.0 when minP is the primary filter (minor).

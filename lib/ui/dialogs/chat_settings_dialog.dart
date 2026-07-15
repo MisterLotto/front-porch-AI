@@ -357,8 +357,8 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           .resolveRepeatPenaltyTokens(storage)
                           .toDouble(),
                       min: 0,
-                      max: 512,
-                      divisions: 512,
+                      max: 2048,
+                      divisions: 256,
                       isInteger: true,
                       tooltip:
                           'How far back the AI checks for repetition (in tokens). Higher = checks more of the conversation history.',
