@@ -140,3 +140,6 @@ docs/Newsletter-Since-March-28-2026.md
 
 # Local Claude Code skills (per-machine, never shared).
 .claude/skills/
+
+# Locally-built fpzip dylib for the native Draw Things client (scripts/build-fpzip-macos.sh)
+tools/fpzip/

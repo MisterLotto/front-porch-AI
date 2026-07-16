@@ -194,6 +194,11 @@ if [ "$DO_ML" -eq 1 ]; then
   # Match the packages and flags used in nightly.yml as closely as possible
   PIP_PKGS="pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy onnxruntime transformers huggingface_hub tokenizers ctranslate2 grpcio grpcio-tools flatbuffers fpzip pillow"
   python3 -m pip install $PIP_PKGS || pip install $PIP_PKGS
+  # protobuf pinned to the pb2 gencode (6.31.1) so the frozen dt_grpc_client has a
+  # matching runtime; without it `import imageService_pb2` raises at startup.
+  # Installed separately because the version spec's <,> chars are shell-hostile
+  # inside the space-split $PIP_PKGS list.
+  python3 -m pip install "protobuf>=6.31.1,<7" || pip install "protobuf>=6.31.1,<7"
 
   # Kokoro (expanded collect-all like CI)
   echo "  -> kokoro_tts"
@@ -258,9 +263,11 @@ if [ "$DO_ML" -eq 1 ]; then
     --add-data "$GRPC_SRC/ControlInputType.py:." \
     --add-data "$GRPC_SRC/ControlMode.py:." \
     --add-data "$GRPC_SRC/ca_chain.pem:." \
-    --collect-all grpcio --collect-all flatbuffers --collect-all fpzip \
+    --collect-all grpc --collect-all protobuf --collect-all flatbuffers --collect-all fpzip \
     --collect-all numpy --collect-all PIL \
-    --hidden-import grpc --hidden-import grpc._cython --hidden-import grpcio \
+    --hidden-import grpc --hidden-import grpc._cython --hidden-import grpc._cython.cygrpc \
+    --hidden-import google.protobuf --hidden-import google.protobuf.runtime_version \
+    --hidden-import google._upb._message \
     --hidden-import flatbuffers --hidden-import fpzip --hidden-import numpy \
     --hidden-import PIL --hidden-import PIL.Image \
     --hidden-import imageService_pb2 --hidden-import imageService_pb2_grpc \

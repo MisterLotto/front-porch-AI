@@ -1048,26 +1048,38 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
       Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.black26,
+          color: AppColors.surfaceContainerOf(context),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
             Icon(
               tts.isPiperAvailable ? Icons.check_circle : Icons.warning_amber,
-              color: tts.isPiperAvailable ? Colors.greenAccent : Colors.amber,
+              color: tts.isPiperAvailable
+                  ? AppColors.resolve(
+                      context,
+                      AppColors.logReady,
+                      AppColors.bondHighLight,
+                    )
+                  : AppColors.porchAmberOf(context),
               size: 16,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 tts.isPiperAvailable
-                    ? 'Piper TTS engine is ready'
-                    : 'Piper TTS engine not found. Requires bundled Piper binary.',
+                    ? 'Piper TTS is ready — standard voices use the '
+                          'built-in engine (downloaded on first use).'
+                    : 'Legacy Piper binary not found. FP_TTS_SIDECAR=1 '
+                          'forces the legacy engine, which requires it.',
                 style: TextStyle(
                   color: tts.isPiperAvailable
-                      ? Colors.greenAccent
-                      : Colors.amber,
+                      ? AppColors.resolve(
+                          context,
+                          AppColors.logReady,
+                          AppColors.bondHighLight,
+                        )
+                      : AppColors.porchAmberOf(context),
                   fontSize: 11,
                 ),
               ),
