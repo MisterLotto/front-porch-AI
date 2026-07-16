@@ -144,9 +144,7 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     if (speaker != null && !speaker.isHost) {
-      final img = speaker.card.imagePath != null
-          ? _resolveCharImage(speaker.card.imagePath!)
-          : null;
+      final img = _coverFor(chatService, speaker.card);
       final idx = nonHost.indexWhere((p) => p.id == speaker!.id);
       return (img, _groupCharacterColor(idx >= 0 ? idx : 0));
     }
@@ -160,10 +158,25 @@ class _ChatPageState extends State<ChatPage> {
         (host != null &&
             (msg.sender == host.name ||
                 (msg.characterId != null && msg.characterId == host.id)));
-    final img = (isHostMsg && host?.card.imagePath != null)
-        ? _resolveCharImage(host!.card.imagePath!)
+    final img = (isHostMsg && host != null)
+        ? _coverFor(chatService, host.card)
         : null;
     return (img, null);
+  }
+
+  /// Star-aware avatar for a character chip (header, bubbles, pickers): the
+  /// ★ gallery cover of the ORIGIN library card — the SAME face the home
+  /// grid, web library, and exports show ("one face per character",
+  /// maintainer 2026-07-16) — else the portrait. Null when imageless.
+  File? _coverFor(ChatService chat, CharacterCard card) {
+    final lib = chat.originLibraryCardFor(card) ?? card;
+    final cover = Provider.of<CharacterRepository>(
+      context,
+      listen: false,
+    ).coverImageFileFor(lib);
+    if (cover != null) return cover;
+    final path = lib.imagePath ?? card.imagePath;
+    return path == null ? null : _resolveCharImage(path);
   }
 
   /// Platform-appropriate label for the regenerate shortcut (#86), surfaced in
@@ -362,7 +375,7 @@ class _ChatPageState extends State<ChatPage> {
       builder: (_) => SceneGuestPickerDialog(
         characters: characters,
         initialFilter: initial,
-        resolveImage: _resolveCharImage,
+        resolveImage: (card) => _coverFor(chat, card),
       ),
     );
     _showingGuestPicker = false;
@@ -386,7 +399,7 @@ class _ChatPageState extends State<ChatPage> {
       builder: (_) => SceneGuestPickerDialog(
         characters: chat.joinableGuestCharacters,
         initialFilter: '',
-        resolveImage: _resolveCharImage,
+        resolveImage: (card) => _coverFor(chat, card),
       ),
     );
     if (selected != null) {
@@ -1015,12 +1028,11 @@ class _ChatPageState extends State<ChatPage> {
     final Widget avatars;
     if (!isMulti) {
       final card = cast.isNotEmpty ? cast.first.card : null;
+      final cover = card == null ? null : _coverFor(chatService, card);
       avatars = CircleAvatar(
-        backgroundImage: card?.imagePath != null
-            ? FileImage(_resolveCharImage(card!.imagePath!))
-            : null,
-        onBackgroundImageError: card?.imagePath != null ? (_, _) {} : null,
-        child: card?.imagePath == null ? const Icon(Icons.person) : null,
+        backgroundImage: cover != null ? FileImage(cover) : null,
+        onBackgroundImageError: cover != null ? (_, _) {} : null,
+        child: cover == null ? const Icon(Icons.person) : null,
       );
     } else {
       final shown = cast.length.clamp(0, 4);
@@ -1058,21 +1070,28 @@ class _ChatPageState extends State<ChatPage> {
                                 )
                               : null,
                         ),
-                        child: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: _groupCharacterColor(i),
-                          backgroundImage: card.imagePath != null
-                              ? FileImage(_resolveCharImage(card.imagePath!))
-                              : null,
-                          child: card.imagePath == null
-                              ? Text(
-                                  card.name.isNotEmpty ? card.name[0] : '?',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                )
-                              : null,
+                        child: Builder(
+                          builder: (_) {
+                            final cover = _coverFor(chatService, card);
+                            return CircleAvatar(
+                              radius: 16,
+                              backgroundColor: _groupCharacterColor(i),
+                              backgroundImage: cover != null
+                                  ? FileImage(cover)
+                                  : null,
+                              child: cover == null
+                                  ? Text(
+                                      card.name.isNotEmpty
+                                          ? card.name[0]
+                                          : '?',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : null,
+                            );
+                          },
                         ),
                       ),
                     );
@@ -2750,8 +2769,14 @@ class _ChatPageState extends State<ChatPage> {
 
               if (expressionFile != null) {
                 displayFile = expressionFile;
-              } else if (isExpressionEnabled) {
-                // Apply fallback behavior
+              } else if (isExpressionEnabled && hasAvatars) {
+                // Apply fallback behavior. Only when the character actually
+                // HAS expression images: with none, the old fallback ladder
+                // ended at the raw portrait — ignoring the gallery ring, so
+                // starring a look changed the library card but never this
+                // sidebar (field report). Expressionless characters now take
+                // the plain-chat ring branch below (star default + chevrons)
+                // even while the global expression toggle is on.
                 final fallback = storage.expressionFallback;
                 if (fallback == 'none') {
                   return const SizedBox.shrink();
@@ -2764,7 +2789,7 @@ class _ChatPageState extends State<ChatPage> {
                       style: TextStyle(fontSize: _sidebarWidth * 0.5),
                     ),
                   );
-                } else if (fallback == 'prime' && hasAvatars) {
+                } else if (fallback == 'prime') {
                   // Show prime avatar (expression-only — never a gallery look).
                   final primeAvatar =
                       expressionAvatars
@@ -2786,20 +2811,18 @@ class _ChatPageState extends State<ChatPage> {
                   expressionKey = primeAvatar.id;
                 } else {
                   // 'neutral' or default: show neutral avatar if available, else character image
-                  if (hasAvatars) {
-                    final neutralAvatar = expressionAvatars
-                        .where((a) => a.label?.toLowerCase() == 'neutral')
-                        .toList();
-                    if (neutralAvatar.isNotEmpty) {
-                      final avatarDir = storage.characterAvatarDir(
-                        character.name,
-                      );
-                      displayFile = File(
-                        '${avatarDir.path}/${neutralAvatar.first.filename}',
-                      );
-                      expressionKey = neutralAvatar.first.id;
-                      expressionEmoji = EmotionLabels.emoji['neutral'];
-                    }
+                  final neutralAvatar = expressionAvatars
+                      .where((a) => a.label?.toLowerCase() == 'neutral')
+                      .toList();
+                  if (neutralAvatar.isNotEmpty) {
+                    final avatarDir = storage.characterAvatarDir(
+                      character.name,
+                    );
+                    displayFile = File(
+                      '${avatarDir.path}/${neutralAvatar.first.filename}',
+                    );
+                    expressionKey = neutralAvatar.first.id;
+                    expressionEmoji = EmotionLabels.emoji['neutral'];
                   }
                   if (displayFile == null && character.imagePath != null) {
                     displayFile = _resolveCharImage(character.imagePath!);
