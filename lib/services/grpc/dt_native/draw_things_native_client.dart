@@ -119,6 +119,15 @@ class DrawThingsNativeClient {
           onBadCertificate: (cert, host) =>
               sha256.convert(cert.der).toString() == _pinnedDerSha256,
         ),
+        // Draw Things gzip-compresses responses. Python gRPC negotiates that
+        // automatically; grpc-dart only accepts compressed messages when a
+        // codec registry says so — without this, every reply died as
+        // DATA_LOSS 'Error parsing response' (field report from the first
+        // signed nightly, reproduced + verified fixed with tool-probe
+        // against a live server).
+        codecRegistry: CodecRegistry(
+          codecs: const [GzipCodec(), IdentityCodec()],
+        ),
       ),
     );
   }
