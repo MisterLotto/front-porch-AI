@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/stt/sherpa_whisper_engine.dart';
 import 'package:front_porch_ai/services/stt/whisper_sidecar_transport.dart';
@@ -178,6 +179,19 @@ class SttService extends ChangeNotifier {
   /// export over direct HTTPS normally, or the sidecar's CTranslate2
   /// model when FP_STT_SIDECAR=1 (the two formats are not interchangeable,
   /// so there is deliberately no cross-engine download fallback).
+  /// Whether the currently selected whisper model's files are on disk
+  /// (verified sizes, not just existence). The forced-legacy sidecar
+  /// manages its own CT2 cache, so it reports true rather than nag.
+  bool get isSelectedModelDownloaded {
+    if (SherpaWhisperEngine.sidecarForced) return true;
+    final root = _storageService.rootPath;
+    if (root == null) return false;
+    return SherpaWhisperEngine.isModelPresent(
+      root,
+      _storageService.whisperModel,
+    );
+  }
+
   Future<bool> downloadModel() async {
     if (_isDownloading) return false;
     _isDownloading = true;
@@ -205,7 +219,13 @@ class SttService extends ChangeNotifier {
             notifyListeners();
           },
         );
-        ok = true;
+        // Never claim success on faith — verify the files actually landed
+        // (all three present, ONNX graphs plausibly sized).
+        ok = SherpaWhisperEngine.isModelPresent(root, modelSize);
+        if (!ok) {
+          _downloadError = 'Download finished but the model files failed '
+              'verification — please try again.';
+        }
       } else {
         final modelDir = p.join(root, 'system', 'whisper_models');
         await Directory(modelDir).create(recursive: true);
@@ -625,8 +645,18 @@ class SttService extends ChangeNotifier {
 
       // Native path: WAV input only (the desktop recorder always produces
       // WAV; browser-uploaded webm from the web UI stays on the sidecar).
-      if (!SherpaWhisperEngine.sidecarForced &&
-          SherpaWhisperEngine.canDecode(audioPath)) {
+      String fallbackReason;
+      var expectedFallback = false;
+      if (SherpaWhisperEngine.sidecarForced) {
+        fallbackReason = 'FP_STT_SIDECAR=1 (legacy forced by environment)';
+        expectedFallback = true;
+      } else if (!SherpaWhisperEngine.canDecode(audioPath)) {
+        fallbackReason =
+            'browser audio (not WAV) — known limitation, native engine '
+            'is WAV-only';
+        expectedFallback = true;
+      } else {
+        fallbackReason = 'native model missing after download attempt';
         try {
           if (!SherpaWhisperEngine.isModelPresent(root, modelSize)) {
             // First use after the engine switch (or a fresh install): the
@@ -644,12 +674,19 @@ class SttService extends ChangeNotifier {
             debugPrint(
               '[STT-Native] transcribed "${text.length > 60 ? '${text.substring(0, 60)}...' : text}"',
             );
+            EngineHealth.instance.reportNative(EngineHealth.whisper);
             return text.isEmpty ? null : text;
           }
         } catch (e) {
           debugPrint('[STT-Native] failed, trying sidecar: $e');
+          fallbackReason = 'native transcription failed: $e';
         }
       }
+      EngineHealth.instance.reportFallback(
+        EngineHealth.whisper,
+        fallbackReason,
+        expected: expectedFallback,
+      );
 
       final modelDir = p.join(root, 'system', 'whisper_models');
       await Directory(modelDir).create(recursive: true);

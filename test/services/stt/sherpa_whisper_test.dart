@@ -72,6 +72,112 @@ void main() {
     });
   });
 
+  group('decodeWav', () {
+    // Builds a WAV around int16 PCM frames. extensible=true reproduces the
+    // macOS recorder's WAVE_FORMAT_EXTENSIBLE 40-byte fmt chunk — the shape
+    // sherpa's own reader rejects ("Expected subchunk1_size 16. Given: 40"),
+    // which made every desktop dictation silently ride the Python sidecar.
+    Uint8List buildWav(
+      List<int> frames, {
+      int channels = 1,
+      int rate = 16000,
+      bool extensible = false,
+    }) {
+      final fmtSize = extensible ? 40 : 16;
+      final dataLen = frames.length * 2;
+      final b = BytesBuilder();
+      void u16(int v) => b.add([v & 0xFF, (v >> 8) & 0xFF]);
+      void u32(int v) =>
+          b.add([v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
+      b.add('RIFF'.codeUnits);
+      u32(4 + 8 + fmtSize + 8 + dataLen);
+      b.add('WAVE'.codeUnits);
+      b.add('fmt '.codeUnits);
+      u32(fmtSize);
+      u16(extensible ? 0xFFFE : 1);
+      u16(channels);
+      u32(rate);
+      u32(rate * channels * 2);
+      u16(channels * 2);
+      u16(16);
+      if (extensible) {
+        u16(22); // cbSize
+        u16(16); // valid bits
+        u32(0); // channel mask
+        u16(1); // SubFormat: PCM
+        b.add(List.filled(14, 0)); // rest of the GUID
+      }
+      b.add('data'.codeUnits);
+      u32(dataLen);
+      for (final f in frames) {
+        u16(f & 0xFFFF);
+      }
+      return b.toBytes();
+    }
+
+    test('classic PCM16 mono decodes with correct rate and values', () async {
+      final dir = await Directory.systemTemp.createTemp('stt_wav');
+      try {
+        final f = File('${dir.path}/classic.wav')
+          ..writeAsBytesSync(buildWav([0, 16384, -16384, 32767]));
+        final wave = SherpaWhisperEngine.decodeWav(f.path);
+        expect(wave.sampleRate, 16000);
+        expect(wave.samples, hasLength(4));
+        expect(wave.samples[1], closeTo(0.5, 0.001));
+        expect(wave.samples[2], closeTo(-0.5, 0.001));
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('macOS extensible (fmt 40) decodes — the field-reported shape', () async {
+      final dir = await Directory.systemTemp.createTemp('stt_wav');
+      try {
+        final f = File('${dir.path}/ext.wav')
+          ..writeAsBytesSync(
+            buildWav([8192, 8192, -8192, -8192], extensible: true),
+          );
+        final wave = SherpaWhisperEngine.decodeWav(f.path);
+        expect(wave.sampleRate, 16000);
+        expect(wave.samples, hasLength(4));
+        expect(wave.samples.first, closeTo(0.25, 0.001));
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('stereo downmixes to mono', () async {
+      final dir = await Directory.systemTemp.createTemp('stt_wav');
+      try {
+        final f = File('${dir.path}/stereo.wav')
+          ..writeAsBytesSync(
+            buildWav([16384, 0, -16384, 0], channels: 2),
+          );
+        final wave = SherpaWhisperEngine.decodeWav(f.path);
+        expect(wave.samples, hasLength(2));
+        expect(wave.samples[0], closeTo(0.25, 0.001));
+        expect(wave.samples[1], closeTo(-0.25, 0.001));
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('garbage and truncated files yield empty samples', () async {
+      final dir = await Directory.systemTemp.createTemp('stt_wav');
+      try {
+        final junk = File('${dir.path}/junk.wav')
+          ..writeAsBytesSync(List.filled(64, 0x42));
+        expect(SherpaWhisperEngine.decodeWav(junk.path).samples, isEmpty);
+        expect(
+          SherpaWhisperEngine.decodeWav('${dir.path}/missing.wav').samples,
+          isEmpty,
+        );
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    });
+  });
+
   test('canDecode accepts WAV and rejects other containers', () async {
     final dir = await Directory.systemTemp.createTemp('stt_probe');
     try {

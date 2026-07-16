@@ -22,9 +22,11 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/kokoro_debug.dart';
 import 'package:front_porch_ai/services/kokoro_chunk.dart';
 import 'package:front_porch_ai/services/ordered_audio_collector.dart';
+import 'package:front_porch_ai/utils/think_tags.dart';
 import 'package:front_porch_ai/utils/wav_utils.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path/path.dart' as p;
+import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/tts_engine.dart';
@@ -115,18 +117,34 @@ class TtsService extends ChangeNotifier {
   /// This is the source of truth used by UI pickers.
   List<TtsVoiceInfo> _currentAvailableVoices = const [];
 
+  /// Engine id [_currentAvailableVoices] was built for — engine switches
+  /// invalidate the cache here so no switch site has to remember to refresh.
+  String _voicesCacheEngine = '';
+
   /// Available voices for the currently selected TTS engine.
   ///
   /// When the engine is 'piper', this returns real installed voices
   /// (including manually added custom voices) instead of falling back to Kokoro.
-  List<TtsVoiceInfo> get activeVoices => _currentAvailableVoices.isNotEmpty
-      ? _currentAvailableVoices
-      : activeEngine.availableVoices;
+  List<TtsVoiceInfo> get activeVoices {
+    if (_voicesCacheEngine != _storageService.ttsEngine) {
+      // Stale cache from the previously selected engine (the voice dropdown
+      // used to keep showing Piper voices after switching to Kokoro). Serve
+      // the new engine's built-ins immediately and refresh asynchronously
+      // (scheduled as a new event — refresh notifies, and this getter can
+      // run during build).
+      unawaited(Future(refreshAvailableVoices));
+      return activeEngine.availableVoices;
+    }
+    return _currentAvailableVoices.isNotEmpty
+        ? _currentAvailableVoices
+        : activeEngine.availableVoices;
+  }
 
   /// Refreshes the voice list for the currently selected engine.
   /// Particularly important for Piper, where voices can be added manually
   /// (custom .onnx files) or via the Voice Browser.
   Future<void> refreshAvailableVoices() async {
+    _voicesCacheEngine = _storageService.ttsEngine;
     if (_isPiperEngine) {
       try {
         _currentAvailableVoices = await _voiceManager
@@ -328,10 +346,35 @@ class TtsService extends ChangeNotifier {
           // In-process sherpa vits path (sidecar retirement phase 4b):
           // fetch the matching re-export once (no export → legacy binary).
           final piperRoot = _storageService.rootPath;
-          final bool piperNative =
-              !SherpaPiperEngine.sidecarForced &&
-              piperRoot != null &&
-              await SherpaPiperEngine.ensureVoice(piperRoot, voice);
+          var piperNative = false;
+          String? piperNativeError;
+          if (!SherpaPiperEngine.sidecarForced && piperRoot != null) {
+            try {
+              piperNative = await SherpaPiperEngine.ensureVoice(
+                piperRoot,
+                voice,
+              );
+            } catch (e) {
+              // 404 returns false (expected); a throw is a REAL failure.
+              piperNativeError = 'native voice download failed: $e';
+            }
+          }
+          if (!piperNative) {
+            EngineHealth.instance.reportFallback(
+              EngineHealth.piper,
+              SherpaPiperEngine.sidecarForced
+                  ? 'FP_TTS_SIDECAR=1 (legacy forced by environment)'
+                  : piperNativeError ??
+                        'no native voice for "$voice" (custom voice) — '
+                            'using legacy binary',
+              expected: piperNativeError == null,
+            );
+          }
+          // Native is reported only after a chunk actually succeeds (Kokoro
+          // parity); a chunk failure is reported once per utterance, not
+          // once per chunk.
+          var nativePiperChunkOk = false;
+          String? nativePiperFailure;
 
           // Early check for the binary so we don't spam errors once per chunk
           final piperBinary = _piperBinaryPath();
@@ -377,8 +420,9 @@ class TtsService extends ChangeNotifier {
             File? wav;
             if (piperNative) {
               try {
+                // piperNative true implies ensureVoice ran → piperRoot set.
                 wav = await _piperNative.generate(
-                  root: piperRoot,
+                  root: piperRoot!,
                   voiceKey: voice,
                   text: chunk.text,
                   outputPath: p.join(
@@ -386,8 +430,10 @@ class TtsService extends ChangeNotifier {
                     'piper_native_${DateTime.now().millisecondsSinceEpoch}_$i.wav',
                   ),
                 );
+                nativePiperChunkOk = true;
               } catch (e) {
                 kDebugPrint('[TTS-Native] piper failed, using binary: $e');
+                nativePiperFailure ??= 'native generation failed: $e';
               }
             }
             wav ??= await _generatePiperWav(chunk.text, modelPath, i);
@@ -397,6 +443,15 @@ class TtsService extends ChangeNotifier {
 
             _generationProgress = (i + 1) / total;
             notifyListeners();
+          }
+          if (nativePiperChunkOk) {
+            EngineHealth.instance.reportNative(EngineHealth.piper);
+          }
+          if (nativePiperFailure != null) {
+            EngineHealth.instance.reportFallback(
+              EngineHealth.piper,
+              nativePiperFailure,
+            );
           }
         } else {
           // Kokoro: uses the persistent worker pool + internal chunking + collation
@@ -941,8 +996,13 @@ class TtsService extends ChangeNotifier {
     return Platform.isWindows ? 'piper.exe' : 'piper';
   }
 
-  /// Check if the Piper binary is available.
+  /// Whether Piper can speak. Standard catalog voices run on the built-in
+  /// sherpa engine (no binary needed since sidecar-retirement phase 4b);
+  /// the legacy binary is only REQUIRED when FP_TTS_SIDECAR=1 forces the
+  /// legacy path. Custom hand-made voices still use the binary via the
+  /// automatic per-voice fallback.
   bool get isPiperAvailable {
+    if (!SherpaPiperEngine.sidecarForced) return true;
     try {
       return File(_piperBinaryPath()).existsSync();
     } catch (_) {
@@ -1218,14 +1278,9 @@ See docs for current bundling instructions.
     }
 
     // ── Standard cleanup ──
-    result = result.replaceAll(
-      RegExp(r'<think>.*?</think>', caseSensitive: false, dotAll: true),
-      '',
-    );
-    result = result.replaceAll(
-      RegExp(r'<think>.*$', caseSensitive: false, dotAll: true),
-      '',
-    );
+    // Reasoning-tag debris (paired/unclosed/orphan-close) must never be
+    // spoken — Kokoro tokenizes stray tags as prose.
+    result = stripThinkTags(result);
     result = result.replaceAll(
       RegExp(r'\(OOC:.*?\)', caseSensitive: false),
       '',

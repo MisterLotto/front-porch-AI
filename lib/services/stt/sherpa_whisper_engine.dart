@@ -63,9 +63,15 @@ class SherpaWhisperEngine {
   static String modelDir(String root, String size) =>
       p.join(root, 'system', 'whisper_models', 'sherpa', size);
 
-  static bool isModelPresent(String root, String size) => _fileSuffixes.every(
-    (s) => File(p.join(modelDir(root, size), '$size-$s')).existsSync(),
-  );
+  static bool isModelPresent(String root, String size) =>
+      _fileSuffixes.every((s) {
+        final f = File(p.join(modelDir(root, size), '$size-$s'));
+        if (!f.existsSync()) return false;
+        // The ONNX graphs are tens of MB; a few-KB file is a saved CDN
+        // error page, not a model.
+        final minBytes = s.endsWith('.onnx') ? 1024 * 1024 : 1;
+        return f.lengthSync() >= minBytes;
+      });
 
   /// True when the native path can decode [audioPath] — a RIFF/WAVE file
   /// (the desktop recorder always produces one). Browser-uploaded webm/ogg
@@ -143,11 +149,11 @@ class SherpaWhisperEngine {
     String? libDir,
   ) {
     sherpa.initBindings(libDir);
-    final wave = sherpa.readWave(audioPath);
+    final wave = decodeWav(audioPath);
     if (wave.samples.isEmpty) {
       throw const FormatException('unreadable or empty WAV');
     }
-    final trimmed = trimSilence(wave.samples);
+    final trimmed = trimSilence(wave.samples, sampleRate: wave.sampleRate);
     if (trimmed.isEmpty) return '';
 
     final config = sherpa.OfflineRecognizerConfig(
@@ -159,6 +165,9 @@ class SherpaWhisperEngine {
         tokens: p.join(dir, '$size-tokens.txt'),
         modelType: 'whisper',
         numThreads: math.max(1, Platform.numberOfProcessors ~/ 2),
+        // sherpa defaults debug to TRUE, which dumps model internals to the
+        // terminal on every transcription.
+        debug: false,
       ),
     );
     final recognizer = sherpa.OfflineRecognizer(config);
@@ -171,6 +180,87 @@ class SherpaWhisperEngine {
     } finally {
       stream?.free();
       recognizer.free();
+    }
+  }
+
+  /// Decodes a RIFF/WAVE file into mono float samples in [-1, 1].
+  ///
+  /// Exists because sherpa's readWave only accepts the classic 16-byte fmt
+  /// chunk, but the macOS recorder writes WAVE_FORMAT_EXTENSIBLE (40-byte
+  /// fmt) — which made EVERY desktop dictation fail native and ride the
+  /// Python sidecar. Walks chunks (fmt sizes 16/18/40, other chunks
+  /// skipped), accepts PCM16 and float32 (extensible SubFormat resolved),
+  /// and downmixes multi-channel to mono. Returns empty samples on
+  /// anything unreadable — callers treat that as "not a WAV".
+  static ({Float32List samples, int sampleRate}) decodeWav(String path) {
+    try {
+      final bytes = File(path).readAsBytesSync();
+      if (bytes.length < 44 ||
+          String.fromCharCodes(bytes.sublist(0, 4)) != 'RIFF' ||
+          String.fromCharCodes(bytes.sublist(8, 12)) != 'WAVE') {
+        return (samples: Float32List(0), sampleRate: 0);
+      }
+      final bd = ByteData.sublistView(bytes);
+      var fmtTag = 0, channels = 0, sampleRate = 0, bits = 0;
+      var dataStart = -1, dataLen = 0;
+      var off = 12;
+      while (off + 8 <= bytes.length) {
+        final id = String.fromCharCodes(bytes.sublist(off, off + 4));
+        final size = bd.getUint32(off + 4, Endian.little);
+        final body = off + 8;
+        if (body + size > bytes.length) break;
+        if (id == 'fmt ' && size >= 16) {
+          fmtTag = bd.getUint16(body, Endian.little);
+          channels = bd.getUint16(body + 2, Endian.little);
+          sampleRate = bd.getUint32(body + 4, Endian.little);
+          bits = bd.getUint16(body + 14, Endian.little);
+          if (fmtTag == 0xFFFE && size >= 40) {
+            // Extensible: the real format is the SubFormat GUID's first
+            // 16 bits (1 = PCM, 3 = IEEE float).
+            fmtTag = bd.getUint16(body + 24, Endian.little);
+          }
+        } else if (id == 'data') {
+          dataStart = body;
+          dataLen = size;
+        }
+        off = body + size + (size.isOdd ? 1 : 0); // chunks are word-aligned
+      }
+      if (channels < 1 || sampleRate <= 0 || dataStart < 0 || dataLen < 1) {
+        return (samples: Float32List(0), sampleRate: 0);
+      }
+      if (fmtTag == 1 && bits == 16) {
+        final frames = dataLen ~/ (2 * channels);
+        final out = Float32List(frames);
+        for (var i = 0; i < frames; i++) {
+          var acc = 0.0;
+          for (var c = 0; c < channels; c++) {
+            acc += bd.getInt16(
+              dataStart + 2 * (i * channels + c),
+              Endian.little,
+            );
+          }
+          out[i] = (acc / channels) / 32768.0;
+        }
+        return (samples: out, sampleRate: sampleRate);
+      }
+      if (fmtTag == 3 && bits == 32) {
+        final frames = dataLen ~/ (4 * channels);
+        final out = Float32List(frames);
+        for (var i = 0; i < frames; i++) {
+          var acc = 0.0;
+          for (var c = 0; c < channels; c++) {
+            acc += bd.getFloat32(
+              dataStart + 4 * (i * channels + c),
+              Endian.little,
+            );
+          }
+          out[i] = acc / channels;
+        }
+        return (samples: out, sampleRate: sampleRate);
+      }
+      return (samples: Float32List(0), sampleRate: 0);
+    } catch (_) {
+      return (samples: Float32List(0), sampleRate: 0);
     }
   }
 

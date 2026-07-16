@@ -41,7 +41,10 @@ class _VoiceBrowserDialogState extends State<VoiceBrowserDialog> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // fetchCatalog notifies its listeners immediately; deferred past the
+    // first frame so the notify never lands mid-build (field-reported
+    // "setState() or markNeedsBuild() called during build" crash).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
   Future<void> _loadData() async {

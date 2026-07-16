@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/tts_engine.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -266,6 +267,9 @@ class KokoroEngine implements TtsEngine {
 
       // In-process sherpa engine first; Python worker pool on any failure.
       final root = await _rootPath;
+      String fallbackReason = SherpaKokoroEngine.sidecarForced
+          ? 'FP_TTS_SIDECAR=1 (legacy forced by environment)'
+          : 'native voice bundle not downloaded';
       if (!SherpaKokoroEngine.sidecarForced &&
           SherpaKokoroEngine.isModelPresent(root)) {
         try {
@@ -277,11 +281,18 @@ class KokoroEngine implements TtsEngine {
             outputPath: outputFile.path,
           );
           onProgress?.call(1.0);
+          EngineHealth.instance.reportNative(EngineHealth.kokoro);
           return wav;
         } catch (e) {
           print('[TTS-Native] kokoro failed, trying sidecar: $e');
+          fallbackReason = 'native generation failed: $e';
         }
       }
+      EngineHealth.instance.reportFallback(
+        EngineHealth.kokoro,
+        fallbackReason,
+        expected: SherpaKokoroEngine.sidecarForced,
+      );
 
       final dir = await _modelDir;
       final modelPath = p.join(dir, 'kokoro-v1.0.onnx');

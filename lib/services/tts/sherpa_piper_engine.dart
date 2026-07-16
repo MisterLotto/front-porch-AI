@@ -56,8 +56,10 @@ class SherpaPiperEngine {
   }
 
   /// Downloads the sherpa re-export for [voiceKey] if absent. Returns true
-  /// when the voice is (now) present; false when no re-export exists or
-  /// the download failed — callers use the legacy piper binary then.
+  /// when the voice is (now) present; false when no re-export EXISTS (404 —
+  /// hand-made voices, the documented legacy-binary path). A failed
+  /// download of an export that does exist THROWS, so callers can tell the
+  /// expected degradation from a real failure (soak-signal purity).
   static Future<bool> ensureVoice(
     String root,
     String voiceKey, {
@@ -71,10 +73,13 @@ class SherpaPiperEngine {
         onProgress: onProgress,
       );
       return isModelPresent(root, voiceKey);
-    } catch (e) {
-      // ignore: avoid_print
-      print('[TTS-Native] no sherpa export for piper voice $voiceKey: $e');
-      return false;
+    } on HttpException catch (e) {
+      if (e.message.startsWith('HTTP 404')) {
+        // ignore: avoid_print
+        print('[TTS-Native] no sherpa export for piper voice $voiceKey');
+        return false;
+      }
+      rethrow;
     }
   }
 
@@ -146,6 +151,9 @@ class SherpaPiperEngine {
               dataDir: p.join(dir, 'espeak-ng-data'),
             ),
             numThreads: math.max(1, Platform.numberOfProcessors ~/ 2),
+            // sherpa defaults debug to TRUE, which dumps every sentence's
+            // full text + token ids to the terminal on each generation.
+            debug: false,
           ),
         ),
       );

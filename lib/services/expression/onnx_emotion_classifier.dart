@@ -20,6 +20,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:front_porch_ai/services/model_fetch.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -72,8 +73,17 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
     final root = Directory(_cacheDir);
     if (!root.existsSync()) return null;
     try {
-      for (final e in root.listSync(recursive: true, followLinks: false)) {
-        if (e is! File || !e.path.endsWith('model.onnx')) continue;
+      // followLinks matters: the hub cache the sidecar built stores every
+      // snapshot file as a symlink into blobs/, so with followLinks:false
+      // the scan saw only Link entities, returned null, and every classify
+      // silently fell back to the Python sidecar. `.no_exist` holds
+      // zero-byte hub placeholders — never model files.
+      for (final e in root.listSync(recursive: true, followLinks: true)) {
+        if (e is! File ||
+            !e.path.endsWith('model.onnx') ||
+            e.path.contains('.no_exist')) {
+          continue;
+        }
         // Hub layout: .../snapshots/<rev>/onnx/model.onnx with tokenizer
         // files in the snapshot root two levels up.
         final snapshot = e.parent.parent;
@@ -99,6 +109,7 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
           vocabPath: files.$2,
           text: text,
         );
+        EngineHealth.instance.reportNative(EngineHealth.expressions);
         return EmotionResult(
           emotion: scored.first.$1,
           confidence: scored.first.$2,
@@ -112,10 +123,32 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
           '[Expr-Native] in-process classify failed, '
           'trying sidecar: $e',
         );
+        EngineHealth.instance.reportFallback(
+          EngineHealth.expressions,
+          'in-process classify failed: $e',
+        );
+        return _sidecarClassifier.classify(text);
       }
     }
+    if (!_sidecarForced && !_loggedMissingModel) {
+      // Once per run — a silent fallback here hid a broken model scan.
+      _loggedMissingModel = true;
+      debugPrint(
+        '[Expr-Native] model files not found under $_cacheDir — '
+        'falling back to the Python sidecar',
+      );
+    }
+    EngineHealth.instance.reportFallback(
+      EngineHealth.expressions,
+      _sidecarForced
+          ? 'FP_EXPR_SIDECAR=1 (legacy forced by environment)'
+          : 'model files not found',
+      expected: _sidecarForced,
+    );
     return _sidecarClassifier.classify(text);
   }
+
+  bool _loggedMissingModel = false;
 
   @override
   Future<bool> isAvailable() async {

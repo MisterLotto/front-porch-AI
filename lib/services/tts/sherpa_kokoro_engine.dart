@@ -224,6 +224,9 @@ class SherpaKokoroEngine {
                   '${p.join(dir, 'lexicon-zh.txt')}',
             ),
             numThreads: math.max(1, Platform.numberOfProcessors ~/ 2),
+            // sherpa defaults debug to TRUE, which dumps every sentence's
+            // full text + token ids to the terminal on each generation.
+            debug: false,
           ),
         ),
       );

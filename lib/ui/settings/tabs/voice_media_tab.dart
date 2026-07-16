@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
+import 'package:front_porch_ai/ui/settings/widgets/engine_status_card.dart';
 import 'package:front_porch_ai/ui/settings/widgets/photo_understanding_card.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
 import 'package:front_porch_ai/ui/settings/widgets/image_gen_enable_section.dart';
@@ -163,6 +164,10 @@ class VoiceMediaTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SectionHeader('Engine Status'),
+          const SizedBox(height: 8),
+          const EngineStatusCard(),
+          const SizedBox(height: 24),
           const SectionHeader('Text-to-Speech'),
           const SizedBox(height: 8),
           Container(
@@ -328,6 +333,12 @@ class VoiceMediaTab extends StatelessWidget {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // The button exists only while it has a job: gone
+                          // once the selected model is verified on disk
+                          // (clicking it then was a no-op anyway), back if
+                          // the files go missing or fail verification.
+                          if (!sttService.isSelectedModelDownloaded ||
+                              sttService.isDownloading)
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton.icon(
@@ -392,6 +403,37 @@ class VoiceMediaTab extends StatelessWidget {
                               ),
                             ),
                           ],
+                          const SizedBox(height: 6),
+                          // Verified on-disk state for the SELECTED size, so
+                          // "did it actually download?" is never a mystery.
+                          Row(
+                            children: [
+                              Icon(
+                                sttService.isSelectedModelDownloaded
+                                    ? Icons.check_circle
+                                    : Icons.info_outline,
+                                size: 13,
+                                color: sttService.isSelectedModelDownloaded
+                                    ? AppColors.logReady
+                                    : AppColors.textTertiary(context),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  sttService.isSelectedModelDownloaded
+                                      ? 'Model files verified on disk — '
+                                            'voice input is ready.'
+                                      : 'Not downloaded yet — use the button '
+                                            'above, or it downloads on first '
+                                            'use.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textTertiary(context),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       );
                     },

@@ -168,16 +168,52 @@ class VoiceManager extends ChangeNotifier {
     return dir;
   }
 
-  /// Fetch the voice catalog from HuggingFace.
+  /// Fetch the voice catalog from HuggingFace. HF's CDN intermittently
+  /// serves 504 error pages, so this retries, and the last good copy is
+  /// kept on disk as a fallback — a stale catalog beats an empty browser.
   Future<void> fetchCatalog() async {
     _isLoadingCatalog = true;
     notifyListeners();
 
     try {
-      final response = await http.get(Uri.parse(_catalogUrl));
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> json = jsonDecode(response.body);
-        _catalog = json.entries.map((e) {
+      String? body;
+      for (var attempt = 0; attempt < 3 && body == null; attempt++) {
+        if (attempt > 0) await Future.delayed(Duration(seconds: attempt));
+        try {
+          final response = await http.get(Uri.parse(_catalogUrl));
+          if (response.statusCode == 200) body = response.body;
+        } catch (_) {}
+      }
+      final cacheFile = File(p.join((await voicesDir).path, 'catalog.json'));
+      if (body != null) {
+        _catalog = _parseCatalog(body);
+        if (_catalog.isNotEmpty) {
+          try {
+            await cacheFile.writeAsString(body);
+          } catch (_) {}
+        }
+      }
+      if (_catalog.isEmpty && cacheFile.existsSync()) {
+        print('Voice catalog fetch failed — using the cached copy');
+        _catalog = _parseCatalog(await cacheFile.readAsString());
+      }
+    } catch (e) {
+      print('Error fetching voice catalog: $e');
+    } finally {
+      _isLoadingCatalog = false;
+      notifyListeners();
+    }
+  }
+
+  /// Parses voices.json. Malformed entries are skipped instead of losing
+  /// the whole catalog; a non-JSON body (CDN error page) yields [].
+  /// Shared by the network fetch and the on-disk cache fallback.
+  List<PiperVoice> _parseCatalog(String body) {
+    try {
+      final Map<String, dynamic> json = jsonDecode(body);
+      final voices = <PiperVoice>[];
+      for (final e in json.entries) {
+        try {
           final data = e.value as Map<String, dynamic>;
           final lang = data['language'] as Map<String, dynamic>;
           final filesRaw = data['files'] as Map<String, dynamic>;
@@ -191,23 +227,25 @@ class VoiceManager extends ChangeNotifier {
             ),
           );
 
-          return PiperVoice(
-            key: data['key'] ?? e.key,
-            name: data['name'] ?? '',
-            languageCode: lang['code'] ?? '',
-            languageEnglish: lang['name_english'] ?? '',
-            countryEnglish: lang['country_english'] ?? '',
-            quality: data['quality'] ?? '',
-            numSpeakers: data['num_speakers'] ?? 1,
-            files: files,
+          voices.add(
+            PiperVoice(
+              key: data['key'] ?? e.key,
+              name: data['name'] ?? '',
+              languageCode: lang['code'] ?? '',
+              languageEnglish: lang['name_english'] ?? '',
+              countryEnglish: lang['country_english'] ?? '',
+              quality: data['quality'] ?? '',
+              numSpeakers: data['num_speakers'] ?? 1,
+              files: files,
+            ),
           );
-        }).toList();
+        } catch (_) {
+          // Skip the malformed entry, keep the rest of the catalog.
+        }
       }
-    } catch (e) {
-      print('Error fetching voice catalog: $e');
-    } finally {
-      _isLoadingCatalog = false;
-      notifyListeners();
+      return voices;
+    } catch (_) {
+      return [];
     }
   }
 

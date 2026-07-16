@@ -33,6 +33,7 @@ import 'package:front_porch_ai/services/expression_classifier.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/think_tags.dart';
 
 /// Plain (non-ChangeNotifier) domain service owning the chat-scoped expression
 /// label selection state machine, manual override, avatar resolution (with
@@ -513,6 +514,9 @@ class ExpressionService {
           break;
         }
       }
+      // Reasoning models leave their <think> block in the stored message
+      // text — classify the character's prose, not the meta-reasoning.
+      text = stripThinkTags(text);
       if (text.isEmpty) text = emotion;
 
       final result = await _expressionClassifierService!.classify(text);
