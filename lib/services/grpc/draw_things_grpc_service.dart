@@ -9,15 +9,32 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-/// Draw Things gRPC service — thin JSON CLI wrapper around the (untouched) Python client.py
-/// Bundled via PyInstaller in release builds (Resources/dt_grpc/dt_grpc_client/...).
-/// Falls back to python3 + dt_grpc_client.py for flutter run dev (requires `pip install -r tools/dt-grpc-python/requirements.txt` once).
+import 'dt_native/draw_things_native_client.dart';
+import 'dt_native/dt_fpzip.dart';
+
+/// Draw Things gRPC service.
+///
+/// Primary path (2026-07): the pure-Dart native gRPC client
+/// (dt_native/draw_things_native_client.dart) — in-process, no Python.
+/// Fallback path: the legacy JSON CLI sidecar (PyInstaller dt_grpc_client in
+/// release bundles; python3 + dt_grpc_client.py under `flutter run`). Every
+/// public method tries native first and falls back to the sidecar on ANY
+/// native failure, logging `[DT-Native]` lines so the active path is visible.
+/// Set FP_DT_SIDECAR=1 to force the sidecar (instant rollback lever). The
+/// sidecar is scheduled for removal once the native path has soaked a release.
 class DrawThingsGrpcService {
   final String host;
   final int port;
 
+  /// Rollback lever: FP_DT_SIDECAR=1 forces the legacy Python sidecar path.
+  static final bool _sidecarForced =
+      Platform.environment['FP_DT_SIDECAR'] == '1';
+
   DrawThingsGrpcService({required this.host, this.port = 7859}) {
-    debugPrint('DrawThingsGrpcService: host=$host port=$port (CLI sidecar)');
+    debugPrint(
+      'DrawThingsGrpcService: host=$host port=$port '
+      '(${_sidecarForced ? "CLI sidecar (forced)" : "native gRPC + sidecar fallback"})',
+    );
   }
 
   /// Runs one JSON request through the CLI sidecar and returns the parsed
@@ -172,6 +189,18 @@ class DrawThingsGrpcService {
 
   /// Tests connection via the JSON CLI sidecar (bundled or dev fallback).
   Future<bool> testConnection() async {
+    if (!_sidecarForced) {
+      final native = DrawThingsNativeClient(host: host, port: port);
+      try {
+        await native.echo();
+        debugPrint('[DT-Native] testConnection OK');
+        return true;
+      } catch (e) {
+        debugPrint('[DT-Native] testConnection failed, trying sidecar: $e');
+      } finally {
+        unawaited(native.shutdown());
+      }
+    }
     try {
       final parsed = await _runCli({
         'op': 'test',
@@ -189,8 +218,74 @@ class DrawThingsGrpcService {
     }
   }
 
-  /// Fetches checkpoint models via the JSON CLI sidecar (uses Draw Things Echo hack internally in CLI).
+  /// Checkpoint filter shared by the native and sidecar paths (the sidecar
+  /// applies the same heuristic internally; this is defense in depth there
+  /// and the ONLY filter on the native path).
+  /// We use broad category patterns so users don't have to manually
+  /// blacklist every VAE, upscaler (4x_ultrasharp, etc.), or preprocessor.
+  /// Text encoders / CLIP / T5 / LLM sidecars — these skip a file ONLY
+  /// when it lacks an image-model marker: modern checkpoints carry the
+  /// LLM family name AND 'image' (qwen_image_*.ckpt, z_image_*,
+  /// ernie_image_*), while encoder sidecars never do (qwen_2.5_vl_*,
+  /// ministral_3_3b_*, t5_xxl_*). A blanket 'qwen' ban used to hide the
+  /// Qwen-Image checkpoint itself.
+  static List<String> _filterCheckpoints(List<String> raw) {
+    const encoderKeywords = [
+      'clip', 't5', 'text_encoder', 'encoder', 'gemma', 'llama',
+      'mistral', 'ministral', 'qwen', 'phi', 'vicuna', 'alpaca',
+    ];
+    const skip = [
+      // VAEs
+      'vae',
+
+      // Safety / NSFW filters
+      'safety',
+
+      // LoRAs
+      'lora',
+
+      // ControlNet + common preprocessors
+      'controlnet', 'openpose', 'dwpose', 'pose', 'depth', 'canny',
+      'normal', 'lineart', 'softedge', 'seg', 'inpaint', 'ip2p',
+      'shuffle', 'mlsd', 'tile', 'blur', 'hed', 'parsenet',
+
+      // Upscalers / face restorers (4x_*, realesrgan, ultrasharp etc.)
+      '4x_', '2x_', 'realesrgan', 'esrgan', 'ultrasharp', 'swinir',
+      'hat_', 'real_esrgan', 'upscaler', 'restoreformer', 'gfpgan',
+      'codeformer',
+
+      // Video / I2V / motion models
+      'i2v', 'video', 'wan_', 'svd', 'motion', 'ltx',
+    ];
+    // Include everything that is not a known sidecar type so the dropdown
+    // populates even when Draw Things reports bare names, .pth files, or
+    // paths.
+    return raw.where((f) {
+      final lower = f.toLowerCase();
+      if (skip.any((k) => lower.contains(k))) return false;
+      if (!lower.contains('image') &&
+          encoderKeywords.any((k) => lower.contains(k))) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  /// Fetches checkpoint models (Draw Things Echo("models") listing) —
+  /// native gRPC first, JSON CLI sidecar as fallback.
   Future<List<String>> fetchModels() async {
+    if (!_sidecarForced) {
+      final native = DrawThingsNativeClient(host: host, port: port);
+      try {
+        final models = _filterCheckpoints(await native.listFiles());
+        debugPrint('[DT-Native] Fetched ${models.length} models (filtered)');
+        return models;
+      } catch (e) {
+        debugPrint('[DT-Native] fetchModels failed, trying sidecar: $e');
+      } finally {
+        unawaited(native.shutdown());
+      }
+    }
     try {
       final parsed = await _runCli({
         'op': 'models',
@@ -199,56 +294,7 @@ class DrawThingsGrpcService {
       }, const Duration(seconds: 25));
       if (parsed == null || parsed['success'] != true) return [];
       final raw = (parsed['models'] as List?)?.cast<String>() ?? <String>[];
-      // Secondary filter on Dart side (defense in depth).
-      // This mirrors the improved logic in dt_grpc_client.py.
-      // We use broad category patterns so users don't have to manually
-      // blacklist every VAE, upscaler (4x_ultrasharp, etc.), or preprocessor.
-      // Text encoders / CLIP / T5 / LLM sidecars — these skip a file ONLY
-      // when it lacks an image-model marker: modern checkpoints carry the
-      // LLM family name AND 'image' (qwen_image_*.ckpt, z_image_*,
-      // ernie_image_*), while encoder sidecars never do (qwen_2.5_vl_*,
-      // ministral_3_3b_*, t5_xxl_*). A blanket 'qwen' ban used to hide the
-      // Qwen-Image checkpoint itself.
-      const encoderKeywords = [
-        'clip', 't5', 'text_encoder', 'encoder', 'gemma', 'llama',
-        'mistral', 'ministral', 'qwen', 'phi', 'vicuna', 'alpaca',
-      ];
-      const skip = [
-        // VAEs
-        'vae',
-
-        // Safety / NSFW filters
-        'safety',
-
-        // LoRAs
-        'lora',
-
-        // ControlNet + common preprocessors
-        'controlnet', 'openpose', 'dwpose', 'pose', 'depth', 'canny',
-        'normal', 'lineart', 'softedge', 'seg', 'inpaint', 'ip2p',
-        'shuffle', 'mlsd', 'tile', 'blur', 'hed', 'parsenet',
-
-        // Upscalers / face restorers (4x_*, realesrgan, ultrasharp etc.)
-        '4x_', '2x_', 'realesrgan', 'esrgan', 'ultrasharp', 'swinir',
-        'hat_', 'real_esrgan', 'upscaler', 'restoreformer', 'gfpgan',
-        'codeformer',
-
-        // Video / I2V / motion models
-        'i2v', 'video', 'wan_', 'svd', 'motion', 'ltx',
-      ];
-      // Trust the Python CLI's skip list primarily; include everything that is
-      // not a known sidecar type so the dropdown populates even when Draw
-      // Things reports bare names, .pth files, or paths.
-      final models = raw.where((f) {
-        final lower = f.toLowerCase();
-        if (skip.any((k) => lower.contains(k))) return false;
-        if (!lower.contains('image') &&
-            encoderKeywords.any((k) => lower.contains(k))) {
-          return false;
-        }
-        return true;
-      }).toList();
-
+      final models = _filterCheckpoints(raw);
       debugPrint(
         'DrawThingsGrpcService: Fetched ${models.length} models via CLI (after filtering)',
       );
@@ -264,6 +310,21 @@ class DrawThingsGrpcService {
   /// the CLI). Returned names are passed verbatim into the generation
   /// config's `loras` list.
   Future<List<String>> fetchLoras() async {
+    if (!_sidecarForced) {
+      final native = DrawThingsNativeClient(host: host, port: port);
+      try {
+        // Same filter the sidecar applies: any listed file containing "lora".
+        final loras = (await native.listFiles())
+            .where((f) => f.toLowerCase().contains('lora'))
+            .toList();
+        debugPrint('[DT-Native] Fetched ${loras.length} LoRAs');
+        return loras;
+      } catch (e) {
+        debugPrint('[DT-Native] fetchLoras failed, trying sidecar: $e');
+      } finally {
+        unawaited(native.shutdown());
+      }
+    }
     try {
       final parsed = await _runCli({
         'op': 'loras',
@@ -355,6 +416,40 @@ class DrawThingsGrpcService {
         'DrawThingsGrpcService: generate (model=$model, '
         'loras=${loras.isEmpty ? "none" : loras.map((l) => l['file']).join(',')})',
       );
+
+      // ── Native path ──
+      // Pre-flight fpzip: generated images arrive as fpzip-compressed NNC
+      // tensors, so without libfpzip the native path would only fail AFTER a
+      // full (possibly minutes-long) generation. Skip straight to the sidecar
+      // in that case rather than paying for the generation twice.
+      if (!_sidecarForced) {
+        if (!DtFpzip.instance.isAvailable) {
+          debugPrint(
+            '[DT-Native] libfpzip not found — using sidecar for generate '
+            '(build it with scripts/build-fpzip-macos.sh for native decode)',
+          );
+        } else {
+          final native = DrawThingsNativeClient(host: host, port: port);
+          try {
+            final bytes = await native.generate(
+              prompt: prompt,
+              negativePrompt: negativePrompt,
+              cfg: cfg,
+              referenceImageBytes: referenceImageBytes,
+              onStep: onProgress == null
+                  ? null
+                  : (step) => onProgress(step, steps),
+            );
+            debugPrint('[DT-Native] Generated ${bytes.length} bytes');
+            return bytes;
+          } catch (e) {
+            debugPrint('[DT-Native] generate failed, trying sidecar: $e');
+          } finally {
+            unawaited(native.shutdown());
+          }
+        }
+      }
+
       final parsed = await _runCli(
         {
           'op': 'generate',
