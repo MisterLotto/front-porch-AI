@@ -25,10 +25,15 @@ echo "==> Cloning fpzip $FPZIP_TAG..."
 git clone --depth 1 --branch "$FPZIP_TAG" "$FPZIP_REPO" "$WORK/fpzip"
 
 echo "==> Building universal (arm64 + x86_64) shared library..."
+# CMAKE_POLICY_VERSION_MINIMUM: fpzip 1.3.0's CMakeLists declares a
+# cmake_minimum_required below 3.5, which CMake 4 (GitHub macOS runners)
+# refuses outright. The override tells modern CMake to configure anyway;
+# older CMakes ignore the unknown cache variable, so it is harmless there.
 cmake -S "$WORK/fpzip" -B "$WORK/build" \
   -DBUILD_SHARED_LIBS=ON \
   -DBUILD_UTILITIES=OFF \
   -DBUILD_TESTING=OFF \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" >/dev/null
 cmake --build "$WORK/build" --config Release -j"$(sysctl -n hw.ncpu)"
