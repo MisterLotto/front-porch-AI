@@ -19,6 +19,7 @@
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
+import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/web/facade/settings_facade.dart';
 import 'package:front_porch_ai/services/web/util/json_response.dart';
 import 'package:front_porch_ai/services/web/util/request_body.dart';
@@ -28,6 +29,12 @@ class WebSettingsRoutes {
   WebSettingsRoutes(this._facade, Router router) {
     router.get('/api/settings', _get);
     router.post('/api/settings', _post);
+    // Read-only native-vs-legacy engine tally (desktop parity: the Engine
+    // Status card in Settings → Voice & Media).
+    router.get(
+      '/api/engine-health',
+      (shelf.Request r) => JsonResponse.ok(EngineHealth.instance.snapshot()),
+    );
   }
 
   final SettingsFacade _facade;

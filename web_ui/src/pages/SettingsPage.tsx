@@ -56,6 +56,17 @@ interface Settings {
   generation: Gen;
 }
 
+// Native-vs-legacy tally for the host's in-process engines (desktop parity:
+// the Engine Status card in Settings → Voice & Media).
+interface EngineHealthRow {
+  name: string;
+  nativeCount: number;
+  fallbackCount: number;
+  // Optional: older hosts don't send it (parse defensively per API rules).
+  unexpectedFallbackCount?: number | null;
+  lastFallbackReason?: string | null;
+}
+
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -65,10 +76,36 @@ export function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState('');
 
+  const [engines, setEngines] = useState<EngineHealthRow[]>([]);
+  const [engineCopied, setEngineCopied] = useState(false);
+
   const load = () => api.get<Settings>('/api/settings').then(setS).catch(() => {});
+  const loadEngines = () =>
+    api
+      .get<{ engines: EngineHealthRow[] }>('/api/engine-health')
+      .then((r) => setEngines(r.engines))
+      .catch(() => {});
   useEffect(() => {
     void load();
+    void loadEngines();
   }, []);
+
+  const copyEngineReport = async () => {
+    const lines = engines.map((e) => {
+      const used = e.nativeCount > 0 || e.fallbackCount > 0;
+      const tail = e.lastFallbackReason ? `\n  last fallback: ${e.lastFallbackReason}` : '';
+      return used
+        ? `- ${e.name}: native ×${e.nativeCount}, fallback ×${e.fallbackCount}${tail}`
+        : `- ${e.name}: not used`;
+    });
+    try {
+      await navigator.clipboard.writeText(`Engine status (web):\n${lines.join('\n')}`);
+      setEngineCopied(true);
+      setTimeout(() => setEngineCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable (non-secure context) — ignore */
+    }
+  };
 
   if (!s) return <div className="centered"><div className="spinner" /></div>;
 
@@ -291,6 +328,51 @@ export function SettingsPage() {
           </>
         )}
       </section>
+
+      {engines.length > 0 && (
+        <section className="card">
+          <h3>Engine status</h3>
+          <p className="muted small">
+            Whether each AI feature on the host ran on the built-in engine this
+            session, or fell back to the legacy Python helper.
+          </p>
+          <div className="test-conn-row">
+            <button className="ghost" onClick={() => void loadEngines()}>Refresh</button>
+            <button className="ghost" onClick={() => void copyEngineReport()}>
+              {engineCopied ? 'Copied ✓' : 'Copy report'}
+            </button>
+          </div>
+          {engines.some((e) => (e.unexpectedFallbackCount ?? e.fallbackCount) > 0) && (
+            <p className="small" style={{ color: 'var(--accent-amber)' }}>
+              ⚠️ An engine unexpectedly fell back to the legacy Python path —
+              please report this on Discord.
+            </p>
+          )}
+          {engines.map((e) => {
+            const unused = e.nativeCount === 0 && e.fallbackCount === 0;
+            const fellBack = e.fallbackCount > 0;
+            const color = unused ? 'var(--muted)' : fellBack ? 'var(--accent-amber)' : 'var(--ok)';
+            const summary = unused
+              ? 'not used yet'
+              : fellBack
+                ? `legacy fallback ×${e.fallbackCount}` +
+                  (e.nativeCount > 0 ? ` · native ×${e.nativeCount}` : '') +
+                  (e.lastFallbackReason ? ` — ${e.lastFallbackReason}` : '')
+                : `native ×${e.nativeCount}`;
+            return (
+              <p key={e.name} className="muted small" style={{ margin: '4px 0' }}>
+                <span
+                  style={{
+                    display: 'inline-block', width: 9, height: 9,
+                    borderRadius: '50%', background: color, marginRight: 8,
+                  }}
+                />
+                <strong>{e.name}</strong> · {summary}
+              </p>
+            );
+          })}
+        </section>
+      )}
 
       {error && <p className="error">{error}</p>}
       <button className="primary" onClick={save} disabled={saving}>
