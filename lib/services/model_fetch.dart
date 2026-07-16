@@ -48,7 +48,27 @@ class ModelFetch {
   /// Streams [url] to [dest]. Skips files that are already fully
   /// downloaded. [onProgress] receives (bytesDone, bytesTotal) for THIS
   /// file; total is -1 when the server doesn't say.
+  ///
+  /// Retries transient failures: HuggingFace's CDN intermittently serves
+  /// 504s (verified in the field — one hiccup used to kill a whole model
+  /// download). The last attempt's error propagates to the caller.
   static Future<void> fetch(
+    String url,
+    File dest, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    const attempts = 3;
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await _fetchOnce(url, dest, onProgress: onProgress);
+      } catch (_) {
+        if (attempt >= attempts) rethrow;
+        await Future.delayed(Duration(seconds: attempt));
+      }
+    }
+  }
+
+  static Future<void> _fetchOnce(
     String url,
     File dest, {
     void Function(int done, int total)? onProgress,
@@ -108,27 +128,34 @@ class ModelFetch {
       },
     );
     onProgress?.call(0.85);
-    final tarPath = tmp.path;
-    await Isolate.run(() => _extractTarBz2(tarPath, destDir));
+    await _extractTarBz2(tmp.path, destDir);
     try {
       await tmp.delete();
     } catch (_) {}
     onProgress?.call(1.0);
   }
 
-  static void _extractTarBz2(String tarBz2Path, String destDir) {
-    final bytes = File(tarBz2Path).readAsBytesSync();
-    final tar = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
-    for (final entry in tar) {
-      final parts = p.posix.split(entry.name);
-      if (parts.length < 2) continue; // top-level dir itself
-      final rel = p.joinAll(parts.sublist(1));
-      final out = File(p.join(destDir, rel));
-      if (entry.isFile) {
-        out.parent.createSync(recursive: true);
-        out.writeAsBytesSync(entry.content as List<int>);
+  /// The [Isolate.run] call must live in its own method: closures share
+  /// their enclosing scope's context when serialized to an isolate, and
+  /// [fetchAndExtractTarBz2]'s scope also holds the caller's [onProgress]
+  /// closure — which can capture unsendable objects (TtsService →
+  /// StorageService held a live Completer) and abort the whole download.
+  /// Here the closure's scope holds only the two path strings.
+  static Future<void> _extractTarBz2(String tarBz2Path, String destDir) {
+    return Isolate.run(() {
+      final bytes = File(tarBz2Path).readAsBytesSync();
+      final tar = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
+      for (final entry in tar) {
+        final parts = p.posix.split(entry.name);
+        if (parts.length < 2) continue; // top-level dir itself
+        final rel = p.joinAll(parts.sublist(1));
+        final out = File(p.join(destDir, rel));
+        if (entry.isFile) {
+          out.parent.createSync(recursive: true);
+          out.writeAsBytesSync(entry.content as List<int>);
+        }
       }
-    }
+    });
   }
 
   static HttpClient _client() =>
