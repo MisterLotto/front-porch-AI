@@ -185,6 +185,22 @@ class AvatarGalleryController extends ChangeNotifier {
     await repository.setCharacterImagePath(libraryCard, croppedPath);
   });
 
+  /// Delete the portrait — the ★ starred look (else the first) is promoted
+  /// in its place. The UI hides this affordance when no looks exist.
+  Future<void> deletePortrait() => _run(() async {
+    if (dbId == null) return;
+    final promotedId = await repository.deletePortraitPromotingLook(
+      libraryCard,
+    );
+    favoriteId = libraryCard.frontPorchExtensions?.favoriteAvatarId;
+    // Same hygiene as remove(): this chat was showing the promoted look →
+    // clear the per-chat selection (it now lives on as the portrait).
+    if (mode == WardrobeMode.inChat && selectedFaceId == promotedId) {
+      await chat?.setLookForCharacter(dbId!, null);
+    }
+    await _reload();
+  });
+
   // ── Expression images ───────────────────────────────────────────────────────
   Future<void> addExpression(Uint8List bytes, String? emotion) => _run(() async {
     if (dbId == null || expressions.length >= maxExpressions) return;

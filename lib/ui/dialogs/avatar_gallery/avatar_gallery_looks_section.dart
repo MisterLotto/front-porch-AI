@@ -36,6 +36,7 @@ class AvatarGalleryLooksSection extends StatelessWidget {
     required this.onAddLook,
     required this.onReplacePortrait,
     required this.onDelete,
+    required this.onDeletePortrait,
   });
 
   final AvatarGalleryController controller;
@@ -44,6 +45,10 @@ class AvatarGalleryLooksSection extends StatelessWidget {
 
   /// Confirm + delete a gallery avatar (the shell owns the confirm dialog).
   final ValueChanged<String> onDelete;
+
+  /// Confirm + delete the portrait (a look gets promoted in its place).
+  /// Only offered when at least one gallery look exists.
+  final VoidCallback onDeletePortrait;
 
   bool get _inChat => controller.mode == WardrobeMode.inChat;
 
@@ -63,6 +68,8 @@ class AvatarGalleryLooksSection extends StatelessWidget {
           onStar: () => controller.setFavorite(null),
           actionLabel: 'Replace portrait',
           onAction: onReplacePortrait,
+          // Deletable only when a look exists to take its place.
+          onDelete: controller.looks.isEmpty ? null : onDeletePortrait,
           onTap: _inChat
               ? () => controller.selectFaceInChat(kPortraitFaceId)
               : null,

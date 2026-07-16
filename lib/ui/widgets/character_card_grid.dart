@@ -110,7 +110,7 @@ class CharacterCardGrid extends StatelessWidget {
   final void Function(double scale)? onGridScaleChangeEnd;
   final void Function(SearchScope scope) onSearchScopeChanged;
   final void Function(String query) onSearchQueryChanged;
-  final File Function(String imagePath) onResolveCharImage;
+  final File Function(CharacterCard card) onResolveCharImage;
   final void Function(GroupChat group) onDeleteGroup;
   final VoidCallback onAfterNavigateBack;
 

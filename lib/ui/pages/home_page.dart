@@ -113,10 +113,16 @@ class _HomePageState extends State<HomePage> {
     Future.microtask(() => _refreshLastActivityCache());
   }
 
-  /// Resolve a character [imagePath] (basename or full path) to a [File].
-  File _resolveCharImage(String imagePath) {
+  /// The file to show as [c]'s library card cover: the ★ starred gallery
+  /// avatar when set (same star-aware resolution the web library and card
+  /// exports already use — the gallery dialog promises "★ sets the default +
+  /// card cover"), else the portrait.
+  File _resolveCharImage(CharacterCard c) {
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final cover = repo.coverImageFileFor(c);
+    if (cover != null) return cover;
     final storage = Provider.of<StorageService>(context, listen: false);
-    return storage.resolveCharacterImage(imagePath);
+    return storage.resolveCharacterImage(c.imagePath ?? '');
   }
 
   @override
