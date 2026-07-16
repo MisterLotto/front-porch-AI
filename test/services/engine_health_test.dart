@@ -32,6 +32,7 @@ void main() {
       EngineHealth.kokoro,
       EngineHealth.piper,
       EngineHealth.whisper,
+      EngineHealth.drawThings,
     ]);
     expect(health.hasFallbacks, isFalse);
     for (final e in health.entries) {
@@ -110,7 +111,7 @@ void main() {
     health.reportFallback(EngineHealth.expressions, 'model files not found');
     final snap = health.snapshot();
     final engines = (snap['engines'] as List).cast<Map<String, dynamic>>();
-    expect(engines, hasLength(4));
+    expect(engines, hasLength(5));
     final expr = engines.firstWhere(
       (e) => e['name'] == EngineHealth.expressions,
     );

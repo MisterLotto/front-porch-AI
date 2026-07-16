@@ -49,8 +49,15 @@ class EngineHealth extends ChangeNotifier {
   static const String kokoro = 'Kokoro voice';
   static const String piper = 'Piper voice';
   static const String whisper = 'Voice input';
+  static const String drawThings = 'Draw Things';
 
-  static const List<String> _order = [expressions, kokoro, piper, whisper];
+  static const List<String> _order = [
+    expressions,
+    kokoro,
+    piper,
+    whisper,
+    drawThings,
+  ];
 
   final Map<String, EngineHealthEntry> _entries = {
     for (final name in _order) name: EngineHealthEntry(name),
