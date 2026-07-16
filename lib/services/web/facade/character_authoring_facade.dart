@@ -94,6 +94,19 @@ class CharacterAuthoringFacade {
     return true;
   }
 
+  /// Web mirror of the desktop portrait delete: promotes the ★ (else first)
+  /// gallery look into the portrait via the shared portrait_promotion leaf.
+  /// False when the card is missing or has no looks — the UI hides the
+  /// button then, but a stale client may still call.
+  Future<bool> deletePortrait(String id) async {
+    final card = await _repo.getCharacterCardById(id);
+    if (card == null) return false;
+    card.avatarImages = await _repo.getAvatarImages(id);
+    if (!card.avatarImages!.any((a) => a.isLook)) return false;
+    await _repo.deletePortraitPromotingLook(card);
+    return true;
+  }
+
   Future<bool> removeAvatar(String id, String avatarId) async {
     final card = await _repo.getCharacterCardById(id);
     if (card == null) return false;

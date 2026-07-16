@@ -66,6 +66,7 @@ class WebCharacterRoutes {
     router.post('/api/characters/<id>/looks', _addLook);
     // The ★ favorite avatar (?avatarId=…, empty clears to the portrait).
     router.post('/api/characters/<id>/favorite', _setFavorite);
+    router.post('/api/characters/<id>/portrait/delete', _deletePortrait);
     router.get('/api/characters/<id>/avatars/<avatarId>/image', _avatarImage);
     router.post('/api/characters/<id>/avatars/<avatarId>/prime', _setPrime);
     router.post(
@@ -340,6 +341,21 @@ class WebCharacterRoutes {
   Future<shelf.Response> _avatars(shelf.Request request, String id) async {
     final auth = _authoring;
     if (auth == null) return JsonResponse.error(503, 'Unavailable');
+    return JsonResponse.ok({'avatars': await auth.avatars(id)});
+  }
+
+  /// Delete the portrait — a gallery look is promoted in its place
+  /// (desktop parity; shared promotion logic).
+  Future<shelf.Response> _deletePortrait(
+    shelf.Request request,
+    String id,
+  ) async {
+    final auth = _authoring;
+    if (auth == null) return JsonResponse.error(503, 'Unavailable');
+    final ok = await auth.deletePortrait(id);
+    if (!ok) {
+      return JsonResponse.error(409, 'No gallery avatar to promote');
+    }
     return JsonResponse.ok({'avatars': await auth.avatars(id)});
   }
 
