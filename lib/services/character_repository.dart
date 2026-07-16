@@ -690,11 +690,17 @@ class CharacterRepository extends ChangeNotifier {
     return {'imported': imported, 'failed': failed, 'errors': errors};
   }
 
-  Future<void> updateCharacter(CharacterCard card) async {
+  /// [notify] = false persists silently (DB + PNG still written): the Avatar
+  /// Gallery's ★ writes per click, and broadcasting each one repainted the
+  /// whole home grid behind the open dialog. Silent callers MUST follow up
+  /// with [notifyCharactersChanged] when their surface closes.
+  Future<void> updateCharacter(CharacterCard card, {bool notify = true}) async {
     if (card.imagePath == null) return;
 
-    _isLoading = true;
-    notifyListeners();
+    if (notify) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       final v2Service = V2CardService();
@@ -781,15 +787,21 @@ class CharacterRepository extends ChangeNotifier {
       if (index != -1) {
         _characters[index] = card;
       }
-      notifyListeners();
+      if (notify) notifyListeners();
     } catch (e) {
       print('Error updating character: $e');
       rethrow;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (notify) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
+
+  /// One deferred broadcast for surfaces that persisted silently
+  /// (updateCharacter notify: false) — fired when their dialog closes.
+  void notifyCharactersChanged() => notifyListeners();
 
   Future<CharacterCard?> duplicateCharacter(
     CharacterCard card, {

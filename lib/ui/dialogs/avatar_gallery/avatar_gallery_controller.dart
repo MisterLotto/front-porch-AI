@@ -84,6 +84,15 @@ class AvatarGalleryController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    if (_needsCloseBroadcast) {
+      // The star wrote silently per click (no repaint behind the dialog);
+      // the home grid gets its ONE refresh now that the dialog is gone.
+      // Deferred to a fresh event-loop task: dispose can run mid-frame, and
+      // notifying the repo's listeners during build would assert. (This
+      // controller stays widgets-import-free, hence no post-frame callback.)
+      final repo = repository;
+      Future(() => repo.notifyCharactersChanged());
+    }
     super.dispose();
   }
 
@@ -158,13 +167,19 @@ class AvatarGalleryController extends ChangeNotifier {
 
   /// Persist [id] as the canonical avatar. Materializes the extensions object
   /// first (a null `frontPorchExtensions` would silently drop the write and the
-  /// ★ would not survive a reopen — Grok P0).
+  /// ★ would not survive a reopen — Grok P0). Silent write: broadcasting each
+  /// click repainted the whole home grid behind the open dialog; [dispose]
+  /// fires the one deferred broadcast instead.
   Future<void> _persistFavorite(String? id) async {
     favoriteId = id;
     (libraryCard.frontPorchExtensions ??= FrontPorchExtensions())
         .favoriteAvatarId = id;
-    await repository.updateCharacter(libraryCard);
+    await repository.updateCharacter(libraryCard, notify: false);
+    _needsCloseBroadcast = true;
   }
+
+  /// Set when a silent write happened; the dialog-close broadcast is owed.
+  bool _needsCloseBroadcast = false;
 
   // ── Gallery avatars ─────────────────────────────────────────────────────────
   Future<void> addLook(Uint8List bytes) => _run(() async {
