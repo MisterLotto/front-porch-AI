@@ -185,6 +185,12 @@ jobs:
           # Install TTS dependencies + PyInstaller
             pip install --upgrade pip
             pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy onnxruntime transformers huggingface_hub
+            # Draw Things gRPC sidecar deps. These were previously MISSING from
+            # this workflow, so the frozen dt_grpc_client shipped with none of its
+            # real dependencies (grpc/protobuf/flatbuffers/fpzip/PIL) and crashed
+            # at import in every release — while `flutter run` worked because it
+            # uses the host Python. protobuf is pinned to match the pb2 gencode.
+            pip install -r "${{ github.workspace }}/tools/dt-grpc-python/requirements.txt"
 
             # Build Kokoro TTS as a standalone directory bundle
             echo "Building Kokoro TTS binary..."
@@ -336,14 +342,18 @@ jobs:
               --add-data "$GRPC_SRC/ControlInputType.py:." \
               --add-data "$GRPC_SRC/ControlMode.py:." \
               --add-data "$GRPC_SRC/ca_chain.pem:." \
-              --collect-all grpcio \
+              --collect-all grpc \
+              --collect-all protobuf \
               --collect-all flatbuffers \
               --collect-all fpzip \
               --collect-all numpy \
               --collect-all PIL \
               --hidden-import grpc \
               --hidden-import grpc._cython \
-              --hidden-import grpcio \
+              --hidden-import grpc._cython.cygrpc \
+              --hidden-import google.protobuf \
+              --hidden-import google.protobuf.runtime_version \
+              --hidden-import google._upb._message \
               --hidden-import flatbuffers \
               --hidden-import fpzip \
               --hidden-import numpy \

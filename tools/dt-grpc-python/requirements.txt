@@ -1,5 +1,13 @@
 grpcio>=1.60.0
 grpcio-tools>=1.60.0
+# The generated imageService_pb2.py calls
+# google.protobuf.runtime_version.ValidateProtobufRuntimeVersion(PUBLIC, 6, 31, 1, ...)
+# — i.e. it was generated for protobuf gencode 6.31.1, which requires a matching
+# runtime (same major, >= that version) or it raises at import. It must be
+# pinned explicitly: without it the frozen sidecar has no protobuf runtime and
+# crashes on `import imageService_pb2` in release builds (dev works only because
+# the host Python happens to have protobuf installed transitively).
+protobuf>=6.31.1,<7
 flatbuffers>=24.0
 numpy>=1.24.0
 Pillow>=10.0.0
