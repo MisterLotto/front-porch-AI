@@ -21,7 +21,7 @@ Flutter engine itself.
 | Sidecar | What it does | Replacement | Phase |
 |---|---|---|---|
 | `dt_grpc_client` (Python) | Draw Things gRPC | Pure-Dart client (`lib/services/grpc/dt_native/`) + tiny fpzip FFI | **1 — shipped, soaking** |
-| `sentiment_classifier` (Python) | emotion/expression ONNX classifier | in-process ONNX via `onnxruntime_v2` (already a dep — photo captioner precedent) + Dart tokenizer | **2 — next** |
+| `sentiment_classifier` (Python) | emotion/expression ONNX classifier | in-process ONNX via `onnxruntime_v2` + Dart WordPiece tokenizer | **2 — shipped, soaking** |
 | `whisper_stt` (Python, faster-whisper/CT2) | STT | sherpa-onnx (single C lib, official `sherpa_onnx` Dart package) | 3 |
 | `kokoro_tts` (Python) | Kokoro TTS | sherpa-onnx (Kokoro is first-class; bundles espeak-ng G2P) | 4 |
 | `piper` (PyInstaller wrap of `python -m piper`) | Piper TTS | sherpa-onnx (vits-piper) | 4 |
@@ -91,14 +91,37 @@ never touch. Per engine:
   delete `tools/dt-grpc-python/`, the dt_grpc PyInstaller build steps, and
   the dt_grpc bundling/chmod steps in all three build paths.
 
-## Phase 2 (next): sentiment/expression classifier in-process
+## Phase 2 record (expression classifier) — shipped 2026-07-16
 
-- Reuse the `onnxruntime_v2` dep (photo captioner precedent) — same ONNX file
-  currently used by the sidecar, loaded in-process.
-- Port the tokenizer to Dart; verify with goldens generated from the Python
-  tokenizer (token ids + final label/scores for a fixed sentence set).
-- Wire behind the existing `ExpressionClassifierService` surface with
-  sidecar fallback + env lever, per the playbook.
+- In-process pipeline: `lib/services/expression/` — `wordpiece_tokenizer.dart`
+  (BERT-uncased WordPiece: lowercase, Latin accent strip, punctuation/CJK
+  splitting, greedy longest-match), `onnx_emotion_engine.dart` (isolate-run
+  session-per-call inference via `onnxruntime_v2`, smolvlm precedent —
+  better memory profile than the persistent sidecar), and
+  `onnx_emotion_classifier.dart` (native-first `ExpressionClassifier` with
+  automatic sidecar fallback + direct-HTTPS model download).
+- Rollback lever: `FP_EXPR_SIDECAR=1` forces the legacy Python sidecar for
+  classification AND download. Per-call fallback logs `[Expr-Native] ...`.
+- Model reuse: resolves the sidecar's HuggingFace hub cache first (its
+  `tokenizer.json` doubles as the vocab source when `vocab.txt` is absent);
+  fresh installs download `model.onnx` + `vocab.txt` (~268 MB) straight from
+  HF — **no Python required anymore** for the download or inference.
+- **Bug fixed, not ported**: the sidecar's `EMOTION_LABELS` had 26 entries
+  for a 28-class model (missing `disapproval` and `relief`), so every label
+  after `disappointment` was reported shifted. The native path uses the
+  model's true id2label order from its config.json.
+- Verification: `test/services/expression/onnx_emotion_test.dart` — 18
+  goldens generated from the exact Python sidecar stack (token ids for 13
+  sentences incl. accents/curly-quotes/emoji/CJK/512-truncation; float64
+  softmax scores from real model logits). Plus
+  `onnx_emotion_e2e_test.dart` — full text→label pipeline against the real
+  268 MB model, gated on `FP_EMOTION_TEST_MODEL` (skips in CI); passed
+  against the Python reference on 2026-07-16 (all six labels + confidences
+  within 1e-3).
+- Still TODO for phase-2 completion: soak one release, then delete
+  `sentiment_classifier.py`, its PyInstaller build/bundle steps in
+  release/nightly workflows + `scripts/build-macos.sh`, and the
+  `ONNXExpressionClassifier` sidecar class + its resolution logic.
 
 ## Success criteria (whole effort)
 

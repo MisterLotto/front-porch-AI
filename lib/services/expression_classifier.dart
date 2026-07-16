@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:front_porch_ai/services/expression/onnx_emotion_classifier.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/utils/emotion_labels.dart';
 
@@ -538,8 +539,8 @@ class ExpressionClassifierService extends ChangeNotifier {
     );
 
     // Clean up old classifier if it was persistent
-    if (_activeClassifier is ONNXExpressionClassifier) {
-      (_activeClassifier as ONNXExpressionClassifier).dispose();
+    if (_activeClassifier is OnnxEmotionClassifier) {
+      (_activeClassifier as OnnxEmotionClassifier).dispose();
     }
 
     _activeMode = mode;
@@ -552,7 +553,9 @@ class ExpressionClassifierService extends ChangeNotifier {
         );
         break;
       case 'onnx':
-        final classifier = ONNXExpressionClassifier(
+        // In-process ONNX first, legacy Python sidecar as automatic
+        // fallback (FP_EXPR_SIDECAR=1 forces the sidecar).
+        final classifier = OnnxEmotionClassifier(
           storage: _storage,
           onProgress: (progress) {
             _isDownloading = true;
@@ -599,8 +602,9 @@ class ExpressionClassifierService extends ChangeNotifier {
 
   /// Triggers a background download of the ONNX model.
   ///
-  /// Creates a dedicated [ONNXExpressionClassifier] that runs the Python sidecar
-  /// with [--download-only] so the model is cached to [storage.rootPath]/models/emotion_classifier.
+  /// Creates a dedicated [OnnxEmotionClassifier] that fetches the model
+  /// directly over HTTPS (Python sidecar as fallback), cached to
+  /// [storage.rootPath]/models/emotion_classifier.
   /// Progress is broadcast via [isDownloading] and [downloadProgress].
   /// Returns false immediately if a download is already in progress.
   Future<bool> triggerOnnxDownload() async {
@@ -612,7 +616,7 @@ class ExpressionClassifierService extends ChangeNotifier {
     _downloadProgress = null;
     notifyListeners();
 
-    final classifier = ONNXExpressionClassifier(
+    final classifier = OnnxEmotionClassifier(
       storage: _storage,
       onProgress: (progress) {
         _downloadProgress = progress;
@@ -625,9 +629,10 @@ class ExpressionClassifierService extends ChangeNotifier {
       },
     );
 
-    if (!await classifier.isAvailable()) {
+    if (!await classifier.canDownload()) {
       debugPrint(
-        '[ExpressionClassifierService] Classifier not available (python3 or script missing)',
+        '[ExpressionClassifierService] No download path available '
+        '(sidecar forced but python3 or script missing)',
       );
       _isDownloading = false;
       notifyListeners();
@@ -656,8 +661,8 @@ class ExpressionClassifierService extends ChangeNotifier {
 
   @override
   void dispose() {
-    if (_activeClassifier is ONNXExpressionClassifier) {
-      (_activeClassifier as ONNXExpressionClassifier).dispose();
+    if (_activeClassifier is OnnxEmotionClassifier) {
+      (_activeClassifier as OnnxEmotionClassifier).dispose();
     }
     super.dispose();
   }

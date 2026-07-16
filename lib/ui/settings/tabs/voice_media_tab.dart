@@ -136,7 +136,7 @@ class VoiceMediaTab extends StatelessWidget {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text(
-                        'Could not start download. Make sure python3 is installed.',
+                        'Could not start download. Check your internet connection.',
                       ),
                     ),
                   );
