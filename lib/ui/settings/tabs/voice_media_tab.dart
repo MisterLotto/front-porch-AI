@@ -299,15 +299,15 @@ class VoiceMediaTab extends StatelessWidget {
                               items: const [
                                 DropdownMenuItem(
                                   value: 'tiny.en',
-                                  child: Text('Tiny (~40MB, fastest)'),
+                                  child: Text('Tiny (~105MB, fastest)'),
                                 ),
                                 DropdownMenuItem(
                                   value: 'base.en',
-                                  child: Text('Base (~75MB, balanced)'),
+                                  child: Text('Base (~155MB, balanced)'),
                                 ),
                                 DropdownMenuItem(
                                   value: 'small.en',
-                                  child: Text('Small (~250MB, best accuracy)'),
+                                  child: Text('Small (~360MB, best accuracy)'),
                                 ),
                               ],
                               onChanged: (val) {

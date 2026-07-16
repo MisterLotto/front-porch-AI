@@ -17,13 +17,14 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/stt/sherpa_whisper_engine.dart';
+import 'package:front_porch_ai/services/stt/whisper_sidecar_transport.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 
 /// Call status phases for the voice call loop.
@@ -152,45 +153,13 @@ class SttService extends ChangeNotifier {
     _ttsService = service;
   }
 
-  // ---- Path resolution (mirrors KokoroEngine pattern) ----
+  // ---- Engine availability ----
 
-  String get _wrapperPath {
-    final execDir = File(Platform.resolvedExecutable).parent.path;
-    if (Platform.isMacOS) {
-      final contentsDir = File(Platform.resolvedExecutable).parent.parent.path;
-      return p.join(contentsDir, 'Resources', 'whisper_stt', 'whisper_stt');
-    }
-    if (Platform.isWindows) {
-      return p.join(execDir, 'whisper_stt', 'whisper_stt.exe');
-    }
-    return p.join(execDir, 'whisper_stt', 'whisper_stt');
-  }
-
-  bool get _hasWrapper {
-    try {
-      return File(_wrapperPath).existsSync();
-    } catch (_) {
-      return false;
-    }
-  }
-
-  String? get _helperScriptPath {
-    final execDir = File(Platform.resolvedExecutable).parent.path;
-    final bundled = p.join(execDir, 'whisper_stt.py');
-    if (File(bundled).existsSync()) return bundled;
-
-    var dir = Directory(execDir);
-    for (int i = 0; i < 8; i++) {
-      final candidate = File(p.join(dir.path, 'whisper_stt.py'));
-      if (candidate.existsSync()) return candidate.path;
-      final parent = dir.parent;
-      if (parent.path == dir.path) break;
-      dir = parent;
-    }
-    return null;
-  }
-
-  bool get isEngineUsable => _hasWrapper || _helperScriptPath != null;
+  /// The in-process sherpa-onnx engine ships with the app, so STT is
+  /// always usable natively; only the forced-sidecar mode
+  /// (FP_STT_SIDECAR=1) depends on the legacy Python transport existing.
+  bool get isEngineUsable =>
+      !SherpaWhisperEngine.sidecarForced || WhisperSidecarTransport.isUsable;
   bool get isAvailable => _storageService.sttEnabled && isEngineUsable;
 
   // ---- Model Download ----
@@ -204,6 +173,11 @@ class SttService extends ChangeNotifier {
   String? get downloadError => _downloadError;
 
   /// Pre-download the selected Whisper model so it's ready for use.
+  ///
+  /// Downloads for whichever engine will transcribe: the sherpa-onnx
+  /// export over direct HTTPS normally, or the sidecar's CTranslate2
+  /// model when FP_STT_SIDECAR=1 (the two formats are not interchangeable,
+  /// so there is deliberately no cross-engine download fallback).
   Future<bool> downloadModel() async {
     if (_isDownloading) return false;
     _isDownloading = true;
@@ -217,70 +191,43 @@ class SttService extends ChangeNotifier {
       final root =
           _storageService.rootPath ??
           (await getApplicationDocumentsDirectory()).path;
-      final modelDir = p.join(root, 'system', 'whisper_models');
-      await Directory(modelDir).create(recursive: true);
-
-      final request = jsonEncode({
-        'model_size': modelSize,
-        'model_dir': modelDir,
-        'download_only': true,
-      });
-
       debugPrint('STT: pre-downloading model=$modelSize');
 
-      Process process;
-      if (_hasWrapper) {
-        process = await Process.start(_wrapperPath, []);
+      bool ok;
+      if (!SherpaWhisperEngine.sidecarForced) {
+        await SherpaWhisperEngine.downloadModel(
+          root,
+          modelSize,
+          onProgress: (fraction) {
+            _downloadProgress = fraction;
+            _downloadStatus =
+                'Downloading... ${(fraction * 100).round()}%';
+            notifyListeners();
+          },
+        );
+        ok = true;
       } else {
-        final helperPath = _helperScriptPath;
-        if (helperPath == null) {
-          _downloadError = 'Whisper helper script not found';
-          _isDownloading = false;
-          notifyListeners();
-          return false;
-        }
-        final pythonCmd = Platform.isWindows ? 'python' : 'python3';
-        process = await Process.start(pythonCmd, [helperPath]);
+        final modelDir = p.join(root, 'system', 'whisper_models');
+        await Directory(modelDir).create(recursive: true);
+        ok = await WhisperSidecarTransport.download(
+          modelSize: modelSize,
+          modelDir: modelDir,
+          onProgress: (fraction, status) {
+            _downloadProgress = fraction;
+            _downloadStatus = status;
+            notifyListeners();
+          },
+          onError: (message) => _downloadError = message,
+        );
       }
 
-      process.stdin.writeln(request);
-      await process.stdin.flush();
-      await process.stdin.close();
-
-      // Stream stderr to capture tqdm download progress
-      final percentRegex = RegExp(r'(\d+)%');
-      String stderrBuffer = '';
-      process.stderr.transform(utf8.decoder).listen((chunk) {
-        stderrBuffer += chunk;
-        // Parse tqdm-style progress: "Downloading: 45%|████ | 45.0M/100M"
-        final match = percentRegex.allMatches(chunk).lastOrNull;
-        if (match != null) {
-          final percent = int.tryParse(match.group(1) ?? '');
-          if (percent != null) {
-            _downloadProgress = percent / 100.0;
-            _downloadStatus = 'Downloading... $percent%';
-            notifyListeners();
-          }
-        }
-      });
-
-      final output = await process.stdout.transform(utf8.decoder).join();
-      final exitCode = await process.exitCode;
-
-      if (exitCode == 0) {
-        debugPrint('STT: model download complete');
+      if (ok) {
         _downloadProgress = 1.0;
         _downloadStatus = 'Complete!';
-        _isDownloading = false;
-        notifyListeners();
-        return true;
-      } else {
-        _downloadError = 'Download failed';
-        debugPrint('STT: download failed: $output $stderrBuffer');
-        _isDownloading = false;
-        notifyListeners();
-        return false;
       }
+      _isDownloading = false;
+      notifyListeners();
+      return ok;
     } catch (e) {
       _downloadError = 'Download error: $e';
       debugPrint('STT: download error: $e');
@@ -665,84 +612,59 @@ class SttService extends ChangeNotifier {
     _currentAmplitude = 0.0;
   }
 
-  // ==== Transcription (subprocess) ====
+  // ==== Transcription (in-process sherpa-onnx, sidecar fallback) ====
 
   Future<String?> _transcribe(String audioPath) async {
     try {
       final modelSize = _storageService.whisperModel;
-
       final root =
           _storageService.rootPath ??
           (await getApplicationDocumentsDirectory()).path;
-      final modelDir = p.join(root, 'system', 'whisper_models');
-      await Directory(modelDir).create(recursive: true);
-
-      final request = jsonEncode({
-        'audio': audioPath,
-        'model_size': modelSize,
-        'model_dir': modelDir,
-      });
 
       debugPrint('STT: transcribing with model=$modelSize');
 
-      Process process;
-      if (_hasWrapper) {
-        process = await Process.start(_wrapperPath, []);
-      } else {
-        final helperPath = _helperScriptPath;
-        if (helperPath == null) {
-          _lastError = 'Whisper helper script not found';
-          return null;
+      // Native path: WAV input only (the desktop recorder always produces
+      // WAV; browser-uploaded webm from the web UI stays on the sidecar).
+      if (!SherpaWhisperEngine.sidecarForced &&
+          SherpaWhisperEngine.canDecode(audioPath)) {
+        try {
+          if (!SherpaWhisperEngine.isModelPresent(root, modelSize)) {
+            // First use after the engine switch (or a fresh install): the
+            // sherpa export downloads on demand, surfaced through the same
+            // progress UI as the settings button — mirrors the sidecar,
+            // which also auto-downloaded on first transcription.
+            await downloadModel();
+          }
+          if (SherpaWhisperEngine.isModelPresent(root, modelSize)) {
+            final text = await SherpaWhisperEngine.transcribe(
+              root: root,
+              size: modelSize,
+              audioPath: audioPath,
+            );
+            debugPrint(
+              '[STT-Native] transcribed "${text.length > 60 ? '${text.substring(0, 60)}...' : text}"',
+            );
+            return text.isEmpty ? null : text;
+          }
+        } catch (e) {
+          debugPrint('[STT-Native] failed, trying sidecar: $e');
         }
-        final pythonCmd = Platform.isWindows ? 'python' : 'python3';
-        process = await Process.start(pythonCmd, [
-          helperPath,
-        ], includeParentEnvironment: true);
       }
 
-      process.stdin.writeln(request);
-      await process.stdin.close();
-
-      final stdout = await process.stdout
-          .transform(const SystemEncoding().decoder)
-          .join();
-      final stderr = await process.stderr
-          .transform(const SystemEncoding().decoder)
-          .join();
-
-      if (stderr.isNotEmpty) {
-        debugPrint('STT stderr: $stderr');
-      }
-
-      final exitCode = await process.exitCode;
-      if (exitCode != 0) {
-        _lastError = 'Whisper process failed (exit code $exitCode)';
-        debugPrint('STT: whisper failed with exit code $exitCode');
-        return null;
-      }
-
-      final trimmed = stdout.trim();
-      if (trimmed.isEmpty) {
-        _lastError = 'Empty response from Whisper';
-        return null;
-      }
-
-      try {
-        final json = jsonDecode(trimmed) as Map<String, dynamic>;
-        if (json.containsKey('error')) {
-          _lastError = json['error'] as String;
-          return null;
-        }
-        final text = (json['text'] as String? ?? '').trim();
+      final modelDir = p.join(root, 'system', 'whisper_models');
+      await Directory(modelDir).create(recursive: true);
+      final text = await WhisperSidecarTransport.transcribe(
+        audioPath: audioPath,
+        modelSize: modelSize,
+        modelDir: modelDir,
+        onError: (message) => _lastError = message,
+      );
+      if (text != null) {
         debugPrint(
           'STT: transcribed "${text.length > 60 ? '${text.substring(0, 60)}...' : text}"',
         );
-        return text.isEmpty ? null : text;
-      } catch (e) {
-        _lastError = 'Failed to parse Whisper output';
-        debugPrint('STT: JSON parse error: $e, output: $trimmed');
-        return null;
       }
+      return text;
     } catch (e) {
       _lastError = 'Transcription error: $e';
       debugPrint('STT error: $e');

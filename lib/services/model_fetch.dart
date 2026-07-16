@@ -1,0 +1,89 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+import 'dart:io';
+
+/// Shared direct-HTTPS model downloader for the in-process engines that
+/// replaced the Python sidecars (emotion classifier, Whisper STT — see
+/// docs/design/sidecar-retirement.md). One implementation so every engine
+/// gets the same behavior: `.part` temp file + atomic rename (a partial
+/// download never masquerades as a complete model), skip-if-present, and
+/// throttled ~1% progress callbacks.
+class ModelFetch {
+  /// Content length of [url] via a HEAD request, or -1 if unknown.
+  /// Used to compute aggregate progress across multi-file model sets.
+  static Future<int> contentLength(String url) async {
+    final client = _client();
+    try {
+      final req = await client.headUrl(Uri.parse(url));
+      final res = await req.close();
+      await res.drain<void>();
+      return res.statusCode == 200 ? res.contentLength : -1;
+    } catch (_) {
+      return -1;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Streams [url] to [dest]. Skips files that are already fully
+  /// downloaded. [onProgress] receives (bytesDone, bytesTotal) for THIS
+  /// file; total is -1 when the server doesn't say.
+  static Future<void> fetch(
+    String url,
+    File dest, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    if (dest.existsSync() && dest.lengthSync() > 0) return;
+    final client = _client();
+    try {
+      final req = await client.getUrl(Uri.parse(url));
+      final res = await req.close();
+      if (res.statusCode != 200) {
+        throw HttpException('HTTP ${res.statusCode} for $url');
+      }
+      final total = res.contentLength;
+      await dest.parent.create(recursive: true);
+      final part = File('${dest.path}.part');
+      final sink = part.openWrite();
+      var done = 0;
+      var lastReport = 0;
+      try {
+        await for (final chunk in res) {
+          sink.add(chunk);
+          done += chunk.length;
+          // Throttle UI updates to ~1% steps on big files.
+          if (total > 0 && (done - lastReport) * 100 >= total) {
+            lastReport = done;
+            onProgress?.call(done, total);
+          }
+        }
+        await sink.flush();
+      } finally {
+        await sink.close();
+      }
+      await part.rename(dest.path);
+      onProgress?.call(done, total);
+    } finally {
+      client.close();
+    }
+  }
+
+  static HttpClient _client() =>
+      HttpClient()..findProxy = HttpClient.findProxyFromEnvironment;
+}

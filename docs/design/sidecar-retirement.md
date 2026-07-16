@@ -22,7 +22,7 @@ Flutter engine itself.
 |---|---|---|---|
 | `dt_grpc_client` (Python) | Draw Things gRPC | Pure-Dart client (`lib/services/grpc/dt_native/`) + tiny fpzip FFI | **1 — shipped, soaking** |
 | `sentiment_classifier` (Python) | emotion/expression ONNX classifier | in-process ONNX via `onnxruntime_v2` + Dart WordPiece tokenizer | **2 — shipped, soaking** |
-| `whisper_stt` (Python, faster-whisper/CT2) | STT | sherpa-onnx (single C lib, official `sherpa_onnx` Dart package) | 3 |
+| `whisper_stt` (Python, faster-whisper/CT2) | STT | sherpa-onnx via the official `sherpa_onnx` Dart package | **3 — shipped, soaking** |
 | `kokoro_tts` (Python) | Kokoro TTS | sherpa-onnx (Kokoro is first-class; bundles espeak-ng G2P) | 4 |
 | `piper` (PyInstaller wrap of `python -m piper`) | Piper TTS | sherpa-onnx (vits-piper) | 4 |
 | `embed_server` (Rust, already non-Python) | RAG embeddings | optional: fold into in-process ort; low priority — it is stable | 5 (optional) |
@@ -122,6 +122,52 @@ never touch. Per engine:
   `sentiment_classifier.py`, its PyInstaller build/bundle steps in
   release/nightly workflows + `scripts/build-macos.sh`, and the
   `ONNXExpressionClassifier` sidecar class + its resolution logic.
+
+## Phase 3 record (Whisper STT) — shipped 2026-07-16
+
+- In-process engine: `lib/services/stt/sherpa_whisper_engine.dart` —
+  isolate-run sherpa-onnx OfflineRecognizer (whisper int8 export), WAV
+  reading via the package's `readWave`, plus an RMS silence trim
+  (`trimSilence`) standing in for faster-whisper's VAD filter (all-silent
+  clips → '' → "No speech detected"; documented divergence: mid-clip
+  silence is left to Whisper).
+- Sidecar transport extracted verbatim to
+  `lib/services/stt/whisper_sidecar_transport.dart` (SttService shrank
+  768→~700 lines); the whole file is the phase-completion deletion target.
+  Rollback lever: `FP_STT_SIDECAR=1`. Fallback logs: `[STT-Native] ...`.
+- New dep `sherpa_onnx` ^1.13.4 — prebuilt native libs ship inside the pub
+  platform packages for macOS/Windows/Linux, so release bundling is
+  automatic (no fpzip-style build script) and signing rides the existing
+  codesign pass.
+- Models: CT2 NOT reusable — sherpa int8 exports
+  (`csukuangfj/sherpa-onnx-whisper-<size>`: encoder+decoder+tokens)
+  download over direct HTTPS into `system/whisper_models/sherpa/<size>/`
+  (CT2 cache untouched until the post-soak cleanup UI). Same size names
+  ('tiny.en' ~105MB / 'base.en' ~155MB / 'small.en' ~360MB — dropdown
+  labels updated), so the user's setting carries over; download happens on
+  the settings button OR on first transcription (the sidecar also
+  auto-downloaded on first use). One-time re-download called out in
+  Rawhide.md per playbook rule 6.
+- Shared infra: `lib/services/model_fetch.dart` — the direct-HTTPS
+  downloader (.part + rename, skip-if-present, ~1% throttle, HEAD
+  contentLength for aggregate multi-file progress) consolidated out of the
+  phase-2 classifier and reused here.
+- Web-UI mic uploads are webm/ogg — the native path handles WAV only
+  (`canDecode` RIFF probe) and browser audio stays on the sidecar.
+  **Phase-3 completion blocker:** move web mic capture to WAV (AudioWorklet
+  PCM) or add an opus decode story before deleting the sidecar, else web
+  voice input breaks.
+- Verification: `test/services/stt/sherpa_whisper_test.dart` — trimSilence
+  + canDecode unit tests always run; the real-model WAV→text test (gated on
+  FP_STT_TEST_MODEL_DIR + FP_SHERPA_LIB) reproduced the upstream reference
+  transcript exactly with tiny.en int8 in-sandbox 2026-07-16, and
+  faster-whisper (the legacy stack, beam 5 + VAD) produced the identical
+  words on the same WAV (punctuation/casing differ — expected across
+  engines).
+- Still TODO for phase-3 completion: web mic WAV capture (above), soak one
+  release, then delete `whisper_stt.py`, its PyInstaller build/bundle steps
+  in release/nightly workflows + `scripts/build-macos.sh`, and
+  `whisper_sidecar_transport.dart`; offer the CT2 cache in the cleanup UI.
 
 ## Success criteria (whole effort)
 

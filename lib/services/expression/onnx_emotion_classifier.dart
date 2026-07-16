@@ -21,6 +21,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/services/expression_classifier.dart';
+import 'package:front_porch_ai/services/model_fetch.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'onnx_emotion_engine.dart';
 
@@ -153,44 +154,17 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
     await _sidecarClassifier.downloadModel();
   }
 
-  /// Streams [url] to [dest] via a `.part` temp file, reporting progress
-  /// through [onProgress]. Skips files that are already fully downloaded.
-  Future<void> _fetch(String url, File dest) async {
-    if (dest.existsSync() && dest.lengthSync() > 0) return;
-    final client = HttpClient()
-      ..findProxy = HttpClient.findProxyFromEnvironment;
-    try {
-      final req = await client.getUrl(Uri.parse(url));
-      final res = await req.close();
-      if (res.statusCode != 200) {
-        throw HttpException('HTTP ${res.statusCode} for $url');
-      }
-      final total = res.contentLength;
-      final name = url.split('/').last;
-      final part = File('${dest.path}.part');
-      final sink = part.openWrite();
-      var done = 0;
-      var lastReport = 0;
-      try {
-        await for (final chunk in res) {
-          sink.add(chunk);
-          done += chunk.length;
-          // Throttle UI updates to ~1% steps on big files.
-          if (total > 0 && (done - lastReport) * 100 >= total) {
-            lastReport = done;
-            onProgress?.call(
-              OnnxDownloadProgress(file: name, downloaded: done, total: total),
-            );
-          }
-        }
-        await sink.flush();
-      } finally {
-        await sink.close();
-      }
-      await part.rename(dest.path);
-    } finally {
-      client.close();
-    }
+  /// Fetches [url] to [dest] via the shared [ModelFetch] helper, mapping
+  /// its per-file progress onto [onProgress].
+  Future<void> _fetch(String url, File dest) {
+    final name = url.split('/').last;
+    return ModelFetch.fetch(
+      url,
+      dest,
+      onProgress: (done, total) => onProgress?.call(
+        OnnxDownloadProgress(file: name, downloaded: done, total: total),
+      ),
+    );
   }
 
   void dispose() => _sidecar?.dispose();
