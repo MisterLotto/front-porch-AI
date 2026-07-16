@@ -322,6 +322,21 @@ if [ "$DO_ML" -eq 1 ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# libfpzip for the native Draw Things client (macOS-only feature)
+# ─────────────────────────────────────────────────────────────────────────────
+# The pure-Dart DT client decodes generated images through a tiny fpzip FFI
+# dylib (lib/services/grpc/dt_native/dt_fpzip.dart looks in
+# Contents/Frameworks/). Without it, signed builds silently fall back to the
+# Python sidecar for image generation — dev and release would diverge. The
+# dylib is signed by the codesign pass below like every other framework.
+echo "==> Bundling libfpzip (native Draw Things tensor decode)..."
+if [ ! -f "$ROOT/tools/fpzip/libfpzip.dylib" ]; then
+  "$ROOT/scripts/build-fpzip-macos.sh"
+fi
+mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+cp "$ROOT/tools/fpzip/libfpzip.dylib" "$APP_BUNDLE/Contents/Frameworks/"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # xattr clean (MUST be before any codesigning)
 # ─────────────────────────────────────────────────────────────────────────────
 echo "==> Cleaning xattrs (critical before codesign/notarization)..."

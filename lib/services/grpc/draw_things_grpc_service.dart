@@ -9,6 +9,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'package:front_porch_ai/services/engine_health.dart';
+
 import 'dt_native/draw_things_native_client.dart';
 import 'dt_native/dt_fpzip.dart';
 
@@ -422,11 +424,24 @@ class DrawThingsGrpcService {
       // tensors, so without libfpzip the native path would only fail AFTER a
       // full (possibly minutes-long) generation. Skip straight to the sidecar
       // in that case rather than paying for the generation twice.
-      if (!_sidecarForced) {
+      if (_sidecarForced) {
+        EngineHealth.instance.reportFallback(
+          EngineHealth.drawThings,
+          'FP_DT_SIDECAR=1 (legacy forced by environment)',
+          expected: true,
+        );
+      } else {
         if (!DtFpzip.instance.isAvailable) {
           debugPrint(
             '[DT-Native] libfpzip not found — using sidecar for generate '
             '(build it with scripts/build-fpzip-macos.sh for native decode)',
+          );
+          // Releases bundle libfpzip in Contents/Frameworks/ — missing means
+          // broken packaging (or an unbuilt dev checkout), so it counts as a
+          // real fallback, not a documented path.
+          EngineHealth.instance.reportFallback(
+            EngineHealth.drawThings,
+            'libfpzip not found — image generation on the legacy sidecar',
           );
         } else {
           final native = DrawThingsNativeClient(host: host, port: port);
@@ -441,9 +456,14 @@ class DrawThingsGrpcService {
                   : (step) => onProgress(step, steps),
             );
             debugPrint('[DT-Native] Generated ${bytes.length} bytes');
+            EngineHealth.instance.reportNative(EngineHealth.drawThings);
             return bytes;
           } catch (e) {
             debugPrint('[DT-Native] generate failed, trying sidecar: $e');
+            EngineHealth.instance.reportFallback(
+              EngineHealth.drawThings,
+              'native generation failed: $e',
+            );
           } finally {
             unawaited(native.shutdown());
           }
