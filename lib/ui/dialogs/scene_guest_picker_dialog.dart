@@ -43,7 +43,7 @@ class SceneGuestPickerDialog extends StatefulWidget {
   final List<CharacterCard> characters;
 
   /// Resolves a character `imagePath` (basename or full path) to a [File].
-  final File Function(String imagePath) resolveImage;
+  final File? Function(CharacterCard card) resolveImage;
 
   /// Pre-fills the search box (e.g. the text typed after `/join`).
   final String initialFilter;
@@ -77,10 +77,8 @@ class _SceneGuestPickerDialogState extends State<SceneGuestPickerDialog> {
   }
 
   ImageProvider? _avatar(CharacterCard c) {
-    final path = c.imagePath;
-    if (path == null || path.isEmpty) return null;
-    final file = widget.resolveImage(path);
-    return file.existsSync() ? FileImage(file) : null;
+    final file = widget.resolveImage(c);
+    return (file != null && file.existsSync()) ? FileImage(file) : null;
   }
 
   @override
