@@ -29,9 +29,11 @@ import 'package:front_porch_ai/models/avatar_image.dart';
 /// (expression images off) the ‹ › chevrons cycle a FACE RING of the portrait +
 /// the gallery looks + (when it's the ★ star) one expression image; chevrons
 /// appear only when the ring has more than one entry. The one ★ star is the
-/// canonical avatar — the ring's default entry and the card cover on export —
-/// and can point at a look OR an expression. Selecting/starring never rewrites
-/// `imagePath` (the library portrait stays put on the home grid). The emotion
+/// canonical avatar — the ring's default entry, the card cover on export, AND
+/// the home-grid/web library card cover (via coverImageFileFor) — and can
+/// point at a look OR an expression. Selecting/starring never rewrites
+/// `imagePath`; the only imagePath rewrite is deleting the portrait, which
+/// promotes a look in its place (portrait_promotion.dart). The emotion
 /// pipeline stays look-blind: a non-starred expression never enters the plain
 /// ring, and a look is never picked as an emotion face.
 

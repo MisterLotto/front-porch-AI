@@ -202,6 +202,28 @@ class _AvatarGalleryDialogState extends State<_AvatarGalleryDialog> {
     if (ok == true) await _c.remove(img);
   }
 
+  Future<void> _confirmDeletePortrait() async {
+    final ok = await showWarmDialog<bool>(
+      context,
+      title: 'Delete the portrait?',
+      content: const WarmDialogText(
+        'A gallery avatar becomes the new portrait — the ★ one when a '
+        'gallery avatar is starred, otherwise the first. The old portrait '
+        'image is replaced.',
+      ),
+      actions: [
+        warmDialogCancel(context),
+        warmDialogConfirm(
+          context,
+          label: 'Delete portrait',
+          destructive: true,
+          onPressed: () => Navigator.pop(context, true),
+        ),
+      ],
+    );
+    if (ok == true) await _c.deletePortrait();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -225,6 +247,7 @@ class _AvatarGalleryDialogState extends State<_AvatarGalleryDialog> {
                       onAddLook: _addLook,
                       onReplacePortrait: _replacePortrait,
                       onDelete: _confirmDelete,
+                      onDeletePortrait: _confirmDeletePortrait,
                     ),
                     const SizedBox(height: 22),
                     Divider(

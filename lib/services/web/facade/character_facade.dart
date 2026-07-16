@@ -406,9 +406,18 @@ class CharacterFacade {
     return file.existsSync() ? file : null;
   }
 
-  /// Resolve the on-disk avatar file for [id], or null if none.
+  /// Resolve the on-disk avatar file for [id], or null if none. Star-aware:
+  /// the ★ gallery avatar wins when set (desktop home-grid parity — both
+  /// route through [CharacterRepository.coverImageFileFor]'s rules).
   Future<File?> avatarFile(String id) async {
     try {
+      final hydrated = _repo?.characters
+          .where((c) => c.dbId == id)
+          .firstOrNull;
+      if (hydrated != null) {
+        final cover = _repo?.coverImageFileFor(hydrated);
+        if (cover != null && cover.existsSync()) return cover;
+      }
       final c = await _db.getCharacterById(id);
       if (c.imagePath == null || c.imagePath!.isEmpty) return null;
       final file = File(

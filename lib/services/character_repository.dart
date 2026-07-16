@@ -24,6 +24,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/services/portrait_promotion.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -1220,6 +1221,17 @@ class CharacterRepository extends ChangeNotifier {
     card.imagePath = imagePath;
     await updateCharacter(card);
   }
+
+  /// Deletes the canonical portrait; a gallery look is promoted in its place.
+  /// Returns the promoted look's id (callers clean their own cascades). Logic
+  /// lives in the portrait_promotion leaf — this file is over the size cap.
+  Future<String> deletePortraitPromotingLook(CharacterCard card) =>
+      promoteLookOverPortrait(
+        card: card,
+        storage: _storage,
+        updateCharacter: updateCharacter,
+        removeAvatar: removeAvatar,
+      );
 
   /// The file to bake as the character's exported / Stoop card cover: the ★
   /// starred avatar (a gallery look OR an expression image) when it's set and
