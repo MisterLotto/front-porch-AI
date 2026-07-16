@@ -78,6 +78,19 @@ export function AvatarManager({ characterId }: { characterId: string }) {
   const toggleFavorite = (a: AvatarItem) =>
     run(api.post(`${base}/favorite?avatarId=${a.isFavorite ? '' : a.id}`));
 
+  // Desktop parity: delete the portrait — the ★ (else first) look is
+  // promoted in its place. Only offered when a look exists to take over.
+  const deletePortrait = () => {
+    if (
+      !window.confirm(
+        'Delete the portrait? A gallery look becomes the new portrait — ' +
+          'the ★ one when a look is starred, otherwise the first.',
+      )
+    )
+      return;
+    run(api.post(`${base}/portrait/delete`));
+  };
+
   const looks = avatars.filter((a) => a.isLook);
   const expressions = avatars.filter((a) => !a.isLook);
 
@@ -125,9 +138,16 @@ export function AvatarManager({ characterId }: { characterId: string }) {
       {/* ── Looks ─────────────────────────────────────────────── */}
       <div className="gallery-section-head">
         <span className="section-label">Looks</span>
-        <button className="ghost" disabled={busy} onClick={() => lookRef.current?.click()}>
-          {busy ? 'Working…' : '⬆ Upload look'}
-        </button>
+        <div className="tool-row">
+          {looks.length > 0 && (
+            <button className="ghost" disabled={busy} onClick={deletePortrait}>
+              🗑 Delete portrait
+            </button>
+          )}
+          <button className="ghost" disabled={busy} onClick={() => lookRef.current?.click()}>
+            {busy ? 'Working…' : '⬆ Upload look'}
+          </button>
+        </div>
       </div>
       {looks.length === 0 ? (
         <p className="muted gallery-empty">
