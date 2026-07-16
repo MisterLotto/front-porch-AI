@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/tts_voice_info.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/kokoro_debug.dart';
 import 'package:front_porch_ai/services/kokoro_worker_pool.dart';
+import 'package:front_porch_ai/services/tts/sherpa_kokoro_engine.dart';
 
 /// Kokoro TTS engine — high-quality local TTS using kokoro-onnx.
 ///
@@ -33,6 +34,11 @@ import 'package:front_porch_ai/services/kokoro_worker_pool.dart';
 class KokoroEngine implements TtsEngine {
   final StorageService _storageService;
   KokoroEngine(this._storageService);
+
+  /// In-process sherpa-onnx engine (phase 4 of the sidecar retirement) —
+  /// primary path; the Python worker pool below is the automatic fallback
+  /// (FP_TTS_SIDECAR=1 forces it).
+  final SherpaKokoroEngine _native = SherpaKokoroEngine();
   static const _modelUrl =
       'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx';
   static const _voicesUrl =
@@ -48,13 +54,13 @@ class KokoroEngine implements TtsEngine {
   @override
   String get engineId => 'kokoro';
 
+  Future<String> get _rootPath async =>
+      _storageService.rootPath ??
+      (await getApplicationDocumentsDirectory()).path;
+
   /// Get the directory where Kokoro model files are stored.
-  Future<String> get _modelDir async {
-    final root =
-        _storageService.rootPath ??
-        (await getApplicationDocumentsDirectory()).path;
-    return p.join(root, 'system', 'kokoro_models');
-  }
+  Future<String> get _modelDir async =>
+      p.join(await _rootPath, 'system', 'kokoro_models');
 
   /// Get the directory containing bundled TTS binaries.
   String get _piperDir {
@@ -114,6 +120,11 @@ class KokoroEngine implements TtsEngine {
   @override
   Future<bool> get isAvailable async {
     try {
+      final root = await _rootPath;
+      if (!SherpaKokoroEngine.sidecarForced &&
+          SherpaKokoroEngine.isModelPresent(root)) {
+        return true;
+      }
       if (!isEngineUsable) return false;
       final dir = await _modelDir;
       final modelFile = File(p.join(dir, 'kokoro-v1.0.onnx'));
@@ -126,6 +137,20 @@ class KokoroEngine implements TtsEngine {
 
   @override
   Future<bool> ensureModelReady({void Function(double)? onProgress}) async {
+    // Native path: one-time download of the sherpa kokoro bundle (the two
+    // legacy files are a different export and not loadable by sherpa).
+    if (!SherpaKokoroEngine.sidecarForced) {
+      final root = await _rootPath;
+      if (SherpaKokoroEngine.isModelPresent(root)) return true;
+      try {
+        await SherpaKokoroEngine.downloadModel(root, onProgress: onProgress);
+        return true;
+      } catch (e) {
+        print('[TTS-Native] kokoro bundle download failed, '
+            'falling back to legacy download: $e');
+      }
+    }
+
     final dir = await _modelDir;
     await Directory(dir).create(recursive: true);
 
@@ -230,6 +255,34 @@ class KokoroEngine implements TtsEngine {
     void Function(double progress)? onProgress,
   }) async {
     try {
+      final tempDir = Directory.systemTemp;
+      _fileCounter++;
+      final outputFile = File(
+        p.join(
+          tempDir.path,
+          'kokoro_tts_${DateTime.now().millisecondsSinceEpoch}_$_fileCounter.wav',
+        ),
+      );
+
+      // In-process sherpa engine first; Python worker pool on any failure.
+      final root = await _rootPath;
+      if (!SherpaKokoroEngine.sidecarForced &&
+          SherpaKokoroEngine.isModelPresent(root)) {
+        try {
+          final wav = await _native.generate(
+            root: root,
+            text: text,
+            voice: voice,
+            speed: speed,
+            outputPath: outputFile.path,
+          );
+          onProgress?.call(1.0);
+          return wav;
+        } catch (e) {
+          print('[TTS-Native] kokoro failed, trying sidecar: $e');
+        }
+      }
+
       final dir = await _modelDir;
       final modelPath = p.join(dir, 'kokoro-v1.0.onnx');
       final voicesPath = p.join(dir, 'voices-v1.0.bin');
@@ -240,15 +293,6 @@ class KokoroEngine implements TtsEngine {
       }
 
       final lang = _voiceLang(voice);
-
-      final tempDir = Directory.systemTemp;
-      _fileCounter++;
-      final outputFile = File(
-        p.join(
-          tempDir.path,
-          'kokoro_tts_${DateTime.now().millisecondsSinceEpoch}_$_fileCounter.wav',
-        ),
-      );
 
       // Lazily create the resident worker pool (1–4 processes, model stays loaded).
       _pool ??= KokoroWorkerPool(_storageService, _spawnWorkerProcess);
@@ -274,6 +318,7 @@ class KokoroEngine implements TtsEngine {
 
   /// Shut down any resident workers. Safe to call multiple times.
   Future<void> shutdown() async {
+    _native.shutdown();
     await _pool?.shutdown();
     _pool = null;
   }
@@ -292,6 +337,16 @@ class KokoroEngine implements TtsEngine {
     kDebugPrint(
       '[KokoroEngine] ensureWorkersWarm called (ttsConcurrency=${_storageService.ttsConcurrency})',
     );
+    final root = await _rootPath;
+    if (!SherpaKokoroEngine.sidecarForced &&
+        SherpaKokoroEngine.isModelPresent(root)) {
+      try {
+        await _native.warmUp(root);
+        return;
+      } catch (e) {
+        print('[TTS-Native] kokoro warm-up failed, using sidecar pool: $e');
+      }
+    }
     _pool ??= KokoroWorkerPool(_storageService, _spawnWorkerProcess);
     await _pool!.warmUp();
   }

@@ -25,6 +25,7 @@ import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'package:front_porch_ai/services/model_fetch.dart';
+import 'package:front_porch_ai/services/sherpa_runtime.dart';
 
 /// In-process Whisper STT via sherpa-onnx (phase 3 of
 /// docs/design/sidecar-retirement.md). Replaces the faster-whisper Python
@@ -129,34 +130,10 @@ class SherpaWhisperEngine {
     required String audioPath,
   }) {
     final dir = modelDir(root, size);
-    final libDir = _nativeLibDir();
+    final libDir = sherpaNativeLibDir();
     return Isolate.run(
       () => _transcribeInIsolate(dir, size, audioPath, libDir),
     );
-  }
-
-  /// Directory holding libsherpa-onnx-c-api, or null to let dlopen search
-  /// default paths (the Flutter bundle case). FP_SHERPA_LIB overrides for
-  /// tests/dev.
-  static String? _nativeLibDir() {
-    final env = Platform.environment['FP_SHERPA_LIB'];
-    if (env != null && env.isNotEmpty) return env;
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final candidates = [
-      if (Platform.isMacOS) p.join(File(exeDir).parent.path, 'Frameworks'),
-      if (Platform.isLinux) p.join(exeDir, 'lib'),
-      if (Platform.isWindows) exeDir,
-    ];
-    const lib = {
-      'macos': 'libsherpa-onnx-c-api.dylib',
-      'linux': 'libsherpa-onnx-c-api.so',
-      'windows': 'sherpa-onnx-c-api.dll',
-    };
-    final name = lib[Platform.operatingSystem];
-    for (final c in candidates) {
-      if (name != null && File(p.join(c, name)).existsSync()) return c;
-    }
-    return null;
   }
 
   static String _transcribeInIsolate(

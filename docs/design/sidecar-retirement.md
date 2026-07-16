@@ -23,8 +23,8 @@ Flutter engine itself.
 | `dt_grpc_client` (Python) | Draw Things gRPC | Pure-Dart client (`lib/services/grpc/dt_native/`) + tiny fpzip FFI | **1 — shipped, soaking** |
 | `sentiment_classifier` (Python) | emotion/expression ONNX classifier | in-process ONNX via `onnxruntime_v2` + Dart WordPiece tokenizer | **2 — shipped, soaking** |
 | `whisper_stt` (Python, faster-whisper/CT2) | STT | sherpa-onnx via the official `sherpa_onnx` Dart package | **3 — shipped, soaking** |
-| `kokoro_tts` (Python) | Kokoro TTS | sherpa-onnx (Kokoro is first-class; bundles espeak-ng G2P) | 4 |
-| `piper` (PyInstaller wrap of `python -m piper`) | Piper TTS | sherpa-onnx (vits-piper) | 4 |
+| `kokoro_tts` (Python) | Kokoro TTS | sherpa-onnx (Kokoro is first-class; bundles espeak-ng G2P) | **4a — shipped, soaking** |
+| `piper` (PyInstaller wrap of `python -m piper`) | Piper TTS | sherpa-onnx (vits-piper) | 4b — pending |
 | `embed_server` (Rust, already non-Python) | RAG embeddings | optional: fold into in-process ort; low priority — it is stable | 5 (optional) |
 
 ## The two upgrade surfaces
@@ -168,6 +168,56 @@ never touch. Per engine:
   release, then delete `whisper_stt.py`, its PyInstaller build/bundle steps
   in release/nightly workflows + `scripts/build-macos.sh`, and
   `whisper_sidecar_transport.dart`; offer the CT2 cache in the cleanup UI.
+
+## Phase 4a record (Kokoro TTS) — shipped 2026-07-16
+
+- In-process engine: `lib/services/tts/sherpa_kokoro_engine.dart` — ONE
+  persistent worker isolate holding the loaded sherpa OfflineTts (the
+  stays-warm parity for the 1–4 process Python pool; ONNX intra-op
+  threading covers the parallelism), jobs serialized over SendPorts, WAV
+  written via sherpa's writeWave into the same temp-file contract the pool
+  used, so TtsService playback/chunking is untouched.
+- Wiring: `kokoro_engine.dart` — native-first in generateAudio /
+  ensureModelReady / ensureWorkersWarm / isAvailable / shutdown, Python
+  pool as automatic per-call fallback. Lever: `FP_TTS_SIDECAR=1`. Logs:
+  `[TTS-Native] ...`.
+- **Model reuse correction:** the doc's earlier "mostly reusable" guess
+  was WRONG — sherpa's export embeds required ONNX metadata and its
+  voices.bin is a custom binary (not the kokoro-onnx npz), so the legacy
+  kokoro-v1.0.onnx + voices-v1.0.bin are NOT loadable. One-time re-download
+  of `kokoro-multi-lang-v1_0.tar.bz2` (~160MB compressed → ~380MB: model,
+  voices.bin, tokens, lexicons, espeak-ng-data, jieba dict) from sherpa's
+  GitHub releases (same host the legacy engine downloaded from), extracted
+  with package:archive in an isolate into
+  `system/kokoro_models/sherpa-v1_0/` (legacy files untouched until the
+  post-soak cleanup UI). Surfaced in Rawhide.md.
+- Settings continuity: voice NAMES are identical (af_heart … zm_yunyang);
+  `SherpaKokoroEngine.speakerIds` maps all 53 names to sherpa speaker ids
+  (source: scripts/kokoro/v1.0/generate_voices_bin.py). Characters'
+  saved voices keep working; unknown names fall back to af_heart.
+- Shared infra: `lib/services/sherpa_runtime.dart` — sherpaNativeLibDir()
+  consolidated out of the phase-3 whisper engine, used by both.
+- Verification: `test/services/tts/sherpa_kokoro_test.dart` — speaker-id
+  map test always runs; gated real-model tests (FP_TTS_TEST_ROOT) verified
+  in-sandbox 2026-07-16, including the **closed-loop test**: Kokoro speaks
+  a sentence and the phase-3 Whisper engine transcribes the exact words
+  back (24kHz→16kHz resample handled by sherpa) — two retired sidecars
+  verifying each other, no reference audio needed.
+- Still TODO for phase-4a completion: soak one release, then delete
+  `kokoro_tts.py`, `kokoro_worker_pool.dart`, the kokoro PyInstaller
+  build/bundle steps, and the legacy download URLs; offer the old model
+  files in the cleanup UI.
+
+## Phase 4b (pending): Piper TTS
+
+Blocked on a model-mapping decision: sherpa cannot load raw piper `.onnx`
+voices (it needs its own vits-piper re-exports with embedded metadata), and
+users install piper voices by name via the in-app voice manager. Plan:
+map the curated voice list to `csukuangfj/vits-piper-*` HF repos
+(1:1 re-exports exist for the standard piper catalog), download the
+matching export on first native use (piper voices are ~60–100MB), and keep
+the piper binary fallback for user-supplied voices with no sherpa export.
+The one-shot-per-chunk generate seam is `TtsService._generatePiperWav`.
 
 ## Success criteria (whole effort)
 
