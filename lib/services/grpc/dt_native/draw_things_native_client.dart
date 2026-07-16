@@ -90,6 +90,17 @@ class DrawThingsNativeClient {
         ImageGenerationResponse.decode,
       );
 
+  /// SHA-256 of the pinned cert's DER, for exact-match pinning below.
+  static final String _pinnedDerSha256 = sha256
+      .convert(
+        base64.decode(
+          _dtCaChainPem
+              .replaceAll(RegExp(r'-----[A-Z ]+-----'), '')
+              .replaceAll(RegExp(r'\s'), ''),
+        ),
+      )
+      .toString();
+
   ClientChannel _connect() {
     return _channel ??= ClientChannel(
       host,
@@ -98,6 +109,15 @@ class DrawThingsNativeClient {
         credentials: ChannelCredentials.secure(
           certificates: utf8.encode(_dtCaChainPem),
           authority: 'localhost',
+          // The pinned PEM is Draw Things' LEAF cert (issued BY "Draw Things
+          // Root CA", whose root is not distributed). Python gRPC accepts a
+          // leaf as a trust anchor (partial-chain verification); dart:io does
+          // NOT — it walks to the absent root and fails the handshake, so
+          // chain verification alone can never succeed against a real DT
+          // server. Exact-match pinning of the presented cert is the correct
+          // (and stricter) equivalent: accept exactly the cert we ship.
+          onBadCertificate: (cert, host) =>
+              sha256.convert(cert.der).toString() == _pinnedDerSha256,
         ),
       ),
     );

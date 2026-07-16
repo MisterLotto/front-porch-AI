@@ -196,9 +196,14 @@ class DrawThingsGrpcService {
       try {
         await native.echo();
         debugPrint('[DT-Native] testConnection OK');
+        EngineHealth.instance.reportNative(EngineHealth.drawThings);
         return true;
       } catch (e) {
         debugPrint('[DT-Native] testConnection failed, trying sidecar: $e');
+        EngineHealth.instance.reportFallback(
+          EngineHealth.drawThings,
+          'native connection failed: $e',
+        );
       } finally {
         unawaited(native.shutdown());
       }
