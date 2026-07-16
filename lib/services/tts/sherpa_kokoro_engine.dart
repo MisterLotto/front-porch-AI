@@ -21,7 +21,6 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
@@ -125,48 +124,19 @@ class SherpaKokoroEngine {
         Directory(p.join(dir, 'espeak-ng-data')).existsSync();
   }
 
-  /// Downloads the tar.bz2 bundle (progress 0–0.85) and extracts it
-  /// (0.85–1.0, in an isolate — bzip2 on ~380MB is CPU-bound).
+  /// Downloads + extracts the tar.bz2 bundle via the shared
+  /// [ModelFetch.fetchAndExtractTarBz2] (also used by the Piper engine).
   static Future<void> downloadModel(
     String root, {
     void Function(double fraction)? onProgress,
   }) async {
-    final dir = modelDir(root);
-    final tmp = File('$dir.tar.bz2');
-    await tmp.parent.create(recursive: true);
-    await ModelFetch.fetch(
+    await ModelFetch.fetchAndExtractTarBz2(
       bundleUrl,
-      tmp,
-      onProgress: (done, total) {
-        if (total > 0) onProgress?.call(0.85 * done / total);
-      },
+      modelDir(root),
+      onProgress: onProgress,
     );
-    onProgress?.call(0.85);
-    final tarPath = tmp.path;
-    await Isolate.run(() => _extractBundle(tarPath, dir));
-    try {
-      await tmp.delete();
-    } catch (_) {}
-    onProgress?.call(1.0);
     if (!isModelPresent(root)) {
       throw const FormatException('kokoro bundle extraction incomplete');
-    }
-  }
-
-  /// Extracts [tarBz2Path] into [destDir], stripping the archive's single
-  /// top-level directory.
-  static void _extractBundle(String tarBz2Path, String destDir) {
-    final bytes = File(tarBz2Path).readAsBytesSync();
-    final tar = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
-    for (final entry in tar) {
-      final parts = p.posix.split(entry.name);
-      if (parts.length < 2) continue; // top-level dir itself
-      final rel = p.joinAll(parts.sublist(1));
-      final out = File(p.join(destDir, rel));
-      if (entry.isFile) {
-        out.parent.createSync(recursive: true);
-        out.writeAsBytesSync(entry.content as List<int>);
-      }
     }
   }
 

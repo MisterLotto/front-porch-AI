@@ -24,7 +24,7 @@ Flutter engine itself.
 | `sentiment_classifier` (Python) | emotion/expression ONNX classifier | in-process ONNX via `onnxruntime_v2` + Dart WordPiece tokenizer | **2 — shipped, soaking** |
 | `whisper_stt` (Python, faster-whisper/CT2) | STT | sherpa-onnx via the official `sherpa_onnx` Dart package | **3 — shipped, soaking** |
 | `kokoro_tts` (Python) | Kokoro TTS | sherpa-onnx (Kokoro is first-class; bundles espeak-ng G2P) | **4a — shipped, soaking** |
-| `piper` (PyInstaller wrap of `python -m piper`) | Piper TTS | sherpa-onnx (vits-piper) | 4b — pending |
+| `piper` (PyInstaller wrap of `python -m piper`) | Piper TTS | sherpa-onnx (vits-piper) | **4b — shipped, soaking** |
 | `embed_server` (Rust, already non-Python) | RAG embeddings | optional: fold into in-process ort; low priority — it is stable | 5 (optional) |
 
 ## The two upgrade surfaces
@@ -43,9 +43,9 @@ never touch. Per engine:
 | Draw Things | none — nothing to migrate |
 | RAG embedding ONNX (~270 MB) | reusable as-is (ONNX is engine-agnostic) |
 | Expression/sentiment ONNX | reusable as-is |
-| Kokoro (`kokoro-v1.0.onnx` ~310 MB + `voices-v1.0.bin`) | mostly reusable; sherpa needs small extras (`tokens.txt`, espeak-ng data) — download only those |
+| Kokoro (`kokoro-v1.0.onnx` ~310 MB + `voices-v1.0.bin`) | **NOT reusable** (corrected 2026-07-16: sherpa needs its own export + voices.bin format) — one-time ~160 MB bundle re-download |
 | Whisper (CTranslate2 format, 75 MB–1.5 GB) | **NOT reusable** — sherpa/whisper.cpp use a different export; one-time re-download, must be explicit UX |
-| Piper voices (`.onnx` + `.json`) | `.onnx` reusable; generate `tokens.txt` from the `.json` in-app (no re-download expected) |
+| Piper voices (`.onnx` + `.json`) | **NOT reusable** (corrected 2026-07-16: sherpa needs its vits-piper re-exports) — per-voice ~60–100 MB re-download, 404 → legacy binary |
 
 ## The playbook (every phase MUST follow this)
 
@@ -208,16 +208,33 @@ never touch. Per engine:
   build/bundle steps, and the legacy download URLs; offer the old model
   files in the cleanup UI.
 
-## Phase 4b (pending): Piper TTS
+## Phase 4b record (Piper TTS) — shipped 2026-07-16
 
-Blocked on a model-mapping decision: sherpa cannot load raw piper `.onnx`
-voices (it needs its own vits-piper re-exports with embedded metadata), and
-users install piper voices by name via the in-app voice manager. Plan:
-map the curated voice list to `csukuangfj/vits-piper-*` HF repos
-(1:1 re-exports exist for the standard piper catalog), download the
-matching export on first native use (piper voices are ~60–100MB), and keep
-the piper binary fallback for user-supplied voices with no sherpa export.
-The one-shot-per-chunk generate seam is `TtsService._generatePiperWav`.
+- Engine: `lib/services/tts/sherpa_piper_engine.dart` — persistent worker
+  isolate holding one loaded vits voice (respawns on voice change);
+  strictly faster than the legacy one-process-spawn-per-chunk binary.
+- Voice mapping is PROGRAMMATIC, no curated table: rhasspy voiceKey
+  `en_US-lessac-medium` → sherpa bundle `vits-piper-en_US-lessac-medium`
+  (.tar.bz2 on the same GitHub tts-models release as kokoro; ~60–100MB
+  incl. per-voice espeak-ng-data). `ensureVoice` fetches on first native
+  use into `system/piper_models/sherpa/<voiceKey>/`; a 404 (no re-export,
+  e.g. hand-made voices) returns false and that whole message uses the
+  legacy piper binary — automatic degradation. Original rhasspy `.onnx`
+  files are NOT sherpa-loadable (missing embedded metadata).
+- Wiring: `TtsService` piper block — `ensureVoice` once per message, then
+  per-chunk native generate with binary fallback. Shares `FP_TTS_SIDECAR=1`
+  with Kokoro. tar.bz2 download+extract consolidated into
+  `ModelFetch.fetchAndExtractTarBz2` (kokoro engine refactored onto it).
+- Verification: layout-probe unit test always runs; gated closed-loop test
+  (Piper speaks → phase-3 Whisper transcribes the words back, 22.05kHz
+  resample) passed in-sandbox 2026-07-16 with the real
+  vits-piper-en_US-lessac-medium export. NOTE: the gated TTS suites should
+  run serially (`flutter test -j 1 test/services/tts/`) — two ONNX TTS
+  engines + two Whisper decodes in parallel can starve small machines.
+- Still TODO for phase-4b completion: soak, then delete `piper_entry.py`,
+  its PyInstaller build/bundle steps, and `_generatePiperWav`/binary
+  resolution in tts_service.dart; offer legacy piper `.onnx` files in the
+  cleanup UI (keep `.onnx.json` — the voice manager still lists from it).
 
 ## Success criteria (whole effort)
 

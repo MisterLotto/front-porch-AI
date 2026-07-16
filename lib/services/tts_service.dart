@@ -31,6 +31,7 @@ import 'package:front_porch_ai/services/tts_engine.dart';
 import 'package:front_porch_ai/services/kokoro_engine.dart';
 import 'package:front_porch_ai/services/openai_tts_engine.dart';
 import 'package:front_porch_ai/services/elevenlabs_tts_engine.dart';
+import 'package:front_porch_ai/services/tts/sherpa_piper_engine.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
 
 /// Text-to-speech service — multi-engine architecture.
@@ -40,6 +41,10 @@ import 'package:front_porch_ai/services/tts_voice_info.dart';
 class TtsService extends ChangeNotifier {
   final StorageService _storageService;
   final VoiceManager _voiceManager;
+
+  /// In-process sherpa vits engine for Piper voices (phase 4b) — the
+  /// PyInstaller piper binary below remains the automatic fallback.
+  final SherpaPiperEngine _piperNative = SherpaPiperEngine();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   // Engines
@@ -173,6 +178,7 @@ class TtsService extends ChangeNotifier {
   void dispose() {
     stop();
     _clearCache();
+    _piperNative.shutdown();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -319,6 +325,14 @@ class TtsService extends ChangeNotifier {
           // Piper: one-shot per chunk, but we still use smart chunking + progress.
           final modelPath = await _voiceManager.getVoiceModelPath(voice);
 
+          // In-process sherpa vits path (sidecar retirement phase 4b):
+          // fetch the matching re-export once (no export → legacy binary).
+          final piperRoot = _storageService.rootPath;
+          final bool piperNative =
+              !SherpaPiperEngine.sidecarForced &&
+              piperRoot != null &&
+              await SherpaPiperEngine.ensureVoice(piperRoot, voice);
+
           // Early check for the binary so we don't spam errors once per chunk
           final piperBinary = _piperBinaryPath();
           if (!File(piperBinary).existsSync() &&
@@ -360,7 +374,23 @@ class TtsService extends ChangeNotifier {
             if (!_isSpeaking) break;
 
             final chunk = chunks[i];
-            final wav = await _generatePiperWav(chunk.text, modelPath, i);
+            File? wav;
+            if (piperNative) {
+              try {
+                wav = await _piperNative.generate(
+                  root: piperRoot,
+                  voiceKey: voice,
+                  text: chunk.text,
+                  outputPath: p.join(
+                    Directory.systemTemp.path,
+                    'piper_native_${DateTime.now().millisecondsSinceEpoch}_$i.wav',
+                  ),
+                );
+              } catch (e) {
+                kDebugPrint('[TTS-Native] piper failed, using binary: $e');
+              }
+            }
+            wav ??= await _generatePiperWav(chunk.text, modelPath, i);
             if (wav != null) {
               generatedWavs.add(wav);
             }

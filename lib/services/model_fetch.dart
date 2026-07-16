@@ -17,6 +17,10 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'dart:isolate';
+
+import 'package:archive/archive.dart';
+import 'package:path/path.dart' as p;
 
 /// Shared direct-HTTPS model downloader for the in-process engines that
 /// replaced the Python sidecars (emotion classifier, Whisper STT — see
@@ -81,6 +85,49 @@ class ModelFetch {
       onProgress?.call(done, total);
     } finally {
       client.close();
+    }
+  }
+
+  /// Downloads a `.tar.bz2` model bundle (progress 0–0.85) and extracts it
+  /// into [destDir] stripping the archive's single top-level directory
+  /// (0.85–1.0, in an isolate — bzip2 on hundreds of MB is CPU-bound).
+  /// Used by the sherpa Kokoro/Piper TTS engines
+  /// (docs/design/sidecar-retirement.md phase 4).
+  static Future<void> fetchAndExtractTarBz2(
+    String url,
+    String destDir, {
+    void Function(double fraction)? onProgress,
+  }) async {
+    final tmp = File('$destDir.tar.bz2');
+    await tmp.parent.create(recursive: true);
+    await fetch(
+      url,
+      tmp,
+      onProgress: (done, total) {
+        if (total > 0) onProgress?.call(0.85 * done / total);
+      },
+    );
+    onProgress?.call(0.85);
+    final tarPath = tmp.path;
+    await Isolate.run(() => _extractTarBz2(tarPath, destDir));
+    try {
+      await tmp.delete();
+    } catch (_) {}
+    onProgress?.call(1.0);
+  }
+
+  static void _extractTarBz2(String tarBz2Path, String destDir) {
+    final bytes = File(tarBz2Path).readAsBytesSync();
+    final tar = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
+    for (final entry in tar) {
+      final parts = p.posix.split(entry.name);
+      if (parts.length < 2) continue; // top-level dir itself
+      final rel = p.joinAll(parts.sublist(1));
+      final out = File(p.join(destDir, rel));
+      if (entry.isFile) {
+        out.parent.createSync(recursive: true);
+        out.writeAsBytesSync(entry.content as List<int>);
+      }
     }
   }
 
