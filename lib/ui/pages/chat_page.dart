@@ -2750,8 +2750,14 @@ class _ChatPageState extends State<ChatPage> {
 
               if (expressionFile != null) {
                 displayFile = expressionFile;
-              } else if (isExpressionEnabled) {
-                // Apply fallback behavior
+              } else if (isExpressionEnabled && hasAvatars) {
+                // Apply fallback behavior. Only when the character actually
+                // HAS expression images: with none, the old fallback ladder
+                // ended at the raw portrait — ignoring the gallery ring, so
+                // starring a look changed the library card but never this
+                // sidebar (field report). Expressionless characters now take
+                // the plain-chat ring branch below (star default + chevrons)
+                // even while the global expression toggle is on.
                 final fallback = storage.expressionFallback;
                 if (fallback == 'none') {
                   return const SizedBox.shrink();
@@ -2764,7 +2770,7 @@ class _ChatPageState extends State<ChatPage> {
                       style: TextStyle(fontSize: _sidebarWidth * 0.5),
                     ),
                   );
-                } else if (fallback == 'prime' && hasAvatars) {
+                } else if (fallback == 'prime') {
                   // Show prime avatar (expression-only — never a gallery look).
                   final primeAvatar =
                       expressionAvatars
@@ -2786,20 +2792,18 @@ class _ChatPageState extends State<ChatPage> {
                   expressionKey = primeAvatar.id;
                 } else {
                   // 'neutral' or default: show neutral avatar if available, else character image
-                  if (hasAvatars) {
-                    final neutralAvatar = expressionAvatars
-                        .where((a) => a.label?.toLowerCase() == 'neutral')
-                        .toList();
-                    if (neutralAvatar.isNotEmpty) {
-                      final avatarDir = storage.characterAvatarDir(
-                        character.name,
-                      );
-                      displayFile = File(
-                        '${avatarDir.path}/${neutralAvatar.first.filename}',
-                      );
-                      expressionKey = neutralAvatar.first.id;
-                      expressionEmoji = EmotionLabels.emoji['neutral'];
-                    }
+                  final neutralAvatar = expressionAvatars
+                      .where((a) => a.label?.toLowerCase() == 'neutral')
+                      .toList();
+                  if (neutralAvatar.isNotEmpty) {
+                    final avatarDir = storage.characterAvatarDir(
+                      character.name,
+                    );
+                    displayFile = File(
+                      '${avatarDir.path}/${neutralAvatar.first.filename}',
+                    );
+                    expressionKey = neutralAvatar.first.id;
+                    expressionEmoji = EmotionLabels.emoji['neutral'];
                   }
                   if (displayFile == null && character.imagePath != null) {
                     displayFile = _resolveCharImage(character.imagePath!);
