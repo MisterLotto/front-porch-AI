@@ -65,6 +65,11 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
+  /// Custom-background existence memo — see the io-lint gate. Cleared
+  /// implicitly on page remount; a deleted bg file shows stale until then,
+  /// same visual outcome as before (background simply doesn't render).
+  final Map<String, bool> _bgExistsCache = {};
+
   final StyledTextController _controller = StyledTextController(
     preset: StyledTextPreset.chat,
   );
@@ -604,9 +609,17 @@ class _ChatPageState extends State<ChatPage> {
                                       .firstWhere((e) => e['id'] == bgKey);
                                 } catch (_) {}
                               }
+                              // Memoized: this builder reruns on every
+                              // streaming token batch; a per-rebuild
+                              // existsSync is the io-lint bug class.
                               final hasCustomBg =
                                   customEntry != null &&
-                                  File(customEntry['filePath']!).existsSync();
+                                  _bgExistsCache.putIfAbsent(
+                                    customEntry['filePath']!,
+                                    () => File(
+                                      customEntry!['filePath']!,
+                                    ).existsSync(), // io-ok: memoized, once per path
+                                  );
 
                               return Stack(
                                 children: [
