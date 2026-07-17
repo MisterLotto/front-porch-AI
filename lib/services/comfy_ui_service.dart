@@ -158,6 +158,24 @@ class ComfyUiService {
     }
   }
 
+  /// Best-effort memory nudge (POST /free): ask the server to drop its loaded
+  /// models before a model swap — e.g. the creator pack's create→edit switch,
+  /// so the edit workflow doesn't fight the txt2img checkpoint for VRAM.
+  /// Fire-and-forget: failure just means the swap costs a little more time.
+  Future<void> freeMemory() async {
+    try {
+      await http
+          .post(
+            Uri.parse('$_root/free'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'unload_models': true, 'free_memory': true}),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('ComfyUI: freeMemory nudge failed (ignored): $e');
+    }
+  }
+
   /// One /object_info fetch shared by the model/LoRA/sampler listings.
   Future<Map<String, dynamic>?> _objectInfo() async {
     try {

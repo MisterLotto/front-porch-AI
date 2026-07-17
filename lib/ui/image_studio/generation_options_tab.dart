@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
+import 'package:front_porch_ai/ui/image_studio/backend_catalog.dart';
 import 'package:front_porch_ai/ui/image_studio/connection_status_card.dart';
 import 'package:front_porch_ai/ui/image_studio/lora_picker.dart';
 import 'package:front_porch_ai/ui/image_studio/model_slot_dropdown.dart';
@@ -130,24 +131,16 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
     }
   }
 
-  Future<void> _fetchLocalModels(String url) async {
+  Future<void> _fetchLocalModels() async {
     final st = Provider.of<StorageService>(context, listen: false);
-    final backend = st.imageGenBackend;
-    final isDT = backend == 'drawthings';
-    final isComfy = backend == 'comfyui';
-    if (!isDT && !isComfy && url.isEmpty) return;
-    if (isDT && st.drawThingsGrpcHost.isEmpty) return;
-    if (isComfy && st.comfyUiUrl.isEmpty) return;
+    if (backendProbeUrl(st).isEmpty) return;
     setState(() => _loadingLocalModels = true);
     final svc = Provider.of<ImageGenService>(context, listen: false);
-    final ms = isDT
-        ? await svc.fetchDrawThingsModels(url)
-        : isComfy
-        ? await svc.fetchComfyModels(url)
-        : await svc.fetchA1111Models(url);
+    // Shared per-backend dispatch (also the creators' engine strip).
+    final options = await fetchBackendModelOptions(svc, st);
     if (mounted) {
       setState(() {
-        _localModels = ms;
+        _localModels = [for (final o in options) o.value];
         _loadingLocalModels = false;
       });
     }
@@ -206,20 +199,10 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
   }
 
   Future<void> _testConnection() async {
+    // The URL controllers write straight through to storage onChanged, so the
+    // shared settings-derived probe URL always matches what the user typed.
     final st = Provider.of<StorageService>(context, listen: false);
-    final isDT = st.imageGenBackend == 'drawthings';
-    final isComfy = st.imageGenBackend == 'comfyui';
-    String u = _localUrlController.text.trim();
-    if (isDT) {
-      final h = _dtHostController.text.trim();
-      final p = _dtPortController.text.trim();
-      final host = h.isNotEmpty ? h : st.drawThingsGrpcHost;
-      final port = p.isNotEmpty ? p : st.drawThingsGrpcPort.toString();
-      u = '$host:$port';
-    } else if (isComfy) {
-      final typed = _comfyUrlController.text.trim();
-      u = typed.isNotEmpty ? typed : st.comfyUiUrl;
-    }
+    final u = backendProbeUrl(st);
     if (u.isEmpty) return;
     setState(() {
       _testingConnection = true;
@@ -233,7 +216,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
         _testingConnection = false;
       });
       if (ok) {
-        _fetchLocalModels(u);
+        _fetchLocalModels();
         _fetchLocalSamplers(u);
         _fetchLocalLoras(u);
       }
@@ -551,12 +534,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                     width: 24,
                     height: 24,
                   ),
-                  onPressed: () {
-                    final h = _dtHostController.text.trim();
-                    final p = _dtPortController.text.trim();
-                    final url = h.isNotEmpty ? '$h:$p' : st.drawThingsGrpcHost;
-                    _fetchLocalModels(url);
-                  },
+                  onPressed: _fetchLocalModels,
                   tooltip: 'Refresh model list',
                 ),
             ],

@@ -230,6 +230,17 @@ class ImageGenService extends ChangeNotifier {
 
   ImageGenService(this._storage);
 
+  /// Best-effort ComfyUI VRAM nudge before a create→edit model swap (the
+  /// creator pack's "Switching to edit model" stage). No-op on every other
+  /// backend — DT/remote load-unload per request on their own.
+  Future<void> nudgeComfyFree() async {
+    final backend = ImageGenBackend.fromKey(
+      _storage.imageGenSettings.imageGenBackend,
+    );
+    if (backend != ImageGenBackend.comfyUi) return;
+    await _ensureComfyUi.freeMemory();
+  }
+
   /// Build the images directory path.
   Directory get _imagesDir =>
       Directory(path.join(_storage.rootPath ?? '', 'KoboldManager', 'images'));

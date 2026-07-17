@@ -19,10 +19,36 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
+
+/// Decode a candidate pack base and re-emit it at a diffusion-friendly size
+/// that PRESERVES the source aspect ratio — a portrait avatar yields a
+/// portrait pack instead of being forced square. The long side lands on 768
+/// and both dimensions snap to multiples of 64, because backends can't
+/// generate at arbitrary pixel sizes and ComfyUI's img2img inherits its
+/// output size from the reference image — the base must literally BE the
+/// generation size. Shared by the Studio pack dialog and the creator's
+/// Portrait & Avatars panel. Returns null when the bytes can't be decoded.
+({Uint8List bytes, int width, int height})? normalizePackBase(Uint8List raw) {
+  final decoded = img.decodeImage(raw);
+  if (decoded == null) return null;
+  final isLandscape = decoded.width >= decoded.height;
+  final scale = 768 / (isLandscape ? decoded.width : decoded.height);
+  int snap(num v) => ((v / 64).round() * 64).clamp(320, 768).toInt();
+  final width = isLandscape ? 768 : snap(decoded.width * scale);
+  final height = isLandscape ? snap(decoded.height * scale) : 768;
+  final resized = img.copyResize(
+    decoded,
+    width: width,
+    height: height,
+    interpolation: img.Interpolation.cubic,
+  );
+  return (bytes: img.encodePng(resized), width: width, height: height);
+}
 
 /// Generates one image per emotion for an expression pack. The generator
 /// closure is injected so this class stays pure and unit-testable; the UI
