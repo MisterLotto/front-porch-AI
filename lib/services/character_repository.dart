@@ -96,6 +96,12 @@ class CharacterRepository extends ChangeNotifier {
     // the in-flight load will still deliver the final update to listeners.
     if (_isLoading) return;
 
+    // Full reload = the path that picks up EXTERNAL changes (Character
+    // Card Forge writes files/DB directly, manual PNG swaps, the toolbar
+    // refresh) — the cover cache must not survive it, or a file replaced
+    // on disk under an unchanged star/portrait key would render stale.
+    _clearCoverCache();
+
     _isLoading = true;
     notifyListeners();
 
