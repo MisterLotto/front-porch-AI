@@ -31,7 +31,6 @@ import 'package:front_porch_ai/services/capability/model_capabilities.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
-import 'package:front_porch_ai/services/image/comfy_edit_presets.dart';
 import 'package:front_porch_ai/services/expression_pack_qc.dart';
 import 'package:front_porch_ai/services/expression_pack_service.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
@@ -67,10 +66,11 @@ import 'expression_pack_setup.dart';
 }
 
 /// The Expression-pack flow: turn one base portrait into a labeled set of
-/// expression avatars via img2img. [launch] runs the pre-flight (backend
-/// guard, base-image resolution, and automatic aspect-preserving size
-/// normalization — no crop step) and then shows this two-step dialog (setup,
-/// then the live generation grid).
+/// expression avatars — edit-first (instruction edits off the base) with an
+/// automatic img2img fallback where edit truly doesn't exist. [launch] runs
+/// the pre-flight (backend guard, base-image resolution, and automatic
+/// aspect-preserving size normalization — no crop step) and then shows this
+/// two-step dialog (setup, then the live generation grid).
 class ExpressionPackDialog extends StatefulWidget {
   const ExpressionPackDialog._({
     required this.characterDbId,
@@ -119,18 +119,24 @@ class ExpressionPackDialog extends StatefulWidget {
     final storage = Provider.of<StorageService>(context, listen: false);
     final imageGen = Provider.of<ImageGenService>(context, listen: false);
 
-    // img2img (which keeps the character recognizable across every emotion)
-    // only exists on the local backends — the remote APIs can't do packs.
+    // Remote APIs have no img2img here, so a remote pack runs entirely
+    // through the provider's image-EDIT endpoint — which needs an
+    // edit-capable model in the EDIT slot. Local backends always have the
+    // img2img floor, so they pass regardless.
     if (ImageGenBackend.fromKey(storage.imageGenSettings.imageGenBackend) ==
-        ImageGenBackend.remote) {
+            ImageGenBackend.remote &&
+        !ImageReferenceResolver.packEditMode(storage.imageGenSettings)) {
       await showWarmDialog(
         context,
-        title: 'Local backend needed',
+        title: 'Edit model needed',
         icon: Icons.theater_comedy,
         accent: AppColors.formMasterAccent,
         content: const WarmDialogText(
-          'Expression packs use img2img, which needs a local image backend — '
-          'A1111, ComfyUI, or Draw Things.',
+          'On a remote API the pack generates through the provider\'s '
+          'image-edit endpoint, so it needs an edit-capable model (e.g. '
+          'qwen-image-max-edit) in the Edit tab\'s model slot. Pick one '
+          'there — or switch to a local backend (A1111, ComfyUI, or Draw '
+          'Things), which can always fall back to img2img.',
         ),
         actions: [warmDialogCancel(context, label: 'Got it')],
       );
@@ -364,28 +370,15 @@ class _ExpressionPackDialogState extends State<ExpressionPackDialog> {
               if (!widget.existingEmotions.contains(e)) e,
           ]
         : chosen;
-    // Edit-first: when the active backend + model can instruction-edit, drive
-    // each emotion through the EDIT path (identity pinned by the base portrait)
-    // instead of img2img. Falls back to img2img automatically otherwise.
-    final settings = widget.storage.imageGenSettings;
-    final backend = ImageGenBackend.fromKey(settings.imageGenBackend);
-    var editMode = ImageReferenceResolver.resolveForBackend(
-      backend: backend,
-      modelName: settings.imageGenModel,
-    ).supportsEdit;
-    // ComfyUI advertises edit unconditionally (it's workflow-gated, not
-    // model-gated), so `supportsEdit` alone would route every slot to the edit
-    // path and fail on unfilled model slots when no edit workflow is set up —
-    // and the img2img fallback would be unreachable. Gate on the SAME
-    // readiness the Edit tab enforces; when it isn't ready, fall back to
-    // img2img (which the plain checkpoint can always do).
-    if (editMode && backend == ImageGenBackend.comfyUi) {
-      editMode = comfyEditReady(
-        workflowId: settings.comfyEditWorkflowId,
-        uploadedWorkflowJson: settings.comfyEditUploadedWorkflow,
-        modelChoices: settings.comfyEditModelChoices,
-      );
-    }
+    // Edit-first: when the active backend + the EDIT-slot model can
+    // instruction-edit, drive each emotion through the EDIT path (identity
+    // pinned by the base portrait) instead of img2img. The decision is the
+    // ONE shared [ImageReferenceResolver.packEditMode] (also used by the
+    // creator's Portrait & Avatars panel) — resolver supportsEdit over the
+    // edit slot + the Edit tab's ComfyUI workflow-readiness gate.
+    final editMode = ImageReferenceResolver.packEditMode(
+      widget.storage.imageGenSettings,
+    );
     final session = ExpressionPackSession(
       emotions: emotions,
       basePrompt: '${widget.basePrompt}, $kExpressionFraming',

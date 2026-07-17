@@ -10,6 +10,7 @@ import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/ui/image_studio/connection_status_card.dart';
 import 'package:front_porch_ai/ui/image_studio/lora_picker.dart';
+import 'package:front_porch_ai/ui/image_studio/model_slot_dropdown.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 const List<({String label, int value})> _drawThingsSamplers = [
@@ -46,8 +47,12 @@ class GenerationOptionsTab extends StatefulWidget {
   /// When true, the per-generation knobs (Steps / CFG / DT Sampler / Shift /
   /// SeedMode) read and write the EDIT-scoped store instead of the Create
   /// (txt2img) store, so the Image Studio Edit tab can tune an edit without
-  /// clobbering Create. Everything else (backend, model, size, seed, LoRA) stays
-  /// shared. Default false = the normal Create/settings-page behavior.
+  /// clobbering Create. The MODEL picker is edit-scoped too on Draw Things and
+  /// remote (the phase-#12 create/edit slot split — an edit model left selected
+  /// after an Edit session used to poison base generation); ComfyUI's edit
+  /// models live in comfyEdit* and A1111 can't edit, so their checkpoint
+  /// pickers stay on the create slot. Everything else (backend, size, seed,
+  /// LoRA) stays shared. Default false = the normal Create/settings behavior.
   final bool editScoped;
   const GenerationOptionsTab({
     super.key,
@@ -409,36 +414,19 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _models.any((m) => m.id == st.imageGenModel)
-                    ? st.imageGenModel
-                    : null,
-                dropdownColor: AppColors.surfaceContainerOf(context),
-                style: TextStyle(color: AppColors.textPrimary(context)),
-                isExpanded: true,
-                menuMaxHeight: 400,
+              child: ModelSlotDropdown(
+                settings: st.imageGenSettings,
+                editSlot: widget.editScoped,
+                keyPrefix: 'remote-model',
+                fontSize: 12,
                 decoration: _deco(
                   hint: _loadingModels
                       ? 'Loading...'
                       : (_models.isEmpty ? 'No models' : 'Select'),
                 ),
-                items: _models
-                    .map(
-                      (m) => DropdownMenuItem(
-                        value: m.id,
-                        child: Text(
-                          m.displayName.isNotEmpty ? m.displayName : m.id,
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) st.setImageGenModel(v);
-                },
+                options: [
+                  for (final m in _models) (value: m.id, label: m.displayName),
+                ],
               ),
             ),
             const SizedBox(width: 6),
@@ -547,7 +535,7 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           Row(
             children: [
               Text(
-                'Checkpoint Model',
+                widget.editScoped ? 'Edit Model' : 'Checkpoint Model',
                 style: TextStyle(
                   color: AppColors.textSecondary(context),
                   fontSize: 12,
@@ -587,11 +575,14 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           else
             Builder(
               builder: (_) {
+                // Offline fallback: show the persisted slot value so the
+                // selection is visible before the server is connected.
+                final slotValue = widget.editScoped
+                    ? st.imageGenSettings.imageGenEditModel
+                    : st.imageGenModel;
                 final dtModels = _localModels.isNotEmpty
                     ? _localModels
-                    : (st.imageGenModel.isNotEmpty
-                          ? [st.imageGenModel]
-                          : <String>[]);
+                    : (slotValue.isNotEmpty ? [slotValue] : <String>[]);
                 if (dtModels.isEmpty) {
                   return Text(
                     'Models appear here once the server is connected.',
@@ -601,35 +592,12 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
                     ),
                   );
                 }
-                return DropdownButtonFormField<String>(
-                  key: ValueKey('dt-checkpoint-${st.imageGenModel}'),
-                  initialValue: dtModels.contains(st.imageGenModel)
-                      ? st.imageGenModel
-                      : null,
-                  dropdownColor: AppColors.surfaceContainerOf(context),
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 11,
-                  ),
-                  isExpanded: true,
+                return ModelSlotDropdown(
+                  settings: st.imageGenSettings,
+                  editSlot: widget.editScoped,
+                  keyPrefix: 'dt-checkpoint',
                   decoration: _deco(hint: 'Select'),
-                  items: dtModels
-                      .map(
-                        (m) => DropdownMenuItem(
-                          value: m,
-                          child: Text(
-                            m,
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) st.setImageGenModel(v);
-                  },
+                  options: [for (final m in dtModels) (value: m, label: m)],
                 );
               },
             ),
@@ -695,35 +663,14 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               ),
             )
           else
-            DropdownButtonFormField<String>(
-              key: ValueKey('comfy-checkpoint-${st.imageGenModel}'),
-              initialValue: _localModels.contains(st.imageGenModel)
-                  ? st.imageGenModel
-                  : null,
-              dropdownColor: AppColors.surfaceContainerOf(context),
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 11,
-              ),
-              isExpanded: true,
+            // Always the CREATE slot — ComfyUI's edit models live in the
+            // comfyEdit* workflow slots, never here.
+            ModelSlotDropdown(
+              settings: st.imageGenSettings,
+              editSlot: false,
+              keyPrefix: 'comfy-checkpoint',
               decoration: _deco(hint: 'Select'),
-              items: _localModels
-                  .map(
-                    (m) => DropdownMenuItem(
-                      value: m,
-                      child: Text(
-                        m,
-                        style: TextStyle(
-                          color: AppColors.textPrimary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) st.setImageGenModel(v);
-              },
+              options: [for (final m in _localModels) (value: m, label: m)],
             ),
           const SizedBox(height: 4),
           Text(
@@ -784,35 +731,14 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
               ),
             )
           else
-            DropdownButtonFormField<String>(
-              key: ValueKey('a1111-checkpoint-${st.imageGenModel}'),
-              initialValue: _localModels.contains(st.imageGenModel)
-                  ? st.imageGenModel
-                  : null,
-              dropdownColor: AppColors.surfaceContainerOf(context),
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 11,
-              ),
-              isExpanded: true,
+            // Always the CREATE slot — stock A1111 can't instruction-edit,
+            // so an edit slot has no meaning here (img2img fallback only).
+            ModelSlotDropdown(
+              settings: st.imageGenSettings,
+              editSlot: false,
+              keyPrefix: 'a1111-checkpoint',
               decoration: _deco(hint: 'Select'),
-              items: _localModels
-                  .map(
-                    (m) => DropdownMenuItem(
-                      value: m,
-                      child: Text(
-                        m,
-                        style: TextStyle(
-                          color: AppColors.textPrimary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) st.setImageGenModel(v);
-              },
+              options: [for (final m in _localModels) (value: m, label: m)],
             ),
           Row(
             children: [
@@ -879,7 +805,13 @@ class _GenerationOptionsTabState extends State<GenerationOptionsTab> {
           else
             LoraPicker(
               loras: _localLoras,
-              checkpointFamily: ImageModelFamily.detectFromName(st.imageGenModel),
+              // Family-filter against the slot this surface generates with
+              // (the Edit tab pairs LoRAs with the EDIT model on DT).
+              checkpointFamily: ImageModelFamily.detectFromName(
+                widget.editScoped && isDT
+                    ? st.imageGenSettings.imageGenEditModel
+                    : st.imageGenModel,
+              ),
               selected: st.imageGenLora,
               weight: st.imageGenLoraWeight,
               onSelected: (val) => st.setImageGenLora(val),
