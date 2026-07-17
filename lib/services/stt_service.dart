@@ -26,10 +26,10 @@ import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/stt/sherpa_whisper_engine.dart';
 import 'package:front_porch_ai/services/stt/whisper_sidecar_transport.dart';
-import 'package:front_porch_ai/services/tts_service.dart';
+import 'package:front_porch_ai/services/stt/call_session.dart';
 
-/// Call status phases for the voice call loop.
-enum CallStatus { idle, listening, transcribing, thinking, speaking }
+export 'package:front_porch_ai/services/stt/call_session.dart'
+    show CallSession, CallStatus;
 
 /// Speech-to-text service using Whisper (faster-whisper) via Python subprocess.
 ///
@@ -51,37 +51,17 @@ class SttService extends ChangeNotifier {
   List<InputDevice> _inputDevices = [];
   String? _selectedDeviceId;
 
-  // ---- Call mode state ----
-  bool _isInCall = false;
-  bool _isMuted = false;
-  CallStatus _callStatus = CallStatus.idle;
-  DateTime? _callStartTime;
-  Timer? _callTimer;
+  // ---- Call mode ----
+  /// The voice-call state machine (see call_session.dart). SttService
+  /// provides the audio I/O; the call overlay drives the turn loop.
+  late final CallSession call = CallSession(
+    startRecording: startRecording,
+    cancelRecording: cancelRecording,
+    stopAndTranscribe: stopRecordingAndTranscribe,
+  );
+
   Timer? _amplitudeTimer;
-  Timer? _ttsWaitTimer;
-  Timer? _silenceTimer;
-  Duration _callDuration = Duration.zero;
   double _currentAmplitude = 0.0; // 0.0 – 1.0 normalized
-  TtsService? _ttsService;
-
-  // ---- Silence detection ----
-  double _noiseFloor = 0.15; // default, calibrated at call start
-  bool _isCalibrating = false;
-  final List<double> _calibrationSamples = [];
-  bool _speechDetected = false; // true once user starts talking
-  static const double _silenceThresholdMultiplier =
-      1.8; // above noise floor = speech
-  static const Duration _silenceDuration = Duration(
-    seconds: 2,
-  ); // silence before auto-send
-
-  /// Called when a transcription is ready during call mode.
-  /// The UI should wire this to chatService.sendMessage().
-  void Function(String text)? onTranscription;
-
-  /// Called when a full call cycle completes (TTS done speaking, ready to listen).
-  /// Used by the UI to know when to auto-resume.
-  VoidCallback? onReadyToListen;
 
   // ---- Getters ----
   bool get isRecording => _isRecording;
@@ -89,16 +69,14 @@ class SttService extends ChangeNotifier {
   bool get isBusy => _isRecording || _isTranscribing;
   String? get lastTranscription => _lastTranscription;
   String? get lastError => _lastError;
-  bool get isInCall => _isInCall;
-  bool get isMuted => _isMuted;
-  CallStatus get callStatus => _callStatus;
-  Duration get callDuration => _callDuration;
   double get currentAmplitude => _currentAmplitude;
   List<InputDevice> get inputDevices => _inputDevices;
   String? get selectedDeviceId => _selectedDeviceId;
 
   SttService(this._storageService) {
     _selectedDeviceId = _storageService.selectedMicId;
+    // The overlay listens to SttService — surface the session's changes.
+    call.addListener(notifyListeners);
   }
 
   // ---- Device Management ----
@@ -147,11 +125,6 @@ class SttService extends ChangeNotifier {
     // Also check permission
     final hasPerm = await _recorder.hasPermission();
     return hasPerm;
-  }
-
-  /// Wire TtsService for call-mode TTS-aware resume.
-  void setTtsService(TtsService service) {
-    _ttsService = service;
   }
 
   // ---- Engine availability ----
@@ -349,7 +322,6 @@ class SttService extends ChangeNotifier {
       }
 
       _isTranscribing = true;
-      if (_isInCall) _callStatus = CallStatus.transcribing;
       notifyListeners();
 
       final result = await _transcribe(path);
@@ -386,196 +358,6 @@ class SttService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==== Call Mode (Phase 2) ====
-
-  /// Start a voice call. The overlay UI should call this.
-  Future<void> startCall() async {
-    if (_isInCall) return;
-
-    _isInCall = true;
-    _isMuted = false;
-    _callStartTime = DateTime.now();
-    _callDuration = Duration.zero;
-    _lastError = null;
-    _lastTranscription = null;
-    _speechDetected = false;
-
-    // Start call duration timer
-    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_callStartTime != null) {
-        _callDuration = DateTime.now().difference(_callStartTime!);
-        notifyListeners();
-      }
-    });
-
-    // Calibrate noise floor before listening
-    await _calibrateNoiseFloor();
-  }
-
-  /// Sample ambient noise for ~1.5s to set the noise floor threshold.
-  Future<void> _calibrateNoiseFloor() async {
-    _isCalibrating = true;
-    _callStatus = CallStatus.idle; // show 'Calibrating...' in UI
-    _calibrationSamples.clear();
-    notifyListeners();
-
-    // Start recording to get amplitude readings
-    await startRecording();
-    _startAmplitudeMonitor();
-
-    // Sample for 1.5 seconds
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    // Calculate noise floor from samples
-    if (_calibrationSamples.isNotEmpty) {
-      _calibrationSamples.sort();
-      // Use the 75th percentile as the noise floor
-      final idx = (_calibrationSamples.length * 0.75).floor();
-      _noiseFloor = _calibrationSamples[idx].clamp(0.05, 0.5);
-      debugPrint(
-        'STT: noise floor calibrated to $_noiseFloor from ${_calibrationSamples.length} samples',
-      );
-    } else {
-      _noiseFloor = 0.15;
-      debugPrint('STT: no calibration samples, using default noise floor');
-    }
-
-    // Stop the calibration recording — start fresh for actual listening
-    await cancelRecording();
-    _stopAmplitudeMonitor();
-    _isCalibrating = false;
-    _speechDetected = false;
-
-    if (_isInCall && !_isMuted) {
-      _callStatus = CallStatus.listening;
-      notifyListeners();
-      await _startCallRecording();
-    }
-  }
-
-  /// End the voice call.
-  Future<void> endCall() async {
-    if (!_isInCall) return;
-
-    _isInCall = false;
-    _callStatus = CallStatus.idle;
-    _isMuted = false;
-    _callTimer?.cancel();
-    _callTimer = null;
-    _ttsWaitTimer?.cancel();
-    _ttsWaitTimer = null;
-    _silenceTimer?.cancel();
-    _silenceTimer = null;
-    _stopAmplitudeMonitor();
-
-    if (_isRecording) {
-      await cancelRecording();
-    }
-
-    _currentAmplitude = 0.0;
-    notifyListeners();
-    debugPrint('STT: call ended, duration=${_callDuration.inSeconds}s');
-  }
-
-  /// Toggle mute during a call.
-  void toggleMute() {
-    if (!_isInCall) return;
-    _isMuted = !_isMuted;
-
-    if (_isMuted) {
-      // Stop recording when muted
-      if (_isRecording) {
-        cancelRecording();
-      }
-      _stopAmplitudeMonitor();
-      _currentAmplitude = 0.0;
-      _callStatus = CallStatus.idle;
-    } else {
-      // Resume recording when unmuted (only if not in a TTS/transcription phase)
-      if (_callStatus == CallStatus.idle && !_isTranscribing) {
-        _callStatus = CallStatus.listening;
-        _startCallRecording();
-      }
-    }
-    notifyListeners();
-  }
-
-  /// Notify the service that the LLM is now generating a response.
-  void notifyThinking() {
-    if (!_isInCall) return;
-    _callStatus = CallStatus.thinking;
-    notifyListeners();
-  }
-
-  /// Notify the service that TTS has started speaking.
-  /// Begins polling for TTS completion to auto-resume listening.
-  void notifySpeaking() {
-    if (!_isInCall) return;
-    _callStatus = CallStatus.speaking;
-    notifyListeners();
-    _waitForTtsThenResume();
-  }
-
-  /// Notify the service that TTS is done and it can resume (called externally or by timer).
-  void notifyTtsDone() {
-    if (!_isInCall || _isMuted) return;
-    _callStatus = CallStatus.listening;
-    notifyListeners();
-    _startCallRecording();
-  }
-
-  // ---- Call internals ----
-
-  Future<void> _startCallRecording() async {
-    if (!_isInCall || _isMuted || _isRecording) return;
-
-    _callStatus = CallStatus.listening;
-    notifyListeners();
-    await startRecording();
-  }
-
-  /// Poll TtsService.isSpeaking and resume listening when TTS finishes.
-  void _waitForTtsThenResume() {
-    _ttsWaitTimer?.cancel();
-    _ttsWaitTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      if (!_isInCall || _isMuted) {
-        timer.cancel();
-        return;
-      }
-      // Check if TTS has finished speaking
-      if (_ttsService == null || !_ttsService!.isSpeaking) {
-        timer.cancel();
-        if (_isInCall && !_isMuted) {
-          // Small delay after TTS ends before resuming listening
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (_isInCall && !_isMuted && _callStatus == CallStatus.speaking) {
-              notifyTtsDone();
-              onReadyToListen?.call();
-            }
-          });
-        }
-      }
-    });
-  }
-
-  /// Stop and transcribe for call mode, then trigger the callback.
-  Future<void> stopAndSendCallTranscription() async {
-    if (!_isInCall || !_isRecording) return;
-
-    final text = await stopRecordingAndTranscribe();
-
-    if (text != null && text.isNotEmpty && _isInCall) {
-      _callStatus = CallStatus.thinking;
-      notifyListeners();
-      onTranscription?.call(text);
-    } else if (_isInCall && !_isMuted) {
-      // No speech detected — resume listening
-      _callStatus = CallStatus.listening;
-      notifyListeners();
-      await _startCallRecording();
-    }
-  }
-
   // ==== Amplitude Monitoring ====
 
   void _startAmplitudeMonitor() {
@@ -584,43 +366,12 @@ class SttService extends ChangeNotifier {
       _,
     ) async {
       if (!_isRecording) return;
-      // During calibration, just collect samples
-      if (_isCalibrating) {
-        try {
-          final amp = await _recorder.getAmplitude();
-          final dbfs = amp.current;
-          _currentAmplitude = ((dbfs + 60) / 60).clamp(0.0, 1.0);
-          _calibrationSamples.add(_currentAmplitude);
-        } catch (_) {}
-        return;
-      }
       try {
         final amp = await _recorder.getAmplitude();
         final dbfs = amp.current;
         _currentAmplitude = ((dbfs + 60) / 60).clamp(0.0, 1.0);
-
-        // Silence detection for call mode
-        if (_isInCall && _callStatus == CallStatus.listening) {
-          final speechThreshold = _noiseFloor * _silenceThresholdMultiplier;
-          if (_currentAmplitude > speechThreshold) {
-            // User is speaking
-            _speechDetected = true;
-            _silenceTimer?.cancel();
-            _silenceTimer = null;
-          } else if (_speechDetected && _silenceTimer == null) {
-            // Speech was detected but now it's silent — start countdown
-            _silenceTimer = Timer(_silenceDuration, () {
-              if (_isInCall &&
-                  _isRecording &&
-                  _callStatus == CallStatus.listening &&
-                  _speechDetected) {
-                debugPrint('STT: silence detected, auto-sending');
-                _speechDetected = false;
-                stopAndSendCallTranscription();
-              }
-            });
-          }
-        }
+        // Calibration sampling and silence auto-send live in the session.
+        call.onAmplitude(_currentAmplitude);
         notifyListeners();
       } catch (_) {}
     });
@@ -719,7 +470,7 @@ class SttService extends ChangeNotifier {
 
   @override
   void dispose() {
-    endCall();
+    call.dispose();
     cancelRecording();
     _recorder.dispose();
     super.dispose();
