@@ -228,7 +228,91 @@ extension _SettingsGpuControls on _SettingsPageState {
           ],
         ),
         const SizedBox(height: 16),
-        _buildGpuBackendChips(context, hardwareService),
+        _buildAccelerationSection(context, hardwareService),
+      ],
+    );
+  }
+
+  /// Acceleration "just works": a status line showing what automatic mode
+  /// resolved to, with the manual backend chips (Vulkan/ROCm/CUDA/Metal —
+  /// confusing to most users) tucked into a collapsed Advanced expander.
+  Widget _buildAccelerationSection(
+    BuildContext context,
+    HardwareService hardwareService,
+  ) {
+    final storage = Provider.of<StorageService>(context, listen: false);
+    final bs = storage.backendSettings;
+    final hw = hardwareService.hardwareInfo;
+    final auto = GpuBackendResolver.isAutomatic(
+      userCublas: bs.useCublas,
+      userVulkan: bs.useVulkan,
+      userRocm: bs.useRocm,
+      userMetal: bs.useMetal,
+    );
+    final backend = GpuBackendResolver.resolve(
+      userCublas: bs.useCublas,
+      userVulkan: bs.useVulkan,
+      userRocm: bs.useRocm,
+      userMetal: bs.useMetal,
+      hasCuda: hw?.hasCuda ?? false,
+      vendor: hw?.vendor ?? 'Unknown',
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              auto ? Icons.auto_awesome : Icons.tune,
+              size: 16,
+              color: AppColors.porchAmberOf(context),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                auto
+                    ? 'Acceleration: Automatic — '
+                          '${GpuBackendResolver.describe(backend, hw?.vendor ?? 'Unknown')}'
+                    : 'Acceleration: Manual — '
+                          '${GpuBackendResolver.describe(backend, hw?.vendor ?? 'Unknown')}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary(context),
+                ),
+              ),
+            ),
+            if (!auto)
+              TextButton(
+                onPressed: () {
+                  storage.setUseVulkan(null);
+                  storage.setUseRocm(null);
+                  storage.setUseCublas(null);
+                  storage.setUseMetal(null);
+                  rebuildState(() {
+                    _useVulkan = false;
+                    _useRocm = false;
+                    _useCublas = false;
+                    _useMetal = false;
+                  });
+                },
+                child: const Text('Reset to Automatic'),
+              ),
+          ],
+        ),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(
+              'Advanced: manual backend override',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textTertiary(context),
+              ),
+            ),
+            children: [_buildGpuBackendChips(context, hardwareService)],
+          ),
+        ),
       ],
     );
   }
