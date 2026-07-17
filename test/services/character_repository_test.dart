@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart';
 
+import 'package:front_porch_ai/models/avatar_image.dart' as model;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -694,6 +695,53 @@ void main() {
       final deleted = await repo.deleteCharacters(const []);
       expect(deleted, 0);
       expect(repo.characters.length, before);
+    });
+
+    // --- Cover-resolution cache (20260716 nightly sluggishness regression) ---
+    test('coverImageFileFor caches disk stats; mutations invalidate', () async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.initialized;
+      final testDb = AppDatabase.forTesting();
+      final testRepo = CharacterRepository(testDb, storage);
+      await Future<void>.delayed(Duration.zero);
+
+      // A starred avatar whose file really exists — the only branch that
+      // stats the disk.
+      final base = storage.characterBaseDir('CacheTest');
+      final avatarFile = File('${base.path}/avatars/star.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final card = CharacterCard(
+        name: 'CacheTest',
+        frontPorchExtensions: FrontPorchExtensions(favoriteAvatarId: 'a1'),
+      )..avatarImages = [
+          model.AvatarImage(
+            id: 'a1',
+            characterId: 'c1',
+            filename: 'star.png',
+            displayOrder: 0,
+            createdAt: DateTime(2026),
+          ),
+        ];
+
+      final first = testRepo.coverImageFileFor(card);
+      expect(first?.path, avatarFile.path);
+
+      // Delete the file on disk: a CACHED answer keeps returning the old
+      // File (no re-stat — this is the perf fix), until invalidation.
+      avatarFile.deleteSync();
+      expect(testRepo.coverImageFileFor(card)?.path, avatarFile.path);
+
+      // The gallery's deferred broadcast invalidates → fresh stat → the
+      // missing star now falls back (null: no portrait on this card).
+      testRepo.notifyCharactersChanged();
+      expect(testRepo.coverImageFileFor(card), equals(null));
+
+      // A ★ change self-invalidates via the key, no broadcast needed.
+      card.frontPorchExtensions!.favoriteAvatarId = 'a2';
+      expect(testRepo.coverImageFileFor(card), equals(null)); // a2
     });
   });
 }

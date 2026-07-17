@@ -96,6 +96,12 @@ class CharacterRepository extends ChangeNotifier {
     // the in-flight load will still deliver the final update to listeners.
     if (_isLoading) return;
 
+    // Full reload = the path that picks up EXTERNAL changes (Character
+    // Card Forge writes files/DB directly, manual PNG swaps, the toolbar
+    // refresh) — the cover cache must not survive it, or a file replaced
+    // on disk under an unchanged star/portrait key would render stale.
+    _clearCoverCache();
+
     _isLoading = true;
     notifyListeners();
 
@@ -335,6 +341,7 @@ class CharacterRepository extends ChangeNotifier {
     WorldRepository? worldRepo,
     Directory? chatsDir,
   }) async {
+    _clearCoverCache();
     // Remove from in-memory list
     _characters.remove(character);
     notifyListeners();
@@ -696,6 +703,7 @@ class CharacterRepository extends ChangeNotifier {
   /// with [notifyCharactersChanged] when their surface closes.
   Future<void> updateCharacter(CharacterCard card, {bool notify = true}) async {
     if (card.imagePath == null) return;
+    _clearCoverCache(); // avatar files may have changed under a stable key
 
     if (notify) {
       _isLoading = true;
@@ -801,7 +809,10 @@ class CharacterRepository extends ChangeNotifier {
 
   /// One deferred broadcast for surfaces that persisted silently
   /// (updateCharacter notify: false) — fired when their dialog closes.
-  void notifyCharactersChanged() => notifyListeners();
+  void notifyCharactersChanged() {
+    _clearCoverCache();
+    notifyListeners();
+  }
 
   Future<CharacterCard?> duplicateCharacter(
     CharacterCard card, {
@@ -1254,20 +1265,43 @@ class CharacterRepository extends ChangeNotifier {
   /// [card] must be a HYDRATED library card (`avatarImages` loaded) for the star
   /// to resolve — a bare card silently falls back to the portrait. Every PNG
   /// bake / upload path should route through this so the star works everywhere.
+  /// Memo for [coverImageFileFor]: chat message bubbles resolve the cover
+  /// on EVERY rebuild (dozens of bubbles × every streaming token batch),
+  /// and the uncached path does a synchronous existsSync per call — near
+  /// free on macOS/APFS, but 10-100x slower on Windows where Defender
+  /// intercepts file stats. Field-reported as "the app got sluggish" in
+  /// the 20260716 nightly. The key embeds the star id and portrait path,
+  /// so changing either self-invalidates; mutations also clear the whole
+  /// cache (updateCharacter / delete / notifyCharactersChanged) to cover
+  /// files changing on disk under an unchanged key.
+  final Map<String, File?> _coverCache = {};
+
+  void _clearCoverCache() => _coverCache.clear();
+
   File? coverImageFileFor(CharacterCard card) {
     final favId = card.frontPorchExtensions?.favoriteAvatarId;
+    final key = '${card.name}|$favId|${card.imagePath}';
+    if (_coverCache.containsKey(key)) return _coverCache[key];
+    if (_coverCache.length > 512) _coverCache.clear();
+
+    File? result;
     if (favId != null) {
       for (final a in card.avatarImages ?? const <AvatarImage>[]) {
         if (a.id == favId) {
           final f = a.resolveFile(_storage.characterBaseDir(card.name).path);
-          if (f.existsSync()) return f;
+          if (f.existsSync()) result = f;
           break;
         }
       }
     }
-    final img = card.imagePath;
-    if (img == null || img.isEmpty) return null;
-    return _storage.resolveCharacterImage(img);
+    if (result == null) {
+      final img = card.imagePath;
+      if (img != null && img.isNotEmpty) {
+        result = _storage.resolveCharacterImage(img);
+      }
+    }
+    _coverCache[key] = result;
+    return result;
   }
 
   /// Set the character's TTS voice (null = global default) and persist.

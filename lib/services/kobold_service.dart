@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:front_porch_ai/services/gpu_backend_resolver.dart';
 import 'package:front_porch_ai/services/kobold_binary_version.dart';
 import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -300,7 +301,9 @@ class KoboldService extends ChangeNotifier
       }
 
       if (useRocm) {
-        args.add('--usehipblas');
+        // Explicit device index — same iGPU-defaulting hazard as CUDA on
+        // APU + dGPU systems.
+        args.addAll(['--usehipblas', _storageService.gpuId.toString()]);
         // Flash attention kernel crashes on many AMD GPUs — always disable for ROCm.
         args.add('--noflashattention');
       }
@@ -408,10 +411,18 @@ class KoboldService extends ChangeNotifier
       print('AG_DEBUG: File exists: ${File(executablePath).existsSync()}');
       print('AG_DEBUG: Model exists: ${File(modelPath).existsSync()}');
 
+      // ROCm: consumer RDNA cards need HSA_OVERRIDE_GFX_VERSION or the
+      // hipblas kernels abort at load — resolver detects the gfx arch and
+      // supplies it (no-op when unnecessary or already exported).
+      final extraEnv = useRocm
+          ? await GpuBackendResolver.rocmEnvironment()
+          : const <String, String>{};
       _process = await Process.start(
         executablePath,
         args,
         workingDirectory: path.dirname(executablePath),
+        environment: extraEnv.isEmpty ? null : extraEnv,
+        includeParentEnvironment: true,
       );
       print('AG_DEBUG: Process started successfully! PID: ${_process!.pid}');
       _isRunning = true;
