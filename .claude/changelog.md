@@ -5052,3 +5052,8 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** lib/ui/chat_components/widgets/inline_chat_image.dart (Stateless→Stateful, existsSync once per element instead of per bubble rebuild), lib/ui/pages/chat_page.dart (custom-background existsSync memoized — ran per streaming rebuild), lib/ui/dialogs/scene_guest_picker_dialog.dart (avatar existsSync memoized — ran per row per search keystroke)
 - **Reason:** Maintainer follow-up to the io-lint gate: the 44 grandfathered sites needed triage, not just grandfathering. Verdict: 3 hot/warm (fixed here, each with io-ok markers on the memoized single stat), 41 cold (one-shot dialog/handler/setup code — left grandfathered deliberately; the diff-based gate prevents new ones). The inline chat image was the worst: same class as the coverImageFileFor regression, one stat per image message per streaming token batch.
 - **Commit:** (this commit)
+
+## 2026-07-17 (UTC) — Porch Stories read-along: stop button never stopped the audio
+- **Files:** lib/ui/pages/story_reader_page.dart
+- **Reason:** Field report: stop only halted sentence pre-buffering while playback continued. Root cause: `_readAlongPlayer` was declared, `.stop()`ed in _stopReadAlong, and `.dispose()`d on page exit — but NEVER assigned; the live audio played on a loop-local `segPlayer` unreachable from outside, so every stop/dispose was a no-op on null (page exit also left audio running). Fix: publish the active segPlayer to the field (nulled in the finally), and add an onPlayerStateChanged listener completing the wait on PlayerState.stopped — audioplayers does not fire onPlayerComplete on manual stop, so without it the loop would hang after silencing.
+- **Commit:** (this commit)
