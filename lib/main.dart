@@ -624,13 +624,8 @@ void main(List<String> args) async {
           create: (context) =>
               SttService(Provider.of<StorageService>(context, listen: false)),
           update: (context, storage, previous) {
-            if (previous != null) {
-              try {
-                previous.setTtsService(
-                  Provider.of<TtsService>(context, listen: false),
-                );
-              } catch (_) {}
-            }
+            // Call-mode TTS awareness is wired by the call overlay itself
+            // (CallSession.attachTtsBusyProbe) — no TTS ref needed here.
             return previous ?? SttService(storage);
           },
         ),

@@ -649,12 +649,25 @@ class TtsService extends ChangeNotifier {
 
     await stop();
 
+    // Busy from the first moment: the call session's mic gating reads
+    // isSpeaking/isGenerating, so they must be true through the whole
+    // setup (voice checks, model readiness), not just once audio starts.
+    _isSpeaking = true;
+    _isGenerating = true;
+    notifyListeners();
+    void bail() {
+      _isSpeaking = false;
+      _isGenerating = false;
+      notifyListeners();
+    }
+
     // Resolve voice
     var voice = (voiceKey != null && voiceKey.isNotEmpty)
         ? voiceKey
         : _storageService.ttsVoiceModel;
     if (voice.isEmpty) {
       print('TTS streaming: no voice configured');
+      bail();
       return;
     }
 
@@ -664,13 +677,19 @@ class TtsService extends ChangeNotifier {
         'TTS WARNING (streaming): Character voice "$voice" not found for Piper. Falling back.',
       );
       voice = _storageService.ttsVoiceModel;
-      if (voice.isEmpty) return;
+      if (voice.isEmpty) {
+        bail();
+        return;
+      }
     }
 
     // For Piper, check model exists
     if (_isPiperEngine) {
       final modelPath = await _voiceManager.getVoiceModelPath(voice);
-      if (!File(modelPath).existsSync()) return;
+      if (!File(modelPath).existsSync()) {
+        bail();
+        return;
+      }
     }
 
     // Ensure Kokoro model is ready
@@ -683,17 +702,17 @@ class TtsService extends ChangeNotifier {
         },
       );
       _isDownloadingModel = false;
-      if (!ready) return;
+      if (!ready) {
+        bail();
+        return;
+      }
 
       if (activeEngine is KokoroEngine) {
         unawaited((activeEngine as KokoroEngine).ensureWorkersWarm());
       }
     }
 
-    _isSpeaking = true;
-    _isGenerating = true;
     _clearCache(); // no caching for streaming
-    notifyListeners();
 
     final engine = activeEngine;
     final speed = _storageService.ttsSpeechRate;
@@ -769,8 +788,10 @@ class TtsService extends ChangeNotifier {
       // ── Collector: gather completed results in order into audioQueue ──
       void collectReady() {
         while (completedFiles.containsKey(nextToQueue)) {
-          final file = completedFiles[nextToQueue]!;
-          audioQueue.add(file);
+          final file = completedFiles[nextToQueue];
+          // A failed generation stores null — skip that sentence instead
+          // of aborting the whole streaming session.
+          if (file != null) audioQueue.add(file);
           nextToQueue++;
         }
       }
