@@ -76,9 +76,18 @@ class _SceneGuestPickerDialogState extends State<SceneGuestPickerDialog> {
         .toList();
   }
 
+  // Memoized per open dialog: _avatar runs per character row per rebuild,
+  // and this dialog rebuilds on every search keystroke — N existsSync per
+  // keypress is the io-lint bug class.
+  final Map<String, ImageProvider?> _avatarCache = {};
+
   ImageProvider? _avatar(CharacterCard c) {
-    final file = widget.resolveImage(c);
-    return (file != null && file.existsSync()) ? FileImage(file) : null;
+    return _avatarCache.putIfAbsent(c.name, () {
+      final file = widget.resolveImage(c);
+      return (file != null && file.existsSync()) // io-ok: memoized per dialog
+          ? FileImage(file)
+          : null;
+    });
   }
 
   @override
