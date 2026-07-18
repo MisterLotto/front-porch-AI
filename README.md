@@ -31,7 +31,6 @@ If you use it, a star would mean a lot to the developer.
 
 > **Note:** This community tool uses direct database access for its advanced features. It can be impacted by future schema changes.
 
-<!-- TODO(1.0): retake docs/screenshots/home_new.png on the current warm-porch UI — tracked in docs/release-promotion.md -->
 <p align="center">
   <img src="docs/screenshots/home_new.png" width="800" alt="Front Porch AI — Character Library">
 </p>
@@ -395,6 +394,18 @@ If Front Porch AI is useful to you, please consider starring these projects too 
 
 The app is **local-first**: using it offline collects nothing and sends us nothing. The **only** part that involves an account or data collection is **The Stoop** — the optional online community hub — and only if you sign in and use it. The Stoop then handles your account info, the cards you choose to upload, a salted **hash** of your IP for anti-abuse (never the raw IP), and an **opt-out** anonymous device-stats ping (no chats, characters, or IP). Full details: [Privacy Policy](PRIVACY.md).
 
+## 🤝 Contributors
+
+Front Porch AI is built by [@linux4life1](https://github.com/linux4life1), with pull requests and fixes from community members — thank you:
+
+- [@S-A-M-F](https://github.com/S-A-M-F)
+- [@willie](https://github.com/willie)
+- [@MisterLotto](https://github.com/MisterLotto)
+- [@dazpants1](https://github.com/dazpants1)
+- [@bigsombar](https://github.com/bigsombar)
+
+…and [@FrozenKangaroo](https://github.com/FrozenKangaroo) for **Character Card Forge** (see the Community Showcase above). Want to pitch in? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## 📄 License
 
 **v0.9.0+** — [AGPL-3.0](LICENSE)  
@@ -406,25 +417,26 @@ The app is **local-first**: using it offline collects nothing and sends us nothi
 
 ### Prerequisites
 - [Flutter SDK](https://docs.flutter.dev/get-started/install)
-- [Rust toolchain](https://rustup.rs/) (for the RAG embedding server)
 - Git
 - Windows, Linux, or macOS
+
+That's the whole list — every AI engine (TTS, STT, character expressions, RAG memory embeddings, the Draw Things client) runs **in-process** via ONNX/native libraries that ship with the app's packages. There are no sidecar binaries to build, no Rust, no Python.
 
 ### Linux Extra Dependencies
 
 **Ubuntu/Debian**
 ```bash
-sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 ```
 
 **Arch Linux**
 ```bash
-sudo pacman -S clang cmake ninja pkgconf gtk3 xz
+sudo pacman -S clang cmake ninja pkgconf gtk3 xz libsecret gstreamer gst-plugins-base
 ```
 
 **Fedora**
 ```bash
-sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel
+sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libsecret-devel gstreamer1-devel gstreamer1-plugins-base-devel libstdc++-devel
 ```
 
 ### Build & Run
@@ -436,17 +448,16 @@ flutter pub get
 flutter run
 ```
 
-**macOS release build** (includes RAG embedding server):
+**macOS release build** (signs, packages, and notarizes):
 ```bash
 ./scripts/build-macos.sh
 ```
 
 **Linux / Windows release build:**
 ```bash
-cargo build --release --manifest-path tools/embed_server/Cargo.toml
 flutter build linux    # or windows
 ```
-> On Linux/Windows, copy `tools/embed_server/target/release/embed_server` next to the built executable under `embed_server/embed_server`.
+That's it — the built bundle is self-contained.
 
 ---
 
