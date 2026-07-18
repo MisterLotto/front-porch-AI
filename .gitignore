@@ -111,7 +111,6 @@ aur_key
 aur_key.pub
 
 # Rust build artifacts
-tools/embed_server/target/
 *.png
 
 # Allow DMG background image (the *.png rule above would otherwise block it)
