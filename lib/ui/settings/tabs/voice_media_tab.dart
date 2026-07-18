@@ -23,10 +23,10 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
-import 'package:front_porch_ai/ui/settings/widgets/engine_status_card.dart';
 import 'package:front_porch_ai/ui/settings/widgets/photo_understanding_card.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
 import 'package:front_porch_ai/ui/settings/widgets/image_gen_enable_section.dart';
+import 'package:front_porch_ai/ui/settings/widgets/legacy_cleanup_card.dart';
 
 /// Voice & Media tab extracted from settings_page god file (Stage 5).
 /// Pure lift of _buildVoiceMediaTab + voice-specific helpers + onnx button.
@@ -164,10 +164,6 @@ class VoiceMediaTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader('Engine Status'),
-          const SizedBox(height: 8),
-          const EngineStatusCard(),
-          const SizedBox(height: 24),
           const SectionHeader('Text-to-Speech'),
           const SizedBox(height: 8),
           Container(
@@ -1272,6 +1268,8 @@ class VoiceMediaTab extends StatelessWidget {
 
           const SizedBox(height: 24),
           const ImageGenEnableSection(),
+          // Appears only while old-engine model files still sit on disk.
+          const LegacyCleanupCard(),
         ],
       ),
     );

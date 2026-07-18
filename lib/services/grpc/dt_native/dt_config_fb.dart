@@ -23,7 +23,8 @@ import 'package:flat_buffers/flat_buffers.dart' as fb;
 /// Builds the FlatBuffer `GenerationConfiguration` Draw Things expects in
 /// ImageGenerationRequest.configuration — a 1:1 port of
 /// `build_config_flatbuffer` + `_build_generation_config` in the Python
-/// sidecar (tools/dt-grpc-python/client.py / dt_grpc_client.py). Slot ids AND
+/// sidecar (tools/dt-grpc-python/client.py, deleted with the sidecar
+/// retirement — see git history). Slot ids AND
 /// per-slot defaults must match the generated GenerationConfiguration.py
 /// exactly: FlatBuffers omits a field whose value equals its schema default,
 /// and the Python side conditionally skips some fields entirely (numFrames,

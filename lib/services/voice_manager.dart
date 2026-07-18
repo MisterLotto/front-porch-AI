@@ -25,6 +25,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/services/tts_voice_info.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/tts/sherpa_piper_engine.dart';
 
 /// Metadata for a single Piper voice from the catalog.
 class PiperVoice {
@@ -108,14 +109,6 @@ class PiperVoice {
     return '${mb.toStringAsFixed(1)} MB';
   }
 
-  /// The .onnx file path relative to HuggingFace repo root.
-  String? get onnxFilePath {
-    final entry = files.entries
-        .where((e) => e.key.endsWith('.onnx'))
-        .firstOrNull;
-    return entry?.key;
-  }
-
   /// The .onnx.json config file path.
   String? get configFilePath {
     final entry = files.entries
@@ -156,12 +149,17 @@ class VoiceManager extends ChangeNotifier {
   bool isDownloading(String voiceKey) =>
       _downloadProgress.containsKey(voiceKey);
 
-  /// Get the directory where voice models are stored.
+  Future<String> get _rootPath async =>
+      _storageService.rootPath ??
+      (await getApplicationDocumentsDirectory()).path;
+
+  /// Get the directory where voice metadata is stored. Since the sidecar
+  /// retirement this holds only the small `.onnx.json` config per voice
+  /// (the installed-voice registry); the audio models themselves are the
+  /// sherpa re-exports under `system/piper_models/sherpa/`. Legacy rhasspy
+  /// `.onnx` files may still sit here until the cleanup UI reclaims them.
   Future<Directory> get voicesDir async {
-    final root =
-        _storageService.rootPath ??
-        (await getApplicationDocumentsDirectory()).path;
-    final dir = Directory(p.join(root, 'system', 'piper_voices'));
+    final dir = Directory(p.join(await _rootPath, 'system', 'piper_voices'));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -249,7 +247,10 @@ class VoiceManager extends ChangeNotifier {
     }
   }
 
-  /// List voice keys that are downloaded locally.
+  /// List voice keys that are installed locally. Keyed on the `.onnx.json`
+  /// config (what installs write now); bare legacy `.onnx` files still
+  /// count so nobody's voice list changes when the cleanup UI reclaims the
+  /// big legacy models but keeps the configs.
   Future<List<String>> listInstalledVoices() async {
     final dir = await voicesDir;
     final installed = <String>[];
@@ -257,10 +258,15 @@ class VoiceManager extends ChangeNotifier {
     if (!await dir.exists()) return installed;
 
     await for (final entity in dir.list()) {
-      if (entity is File && entity.path.endsWith('.onnx')) {
-        final baseName = p.basenameWithoutExtension(entity.path);
-        installed.add(baseName);
+      if (entity is! File) continue;
+      String? key;
+      if (entity.path.endsWith('.onnx.json')) {
+        key = p.basename(entity.path);
+        key = key.substring(0, key.length - '.onnx.json'.length);
+      } else if (entity.path.endsWith('.onnx')) {
+        key = p.basenameWithoutExtension(entity.path);
       }
+      if (key != null && !installed.contains(key)) installed.add(key);
     }
     return installed;
   }
@@ -290,58 +296,47 @@ class VoiceManager extends ChangeNotifier {
   /// Check if a specific voice is installed.
   Future<bool> isVoiceInstalled(String voiceKey) async {
     final dir = await voicesDir;
-    final onnxFile = File(p.join(dir.path, '$voiceKey.onnx'));
-    return onnxFile.existsSync();
+    return File(p.join(dir.path, '$voiceKey.onnx.json')).existsSync() ||
+        File(p.join(dir.path, '$voiceKey.onnx')).existsSync();
   }
 
-  /// Get the local path to a voice model's .onnx file.
-  Future<String> getVoiceModelPath(String voiceKey) async {
-    final dir = await voicesDir;
-    return p.join(dir.path, '$voiceKey.onnx');
-  }
-
-  /// Download a voice model (both .onnx and .onnx.json).
+  /// Install a voice: the small `.onnx.json` config registers it in the
+  /// voice list, then the sherpa re-export (the model that actually
+  /// speaks, ~60–100MB) downloads eagerly so the first playback isn't a
+  /// surprise wait. Returns false — with nothing left behind — when the
+  /// voice has no sherpa export and therefore can't be played.
   Future<bool> downloadVoice(String voiceKey) async {
     final voice = _catalog.where((v) => v.key == voiceKey).firstOrNull;
     if (voice == null) return false;
 
-    final onnxPath = voice.onnxFilePath;
     final configPath = voice.configFilePath;
-    if (onnxPath == null || configPath == null) return false;
+    if (configPath == null) return false;
 
     _downloadProgress[voiceKey] = 0.0;
     notifyListeners();
 
     try {
       final dir = await voicesDir;
-      final totalBytes = voice.totalSizeBytes;
-      int downloadedBytes = 0;
-
-      // Download .onnx model
-      final onnxUrl = '$_fileBaseUrl$onnxPath';
-      final onnxFile = File(p.join(dir.path, '$voiceKey.onnx'));
-      await _downloadFile(onnxUrl, onnxFile, (received) {
-        downloadedBytes = received;
-        _downloadProgress[voiceKey] = totalBytes > 0
-            ? downloadedBytes / totalBytes
-            : 0.0;
-        notifyListeners();
-      });
-
-      // Download .onnx.json config
-      final configUrl = '$_fileBaseUrl$configPath';
       final configFile = File(p.join(dir.path, '$voiceKey.onnx.json'));
-      final onnxSize = voice.files[onnxPath]?.sizeBytes ?? 0;
-      await _downloadFile(configUrl, configFile, (received) {
-        _downloadProgress[voiceKey] = totalBytes > 0
-            ? (onnxSize + received) / totalBytes
-            : 0.0;
-        notifyListeners();
-      });
+      await _downloadFile('$_fileBaseUrl$configPath', configFile, (_) {});
 
+      final ok = await SherpaPiperEngine.ensureVoice(
+        await _rootPath,
+        voiceKey,
+        onProgress: (fraction) {
+          _downloadProgress[voiceKey] = fraction;
+          notifyListeners();
+        },
+      );
+      if (!ok) {
+        // No sherpa export → the voice can never play. Don't leave a
+        // config that would list an unplayable voice.
+        print('Voice $voiceKey has no sherpa export — not installable');
+        if (await configFile.exists()) await configFile.delete();
+      }
       _downloadProgress.remove(voiceKey);
       notifyListeners();
-      return true;
+      return ok;
     } catch (e) {
       print('Error downloading voice $voiceKey: $e');
       _downloadProgress.remove(voiceKey);
@@ -350,7 +345,8 @@ class VoiceManager extends ChangeNotifier {
     }
   }
 
-  /// Delete a downloaded voice model.
+  /// Delete an installed voice: the config, any legacy rhasspy `.onnx`,
+  /// and the sherpa model bundle.
   Future<void> deleteVoice(String voiceKey) async {
     final dir = await voicesDir;
     final onnxFile = File(p.join(dir.path, '$voiceKey.onnx'));
@@ -358,6 +354,10 @@ class VoiceManager extends ChangeNotifier {
 
     if (await onnxFile.exists()) await onnxFile.delete();
     if (await configFile.exists()) await configFile.delete();
+    final sherpaDir = Directory(
+      SherpaPiperEngine.modelDir(await _rootPath, voiceKey),
+    );
+    if (await sherpaDir.exists()) await sherpaDir.delete(recursive: true);
     notifyListeners();
   }
 

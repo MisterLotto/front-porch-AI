@@ -26,7 +26,6 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'package:front_porch_ai/services/model_fetch.dart';
 import 'package:front_porch_ai/services/sherpa_runtime.dart';
-import 'sherpa_kokoro_engine.dart';
 
 /// In-process Piper TTS via sherpa-onnx (phase 4b of
 /// docs/design/sidecar-retirement.md). Replaces the one-shot-per-chunk
@@ -39,8 +38,8 @@ import 'sherpa_kokoro_engine.dart';
 /// voiceKey `en_US-lessac-medium` → bundle `vits-piper-en_US-lessac-medium`
 /// on sherpa's GitHub releases. The matching bundle downloads on first
 /// native use (~60–100MB incl. its own espeak-ng-data); voices with no
-/// re-export (404) — e.g. hand-made user voices — stay on the legacy piper
-/// binary automatically. Shares the `FP_TTS_SIDECAR=1` lever with Kokoro.
+/// re-export (404) — e.g. hand-made user voices — cannot be played (the
+/// legacy piper binary is gone) and surface a clear error instead.
 class SherpaPiperEngine {
   static const _bundleBase =
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models';
@@ -91,7 +90,7 @@ class SherpaPiperEngine {
 
   /// Generates [text] into a WAV at [outputPath] with the vits voice
   /// [voiceKey] (worker respawns when the voice changes). Throws on
-  /// failure — the caller owns the piper-binary fallback.
+  /// failure — the caller owns error reporting.
   Future<File> generate({
     required String root,
     required String voiceKey,
@@ -187,7 +186,4 @@ class SherpaPiperEngine {
     });
   }
 
-  /// Shared rollback lever with the Kokoro native path — one switch for
-  /// all phase-4 TTS.
-  static bool get sidecarForced => SherpaKokoroEngine.sidecarForced;
 }

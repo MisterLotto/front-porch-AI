@@ -19,20 +19,20 @@
 // Cross-language golden tests for the pure-Dart Draw Things client.
 //
 // Every golden hex string below was produced by the PYTHON reference stack
-// this client replaces — the repo's imageService_pb2 (protobuf runtime),
-// client.py's build_config_flatbuffer / image_to_nnc_tensor, and the fpzip
-// pip package — so these tests pin the Dart implementation to the exact
-// bytes the legacy sidecar produced/consumed. Regenerate with:
-//   pip install -r tools/dt-grpc-python/requirements.txt
-//   (see .claude/changelog.md entry for the generator snippet)
+// this client replaced — imageService_pb2 (protobuf runtime), client.py's
+// build_config_flatbuffer / image_to_nnc_tensor, and the fpzip pip package
+// — so these tests pin the Dart implementation to the exact bytes the
+// legacy sidecar produced/consumed. That Python stack (tools/
+// dt-grpc-python) was deleted with the sidecar retirement; the goldens are
+// frozen reference data now (history has the generators if ever needed).
 
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
+import 'package:front_porch_ai/services/grpc/dt_native/draw_things_native_client.dart';
 import 'package:front_porch_ai/services/grpc/dt_native/dt_config_fb.dart';
 import 'package:front_porch_ai/services/grpc/dt_native/dt_fpzip.dart';
 import 'package:front_porch_ai/services/grpc/dt_native/dt_proto.dart';
@@ -361,10 +361,9 @@ void main() {
 
   group('sanity', () {
     test('embedded CA pem parses as base64 blocks', () {
-      // Guards against accidental corruption of the embedded cert constant.
-      final pem = File(
-        'tools/dt-grpc-python/ca_chain.pem',
-      ).readAsStringSync();
+      // Guards against accidental corruption of the embedded cert constant
+      // (checked in-place now — its source file left with the sidecar).
+      final pem = DrawThingsNativeClient.caChainPemForTest;
       expect(pem, contains('BEGIN CERTIFICATE'));
       final body = pem
           .replaceAll(RegExp(r'-----(BEGIN|END) CERTIFICATE-----'), '')

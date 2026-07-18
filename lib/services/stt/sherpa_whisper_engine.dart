@@ -40,15 +40,12 @@ import 'package:front_porch_ai/services/sherpa_runtime.dart';
 /// 'base.en', 'small.en') so the settings value carries over; a one-time
 /// re-download happens per the retirement playbook, surfaced in Rawhide.md.
 ///
-/// Known divergence, documented + accepted for the soak: the sidecar ran
+/// Known divergence from the retired sidecar, documented + accepted: it ran
 /// faster-whisper's VAD filter. Here a simple RMS energy trim drops
 /// leading/trailing silence (and returns '' for all-silent clips, matching
 /// VAD-drops-everything → "No speech detected"); mid-clip silence is left
-/// to Whisper. `FP_STT_SIDECAR=1` restores the legacy path entirely.
+/// to Whisper.
 class SherpaWhisperEngine {
-  static final bool sidecarForced =
-      Platform.environment['FP_STT_SIDECAR'] == '1';
-
   static const _hfBase = 'https://huggingface.co/csukuangfj';
 
   static const _fileSuffixes = [
