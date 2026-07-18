@@ -106,7 +106,7 @@ class ChargenFacade {
 
   /// Render a portrait via the configured image backend, or null if there is no
   /// backend / prompt / on failure (generation never blocks on the image step).
-  /// Mirrors the desktop generateAvatar: strip the character name from the
+  /// Mirrors the desktop buildPortraitPromptSeed: strip the character name from the
   /// LLM-authored prompt so the image model doesn't render it as text.
   Future<List<int>?> _renderPortrait(String name, String? imagePrompt) async {
     final svc = _imageGen;
@@ -199,9 +199,9 @@ class ChargenFacade {
         });
         return;
       }
-      // Auto-render a portrait when an image backend is configured — the web
-      // mirror of the desktop's end-of-generation generateAvatar (creator_state_
-      // engine.dart). The LLM authored the prompt during generation; strip the
+      // Auto-render a portrait when an image backend is configured (web-only
+      // convenience; desktop generation moved to the explicit Portrait &
+      // Avatars panel). The LLM authored the prompt during generation; strip the
       // name (image models render names as text) and render a 512² portrait.
       final portrait = await _renderPortrait(name, gen.generatedImagePrompt);
       final saved = await _characters.persistNewCard(

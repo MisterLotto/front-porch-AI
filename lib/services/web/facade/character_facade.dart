@@ -281,7 +281,7 @@ class CharacterFacade {
   }
 
   /// Create a brand-new character from web wizard fields. Mirrors the desktop
-  /// `create_character_page._saveCharacter`: build the card + Realism seeds, write
+  /// `create_character_page._createAndAdvance`: build the card + Realism seeds, write
   /// a V2 PNG (embedding the extensions so the seeds survive — the DB has no
   /// realism columns) with a synthesized placeholder avatar, then add it via the
   /// same [CharacterRepository.addCharacter] path. Returns {id, name} or null.

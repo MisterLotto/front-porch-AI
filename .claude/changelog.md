@@ -5199,3 +5199,23 @@ process, and the removed Chub/aicharactercards in-app browser (incl. its WPE Web
 Linux notes + a whole troubleshooting section). Rewritten for the in-process world;
 Linux build deps now match CI's proven set. Deployed to the droplet as part of the
 1.0 website refresh.
+## 2026-07-17 — Phase #12 "Portrait & Avatars" creator step (worktree feat/p12-avatar-creator, 4-commit series)
+
+**Commit 92dadafa — feat(studio): CREATE/EDIT model-slot split**
+Files: lib/services/storage/settings/image_gen_settings.dart, lib/services/image_gen_service.dart, lib/services/capability/image_reference_role.dart, lib/services/capability/image_reference_resolver.dart, lib/ui/image_studio/{edit_view,expression_pack_dialog,generation_options_tab,model_slot_dropdown}.dart, test/services/capability/model_slot_split_test.dart, test/ui/image_studio/generation_options_tab_test.dart
+Reason: one shared imageGenModel let an edit model poison base generation (and vice versa). Existing key stays the CREATE slot (back-compat), new image_gen_edit_model key + one-time looksLikeEditModel migration seed. generateImage resolves the slot per intent; Edit tab binds to the edit slot on DT/remote; ONE ModelSlotDropdown serves all pickers + non-blocking create-slot warning; pack edit-mode decision centralized in ImageReferenceResolver.packEditMode (edit slot + ComfyUI readiness); pack dialog's blanket remote block became "remote needs an edit model".
+
+**Commit bcad65d4 — feat(creator): shared AvatarGenerationPanel**
+Files: lib/ui/avatar_creation/* (7 new files, all <500 LOC), lib/ui/image_studio/{vision_gate,backend_catalog}.dart (new shared seams), lib/ui/image_studio/{expression_pack_dialog,generation_options_tab}.dart, lib/services/{expression_pack_service,comfy_ui_service,image_gen_service,portrait_promotion}.dart, lib/services/capability/vision_support_resolver.dart, test/ui/avatar_creation/avatar_creation_controller_test.dart (16 tests)
+Reason: phase #12 locked design (a)–(o). Card-saved-first orchestration; portrait txt2img on create slot; edit-first pack via ExpressionPackSession + packEditMode; explicit "Switching to edit model" stage + ComfyUI /free nudge; capability-gated Vision QC (hidden when known-unsupported, click-time resolve when unknown, flagged slots held back from import); upload count follows the pack toggle; results land via addLook/addAvatar/portraitWriteTarget. Extracted (not duplicated): normalizePackBase → service, resolveVisionFireWithExplainer, peekForActiveLlm, backend_catalog (Studio tab now consumes it too).
+
+**Commit 1961bd82 — feat(creator): manual wizard final step**
+Files: lib/ui/pages/create_character_page.dart (−452 LOC), test/golden/widget/{manual_creator_steps_golden_test,pages_golden_test}.dart, 4 stale golden PNGs deleted
+Reason: wizard now Identity → … → Review & Create → Portrait & Avatars. Review's button saves first, then advances into the shared panel under a "saved" chip. Absorbed+deleted: identity-step avatar picker, the whole Expression Images step (_buildExpressionImagesStep/_pickExpressionImage/_importExpressionZip/emotion picker/_ExpressionImageEntry + hand-rolled ZIP decode). Goldens step_5_review + identity need Linux-runner regen.
+
+**Commit 8f2a5d66 — feat(creator): AI creator embeds the panel, bespoke path deleted**
+Files: lib/ui/character_creator/steps/review_step.dart, lib/ui/character_creator/{creator_state,creator_state_engine}.dart, lib/ui/pages/character_creator_page.dart, widgets/review_avatar_panel.dart DELETED, test/golden/creator/creator_engine_golden_test.dart, test/golden/widget/creator_steps_golden_test.dart
+Reason: review step's left rail = the shared panel via ensureCardSaved (saveCharacter now idempotent: dbId → update in place; first save ALWAYS writes the V2 PNG — fixes AI-created no-avatar cards having no card PNG at all). Deleted generateAvatar + post-generation auto-fire + generatedAvatar/isGeneratingAvatar/imagePromptController/imagePromptExpanded/avatarBytesForReview + the imageService plumbing through generateFromMode. Prompt derivation kept as buildPortraitPromptSeed(). Review widget golden needs Linux regen.
+
+Web UI: deliberately untouched — web creators stay upload-only (maintainer-approved deferral, 2026-07-16).
+Gates: flutter analyze 0 issues; dart fix --dry-run nothing; flutter test 2180 passed (+16 new controller, +14 new slot-split); flutter build macos ✓.
