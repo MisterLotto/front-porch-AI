@@ -142,6 +142,12 @@ jobs:
 
   theme-lint:
     name: Theme lint (no new raw blueAccent)
+    # Skip on Rawhide→main promotion PRs: their diff is the ENTIRE Rawhide
+    # branch, so every line grandfathered as diff context on normal PRs
+    # re-appears as "added" (even comments that merely mention the banned
+    # token) and the gate re-litigates history it already passed
+    # incrementally. Same guard on io-lint below.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release/promote-')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -183,6 +189,8 @@ jobs:
 
   io-lint:
     name: IO lint (no new sync I/O in UI code)
+    # Promotion-PR skip — see the theme-lint comment above.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release/promote-')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

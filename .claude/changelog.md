@@ -5125,3 +5125,12 @@ tag-named branch `v0.9.99.1`, since deleted): all 3 platform legs green, all 4 p
 jobs skipped (tag-gated), and the `.deb`/`.rpm` were install-tested in linux/amd64
 Debian/Fedora containers — correct 0.9.99.1 version stamp, binary + symlink + desktop
 file + fresh WebUI bundle present, zero sidecar remnants.
+
+## 2026-07-18 (UTC) — ci.yml: theme/io diff-lints skip promotion PRs
+**Files:** `.github/workflows/ci.yml`
+**Why:** PR #147 (the 1.0 Rawhide→main promotion) failed theme-lint + io-lint: a
+promotion PR's diff is the entire Rawhide branch, so grandfathered lines (and even a
+comment that mentions "Colors.blueAccent" while documenting the amber migration)
+re-appear as "added". Both jobs now skip when the PR head starts with
+`release/promote-` — Rawhide's incremental CI already gated every new line when it
+landed. Push/normal-PR behavior unchanged.
