@@ -360,19 +360,11 @@ Front Porch AI stands on the shoulders of these incredible open-source projects:
 | Project | What It Does | Link |
 |---|---|---|
 | **KoboldCpp** | The local LLM backend. Single-file, GGUF-native, GPU-accelerated. | [GitHub](https://github.com/LostRuins/koboldcpp) |
-| **Faster Whisper** | Speech-to-text for push-to-talk and voice call mode. | [GitHub](https://github.com/SYSTRAN/faster-whisper) |
+| **sherpa-onnx** | Runs Whisper speech-to-text and the local TTS voices in-process. | [GitHub](https://github.com/k2-fsa/sherpa-onnx) |
 | **Kokoro** | Default TTS engine. Beautiful offline voices via ONNX. | [GitHub](https://github.com/hexgrad/kokoro) |
 | **Piper** | Fallback TTS engine. Fast, lightweight, privacy-respecting. | [GitHub](https://github.com/rhasspy/piper) |
 
 If Front Porch AI is useful to you, please consider starring these projects too — they're the foundation everything is built on.
-
-### 🌟 Contributors
-
-| Contributor | Role |
-|---|---|
-| **Hakko504** | Bug Testing, UI/Feature Suggestions |
-| **PacmanIncarnate** | Bug Testing, UI/Feature Suggestions |
-| **SunTzucious** | Beta Testing |
 
 ---
 
@@ -382,13 +374,23 @@ The app is **local-first**: using it offline collects nothing and sends us nothi
 
 ## 🤝 Contributors
 
-Front Porch AI is built by [@linux4life1](https://github.com/linux4life1), with pull requests and fixes from community members — thank you:
+Front Porch AI is built by [@linux4life1](https://github.com/linux4life1), with help from the community — thank you:
+
+**Code — pull requests & fixes**
 
 - [@S-A-M-F](https://github.com/S-A-M-F)
 - [@willie](https://github.com/willie)
 - [@MisterLotto](https://github.com/MisterLotto)
 - [@dazpants1](https://github.com/dazpants1)
 - [@bigsombar](https://github.com/bigsombar)
+
+**Testing & feedback**
+
+| Contributor | Role |
+|---|---|
+| **Hakko504** | Bug Testing, UI/Feature Suggestions |
+| **PacmanIncarnate** | Bug Testing, UI/Feature Suggestions |
+| **SunTzucious** | Beta Testing |
 
 …and [@FrozenKangaroo](https://github.com/FrozenKangaroo) for **Character Card Forge** (see the Community Showcase above). Want to pitch in? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
