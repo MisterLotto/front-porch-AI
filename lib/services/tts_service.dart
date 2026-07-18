@@ -38,14 +38,15 @@ import 'package:front_porch_ai/services/tts_voice_info.dart';
 
 /// Text-to-speech service — multi-engine architecture.
 ///
-/// Supports: Kokoro (local, default), OpenAI TTS (cloud), Piper (fallback).
-/// Handles buffered playback, progress tracking, and text sanitization.
+/// Supports: Kokoro (local, default), Piper (local), OpenAI TTS (cloud),
+/// ElevenLabs (cloud). Handles buffered playback, progress tracking, and
+/// text sanitization. All local audio is generated in-process by
+/// sherpa-onnx (docs/design/sidecar-retirement.md — no Python involved).
 class TtsService extends ChangeNotifier {
   final StorageService _storageService;
   final VoiceManager _voiceManager;
 
-  /// In-process sherpa vits engine for Piper voices (phase 4b) — the
-  /// PyInstaller piper binary below remains the automatic fallback.
+  /// In-process sherpa vits engine for Piper voices (phase 4b).
   final SherpaPiperEngine _piperNative = SherpaPiperEngine();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
@@ -55,7 +56,6 @@ class TtsService extends ChangeNotifier {
   final OpenAiTtsEngine _openaiEngine = OpenAiTtsEngine();
   final ElevenLabsTtsEngine _elevenlabsEngine = ElevenLabsTtsEngine();
 
-  Process? _piperProcess;
   bool _isSpeaking = false;
   bool _isGenerating = false;
   String? _currentMessageId;
@@ -110,7 +110,7 @@ class TtsService extends ChangeNotifier {
     }
   }
 
-  /// Whether the current engine is Piper (legacy path).
+  /// Whether the current engine is Piper.
   bool get _isPiperEngine => _storageService.ttsEngine == 'piper';
 
   /// Cached voices for the currently selected engine.
@@ -244,15 +244,6 @@ class TtsService extends ChangeNotifier {
 
     final speed = _storageService.ttsSpeechRate;
 
-    // For Piper, check model file exists
-    if (_isPiperEngine) {
-      final modelPath = await _voiceManager.getVoiceModelPath(voice);
-      if (!File(modelPath).existsSync()) {
-        print('TTS: Piper voice model not found at $modelPath');
-        return;
-      }
-    }
-
     // Check cache — replay instantly if same message & same content
     final textHash = sanitized.hashCode;
     if (messageId != null &&
@@ -340,49 +331,12 @@ class TtsService extends ChangeNotifier {
         List<File> generatedWavs = [];
 
         if (isPiper) {
-          // Piper: one-shot per chunk, but we still use smart chunking + progress.
-          final modelPath = await _voiceManager.getVoiceModelPath(voice);
-
-          // In-process sherpa vits path (sidecar retirement phase 4b):
-          // fetch the matching re-export once (no export → legacy binary).
-          final piperRoot = _storageService.rootPath;
-          var piperNative = false;
-          String? piperNativeError;
-          if (!SherpaPiperEngine.sidecarForced && piperRoot != null) {
-            try {
-              piperNative = await SherpaPiperEngine.ensureVoice(
-                piperRoot,
-                voice,
-              );
-            } catch (e) {
-              // 404 returns false (expected); a throw is a REAL failure.
-              piperNativeError = 'native voice download failed: $e';
-            }
-          }
-          if (!piperNative) {
-            EngineHealth.instance.reportFallback(
-              EngineHealth.piper,
-              SherpaPiperEngine.sidecarForced
-                  ? 'FP_TTS_SIDECAR=1 (legacy forced by environment)'
-                  : piperNativeError ??
-                        'no native voice for "$voice" (custom voice) — '
-                            'using legacy binary',
-              expected: piperNativeError == null,
-            );
-          }
-          // Native is reported only after a chunk actually succeeds (Kokoro
-          // parity); a chunk failure is reported once per utterance, not
-          // once per chunk.
-          var nativePiperChunkOk = false;
-          String? nativePiperFailure;
-
-          // Early check for the binary so we don't spam errors once per chunk
-          final piperBinary = _piperBinaryPath();
-          if (!File(piperBinary).existsSync() &&
-              piperBinary != 'piper' &&
-              piperBinary != 'piper.exe') {
-            print('Piper binary not found at: $piperBinary');
-            print('See the detailed error below when generation is attempted.');
+          // Piper: per-chunk one-shot on the in-process sherpa engine
+          // (sidecar retirement phase 4b — the legacy binary is gone).
+          if (!await _ensurePiperVoice(voice)) {
+            _isGenerating = false;
+            notifyListeners();
+            return;
           }
 
           final bool readEverythingMode =
@@ -396,7 +350,7 @@ class TtsService extends ChangeNotifier {
               voice: voice,
               speed: speed,
               lang: 'en-us',
-              modelPath: modelPath,
+              modelPath: '',
               voicesPath: '',
               chunkSize: KokoroChunker.verbatimChunkSize,
             );
@@ -406,7 +360,7 @@ class TtsService extends ChangeNotifier {
               voice: voice,
               speed: speed,
               lang: 'en-us',
-              modelPath: modelPath,
+              modelPath: '',
               voicesPath: '',
               maxChars: 450,
             );
@@ -416,42 +370,13 @@ class TtsService extends ChangeNotifier {
           for (int i = 0; i < total; i++) {
             if (!_isSpeaking) break;
 
-            final chunk = chunks[i];
-            File? wav;
-            if (piperNative) {
-              try {
-                // piperNative true implies ensureVoice ran → piperRoot set.
-                wav = await _piperNative.generate(
-                  root: piperRoot!,
-                  voiceKey: voice,
-                  text: chunk.text,
-                  outputPath: p.join(
-                    Directory.systemTemp.path,
-                    'piper_native_${DateTime.now().millisecondsSinceEpoch}_$i.wav',
-                  ),
-                );
-                nativePiperChunkOk = true;
-              } catch (e) {
-                kDebugPrint('[TTS-Native] piper failed, using binary: $e');
-                nativePiperFailure ??= 'native generation failed: $e';
-              }
-            }
-            wav ??= await _generatePiperWav(chunk.text, modelPath, i);
+            final wav = await _piperGenerateWav(voice, chunks[i].text, i);
             if (wav != null) {
               generatedWavs.add(wav);
             }
 
             _generationProgress = (i + 1) / total;
             notifyListeners();
-          }
-          if (nativePiperChunkOk) {
-            EngineHealth.instance.reportNative(EngineHealth.piper);
-          }
-          if (nativePiperFailure != null) {
-            EngineHealth.instance.reportFallback(
-              EngineHealth.piper,
-              nativePiperFailure,
-            );
           }
         } else {
           // Kokoro: uses the persistent worker pool + internal chunking + collation
@@ -506,6 +431,7 @@ class TtsService extends ChangeNotifier {
       // Phase 1: Generate audio
       // ElevenLabs is fast enough to process full text in one request —
       // skip sentence splitting for better intonation and fewer API calls.
+      // (Kokoro and Piper returned above; only the cloud engines get here.)
       if (_storageService.ttsEngine == 'elevenlabs') {
         final engine = activeEngine;
         final speed = _storageService.ttsSpeechRate;
@@ -513,20 +439,10 @@ class TtsService extends ChangeNotifier {
         notifyListeners();
         final wav = await engine.generateAudio(sanitized, voice, speed);
         if (wav != null && _isSpeaking) {
-          wavFiles[0] = wav;
+          wavFiles.add(wav);
         }
         _generationProgress = 1.0;
         notifyListeners();
-      } else if (_isPiperEngine) {
-        // Sequential for Piper (legacy)
-        for (int i = 0; i < sentences.length; i++) {
-          if (!_isSpeaking) break;
-          final modelPath = await _voiceManager.getVoiceModelPath(voice);
-          wavFiles[i] = await _generatePiperWav(sentences[i], modelPath, i);
-          if (wavFiles[i] == null || !_isSpeaking) break;
-          _generationProgress = (i + 1) / sentences.length;
-          notifyListeners();
-        }
       } else {
         // Parallel for Kokoro / OpenAI — all results go through the OrderedAudioCollector
         final engine = activeEngine;
@@ -683,13 +599,10 @@ class TtsService extends ChangeNotifier {
       }
     }
 
-    // For Piper, check model exists
-    if (_isPiperEngine) {
-      final modelPath = await _voiceManager.getVoiceModelPath(voice);
-      if (!File(modelPath).existsSync()) {
-        bail();
-        return;
-      }
+    // For Piper, make sure the sherpa voice bundle is on disk
+    if (_isPiperEngine && !await _ensurePiperVoice(voice)) {
+      bail();
+      return;
     }
 
     // Ensure Kokoro model is ready
@@ -751,8 +664,7 @@ class TtsService extends ChangeNotifier {
           final future = () async {
             File? wavFile;
             if (_isPiperEngine) {
-              final modelPath = await _voiceManager.getVoiceModelPath(voice);
-              wavFile = await _generatePiperWav(sanitized, modelPath, idx);
+              wavFile = await _piperGenerateWav(voice, sanitized, idx);
             } else {
               kDebugPrint(
                 '[TtsService] Streaming: generating audio for chunk (len=${sanitized.length})',
@@ -862,10 +774,7 @@ class TtsService extends ChangeNotifier {
     final sanitized = _sanitizeText(text);
     if (sanitized.trim().isEmpty) return null;
 
-    if (_isPiperEngine) {
-      final modelPath = await _voiceManager.getVoiceModelPath(voice);
-      if (!File(modelPath).existsSync()) return null;
-    }
+    if (_isPiperEngine && !await _ensurePiperVoice(voice)) return null;
 
     try {
       if (_storageService.ttsEngine == 'kokoro') {
@@ -888,8 +797,7 @@ class TtsService extends ChangeNotifier {
         if (wav != null) wavFiles.add(wav);
       } else if (_isPiperEngine) {
         for (int i = 0; i < sentences.length; i++) {
-          final modelPath = await _voiceManager.getVoiceModelPath(voice);
-          final wav = await _generatePiperWav(sentences[i], modelPath, i);
+          final wav = await _piperGenerateWav(voice, sentences[i], i);
           if (wav == null) break;
           wavFiles.add(wav);
         }
@@ -947,9 +855,6 @@ class TtsService extends ChangeNotifier {
     _generationProgress = 0.0;
     _currentMessageId = null;
 
-    _piperProcess?.kill();
-    _piperProcess = null;
-
     _afplayProcess?.kill();
     _afplayProcess = null;
 
@@ -957,155 +862,61 @@ class TtsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---- Piper legacy support ----
+  // ---- Piper (in-process sherpa vits) ----
 
-  /// Resolve the path to the Piper binary.
-  ///
-  /// This method tries multiple locations so Piper works in both:
-  /// - Release builds (where the binary is bundled via PyInstaller + build scripts)
-  /// - Development (`flutter run`) where the binary may live elsewhere
-  String _piperBinaryPath() {
-    final execFile = File(Platform.resolvedExecutable);
-    final execDir = execFile.parent.path;
-
-    // 1. Try the standard bundled location first (release builds)
-    String bundledPath;
-    if (Platform.isWindows) {
-      bundledPath = p.join(execDir, 'piper', 'piper', 'piper.exe');
-    } else if (Platform.isMacOS) {
-      final contentsDir = execFile.parent.parent.path;
-      bundledPath = p.join(contentsDir, 'Resources', 'piper', 'piper', 'piper');
-    } else {
-      bundledPath = p.join(execDir, 'piper', 'piper', 'piper');
-    }
-
-    if (File(bundledPath).existsSync()) {
-      return bundledPath;
-    }
-
-    // 2. Walk up from the executable (helpful in some debug bundle layouts)
-    var currentDir = execFile.parent;
-    for (int i = 0; i < 12; i++) {
-      final candidate = p.join(currentDir.path, 'piper', 'piper', 'piper');
-      if (File(candidate).existsSync()) {
-        return candidate;
-      }
-      final parent = currentDir.parent;
-      if (parent.path == currentDir.path) break;
-      currentDir = parent;
-    }
-
-    // 3. Development fallbacks - look relative to current working directory
-    final cwd = Directory.current.path;
-    final devCandidates = <String>[
-      p.join(cwd, 'piper', 'piper', 'piper'),
-      p.join(cwd, 'piper', 'piper', 'piper.exe'),
-      p.join(cwd, '..', 'piper', 'piper', 'piper'),
-      p.join(cwd, '..', 'piper', 'piper', 'piper.exe'),
-      // Sometimes people put it directly in the project root
-      p.join(cwd, 'piper', 'piper'),
-    ];
-
-    for (final candidate in devCandidates) {
-      if (File(candidate).existsSync()) {
-        return candidate;
-      }
-    }
-
-    // 4. Last resort - assume `piper` is available on the system PATH
-    // (user may have installed it via Homebrew, built from source, etc.)
-    return Platform.isWindows ? 'piper.exe' : 'piper';
-  }
-
-  /// Whether Piper can speak. Standard catalog voices run on the built-in
-  /// sherpa engine (no binary needed since sidecar-retirement phase 4b);
-  /// the legacy binary is only REQUIRED when FP_TTS_SIDECAR=1 forces the
-  /// legacy path. Custom hand-made voices still use the binary via the
-  /// automatic per-voice fallback.
-  bool get isPiperAvailable {
-    if (!SherpaPiperEngine.sidecarForced) return true;
+  /// Makes sure the sherpa re-export for [voice] is on disk (downloading it
+  /// on first use). Returns false — with [_lastError] set and the failure
+  /// tallied — when the voice can't be played: there is no legacy piper
+  /// binary anymore, so a voice with no sherpa export (e.g. a hand-made
+  /// custom voice) simply cannot speak.
+  Future<bool> _ensurePiperVoice(String voice) async {
+    final root = _storageService.rootPath;
+    if (root == null) return false;
     try {
-      return File(_piperBinaryPath()).existsSync();
-    } catch (_) {
+      final ok = await SherpaPiperEngine.ensureVoice(root, voice);
+      if (!ok) {
+        _lastError =
+            'The voice "$voice" has no downloadable engine model '
+            '(custom voices are no longer supported) — pick a different '
+            'Piper voice.';
+        EngineHealth.instance.reportFailure(
+          EngineHealth.piper,
+          'no sherpa export for "$voice"',
+          expected: true,
+        );
+      }
+      return ok;
+    } catch (e) {
+      _lastError = 'Piper voice download failed: $e';
+      EngineHealth.instance.reportFailure(
+        EngineHealth.piper,
+        'voice download failed: $e',
+      );
       return false;
     }
   }
 
-  /// Generate a WAV file using Piper.
-  Future<File?> _generatePiperWav(
-    String text,
-    String modelPath,
-    int index,
-  ) async {
+  /// Generates one chunk of [text] with the in-process sherpa engine.
+  /// Callers run [_ensurePiperVoice] first (once per utterance).
+  Future<File?> _piperGenerateWav(String voice, String text, int index) async {
     try {
-      final piperPath = _piperBinaryPath();
-      final voicesDir = p.dirname(modelPath);
-      final voiceName = p.basenameWithoutExtension(modelPath);
-
-      final tempDir = Directory.systemTemp;
-      final wavFile = File(
-        p.join(
-          tempDir.path,
+      final wav = await _piperNative.generate(
+        root: _storageService.rootPath!,
+        voiceKey: voice,
+        text: text,
+        outputPath: p.join(
+          Directory.systemTemp.path,
           'piper_tts_${DateTime.now().millisecondsSinceEpoch}_$index.wav',
         ),
       );
-
-      _piperProcess = await Process.start(piperPath, [
-        '-m',
-        voiceName,
-        '--data-dir',
-        voicesDir,
-        '-f',
-        wavFile.path,
-      ]);
-
-      _piperProcess!.stdin.writeln(text);
-      await _piperProcess!.stdin.close();
-
-      final stderr = await _piperProcess!.stderr
-          .transform(const SystemEncoding().decoder)
-          .join();
-      if (stderr.isNotEmpty) print('Piper stderr: $stderr');
-
-      final exitCode = await _piperProcess!.exitCode;
-      _piperProcess = null;
-
-      if (exitCode != 0 || !wavFile.existsSync() || wavFile.lengthSync() == 0) {
-        print('Piper failed with exit code $exitCode');
-        return null;
-      }
-      return wavFile;
+      EngineHealth.instance.reportNative(EngineHealth.piper);
+      return wav;
     } catch (e) {
-      final piperPath = _piperBinaryPath();
-
-      if (e is ProcessException &&
-          e.message.contains('No such file or directory')) {
-        print('''
-════════════════════════════════════════════════════════════
-Piper TTS binary not found!
-
-Expected location tried: $piperPath
-
-This usually happens in development builds.
-To use Piper locally:
-
-  • Run a release build (recommended for testing Piper):
-      ./scripts/build-macos.sh
-
-  • Or place the Piper binary at one of these locations:
-      <project>/piper/piper/piper
-      <project>/piper/piper/piper.exe
-
-  • Or install `piper` on your PATH (build from source or use prebuilts)
-
-See docs for current bundling instructions.
-════════════════════════════════════════════════════════════
-''');
-      } else {
-        print('Piper error: $e');
-      }
-
-      _piperProcess = null;
+      print('[TTS-Native] piper generation failed: $e');
+      EngineHealth.instance.reportFailure(
+        EngineHealth.piper,
+        'generation failed: $e',
+      );
       return null;
     }
   }

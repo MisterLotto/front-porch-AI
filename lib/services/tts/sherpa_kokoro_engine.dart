@@ -38,16 +38,11 @@ import 'package:front_porch_ai/services/sherpa_runtime.dart';
 /// is its own binary format, not the kokoro-onnx npz) — a one-time
 /// re-download of the sherpa kokoro-multi-lang-v1_0 bundle happens per the
 /// retirement playbook, surfaced in Rawhide.md. Old files stay on disk
-/// until the post-soak cleanup UI. Voice NAMES are unchanged (af_heart,
-/// bm_fable, …) — they map to sherpa speaker ids via [speakerIds], so
-/// every character's saved voice keeps working (playbook rule 5).
-///
-/// Rollback lever: `FP_TTS_SIDECAR=1` forces the legacy Python worker
-/// pool for both generation and model download.
+/// until the cleanup UI reclaims them. Voice NAMES are unchanged
+/// (af_heart, bm_fable, …) — they map to sherpa speaker ids via
+/// [speakerIds], so every character's saved voice keeps working (playbook
+/// rule 5).
 class SherpaKokoroEngine {
-  static final bool sidecarForced =
-      Platform.environment['FP_TTS_SIDECAR'] == '1';
-
   /// Single-file bundle on sherpa's GitHub releases (same host the legacy
   /// engine already downloads its model from).
   static const bundleUrl =

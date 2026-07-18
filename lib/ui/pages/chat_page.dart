@@ -2440,7 +2440,7 @@ class _ChatPageState extends State<ChatPage> {
                   // Mic button (push-to-talk STT)
                   Consumer2<SttService, StorageService>(
                     builder: (context, sttService, storage, _) {
-                      if (!storage.sttEnabled || !sttService.isEngineUsable) {
+                      if (!storage.sttEnabled) {
                         return const SizedBox.shrink();
                       }
                       if (sttService.isTranscribing) {
@@ -2509,9 +2509,7 @@ class _ChatPageState extends State<ChatPage> {
                   // Call button (voice call mode)
                   Consumer2<SttService, StorageService>(
                     builder: (context, sttService, storage, _) {
-                      if (!storage.sttEnabled ||
-                          !sttService.isEngineUsable ||
-                          chatService.isGroupMode) {
+                      if (!storage.sttEnabled || chatService.isGroupMode) {
                         return const SizedBox.shrink();
                       }
                       return Tooltip(

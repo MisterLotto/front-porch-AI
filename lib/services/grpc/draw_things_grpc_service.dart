@@ -2,232 +2,48 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import 'package:front_porch_ai/services/engine_health.dart';
 
 import 'dt_native/draw_things_native_client.dart';
 import 'dt_native/dt_fpzip.dart';
 
-/// Draw Things gRPC service.
-///
-/// Primary path (2026-07): the pure-Dart native gRPC client
-/// (dt_native/draw_things_native_client.dart) — in-process, no Python.
-/// Fallback path: the legacy JSON CLI sidecar (PyInstaller dt_grpc_client in
-/// release bundles; python3 + dt_grpc_client.py under `flutter run`). Every
-/// public method tries native first and falls back to the sidecar on ANY
-/// native failure, logging `[DT-Native]` lines so the active path is visible.
-/// Set FP_DT_SIDECAR=1 to force the sidecar (instant rollback lever). The
-/// sidecar is scheduled for removal once the native path has soaked a release.
+/// Draw Things gRPC service — the pure-Dart native client
+/// (dt_native/draw_things_native_client.dart), in-process, no Python (the
+/// JSON CLI sidecar is gone — docs/design/sidecar-retirement.md phase 1).
+/// `[DT-Native]` log lines show what happened; failures are tallied in
+/// [EngineHealth] (pre-release builds surface the first one loudly).
 class DrawThingsGrpcService {
   final String host;
   final int port;
 
-  /// Rollback lever: FP_DT_SIDECAR=1 forces the legacy Python sidecar path.
-  static final bool _sidecarForced =
-      Platform.environment['FP_DT_SIDECAR'] == '1';
-
   DrawThingsGrpcService({required this.host, this.port = 7859}) {
-    debugPrint(
-      'DrawThingsGrpcService: host=$host port=$port '
-      '(${_sidecarForced ? "CLI sidecar (forced)" : "native gRPC + sidecar fallback"})',
-    );
+    debugPrint('DrawThingsGrpcService: host=$host port=$port (native gRPC)');
   }
 
-  /// Runs one JSON request through the CLI sidecar and returns the parsed
-  /// JSON response map, or null when the CLI failed / returned non-JSON.
-  ///
-  /// Consolidates the CLI resolution + spawn + stdin/stdout plumbing that was
-  /// previously copy-pasted into testConnection/fetchModels/generateImage
-  /// (three near-identical ~50-line blocks). Resolution order: the PyInstaller
-  /// bundle (macOS Resources/dt_grpc/...) first, then the dev fallback of
-  /// `python`/`python3 tools/dt-grpc-python/dt_grpc_client.py` found by
-  /// walking up from the executable dir (mirrors the stt/kokoro pattern).
-  /// [onStderrLine] streams stderr lines as they arrive (used by generate for
-  /// live `FP_PROGRESS <step>` lines); the full stderr is still collected for
-  /// the error log either way.
-  Future<Map<String, dynamic>?> _runCli(
-    Map<String, dynamic> request,
-    Duration timeout, {
-    void Function(String line)? onStderrLine,
-  }) async {
-    final execDir = File(Platform.resolvedExecutable).parent.path;
-    String? cliExe;
-    String? pyScript;
-    bool useWrapper = false;
-    if (Platform.isMacOS) {
-      final contents = File(Platform.resolvedExecutable).parent.parent.path;
-      final bundled = p.join(
-        contents,
-        'Resources',
-        'dt_grpc',
-        'dt_grpc_client',
-        'dt_grpc_client',
-      );
-      if (File(bundled).existsSync()) {
-        cliExe = bundled;
-        useWrapper = true;
-      }
-    }
-    if (cliExe == null) {
-      var dir = Directory(execDir);
-      for (int i = 0; i < 12; i++) {
-        final cand = File(
-          p.join(dir.path, 'tools', 'dt-grpc-python', 'dt_grpc_client.py'),
-        );
-        if (cand.existsSync()) {
-          pyScript = cand.path;
-          break;
-        }
-        final parent = dir.parent;
-        if (parent.path == dir.path) break;
-        dir = parent;
-      }
-      if (pyScript == null) {
-        final cwdCand = File(
-          p.join(
-            Directory.current.path,
-            'tools',
-            'dt-grpc-python',
-            'dt_grpc_client.py',
-          ),
-        );
-        if (cwdCand.existsSync()) pyScript = cwdCand.path;
-      }
-    }
-
-    final process = await Process.start(
-      useWrapper ? cliExe! : (Platform.isWindows ? 'python' : 'python3'),
-      useWrapper ? [] : (pyScript != null ? [pyScript] : []),
-      includeParentEnvironment: true,
-    );
-    process.stdin.writeln(jsonEncode(request));
-    await process.stdin.close();
-
-    final stdoutFut = process.stdout.transform(utf8.decoder).join();
-    final stderrBuf = StringBuffer();
-    final stderrFut = process.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .forEach((line) {
-          stderrBuf.writeln(line);
-          onStderrLine?.call(line);
-        });
-    final int exitCode;
-    final String stdoutStr;
-    try {
-      exitCode = await process.exitCode.timeout(timeout);
-      stdoutStr = await stdoutFut;
-      await stderrFut;
-    } on TimeoutException {
-      // The CLI (and the Draw Things render it drives) is wedged. KILL the
-      // subprocess so it stops holding the GPU + gRPC stream — otherwise the
-      // next generation queues behind it and also times out, a compounding
-      // failure the user could only clear by killing processes by hand. Then
-      // drain the stdout/stderr futures so their stream subscriptions don't
-      // leak, and rethrow so the caller surfaces the timeout.
-      process.kill(); // SIGTERM
-      // Escalate to SIGKILL if it ignores SIGTERM within a short grace — a
-      // GPU-wait can swallow SIGTERM, and the whole point is to free the GPU.
-      unawaited(
-        process.exitCode
-            .timeout(
-              const Duration(seconds: 3),
-              onTimeout: () {
-                process.kill(ProcessSignal.sigkill);
-                return -1;
-              },
-            )
-            .catchError((_) => -1),
-      );
-      unawaited(stdoutFut.catchError((_) => ''));
-      unawaited(stderrFut.catchError((_) {}));
-      debugPrint(
-        'DrawThingsGrpcService: CLI op=${request['op']} timed out after '
-        '${timeout.inSeconds}s — killed the subprocess.',
-      );
-      rethrow;
-    }
-    final stderrStr = stderrBuf.toString();
-
-    final filteredErr = stderrStr
-        .split('\n')
-        .where((l) => !l.contains('CERTIFICATE_VERIFY_FAILED'))
-        .join('\n')
-        .trim();
-    if (filteredErr.isNotEmpty) {
-      debugPrint('DrawThingsGrpcService: CLI stderr: $filteredErr');
-    }
-
-    // The CLI should emit exactly one clean JSON line on stdout, but if extra
-    // prints leaked, fall back to the last JSON-looking line.
-    Map<String, dynamic>? parsed;
-    try {
-      parsed = jsonDecode(stdoutStr.trim()) as Map<String, dynamic>;
-    } catch (_) {
-      for (final line in stdoutStr.trim().split('\n').reversed) {
-        final t = line.trim();
-        if (t.startsWith('{') && t.endsWith('}')) {
-          try {
-            parsed = jsonDecode(t) as Map<String, dynamic>;
-          } catch (_) {}
-          break;
-        }
-      }
-    }
-    if (parsed == null || exitCode != 0 && parsed['success'] != true) {
-      debugPrint(
-        'DrawThingsGrpcService: CLI op=${request['op']} failed '
-        '(exit $exitCode): $stdoutStr',
-      );
-    }
-    return parsed;
-  }
-
-  /// Tests connection via the JSON CLI sidecar (bundled or dev fallback).
+  /// Tests the gRPC connection (TLS handshake + Echo).
   Future<bool> testConnection() async {
-    if (!_sidecarForced) {
-      final native = DrawThingsNativeClient(host: host, port: port);
-      try {
-        await native.echo();
-        debugPrint('[DT-Native] testConnection OK');
-        EngineHealth.instance.reportNative(EngineHealth.drawThings);
-        return true;
-      } catch (e) {
-        debugPrint('[DT-Native] testConnection failed, trying sidecar: $e');
-        EngineHealth.instance.reportFallback(
-          EngineHealth.drawThings,
-          'native connection failed: $e',
-        );
-      } finally {
-        unawaited(native.shutdown());
-      }
-    }
+    final native = DrawThingsNativeClient(host: host, port: port);
     try {
-      final parsed = await _runCli({
-        'op': 'test',
-        'host': host,
-        'port': port,
-      }, const Duration(seconds: 25));
-      final ok = parsed?['success'] == true;
-      debugPrint(
-        'DrawThingsGrpcService: testConnection ${ok ? "OK" : "failed"}',
-      );
-      return ok;
+      await native.echo();
+      debugPrint('[DT-Native] testConnection OK');
+      EngineHealth.instance.reportNative(EngineHealth.drawThings);
+      return true;
     } catch (e) {
-      debugPrint('DrawThingsGrpcService: testConnection error: $e');
+      debugPrint('[DT-Native] testConnection failed: $e');
+      EngineHealth.instance.reportFailure(
+        EngineHealth.drawThings,
+        'connection failed: $e',
+      );
       return false;
+    } finally {
+      unawaited(native.shutdown());
     }
   }
 
-  /// Checkpoint filter shared by the native and sidecar paths (the sidecar
-  /// applies the same heuristic internally; this is defense in depth there
-  /// and the ONLY filter on the native path).
+  /// Checkpoint filter for the raw Draw Things file listing.
   /// We use broad category patterns so users don't have to manually
   /// blacklist every VAE, upscaler (4x_ultrasharp, etc.), or preprocessor.
   /// Text encoders / CLIP / T5 / LLM sidecars — these skip a file ONLY
@@ -278,84 +94,49 @@ class DrawThingsGrpcService {
     }).toList();
   }
 
-  /// Fetches checkpoint models (Draw Things Echo("models") listing) —
-  /// native gRPC first, JSON CLI sidecar as fallback.
+  /// Fetches checkpoint models (Draw Things Echo("models") listing).
   Future<List<String>> fetchModels() async {
-    if (!_sidecarForced) {
-      final native = DrawThingsNativeClient(host: host, port: port);
-      try {
-        final models = _filterCheckpoints(await native.listFiles());
-        debugPrint('[DT-Native] Fetched ${models.length} models (filtered)');
-        return models;
-      } catch (e) {
-        debugPrint('[DT-Native] fetchModels failed, trying sidecar: $e');
-      } finally {
-        unawaited(native.shutdown());
-      }
-    }
+    final native = DrawThingsNativeClient(host: host, port: port);
     try {
-      final parsed = await _runCli({
-        'op': 'models',
-        'host': host,
-        'port': port,
-      }, const Duration(seconds: 25));
-      if (parsed == null || parsed['success'] != true) return [];
-      final raw = (parsed['models'] as List?)?.cast<String>() ?? <String>[];
-      final models = _filterCheckpoints(raw);
-      debugPrint(
-        'DrawThingsGrpcService: Fetched ${models.length} models via CLI (after filtering)',
-      );
+      final models = _filterCheckpoints(await native.listFiles());
+      debugPrint('[DT-Native] Fetched ${models.length} models (filtered)');
       return models;
     } catch (e) {
-      debugPrint('DrawThingsGrpcService: fetchModels error: $e');
+      debugPrint('[DT-Native] fetchModels failed: $e');
       return [];
+    } finally {
+      unawaited(native.shutdown());
     }
   }
 
-  /// Fetches available LoRA files from Draw Things (op 'loras' — same
-  /// Echo('models') listing the checkpoint fetch uses, filtered to LoRAs by
-  /// the CLI). Returned names are passed verbatim into the generation
+  /// Fetches available LoRA files from Draw Things (same Echo('models')
+  /// listing the checkpoint fetch uses, filtered to files containing
+  /// "lora"). Returned names are passed verbatim into the generation
   /// config's `loras` list.
   Future<List<String>> fetchLoras() async {
-    if (!_sidecarForced) {
-      final native = DrawThingsNativeClient(host: host, port: port);
-      try {
-        // Same filter the sidecar applies: any listed file containing "lora".
-        final loras = (await native.listFiles())
-            .where((f) => f.toLowerCase().contains('lora'))
-            .toList();
-        debugPrint('[DT-Native] Fetched ${loras.length} LoRAs');
-        return loras;
-      } catch (e) {
-        debugPrint('[DT-Native] fetchLoras failed, trying sidecar: $e');
-      } finally {
-        unawaited(native.shutdown());
-      }
-    }
+    final native = DrawThingsNativeClient(host: host, port: port);
     try {
-      final parsed = await _runCli({
-        'op': 'loras',
-        'host': host,
-        'port': port,
-      }, const Duration(seconds: 25));
-      if (parsed == null || parsed['success'] != true) return [];
-      final loras = (parsed['loras'] as List?)?.cast<String>() ?? <String>[];
-      debugPrint(
-        'DrawThingsGrpcService: Fetched ${loras.length} LoRAs via CLI',
-      );
+      final loras = (await native.listFiles())
+          .where((f) => f.toLowerCase().contains('lora'))
+          .toList();
+      debugPrint('[DT-Native] Fetched ${loras.length} LoRAs');
       return loras;
     } catch (e) {
-      debugPrint('DrawThingsGrpcService: fetchLoras error: $e');
+      debugPrint('[DT-Native] fetchLoras failed: $e');
       return [];
+    } finally {
+      unawaited(native.shutdown());
     }
   }
 
-  /// Generates an image via the JSON CLI sidecar (full DT-native config passed through).
-  /// referenceImageBytes: optional PNG/JPG/etc bytes for img2img (written to temp file for the Python client).
-  /// loras: optional list of {'file': name, 'weight': double} maps applied natively by Draw Things.
-  /// [onProgress] receives (step, totalSteps) live from the CLI's
-  /// `FP_PROGRESS <step>` stderr lines (Draw Things streams sampling
-  /// signposts; no preview frames are available over this protocol).
+  /// Generates an image via the native gRPC client (full DT-native config
+  /// passed through).
+  /// referenceImageBytes: optional PNG/JPG/etc bytes for img2img.
+  /// loras: optional list of {'file': name, 'weight': double} maps applied
+  /// natively by Draw Things.
+  /// [onProgress] receives (step, totalSteps) from Draw Things' streamed
+  /// sampling signposts (no preview frames are available over this
+  /// protocol).
   Future<Uint8List> generateImage({
     required String prompt,
     String negativePrompt = '',
@@ -376,173 +157,70 @@ class DrawThingsGrpcService {
     Uint8List? referenceImageBytes,
     void Function(int step, int totalSteps)? onProgress,
   }) async {
-    Directory? refTempDir;
-    String? refImagePath;
-    String? cliOutPath; // reported by CLI
-    final tempRoot = await getTemporaryDirectory();
+    // Config dict with all DT-specific knobs (the FlatBuffer builder in the
+    // native client consumes these keys).
+    final cfg = {
+      'model': model,
+      'start_width': width ~/ 64,
+      'start_height': height ~/ 64,
+      'seed': (seed == -1 ? 0 : seed),
+      'steps': steps,
+      'guidance_scale': cfgScale,
+      'strength': strength,
+      'shift': shift,
+      'sampler': sampler,
+      'seed_mode': seedMode,
+      'tea_cache': teaCache,
+      'tea_cache_threshold': teaCacheThreshold,
+      'cfg_zero_star': cfgZeroStar,
+      'resolution_dependent_shift': false,
+      'mask_blur': 1.5,
+      'sharpness': 0.0,
+      if (loras.isNotEmpty) 'loras': loras,
+    };
 
+    debugPrint(
+      'DrawThingsGrpcService: generate (model=$model, '
+      'loras=${loras.isEmpty ? "none" : loras.map((l) => l['file']).join(',')})',
+    );
+
+    // Pre-flight fpzip: generated images arrive as fpzip-compressed NNC
+    // tensors, so without libfpzip the generation would only fail AFTER a
+    // full (possibly minutes-long) render. Releases bundle libfpzip in
+    // Contents/Frameworks/ — missing means broken packaging (or a dev
+    // checkout that hasn't run scripts/build-fpzip-macos.sh).
+    if (!DtFpzip.instance.isAvailable) {
+      EngineHealth.instance.reportFailure(
+        EngineHealth.drawThings,
+        'libfpzip not found — cannot decode generated images',
+      );
+      throw Exception(
+        'libfpzip is missing from this build — Draw Things images cannot '
+        'be decoded (dev checkouts: run scripts/build-fpzip-macos.sh).',
+      );
+    }
+
+    final native = DrawThingsNativeClient(host: host, port: port);
     try {
-      // If reference image bytes supplied, write to a short-lived temp for the Python NNC encoder.
-      // Use high-entropy name (timestamp + random) to reduce TOCTOU/predictability risk.
-      if (referenceImageBytes != null && referenceImageBytes.isNotEmpty) {
-        final rand =
-            DateTime.now().millisecondsSinceEpoch ^
-            (DateTime.now().microsecondsSinceEpoch % 100000);
-        refTempDir = await Directory(
-          p.join(tempRoot.path, 'dt_ref_$rand'),
-        ).create(recursive: true);
-        refImagePath = p.join(refTempDir.path, 'ref.png');
-        await File(refImagePath).writeAsBytes(referenceImageBytes);
-        debugPrint(
-          'DrawThingsGrpcService: Wrote ${referenceImageBytes.length} byte reference image to temp',
-        );
-      }
-
-      // Build rich config dict for the CLI (all DT-specific knobs)
-      final cfg = {
-        'model': model,
-        'start_width': width ~/ 64,
-        'start_height': height ~/ 64,
-        'seed': (seed == -1 ? 0 : seed),
-        'steps': steps,
-        'guidance_scale': cfgScale,
-        'strength': strength,
-        'shift': shift,
-        'sampler': sampler,
-        'seed_mode': seedMode,
-        'tea_cache': teaCache,
-        'tea_cache_threshold': teaCacheThreshold,
-        'cfg_zero_star': cfgZeroStar,
-        'resolution_dependent_shift': false,
-        'mask_blur': 1.5,
-        'sharpness': 0.0,
-        if (loras.isNotEmpty) 'loras': loras,
-      };
-
-      debugPrint(
-        'DrawThingsGrpcService: generate (model=$model, '
-        'loras=${loras.isEmpty ? "none" : loras.map((l) => l['file']).join(',')})',
+      final bytes = await native.generate(
+        prompt: prompt,
+        negativePrompt: negativePrompt,
+        cfg: cfg,
+        referenceImageBytes: referenceImageBytes,
+        onStep: onProgress == null ? null : (step) => onProgress(step, steps),
       );
-
-      // ── Native path ──
-      // Pre-flight fpzip: generated images arrive as fpzip-compressed NNC
-      // tensors, so without libfpzip the native path would only fail AFTER a
-      // full (possibly minutes-long) generation. Skip straight to the sidecar
-      // in that case rather than paying for the generation twice.
-      if (_sidecarForced) {
-        EngineHealth.instance.reportFallback(
-          EngineHealth.drawThings,
-          'FP_DT_SIDECAR=1 (legacy forced by environment)',
-          expected: true,
-        );
-      } else {
-        if (!DtFpzip.instance.isAvailable) {
-          debugPrint(
-            '[DT-Native] libfpzip not found — using sidecar for generate '
-            '(build it with scripts/build-fpzip-macos.sh for native decode)',
-          );
-          // Releases bundle libfpzip in Contents/Frameworks/ — missing means
-          // broken packaging (or an unbuilt dev checkout), so it counts as a
-          // real fallback, not a documented path.
-          EngineHealth.instance.reportFallback(
-            EngineHealth.drawThings,
-            'libfpzip not found — image generation on the legacy sidecar',
-          );
-        } else {
-          final native = DrawThingsNativeClient(host: host, port: port);
-          try {
-            final bytes = await native.generate(
-              prompt: prompt,
-              negativePrompt: negativePrompt,
-              cfg: cfg,
-              referenceImageBytes: referenceImageBytes,
-              onStep: onProgress == null
-                  ? null
-                  : (step) => onProgress(step, steps),
-            );
-            debugPrint('[DT-Native] Generated ${bytes.length} bytes');
-            EngineHealth.instance.reportNative(EngineHealth.drawThings);
-            return bytes;
-          } catch (e) {
-            debugPrint('[DT-Native] generate failed, trying sidecar: $e');
-            EngineHealth.instance.reportFallback(
-              EngineHealth.drawThings,
-              'native generation failed: $e',
-            );
-          } finally {
-            unawaited(native.shutdown());
-          }
-        }
-      }
-
-      final parsed = await _runCli(
-        {
-          'op': 'generate',
-          'host': host,
-          'port': port,
-          'prompt': prompt,
-          'negative_prompt': negativePrompt,
-          'config': cfg,
-          'reference_image_path': ?refImagePath,
-        },
-        // 10 min — a high-step edit on a big/quantized edit model (e.g.
-        // qwen-image-edit-i8) at the user's chosen step count is slow; 5 min
-        // was timing those out mid-generation.
-        const Duration(seconds: 600),
-        onStderrLine: onProgress == null
-            ? null
-            : (line) {
-                if (line.startsWith('FP_PROGRESS ')) {
-                  final step = int.tryParse(line.substring(12).trim());
-                  if (step != null) onProgress(step, steps);
-                }
-              },
-      );
-
-      if (parsed == null) {
-        throw Exception('CLI returned no parseable response');
-      }
-      if (parsed['success'] != true) {
-        throw Exception('Generation error from CLI: ${parsed['error']}');
-      }
-
-      cliOutPath = parsed['output_path'] as String?;
-      if (cliOutPath == null || cliOutPath.isEmpty) {
-        throw Exception('CLI did not return output_path');
-      }
-
-      final outFile = File(cliOutPath);
-      if (!await outFile.exists()) {
-        throw Exception('CLI output file missing at $cliOutPath');
-      }
-      final bytes = await outFile.readAsBytes();
-      if (bytes.isEmpty) {
-        throw Exception('CLI output file empty');
-      }
-      debugPrint(
-        'DrawThingsGrpcService: Generated ${bytes.length} bytes via CLI (elapsed=${parsed['elapsed']})',
-      );
+      debugPrint('[DT-Native] Generated ${bytes.length} bytes');
+      EngineHealth.instance.reportNative(EngineHealth.drawThings);
       return bytes;
     } catch (e) {
-      debugPrint('DrawThingsGrpcService: generateImage error: $e');
+      debugPrint('[DT-Native] generate failed: $e');
+      EngineHealth.instance.reportFailure(
+        EngineHealth.drawThings,
+        'generation failed: $e',
+      );
       rethrow;
     } finally {
-      // Best-effort cleanup of any temps we created
-      try {
-        if (refTempDir != null && await refTempDir.exists()) {
-          await refTempDir.delete(recursive: true);
-        }
-      } catch (_) {}
-      try {
-        if (cliOutPath != null) {
-          final f = File(cliOutPath);
-          if (await f.exists()) await f.delete();
-          final parent = f.parent;
-          if (await parent.exists() && (await parent.list().isEmpty)) {
-            await parent.delete();
-          }
-        }
-      } catch (_) {}
+      unawaited(native.shutdown());
     }
   }
 }

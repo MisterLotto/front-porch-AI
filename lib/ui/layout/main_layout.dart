@@ -51,22 +51,22 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    // Pre-release builds surface the first native→legacy engine fallback of
-    // the session as a report-it notice: silent fallbacks are otherwise
-    // indistinguishable from native success during a soak (sidecar
-    // retirement playbook), and users only report what visibly breaks.
-    EngineHealth.instance.onFirstFallback = _showEngineFallbackNotice;
+    // Pre-release builds surface the first unexpected engine failure of the
+    // session as a report-it notice: a quietly-broken engine is otherwise
+    // indistinguishable from a working one (sidecar retirement playbook),
+    // and users only report what visibly breaks.
+    EngineHealth.instance.onFirstFailure = _showEngineFailureNotice;
   }
 
   @override
   void dispose() {
-    if (EngineHealth.instance.onFirstFallback == _showEngineFallbackNotice) {
-      EngineHealth.instance.onFirstFallback = null;
+    if (EngineHealth.instance.onFirstFailure == _showEngineFailureNotice) {
+      EngineHealth.instance.onFirstFailure = null;
     }
     super.dispose();
   }
 
-  void _showEngineFallbackNotice(String engine, String reason) {
+  void _showEngineFailureNotice(String engine, String reason) {
     if (!isPreRelease || !mounted) return;
     // Engines report from service code that may be mid-frame; defer so the
     // snackbar never fires during a build.
@@ -79,8 +79,8 @@ class _MainLayoutState extends State<MainLayout> {
           // Without persist:false, action snackbars never auto-dismiss.
           persist: false,
           content: Text(
-            '⚠️ $engine fell back to the legacy Python engine — please '
-            'report this on Discord.',
+            '⚠️ $engine hit an engine error — please report this on '
+            'Discord.',
             style: const TextStyle(color: AppColors.onChaosAccent),
           ),
           action: SnackBarAction(

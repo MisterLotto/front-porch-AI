@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -26,24 +27,18 @@ import 'package:front_porch_ai/services/model_fetch.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'onnx_emotion_engine.dart';
 
-/// ONNX expression classifier: in-process inference first, legacy Python
-/// sidecar as automatic fallback (phase 2 of
-/// docs/design/sidecar-retirement.md — same fallback-first pattern as the
-/// Draw Things native client).
+/// ONNX expression classifier: in-process inference (phase 2 of
+/// docs/design/sidecar-retirement.md — the Python sidecar is gone).
 ///
-/// Rollback lever: `FP_EXPR_SIDECAR=1` forces the legacy sidecar for both
-/// classification and model download.
+/// The model auto-downloads on first use (direct HTTPS, no Python), same
+/// behavior the sidecar had; until it lands, classify returns neutral.
 class OnnxEmotionClassifier implements ExpressionClassifier {
   final StorageService storage;
   final void Function(OnnxDownloadProgress)? onProgress;
   final void Function()? onModelReady;
 
-  static final bool _sidecarForced =
-      Platform.environment['FP_EXPR_SIDECAR'] == '1';
   static const String _hfBase =
       'https://huggingface.co/Cohee/distilbert-base-uncased-go-emotions-onnx/resolve/main';
-
-  ONNXExpressionClassifier? _sidecar;
 
   OnnxEmotionClassifier({
     required this.storage,
@@ -53,17 +48,11 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
 
   String get _cacheDir => '${storage.rootPath}/models/emotion_classifier';
 
-  ONNXExpressionClassifier get _sidecarClassifier =>
-      _sidecar ??= ONNXExpressionClassifier(
-        storage: storage,
-        onProgress: onProgress,
-        onModelReady: onModelReady,
-      );
-
   /// Locates `(model.onnx, vocab source)` — the native flat dir first, then
-  /// the sidecar's HuggingFace hub cache (reused as-is, no re-download).
-  /// The hub cache may lack vocab.txt (the fast tokenizer only downloads
-  /// tokenizer.json); the engine's vocab loader accepts either file.
+  /// the HuggingFace hub cache the retired sidecar built (reused as-is, no
+  /// re-download). The hub cache may lack vocab.txt (the fast tokenizer
+  /// only downloads tokenizer.json); the engine's vocab loader accepts
+  /// either file.
   (String, String)? _resolveModelFiles() {
     final nativeModel = File('$_cacheDir/native/model.onnx');
     final nativeVocab = File('$_cacheDir/native/vocab.txt');
@@ -96,95 +85,75 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
     return null;
   }
 
+  bool _downloadKicked = false;
+
   @override
   Future<EmotionResult> classify(String text) async {
     if (text.trim().isEmpty) {
       return const EmotionResult(emotion: 'neutral', confidence: 0.0);
     }
-    final files = _sidecarForced ? null : _resolveModelFiles();
-    if (files != null) {
-      try {
-        final scored = await OnnxEmotionEngine.classify(
-          modelPath: files.$1,
-          vocabPath: files.$2,
-          text: text,
-        );
-        EngineHealth.instance.reportNative(EngineHealth.expressions);
-        return EmotionResult(
-          emotion: scored.first.$1,
-          confidence: scored.first.$2,
-          topCandidates: [
-            for (final (label, score) in scored.take(3))
-              EmotionCandidate(emotion: label, confidence: score),
-          ],
-        );
-      } catch (e) {
+    final files = _resolveModelFiles();
+    if (files == null) {
+      // Model not on disk yet: start the download once (mirrors the
+      // sidecar, which auto-downloaded on first use) and answer neutral
+      // until it lands.
+      if (!_downloadKicked) {
+        _downloadKicked = true;
         debugPrint(
-          '[Expr-Native] in-process classify failed, '
-          'trying sidecar: $e',
+          '[Expr-Native] model files not found under $_cacheDir — '
+          'starting download',
         );
-        EngineHealth.instance.reportFallback(
-          EngineHealth.expressions,
-          'in-process classify failed: $e',
+        unawaited(
+          downloadModel().catchError((Object e) {
+            debugPrint('[Expr-Native] auto-download failed: $e');
+          }),
         );
-        return _sidecarClassifier.classify(text);
       }
-    }
-    if (!_sidecarForced && !_loggedMissingModel) {
-      // Once per run — a silent fallback here hid a broken model scan.
-      _loggedMissingModel = true;
-      debugPrint(
-        '[Expr-Native] model files not found under $_cacheDir — '
-        'falling back to the Python sidecar',
+      EngineHealth.instance.reportFailure(
+        EngineHealth.expressions,
+        'model not downloaded yet',
+        expected: true,
       );
+      return const EmotionResult(emotion: 'neutral', confidence: 0.0);
     }
-    EngineHealth.instance.reportFallback(
-      EngineHealth.expressions,
-      _sidecarForced
-          ? 'FP_EXPR_SIDECAR=1 (legacy forced by environment)'
-          : 'model files not found',
-      expected: _sidecarForced,
-    );
-    return _sidecarClassifier.classify(text);
+    try {
+      final scored = await OnnxEmotionEngine.classify(
+        modelPath: files.$1,
+        vocabPath: files.$2,
+        text: text,
+      );
+      EngineHealth.instance.reportNative(EngineHealth.expressions);
+      return EmotionResult(
+        emotion: scored.first.$1,
+        confidence: scored.first.$2,
+        topCandidates: [
+          for (final (label, score) in scored.take(3))
+            EmotionCandidate(emotion: label, confidence: score),
+        ],
+      );
+    } catch (e) {
+      debugPrint('[Expr-Native] in-process classify failed: $e');
+      EngineHealth.instance.reportFailure(
+        EngineHealth.expressions,
+        'in-process classify failed: $e',
+      );
+      return const EmotionResult(emotion: 'neutral', confidence: 0.0);
+    }
   }
 
-  bool _loggedMissingModel = false;
-
+  /// The direct HTTPS download needs nothing installed, so the classifier
+  /// is always available — [classify] answers neutral until the model
+  /// finishes downloading.
   @override
-  Future<bool> isAvailable() async {
-    if (!_sidecarForced && _resolveModelFiles() != null) return true;
-    return _sidecarClassifier.isAvailable();
-  }
+  Future<bool> isAvailable() async => true;
 
-  /// Whether [downloadModel] has a usable path: the direct HTTPS download
-  /// needs nothing installed; only the forced-sidecar mode depends on
-  /// Python being present.
-  Future<bool> canDownload() =>
-      _sidecarForced ? _sidecarClassifier.isAvailable() : Future.value(true);
-
-  /// Downloads model.onnx + vocab.txt directly over HTTPS (no Python
-  /// involved); falls back to the sidecar's `--download-only` mode if the
-  /// direct download fails.
+  /// Downloads model.onnx + vocab.txt directly over HTTPS.
   Future<void> downloadModel() async {
-    if (!_sidecarForced) {
-      try {
-        final dir = Directory('$_cacheDir/native');
-        await dir.create(recursive: true);
-        await _fetch('$_hfBase/vocab.txt', File('${dir.path}/vocab.txt'));
-        await _fetch(
-          '$_hfBase/onnx/model.onnx',
-          File('${dir.path}/model.onnx'),
-        );
-        onModelReady?.call();
-        return;
-      } catch (e) {
-        debugPrint(
-          '[Expr-Native] direct model download failed, '
-          'trying sidecar: $e',
-        );
-      }
-    }
-    await _sidecarClassifier.downloadModel();
+    final dir = Directory('$_cacheDir/native');
+    await dir.create(recursive: true);
+    await _fetch('$_hfBase/vocab.txt', File('${dir.path}/vocab.txt'));
+    await _fetch('$_hfBase/onnx/model.onnx', File('${dir.path}/model.onnx'));
+    onModelReady?.call();
   }
 
   /// Fetches [url] to [dest] via the shared [ModelFetch] helper, mapping
@@ -199,6 +168,4 @@ class OnnxEmotionClassifier implements ExpressionClassifier {
       ),
     );
   }
-
-  void dispose() => _sidecar?.dispose();
 }

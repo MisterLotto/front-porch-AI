@@ -34,17 +34,16 @@ void main() {
       EngineHealth.whisper,
       EngineHealth.drawThings,
     ]);
-    expect(health.hasFallbacks, isFalse);
     for (final e in health.entries) {
       expect(e.nativeCount, 0);
-      expect(e.fallbackCount, 0);
+      expect(e.failureCount, 0);
     }
   });
 
-  test('reportNative and reportFallback tally per engine', () {
+  test('reportNative and reportFailure tally per engine', () {
     health.reportNative(EngineHealth.kokoro);
     health.reportNative(EngineHealth.kokoro);
-    health.reportFallback(EngineHealth.whisper, 'native failed: boom');
+    health.reportFailure(EngineHealth.whisper, 'transcription failed: boom');
 
     final kokoro = health.entries.firstWhere(
       (e) => e.name == EngineHealth.kokoro,
@@ -53,26 +52,24 @@ void main() {
       (e) => e.name == EngineHealth.whisper,
     );
     expect(kokoro.nativeCount, 2);
-    expect(kokoro.fallbackCount, 0);
-    expect(whisper.fallbackCount, 1);
-    expect(whisper.lastFallbackReason, 'native failed: boom');
-    expect(whisper.lastFallbackAt, isNotNull);
-    expect(health.hasFallbacks, isTrue);
+    expect(kokoro.failureCount, 0);
+    expect(whisper.failureCount, 1);
+    expect(whisper.lastFailureReason, 'transcription failed: boom');
   });
 
   test('unknown engine names are ignored, not crashed on', () {
     health.reportNative('No Such Engine');
-    health.reportFallback('No Such Engine', 'whatever');
-    expect(health.hasFallbacks, isFalse);
+    health.reportFailure('No Such Engine', 'whatever');
+    expect(health.entries.every((e) => e.failureCount == 0), isTrue);
   });
 
-  test('onFirstFallback fires exactly once per engine per session', () {
+  test('onFirstFailure fires exactly once per engine per session', () {
     final fired = <String>[];
-    health.onFirstFallback = (engine, reason) => fired.add('$engine|$reason');
+    health.onFirstFailure = (engine, reason) => fired.add('$engine|$reason');
 
-    health.reportFallback(EngineHealth.piper, 'first');
-    health.reportFallback(EngineHealth.piper, 'second');
-    health.reportFallback(EngineHealth.expressions, 'model missing');
+    health.reportFailure(EngineHealth.piper, 'first');
+    health.reportFailure(EngineHealth.piper, 'second');
+    health.reportFailure(EngineHealth.expressions, 'model missing');
 
     expect(fired, [
       '${EngineHealth.piper}|first',
@@ -80,52 +77,38 @@ void main() {
     ]);
   });
 
-  test('expected fallbacks are tallied but never fire the notice', () {
+  test('expected failures are tallied but never fire the notice', () {
     final fired = <String>[];
-    health.onFirstFallback = (engine, reason) => fired.add(engine);
+    health.onFirstFailure = (engine, reason) => fired.add(engine);
 
-    health.reportFallback(
+    health.reportFailure(
       EngineHealth.whisper,
-      'browser audio (not WAV) — known limitation',
+      'model missing after download attempt',
       expected: true,
     );
-    health.reportFallback(
+    health.reportFailure(
       EngineHealth.piper,
-      'no native voice (custom voice)',
+      'no sherpa export (custom voice)',
       expected: true,
     );
     expect(fired, isEmpty);
     final whisper = health.entries.firstWhere(
       (e) => e.name == EngineHealth.whisper,
     );
-    expect(whisper.fallbackCount, 1);
-    expect(whisper.unexpectedFallbackCount, 0);
+    expect(whisper.failureCount, 1);
 
     // A real failure on the same engine still notices afterwards.
-    health.reportFallback(EngineHealth.whisper, 'native crashed');
+    health.reportFailure(EngineHealth.whisper, 'engine crashed');
     expect(fired, [EngineHealth.whisper]);
-    expect(whisper.unexpectedFallbackCount, 1);
+    expect(whisper.failureCount, 2);
   });
 
-  test('snapshot is additive JSON with all engines', () {
-    health.reportFallback(EngineHealth.expressions, 'model files not found');
-    final snap = health.snapshot();
-    final engines = (snap['engines'] as List).cast<Map<String, dynamic>>();
-    expect(engines, hasLength(5));
-    final expr = engines.firstWhere(
-      (e) => e['name'] == EngineHealth.expressions,
-    );
-    expect(expr['fallbackCount'], 1);
-    expect(expr['lastFallbackReason'], 'model files not found');
-    expect(expr['lastFallbackAt'], isA<String>());
-  });
-
-  test('buildReport marks unused engines and carries fallback reasons', () {
+  test('buildReport marks unused engines and carries failure reasons', () {
     health.reportNative(EngineHealth.kokoro);
-    health.reportFallback(EngineHealth.whisper, 'browser audio (not WAV)');
+    health.reportFailure(EngineHealth.whisper, 'unsupported audio format');
     final report = health.buildReport();
     expect(report, contains('${EngineHealth.expressions}: not used'));
-    expect(report, contains('${EngineHealth.kokoro}: native ×1, fallback ×0'));
-    expect(report, contains('browser audio (not WAV)'));
+    expect(report, contains('${EngineHealth.kokoro}: ok ×1, failed ×0'));
+    expect(report, contains('unsupported audio format'));
   });
 }

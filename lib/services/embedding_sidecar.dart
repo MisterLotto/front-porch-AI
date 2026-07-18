@@ -50,13 +50,14 @@ class EmbeddingSidecar extends ChangeNotifier {
     return path != null && File(path).existsSync();
   }
 
-  /// Resolve the path to the embed_server binary.
+  /// Resolve the path to the embed_server binary (the Rust helper — the
+  /// only subprocess left after the Python sidecar retirement).
   ///
   /// Release layout:
   ///   Windows/Linux: &lt;exe_dir&gt;/embed_server/embed_server(.exe)
   ///   macOS:         &lt;bundle&gt;/Contents/Resources/embed_server/embed_server
   ///
-  /// Dev mode: walk up from exe dir looking for embed_server.py
+  /// Dev mode: [_devBinaryPath] walks up to tools/embed_server/target.
   String? get _binaryPath {
     final execDir = File(Platform.resolvedExecutable).parent.path;
 
