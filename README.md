@@ -290,32 +290,14 @@ sudo dnf install front-porch-ai
 
 **Arch Linux (AUR)**
 ```bash
-yay -S front-porch-ai-bin        # Stable (recommended)
-yay -S front-porch-ai-beta-bin   # Beta / Early access
+yay -S front-porch-ai-bin        # Stable
 ```
 
 Future updates arrive through your normal system updates (`apt upgrade`, `dnf upgrade`, `yay -Syu`).
 
-> **Beta builds** are available for early access to new features. They install to a completely separate directory (`~/Documents/FrontPorchAI-Beta/`) and use `beta_` preference keys so they never touch your stable data. See the [Beta Builds](#beta-builds) section below for details.
-
 ### All Platforms — Manual Download
 
-Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page:
-
-- **Stable**: `.exe` installer (Windows), `.dmg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux)
-- **Beta**: Standalone `.zip` (Windows/macOS), `.AppImage` / `.tar.gz` (Linux) — no installer, just extract and run
-
----
-
-## Beta Builds
-
-Beta releases (e.g. the `0.9.x-Beta` series) are available for early access to new features. They are completely isolated from your stable installation:
-
-- Data directory: `~/Documents/FrontPorchAI-Beta/`
-- All preferences are namespaced with a `beta_` prefix
-- Stable builds will never offer a beta update (and vice versa)
-
-This isolation protects your main library while you test new features. Beta builds are recommended only for users comfortable with occasional rough edges.
+Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)** page for the stable installers: `.exe` (Windows), `.pkg` (macOS), `.AppImage` / `.deb` / `.rpm` (Linux).
 
 ---
 
