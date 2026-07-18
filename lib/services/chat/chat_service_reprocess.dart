@@ -454,6 +454,17 @@ extension ChatServiceReprocess on ChatService {
         _groupManager?.setNextSpeaker(regenSpeakerCard);
       }
 
+      // Roll back objective mutations recorded for the rejected turn (eval
+      // proposals + completion-check side effects) BEFORE the eval replay, so
+      // the new turn re-derives objectives from a clean baseline instead of
+      // stacking on the invalidated turn's (and dedup can't suppress a fresh
+      // proposal because the rejected turn's copy still exists). Runs with or
+      // without realism (completion checks also run realism-off); id-addressed
+      // ops keep 1:1 and group identical. Guest turns never touch objectives.
+      if (regenGuest == null) {
+        await _revertObjectiveTurnOps(lastMsg);
+      }
+
       // Revert realism state from the rejected swipe and re-evaluate.
       // Guest messages carry no Realism/Needs state (regenGuest != null skips).
       //
