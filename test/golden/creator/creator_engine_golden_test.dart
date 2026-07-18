@@ -40,7 +40,6 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/backend_manager.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
@@ -230,8 +229,6 @@ void main() {
       addTearDown(() async => personaDb.close());
       final persona = UserPersonaService(personaDb);
       addTearDown(persona.dispose);
-      // Unused on the kobold path (avatar gen is skipped) but required by the API.
-      final imageService = ImageGenService(storage);
 
       final state = CreatorState();
       addTearDown(state.dispose);
@@ -243,7 +240,6 @@ void main() {
         llmProvider: provider,
         storage: storage,
         personaService: persona,
-        imageService: imageService,
       );
 
       // The decisive signal: the engine actually called the model. The dummy

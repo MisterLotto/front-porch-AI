@@ -17,7 +17,6 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -147,7 +146,6 @@ class CreatorState extends ChangeNotifier {
   final firstMessageController = TextEditingController();
   final exampleDialogueController = TextEditingController();
   final systemPromptController = TextEditingController();
-  final imagePromptController = TextEditingController();
 
   // SharedPreferences keys (all lifted)
   static const _prefName = 'chargen_name';
@@ -228,11 +226,8 @@ class CreatorState extends ChangeNotifier {
   bool isGenerating = false;
   double progress = 0.0;
   CharacterCard? generatedCard;
-  Uint8List? generatedAvatar;
   String? imagePrompt;
-  bool isGeneratingAvatar = false;
   Map<int, bool> lorebookEntryEnabled = {};
-  bool imagePromptExpanded = false;
 
   // Quick-mode NSFW flag (synced into [nsfwEnabled] when generation starts).
   bool quickNsfwEnabled = false;
@@ -297,9 +292,6 @@ class CreatorState extends ChangeNotifier {
   final gpuLayersController = TextEditingController();
   final contextSizeController = TextEditingController();
   CharacterGenService? activeGenService;
-
-  // Review avatar state
-  Uint8List? avatarBytesForReview;
 
   // Options (lifted statics)
   static const generationDetailOptions = {
@@ -606,7 +598,6 @@ class CreatorState extends ChangeNotifier {
     firstMessageController.clear();
     exampleDialogueController.clear();
     systemPromptController.clear();
-    imagePromptController.clear();
 
     // Chip/toggle selections
     selectedTones = {'Neutral'};
@@ -663,11 +654,8 @@ class CreatorState extends ChangeNotifier {
 
     // Generated results
     generatedCard = null;
-    generatedAvatar = null;
     imagePrompt = null;
-    isGeneratingAvatar = false;
     lorebookEntryEnabled = {};
-    imagePromptExpanded = false;
 
     // Persona
     selectedPersonaId = '';
@@ -886,7 +874,6 @@ class CreatorState extends ChangeNotifier {
     firstMessageController.dispose();
     exampleDialogueController.dispose();
     systemPromptController.dispose();
-    imagePromptController.dispose();
     quickScenarioController.dispose();
     guidedVisionController.dispose();
     guidedAppearanceController.dispose();
