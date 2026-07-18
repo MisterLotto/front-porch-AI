@@ -28,6 +28,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/services/expression/onnx_emotion_engine.dart'
     show OnnxEmotionEngine;
 import 'package:front_porch_ai/services/expression/wordpiece_tokenizer.dart';
+import 'package:front_porch_ai/services/onnx_runtime.dart';
 
 /// In-process RAG embeddings: nomic-embed-text-v1.5 via onnxruntime, phase 5
 /// of docs/design/sidecar-retirement.md (the last helper, the Rust
@@ -204,7 +205,7 @@ class NativeEmbeddingEngine {
         ..setIntraOpNumThreads(
           math.max(1, Platform.numberOfProcessors ~/ 2),
         );
-      session = OrtSession.fromFile(File(args[1] as String), opts);
+      session = ortSessionFromFile(File(args[1] as String), opts);
       opts.release();
       wantsTokenTypes = session.inputNames.contains('token_type_ids');
     } catch (e) {

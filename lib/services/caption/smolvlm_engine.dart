@@ -26,6 +26,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/services/caption/smolvlm_preprocess.dart';
 import 'package:front_porch_ai/services/caption/smolvlm_prompt.dart';
+import 'package:front_porch_ai/services/onnx_runtime.dart';
 
 /// The raw SmolVLM-500M ONNX inference pipeline: vision encode → embed →
 /// feature splice → prefill → greedy KV-cache decode with a repetition
@@ -104,15 +105,15 @@ class SmolVlmEngine {
     OrtSession? vision, embed, decoder;
     final ro = OrtRunOptions();
     try {
-      vision = OrtSession.fromFile(
+      vision = ortSessionFromFile(
         File(p.join(modelDirPath, 'vision_encoder_quantized.onnx')),
         opts,
       );
-      embed = OrtSession.fromFile(
+      embed = ortSessionFromFile(
         File(p.join(modelDirPath, 'embed_tokens_int8.onnx')),
         opts,
       );
-      decoder = OrtSession.fromFile(
+      decoder = ortSessionFromFile(
         File(p.join(modelDirPath, 'decoder_model_merged_int8.onnx')),
         opts,
       );
