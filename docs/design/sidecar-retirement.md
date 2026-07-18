@@ -325,3 +325,13 @@ silently using a binary that no longer exists.
   parity here is bit-level-verified against the production binary.
 - EngineHealth row: 'Memory embeddings'. `FP_ORT_LIB` pre-loads
   libonnxruntime for bare test harnesses (FP_SHERPA_LIB pattern).
+- **Windows field bug (fixed 2026-07-18)**: `OrtSession.fromFile` in
+  onnxruntime_v2 passes the model path to `CreateSession` as UTF-8, but on
+  Windows that C API parameter is a wide-char `ORTCHAR_T*` (UTF-16) — the
+  path is reinterpreted as garbage, so loading by path could NEVER work
+  there ("the engine failed its self-test" on every Windows install; the
+  phase-2 emotion engine and the smolvlm captioner had the same latent
+  bug). Fix: `lib/services/onnx_runtime.dart` `ortSessionFromFile` routes
+  Windows through `fromBuffer` (`CreateSessionFromArray` takes no path),
+  all three engines use it. Verified by re-running the nomic goldens with
+  the fromBuffer path forced on Linux — identical golden vectors.

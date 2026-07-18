@@ -42,6 +42,7 @@ class EmbeddingService extends ChangeNotifier {
 
   bool _available = false;
   int _dimensions = 0;
+  String? _lastEngineError;
 
   static const String _hfBase =
       'https://huggingface.co/nomic-ai/nomic-embed-text-v1.5/resolve/main';
@@ -132,7 +133,12 @@ class EmbeddingService extends ChangeNotifier {
       notifyListeners();
       await checkAvailability();
       if (!_available) {
-        throw StateError('the engine failed its self-test');
+        // Surface the engine's actual failure — a bare "self-test failed"
+        // gives the user (and us) nothing to act on.
+        throw StateError(
+          'the engine failed its self-test'
+          '${_lastEngineError == null ? '' : ' — $_lastEngineError'}',
+        );
       }
       _setupStatus = 'Memory is ready.';
       return true;
@@ -186,12 +192,14 @@ class EmbeddingService extends ChangeNotifier {
       final result = await _nativeEmbed('test');
       _dimensions = result.length;
       _available = true;
+      _lastEngineError = null;
       debugPrint(
         '[RAG:Embed] ✅ In-process embeddings available '
         '(${_dimensions}d vectors)',
       );
     } catch (e) {
       _available = false;
+      _lastEngineError = '$e';
       debugPrint('[RAG:Embed] ✗ In-process engine failed: $e');
       EngineHealth.instance.reportFailure(
         EngineHealth.embeddings,

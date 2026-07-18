@@ -24,6 +24,7 @@ import 'dart:typed_data';
 
 import 'package:onnxruntime_v2/onnxruntime_v2.dart';
 
+import '../onnx_runtime.dart';
 import 'wordpiece_tokenizer.dart';
 
 /// In-process go-emotions inference for the expression classifier:
@@ -102,7 +103,7 @@ class OnnxEmotionEngine {
     final ro = OrtRunOptions();
     List<OrtValue?>? outs;
     try {
-      session = OrtSession.fromFile(File(modelPath), opts);
+      session = ortSessionFromFile(File(modelPath), opts);
       idsT = OrtValueTensor.createTensorWithDataList(Int64List.fromList(ids), [
         1,
         ids.length,
