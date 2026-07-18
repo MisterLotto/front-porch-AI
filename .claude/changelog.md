@@ -5134,3 +5134,11 @@ comment that mentions "Colors.blueAccent" while documenting the amber migration)
 re-appear as "added". Both jobs now skip when the PR head starts with
 `release/promote-` — Rawhide's incremental CI already gated every new line when it
 landed. Push/normal-PR behavior unchanged.
+
+## 2026-07-18 (UTC) — 1.0 hero screenshot refresh
+**Files:** `docs/screenshots/home_new.png`
+**Why:** The README hero still showed v0.9.6 (removed Cloud Sync item, open context
+menu, pre-warm-porch design). Replaced with the maintainer's staged 1.0 shot
+(~/Desktop/fpai-review/screens-1.0/home_screen.png, picked per maintainer request),
+resampled to 1920px (6.7MB→1.9MB). Committed on Rawhide so the promotion carries it
+to main — same single-source rule as the banner SVGs.
