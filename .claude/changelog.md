@@ -5189,3 +5189,13 @@ no fatals). Operational notes recorded in the release-promotion memory: tag must
 v1.0.0 (never v1.0 — 2-segment tag breaks pubspec), release must not be marked
 pre-release, don't re-publish older stable releases afterward (updater picks stable
 by publish date).
+
+## 2026-07-18 (UTC) — Site docs de-staled for the 1.0 website refresh
+**Files:** `docs/install.md`, `docs/faq.md`, `docs/troubleshooting.md`
+**Why:** These render on frontporchai.app (and GitHub). All three still documented the
+sidecar era and removed features: Rust/cargo embed_server build steps, Python voice
+sidecar pip installs, `pkill -f embed_server` advice, RAG described as a helper
+process, and the removed Chub/aicharactercards in-app browser (incl. its WPE WebKit
+Linux notes + a whole troubleshooting section). Rewritten for the in-process world;
+Linux build deps now match CI's proven set. Deployed to the droplet as part of the
+1.0 website refresh.
