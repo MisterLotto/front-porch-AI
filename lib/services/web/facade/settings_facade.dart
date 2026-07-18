@@ -18,6 +18,7 @@
 
 import 'package:path/path.dart' as p;
 
+import 'package:front_porch_ai/services/legacy_model_cleanup.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
@@ -173,4 +174,26 @@ class SettingsFacade {
         'omlx' => BackendType.omlx,
         _ => null,
       };
+
+  /// Legacy-engine model files still on the host's disk (sidecar
+  /// retirement cleanup — desktop parity: the Reclaim Disk Space card).
+  Future<Map<String, dynamic>> legacyModels() async {
+    final root = _storage.rootPath;
+    if (root == null) return {'groups': const [], 'totalBytes': 0};
+    final groups = await LegacyModelCleanup.scan(root);
+    return {
+      'groups': [
+        for (final g in groups) {'label': g.label, 'bytes': g.bytes},
+      ],
+      'totalBytes': groups.fold(0, (sum, g) => sum + g.bytes),
+    };
+  }
+
+  /// Deletes the scanned legacy files (the scan reruns server-side — the
+  /// client never supplies paths). Returns bytes freed.
+  Future<int> reclaimLegacyModels() async {
+    final root = _storage.rootPath;
+    if (root == null) return 0;
+    return LegacyModelCleanup.reclaim(root);
+  }
 }

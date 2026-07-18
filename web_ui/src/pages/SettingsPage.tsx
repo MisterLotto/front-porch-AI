@@ -56,6 +56,16 @@ interface Settings {
   generation: Gen;
 }
 
+// Legacy-engine model files still on the host (desktop parity: the Reclaim
+// Disk Space card in Settings → Voice & Media). Absent/empty → no section.
+interface LegacyModels {
+  groups: { label: string; bytes: number }[];
+  totalBytes: number;
+}
+
+const fmtBytes = (b: number) =>
+  b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.round(b / 1024 ** 2)} MB`;
+
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -65,10 +75,36 @@ export function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState('');
 
+  const [legacy, setLegacy] = useState<LegacyModels | null>(null);
+  const [reclaiming, setReclaiming] = useState(false);
+
   const load = () => api.get<Settings>('/api/settings').then(setS).catch(() => {});
+  const loadLegacy = () =>
+    api.get<LegacyModels>('/api/legacy-models').then(setLegacy).catch(() => {});
   useEffect(() => {
     void load();
+    void loadLegacy();
   }, []);
+
+  const reclaim = async () => {
+    if (
+      !window.confirm(
+        'Permanently delete the old speech engines’ model files? ' +
+          'Your voices and settings are unaffected — the new engines ' +
+          'have their own models.',
+      )
+    )
+      return;
+    setReclaiming(true);
+    try {
+      await api.post('/api/legacy-models/reclaim');
+      await loadLegacy();
+    } catch {
+      /* surfaced by the section simply not shrinking */
+    } finally {
+      setReclaiming(false);
+    }
+  };
 
   if (!s) return <div className="centered"><div className="spinner" /></div>;
 
@@ -291,6 +327,24 @@ export function SettingsPage() {
           </>
         )}
       </section>
+
+      {legacy && legacy.totalBytes > 0 && (
+        <section className="card">
+          <h3>Reclaim disk space</h3>
+          <p className="muted small">
+            The new built-in speech engines use their own models. These files
+            from the old engines are no longer used:
+          </p>
+          {legacy.groups.map((g) => (
+            <p key={g.label} className="muted small" style={{ margin: '4px 0' }}>
+              • {g.label} — {fmtBytes(g.bytes)}
+            </p>
+          ))}
+          <button className="ghost" onClick={() => void reclaim()} disabled={reclaiming}>
+            {reclaiming ? 'Reclaiming…' : `Reclaim ${fmtBytes(legacy.totalBytes)}`}
+          </button>
+        </section>
+      )}
 
       {error && <p className="error">{error}</p>}
       <button className="primary" onClick={save} disabled={saving}>
