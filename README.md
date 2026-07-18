@@ -381,25 +381,26 @@ The app is **local-first**: using it offline collects nothing and sends us nothi
 
 ### Prerequisites
 - [Flutter SDK](https://docs.flutter.dev/get-started/install)
-- [Rust toolchain](https://rustup.rs/) (for the RAG embedding server)
 - Git
 - Windows, Linux, or macOS
+
+That's the whole list — every AI engine (TTS, STT, character expressions, RAG memory embeddings, the Draw Things client) runs **in-process** via ONNX/native libraries that ship with the app's packages. There are no sidecar binaries to build, no Rust, no Python.
 
 ### Linux Extra Dependencies
 
 **Ubuntu/Debian**
 ```bash
-sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 ```
 
 **Arch Linux**
 ```bash
-sudo pacman -S clang cmake ninja pkgconf gtk3 xz
+sudo pacman -S clang cmake ninja pkgconf gtk3 xz libsecret gstreamer gst-plugins-base
 ```
 
 **Fedora**
 ```bash
-sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel
+sudo dnf install clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libsecret-devel gstreamer1-devel gstreamer1-plugins-base-devel libstdc++-devel
 ```
 
 ### Build & Run
@@ -411,17 +412,16 @@ flutter pub get
 flutter run
 ```
 
-**macOS release build** (includes RAG embedding server):
+**macOS release build** (signs, packages, and notarizes):
 ```bash
 ./scripts/build-macos.sh
 ```
 
 **Linux / Windows release build:**
 ```bash
-cargo build --release --manifest-path tools/embed_server/Cargo.toml
 flutter build linux    # or windows
 ```
-> On Linux/Windows, copy `tools/embed_server/target/release/embed_server` next to the built executable under `embed_server/embed_server`.
+That's it — the built bundle is self-contained.
 
 ---
 

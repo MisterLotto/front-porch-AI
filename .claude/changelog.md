@@ -5174,3 +5174,18 @@ embed assets/images/front_porch_ai_icon.png as a base64 data URI in a rounded ti
 (GitHub's camo proxy strips external/relative resources inside <img>-rendered SVGs,
 so embedding is the only rendering option). Verified via qlmanage renders (previews
 in ~/Desktop/fpai-review/).
+
+## 2026-07-18 (UTC) — Pre-launch sweep: README build docs + contributors; GO verdict
+**Files:** `README.md` (Rawhide's dev copy; main's guarded 1.0 copy fixed directly on main @ 3a137023), `.claude/changelog.md`
+**Why:** Final lockdown before the v1.0.0 tag. Maintainer caught the Build from Source
+sections (both READMEs) still instructing Rust toolchain + cargo-building the deleted
+embed_server; rewritten for the in-process world with CI's proven Linux dep list
+(libsecret + gstreamer were missing). main's README also gained the Contributors
+section (S-A-M-F, willie, MisterLotto, dazpants1, bigsombar, FrozenKangaroo) and lost
+a stale screenshot TODO. Joint Claude+Grok audit verdict: GO — updater contract for
+0.9.9.1.3→1.0.0 verified against the OLD binary's frozen code (zero-padded compare,
+channel isolation, exact asset names), fresh-install boot tested in docker (v37 DB,
+no fatals). Operational notes recorded in the release-promotion memory: tag must be
+v1.0.0 (never v1.0 — 2-segment tag breaks pubspec), release must not be marked
+pre-release, don't re-publish older stable releases afterward (updater picks stable
+by publish date).
