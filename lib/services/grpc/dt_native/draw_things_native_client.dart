@@ -27,11 +27,13 @@ import 'dt_config_fb.dart';
 import 'dt_proto.dart';
 import 'dt_tensor.dart';
 
-/// Draw Things' self-signed cert chain (same ca_chain.pem the Python sidecar
-/// bundles — public root material, embedded so the pure-Dart path needs no
-/// asset plumbing). The server cert is issued to `localhost`, so like the
-/// Python client (grpc.ssl_target_name_override) we pin the TLS authority to
-/// `localhost` regardless of the host actually dialed.
+/// Draw Things' self-signed cert chain (public root material shipped by
+/// Draw Things itself, embedded so the pure-Dart path needs no asset
+/// plumbing). The server cert is issued to `localhost`, so like the old
+/// Python client (grpc.ssl_target_name_override) we pin the TLS authority
+/// to `localhost` regardless of the host actually dialed. Exposed via
+/// [DrawThingsNativeClient.caChainPemForTest] so the golden suite can
+/// guard the constant against accidental corruption.
 const String _dtCaChainPem = '''
 -----BEGIN CERTIFICATE-----
 MIIFJzCCAw+gAwIBAgIUKkid2GhFrc7rFSbYgYimGr9/39swDQYJKoZIhvcNAQEL
@@ -89,6 +91,11 @@ class DrawThingsNativeClient {
         (r) => r.encode().toList(),
         ImageGenerationResponse.decode,
       );
+
+  /// The embedded cert chain, exposed for the golden suite's sanity check
+  /// (its former source file left with the deleted Python sidecar).
+  @visibleForTesting
+  static String get caChainPemForTest => _dtCaChainPem;
 
   /// SHA-256 of the pinned cert's DER, for exact-match pinning below.
   static final String _pinnedDerSha256 = sha256
