@@ -5165,3 +5165,12 @@ impossible — task-gen fills tasks async post-flush; self-heals next turn) and
 documented in the turn-ops block comment. No god growth (logic in the objectives part
 file); 2 new privates (_recordObjectiveTurnOp, _revertObjectiveTurnOps) — justified,
 no existing method records into pending metadata or inverts ops.
+
+## 2026-07-18 (UTC) — README banner: real app icon replaces the drawn lantern
+**Files:** `docs/assets/porch-banner-dark.svg`, `docs/assets/porch-banner-light.svg`
+**Why:** Maintainer: the GitHub README hero used a generic drawn lantern while the
+website leads with the actual app icon — brand mismatch. Both banner variants now
+embed assets/images/front_porch_ai_icon.png as a base64 data URI in a rounded tile
+(GitHub's camo proxy strips external/relative resources inside <img>-rendered SVGs,
+so embedding is the only rendering option). Verified via qlmanage renders (previews
+in ~/Desktop/fpai-review/).
