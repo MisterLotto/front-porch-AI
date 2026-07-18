@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Tests for ExpressionClassifierService, ONNXExpressionClassifier, and
+// Tests for ExpressionClassifierService, LLMExpressionClassifier, and
 // OnnxDownloadProgress. Validates the ONNX classification routing, download
 // progress tracking, and emotion result parsing.
 
