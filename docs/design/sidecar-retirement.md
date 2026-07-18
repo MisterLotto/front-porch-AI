@@ -282,5 +282,46 @@ the removal release shipped. What landed:
 re-export) can no longer play; they surface a clear error instead of
 silently using a binary that no longer exists.
 
-Phase 5 (fold the Rust embed_server into in-process ort) remains optional
-and unscheduled.
+## Phase 5 record (RAG embeddings) — COMPLETE, Rust server fully removed 2026-07-18
+
+- In-process engine: `lib/services/embedding/native_embedding_engine.dart`
+  — nomic-embed-text-v1.5 via onnxruntime_v2 in ONE persistent worker
+  isolate (the 547MB f32 session loads once; per-call sessions like the
+  emotion engine's would be unusable). Pipeline: `search_document: `
+  prefix (the server applied it to everything — parity means we do too) →
+  shared BERT WordPiece tokenizer, 512-token truncation → forward pass →
+  mean-pool → L2 normalize.
+- **Golden methodology upgrade**: the reference vectors were captured from
+  the LIVE production Rust server (fastembed 4) BEFORE any Dart was
+  written — 14 cases spanning roleplay text, accents, emoji, CJK,
+  truncation, and unicode edge cases
+  (test/services/embedding/goldens/nomic_v15_rust_goldens.json). The suite
+  pins cosine > 0.9999 per case; it runs wherever the model exists on disk
+  and skips in CI. This matters more here than any other phase: stored
+  embeddings in user databases must keep comparing correctly against
+  vectors the new engine produces, or RAG retrieval silently degrades.
+- **Real bug the goldens caught**: the shared WordPiece tokenizer's accent
+  stripping was a Latin-only lookup table; HF/fastembed strip via Unicode
+  NFD across ALL scripts (Japanese voiced kana が→か, Greek/Cyrillic/
+  Vietnamese diacritics), so those tokenized as [UNK] natively. Fixed with
+  true NFD (`unorm_dart`, maintainer-approved dep) + combining-mark
+  removal — which also quietly improves the expression classifier that
+  shares this tokenizer (its own 18 goldens still pass).
+- Model reuse: the engine reads the fastembed hub cache the Rust server
+  populated (`~/Library/Caches/front-porch-ai/embeddings` and the
+  platform equivalents) — zero re-download for existing users. Fresh
+  installs download model.onnx + tokenizer.json over direct HTTPS
+  (`EmbeddingService.runSetup`, driven by the RAG consent dialog with
+  real progress) into `<root>/models/embeddings/nomic-v1_5/`.
+- **Full removal, no soak** (maintainer decision 2026-07-18, "strip the
+  rust sidecar out fully"): `tools/embed_server/` and
+  `embedding_sidecar.dart` deleted outright; `EmbeddingService` is
+  native-only (the app spawns NO helper processes at all); the RAG setup
+  dialog and sidebar status run off EmbeddingService; nightly.yml +
+  build-macos.sh lost the Rust toolchain/cargo/bundling steps and the
+  helper-signing pass; and `Sidecar.entitlements` is DELETED — the final
+  success criterion of the whole retirement. Confidence for skipping the
+  soak came from the golden pinning: unlike the other engines, the
+  parity here is bit-level-verified against the production binary.
+- EngineHealth row: 'Memory embeddings'. `FP_ORT_LIB` pre-loads
+  libonnxruntime for bare test harnesses (FP_SHERPA_LIB pattern).

@@ -16,18 +16,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-/// Pure-Dart BERT WordPiece tokenizer matching HuggingFace's
-/// `DistilBertTokenizer` (uncased) closely enough for the go-emotions
-/// classifier: lowercasing, Latin accent stripping, punctuation splitting,
-/// CJK isolation, then greedy longest-match WordPiece.
-///
-/// Verified against token-id goldens generated from the exact Python
-/// tokenizer the sentiment sidecar used (see
-/// test/services/expression/wordpiece_tokenizer_test.dart). Known
-/// divergence: accent stripping covers Latin-1 Supplement + Latin
-/// Extended-A (the practical chat range) rather than full Unicode NFD;
-/// exotic precomposed characters fall through to [UNK], which the
-/// classifier treats as neutral-ish context — harmless for emotion labels.
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
+
+/// Pure-Dart BERT WordPiece tokenizer matching HuggingFace's uncased
+/// `BertTokenizer` pipeline: lowercasing, NFD accent stripping, punctuation
+/// splitting, CJK isolation, then greedy longest-match WordPiece. Shared by
+/// the expression classifier and the RAG embedding engine (phase 5) — the
+/// embedding goldens pin it to fastembed's tokenizers-crate output, so
+/// changes here must keep BOTH golden suites green
+/// (test/services/expression/wordpiece_tokenizer_test.dart and
+/// test/services/embedding/nomic_embedding_test.dart).
 class WordPieceTokenizer {
   final Map<String, int> _vocab;
   final int clsId;
@@ -176,49 +174,44 @@ class WordPieceTokenizer {
       (cp >= 0x2A700 && cp <= 0x2CEAF) ||
       (cp >= 0x2F800 && cp <= 0x2FA1F);
 
-  /// Latin-1 Supplement + Latin Extended-A precomposed → base letter, plus
-  /// removal of already-decomposed combining marks. Applied after
-  /// lowercasing, mirroring HF's lower() → NFD-strip order.
+  /// True NFD accent strip, matching HF's BertNormalizer exactly: decompose
+  /// (unorm NFD), then drop combining marks. Applied after lowercasing,
+  /// mirroring HF's lower() → NFD-strip order.
+  ///
+  /// This replaced a Latin-only precomposed→base lookup table after the
+  /// phase-5 embedding goldens caught the difference: NFD-stripping applies
+  /// to EVERY script — Japanese voiced kana (が → か + U+3099, mark
+  /// dropped), Greek/Cyrillic/Vietnamese diacritics — and the table's
+  /// Latin-only view made those tokenize as [UNK] where the reference
+  /// stacks produced real tokens.
   static String _stripAccents(String s) {
     final buf = StringBuffer();
-    for (final cp in s.runes) {
-      if (cp >= 0x0300 && cp <= 0x036F) continue; // combining marks
-      final mapped = _accentMap[cp];
-      if (mapped != null) {
-        buf.write(mapped);
-      } else {
-        buf.writeCharCode(cp);
-      }
+    for (final cp in unorm.nfd(s).runes) {
+      if (_isCombiningMark(cp)) continue;
+      buf.writeCharCode(cp);
     }
     return buf.toString();
   }
 
-  static const Map<int, String> _accentMap = {
-    0xE0: 'a', 0xE1: 'a', 0xE2: 'a', 0xE3: 'a', 0xE4: 'a', 0xE5: 'a',
-    0xE7: 'c',
-    0xE8: 'e', 0xE9: 'e', 0xEA: 'e', 0xEB: 'e',
-    0xEC: 'i', 0xED: 'i', 0xEE: 'i', 0xEF: 'i',
-    0xF1: 'n',
-    0xF2: 'o', 0xF3: 'o', 0xF4: 'o', 0xF5: 'o', 0xF6: 'o',
-    0xF9: 'u', 0xFA: 'u', 0xFB: 'u', 0xFC: 'u',
-    0xFD: 'y', 0xFF: 'y',
-    // Latin Extended-A (lowercase forms; input is already lowercased)
-    0x101: 'a', 0x103: 'a', 0x105: 'a',
-    0x107: 'c', 0x109: 'c', 0x10B: 'c', 0x10D: 'c',
-    0x10F: 'd',
-    0x113: 'e', 0x115: 'e', 0x117: 'e', 0x119: 'e', 0x11B: 'e',
-    0x11D: 'g', 0x11F: 'g', 0x121: 'g', 0x123: 'g',
-    0x125: 'h',
-    0x129: 'i', 0x12B: 'i', 0x12D: 'i', 0x12F: 'i',
-    0x135: 'j', 0x137: 'k',
-    0x13A: 'l', 0x13C: 'l', 0x13E: 'l',
-    0x144: 'n', 0x146: 'n', 0x148: 'n',
-    0x14D: 'o', 0x14F: 'o', 0x151: 'o',
-    0x155: 'r', 0x157: 'r', 0x159: 'r',
-    0x15B: 's', 0x15D: 's', 0x15F: 's', 0x161: 's',
-    0x163: 't', 0x165: 't',
-    0x169: 'u', 0x16B: 'u', 0x16D: 'u', 0x16F: 'u', 0x171: 'u', 0x173: 'u',
-    0x175: 'w', 0x177: 'y',
-    0x17A: 'z', 0x17C: 'z', 0x17E: 'z',
-  };
+  /// Combining marks (Unicode category Mn) that NFD decomposition can emit,
+  /// plus the standalone combining blocks — the set HF's strip_accents
+  /// removes for real-world text.
+  static bool _isCombiningMark(int cp) =>
+      (cp >= 0x0300 && cp <= 0x036F) || // Combining Diacritical Marks
+      (cp >= 0x0483 && cp <= 0x0489) || // Cyrillic combining
+      (cp >= 0x0591 && cp <= 0x05C7) || // Hebrew points
+      (cp >= 0x0610 && cp <= 0x061A) || // Arabic marks
+      (cp >= 0x064B && cp <= 0x065F) ||
+      cp == 0x0670 ||
+      (cp >= 0x06D6 && cp <= 0x06DC) ||
+      (cp >= 0x06DF && cp <= 0x06E4) ||
+      (cp >= 0x06E7 && cp <= 0x06E8) ||
+      (cp >= 0x06EA && cp <= 0x06ED) ||
+      cp == 0x093C || cp == 0x09BC || cp == 0x0A3C || // Indic nukta
+      cp == 0x0ABC || cp == 0x0B3C || cp == 0x0CBC ||
+      (cp >= 0x1AB0 && cp <= 0x1AFF) || // Combining Extended
+      (cp >= 0x1DC0 && cp <= 0x1DFF) || // Combining Supplement
+      (cp >= 0x20D0 && cp <= 0x20FF) || // Marks for Symbols
+      (cp >= 0x3099 && cp <= 0x309A) || // Kana voicing marks
+      (cp >= 0xFE20 && cp <= 0xFE2F); // Combining Half Marks
 }

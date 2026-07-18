@@ -55,7 +55,6 @@ import 'package:front_porch_ai/services/download_manager.dart';
 import 'package:front_porch_ai/services/setup_service.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
-import 'package:front_porch_ai/services/embedding_sidecar.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
 import 'package:front_porch_ai/services/file_consolidation_service.dart';
@@ -434,10 +433,9 @@ void main(List<String> args) async {
             return newRepo;
           },
         ),
-        ChangeNotifierProvider(create: (_) => EmbeddingSidecar()),
         ChangeNotifierProvider<EmbeddingService>(
           create: (context) => EmbeddingService(
-            Provider.of<EmbeddingSidecar>(context, listen: false),
+            Provider.of<StorageService>(context, listen: false),
           ),
         ),
         ChangeNotifierProxyProvider<StorageService, BackendManager>(
@@ -510,14 +508,13 @@ void main(List<String> args) async {
             );
             // Wire MemoryService for RAG
             try {
-              final sidecar = Provider.of<EmbeddingSidecar>(
+              final storage = Provider.of<StorageService>(
                 context,
                 listen: false,
               );
-              final embeddingService = EmbeddingService(sidecar);
               final memoryService = MemoryService(
-                embeddingService,
-                Provider.of<StorageService>(context, listen: false),
+                EmbeddingService(storage),
+                storage,
                 db,
               );
               chatService.setMemoryService(memoryService);
@@ -657,13 +654,12 @@ void main(List<String> args) async {
               context,
               listen: false,
             );
-            final sidecar = Provider.of<EmbeddingSidecar>(
-              context,
-              listen: false,
-            );
             final storage = Provider.of<StorageService>(context, listen: false);
-            final embeddingService = EmbeddingService(sidecar);
-            final memoryService = MemoryService(embeddingService, storage, db);
+            final memoryService = MemoryService(
+              EmbeddingService(storage),
+              storage,
+              db,
+            );
             final repo = Provider.of<StoryRepository>(context, listen: false);
             return StoryPipelineService(
               repo,
@@ -673,12 +669,11 @@ void main(List<String> args) async {
             );
           },
           update: (context, llmProvider, storage, previous) {
-            final sidecar = Provider.of<EmbeddingSidecar>(
-              context,
-              listen: false,
+            final memoryService = MemoryService(
+              EmbeddingService(storage),
+              storage,
+              db,
             );
-            final embeddingService = EmbeddingService(sidecar);
-            final memoryService = MemoryService(embeddingService, storage, db);
             final repo = Provider.of<StoryRepository>(context, listen: false);
             return StoryPipelineService(
               repo,
@@ -1052,15 +1047,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
       debugPrint('AG_DEBUG: Error stopping web server on close: $e');
     }
 
-    // Stop embedding sidecar
-    try {
-      final sidecar = Provider.of<EmbeddingSidecar>(context, listen: false);
-      if (sidecar.isRunning) {
-        await sidecar.stopServer();
-      }
-    } catch (e) {
-      debugPrint('AG_DEBUG: Error stopping embedding sidecar on close: $e');
-    }
 
     // On Linux and Windows, windowManager.destroy() can trigger a Flutter engine bug:
     //   "FlutterEngineRemoveView returned kInvalidArguments"
@@ -1181,13 +1167,6 @@ class _MyAppState extends State<MyApp> with WindowListener {
                           listen: false,
                         );
                         if (webServer.isRunning) await webServer.stop();
-                      } catch (_) {}
-                      try {
-                        final sidecar = Provider.of<EmbeddingSidecar>(
-                          context,
-                          listen: false,
-                        );
-                        if (sidecar.isRunning) await sidecar.stopServer();
                       } catch (_) {}
                     });
                   } catch (_) {}
