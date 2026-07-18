@@ -170,12 +170,6 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Setup Python (with pip cache)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
       - name: Install Linux Dependencies
         if: matrix.platform == 'linux'
         run: |
@@ -330,251 +324,62 @@ jobs:
           cp tools/fpzip/libfpzip.dylib "$APP_PATH/Contents/Frameworks/"
           echo "Bundled libfpzip into $APP_PATH/Contents/Frameworks/"
 
-      - name: Bundle ML Engines (Kokoro TTS, Piper TTS, Whisper STT, ONNX Embeddings)
+      - name: Build + Bundle Embedding Server (Rust)
         shell: bash
         run: |
-          # ML sidecars are ALWAYS built fresh from source — caching of this step is
-          # deliberately DISABLED. A previous "Cache ML Engines" step cached the ENTIRE
-          # build directory (which also contains the compiled Flutter app), so on a cache
-          # hit it restored a STALE app over the fresh `flutter build` output — shipping
-          # weeks-old code under fresh version tags and causing an endless "Update
-          # Available" loop on every platform (the published rawhide.20260625 .pkg
-          # actually contained rawhide.20260621 code). Rather than risk that class of
-          # "everything says current but isn't" bug ever again, we eat the sidecar build
-          # time on every run. Correctness > a few minutes of CI. The other caches
-          # (Flutter SDK, pub, pip, cargo/rust-cache) only cache build *inputs*, never
-          # the app output, so they remain safe and are kept.
-          echo "Building ML engines from source (caching intentionally disabled)"
-          DEST="${{ matrix.build_path }}/piper"
-            mkdir -p "$DEST"
-
-            # Install TTS dependencies + PyInstaller
-            pip install pyinstaller kokoro-onnx soundfile piper_tts pathvalidate faster-whisper numpy onnxruntime transformers huggingface_hub
-            # Draw Things gRPC sidecar deps — previously MISSING here, so the frozen
-            # dt_grpc_client shipped without grpc/protobuf/flatbuffers/fpzip/PIL and
-            # crashed at import in nightly builds. protobuf is pinned to the pb2 gencode.
-            pip install -r "${{ github.workspace }}/tools/dt-grpc-python/requirements.txt"
-
-            # Build Kokoro TTS as a standalone directory bundle
-            echo "Building Kokoro TTS binary..."
-            pyinstaller kokoro_tts.py \
-              --onedir \
-              --name kokoro_tts \
-              --collect-all kokoro_onnx \
-              --collect-all soundfile \
-              --collect-all language_tags \
-              --collect-all csvw \
-              --collect-all segments \
-              --collect-all phonemizer \
-              --collect-all espeakng_loader \
-              --hidden-import kokoro_onnx \
-              --hidden-import soundfile \
-              --hidden-import numpy \
-              --hidden-import onnxruntime \
-              --distpath "$DEST" \
-              --workpath ./build_tmp/kokoro \
-              --specpath ./build_tmp/kokoro \
-              --clean \
-              --exclude-module torch \
-              --exclude-module torchvision \
-              --exclude-module torchaudio \
-              --noconfirm
-            echo "Kokoro built at: $DEST/kokoro_tts/"
-
-            # Build Piper TTS as a standalone directory bundle
-            echo "Building Piper TTS binary..."
-            pyinstaller piper_entry.py \
-              --onedir \
-              --name piper \
-              --collect-all piper \
-              --hidden-import piper \
-              --hidden-import pathvalidate \
-              --hidden-import piper_phonemize \
-              --hidden-import onnxruntime \
-              --distpath "$DEST" \
-              --workpath ./build_tmp/piper \
-              --specpath ./build_tmp/piper \
-              --clean \
-              --exclude-module torch \
-              --exclude-module torchvision \
-              --exclude-module torchaudio \
-              --noconfirm
-            echo "Piper built at: $DEST/piper/"
-
-            # Build Whisper STT as a standalone directory bundle
-            echo "Building Whisper STT binary..."
-            STT_DEST="${{ matrix.build_path }}"
-            pyinstaller whisper_stt.py \
-              --onedir \
-              --name whisper_stt \
-              --collect-all faster_whisper \
-              --hidden-import faster_whisper \
-              --hidden-import ctranslate2 \
-              --hidden-import huggingface_hub \
-              --hidden-import tokenizers \
-              --distpath "$STT_DEST" \
-              --workpath ./build_tmp/whisper \
-              --specpath ./build_tmp/whisper \
-              --clean \
-              --exclude-module torch \
-              --exclude-module torchvision \
-              --exclude-module torchaudio \
-              --noconfirm
-            echo "Whisper STT built at: $STT_DEST/whisper_stt/"
-
-            # Build Embedding Server (Rust binary)
-            # NOTE: Uses prebuilt ONNX Runtime static libs downloaded by ort-sys from
-            # parcel.pyke.io. These downloads are occasionally flaky (timeouts/5xx).
-            # We retry + rely on rust-cache + ML-engines-cache to avoid repeated downloads.
-            echo "Building Embedding Server (Rust)..."
-            cd tools/embed_server
-            for attempt in 1 2 3; do
-              if cargo build --release; then
-                echo "cargo build succeeded on attempt $attempt"
-                break
+          # The Rust embed_server is the ONLY helper subprocess left after the
+          # Python sidecar retirement (docs/design/sidecar-retirement.md) —
+          # TTS, STT, expressions, and Draw Things all run in-process now, so
+          # the PyInstaller builds that used to live here are gone.
+          #
+          # Always built fresh from source — build-output caching stays
+          # deliberately DISABLED: a previous "Cache ML Engines" step cached a
+          # directory containing the compiled Flutter app and restored a STALE
+          # app over fresh `flutter build` output (the published
+          # rawhide.20260625 .pkg actually contained rawhide.20260621 code).
+          # rust-cache above only caches build *inputs*, so it stays.
+          #
+          # NOTE: ort-sys downloads prebuilt ONNX Runtime libs from
+          # parcel.pyke.io; occasionally flaky (timeouts/5xx) → retry.
+          echo "Building Embedding Server (Rust)..."
+          cd tools/embed_server
+          for attempt in 1 2 3; do
+            if cargo build --release; then
+              echo "cargo build succeeded on attempt $attempt"
+              break
+            else
+              echo "cargo build attempt $attempt failed"
+              if [ $attempt -lt 3 ]; then
+                echo "Retrying in 15s..."
+                sleep 15
               else
-                echo "cargo build attempt $attempt failed"
-                if [ $attempt -lt 3 ]; then
-                  echo "Retrying in 15s..."
-                  sleep 15
-                else
-                  echo "ERROR: cargo build failed after 3 attempts"
-                  exit 1
-                fi
+                echo "ERROR: cargo build failed after 3 attempts"
+                exit 1
               fi
-            done
-            cd ../..
-            EMBED_BINARY="tools/embed_server/target/release/embed_server"
-            if [ "${{ matrix.platform }}" = "windows" ]; then
-              EMBED_BINARY="tools/embed_server/target/release/embed_server.exe"
             fi
-            mkdir -p "$STT_DEST/embed_server"
-            cp "$EMBED_BINARY" "$STT_DEST/embed_server/"
-            echo "Embedding server built at: $STT_DEST/embed_server/"
+          done
+          cd ../..
 
-            # Build Sentiment Classifier (expression images ONNX)
-            echo "Building Sentiment Classifier binary..."
-            pyinstaller sentiment_classifier.py \
-              --onedir \
-              --name sentiment_classifier \
-              --collect-all huggingface_hub \
-              --collect-all transformers \
-              --collect-all numpy \
-              --collect-all onnxruntime \
-              --hidden-import huggingface_hub \
-              --hidden-import transformers \
-              --hidden-import numpy \
-              --hidden-import onnxruntime \
-              --distpath "$STT_DEST" \
-              --workpath ./build_tmp/sentiment \
-              --specpath ./build_tmp/sentiment \
-              --clean \
-              --exclude-module torch \
-              --exclude-module torchvision \
-              --exclude-module torchaudio \
-              --noconfirm
-            echo "Sentiment classifier built at: $STT_DEST/sentiment_classifier/"
+          DEST="${{ matrix.build_path }}"
+          EMBED_BINARY="tools/embed_server/target/release/embed_server"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            EMBED_BINARY="tools/embed_server/target/release/embed_server.exe"
+          fi
+          mkdir -p "$DEST/embed_server"
+          cp "$EMBED_BINARY" "$DEST/embed_server/"
+          echo "Embedding server built at: $DEST/embed_server/"
 
-            # Build Draw Things gRPC client (proper PyInstaller bundle for release .app)
-            # --add-data includes the sibling .py source files (client.py, pb2 files, etc.)
-            # that dt_grpc_client.py imports via sys.path.insert(0, dirname(__file__)).
-            # Without --add-data these files are absent inside the frozen bundle, causing
-            # ImportError in .app builds (while flutter run works because the raw .py files
-            # are on disk and sys.path.insert finds them).
-            # --paths tells PyInstaller to trace imports from the sibling directory at
-            # bundle time, so hidden-import client / imageService_pb2 are actually found.
-            echo "Building Draw Things gRPC client..."
-            # Use $(pwd) absolute paths for --add-data: when --specpath is set,
-            # PyInstaller resolves relative paths relative to the spec file location
-            # (./build_tmp/dt_grpc/), not the workspace root. Absolute paths are
-            # unambiguous regardless of where the spec file lives.
-            GRPC_SRC="$(pwd)/tools/dt-grpc-python"
-            pyinstaller "$GRPC_SRC/dt_grpc_client.py" \
-              --onedir \
-              --name dt_grpc_client \
-              --paths "$GRPC_SRC" \
-              --add-data "$GRPC_SRC/client.py:." \
-              --add-data "$GRPC_SRC/imageService_pb2.py:." \
-              --add-data "$GRPC_SRC/imageService_pb2_grpc.py:." \
-              --add-data "$GRPC_SRC/GenerationConfiguration.py:." \
-              --add-data "$GRPC_SRC/SamplerType.py:." \
-              --add-data "$GRPC_SRC/SeedMode.py:." \
-              --add-data "$GRPC_SRC/LoRA.py:." \
-              --add-data "$GRPC_SRC/LoRAMode.py:." \
-              --add-data "$GRPC_SRC/Control.py:." \
-              --add-data "$GRPC_SRC/ControlInputType.py:." \
-              --add-data "$GRPC_SRC/ControlMode.py:." \
-              --add-data "$GRPC_SRC/ca_chain.pem:." \
-              --collect-all grpc \
-              --collect-all protobuf \
-              --collect-all flatbuffers \
-              --collect-all fpzip \
-              --collect-all numpy \
-              --collect-all PIL \
-              --hidden-import grpc \
-              --hidden-import grpc._cython \
-              --hidden-import grpc._cython.cygrpc \
-              --hidden-import google.protobuf \
-              --hidden-import google.protobuf.runtime_version \
-              --hidden-import google._upb._message \
-              --hidden-import flatbuffers \
-              --hidden-import fpzip \
-              --hidden-import numpy \
-              --hidden-import PIL \
-              --hidden-import PIL.Image \
-              --hidden-import imageService_pb2 \
-              --hidden-import imageService_pb2_grpc \
-              --hidden-import GenerationConfiguration \
-              --hidden-import SamplerType \
-              --hidden-import SeedMode \
-              --hidden-import LoRA \
-              --hidden-import LoRAMode \
-              --hidden-import client \
-              --distpath "$STT_DEST" \
-              --workpath ./build_tmp/dt_grpc \
-              --specpath ./build_tmp/dt_grpc \
-              --clean \
-              --exclude-module torch \
-              --exclude-module torchvision \
-              --exclude-module torchaudio \
-              --noconfirm
-            echo "Draw Things gRPC client built at: $STT_DEST/dt_grpc_client/"
-
-          # For macOS, copy into the app bundle Resources (always runs)
+          # macOS: the binary ships inside the app bundle Resources
           if [ "${{ matrix.platform }}" = "macos" ]; then
             APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app 2>/dev/null | head -1)
             if [ -n "$APP_NAME" ]; then
-              RESOURCES="$APP_NAME/Contents/Resources/piper"
-              mkdir -p "$RESOURCES"
-              cp -R "${{ matrix.build_path }}/piper/kokoro_tts" "$RESOURCES/kokoro_tts" 2>/dev/null || true
-              cp -R "${{ matrix.build_path }}/piper/piper" "$RESOURCES/piper" 2>/dev/null || true
-              chmod +x "$RESOURCES/kokoro_tts/kokoro_tts" 2>/dev/null || true
-              chmod +x "$RESOURCES/piper/piper" 2>/dev/null || true
-
-              STT_RESOURCES="$APP_NAME/Contents/Resources/whisper_stt"
-              mkdir -p "$STT_RESOURCES"
-              cp -R "${{ matrix.build_path }}/whisper_stt/"* "$STT_RESOURCES/" 2>/dev/null || true
-              chmod +x "$STT_RESOURCES/whisper_stt" 2>/dev/null || true
-
               EMBED_RESOURCES="$APP_NAME/Contents/Resources/embed_server"
               mkdir -p "$EMBED_RESOURCES"
-              cp -R "${{ matrix.build_path }}/embed_server/"* "$EMBED_RESOURCES/" 2>/dev/null || true
-              chmod +x "$EMBED_RESOURCES/embed_server" 2>/dev/null || true
-
-              SENTIMENT_RESOURCES="$APP_NAME/Contents/Resources/sentiment_classifier"
-              mkdir -p "$SENTIMENT_RESOURCES"
-              cp -R "${{ matrix.build_path }}/sentiment_classifier/"* "$SENTIMENT_RESOURCES/" 2>/dev/null || true
-              chmod +x "$SENTIMENT_RESOURCES/sentiment_classifier" 2>/dev/null || true
-
-              # Draw Things gRPC client (proper bundled executable, not raw sources)
-              DT_RESOURCES="$APP_NAME/Contents/Resources/dt_grpc"
-              mkdir -p "$DT_RESOURCES"
-              cp -R "${{ matrix.build_path }}/dt_grpc_client" "$DT_RESOURCES/" 2>/dev/null || true
-              chmod +x "$DT_RESOURCES/dt_grpc_client/dt_grpc_client" 2>/dev/null || true
+              cp -R "$DEST/embed_server/"* "$EMBED_RESOURCES/"
+              chmod +x "$EMBED_RESOURCES/embed_server"
+              echo "Embedding server bundled into $EMBED_RESOURCES"
             fi
           fi
-
-          echo "ML engine bundling step complete"
 
       - name: Download VC++ Redistributable (Windows)
         if: matrix.platform == 'windows'
@@ -674,39 +479,24 @@ jobs:
         run: |
           APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app | head -1)
           ENTITLEMENTS="${{ github.workspace }}/macos/Runner/Release.entitlements"
-          # Sidecar entitlements: required for all PyInstaller bundles under hardened
-          # runtime. PyInstaller's boot-loader needs:
-          #   - cs.disable-library-validation   (load unsigned .so extension modules
-          #                                      bundled inside _internal/)
-          #   - cs.allow-unsigned-executable-memory (mmap the .pyc archive as exec)
-          # Without these, macOS kills the sidecar immediately when the app runs.
+          # Helper entitlements for the Rust embed_server (the one subprocess
+          # left after the Python sidecar retirement). Kept on the same
+          # Sidecar.entitlements it has always shipped with — changing a
+          # hardened-runtime entitlement set can only be verified with a full
+          # signed build, so it stays untouched until embed_server itself is
+          # retired (sidecar-retirement.md phase 5, optional).
           SIDECAR_ENT="${{ github.workspace }}/macos/Runner/Sidecar.entitlements"
 
-          # Parallelize signing across the thousands of Mach-O files in the
-          # PyInstaller sidecars. Passes run inside-out (the main .app is signed
-          # LAST); only distinct files WITHIN a pass run in parallel. BSD xargs on
-          # macOS, so no GNU-only flags and we guard against empty input.
-          #
-          # Two distinct failure modes are handled here:
-          #
-          # 1. TIMESTAMP THROTTLE (intermittent "Invalid"): each
-          #    `codesign --timestamp` is a network round-trip to Apple's timestamp
-          #    server, which throttles under this parallel burst. Every codesign
-          #    RETRIES with backoff to heal the throttle.
-          #
-          # 2. AMBIGUOUS PyInstaller FRAMEWORKS (deterministic "Invalid"): PyInstaller's
-          #    frameworks are already versioned (Versions/<X.Y>/<name> is the real
-          #    Mach-O) but ALSO carry a DUPLICATE real binary/Resources at the bundle
-          #    ROOT. A real Mach-O at the root looks app-like while Versions/ looks
-          #    framework-like, so codesign reports "bundle format is ambiguous (could
-          #    be app or framework)" and refuses to SEAL the framework — and Apple
-          #    then rejects notarization with "The signature of the binary is invalid."
-          #    The dedicated framework pass below normalizes each framework to the
-          #    canonical layout (root entries become symlinks into Versions/Current),
-          #    SEALS it, and HARD-fails on a local `codesign --verify --deep --strict`
-          #    so we never submit a framework Apple would reject.
-          # If Apple still rejects anything, the notarize step below fetches
-          # `notarytool log` so the precise reason is in the CI log.
+          # Sign inside-out (the main .app is signed LAST); distinct files
+          # WITHIN a pass run in parallel. BSD xargs on macOS, so no GNU-only
+          # flags and we guard against empty input. Each `codesign --timestamp`
+          # is a network round-trip to Apple's timestamp server, which
+          # throttles under a parallel burst — every codesign RETRIES with
+          # backoff. (The PyInstaller framework-normalization passes that used
+          # to live here left with the Python sidecars; Resources now holds
+          # only the embed_server binary and data files.) If Apple rejects
+          # anything, the notarize step below fetches `notarytool log` so the
+          # precise reason is in the CI log.
           export MACOS_CERTIFICATE_NAME SIDECAR_ENT ENTITLEMENTS
           JOBS=8
 
@@ -734,98 +524,6 @@ jobs:
                 until codesign --force --sign "$MACOS_CERTIFICATE_NAME" --timestamp --options runtime --entitlements "$SIDECAR_ENT" "$f" >"/tmp/cs.$$.log" 2>&1; do
                   i=$((i + 1))
                   if [ "$i" -ge 4 ]; then echo "  ⚠ codesign skipped after 4 tries (continuing — non-framework Mach-O, throttle): $f" >&2; break; fi
-                  sleep $((i * 2))
-                done
-                rm -f "/tmp/cs.$$.log"
-              ' _ {}
-
-          echo "    Normalizing + signing nested *.framework bundles (PyInstaller layout)..."
-          # Ground truth from a failed run's structure dump: PyInstaller's frameworks
-          # are NOT flat — they are already versioned (Versions/<X.Y>/<name> is the
-          # real Mach-O, with a Versions/Current). The problem is that PyInstaller
-          # ALSO drops a DUPLICATE real binary (and real Resources/Headers) at the
-          # framework ROOT. A real Mach-O at the bundle root looks app-like while
-          # Versions/ looks framework-like, so codesign reports
-          #   "bundle format is ambiguous (could be app or framework)"
-          # and refuses to seal it — which is why notarization then reports
-          #   "The signature of the binary is invalid."
-          # Fix: normalize to the canonical framework layout — the root entries must
-          # be SYMLINKS into Versions/Current, and Versions/Current a symlink to the
-          # real version dir — then codesign can seal the framework cleanly. The real
-          # python.org Info.plist already present in the version dir is used as-is. A
-          # hard local `codesign --verify --deep --strict` gate means we never submit
-          # a framework Apple would reject (and dumps the structure if a guess is off).
-          while IFS= read -r -d '' fw; do
-            name="$(basename "$fw" .framework)"
-
-            # Discover the real version dir: a dir under Versions/ (not Current, not a
-            # stray A) that holds the real principal binary.
-            realver=""
-            shopt -s nullglob
-            for cand in "$fw"/Versions/*/; do
-              cn="$(basename "$cand")"
-              case "$cn" in Current) continue;; esac
-              if [ -f "$cand$name" ] && [ ! -L "${cand}$name" ]; then realver="$cn"; break; fi
-            done
-            shopt -u nullglob
-
-            if [ -n "$realver" ]; then
-              # Remove any stray Versions/A a prior run of this script created (it only
-              # ever held a synthesized Info.plist, never a binary), unless it IS the
-              # real version we just found.
-              if [ "$realver" != "A" ] && [ -d "$fw/Versions/A" ] && [ ! -f "$fw/Versions/A/$name" ]; then
-                rm -rf "$fw/Versions/A"
-              fi
-              # Versions/Current → real version (replace whatever is there).
-              rm -rf "$fw/Versions/Current"
-              ln -s "$realver" "$fw/Versions/Current"
-              # Root entries → symlinks into Versions/Current (drop the duplicate root
-              # binary; this is what clears the "ambiguous bundle" error).
-              for sub in "$name" Resources Headers Modules; do
-                if [ -e "$fw/Versions/$realver/$sub" ] && [ ! -L "$fw/$sub" ]; then
-                  rm -rf "$fw/$sub"
-                  ln -s "Versions/Current/$sub" "$fw/$sub"
-                fi
-              done
-              echo "      ↻ normalized framework layout: $fw (version $realver)"
-            fi
-
-            # Sign any non-principal nested Mach-O (.so/.dylib) inside the version first.
-            tgtver="${realver:+$fw/Versions/$realver}"; tgtver="${tgtver:-$fw}"
-            while IFS= read -r -d '' inner; do
-              case "$inner" in */"$name") [ -n "$realver" ] && [ "$inner" = "$fw/Versions/$realver/$name" ] && continue;; esac
-              file "$inner" | grep -q "Mach-O" || continue
-              codesign --force --sign "$MACOS_CERTIFICATE_NAME" --timestamp --options runtime "$inner" >/dev/null 2>&1 || true
-            done < <(find "$tgtver" -type f -print0 2>/dev/null || true)
-
-            # Seal the framework bundle (also signs the principal binary). HARD fail.
-            i=0
-            until codesign --force --sign "$MACOS_CERTIFICATE_NAME" --timestamp --options runtime "$fw" >/tmp/cs_fw.log 2>&1; do
-              i=$((i + 1)); if [ "$i" -ge 4 ]; then echo "::error::Failed to sign framework $fw"; cat /tmp/cs_fw.log; ls -laR "$fw" | head -120; exit 1; fi
-              sleep $((i * 2))
-            done
-
-            # Verify locally exactly how Apple's notary does. Never ship a bad seal.
-            if ! codesign --verify --deep --strict --verbose=2 "$fw" >/tmp/cs_vfy.log 2>&1; then
-              echo "::error::codesign --verify failed for framework $fw"; cat /tmp/cs_vfy.log
-              echo "---- framework structure ----"; ls -laR "$fw" | head -120
-              exit 1
-            fi
-            echo "      ✓ framework signed + verified: $fw"
-          done < <(find "$APP_NAME/Contents/Resources" -type d -name "*.framework" -print0 2>/dev/null || true)
-
-          echo "    Broad catch-all pass: force-signing EVERY remaining Mach-O under Resources..."
-          { find "$APP_NAME/Contents/Resources" -type f -print0 2>/dev/null || true; } \
-            | xargs -0 -P "$JOBS" -I {} bash -c '
-                f="$1"; [ -n "$f" ] || exit 0
-                case "$f" in
-                  */Contents/MacOS/FrontPorchAI*|*/Contents/Frameworks/*|*.framework/*) exit 0 ;;
-                esac
-                file "$f" | grep -qiE "mach-o|executable|shared library|dynamically linked" || exit 0
-                i=0
-                until codesign --force --sign "$MACOS_CERTIFICATE_NAME" --timestamp --options runtime --entitlements "$SIDECAR_ENT" "$f" >"/tmp/cs.$$.log" 2>&1; do
-                  i=$((i + 1))
-                  if [ "$i" -ge 4 ]; then echo "  ⚠ codesign skipped after 4 tries (continuing — throttle): $f" >&2; break; fi
                   sleep $((i * 2))
                 done
                 rm -f "/tmp/cs.$$.log"
