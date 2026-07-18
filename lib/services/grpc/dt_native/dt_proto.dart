@@ -103,7 +103,13 @@ class ProtoReader {
       case 1:
         _i += 8;
       case 2:
-        _i += readVarint();
+        // NOT `_i += readVarint()`: compound assignment reads the OLD _i
+        // before readVarint() advances it past the length bytes, leaving the
+        // reader 1-5 bytes short inside every skipped field. That misparse
+        // was the intermittent DATA_LOSS on Echo (DT's ~20KB model-metadata
+        // JSON is a skipped field) and killed every streamed generation.
+        final len = readVarint();
+        _i += len;
       case 5:
         _i += 4;
       default:

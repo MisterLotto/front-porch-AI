@@ -192,6 +192,26 @@ void main() {
       expect(r.files, ['a.ckpt', 'b_lora.safetensors', 'vae.ckpt']);
     });
 
+    test('skipping an unknown length-delimited field lands exactly past it', () {
+      // Regression: Draw Things' Echo replies carry a ~20KB model-metadata
+      // JSON in a field the client skips. ProtoReader.skip used
+      // `_i += readVarint()` — compound assignment reads the OLD offset
+      // before readVarint() advances past the length bytes, so the reader
+      // resumed 1-5 bytes short and parsed blob content as protobuf tags.
+      // That was the intermittent DATA_LOSS on connect and the reason every
+      // native generation dropped. The 0x2c bytes at the blob's tail decode
+      // as wire type 4, so this test throws if the bug ever comes back.
+      final blob = List<int>.filled(200, 0)..setRange(198, 200, [0x2c, 0x2c]);
+      final reply = EchoReply.decode([
+        0x0a, 0x02, ...'hi'.codeUnits, // message = "hi"
+        0x1a, 0xc8, 0x01, ...blob, // unknown field 3, len 200 (2-byte varint)
+        0x12, 0x06, ...'a.ckpt'.codeUnits, // files: "a.ckpt"
+        0x30, 0x01, // unknown varint field 6 (trailing, like real replies)
+      ]);
+      expect(reply.message, 'hi');
+      expect(reply.files, ['a.ckpt']);
+    });
+
     test('ImageGenerationRequest bytes match python', () {
       final req = ImageGenerationRequest(
         prompt: 'a porch at dusk',
