@@ -1,8 +1,10 @@
 # Sidecar Retirement Plan (the "sidecar-ectomy")
 
-**Status:** Phase 1 shipped behind fallback (PR #122). This document is the
-canonical plan — read it before touching any sidecar, its build steps, or its
-models. Maintainer-approved direction: eliminate every Python/PyInstaller
+**Status: COMPLETE (2026-07-18).** Every Python/PyInstaller sidecar is gone
+— sources deleted, Dart fallback paths removed, nightly build steps
+removed. See the Removal record at the bottom for what shipped and the two
+deliberate exceptions. The phase records below are kept as history.
+Maintainer-approved direction was: eliminate every Python/PyInstaller
 sidecar in favor of in-process Dart + `dart:ffi` against plain native
 libraries.
 
@@ -241,3 +243,44 @@ never touch. Per engine:
 Zero Python at runtime; `Sidecar.entitlements` deleted; release workflows lose
 all PyInstaller steps; bundle shrinks >1 GB; worst-case user migration cost is
 one Whisper model re-download + a few MB of Kokoro extras.
+
+## Removal record (2026-07-18, branch claude/sidecar-ectomy)
+
+Users field-confirmed all engines native in the no-Python Rawhide build, so
+the removal release shipped. What landed:
+
+- **Dart:** every sidecar spawn/fallback path deleted
+  (whisper_sidecar_transport.dart, kokoro_worker_pool.dart,
+  ONNXExpressionClassifier, DT `_runCli`), all `FP_*_SIDECAR` levers gone.
+  Piper's streaming/call-mode and web-speak paths — which had NEVER been
+  wired to sherpa — were unified onto the native engine.
+  VoiceManager re-keyed "installed" onto `.onnx.json`; installs fetch the
+  sherpa bundle eagerly instead of the unplayable rhasspy `.onnx`.
+- **Web mic** (the phase-3 blocker): captures raw PCM via Web Audio and
+  uploads 16 kHz WAV — no webm anywhere.
+- **EngineHealth** became a failure ledger (reportFailure); the Settings
+  Engine Status panel was removed at the maintainer's request (desktop +
+  web); the pre-release first-failure snackbar remains the loud surface.
+- **Cleanup UI** (playbook rule 4): "Reclaim Disk Space" in Settings →
+  Voice & Media + web Settings parity, backed by
+  `lib/services/legacy_model_cleanup.dart` (one scanner + one applier;
+  spares `sherpa/` dirs, piper `.onnx.json`, and the expression HF hub
+  cache, which the native engine still reads).
+- **Build:** Python sources + tools/dt-grpc-python deleted; nightly.yml and
+  scripts/build-macos.sh build only the Rust embed_server (+ libfpzip).
+
+**Deliberate exceptions (maintainer decisions, 2026-07-18):**
+1. `Sidecar.entitlements` KEPT for the Rust embed_server — it has always
+   shipped signed with that exact set, and entitlement changes are only
+   verifiable via a full signed build. Revisit at phase 5.
+2. `release.yml` / `beta-release.yml` NOT touched — they still reference
+   the deleted .py files and MUST be ported (nightly.yml is the reference)
+   before the next beta cut or Rawhide→main promotion. nightly.yml must
+   also be synced to main immediately (the cron runs main's copy).
+
+**Accepted degradation:** hand-made custom Piper voices (no sherpa
+re-export) can no longer play; they surface a clear error instead of
+silently using a binary that no longer exists.
+
+Phase 5 (fold the Rust embed_server into in-process ort) remains optional
+and unscheduled.

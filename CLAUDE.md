@@ -82,7 +82,7 @@ lib/
 │   ├── embedding_sidecar.dart   # Rust subprocess manager for ONNX embeddings
 │   ├── memory_service.dart      # RAG memory extraction and retrieval
 │   ├── tts_service.dart         # TTS orchestration (Kokoro, ElevenLabs, OpenAI, Piper)
-│   ├── stt_service.dart         # Whisper STT via Python subprocess
+│   ├── stt_service.dart         # Whisper STT via in-process sherpa-onnx
 │   ├── backup_service.dart      # Automatic local DB backups + restore
 │   ├── hardware_service.dart    # GPU detection, VRAM estimation
 │   ├── backend_manager.dart     # KoboldCpp lifecycle (start/stop/restart)
@@ -138,14 +138,9 @@ lib/
 - **StorageService** (`lib/services/storage_service.dart`): Data directories. Beta builds use `FrontPorchAI-Beta/` with `beta_` prefixed SharedPreferences keys.
 - **EmbeddingSidecar** (`lib/services/embedding_sidecar.dart`): Manages the Rust `embed_server` subprocess for ONNX embeddings (RAG memory).
 
-### Python Sidecars
+### Native Engines (no Python)
 
-TTS and STT use Python subprocesses communicating via JSON over stdin/stdout:
-- `kokoro_tts.py` — Kokoro TTS engine
-- `whisper_stt.py` — Whisper speech-to-text
-- `embed_server.py` — Fallback embedding server (Rust binary preferred)
-
-Protocol: read JSON from stdin → process → write JSON result to stdout → errors to stderr with non-zero exit.
+Every Python sidecar was retired in 2026-07 (docs/design/sidecar-retirement.md — read it before touching any engine). TTS (Kokoro/Piper via sherpa-onnx), STT (Whisper via sherpa-onnx), expression classification (onnxruntime), and Draw Things (pure-Dart gRPC + fpzip FFI) all run **in-process**. The only helper subprocess is the Rust `embed_server` (RAG embeddings). Engine successes/failures report to `EngineHealth` (`lib/services/engine_health.dart`); pre-release builds surface the first unexpected failure loudly. Do not reintroduce Python at runtime.
 
 ### Database
 
@@ -321,7 +316,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 ### Verification
 - **ALWAYS run `flutter analyze` after making code changes** — the project is at 0 warnings on the active rule set. New code must not introduce warnings. Never claim changes are "verified" without running it. Variables declared inside `try` blocks are not accessible outside — declare them before the `try` with defaults.
 - **Do NOT bulk-run `dart format` / `flutter format` on whole files.** The codebase is mid-migration to the Dart 3.11 "tall style" formatter, so running the new formatter on a not-yet-migrated file rewraps **hundreds of unrelated lines** (and can even introduce lint errors — e.g. splitting a one-line `if (x) return;` trips `curly_braces_in_flow_control_structures`), burying your real change in churn. Match the surrounding style **by hand** in the regions you edit; the Edit tool already preserves it. A whole-file reformat is its own intentional, isolated commit — never a side effect of a feature change.
-- **Cross-platform verification is mandatory.** Front Porch AI is a Windows + macOS + Linux desktop app. Every non-trivial change must be checked (or have an explicit plan) so it does not regress on any platform — especially file paths, process spawning, Python sidecars, and anything touching `dart:io` or native binaries.
+- **Cross-platform verification is mandatory.** Front Porch AI is a Windows + macOS + Linux desktop app. Every non-trivial change must be checked (or have an explicit plan) so it does not regress on any platform — especially file paths, process spawning, native libraries (sherpa-onnx, onnxruntime, libfpzip), and anything touching `dart:io` or native binaries.
 - **Realism & Needs parity is mandatory** (see the dedicated section). Any change to the Realism Engine or Needs simulation must keep 1:1 and group behavior consistent unless explicitly approved otherwise.
 - **Because the user cannot review code**, treat every change as if it will be accepted without scrutiny. Leave the codebase strictly cleaner (or at minimum no worse) than you found it.
 
@@ -347,8 +342,8 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 
 ### Cross-Platform Compatibility (critical)
 - **Never hardcode Unix paths** (`/tmp`, `/Users/`, `~/`). Use `Directory.systemTemp`, `getApplicationDocumentsDirectory()`, `StorageService.rootPath`, or `path_provider` + `package:path/path.dart` with `p.join()`.
-- **Python sidecars** (`kokoro_tts.py`, `whisper_stt.py`, `piper_entry.py`): handle `python` vs `python3` (and `py` launcher on Windows); `;` vs `:` for `PYTHONPATH`/`PATH`; `HOME` (Unix) vs `USERPROFILE` (Windows). Prefer PyInstaller one-dir bundles; fall back to raw `python + .py` only in dev.
-- **Process management**: use `Process.start(..., includeParentEnvironment: true)`; expect `process.kill()` differences (Unix SIGTERM vs Windows TerminateProcess).
+- **Native libraries** (sherpa-onnx, onnxruntime, libfpzip): the sherpa/ort libs ship inside their pub packages for all three platforms; libfpzip is macOS-only (Draw Things is macOS-only software). Never assume a dylib/so/dll path — resolve via the existing helpers (`sherpa_runtime.dart`, `dt_fpzip.dart`).
+- **Process management** (the Rust `embed_server`): use `Process.start(..., includeParentEnvironment: true)`; expect `process.kill()` differences (Unix SIGTERM vs Windows TerminateProcess).
 - **Before marking a task "done"**, either run the affected feature on at least two platforms, or explicitly document the platform-specific limitation + mitigation.
 
 ### Dart conventions
@@ -386,11 +381,6 @@ When you add a new service or model used from 3+ locations and not purely intern
 - Use `AsyncNotifier` for async operations.
 - `ref.watch` for reactive dependencies, `ref.read` for one-time actions.
 - Proper error handling with `AsyncValue`.
-
-### Python sidecar protocol
-- Read JSON from stdin → process → write JSON to stdout → errors to stderr with non-zero exit.
-- Always validate input JSON; catch all exceptions; exit non-zero on failure.
-- Never write errors to stdout (breaks JSON parsing).
 
 ### Error handling
 - Never silently swallow errors; always log or surface to the user.
