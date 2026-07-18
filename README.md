@@ -309,17 +309,21 @@ Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)
 
 ---
 
-## 🔓 Why Does This Exist?
+## 🕯️ Why Does This Exist?
 
-Backyard AI built a genuinely good local LLM companion app. Then they killed it — no warning, pivoted to a cloud subscription, and left users with characters stuck in a proprietary `.byaf` archive format with nowhere to go.
+If you've ever played Diablo, this line might sound familiar: **Stay awhile and listen.** 😄
 
-Front Porch AI was built directly in response to that. The goal: an open-source, local-first alternative that **cannot** be yanked out from under you by a pivot to SaaS. We even support importing directly from `.byaf` files so your characters can escape.
+After five months and more than 1,600 commits, Front Porch AI is at a place where calling it 1.0 doesn't feel like a lie. Not a victory lap. Just… ready enough.
 
-Starting with **v0.9.0**, this project is licensed under **AGPL-3.0** — meaning anyone who hosts a modified version as a service must open-source their changes too. It stays open, even in a world of cloud-hosted forks.
+When Backyard's desktop app went away, a lot of people lost more than software — they lost the room they actually sat in at night. The community didn't vanish so much as it broke into pieces. Some went to SillyTavern. Some stayed through the SaaS churn. Some got tired and left AI RP entirely. That still sits with me. On **February 14, 2026**, I made the first push to this repository because I didn't want that spark to just… end. Front Porch AI is a playful nod to Backyard — not a claim that it can replace what people lost, only that there could still be a warm place to sit with your characters, on your own machine.
 
-> **Note:** v0.8.x and earlier are licensed under GPLv3.
+I didn't get here alone, and I wouldn't have. When I started, I didn't know how to "vibe code." I didn't know anything about agentic coding. Half the time I was learning out loud in public, breaking things, fixing them, and wondering if any of it was going to matter. The **DreamersAI Discord** was there every step of the way — encouragement when it was quiet, guidance when I was lost, help when I was in over my head. A real heartfelt thank you to **PapaOak**, **Pacmanincarnate**, **Vanta**, and every member of that community who showed up. You were there in the hard stretches when I wanted to step away. You were there for the small bright ones too. The first GitHub star landed on February 21, 2026 — one week after the first commit — and it felt bigger than it probably looked from the outside. It never felt like a metric. It felt like someone else sitting on the porch with me. (We're at 49 as I write this.)
 
-> 🎩 Hat tip to the Backyard AI team for at least open-sourcing the `.byaf` format on their way out.
+I know what a lot of you are hoping for when you show up. Not hype. Not another almost. **A home that stays.** Characters that feel like they're there. A neighborhood that doesn't get locked behind a door you can't open anymore.
+
+That's why the license is part of the promise: from **v0.9.0** on, Front Porch AI is **AGPL-3.0** — anyone who hosts a modified version as a service must open-source their changes, so it stays open even in a world of cloud-hosted forks. And your characters can come home too: the app imports directly from Backyard's `.byaf` archives.
+
+> 🎩 Hat tip to the Backyard AI team for open-sourcing the `.byaf` format on their way out. (v0.8.x and earlier are GPLv3.)
 
 ---
 
