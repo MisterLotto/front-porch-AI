@@ -2,14 +2,34 @@
 
 These notes feed the in-app "Update Available" dialog for stable releases on `main`.
 
-## Highlights
+## Highlights — v1.0
 
-- 🔌 **Character creation now works on local KoboldCpp** — On the native KoboldCpp backend the AI Character Creator (and the Realism Engine's behind-the-scenes evaluations) could come back empty or run away repeating itself, so characters generated blank or garbled. Front Porch now talks to KoboldCpp through its chat API, so the model gets its proper instruct template and generates reliably — exactly like the cloud / oMLX backends. Making characters and running Realism on a local model just works again.
+Front Porch AI hits **1.0** — the biggest update ever. Everything below has been proving itself on the nightly builds for months and lands in stable at once.
 
-- 🎨 **Generate character avatars on the local backend too** — In the Creator's Review step, "Generate Avatar" was hidden whenever your chat model was KoboldCpp — a leftover from when KoboldCpp was mistakenly treated as the image source. Avatars actually come from the image generator you pick in Image Studio (Draw Things / A1111 / a remote API), which is independent of your chat model — so generating one now works no matter which LLM backend you're on.
+- 🏡 **The Stoop — a community character hub, built right in** — browse, share, and download character & group cards without leaving the app (or from any browser at hub.frontporchai.app). Whole group casts travel with their lorebooks and realism state intact. Opt-in, 18+, and the rest of the app stays 100% local.
 
-- 🖼️ **Image Studio: typing no longer comes out backwards** — In the custom image generator, typing into the Prompt and Negative Prompt fields inserted each character at the *start*, so your prompt ended up reversed. Fixed — text goes in the right direction, and editing mid-prompt keeps the cursor where you put it.
+- 📔 **Characters keep a real diary now (The Journal)** — promises made, things they learned about you, moments that mattered — each memory stamped with the feeling behind it. Strong memories linger; faint ones resurface when the moment calls them back. Read it, edit it, pin the ones that matter. Nothing ever leaks between chats.
 
-- 🧹 **Cleaner large-model loading** — Loading a big-vocabulary model no longer floods the log with GGUF parsing errors, and the app reads those models' architecture correctly now, so VRAM and layer estimates are a touch more accurate.
+- 🌱 **Growth Rings — character growth you can actually see** — instead of silent personality rewrites, every real change becomes a visible "ring" with receipts you can tap to jump to the moment it happened. Recurring growth becomes permanent; stale growth fades into a viewable past.
+
+- 🎭 **One chat, a cast that changes** — turn any solo chat into a group in place with `/join`, wave someone off with `/exit` (undo included), and collapse back to a clean 1:1 — realism, needs, and memory carry across both ways.
+
+- 🧭 **Lorebooks work the way their authors wrote them** — import SillyTavern / Chub / NovelAI / AgnAI / RisuAI books through a preview wizard; conditional triggers, timers, chains, variety groups, and stateful macros (`{{setvar}}`, `{{roll:d20}}`…) all actually run.
+
+- 🖼️ **The Image Studio was rebuilt** — pick a subject and go; generate full **expression packs** from one portrait (with an AI vision quality check), paint the current scene with `/image` right in chat, use reference images with a denoise slider, and connect **ComfyUI** with zero node graphs.
+
+- 📸 **Send your character a photo — they actually see it** — vision models react to your pictures in character; any GGUF can gain sight via its mmproj file; and a fully local Photo Understanding helper covers text-only models. No cloud.
+
+- 📱 **The web & phone app was rebuilt** — a proper installable app in the same warm look: chat, characters, stories, images, and the full Stoop from your phone. Much faster over slow connections, and it heals itself after your phone sleeps.
+
+- 🛋️ **The warm-porch redesign** — the whole app now speaks one cozy design language (goodbye neon accents), and light mode finally looks right everywhere.
+
+- 🧠 **The Realism Engine got deeper and far more reliable** — readings arrive as structured tool calls on capable models (chips stop stalling), characters hear their state as natural language instead of stat dumps, group chats match 1:1 exactly (including genuine hostility and needs catastrophes), intimacy recovery feels human, and self-chosen goals become real quests with steps.
+
+- ☕ **Your character keeps living while you're away** — turn on Dynamic Responses (or type `/afk`) and they'll quietly get on with their day — a meal, a nap, a shower — with time and needs following along.
+
+- ⚡ **Faster, and honest about what it's doing** — long local chats reply dramatically sooner (reading phase ~15s → ~1s), the status bar shows real progress ("Reading prompt — 43%"), your sampler settings and stop strings actually reach the model, and thinking models genuinely think on local KoboldCpp.
+
+- 💾 **Smarter local backups replaced Cloud Sync** — rolling 30-minute + daily snapshots written by the database engine itself, with one-click restore. Old PCs without AVX2 are now supported automatically, too.
 
 For the complete list, see the GitHub release notes.
