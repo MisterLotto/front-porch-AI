@@ -18,114 +18,27 @@
 > Every porch is really about who shows up to it. **The Stoop** is a community character hub built right into the app — browse, share, and **download character & group cards without ever leaving Front Porch.** No browser, no separate website, no fragile copy-paste imports. Featured & mod-picked cards, follow the creators you love, upvote/downvote, and one-tap download straight into your library. Whole **group casts** travel too — members, avatars, lorebooks, **and** the pre-seeded realism/needs state all survive the round-trip, not just single cards. It's also on the web at **[hub.frontporchai.app](https://hub.frontporchai.app)** — browse as a guest, no install needed.
 > It's **opt-in, account-gated, strictly 18+** (NSFW hidden by default), and **fully open-source (AGPL-3.0)** — while the rest of the app stays 100% local. Other apps have in-app hubs, but the closed ones eventually go paid-SaaS (Backyard AI killed its desktop app to do exactly that); The Stoop is the open, local-first porch that shares living casts, not just cards. **Come sit a while → [The Stoop](#-the-stoop--built-in-community-character-hub).**
 
-💬 **[Join the Discord](https://discord.gg/e4tET6rpdv)** — questions, feedback, and hanging out welcome.
+## 🕯️ Why Does This Exist?
 
-### 🌟 Community Showcase
+If you've ever played Diablo, this line might sound familiar: **Stay awhile and listen.** 😄
 
-Front Porch is growing a small companion ecosystem. Big thanks to community members building tools that integrate deeply.
+After five months and more than 1,600 commits, Front Porch AI is at a place where calling it 1.0 doesn't feel like a lie. Not a victory lap. Just… ready enough.
 
-**Character Card Forge** by [@FrozenKangaroo](https://github.com/FrozenKangaroo) — A companion editor with strong integration, including emotion image export and seeding initial Realism Engine state.
+When Backyard's desktop app went away, a lot of people lost more than software — they lost the room they actually sat in at night. The community didn't vanish so much as it broke into pieces. Some went to SillyTavern. Some stayed through the SaaS churn. Some got tired and left AI RP entirely. That still sits with me. On **February 14, 2026**, I made the first push to this repository because I didn't want that spark to just… end. Front Porch AI is a playful nod to Backyard — not a claim that it can replace what people lost, only that there could still be a warm place to sit with your characters, on your own machine.
 
-[Check it out →](https://github.com/FrozenKangaroo/Character-Card-Forge)  
-If you use it, a star would mean a lot to the developer.
+I didn't get here alone, and I wouldn't have. When I started, I didn't know how to "vibe code." I didn't know anything about agentic coding. Half the time I was learning out loud in public, breaking things, fixing them, and wondering if any of it was going to matter. The **[DreamersAI Discord](https://discord.gg/e4tET6rpdv)** was there every step of the way — encouragement when it was quiet, guidance when I was lost, help when I was in over my head. A real heartfelt thank you to **PapaOak**, **Pacmanincarnate**, **Vanta**, and every member of that community who showed up. You were there in the hard stretches when I wanted to step away. You were there for the small bright ones too. The first GitHub star landed on February 21, 2026 — one week after the first commit — and it felt bigger than it probably looked from the outside. It never felt like a metric. It felt like someone else sitting on the porch with me. (We're at 49 as I write this.)
 
-> **Note:** This community tool uses direct database access for its advanced features. It can be impacted by future schema changes.
+I know what a lot of you are hoping for when you show up. Not hype. Not another almost. **A home that stays.** Characters that feel like they're there. A neighborhood that doesn't get locked behind a door you can't open anymore.
+
+That's why the license is part of the promise: from **v0.9.0** on, Front Porch AI is **AGPL-3.0** — anyone who hosts a modified version as a service must open-source their changes, so it stays open even in a world of cloud-hosted forks. And your characters can come home too: the app imports directly from Backyard's `.byaf` archives.
+
+> 🎩 Hat tip to the Backyard AI team for open-sourcing the `.byaf` format on their way out. (v0.8.x and earlier are GPLv3.)
+
+---
 
 <p align="center">
   <img src="docs/screenshots/home_new.png" width="800" alt="Front Porch AI — Character Library">
 </p>
-
----
-
-## 🆕 What's New in v1.0
-
-v1.0 is the largest release in Front Porch AI's history — everything that has been proving itself on the Rawhide nightlies since v0.9.9.1.3, promoted to stable at once. The highlights, by theme:
-
-**🏡 The Stoop — a built-in community character hub**
-
-- Browse, share, and download character & group cards from right inside the app — featured and mod-picked cards, search and tag filters, follow creators, upvote/downvote, one-tap download.
-- **Whole group casts round-trip losslessly**: members, avatars, lorebooks, **and** the pre-seeded Realism/Needs state. No other hub carries a living cast like this.
-- **Now on the web too**: [hub.frontporchai.app](https://hub.frontporchai.app) — browse as a guest with no install; downloads come out as real card files any compatible app can read.
-- Credit where it's due: an optional **"Original creator"** field shows *"uploaded by you · created by them"* everywhere, shared cards can be **updated in place** (downloaders see v2, v3, …), vote/download counts tick up **live**, and your inbox is sorted into Notifications vs. Moderator chat.
-- Opt-in, account-gated, **strictly 18+** (NSFW hidden by default), optional two-factor auth — and the rest of the app stays 100% local.
-
-**📔 The Journal — memory with feelings**
-
-- Characters keep a real, per-chat **diary**: the promises made, what they learned about you, the moments that mattered — each stamped with the emotion behind it.
-- Memories carry *heat*: strong ones barely fade, faint ones cool off and resurface only when the moment calls them back — so recall feels emotional, not mechanical.
-- Read the diary, edit or pin entries, plant your own, and tap a memory's receipt to **jump to the exact line** it came from. Prefer control? Flip on review-first and approve updates with checkboxes.
-- **Memory never leaks between chats** — a new conversation truly starts fresh. (Replaces the old chat summaries and learned-facts systems.)
-
-**🌱 Growth Rings — character growth you can actually see**
-
-- Character Evolution was rebuilt from the ground up: instead of the AI silently rewriting a personality (and slowly making it drift), each small real change — a new habit, a softened stance, a scar from a painful scene — becomes its own **ring**, with receipts you can tap to jump to the message that earned it.
-- Rings that keep showing up grow stronger until they're permanent; ones that stop mattering fade into a viewable past. Pinned rings are truly permanent.
-- A Growth timeline lives in the sidebar (and the web app): pin, edit, retire, or plant a ring yourself; optional "review growth before it applies" mode; existing chats convert automatically.
-
-**🎭 One chat, a cast that changes**
-
-- 1:1 and group are the same chat now. Turn a solo chat into a group **in place** with `/join --full`, bring characters in and out with `/join` / `/exit` (goodbye narration + one-tap undo), force a turn with `/speak`, set the order with `/turnorder`, promote a scene guest with `/promote`.
-- Collapse back to a clean 1:1 with the **original** character — no forking, no orphan copies. Realism, needs, memory, growth, objectives, and expressions carry across the conversion **both ways**.
-
-**🧭 Lorebooks got a real engine — full SillyTavern-grade behavior**
-
-- Import any lorebook (SillyTavern, Chub, NovelAI, AgnAI, RisuAI) through a proper preview wizard — see entry counts, token estimates, and honest warnings *before* committing — and drop a book into a World, characters, a group, or **one chat only**.
-- The engine runs everything their authors wrote: conditional & regex triggers, scan depth, exact prompt placement, sticky/cooldown timers, chained entries, variety groups, and a token budget so giant books can't crowd out the conversation. Exports round-trip perfectly.
-- A grown-up **macro toolbox**: `{{setvar}}`/`{{getvar}}` (state that persists), `{{random:…}}`, `{{roll:d20}}`, conversation and time macros — so interactive, stateful cards work the way they were written.
-
-**🖼️ Image Studio — rebuilt, and images everywhere**
-
-- The Studio opens on one clean canvas: pick a **Subject** (freeform, the character you're chatting with, or your persona) and the prompt auto-fills, ready to tweak. Everything technical tucks into a collapsible settings panel.
-- **Expression packs**: paint a full matching emotion set (8 or 28 expressions) from one base portrait — live grid, re-roll the misses, one-tap import. An optional **AI vision check** compares every image against the base portrait before you import.
-- Type **`/image`** in any chat and the current scene is painted as a picture bubble (variants: `/image me`, `/image char`, `/image raw …`) — with a live in-progress preview instead of a frozen spinner, and an optional review card so you see the prompt first.
-- Drop in a **reference image** and paint your prompt over it with a denoise slider; a **LoRA compatibility guard** keeps mismatched model families out of your way; Draw Things gains native LoRA support; and the image **Edit** mode keeps its own settings so tuning an edit never disturbs your regular generation.
-- **ComfyUI joins** A1111, Forge, SDNext, and Draw Things — auto-discovered, no node graphs, same simple dropdowns as every other backend.
-
-**📸 Your characters can see photos now**
-
-- A 📷 attach button drops a photo straight into the chat — vision-capable models genuinely look at it and react in character, and the character quietly remembers what it showed.
-- Any local GGUF can gain vision by attaching its **mmproj projector file** in Settings; vision detection on LM Studio and oMLX now asks the server directly instead of guessing.
-- No vision model at all? **Photo Understanding** (a one-time ~515 MB local helper) reads the photo entirely on your machine and hands the character a detailed description — no cloud, nothing else to install.
-
-**📱 The web & phone app was rebuilt**
-
-- Front Porch now runs in your browser and on your phone as a proper installable app (PWA) in the same warm-porch look — chat, characters, stories, image generation, and the full Stoop hub included.
-- Much faster over slow connections (right-sized thumbnails, smart caching), and it heals itself after your phone sleeps instead of showing a frozen chat.
-- Web login management built in: change or recover your login, sign out all devices — and turning the web server on can never lock the desktop app out.
-
-**🛋️ The warm-porch redesign**
-
-- The whole app — sidebar, home screen, settings, wizards, Porch Stories, Image Studio, dialogs — now speaks one cozy design language (terracotta / honey / amber instead of the old neon accents), and **light mode finally looks right everywhere**.
-- The chat sidebar's nine bolted-on sections became three tidy groups: 🎭 Character State, 📖 Journal & Memory, and 🎲 Story Tools.
-
-**🧠 Realism & Needs — deeper, and dramatically more reliable**
-
-- On models that support it (including modern local models like Qwen3), the engine's readings now arrive as **structured tool calls** instead of being fished out of prose — the single most fragile step in the engine, fixed at the source. A sidebar pill shows whether your current model supports it; models that can't are detected automatically and keep the text fallback.
-- Characters get their state as **natural language** ("her stomach keeps growling; she hasn't eaten since morning") instead of raw stat dumps — no more immersion-breaking "My hunger at 41…" recitals — and quiet moments stay quiet.
-- **Group parity everywhere**: group members feel needs and bonds on their own rhythm exactly like 1:1, can genuinely dislike you (hostility no longer flattens to neutral), and regenerating/swiping/deleting no longer skews anyone's state. Needs **catastrophes** are back — run a need to zero and something real happens in the very next reply.
-- Intimacy recovery works like a human being now (no more permanently cold partners), peak desire tips over naturally without stage direction, fresh chats start with a truly clean slate, and warm characters read warm from turn one.
-- **AFK**: turn on Dynamic Responses and your character keeps living while you're away — a meal, a nap, a shower — with time and Needs moving to match (`/afk` on demand).
-- **Quests with steps**: when a character genuinely wants something, that goal becomes a real main quest with a 5-step plan they actively pursue — and finished quests now properly complete so the next one can begin.
-
-**⚡ Faster, and honest about what it's doing**
-
-- Long chats got dramatically faster on local models — a typical reply's "reading" phase dropped from ~15 seconds to about 1 second on real hardware once a conversation fills the context window.
-- The generation status bar tells the truth: "Reading prompt — 1.8K / 4.2K tokens (43%)" with a real progress bar, on KoboldCpp, oMLX, **and** LM Studio (the web app shows the same live status).
-- Your sampler settings **actually reach the model** now (Min-P, Repeat Penalty, XTC, Dynamic Temperature were being silently dropped) — plus new Top-P, Top-K, and DRY controls. Custom stop strings are finally sent too.
-- **Thinking models genuinely think on local KoboldCpp** — flip Request Reasoning on and Qwen3, the newest Gemma, and friends show their reasoning in a collapsible block, just like the remote APIs.
-- Older PCs without AVX2 are supported automatically (the app fetches the compatible build), and retrieved memories can no longer crowd the character card out of the prompt.
-
-**💾 Cloud Sync retired → smarter local backups**
-
-- Cloud Sync was removed (it could occasionally resurrect deleted data). The replacement: **two-tier rolling local backups** — 30-minute snapshots plus one per day for 7 days — written by the database engine itself so a backup can never be silently broken, with one-click restore.
-- Moving between app versions no longer traps you on a "Database Issue Detected" screen, and chat saving is self-healing.
-
-**🧹 Also in this release**
-
-- Removed the built-in Chub / AI Character Cards webview browser (it misbehaved on some systems and opened an unmoderated pipe into the app) — the **Import** button and **The Stoop** cover it, and the app got slimmer.
-- Mass-delete characters and folder purges (with a type-DELETE confirmation), library sorting that works *and* persists, file dialogs that remember where you were, dialogue highlighting for „…“ «…» 「…」 and friends, and a Generate-reply button (⌘R / Ctrl+R) after deleting a response.
-
-For the complete story, see the [release notes](https://github.com/linux4life1/front-porch-AI/releases).
 
 ---
 
@@ -309,30 +222,6 @@ Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)
 
 ---
 
-## 🕯️ Why Does This Exist?
-
-If you've ever played Diablo, this line might sound familiar: **Stay awhile and listen.** 😄
-
-After five months and more than 1,600 commits, Front Porch AI is at a place where calling it 1.0 doesn't feel like a lie. Not a victory lap. Just… ready enough.
-
-When Backyard's desktop app went away, a lot of people lost more than software — they lost the room they actually sat in at night. The community didn't vanish so much as it broke into pieces. Some went to SillyTavern. Some stayed through the SaaS churn. Some got tired and left AI RP entirely. That still sits with me. On **February 14, 2026**, I made the first push to this repository because I didn't want that spark to just… end. Front Porch AI is a playful nod to Backyard — not a claim that it can replace what people lost, only that there could still be a warm place to sit with your characters, on your own machine.
-
-I didn't get here alone, and I wouldn't have. When I started, I didn't know how to "vibe code." I didn't know anything about agentic coding. Half the time I was learning out loud in public, breaking things, fixing them, and wondering if any of it was going to matter. The **DreamersAI Discord** was there every step of the way — encouragement when it was quiet, guidance when I was lost, help when I was in over my head. A real heartfelt thank you to **PapaOak**, **Pacmanincarnate**, **Vanta**, and every member of that community who showed up. You were there in the hard stretches when I wanted to step away. You were there for the small bright ones too. The first GitHub star landed on February 21, 2026 — one week after the first commit — and it felt bigger than it probably looked from the outside. It never felt like a metric. It felt like someone else sitting on the porch with me. (We're at 49 as I write this.)
-
-I know what a lot of you are hoping for when you show up. Not hype. Not another almost. **A home that stays.** Characters that feel like they're there. A neighborhood that doesn't get locked behind a door you can't open anymore.
-
-That's why the license is part of the promise: from **v0.9.0** on, Front Porch AI is **AGPL-3.0** — anyone who hosts a modified version as a service must open-source their changes, so it stays open even in a world of cloud-hosted forks. And your characters can come home too: the app imports directly from Backyard's `.byaf` archives.
-
-> 🎩 Hat tip to the Backyard AI team for open-sourcing the `.byaf` format on their way out. (v0.8.x and earlier are GPLv3.)
-
----
-
-## 💬 Community
-
-- **Discord**: [Join our server](https://discord.gg/e4tET6rpdv)
-
----
-
 ## 🤝 Contributing
 
 Pull requests are welcome! If you're a dev reading this far down, here's what you need to know:
@@ -392,7 +281,18 @@ Front Porch AI is built by [@linux4life1](https://github.com/linux4life1), with 
 | **PacmanIncarnate** | Bug Testing, UI/Feature Suggestions |
 | **SunTzucious** | Beta Testing |
 
-…and [@FrozenKangaroo](https://github.com/FrozenKangaroo) for **Character Card Forge** (see the Community Showcase above). Want to pitch in? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+…and [@FrozenKangaroo](https://github.com/FrozenKangaroo) for **Character Card Forge** (see the Community Showcase below). Want to pitch in? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## 🌟 Community Showcase
+
+Front Porch is growing a small companion ecosystem. Big thanks to community members building tools that integrate deeply.
+
+**Character Card Forge** by [@FrozenKangaroo](https://github.com/FrozenKangaroo) — A companion editor with strong integration, including emotion image export and seeding initial Realism Engine state.
+
+[Check it out →](https://github.com/FrozenKangaroo/Character-Card-Forge)  
+If you use it, a star would mean a lot to the developer.
+
+> **Note:** This community tool uses direct database access for its advanced features. It can be impacted by future schema changes.
 
 ## 📄 License
 
