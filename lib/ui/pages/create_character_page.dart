@@ -62,6 +62,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   /// the final step. The panel needs a saved card before any image lands.
   CharacterCard? _savedCard;
 
+  /// The panel is mid-generation — Done is locked so leaving can't silently
+  /// drop work the engine is still finishing.
+  bool _panelBusy = false;
+
   // ── Personality (Step 1) ──
   final _descriptionController = StyledTextController(preset: StyledTextPreset.macros);
   final _personalityController = StyledTextController(preset: StyledTextPreset.macros);
@@ -1657,6 +1661,9 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                 card: card,
                 ensureCardSaved: () async => card,
                 initialPrompt: _portraitPromptSeed(card.name),
+                onBusyChanged: (busy) {
+                  if (mounted) setState(() => _panelBusy = busy);
+                },
               ),
               const SizedBox(height: 24),
               Center(
@@ -1664,7 +1671,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                   width: 280,
                   height: 52,
                   child: ElevatedButton.icon(
-                    onPressed: _finishAndClose,
+                    onPressed: _panelBusy ? null : _finishAndClose,
                     icon: const Icon(Icons.check, size: 20),
                     label: const Text('Done', style: TextStyle(fontSize: 16)),
                     style: ElevatedButton.styleFrom(
@@ -1851,6 +1858,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
     setState(() {
       _currentStep = 0;
       _savedCard = null;
+      _panelBusy = false;
       _nameController.clear();
       _descriptionController.clear();
       _personalityController.clear();

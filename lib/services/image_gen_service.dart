@@ -266,10 +266,10 @@ class ImageGenService extends ChangeNotifier {
     // Remote APIs ignore them (no seed/denoise support on those endpoints).
     int? seed,
     double? denoise,
-    // Which Studio surface asked. Create (default) keeps every existing path
-    // byte-identical; Edit routes an edit-capable model to edit-conditioning.
-    // No caller passes Edit until the Create/Edit tabs land (Phase 3), so this
-    // is dormant and non-breaking today.
+    // Which surface asked. Create (default) keeps every existing path
+    // byte-identical; Edit routes an edit-capable model to edit-conditioning
+    // and resolves the EDIT model slot. Passed by the Studio's Edit tab and
+    // by edit-first expression packs (Studio dialog + the creator panel).
     StudioIntent intent = StudioIntent.create,
     // Edit-only: how strongly the instruction changes the reference (higher =
     // more change). Overrides the edit profile's default strength when set, so

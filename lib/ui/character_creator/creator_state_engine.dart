@@ -120,6 +120,14 @@ extension CreatorEngine on CreatorState {
         needsDecayHygiene: needsDecayHygiene,
         needsDecayComfort: needsDecayComfort,
       );
+      // Save is MULTI-SHOT now (the Portrait & Avatars panel persists before
+      // it generates; Save & Finish updates the same card), so identity
+      // fields the wizard doesn't own MUST carry over — rebuilding without
+      // them would mint a fresh stableId on every save and silently break
+      // export/re-import identity (Grok review finding, 2026-07-17).
+      final prior = card.frontPorchExtensions;
+      fpExt.stableId = prior?.stableId;
+      fpExt.favoriteAvatarId = prior?.favoriteAvatarId;
       // Stable tracking UUID: ensures later realism/needs edits update this
       // character in place instead of decoupling it from its DB row.
       fpExt.ensureStableId();

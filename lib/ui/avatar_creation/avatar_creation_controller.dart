@@ -154,6 +154,9 @@ class AvatarCreationController extends ChangeNotifier {
   bool _disposed = false;
   Set<String> _existingEmotions = const {};
 
+  /// The one in-flight first-persist (see _ensureCard's single-flight guard).
+  Future<bool>? _ensuring;
+
   bool get running =>
       stage != AvatarRunStage.idle &&
       stage != AvatarRunStage.done &&
@@ -409,6 +412,10 @@ class AvatarCreationController extends ChangeNotifier {
         );
         return;
       }
+      // Deliberately applied even when cancel arrived mid-generation: the
+      // same contract as the pack session, whose in-flight slot "finishes,
+      // then stops" and KEEPS the result — cancel skips future work, it
+      // never discards an image the user already waited for.
       await applyPortrait(bytes);
       if (_disposed) return;
       base = bytes;

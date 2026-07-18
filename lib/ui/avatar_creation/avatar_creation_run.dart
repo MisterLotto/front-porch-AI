@@ -115,11 +115,18 @@ extension _AvatarCreationRunSteps on AvatarCreationController {
     };
   }
 
-  Future<bool> _ensureCard() async {
-    if (_card?.dbId != null) {
-      if (_existingEmotions.isEmpty) await _loadExistingEmotions();
-      return true;
+  /// Single-flight: two quick user actions before the first persist lands
+  /// (upload + ZIP, say) must NOT both see a null dbId and addCharacter
+  /// twice — every concurrent caller awaits the ONE in-flight save.
+  Future<bool> _ensureCard() {
+    if (_card?.dbId != null && _ensuring == null) {
+      return _loadExistingEmotions().then((_) => true);
     }
+    return _ensuring ??= _ensureCardOnce().whenComplete(() => _ensuring = null);
+  }
+
+  Future<bool> _ensureCardOnce() async {
+    if (_card?.dbId != null) return true;
     final c = await ensureCardSaved();
     if (_disposed) return false;
     if (c == null || c.dbId == null) return false;

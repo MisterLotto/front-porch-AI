@@ -5219,3 +5219,7 @@ Reason: review step's left rail = the shared panel via ensureCardSaved (saveChar
 
 Web UI: deliberately untouched — web creators stay upload-only (maintainer-approved deferral, 2026-07-16).
 Gates: flutter analyze 0 issues; dart fix --dry-run nothing; flutter test 2180 passed (+16 new controller, +14 new slot-split); flutter build macos ✓.
+
+## 2026-07-18 — Grok review fixes for the Portrait & Avatars series
+Files: lib/ui/character_creator/creator_state_engine.dart, lib/ui/avatar_creation/{avatar_creation_controller,avatar_creation_run,avatar_generation_panel}.dart, lib/ui/pages/create_character_page.dart, lib/services/image_gen_service.dart, test/golden/creator/creator_engine_golden_test.dart
+Reason: independent Grok review of the branch (session b9bb7e46). Accepted+fixed: (1) multi-shot AI-creator save minted a fresh stableId every save — extensions rebuild now carries stableId+favoriteAvatarId (+ regression test); (3) first-persist race could addCharacter twice — _ensureCard is single-flight; (4) manual Done mid-run could dispose the panel and drop finishing work — onBusyChanged locks Done while running (+ busy-clear on dispose); (6) stale generateImage edit-intent doc. Dismissed with rationale Grok accepted: (2) cancel-during-portrait keeps the finished image (identical to the pack session's finish-then-stop contract). (5) golden PNG regen = Linux-runner process step, flagged for the merge.

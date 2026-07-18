@@ -44,6 +44,7 @@ class AvatarGenerationPanel extends StatefulWidget {
     required this.ensureCardSaved,
     required this.initialPrompt,
     this.card,
+    this.onBusyChanged,
   });
 
   /// Host guarantee: returns a persisted card (dbId set), saving it first if
@@ -56,12 +57,24 @@ class AvatarGenerationPanel extends StatefulWidget {
   /// Already-saved card, when the host saved before showing the panel.
   final CharacterCard? card;
 
+  /// Fires on run start/stop so the host can lock its own exits (e.g. the
+  /// manual wizard's Done) — leaving mid-run disposes the panel and drops
+  /// whatever the engine was still finishing.
+  final ValueChanged<bool>? onBusyChanged;
+
   @override
   State<AvatarGenerationPanel> createState() => _AvatarGenerationPanelState();
 }
 
 class _AvatarGenerationPanelState extends State<AvatarGenerationPanel> {
   late final AvatarCreationController _c;
+  bool _lastBusy = false;
+
+  void _reportBusy() {
+    if (_c.running == _lastBusy) return;
+    _lastBusy = _c.running;
+    widget.onBusyChanged?.call(_lastBusy);
+  }
 
   @override
   void initState() {
@@ -86,11 +99,15 @@ class _AvatarGenerationPanelState extends State<AvatarGenerationPanel> {
       initialPrompt: widget.initialPrompt,
       card: widget.card,
     );
+    _c.addListener(_reportBusy);
     _c.init();
   }
 
   @override
   void dispose() {
+    _c.removeListener(_reportBusy);
+    // A host that outlives the panel must never be stuck on busy == true.
+    if (_lastBusy) widget.onBusyChanged?.call(false);
     _c.dispose();
     super.dispose();
   }

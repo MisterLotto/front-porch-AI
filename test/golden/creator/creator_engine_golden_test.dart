@@ -195,6 +195,35 @@ void main() {
       expectGoldenJson(_stabilize(saved.toJson()),
           group: 'creator', name: 'saved_card');
     });
+
+    test('save is idempotent: a second save UPDATES in place and keeps the '
+        'stableId (the panel saves first, Save & Finish saves again)',
+        () async {
+      final storage = await makeGoldenStorage();
+      final db = AppDatabase.forTesting();
+      final repo = CharacterRepository(db, storage);
+      addTearDown(() async => db.close());
+
+      final state = CreatorState();
+      addTearDown(state.dispose);
+      state.generatedCard = CharacterCard(name: 'Aria Vale');
+      state.descController.text = 'First draft.';
+
+      expect(await state.saveCharacter(repo: repo, storage: storage), isTrue);
+      final firstId = state.generatedCard!.frontPorchExtensions!.stableId;
+      expect(firstId, isNotNull);
+
+      // Edit + save again — the flow the Portrait & Avatars panel creates.
+      state.descController.text = 'Edited after the panel saved.';
+      expect(await state.saveCharacter(repo: repo, storage: storage), isTrue);
+
+      final rows = await db.getAllCharacters();
+      expect(rows.length, 1, reason: 'update in place — never a duplicate');
+      expect(state.generatedCard!.frontPorchExtensions!.stableId, firstId,
+          reason: 'identity must survive the multi-shot save');
+      expect(repo.characters.single.description,
+          'Edited after the panel saved.');
+    });
   });
 
   group('CreatorEngine.generateFromMode — drives the LLM', () {
