@@ -436,9 +436,9 @@ class ByafService {
   }
 
   Future<void> _createPlaceholderPng(String outputPath) async {
-    // Minimal valid 1x1 white PNG
+    // Minimal blank placeholder written when a BYAF card carries no image.
     final pngBytes = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mP4/vU9VsQwtCQAafG2wXWW5mYAAAAASUVORK5CYII=',
     );
     await File(outputPath).writeAsBytes(pngBytes);
   }

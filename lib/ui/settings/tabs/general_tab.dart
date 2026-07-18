@@ -18,7 +18,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
@@ -129,7 +131,10 @@ class GeneralTab extends StatelessWidget {
                     color: AppColors.iconSecondary(context),
                   ),
                   const SizedBox(width: 8),
-                  Text('Enable Realism Mode', style: theme.textTheme.titleMedium),
+                  Text(
+                    'Enable Realism Mode',
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ],
               ),
               Switch(
@@ -157,7 +162,8 @@ class GeneralTab extends StatelessWidget {
             subToggle(
               icon: Icons.local_fire_department,
               label: 'NSFW Cooldown',
-              blurb: 'Tracks arousal level and enforces refractory periods '
+              blurb:
+                  'Tracks arousal level and enforces refractory periods '
                   'after intimate scenes.',
               value: storageService.nsfwCooldownDefault,
               onChanged: (val) {
@@ -168,7 +174,8 @@ class GeneralTab extends StatelessWidget {
             subToggle(
               icon: Icons.access_time,
               label: 'Automatic Passage of Time',
-              blurb: 'Time automatically advances '
+              blurb:
+                  'Time automatically advances '
                   '(dawn→morning→afternoon→evening→night) as you chat.',
               value: storageService.passageOfTimeDefault,
               onChanged: (val) {
@@ -488,6 +495,71 @@ class GeneralTab extends StatelessWidget {
               ),
             ),
             onChanged: (val) => storageService.setSystemPrompt(val),
+          ),
+
+          const SectionHeader('About & License'),
+          _buildAboutSection(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutSection(BuildContext context) {
+    const repoUrl = 'https://github.com/linux4life1/front-porch-ai';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardOf(context),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderOf(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Front Porch AI v$appVersion',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary(context),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Free, open-source software © 2026 Front Porch AI, licensed under '
+            'the GNU Affero General Public License v3.0. You are free to use, '
+            'study, modify, and redistribute it under the AGPL. The complete '
+            'source code is available below; if you received this app without '
+            'that source, or as part of a closed-source product, that is a '
+            'license violation.',
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.code, size: 16),
+                label: const Text('Source code'),
+                onPressed: () => launchUrl(
+                  Uri.parse(repoUrl),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.gavel, size: 16),
+                label: const Text('Report a license violation'),
+                onPressed: () => launchUrl(
+                  Uri.parse('$repoUrl/issues'),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+            ],
           ),
         ],
       ),

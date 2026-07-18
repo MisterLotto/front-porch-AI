@@ -64,15 +64,14 @@ class VisionSupportResolver {
   /// either way, and [clear] forgets a transient failure.
   final Map<String, ModelApiCapabilities?> _capsCache = {};
 
-  /// 64×64 solid-gray PNG (132 bytes) used by the runtime probe. Deliberately
-  /// NOT a 1×1: several vision preprocessors enforce a minimum image size
-  /// (Qwen2-VL rejects anything under its 28-px patch factor, SigLIP-based
-  /// stacks have similar floors), so a degenerate probe image made genuinely
+  /// 64×64 solid-gray PNG used by the runtime probe. Deliberately NOT a 1×1:
+  /// several vision preprocessors enforce a minimum image size (Qwen2-VL
+  /// rejects anything under its 28-px patch factor, SigLIP-based stacks have
+  /// similar floors), so a degenerate probe image made genuinely
   /// vision-capable local models error out and get branded "no vision".
   static const String _probePngB64 =
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAS0lEQVR42u3PMQ0A'
-      'AAwDoEqv9ErYvQQckD4XAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB'
-      'AQEBAQEBAQEBAQEBAYHLAB8+AWnmfUycAAAAAElFTkSuQmCC';
+      'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAAAKUlEQVR42u3MQREA'
+      'AAwCIFtb3xD77SAA6VEEAoFAIBAIBAKBQCAQfA8Gmt9wakTxR5IAAAAASUVORK5CYII=';
 
   /// Clear all cached verdicts (e.g. after the user swaps models/backends).
   void clear() {

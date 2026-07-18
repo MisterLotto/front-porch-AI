@@ -378,6 +378,36 @@ export function SettingsPage() {
       <button className="primary" onClick={save} disabled={saving}>
         {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save settings'}
       </button>
+
+      <section className="card">
+        <h2>About &amp; License</h2>
+        <p className="muted small" style={{ lineHeight: 1.5 }}>
+          Front Porch AI is free, open-source software © 2026 Front Porch AI,
+          licensed under the GNU Affero General Public License v3.0. You are
+          free to use, study, modify, and redistribute it under the AGPL. The
+          complete source code is available below; if you received this app
+          without that source, or as part of a closed-source product, that is a
+          license violation.
+        </p>
+        <div className="about-links">
+          <a
+            className="btn-link"
+            href="https://github.com/linux4life1/front-porch-ai"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Source code
+          </a>
+          <a
+            className="btn-link"
+            href="https://github.com/linux4life1/front-porch-ai/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Report a license violation
+          </a>
+        </div>
+      </section>
     </div>
   );
 }
