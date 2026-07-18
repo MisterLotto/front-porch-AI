@@ -182,6 +182,13 @@ class ChatService extends ChangeNotifier {
   // purpose — NOT persisted, so NSFW tasks default OFF on a fresh launch.
   bool objectiveNsfwTasks = false;
   int objectiveTaskCount = 5;
+
+  /// Armed only while the TURN-path completion check runs (see
+  /// _maybeCheckTaskCompletionSync try/finally): check-driven objective
+  /// mutations record regen turn-ops only when armed, so the UI's manual
+  /// "Check now" (forceCheckCompletion) never records — a regen must not
+  /// undo a user-triggered check. Scoped by try/finally; no reset needed.
+  bool _objectiveTurnOpsArmed = false;
   int _messagesSinceLastCheck = 0;
   bool _isCheckingCompletion =
       false; // god-side secondary runtime flag for objective_proposal leaf's get/setIsChecking (early guard in check); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths (like _activeObjectives + _messagesSinceLastCheck) to prevent permanent skip of future task checks after in-flight reset; see CLAUDE.md "keep reset blocks in sync" + "incomplete zeroing..." (leaves incl fact/evo/verif + needs_impact etc) + " ; no extra mutable scalar; live read from frontPorch under impersonation)" + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)").
@@ -1951,6 +1958,10 @@ class ChatService extends ChangeNotifier {
           text,
           isPrimary: isPrimary,
           autoGenerateTasks: autoGenerateTasks,
+          // Eval-proposed objectives belong to the turn being generated —
+          // record them so regen can roll them back (turn-ops; the UI's
+          // direct setObjective calls stay unrecorded).
+          recordTurnOps: true,
         ),
     verifyRealismOutput: _realismVerifier.verify,
   );
@@ -1995,6 +2006,13 @@ class ChatService extends ChangeNotifier {
       );
     },
     deactivateObjective: (id) async {
+      // Only the completion check retires through this cb (the UI's
+      // clearObjective has its own db call) — record the turn-op so regen
+      // can reactivate a quest the invalidated turn retired. Armed-gated:
+      // manual "Check now" retirements are user actions, not turn ops.
+      if (_objectiveTurnOpsArmed) {
+        _recordObjectiveTurnOp({'op': 'deactivated', 'id': id});
+      }
       await _db.updateObjective(
         ObjectivesCompanion(
           id: drift.Value(id),

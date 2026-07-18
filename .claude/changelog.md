@@ -5135,10 +5135,33 @@ re-appear as "added". Both jobs now skip when the PR head starts with
 `release/promote-` — Rawhide's incremental CI already gated every new line when it
 landed. Push/normal-PR behavior unchanged.
 
-## 2026-07-18 (UTC) — 1.0 hero screenshot refresh
-**Files:** `docs/screenshots/home_new.png`
-**Why:** The README hero still showed v0.9.6 (removed Cloud Sync item, open context
-menu, pre-warm-porch design). Replaced with the maintainer's staged 1.0 shot
-(~/Desktop/fpai-review/screens-1.0/home_screen.png, picked per maintainer request),
-resampled to 1920px (6.7MB→1.9MB). Committed on Rawhide so the promotion carries it
-to main — same single-source rule as the banner SVGs.
+## 2026-07-18 (UTC) — 1.0 hero screenshot refresh (correction: already done)
+**Files:** none (commit 1eeb5325 carried only this changelog entry)
+**Why:** Set out to replace the stale v0.9.6 README hero with the maintainer's staged
+1.0 shot (~/Desktop/fpai-review/screens-1.0/home_screen.png). Turned out Rawhide
+commit 374612e7 ("retake the four canonical screenshots on the 1.0 warm-porch UI")
+had already committed that exact capture at 1920px — the working tree matched, so
+nothing staged and 1eeb5325's message overstates itself (only this changelog rode
+in it). main still shows the old hero only until the promotion merge lands; no
+image action needed.
+
+## 2026-07-18 (UTC) — Regen now rolls back the turn's objective mutations
+**Files:** `lib/services/chat/chat_service_objectives.dart`, `lib/services/chat_service.dart`, `lib/services/chat/chat_service_reprocess.dart`, `docs/Rawhide.md`
+**Why:** Maintainer report: regenerating a message left the invalidated turn's objective
+changes in place (eval-proposed quests stayed created, completion-check task ticks and
+quest retirements stayed applied). The realism engine has per-message delta revert;
+objectives had nothing. Fix mirrors that pattern: turn-attributable objective ops
+(created + demoted/evicted side effects, tasks_changed with pre-mutation JSON,
+deactivated) are recorded into _pendingRealismMetadata['objective_turn_ops'] (inherits
+the existing flush/reset lifecycle), and regenerateLastMessage inverts them reversed +
+id-addressed before the eval replay — 1:1/group parity by construction, guest regens
+skip. Recording is armed only for turn-path work: the eval setObjective cb passes
+recordTurnOps:true; check-driven sites gate on _objectiveTurnOpsArmed (armed via
+try/finally only in _maybeCheckTaskCompletionSync), so panel edits and manual "Check
+now" are never recorded. Grok review: demote-invert reconciliation guard added (skip
+isPrimary restore when the user promoted another primary in between, charId recorded
+on ops for it); swipe-back re-apply deliberately deferred (faithful 'created' re-apply
+impossible — task-gen fills tasks async post-flush; self-heals next turn) and
+documented in the turn-ops block comment. No god growth (logic in the objectives part
+file); 2 new privates (_recordObjectiveTurnOp, _revertObjectiveTurnOps) — justified,
+no existing method records into pending metadata or inverts ops.
