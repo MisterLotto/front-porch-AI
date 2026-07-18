@@ -242,6 +242,8 @@ button.ghost { background: transparent; border-color: var(--border); }
   padding: 10px 14px; margin-top: 4px;
 }
 .btn-link.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.about-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.about-links .btn-link { border: 1px solid var(--border); color: var(--accent); }
 .help-link { display: inline-block; margin-top: 6px; color: var(--accent); font-size: 0.8rem; }
 .tunnel-result { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .tunnel-url-row { display: flex; align-items: center; gap: 8px; width: 100%; }
