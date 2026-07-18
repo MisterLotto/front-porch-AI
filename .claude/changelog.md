@@ -5135,10 +5135,12 @@ re-appear as "added". Both jobs now skip when the PR head starts with
 `release/promote-` — Rawhide's incremental CI already gated every new line when it
 landed. Push/normal-PR behavior unchanged.
 
-## 2026-07-18 (UTC) — 1.0 hero screenshot refresh
-**Files:** `docs/screenshots/home_new.png`
-**Why:** The README hero still showed v0.9.6 (removed Cloud Sync item, open context
-menu, pre-warm-porch design). Replaced with the maintainer's staged 1.0 shot
-(~/Desktop/fpai-review/screens-1.0/home_screen.png, picked per maintainer request),
-resampled to 1920px (6.7MB→1.9MB). Committed on Rawhide so the promotion carries it
-to main — same single-source rule as the banner SVGs.
+## 2026-07-18 (UTC) — 1.0 hero screenshot refresh (correction: already done)
+**Files:** none (commit 1eeb5325 carried only this changelog entry)
+**Why:** Set out to replace the stale v0.9.6 README hero with the maintainer's staged
+1.0 shot (~/Desktop/fpai-review/screens-1.0/home_screen.png). Turned out Rawhide
+commit 374612e7 ("retake the four canonical screenshots on the 1.0 warm-porch UI")
+had already committed that exact capture at 1920px — the working tree matched, so
+nothing staged and 1eeb5325's message overstates itself (only this changelog rode
+in it). main still shows the old hero only until the promotion merge lands; no
+image action needed.
