@@ -412,14 +412,9 @@ flutter pub get
 flutter run
 ```
 
-**macOS release build** (signs, packages, and notarizes):
+**Release build:**
 ```bash
-./scripts/build-macos.sh
-```
-
-**Linux / Windows release build:**
-```bash
-flutter build linux    # or windows
+flutter build linux    # or windows, or macos
 ```
 That's it — the built bundle is self-contained.
 
