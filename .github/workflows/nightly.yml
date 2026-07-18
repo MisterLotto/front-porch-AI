@@ -10,7 +10,7 @@ name: Nightly Build (Rawhide)
 # with "Undefined name" compile errors for any new getters/symbols (e.g. isNightlyBuild).
 #
 # The job itself checks out `ref: Rawhide` for the actual source, but the workflow
-# definition (including the sed/python patch logic) always comes from main's copy.
+# definition (including the sed version-patch logic) always comes from main's copy.
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -244,15 +244,6 @@ jobs:
         run: npm ci && npm run build
         working-directory: web_ui
 
-      - name: Disable inappwebview Linux plugin (uses external browser fallback)
-        if: matrix.platform == 'linux'
-        run: |
-          echo "" >> pubspec.yaml
-          echo "dependency_overrides:" >> pubspec.yaml
-          echo "  flutter_inappwebview_linux:" >> pubspec.yaml
-          echo "    path: ci/flutter_inappwebview_linux_stub" >> pubspec.yaml
-          flutter pub get
-
       - name: Build Application
         if: matrix.platform != 'linux'
         run: flutter build ${{ matrix.platform }} --release
@@ -301,11 +292,12 @@ jobs:
         run: |
           # The pure-Dart Draw Things client decodes generated images through
           # a tiny fpzip FFI dylib (dt_fpzip.dart looks in Contents/Frameworks/).
-          # Without it here, signed builds silently fell back to the Python
-          # sidecar for image generation — dev and release diverged. Built
-          # fresh (LLNL fpzip 1.3.0, universal arm64+x86_64) and signed by the
-          # codesign pass below like every other Frameworks dylib. Draw Things
-          # is macOS-only software, so no Windows/Linux counterpart exists.
+          # Without it, Draw Things generation fails with a clear
+          # libfpzip-missing error (no fallback exists — the sidecars are
+          # gone). Built fresh (LLNL fpzip 1.3.0, universal arm64+x86_64)
+          # and signed by the codesign pass below like every other
+          # Frameworks dylib. Draw Things is macOS-only software, so no
+          # Windows/Linux counterpart exists.
           ./scripts/build-fpzip-macos.sh
           APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name "*.app" | head -1)
           if [ -z "$APP_PATH" ]; then

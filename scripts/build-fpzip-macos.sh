@@ -4,8 +4,8 @@
 # Draw Things returns generated images as fpzip-compressed float tensors; the
 # native (pure-Dart) DT client decodes them via dart:ffi against this library
 # (lib/services/grpc/dt_native/dt_fpzip.dart). Without it, image *generation*
-# transparently falls back to the legacy Python sidecar — test connection and
-# model listing are pure Dart either way.
+# fails with a clear libfpzip-missing error (no fallback exists — the
+# sidecars are gone); test connection and model listing need no fpzip.
 #
 # Usage:  ./scripts/build-fpzip-macos.sh
 # Output: tools/fpzip/libfpzip.dylib  (found automatically by `flutter run`)
@@ -51,4 +51,3 @@ echo "==> Verifying..."
 file "$DEST/libfpzip.dylib"
 echo "✓ Installed $DEST/libfpzip.dylib"
 echo "  flutter run will pick it up automatically (see dt_fpzip.dart)."
-echo "  To force the legacy Python sidecar instead: FP_DT_SIDECAR=1"
