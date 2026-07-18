@@ -5104,3 +5104,24 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 - **Files:** lib/services/grpc/dt_native/dt_proto.dart (ProtoReader.skip wire-type-2 case), test/services/grpc/dt_native_test.dart (regression test), docs/Rawhide.md
 - **Reason:** Field report (Rawhide nightly 375ae18): "Test Connection" to Draw Things succeeded or failed at random on repeated presses, and generation showed Draw Things rendering while the app received nothing, then wouldn't reconnect. Root cause: `skip()` used `_i += readVarint()` — Dart compound assignment reads the OLD `_i` before `readVarint()` advances it past the 1–5 length-prefix bytes, so every skipped length-delimited field left the reader short, parsing field content as protobuf tags. Draw Things' Echo reply carries a ~20KB model-metadata JSON blob in a skipped field whose key order shuffles per call (Swift dictionaries), so each reply randomly either mis-parsed "successfully" or died as gRPC DATA_LOSS; generation responses stream many messages with skipped fields, so they nearly always died mid-stream (the app dropped the call while DT kept rendering — matching the report exactly). Diagnosed by capturing live wire bytes with a raw HTTP/2 probe (server bytes were always well-formed) and dumping the exact buffer handed to the deserializer (identical bytes parsed fine offline — the in-process "corruption" was skip() landing mid-JSON). Fix: precompute the varint before advancing. Verified live against a real Draw Things server: echo/listFiles 20/20 (was ~35%), full generation end-to-end with streamed step progress + fpzip decode + immediate reconnect after. Regression test crafts an unknown length-delimited field whose tail bytes decode as wire type 4 — it throws the exact production error on the old code. Grok reviewed the diff.
 - **Commit:** (this commit)
+
+## 2026-07-18 (UTC) — Defuse release-workflow Python landmine + AUR dispatch guard
+**Files:** `.github/workflows/release.yml`, `.github/workflows/beta-release.yml`
+**Why:** Both release workflows still built the Python/Rust sidecars deleted by the
+sidecar-ectomy (PR #141) and native-RAG (PR #146) work: `pyinstaller kokoro_tts.py`
+etc. on files that no longer exist, `cargo build` in the deleted `tools/embed_server`,
+signing passes referencing the deleted `macos/Runner/Sidecar.entitlements`, and a
+dead `ci/flutter_inappwebview_linux_stub` dependency-override that would fail
+`flutter pub get` on Linux. Any beta cut or the 1.0 promotion would have hard-failed.
+Ported nightly.yml's post-ectomy shape: dropped Setup Python/Rust + ML-engine
+bundling/caching steps, added the macOS libfpzip bundling step (Draw Things needs it,
+no sidecar fallback left), replaced the signing step with nightly's retry-based
+frameworks+app version, added the Setup Node + WebUI bundle rebuild steps (fresh
+`assets/web_app`, never stale), split the Linux build with the CXXFLAGS workaround.
+Also tag-gated `publish-aur-beta` (a manual dispatch would have pushed a broken
+version to AUR pointing at a nonexistent release tag). Not yet pushed to origin (awaiting maintainer review).
+**Pipeline test PASSED 2026-07-18** (run 29660260719, workflow_dispatch on throwaway
+tag-named branch `v0.9.99.1`, since deleted): all 3 platform legs green, all 4 publish
+jobs skipped (tag-gated), and the `.deb`/`.rpm` were install-tested in linux/amd64
+Debian/Fedora containers — correct 0.9.99.1 version stamp, binary + symlink + desktop
+file + fresh WebUI bundle present, zero sidecar remnants.
