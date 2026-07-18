@@ -253,14 +253,6 @@ jobs:
           echo "    path: ci/flutter_inappwebview_linux_stub" >> pubspec.yaml
           flutter pub get
 
-      - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust build artifacts (embed_server + ort prebuilts)
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "tools/embed_server"
-
       - name: Build Application
         if: matrix.platform != 'linux'
         run: flutter build ${{ matrix.platform }} --release
@@ -323,63 +315,6 @@ jobs:
           mkdir -p "$APP_PATH/Contents/Frameworks"
           cp tools/fpzip/libfpzip.dylib "$APP_PATH/Contents/Frameworks/"
           echo "Bundled libfpzip into $APP_PATH/Contents/Frameworks/"
-
-      - name: Build + Bundle Embedding Server (Rust)
-        shell: bash
-        run: |
-          # The Rust embed_server is the ONLY helper subprocess left after the
-          # Python sidecar retirement (docs/design/sidecar-retirement.md) —
-          # TTS, STT, expressions, and Draw Things all run in-process now, so
-          # the PyInstaller builds that used to live here are gone.
-          #
-          # Always built fresh from source — build-output caching stays
-          # deliberately DISABLED: a previous "Cache ML Engines" step cached a
-          # directory containing the compiled Flutter app and restored a STALE
-          # app over fresh `flutter build` output (the published
-          # rawhide.20260625 .pkg actually contained rawhide.20260621 code).
-          # rust-cache above only caches build *inputs*, so it stays.
-          #
-          # NOTE: ort-sys downloads prebuilt ONNX Runtime libs from
-          # parcel.pyke.io; occasionally flaky (timeouts/5xx) → retry.
-          echo "Building Embedding Server (Rust)..."
-          cd tools/embed_server
-          for attempt in 1 2 3; do
-            if cargo build --release; then
-              echo "cargo build succeeded on attempt $attempt"
-              break
-            else
-              echo "cargo build attempt $attempt failed"
-              if [ $attempt -lt 3 ]; then
-                echo "Retrying in 15s..."
-                sleep 15
-              else
-                echo "ERROR: cargo build failed after 3 attempts"
-                exit 1
-              fi
-            fi
-          done
-          cd ../..
-
-          DEST="${{ matrix.build_path }}"
-          EMBED_BINARY="tools/embed_server/target/release/embed_server"
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            EMBED_BINARY="tools/embed_server/target/release/embed_server.exe"
-          fi
-          mkdir -p "$DEST/embed_server"
-          cp "$EMBED_BINARY" "$DEST/embed_server/"
-          echo "Embedding server built at: $DEST/embed_server/"
-
-          # macOS: the binary ships inside the app bundle Resources
-          if [ "${{ matrix.platform }}" = "macos" ]; then
-            APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app 2>/dev/null | head -1)
-            if [ -n "$APP_NAME" ]; then
-              EMBED_RESOURCES="$APP_NAME/Contents/Resources/embed_server"
-              mkdir -p "$EMBED_RESOURCES"
-              cp -R "$DEST/embed_server/"* "$EMBED_RESOURCES/"
-              chmod +x "$EMBED_RESOURCES/embed_server"
-              echo "Embedding server bundled into $EMBED_RESOURCES"
-            fi
-          fi
 
       - name: Download VC++ Redistributable (Windows)
         if: matrix.platform == 'windows'
@@ -479,25 +414,17 @@ jobs:
         run: |
           APP_NAME=$(ls -d ${{ matrix.build_path }}/*.app | head -1)
           ENTITLEMENTS="${{ github.workspace }}/macos/Runner/Release.entitlements"
-          # Helper entitlements for the Rust embed_server (the one subprocess
-          # left after the Python sidecar retirement). Kept on the same
-          # Sidecar.entitlements it has always shipped with — changing a
-          # hardened-runtime entitlement set can only be verified with a full
-          # signed build, so it stays untouched until embed_server itself is
-          # retired (sidecar-retirement.md phase 5, optional).
-          SIDECAR_ENT="${{ github.workspace }}/macos/Runner/Sidecar.entitlements"
-
           # Sign inside-out (the main .app is signed LAST); distinct files
           # WITHIN a pass run in parallel. BSD xargs on macOS, so no GNU-only
           # flags and we guard against empty input. Each `codesign --timestamp`
           # is a network round-trip to Apple's timestamp server, which
           # throttles under a parallel burst — every codesign RETRIES with
-          # backoff. (The PyInstaller framework-normalization passes that used
-          # to live here left with the Python sidecars; Resources now holds
-          # only the embed_server binary and data files.) If Apple rejects
+          # backoff. (The helper-signing passes that used to follow left with
+          # the sidecar retirement — since phase 5 the app spawns no helper
+          # processes, so Resources holds only data files.) If Apple rejects
           # anything, the notarize step below fetches `notarytool log` so the
           # precise reason is in the CI log.
-          export MACOS_CERTIFICATE_NAME SIDECAR_ENT ENTITLEMENTS
+          export MACOS_CERTIFICATE_NAME ENTITLEMENTS
           JOBS=8
 
           echo "Code signing $APP_NAME with hardened runtime using Developer ID certificate (parallel x$JOBS, with retries)..."
@@ -510,20 +437,6 @@ jobs:
                 until codesign --force --sign "$MACOS_CERTIFICATE_NAME" --timestamp --options runtime "$f" >"/tmp/cs.$$.log" 2>&1; do
                   i=$((i + 1))
                   if [ "$i" -ge 4 ]; then echo "  ⚠ codesign skipped after 4 tries (continuing — Apple still notarizes; matches the long-standing pipeline): $f" >&2; break; fi
-                  sleep $((i * 2))
-                done
-                rm -f "/tmp/cs.$$.log"
-              ' _ {}
-
-          echo "    Signing loose Mach-O files under Resources (excluding *.framework internals)..."
-          { find "$APP_NAME/Contents/Resources" -type f ! -path '*.framework/*' -print0 2>/dev/null || true; } \
-            | xargs -0 -P "$JOBS" -I {} bash -c '
-                f="$1"; [ -n "$f" ] || exit 0
-                file "$f" | grep -q "Mach-O" || exit 0
-                i=0
-                until codesign --force --sign "$MACOS_CERTIFICATE_NAME" --timestamp --options runtime --entitlements "$SIDECAR_ENT" "$f" >"/tmp/cs.$$.log" 2>&1; do
-                  i=$((i + 1))
-                  if [ "$i" -ge 4 ]; then echo "  ⚠ codesign skipped after 4 tries (continuing — non-framework Mach-O, throttle): $f" >&2; break; fi
                   sleep $((i * 2))
                 done
                 rm -f "/tmp/cs.$$.log"

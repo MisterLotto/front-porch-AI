@@ -282,7 +282,7 @@ the removal release shipped. What landed:
 re-export) can no longer play; they surface a clear error instead of
 silently using a binary that no longer exists.
 
-## Phase 5 record (RAG embeddings) — shipped behind fallback 2026-07-18
+## Phase 5 record (RAG embeddings) — COMPLETE, Rust server fully removed 2026-07-18
 
 - In-process engine: `lib/services/embedding/native_embedding_engine.dart`
   — nomic-embed-text-v1.5 via onnxruntime_v2 in ONE persistent worker
@@ -310,16 +310,18 @@ silently using a binary that no longer exists.
 - Model reuse: the engine reads the fastembed hub cache the Rust server
   populated (`~/Library/Caches/front-porch-ai/embeddings` and the
   platform equivalents) — zero re-download for existing users. Fresh
-  installs: the sidecar still downloads the model this soak; the native
-  path picks the cache up from then on.
-- Wiring: `EmbeddingService` native-first (no subprocess started at all
-  when the model is on disk); Rust sidecar is the automatic per-call
-  fallback. Lever: `FP_EMBED_SIDECAR=1`. EngineHealth row: 'Memory
-  embeddings'. `FP_ORT_LIB` pre-loads libonnxruntime for bare test
-  harnesses (FP_SHERPA_LIB pattern).
-- Still TODO for phase-5 completion: soak one release, then delete
-  `tools/embed_server/` + `embedding_sidecar.dart` + the sidecar branches
-  in EmbeddingService, add a native ModelFetch download for fresh
-  installs, remove the cargo/bundling steps from nightly.yml +
-  build-macos.sh, and finally delete `Sidecar.entitlements` (nothing will
-  need it anymore).
+  installs download model.onnx + tokenizer.json over direct HTTPS
+  (`EmbeddingService.runSetup`, driven by the RAG consent dialog with
+  real progress) into `<root>/models/embeddings/nomic-v1_5/`.
+- **Full removal, no soak** (maintainer decision 2026-07-18, "strip the
+  rust sidecar out fully"): `tools/embed_server/` and
+  `embedding_sidecar.dart` deleted outright; `EmbeddingService` is
+  native-only (the app spawns NO helper processes at all); the RAG setup
+  dialog and sidebar status run off EmbeddingService; nightly.yml +
+  build-macos.sh lost the Rust toolchain/cargo/bundling steps and the
+  helper-signing pass; and `Sidecar.entitlements` is DELETED — the final
+  success criterion of the whole retirement. Confidence for skipping the
+  soak came from the golden pinning: unlike the other engines, the
+  parity here is bit-level-verified against the production binary.
+- EngineHealth row: 'Memory embeddings'. `FP_ORT_LIB` pre-loads
+  libonnxruntime for bare test harnesses (FP_SHERPA_LIB pattern).

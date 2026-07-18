@@ -19,10 +19,10 @@
 # Fallback: keychain profile "front-porch-ai" (run store-credentials once) or APPLE_ID envs.
 #
 # What it does:
-#   1. flutter build macos --release (+ web UI + Rust embed_server)
+#   1. flutter build macos --release (+ web UI)
 #   2. Rename to FrontPorchAI-Rawhide.app + Plist patch for Rawhide
-#   3. Bundle embed_server + libfpzip (the only native helpers left after the
-#      Python sidecar retirement — TTS/STT/expressions/DT run in-process)
+#   3. Bundle libfpzip (the only native helper file left — the sidecar
+#      retirement is complete; everything runs in-process, no subprocesses)
 #   4. xattr clean + codesign (hardened runtime, Developer ID)
 #   5. Bare pkgbuild .pkg (installs the app to /Applications)
 #   6. Notarize + staple the .pkg (using API key if set)
@@ -47,7 +47,7 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing (simple, no getopts for maximum portability)
 # ─────────────────────────────────────────────────────────────────────────────
-DO_ML=1          # full app build (Flutter + web UI + embed_server) by default
+DO_ML=1          # full app build (Flutter + web UI) by default
 SKIP_SIGN=0
 SKIP_PKG=0
 SKIP_SHIM=0
@@ -89,7 +89,7 @@ APP_NAME="FrontPorchAI-Rawhide.app"
 APP_BUNDLE="$ROOT/build/macos/Build/Products/Release/$APP_NAME"
 PKG_PATH=""
 SHIM_DMG_PATH=""
-EMBED_SRC="$ROOT/tools/embed_server"
+
 
 if [ "$DO_ML" -eq 1 ]; then
   echo "======================================================================"
@@ -112,13 +112,6 @@ if [ "$DO_ML" -eq 1 ]; then
     echo "==> Skipping web UI build (web_ui/ or npm not present)."
   fi
 
-  echo "==> Building embedding server (Rust)..."
-  if ! command -v cargo &>/dev/null; then
-    echo "Error: Rust toolchain not found. Install it from https://rustup.rs/"
-    exit 1
-  fi
-  cargo build --release --manifest-path "$EMBED_SRC/Cargo.toml"
-
   echo "==> Building macOS app (release)..."
   flutter build macos --release
 
@@ -139,23 +132,16 @@ if [ "$DO_ML" -eq 1 ]; then
   cd "$ROOT"
   APP_BUNDLE="$ROOT/build/macos/Build/Products/Release/$APP_NAME"
 
-  # Embed the Rust server early (it is small)
-  echo "==> Bundling embed_server..."
-  EMBED_DEST="$APP_BUNDLE/Contents/Resources/embed_server"
-  mkdir -p "$EMBED_DEST"
-  cp "$EMBED_SRC/target/release/embed_server" "$EMBED_DEST/" || true
-  chmod +x "$EMBED_DEST/embed_server" 2>/dev/null || true
-
 else
   # ── FAST MODE ──────────────────────────────────────────────────────────────
-  # Skip flutter pub get, cargo build, flutter build, rename, and embed_server.
+  # Skip flutter pub get, flutter build, and the rename.
   # Work with the existing bundle from the last full build. This is the
   # correct iteration loop for sign/PKG/notarize.
   echo "======================================================================"
   echo "  FAST MODE — reusing existing bundle (skip Flutter + helper build)"
   echo "======================================================================"
   echo ""
-  echo "==> --fast: skipping Flutter build, Rust build, and helper copy."
+  echo "==> --fast: skipping the Flutter build."
   echo "    Working with existing bundle at:"
   echo "    $APP_BUNDLE"
   echo ""
@@ -166,7 +152,7 @@ else
     exit 1
   fi
   # Sanity check: a real bundle should be >> 100 MB (Flutter app + web UI +
-  # sherpa/ONNX libs + embed_server; the Python sidecars are gone).
+  # sherpa/ONNX libs).
   BUNDLE_SIZE_MB=$(du -sm "$APP_BUNDLE" 2>/dev/null | awk '{print $1}')
   if [ "${BUNDLE_SIZE_MB:-0}" -lt 100 ]; then
     echo "WARNING: Bundle is only ${BUNDLE_SIZE_MB}MB — it may be incomplete."
@@ -177,10 +163,9 @@ else
   echo ""
 fi
 
-# (The PyInstaller sidecar builds that used to run here left with the Python
-# sidecar retirement — docs/design/sidecar-retirement.md. The only helper
-# binary now is the Rust embed_server, bundled above right after the Flutter
-# build; TTS/STT/expressions/Draw Things all run in-process.)
+# (The sidecar builds that used to run here left with the sidecar
+# retirement — docs/design/sidecar-retirement.md. Everything runs
+# in-process now; the app spawns no helper processes.)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # libfpzip for the native Draw Things client (macOS-only feature)
@@ -242,7 +227,6 @@ else
   fi
 
   ENTITLEMENTS="$ROOT/macos/Runner/Release.entitlements"
-  SIDECAR_ENT="$ROOT/macos/Runner/Sidecar.entitlements"
 
   # 1. Frameworks (outer)
   while IFS= read -r -d '' f; do
@@ -250,22 +234,11 @@ else
       2>&1 | grep -v -E '(replacing existing signature|already signed)' || true
   done < <(find "$APP_BUNDLE/Contents/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) -print0 2>/dev/null || true)
 
-  # 2. Normal Mach-O under Resources (the embed_server binary)
-  echo "    Signing loose Mach-O files under Resources..."
-  while IFS= read -r -d '' f; do
-    if file "$f" | grep -q "Mach-O"; then
-      echo "    Signing native binary: $f"
-      codesign --force --sign "$CERT_NAME" --timestamp --options runtime \
-        --entitlements "$SIDECAR_ENT" "$f" \
-        2>&1 | grep -v -E '(replacing existing signature|already signed)' || true
-    fi
-  done < <(find "$APP_BUNDLE/Contents/Resources" -type f -print0 2>/dev/null || true)
+  # (The helper-signing passes that used to follow left with the sidecar
+  # retirement — since phase 5 the app spawns no helper processes, so
+  # Resources holds only data files.)
 
-  # (The PyInstaller framework-normalization + broad catch-all passes that
-  # used to run here left with the Python sidecars. Resources now holds
-  # only the embed_server binary and data files, and pass 2 covers it.)
-
-  # 3. The main app bundle last (after all nested helper code is signed)
+  # 2. The main app bundle last (outermost)
   codesign --force --sign "$CERT_NAME" --timestamp --options runtime \
     --entitlements "$ENTITLEMENTS" "$APP_BUNDLE" || true
 
@@ -343,8 +316,8 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Bare-minimum .pkg (often more reliable for notarization on complex apps).
-# Installs the exact same bundle to /Applications; helpers (embed_server,
-# libfpzip) stay inside the .app exactly as built.
+# Installs the exact same bundle to /Applications; libfpzip stays inside
+# the .app exactly as built.
 # ─────────────────────────────────────────────────────────────────────────────
 if [ "$SKIP_PKG" -eq 1 ]; then
   echo "==> Skipping .pkg creation (--skip-pkg)"
@@ -484,8 +457,8 @@ echo "  1. Double-click $PKG_PATH for the real signed install (recommended)."
 echo "  2. The unsigned shim DMG (if produced) is only for testing the legacy"
 echo "     in-app auto-update replace path from old .dmg-based installs."
 echo "  3. Let the Installer place the app to /Applications/FrontPorchAI-Rawhide.app"
-echo "  4. The native helpers (embed_server, libfpzip) are inside the"
-echo "     installed bundle in the exact correct relative paths."
+echo "  4. libfpzip is inside the installed bundle at the exact"
+echo "     correct relative path (Contents/Frameworks)."
 echo "  4. Run the 4 checks on the installed app:"
 echo "     codesign -vvv --deep --strict /Applications/$APP_NAME"
 echo "     spctl --assess --type exec -vv /Applications/$APP_NAME"

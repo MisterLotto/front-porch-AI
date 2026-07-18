@@ -27,13 +27,10 @@ flutter test --coverage              # With coverage
 flutter test test/path/to/file.dart  # Single test file
 flutter test -n "test name"          # Run specific test by name
 
-# Build embedding server (Rust, required for RAG)
-cargo build --release --manifest-path tools/embed_server/Cargo.toml
-
 # Release builds
-flutter build linux                  # Linux (then copy embed_server to build/linux/x64/release/bundle/embed_server/)
-flutter build windows                # Windows (then copy embed_server.exe to build/windows/x64/runner/Release/)
-./scripts/build-macos.sh             # macOS (bundles embed_server automatically)
+flutter build linux                  # Linux
+flutter build windows                # Windows
+./scripts/build-macos.sh             # macOS (signs + packages + notarizes)
 ```
 
 ## Architecture
@@ -79,7 +76,7 @@ lib/
 │   ├── llm_provider.dart        # Abstraction over Kobold/OpenRouter/external APIs
 │   ├── character_repository.dart # Character CRUD via Drift
 │   ├── storage_service.dart     # File system paths, beta/stable data dir isolation
-│   ├── embedding_sidecar.dart   # Rust subprocess manager for ONNX embeddings
+│   ├── embedding_service.dart   # In-process RAG embeddings (nomic via onnxruntime)
 │   ├── memory_service.dart      # RAG memory extraction and retrieval
 │   ├── tts_service.dart         # TTS orchestration (Kokoro, ElevenLabs, OpenAI, Piper)
 │   ├── stt_service.dart         # Whisper STT via in-process sherpa-onnx
@@ -136,11 +133,11 @@ lib/
 - **EvolutionService** (`lib/services/chat/evolution_service.dart`): Character evolution — trait development, effective personality/scenario layering, group per-character counts.
 - **KoboldService** (`lib/services/kobold_service.dart`): HTTP client for KoboldCpp (`/api/v1/generate`, `/api/extras/abort`, etc.).
 - **StorageService** (`lib/services/storage_service.dart`): Data directories. Beta builds use `FrontPorchAI-Beta/` with `beta_` prefixed SharedPreferences keys.
-- **EmbeddingSidecar** (`lib/services/embedding_sidecar.dart`): Manages the Rust `embed_server` subprocess for ONNX embeddings (RAG memory).
+- **EmbeddingService** (`lib/services/embedding_service.dart`): In-process RAG embeddings — nomic-embed-text-v1.5 via onnxruntime in a persistent worker isolate (`embedding/native_embedding_engine.dart`), golden-pinned to the retired Rust server's exact vectors so stored embeddings stay valid. Owns the model download/setup flow the RAG consent dialog drives.
 
-### Native Engines (no Python)
+### Native Engines (no sidecars at all)
 
-Every Python sidecar was retired in 2026-07 (docs/design/sidecar-retirement.md — read it before touching any engine). TTS (Kokoro/Piper via sherpa-onnx), STT (Whisper via sherpa-onnx), expression classification (onnxruntime), and Draw Things (pure-Dart gRPC + fpzip FFI) all run **in-process**. The only helper subprocess is the Rust `embed_server` (RAG embeddings). Engine successes/failures report to `EngineHealth` (`lib/services/engine_health.dart`); pre-release builds surface the first unexpected failure loudly. Do not reintroduce Python at runtime.
+Every sidecar was retired in 2026-07 (docs/design/sidecar-retirement.md — read it before touching any engine). TTS (Kokoro/Piper via sherpa-onnx), STT (Whisper via sherpa-onnx), expression classification (onnxruntime), RAG embeddings (nomic via onnxruntime, golden-pinned to the old Rust server's vectors), and Draw Things (pure-Dart gRPC + fpzip FFI) all run **in-process** — the app spawns no helper processes. Engine successes/failures report to `EngineHealth` (`lib/services/engine_health.dart`); pre-release builds surface the first unexpected failure loudly. Do not reintroduce sidecar processes.
 
 ### Database
 
@@ -343,7 +340,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 ### Cross-Platform Compatibility (critical)
 - **Never hardcode Unix paths** (`/tmp`, `/Users/`, `~/`). Use `Directory.systemTemp`, `getApplicationDocumentsDirectory()`, `StorageService.rootPath`, or `path_provider` + `package:path/path.dart` with `p.join()`.
 - **Native libraries** (sherpa-onnx, onnxruntime, libfpzip): the sherpa/ort libs ship inside their pub packages for all three platforms; libfpzip is macOS-only (Draw Things is macOS-only software). Never assume a dylib/so/dll path — resolve via the existing helpers (`sherpa_runtime.dart`, `dt_fpzip.dart`).
-- **Process management** (the Rust `embed_server`): use `Process.start(..., includeParentEnvironment: true)`; expect `process.kill()` differences (Unix SIGTERM vs Windows TerminateProcess).
+- **Process management** (KoboldCpp and other external tools): use `Process.start(..., includeParentEnvironment: true)`; expect `process.kill()` differences (Unix SIGTERM vs Windows TerminateProcess).
 - **Before marking a task "done"**, either run the affected feature on at least two platforms, or explicitly document the platform-specific limitation + mitigation.
 
 ### Dart conventions

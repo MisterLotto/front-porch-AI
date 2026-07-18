@@ -52,13 +52,14 @@ import 'package:front_porch_ai/services/expression/wordpiece_tokenizer.dart';
 /// One persistent worker isolate holds the loaded ~550MB session (model
 /// load takes seconds — per-call sessions like the emotion engine uses
 /// would be unusable here). [shutdown] releases it; the embedding service
-/// calls that when RAG turns off.
+/// calls that when setup is cancelled.
+///
+/// Model files: the fastembed hub cache the retired Rust server populated
+/// is read as-is (zero re-download for existing users); fresh installs
+/// download via [EmbeddingService.runSetup] into the app-managed dir.
 class NativeEmbeddingEngine {
-  /// Rollback lever for the phase-5 soak: forces the legacy Rust sidecar.
-  static final bool sidecarForced =
-      Platform.environment['FP_EMBED_SIDECAR'] == '1';
-
-  /// Nomic task prefix — applied to every input, exactly like the server.
+  /// Nomic task prefix — applied to every input, exactly like the retired
+  /// server did.
   static const String taskPrefix = 'search_document: ';
 
   /// fastembed's default token budget (what the goldens were captured at).
