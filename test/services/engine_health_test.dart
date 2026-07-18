@@ -33,6 +33,7 @@ void main() {
       EngineHealth.piper,
       EngineHealth.whisper,
       EngineHealth.drawThings,
+      EngineHealth.embeddings,
     ]);
     for (final e in health.entries) {
       expect(e.nativeCount, 0);

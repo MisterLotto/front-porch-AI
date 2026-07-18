@@ -20,13 +20,21 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/embedding_sidecar.dart';
+import 'package:front_porch_ai/services/embedding/native_embedding_engine.dart';
+import 'package:front_porch_ai/services/engine_health.dart';
 
 /// Service that generates text embeddings (numerical vectors) for RAG memory retrieval.
 ///
-/// Uses a local ONNX sidecar running nomic-embed-text-v1.5 on CPU (localhost:5055).
-/// The sidecar is auto-managed — it starts when RAG is enabled and stops when the app closes.
+/// In-process nomic-embed-text-v1.5 via onnxruntime first (phase 5 of
+/// docs/design/sidecar-retirement.md, golden-pinned to the Rust server's
+/// exact vectors so stored embeddings keep matching); the Rust embed_server
+/// sidecar remains the automatic fallback for this soak — and the model
+/// downloader for fresh installs, whose fastembed cache the native engine
+/// then reuses as-is. `FP_EMBED_SIDECAR=1` forces the legacy path.
 class EmbeddingService extends ChangeNotifier {
   final EmbeddingSidecar? _sidecar;
+  final NativeEmbeddingEngine _native = NativeEmbeddingEngine();
+  ({String model, String vocab})? _nativeFiles;
 
   bool _available = false;
   int _dimensions = 0;
@@ -38,10 +46,43 @@ class EmbeddingService extends ChangeNotifier {
 
   EmbeddingService(this._sidecar);
 
-  /// Check if embeddings are available by verifying the sidecar is running.
-  /// Starts the sidecar automatically if it's not already running.
+  /// Check if embeddings are available. Native first (no subprocess at
+  /// all when the model is on disk); otherwise starts the sidecar, which
+  /// also downloads the model on fresh installs.
   Future<void> checkAvailability() async {
     debugPrint('[RAG:Embed] ── Checking embedding availability ──');
+
+    if (!NativeEmbeddingEngine.sidecarForced) {
+      _nativeFiles = NativeEmbeddingEngine.resolveModelFiles(null);
+      if (_nativeFiles != null) {
+        try {
+          // Real end-to-end check — also warms the session so the first
+          // user-visible embed isn't the one paying the model load.
+          final result = await _nativeEmbed('test');
+          _dimensions = result.length;
+          _available = true;
+          debugPrint(
+            '[RAG:Embed] ✅ In-process embeddings available '
+            '(${_dimensions}d vectors, no sidecar)',
+          );
+          notifyListeners();
+          return;
+        } catch (e) {
+          debugPrint(
+            '[RAG:Embed] in-process engine failed, trying sidecar: $e',
+          );
+          EngineHealth.instance.reportFailure(
+            EngineHealth.embeddings,
+            'in-process engine failed: $e',
+          );
+          _nativeFiles = null;
+        }
+      } else {
+        debugPrint(
+          '[RAG:Embed] no local model yet — the sidecar will download it',
+        );
+      }
+    }
 
     // Auto-start sidecar if available but not running
     if (_sidecar != null && _sidecar.isUsable && !_sidecar.isRunning) {
@@ -93,6 +134,29 @@ class EmbeddingService extends ChangeNotifier {
     final preview = text.length > 80 ? '${text.substring(0, 80)}...' : text;
     final sw = Stopwatch()..start();
 
+    // In-process path (with automatic sidecar fallback during the soak).
+    if (_nativeFiles != null) {
+      try {
+        final result = await _nativeEmbed(text);
+        sw.stop();
+        EngineHealth.instance.reportNative(EngineHealth.embeddings);
+        debugPrint(
+          '[RAG:Embed] ✅ ${result.length}d vector in ${sw.elapsedMilliseconds}ms (in-process) ← "$preview"',
+        );
+        return result;
+      } catch (e) {
+        debugPrint('[RAG:Embed] in-process embed failed, trying sidecar: $e');
+        EngineHealth.instance.reportFailure(
+          EngineHealth.embeddings,
+          'in-process embed failed: $e',
+        );
+        if (_sidecar != null && _sidecar.isUsable && !_sidecar.isRunning) {
+          await _sidecar.startServer();
+          await _sidecar.waitForModelReady();
+        }
+      }
+    }
+
     try {
       final result = await _embed(text);
       sw.stop();
@@ -111,6 +175,24 @@ class EmbeddingService extends ChangeNotifier {
       );
     }
     return null;
+  }
+
+  Future<List<double>> _nativeEmbed(String text) => _native.embed(
+    modelPath: _nativeFiles!.model,
+    vocabPath: _nativeFiles!.vocab,
+    text: text,
+  );
+
+  /// Frees the in-process session (~550MB of weights). Called when RAG is
+  /// turned off; the next [checkAvailability] reloads it.
+  void shutdownNative() {
+    _native.shutdown();
+  }
+
+  @override
+  void dispose() {
+    _native.shutdown();
+    super.dispose();
   }
 
   /// Batch embed multiple texts. Returns null entries for failures.

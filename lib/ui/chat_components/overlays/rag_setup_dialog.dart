@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/embedding_sidecar.dart';
+import 'package:front_porch_ai/services/embedding_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 class RagSetupDialog extends StatefulWidget {
@@ -482,8 +483,13 @@ class RagSetupDialogState extends State<RagSetupDialog> {
             ] else
               TextButton(
                 onPressed: () {
-                  // Cancel the setup — stop sidecar
+                  // Cancel the setup — release both engines (the in-process
+                  // session holds ~550MB of weights when it warmed up).
                   sidecar.stopServer();
+                  Provider.of<EmbeddingService>(
+                    context,
+                    listen: false,
+                  ).shutdownNative();
                   Navigator.of(context).pop(false);
                 },
                 child: Text(

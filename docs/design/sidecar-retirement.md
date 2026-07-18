@@ -282,5 +282,44 @@ the removal release shipped. What landed:
 re-export) can no longer play; they surface a clear error instead of
 silently using a binary that no longer exists.
 
-Phase 5 (fold the Rust embed_server into in-process ort) remains optional
-and unscheduled.
+## Phase 5 record (RAG embeddings) — shipped behind fallback 2026-07-18
+
+- In-process engine: `lib/services/embedding/native_embedding_engine.dart`
+  — nomic-embed-text-v1.5 via onnxruntime_v2 in ONE persistent worker
+  isolate (the 547MB f32 session loads once; per-call sessions like the
+  emotion engine's would be unusable). Pipeline: `search_document: `
+  prefix (the server applied it to everything — parity means we do too) →
+  shared BERT WordPiece tokenizer, 512-token truncation → forward pass →
+  mean-pool → L2 normalize.
+- **Golden methodology upgrade**: the reference vectors were captured from
+  the LIVE production Rust server (fastembed 4) BEFORE any Dart was
+  written — 14 cases spanning roleplay text, accents, emoji, CJK,
+  truncation, and unicode edge cases
+  (test/services/embedding/goldens/nomic_v15_rust_goldens.json). The suite
+  pins cosine > 0.9999 per case; it runs wherever the model exists on disk
+  and skips in CI. This matters more here than any other phase: stored
+  embeddings in user databases must keep comparing correctly against
+  vectors the new engine produces, or RAG retrieval silently degrades.
+- **Real bug the goldens caught**: the shared WordPiece tokenizer's accent
+  stripping was a Latin-only lookup table; HF/fastembed strip via Unicode
+  NFD across ALL scripts (Japanese voiced kana が→か, Greek/Cyrillic/
+  Vietnamese diacritics), so those tokenized as [UNK] natively. Fixed with
+  true NFD (`unorm_dart`, maintainer-approved dep) + combining-mark
+  removal — which also quietly improves the expression classifier that
+  shares this tokenizer (its own 18 goldens still pass).
+- Model reuse: the engine reads the fastembed hub cache the Rust server
+  populated (`~/Library/Caches/front-porch-ai/embeddings` and the
+  platform equivalents) — zero re-download for existing users. Fresh
+  installs: the sidecar still downloads the model this soak; the native
+  path picks the cache up from then on.
+- Wiring: `EmbeddingService` native-first (no subprocess started at all
+  when the model is on disk); Rust sidecar is the automatic per-call
+  fallback. Lever: `FP_EMBED_SIDECAR=1`. EngineHealth row: 'Memory
+  embeddings'. `FP_ORT_LIB` pre-loads libonnxruntime for bare test
+  harnesses (FP_SHERPA_LIB pattern).
+- Still TODO for phase-5 completion: soak one release, then delete
+  `tools/embed_server/` + `embedding_sidecar.dart` + the sidecar branches
+  in EmbeddingService, add a native ModelFetch download for fresh
+  installs, remove the cargo/bundling steps from nightly.yml +
+  build-macos.sh, and finally delete `Sidecar.entitlements` (nothing will
+  need it anymore).

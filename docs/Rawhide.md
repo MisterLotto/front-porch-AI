@@ -5,6 +5,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 ## Recent improvements (unreleased — ships in the next build)
 
 - 🪶 **The app is dramatically smaller and faster to install** — the old Python-based speech and image helpers are gone for good. Voice, dictation, character expressions, and Draw Things all run on the new built-in engines that you've been soaking — no bundled Python, over a gigabyte lighter, and faster to sign, download, and update.
+- 🧠 **Character memory (RAG) now runs inside the app** — the last background helper process is being retired too. Your existing memories keep working exactly as before (the new engine was verified to produce matching results down to the decimal), the model you already downloaded is reused as-is, and one less process runs on your machine.
 - 🧹 **One-click "Reclaim Disk Space"** — Settings → Voice & Media now offers to delete the old engines' leftover model files (up to ~2 GB for some setups). It only appears if you actually have old files, and your voices and settings are untouched.
 - 🎙️ **Voice input from your phone/browser got lighter too** — the web mic now records in a format the built-in engine reads directly, so uploads are smaller and transcription starts sooner.
 - 🗣️ **Piper voice installs are smarter** — installing a voice now downloads the model the app actually plays (no more dead-weight files). Heads up: hand-made custom Piper voices aren't supported by the new engine and will ask you to pick a standard voice instead.

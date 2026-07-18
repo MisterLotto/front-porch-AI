@@ -51,6 +51,7 @@ class EngineHealth extends ChangeNotifier {
   static const String piper = 'Piper voice';
   static const String whisper = 'Voice input';
   static const String drawThings = 'Draw Things';
+  static const String embeddings = 'Memory embeddings';
 
   static const List<String> _order = [
     expressions,
@@ -58,6 +59,7 @@ class EngineHealth extends ChangeNotifier {
     piper,
     whisper,
     drawThings,
+    embeddings,
   ];
 
   final Map<String, EngineHealthEntry> _entries = {
