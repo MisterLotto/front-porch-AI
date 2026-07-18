@@ -5199,3 +5199,14 @@ process, and the removed Chub/aicharactercards in-app browser (incl. its WPE Web
 Linux notes + a whole troubleshooting section). Rewritten for the in-process world;
 Linux build deps now match CI's proven set. Deployed to the droplet as part of the
 1.0 website refresh.
+
+## 2026-07-18 (UTC) — Website refreshed for the 1.0 release (deployed)
+**Files:** `website/build.mjs`, `website/src/index.html`
+**Why:** STABLE_VERSION bumped v0.9.9.1.3 → v1.0.0 (stamps the Stable download card);
+hero gained the "🎉 Version 1.0 is here — stay awhile and listen" announcement linking
+to releases/latest; Stable card bullets refreshed to the 1.0 headliners (Stoop,
+Realism, Journal, voice/expressions/phone); Stoop section eyebrow now says "New in
+1.0". Built (link check green, 15 screenshots regenerated from the retaken 1.0 set)
+and rsync-deployed to the droplet; live verification: announcement + v1.0.0 served,
+zero stale sidecar strings (the de-staled docs from 6aa97646 render clean).
+Playwright desktop+phone screenshots in ~/Desktop/fpai-review/website-1.0-*.png.
