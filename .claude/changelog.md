@@ -5313,3 +5313,20 @@ top level). That top-level spot is now canonical and actually read on fresh
 group sessions — including for pre-fix groups via the baseline fallback — and
 every group authoring surface gains "Story begins…"/"Opens at…" through ONE
 shared widget. Analyze clean; 2300 tests pass.
+
+## 2026-07-20 (UTC) — Eval hang guards: streams and tool calls can no longer spin forever
+**Files:** `lib/services/chat/llm_eval_engine.dart` (kEvalStreamChunkTimeout
+180s between-chunk guard on fireLLMEval, injectable via ctor for tests;
+kEvalToolCallTimeout 6min), `lib/services/chat_service.dart` (_fireToolEval
+whole-call deadline → null on timeout), `test/services/chat/llm_eval_engine_test.dart`
+(3 hang-guard tests: never-emits, stalls-after-first-chunk, slow-but-alive
+untouched; factory gains streamFactory/streamChunkTimeout).
+**Why:** Discord report (Aelivar): with oMLX unloading the model after 15min
+idle, the Journal pass's request could hang forever on a stalled cold reload —
+the retry loop only fired on thrown errors or completed-empty streams, so the
+"Where we are" spinner spun indefinitely. A between-chunk timeout now throws
+into the existing retry/give-up path (silent fail, retry next interval — the
+pass's designed failure mode), and the non-streaming tools call gets a
+whole-call deadline (a timed-out probe just marks the backend XML-only).
+Hardens ALL realism/needs/journal/growth evals, not just the Journal.
+Analyze clean; 2303 tests pass.

@@ -2098,7 +2098,12 @@ class ChatService extends ChangeNotifier {
         stopSequences: const [],
       ),
       tools,
-    );
+      // Whole-call deadline: a backend that accepts the request and never
+      // answers (cold model reload after an idle unload, dead server queue)
+      // must not park a journal/realism pass forever. Timeout → null, which
+      // every caller already treats as a failed call (the probe falls back
+      // to the text path, which carries its own between-chunk timeout).
+    ).timeout(kEvalToolCallTimeout, onTimeout: () => null);
   }
 
   /// Backend+model identity key for the tools probe. Remote model name AND
