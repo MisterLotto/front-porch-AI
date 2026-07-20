@@ -361,13 +361,25 @@ Everything above shipped as designed, with these deltas:
 - **Passage-of-time toggle:** stays in Character State settings — the
   calendar gear carries only "story begins on…" and "set date & time"
   (relocating the toggle would have duplicated a control for no UX gain).
-- **Group creation wizard:** did NOT gain the calendar block. Investigation
-  showed the group creator's scene-time seed (baseline blob
-  `timeOfDay`/`dayCount`) has **no runtime application path** to the
-  chat-scoped clock — it's editor-carried state only, a pre-existing latent
-  gap. Groups author dates live via the calendar dialog (works fully in
-  groups; time is chat-scoped). Wiring the wizard seed through is its own
-  small fix if wanted.
+- **Group creation wizard:** initially shipped without the calendar block
+  because the group creator's scene-time seed had **no runtime application
+  path** to the chat-scoped clock (editor-carried state only — a
+  pre-existing latent gap). **Fixed in the follow-up commit:** group-wide
+  time now lives as canonical TOP-LEVEL keys on `defaultMemberRealismState`
+  (`timeOfDay`/`dayCount`/`storyStartDate`/`storyStartTime` — adopting the
+  spot the group settings dialog already wrote), `parseGroupTimeSeed` reads
+  them (falling back to the per-member baseline copy, so pre-fix groups'
+  authored time finally applies too), and both fresh-group paths
+  (`_loadLastSession` 0-session + `startNewChat` group branch) seed the
+  clock through the same `seedFromV2OrExt` the 1:1 card path uses. The
+  authoring UI is one shared widget — `StoryBeginsRow`
+  (`ui/widgets/story_begins_row.dart`), extracted from RealismFormSection's
+  private row — used by the 1:1 form, the group creation wizard's global
+  scene time, the group dynamics editor, and the group settings dialog.
+  Per-member baseline time copies keep being written for older apps reading
+  exported group cards. (The web group creator is a minimal name+members
+  flow with no realism seeding step at all, so no web change — web groups
+  author dates via the calendar modal.)
 - **Web parity:** `GET /api/chat/tools/calendar` (owner-scoped day/card
   payload), additive `time.{clock,date,dateLong,storyClock,storyStartDate}`
   fields, `POST /api/chat/tools/time` additive `{setClock}`/`{setStartDate}`

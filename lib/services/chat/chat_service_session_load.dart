@@ -47,6 +47,26 @@ extension ChatServiceSessionLoad on ChatService {
       // See "keep reset blocks in sync" (setActiveGroup, startNewChat 1:1+group (now explicit in both), load* , setActive* all must hit this; now includes needs/chaos/... + leaves (see CLAUDE.md for full; incomplete zeroing now complete) + " ; now complete in all group/0-session/new-chat hygiene)" ; incomplete zeroing now complete).
       // (cross-ref setActiveCharacter:1572)
       _timeService.resetForFreshChat();
+      // Fresh GROUP session: apply the group's authored scene-time seed on
+      // top of the reset (story-calendar "As built" gap fix — the wizard's
+      // time seed used to be editor-carried only and never reached the
+      // clock). Keep in sync with the startNewChat group branch.
+      if (_activeGroup != null) {
+        final timeSeed = parseGroupTimeSeed(
+          _activeGroup!.defaultMemberRealismState,
+          _activeGroup!.baselineRealismState,
+        );
+        if (timeSeed != null) {
+          _timeService.seedFromV2OrExt(
+            dayCount: timeSeed.dayCount,
+            timeOfDay: timeSeed.timeOfDay,
+            storyStartDate: timeSeed.storyStartDate,
+            storyStartTime: timeSeed.storyStartTime,
+            passageOfTimeEnabled:
+                _storageService.realismSettings.passageOfTimeDefault,
+          );
+        }
+      }
       _nsfwService.resetForFreshChat();
       _lorebookScanner.resetLorebookTriggerState();
       _activeObjectives = [];

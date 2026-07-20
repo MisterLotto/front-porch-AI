@@ -18,8 +18,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 
 /// Shared Realism Engine configuration form.
 ///
@@ -140,124 +140,6 @@ class RealismFormSection extends StatelessWidget {
         .split('_')
         .map((w) => w[0].toUpperCase() + w.substring(1))
         .join(' ');
-  }
-
-  /// Story Calendar authoring row (story-calendar.md §3a): "Story begins…" —
-  /// the day the chat starts (default, what every pre-calendar card meant) or
-  /// a fixed date at any year for period settings — plus an optional exact
-  /// opening clock behind the friendly time-of-day dropdown above.
-  Widget _storyCalendarRow(BuildContext context, TextStyle labelStyle) {
-    final amber = AppColors.porchAmberOf(context);
-    final anchor = StoryClock.parse(storyStartDate);
-    final hhmm = StoryClock.parseHHMM(storyStartTime);
-
-    Widget chip({
-      required IconData icon,
-      required String label,
-      required bool isSet,
-      required VoidCallback onTap,
-      required VoidCallback onClear,
-    }) => Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerOf(context),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSet
-                  ? amber.withValues(alpha: 0.55)
-                  : AppColors.borderOf(context),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, size: 13, color: amber),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: isSet
-                        ? AppColors.textPrimary(context)
-                        : AppColors.textTertiary(context),
-                  ),
-                ),
-              ),
-              if (isSet)
-                GestureDetector(
-                  onTap: onClear,
-                  child: Icon(
-                    Icons.close,
-                    size: 13,
-                    color: AppColors.iconSecondary(context),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    return Row(
-      children: [
-        chip(
-          icon: Icons.flag_outlined,
-          label: anchor == null
-              ? 'Story begins: the day the chat starts'
-              : 'Story begins ${StoryClock.formatShortDate(anchor)}, '
-                    '${anchor.year}',
-          isSet: anchor != null,
-          onTap: () async {
-            final now = DateTime.now();
-            final picked = await showDatePicker(
-              context: context,
-              initialDate: anchor == null
-                  ? DateTime(now.year, now.month, now.day)
-                  : DateTime(anchor.year, anchor.month, anchor.day),
-              firstDate: DateTime(1),
-              lastDate: DateTime(9999, 12, 31),
-              helpText: 'The story begins on…',
-            );
-            if (picked == null) return;
-            onStoryStartDateChanged!(
-              StoryClock.serializeDate(
-                DateTime.utc(picked.year, picked.month, picked.day),
-              ),
-            );
-          },
-          onClear: () => onStoryStartDateChanged!(null),
-        ),
-        const SizedBox(width: 10),
-        chip(
-          icon: Icons.schedule,
-          label: hhmm == null
-              ? 'Opens at: time-of-day default'
-              : 'Opens at ${StoryClock.formatClock(DateTime.utc(2000, 1, 1, hhmm.$1, hhmm.$2))}',
-          isSet: hhmm != null,
-          onTap: () async {
-            final picked = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay(
-                hour: hhmm?.$1 ?? 9,
-                minute: hhmm?.$2 ?? 0,
-              ),
-              helpText: 'The story opens at…',
-            );
-            if (picked == null) return;
-            onStoryStartTimeChanged?.call(
-              '${picked.hour.toString().padLeft(2, '0')}:'
-              '${picked.minute.toString().padLeft(2, '0')}',
-            );
-          },
-          onClear: () => onStoryStartTimeChanged?.call(null),
-        ),
-      ],
-    );
   }
 
   String _shortTermTierName(int score) {
@@ -514,7 +396,12 @@ class RealismFormSection extends StatelessWidget {
             ),
             if (onStoryStartDateChanged != null) ...[
               const SizedBox(height: 8),
-              _storyCalendarRow(context, labelStyle),
+              StoryBeginsRow(
+                storyStartDate: storyStartDate,
+                onStoryStartDateChanged: onStoryStartDateChanged!,
+                storyStartTime: storyStartTime,
+                onStoryStartTimeChanged: onStoryStartTimeChanged,
+              ),
             ],
           ], // end showTimeAndDay
           const SizedBox(height: 20),

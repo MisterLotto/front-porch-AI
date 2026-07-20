@@ -5292,3 +5292,24 @@ ensureStartDayOfWeekAnchored, turnsPerTimePeriod, both modulo-7 weekday
 computations, TimeService's duplicate buildTimeInjection, the triple prompt
 branching. All 2296 tests pass; flutter analyze clean; web tsc/build/vitest
 clean.
+
+## 2026-07-20 (UTC) — Group wizard's story-calendar seed finally reaches the clock
+**Files:** `lib/utils/group_realism_blobs.dart` (top-level time keys on
+defaultMemberJson + new parseGroupTimeSeed with per-member baseline fallback),
+`lib/services/chat/chat_service_session_load.dart` +
+`chat_service_session_manage.dart` (fresh-group paths seed TimeService via the
+same seedFromV2OrExt the 1:1 card path uses), `lib/ui/widgets/story_begins_row.dart`
+(new shared widget, extracted from RealismFormSection's private row — deleted),
+`realism_form_section.dart`, `create_group_chat_page.dart` (global scene time
+gains the row + passes fields to blobs), `group_realism_dynamics_editor.dart`
+(loads via parseGroupTimeSeed so the editor shows what a fresh session actually
+seeds), `group_settings_dialog.dart` (top-level read/write + row),
+`test/utils/group_realism_blobs_test.dart` (parseGroupTimeSeed coverage:
+canonical, baseline fallback, precedence, garbage).
+**Why:** The group creator's scene-time seed was editor-carried state that
+never reached the runtime clock (latent gap flagged in the Story Calendar
+as-built notes; the settings dialog even wrote a second dead copy at the blob
+top level). That top-level spot is now canonical and actually read on fresh
+group sessions — including for pre-fix groups via the baseline fallback — and
+every group authoring surface gains "Story begins…"/"Opens at…" through ONE
+shared widget. Analyze clean; 2300 tests pass.
