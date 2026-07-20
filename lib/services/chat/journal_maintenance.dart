@@ -116,6 +116,12 @@ class JournalMaintenance {
   final VoidCallback onNotify;
   final Future<void> Function() onSaveChat;
 
+  /// Current story time (TimeService) — the fallback date stamp for new
+  /// cards whose cited messages carry no realism_state snapshot
+  /// (story-calendar §4; realism-off chats, legacy messages).
+  final int Function() getCurrentStoryDay;
+  final String Function() getCurrentStoryClockIso;
+
   JournalMaintenance({
     required this.store,
     required this.review,
@@ -141,6 +147,8 @@ class JournalMaintenance {
     required this.getMaxCards,
     required this.onNotify,
     required this.onSaveChat,
+    required this.getCurrentStoryDay,
+    required this.getCurrentStoryClockIso,
   });
 
   /// How many trailing messages to re-read when a force pass finds an empty
@@ -357,6 +365,7 @@ class JournalMaintenance {
       switch (op.action) {
         case JournalOpAction.add:
           final stamp = _emotionStamp(op.sourcePositions, window, windowStart);
+          final date = _dateStamp(op.sourcePositions, window, windowStart);
           resolved.add(
             JournalProposedOp(
               action: op.action,
@@ -365,6 +374,8 @@ class JournalMaintenance {
               emotionLabel: stamp?.$1,
               emotionIntensity: stamp?.$2,
               sourcePositions: op.sourcePositions,
+              storyDay: date.$1,
+              storyClock: date.$2,
             ),
           );
           break;
@@ -431,5 +442,41 @@ class JournalMaintenance {
       }
     }
     return best;
+  }
+
+  /// Deterministic story-date stamp for a new card (story-calendar §4): the
+  /// LATEST cited message's realism_state time (a memory happened when its
+  /// last cited moment happened), falling back to the last annotated message
+  /// in the window, then to the current story time. Sibling of
+  /// [_emotionStamp] — different selection rule (latest vs strongest), same
+  /// snapshot-while-live contract. Returns (storyDay, storyClockIso).
+  (int?, String?) _dateStamp(
+    List<int> positions,
+    List<ChatMessage> window,
+    int windowStart,
+  ) {
+    (int?, String?)? found;
+
+    void consider(ChatMessage m) {
+      final state = m.activeMetadata?['realism_state'];
+      if (state is! Map) return;
+      final day = (state['dayCount'] as num?)?.toInt();
+      final clock = state['storyClock'] as String?;
+      if (day == null && clock == null) return;
+      found = (day, clock);
+    }
+
+    for (final pos in positions.toList()..sort()) {
+      final idx = pos - windowStart;
+      if (idx >= 0 && idx < window.length) consider(window[idx]);
+    }
+    if (found == null) {
+      for (final m in window.reversed) {
+        consider(m);
+        if (found != null) break;
+      }
+    }
+    return found ??
+        (getCurrentStoryDay(), getCurrentStoryClockIso());
   }
 }

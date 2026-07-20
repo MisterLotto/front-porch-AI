@@ -22,6 +22,7 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import '../journal_physics.dart';
 import '../journal_store.dart';
+import '../story_clock.dart';
 
 /// The Journal — prompt injection builder (docs/design/journal-memory.md
 /// §4.5). Tenth sibling of the prompt_injection builders: renders the
@@ -52,10 +53,18 @@ class JournalInjection {
   final String? Function() getSessionId;
   final String Function() getCurrentEmotion;
 
+  /// Current story time (TimeService) — lets stamped cards render WHEN they
+  /// happened relative to now (story-calendar §4: "Day 5, Tuesday night —
+  /// 9 days ago"). Unstamped cards render exactly as before.
+  final int Function() getCurrentStoryDay;
+  final DateTime Function() getStoryStartDate;
+
   JournalInjection({
     required this.store,
     required this.getSessionId,
     required this.getCurrentEmotion,
+    required this.getCurrentStoryDay,
+    required this.getStoryStartDate,
   });
 
   /// ~600 tokens at the shared chars/4 heuristic (same estimator the
@@ -103,7 +112,8 @@ class JournalInjection {
     var usedChars = 0;
     const budgetChars = kHotSetTokenBudget * 4;
     for (final card in [...pinned, ...hot, ...resurfaced]) {
-      final line = '- (${_label(card, userName)}) ${card.content}';
+      final line =
+          '- (${_label(card, userName)}${_when(card)}) ${card.content}';
       if (usedChars + line.length > budgetChars && lines.isNotEmpty) break;
       usedChars += line.length;
       lines.add(line);
@@ -202,5 +212,28 @@ class JournalInjection {
       _ => '',
     };
     return '$category, felt $emotion$intensity';
+  }
+
+  /// " · Day 5, Tuesday night — 9 days ago" for stamped cards; '' otherwise.
+  /// The date re-derives live from storyDay + the anchor, so a calendar
+  /// re-anchor retro-dates every memory consistently (story-calendar §4).
+  String _when(JournalMemoryData card) {
+    final (day, clock) = JournalStore.stampOf(card);
+    if (day == null) return '';
+    final date = StoryClock.dateOnly(
+      getStoryStartDate(),
+    ).add(Duration(days: day - 1));
+    final weekday = StoryClock.weekdayName(date);
+    final period = clock == null
+        ? ''
+        : ' ${StoryClock.periodForHour(clock.hour).replaceAll('_', ' ')}';
+    final delta = getCurrentStoryDay() - day;
+    final ago = switch (delta) {
+      <= 0 => 'earlier today',
+      1 => 'yesterday',
+      < 14 => '$delta days ago',
+      _ => '${(delta / 7).round()} weeks ago',
+    };
+    return ' · Day $day, $weekday$period — $ago';
   }
 }

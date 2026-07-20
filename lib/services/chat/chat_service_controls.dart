@@ -30,12 +30,8 @@ extension ChatServiceControls on ChatService {
 
   Future<void> setRealismEnabled(bool enabled) async {
     _realismEnabled = enabled;
-    // Anchor the narrative weekday to the real-world day when realism first turns on for this session.
-    // Only set if not already anchored (0 = legacy/unset). This prevents re-anchoring on toggle-off/on
-    // for long-running sessions, keeping Day N stable across restarts.
-    if (enabled) {
-      _timeService.ensureStartDayOfWeekAnchored();
-    }
+    // (The story clock is always anchored — the old ensureStartDayOfWeekAnchored
+    // legacy-0 repair died with the modulo-7 weekday math.)
 
     if (enabled && _activeGroup == null && _activeCharacter != null) {
       // ── Solution 1: Pending greeting flag ────────────────────────────
@@ -160,6 +156,24 @@ extension ChatServiceControls on ChatService {
   Future<void> nudgeTimePeriod(int delta) async {
     if (!_realismEnabled) return;
     _timeService.nudgeTimePeriod(delta);
+    await _saveChat();
+    notifyListeners();
+  }
+
+  /// Calendar dialog: set the story's current date & time directly.
+  /// Same guard/save/notify shape as the nudge (it IS a precise nudge).
+  Future<void> setStoryClock(DateTime clock) async {
+    if (!_realismEnabled) return;
+    _timeService.setClockDirect(clock);
+    await _saveChat();
+    notifyListeners();
+  }
+
+  /// Calendar dialog: re-anchor "story begins on…" — the whole timeline
+  /// slides together (Day N is preserved, every date re-derives).
+  Future<void> setStoryStartDate(DateTime date) async {
+    if (!_realismEnabled) return;
+    _timeService.setStartDate(date);
     await _saveChat();
     notifyListeners();
   }

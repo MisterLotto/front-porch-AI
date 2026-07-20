@@ -342,6 +342,8 @@ extension ChatServiceSessionState on ChatService {
         timeOfDay: drift.Value(_timeService.timeOfDay),
         dayCount: drift.Value(_timeService.dayCount),
         startDayOfWeek: drift.Value(_timeService.startDayOfWeekAnchor),
+        storyClock: drift.Value(_timeService.storyClockIso),
+        storyStartDate: drift.Value(_timeService.storyStartDateIso),
         passageOfTimeEnabled: drift.Value(_timeService.passageOfTimeEnabled),
         nsfwCooldownEnabled: drift.Value(_nsfwService.nsfwCooldownEnabled),
         needsSimEnabled: drift.Value(_needsSimEnabled),

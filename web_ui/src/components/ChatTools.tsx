@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
+import { StoryCalendarModal } from './StoryCalendarModal';
 
 interface ObjectiveTask {
   description: string;
@@ -49,7 +50,18 @@ interface ToolsState {
   };
   chaos: { enabled: boolean; nsfwEnabled: boolean; pressure: number; hasPendingEvent: boolean };
   nsfw: { cooldownEnabled: boolean; cooldownTurnsRemaining: number; arousalLevel: number; arousalTier: string };
-  time: { timeOfDay: string; dayCount: number; weekday: string; passageEnabled: boolean };
+  time: {
+    timeOfDay: string;
+    dayCount: number;
+    weekday: string;
+    passageEnabled: boolean;
+    // Story Calendar (additive — absent on older facades).
+    clock?: string;
+    date?: string;
+    dateLong?: string;
+    storyClock?: string;
+    storyStartDate?: string;
+  };
   objectives: { primary: ObjectiveView | null; secondary: ObjectiveView[]; isChecking: boolean };
   focusedId?: string | null;
   group?: GroupBlock | null;
@@ -119,6 +131,7 @@ export function ChatTools({
 }) {
   const [t, setT] = useState<ToolsState | null>(null);
   const [goal, setGoal] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
 
   // Scope every tools call to the focused cast participant so objectives/arousal
   // (and the snapshot returned by mutations) follow the focus.
@@ -356,9 +369,17 @@ export function ChatTools({
         <summary>Scene &amp; time</summary>
         <div className="tool-body">
           <div className="stat-line">
-            <span>{t.time.weekday}, day {t.time.dayCount}</span>
-            <span className="muted">{t.time.timeOfDay.replace(/_/g, ' ')}</span>
+            <span>{t.time.date ?? t.time.weekday}, day {t.time.dayCount}</span>
+            <span className="muted">
+              {t.time.timeOfDay.replace(/_/g, ' ')}
+              {t.time.clock ? ` · ${t.time.clock}` : ''}
+            </span>
           </div>
+          {t.time.storyClock && (
+            <button className="link-btn story-cal-open" onClick={() => setShowCalendar(true)}>
+              📅 Story Calendar
+            </button>
+          )}
           <div className="time-dots">
             {TIME_DOTS.map(([period, dot]) => (
               <div
@@ -398,6 +419,14 @@ export function ChatTools({
         />
       )}
 
+      {showCalendar && (
+        <StoryCalendarModal
+          focusedId={focusedId}
+          canEdit={t.realismEnabled}
+          onClose={() => setShowCalendar(false)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }
