@@ -5236,3 +5236,15 @@ extensions via The Stoop, web facade) is kept as written-derived /
 read-as-seed with one legacy synthesis function. Journal stamping now carries
 a full timestamp ("that night on the pier"). Still docs-only; sessions
 columns remain gated on maintainer approval (Character Card Forge).
+
+## 2026-07-20 (UTC) — Story Calendar sketch: creator/editor seeding + OOC detail
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer required the calendar be authorable from the character
+creators and edit menus. Added §3a: the shared RealismFormSection (manual
+creator, AI creator Realism step, edit page) gains a "Story begins…" block
+(anchored-to-today default vs fixed-date mode, optional exact clock time,
+existing period/day pickers kept as friendly input), CharacterCard exports
+additive story_start_date/story_clock alongside kept day_count/time_of_day,
+group surfaces seed at group level (time is chat-scoped). Also expanded the
+OOC bullet to make explicit that both marker-style and in-narrative skip
+phrasing keep working, now mapped to real durations. Docs only.

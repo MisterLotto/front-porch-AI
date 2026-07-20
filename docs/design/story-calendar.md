@@ -84,13 +84,18 @@ reduces to `_clock = _clock.add(...)` / snap-to-period helpers in the leaf:
 - **Nudge chevrons (±1):** snap to the previous/next period's representative
   time; day rollover falls out of the datetime math instead of the manual
   wrap. Same last-message `realism_state` patch callback for swipe survival.
-- **OOC time-skip detector:** finally speaks real durations — existing
-  vocabulary maps to minutes/hours ("an hour" +60, "a few hours" +180,
-  "next morning" → next day 08:00), and the vocabulary grows the cases the
-  old model could not express: "a week later" +7 days, "next month" → the
-  1st of the following month, "that winter…" parked as a future nicety.
-  Same `passageOfTimeEnabled` gate, same pending-metadata chip
-  ("Skipped to Mon, Mar 9").
+- **OOC time-skip detector (kept, upgraded):** the detector stays and still
+  fires on *both* trigger styles it recognizes today — explicit OOC markers
+  ("(OOC: skip ahead)") **and** in-narrative skip phrasing with no marker at
+  all ("we drive for several hours", "a few hours later", "the next
+  morning…"). What changes is the payload: instead of counting fuzzy
+  periods, the same vocabulary maps to real durations — "an hour" +60 min,
+  "a few hours" +120, "several hours" +180, "next morning" → next day
+  08:00 — and grows the cases the old model could not express: "a week
+  later" +7 days, "next month" → the 1st of the following month ("that
+  winter…" parked as a future nicety). Same `passageOfTimeEnabled` gate,
+  same pending-metadata chip, which now names the destination
+  ("Skipped to Mon, Mar 9 · 2:40 PM" instead of "Skipped to Afternoon").
 - **AFK idle mode:** `advanceTimePeriods(count)` becomes count
   snap-to-next-period steps — identical observable result.
 - **One-shot parity (contract upheld):** the fused one-shot JSON carries the
@@ -118,7 +123,48 @@ The rewrite treats each as *written-derived, read-as-seed*:
 | Group realism blobs (`group_realism_blobs.dart`) | same additive-keys pattern | same |
 | V2 card extensions (`day_count`, `time_of_day` — travels via The Stoop) | keep both, add `story_clock`/`story_start_date` | prefer new; old cards seed via synthesis |
 | Web facade (`chat_tools_facade.dart`) | existing fields unchanged + additive `clock`, `storyDate`, `storyStartDate` | n/a |
-| Seeding editors (`group_realism_dynamics_editor`, `group_member_realism_editor`, speaker-objective seeding) | keep their period+day pickers, now writing through synthesis; the dynamics editor gains an optional date/time picker | n/a |
+| Seeding editors (§3a) | keep their period+day pickers, now writing through synthesis; gain the calendar block | n/a |
+
+### 3a. Seeding: creators, editors, and cards (first-class, same PR)
+
+Every place a character's *starting* time state is authored gets the
+calendar. The lucky break: they all already share **one widget** —
+`RealismFormSection` (`lib/ui/widgets/realism_form_section.dart`) is the
+form used by the manual creator (`create_character_page.dart`), the AI
+creator's Realism step (`character_creator/steps/realism_step.dart` +
+`creator_state_engine.dart`), and the edit-character page — so the calendar
+plugs in at one widget plus the card model, not five screens.
+
+The form's time block becomes:
+
+- **"Story begins…"** — two modes: *"the day the chat starts"* (default —
+  what every existing card implicitly means; the date anchors to the real
+  world when a chat begins) or *a fixed date* (date picker, any year — a
+  card set in "London, June 1888" carries its own era).
+- **Starting time of day** — the existing six-period dropdown stays as the
+  friendly picker, with an optional exact clock time for authors who care
+  ("the story opens at 11:47 PM"). Period-only input seeds the
+  representative time via the §3 synthesis — no author is forced to think
+  in minutes.
+- **Starting day** — the existing Day counter stays (Day 3 of a fixed-date
+  story means startDate + 2, exactly as you'd expect).
+
+`CharacterCard` gains the additive extension fields (`story_start_date`,
+`story_clock`) alongside the kept `day_count`/`time_of_day`, so authored
+cards round-trip through export/import/The Stoop; old apps reading a new
+card simply ignore the new keys and still get the period+day it also
+carries. The group surfaces (`create_group_chat_page.dart`,
+`group_realism_dynamics_editor.dart` — where scene time is authored
+group-wide — and the per-member expanders via `group_member_realism_editor`)
+get the same block; per-member editors keep only what is per-member
+(time stays chat-scoped, so the calendar block lives at the group level).
+The speaker-objective external seeding path (`chat_service_speaker_objectives.dart`)
+keeps its whitelisted `timeOfDay`/`dayCount` fields, additively accepting
+the new keys.
+
+After creation, the same authored values remain editable per-chat in the
+calendar dialog's gear (§6) — creator sets the default, the chat can always
+override.
 
 **One synthesis function** (in `story_clock.dart`) covers every legacy read:
 
