@@ -64,6 +64,7 @@ class CreatorState extends ChangeNotifier {
   bool generateLorebook = true;
   Set<String> selectedLoreCategories = {};
   String loreDepth = 'Standard';
+  bool includeDynamicMacros = false;
   Set<String> selectedRelationships = {};
   String customRelationship = '';
   String selectedArchetype = '';
@@ -164,6 +165,7 @@ class CreatorState extends ChangeNotifier {
   static const _prefQuickScenario = 'chargen_quick_scenario';
   static const _prefLoreCategories = 'chargen_lore_categories';
   static const _prefLoreDepth = 'chargen_lore_depth';
+  static const _prefDynamicMacros = 'chargen_dynamic_macros';
   static const _prefRelationships = 'chargen_relationships';
   static const _prefCustomRelationship = 'chargen_custom_relationship';
   static const _prefNsfwEnabled = 'chargen_nsfw_enabled';
@@ -364,6 +366,7 @@ class CreatorState extends ChangeNotifier {
         .where((c) => c.isNotEmpty)
         .toSet();
     loreDepth = prefs.getString(_prefLoreDepth) ?? 'Standard';
+    includeDynamicMacros = prefs.getBool(_prefDynamicMacros) ?? false;
     final savedRelationships = prefs.getString(_prefRelationships) ?? '';
     selectedRelationships = savedRelationships
         .split(',')
@@ -465,6 +468,7 @@ class CreatorState extends ChangeNotifier {
       selectedLoreCategories.join(','),
     );
     await prefs.setString(_prefLoreDepth, loreDepth);
+    await prefs.setBool(_prefDynamicMacros, includeDynamicMacros);
     await prefs.setString(_prefRelationships, selectedRelationships.join(','));
     await prefs.setString(_prefCustomRelationship, customRelationship);
     await prefs.setBool(_prefNsfwEnabled, nsfwEnabled);
@@ -644,6 +648,7 @@ class CreatorState extends ChangeNotifier {
     altGreetingCount = 2;
     generateLorebook = true;
     loreDepth = 'Standard';
+    includeDynamicMacros = false;
     generationDetail = 'Standard';
 
     // Generation state

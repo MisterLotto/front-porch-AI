@@ -514,6 +514,7 @@ extension CreatorEngine on CreatorState {
         generateLorebook: true,
         loreCategories: const [],
         loreDepth: 'Standard',
+        includeDynamicMacros: includeDynamicMacros,
         descriptionDetail: '2-3 paragraphs',
         age: '',
         sex: '',
@@ -612,6 +613,7 @@ extension CreatorEngine on CreatorState {
         generateLorebook: generateLorebook,
         loreCategories: selectedLoreCategories.toList(),
         loreDepth: loreDepth,
+        includeDynamicMacros: includeDynamicMacros,
         descriptionDetail:
             CreatorState.generationDetailOptions[generationDetail] ??
             '2-3 paragraphs',
@@ -713,6 +715,7 @@ extension CreatorEngine on CreatorState {
           generateLorebook: generateLorebook,
           loreCategories: selectedLoreCategories.toList(),
           loreDepth: loreDepth,
+          includeDynamicMacros: includeDynamicMacros,
           descriptionDetail:
               CreatorState.generationDetailOptions[generationDetail] ??
               '2-3 paragraphs',
