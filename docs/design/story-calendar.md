@@ -32,7 +32,7 @@ all get real dates and times of day.
 DateTime _clock;          // the story's current moment (UTC, minute granularity)
 DateTime _startDate;      // Day 1's date (date-only, UTC midnight)
 bool _passageOfTimeEnabled;
-int  _turnsSinceLastTimeAdvance;   // pacing counter — unchanged concept
+int  _turnsSinceClockMoved;   // stall backstop only — the 6-turn pacing gate is gone (§2)
 ```
 
 ### Everything else is derived (nothing else is stored in memory)
@@ -69,18 +69,37 @@ Every hand-rolled six-element array walk in the current service (nudge,
 advanceTimePeriods, OOC skip, hold-eval rollover — four separate copies)
 reduces to `_clock = _clock.add(...)` / snap-to-period helpers in the leaf:
 
-- **Deterministic pacing (unchanged cadence):** the 6-turn eligibility
-  counter stays. The clock only moves on the events below — no per-turn
-  drift — so the observable rhythm users know is preserved.
-- **Eligible advance + LLM eval (upgraded):** the scene-time eval stops being
-  a boolean veto and reports elapsed time. Tool/JSON schema (flat, no
-  grammar — the GBNF gotcha stands):
-  `{"minutes_elapsed": 0–480, "new_day": bool, "posture": "..."}`.
-  `minutes_elapsed: 0` is the old "hold"; the deterministic floor on eval
-  failure/absence is "advance to the next period's representative time"
-  (exactly today's failure behavior, expressed in minutes). `new_day` jumps
-  to 08:00 next day (valid from evening onward, as today). Clamped hard —
-  the LLM can pace a scene, never teleport the timeline.
+- **Continuous per-turn time (the 6-turn gate and the veto die):** with a
+  real clock, "time is frozen for six turns, then lurches a whole period
+  unless the LLM vetoes" is backwards — the AI should report how much time
+  each exchange took, every turn. Crucially this costs **zero extra LLM
+  calls**: the scene-time eval already fires every turn today (the
+  "not-yet-eligible" branch runs a posture-only call each turn, and in
+  one-shot mode posture rides the fused JSON each turn) — the gate was
+  never saving a call, only withholding the time question from it. The
+  per-turn schema (flat, no grammar — the GBNF gotcha stands):
+  `{"minutes_elapsed": 0–180, "new_day": bool, "posture": "..."}`.
+  - `minutes_elapsed: 0` is legitimate (mid-fight slow-motion — the old
+    "hold", now expressible per turn instead of once per six).
+  - **Clamped hard** to [0, 180] per turn — the LLM paces scenes, it never
+    teleports the timeline. Bigger jumps belong to `new_day` (→ 08:00 next
+    day, valid from evening onward as today) and the OOC skip detector.
+  - **Deterministic floor:** eval failure/absence/tool-less garbage →
+    +5 minutes (a typical exchange), so a flaky local model degrades to
+    gentle real-time drift, never a freeze.
+  - **Stall backstop:** `_turnsSinceClockMoved ≥ 12` forces a snap to the
+    next period's representative time — preserving the old system's one
+    real guarantee ("time can never freeze forever") without its gate.
+  - Retired with the gate: `turnsPerTimePeriod`, `hold_time`, the
+    eligible/not-eligible/passage-disabled triple prompt branching in
+    `evaluateTimeProgressAndPostureIfNeeded` (three prompt variants
+    collapse into one per-turn prompt; passage-disabled keeps a
+    posture-only variant).
+  - **Pacing character changes, deliberately:** instead of frozen-then-lurch,
+    the clock creeps naturally (a chatty hour is an hour; a terse scene
+    barely moves). This is the accuracy the calendar promises, and the
+    per-message chips + time strip make it visible and auditable. Manual
+    chevrons and OOC skips remain the user's override at all times.
 - **Nudge chevrons (±1):** snap to the previous/next period's representative
   time; day rollover falls out of the datetime math instead of the manual
   wrap. Same last-message `realism_state` patch callback for swipe survival.
@@ -99,9 +118,12 @@ reduces to `_clock = _clock.add(...)` / snap-to-period helpers in the leaf:
 - **AFK idle mode:** `advanceTimePeriods(count)` becomes count
   snap-to-next-period steps — identical observable result.
 - **One-shot parity (contract upheld):** the fused one-shot JSON carries the
-  same `minutes_elapsed`/`new_day` fields; both paths tick the same counter
-  and mutate the same clock. Parity holds because there is only one clock
-  and one mutation site.
+  same per-turn `minutes_elapsed`/`new_day` fields the dedicated eval does;
+  both paths apply the same clamp, floor, and backstop to the same clock.
+  Parity holds because there is only one clock and one mutation site — and
+  the rewrite actually *simplifies* the one-shot contract, since the old
+  "one-shot must remember to tick the gate counter" trap (which once shipped
+  as frozen-time) no longer exists.
 
 ### Explicitly out of scope
 
@@ -286,13 +308,16 @@ duplicate of TimeInjection) is deleted in the same pass — one builder.
 
 1. **Core rewrite:** `chat/story_clock.dart` (pure leaf: conversions,
    synthesis, formatting) + TimeService rewritten around `_clock`/`_startDate`
-   (nudge/OOC/AFK/eval collapse onto the leaf; the four period-array walks,
-   both weekday computations, `resolveStartDayOfWeek`,
-   `ensureStartDayOfWeekAnchored`, and TimeService's duplicate
-   `buildTimeInjection` are deleted). Eval schema upgrade with parity across
-   one-shot. Sessions columns (post-approval) + every wire format in §3.
-   Unit tests target the leaf (boundary/rollover/leap-year/synthesis) and the
-   service (eligibility, floors, restore paths).
+   (nudge/OOC/AFK/eval collapse onto the leaf; deleted outright: the four
+   period-array walks, both weekday computations, `resolveStartDayOfWeek`,
+   `ensureStartDayOfWeekAnchored`, TimeService's duplicate
+   `buildTimeInjection`, the 6-turn gate (`turnsPerTimePeriod`), `hold_time`,
+   and the triple prompt branching in
+   `evaluateTimeProgressAndPostureIfNeeded`). Per-turn eval schema with
+   parity across one-shot. Sessions columns (post-approval) + every wire
+   format in §3. Unit tests target the leaf
+   (boundary/rollover/leap-year/synthesis) and the service (clamp, floor,
+   stall backstop, restore paths).
 2. **Journal stamping** (§4): pass writes the pouch; injection suffix;
    diary/panel date groups.
 3. **Calendar UI** desktop + **web parity** (§6).
@@ -306,10 +331,14 @@ stamping path); phase 3 may follow immediately after in the same effort.
 ## 10. Open questions for the maintainer
 
 1. **Sessions columns approval** (§5) — the hard gate.
-2. **`minutes_elapsed` eval** (§2): comfortable letting local models pace
-   minutes (clamped, deterministic floor), or keep the veto-only eval for
-   v1 and advance by whole periods? The rewrite works either way; minutes
-   is recommended (it's what makes "9:40" mean something).
+2. **Continuous per-turn time** (§2): the 6-turn gate + veto are retired in
+   favor of per-turn `minutes_elapsed` riding the eval that already fires
+   every turn (zero extra calls; clamp + floor + stall backstop as
+   guardrails). This deliberately changes the pacing *feel* from
+   frozen-then-lurch to a naturally creeping clock — approved per the
+   maintainer's 2026-07-20 direction, noted here since it is the one
+   observable-behavior change in the rewrite. Tuning knobs (per-turn clamp
+   180, floor 5, backstop 12) are constants in `story_clock.dart`.
 3. Clock digits in the injection (§7) — recommended yes; confirm.
 4. Group calendar dots: focused participant only (matches the journal
    panel — recommended) or union of all members?

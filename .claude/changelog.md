@@ -5248,3 +5248,15 @@ additive story_start_date/story_clock alongside kept day_count/time_of_day,
 group surfaces seed at group level (time is chat-scoped). Also expanded the
 OOC bullet to make explicit that both marker-style and in-narrative skip
 phrasing keep working, now mapped to real durations. Docs only.
+
+## 2026-07-20 (UTC) — Story Calendar sketch: continuous per-turn time replaces the 6-turn gate
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer asked whether AI-driven advancement should change now that
+time is "actual". Yes: the 6-turn eligibility gate + hold_time veto are
+retired in favor of per-turn minutes_elapsed riding the scene-time eval that
+ALREADY fires every turn (posture-only branch / fused one-shot JSON), so the
+upgrade costs zero extra LLM calls. Guardrails: per-turn clamp [0,180], +5min
+deterministic floor on eval failure, 12-turn stall backstop snapping to the
+next period (preserves the never-freezes guarantee). Deletion list grows:
+turnsPerTimePeriod, hold_time, the triple prompt branching. Pacing feel
+deliberately changes from frozen-then-lurch to a creeping clock. Docs only.
