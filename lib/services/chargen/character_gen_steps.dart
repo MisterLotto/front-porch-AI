@@ -113,13 +113,22 @@ Respond with ONLY the JSON:''';
         'as $name would speak — use their vocabulary, cadence, and emotional '
         'register.';
 
+    // Skip the relationship question for strangers/one-shots — inventing shared
+    // history (what they want from {{user}}, unspoken tension) actively hurts a
+    // "you just met" card. Empty OR a stranger-like preset counts as no relationship.
+    final relLower = relationship.trim().toLowerCase();
+    final hasRelationship = relLower.isNotEmpty &&
+        relLower != 'stranger' &&
+        relLower != 'strangers' &&
+        relLower != 'none';
+
     // Voice → motive → wound → (relationship) → social → pressure → joy →
     // (NSFW) → appearance. See the question constants for the rationale.
     final questions = <String>[
       _qVoice,
       _qWho,
       _qWound,
-      if (relationship.trim().isNotEmpty) _relationshipQuestion(relationship),
+      if (hasRelationship) _relationshipQuestion(relationship),
       _qSocial,
       _qPressure,
       _qJoy,
@@ -182,6 +191,7 @@ Respond with ONLY the JSON:''';
     required CharacterCard card,
     required String name,
     required String interviewTranscript,
+    bool preserveUserScenario = false,
     void Function(String)? onProgress,
   }) async {
     final prompt =
@@ -264,9 +274,10 @@ Respond with ONLY the JSON:''';
     }
     // Scenario is intentionally CONCISE (2-4 sentences) so it can be shorter
     // than the base — use an absolute floor, not the 0.5x ratio, to accept a
-    // tight rewrite while still rejecting an empty/garbage response.
+    // tight rewrite while still rejecting an empty/garbage response. Never touch
+    // a scenario the USER wrote verbatim (a local model would drift it).
     final newScenario = (data['scenario']?.toString() ?? '').trim();
-    if (newScenario.length >= 60) {
+    if (!preserveUserScenario && newScenario.length >= 60) {
       card.scenario = newScenario;
       debugPrint(
         'CharacterGen: Scenario enriched (${newScenario.length} chars)',

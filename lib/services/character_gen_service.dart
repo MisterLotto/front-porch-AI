@@ -335,6 +335,7 @@ class CharacterGenService {
         card: card,
         name: name,
         interviewTranscript: interviewTranscript,
+        preserveUserScenario: scenario.trim().isNotEmpty,
         onProgress: onProgress,
       );
     }
