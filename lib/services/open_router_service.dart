@@ -306,6 +306,25 @@ class OpenRouterService extends LLMService {
       payload['reasoning'] = reasoning;
     }
 
+    // Qwen3's NATIVE thinking switch — LOCAL backends only. Local OpenAI-compatible
+    // MLX/vLLM servers (oMLX, LM Studio) IGNORE the OpenRouter `reasoning` object
+    // above and only honor `enable_thinking` in the chat template. Verified live
+    // against oMLX v0.5.2: `reasoning:{enabled:false}` left Qwen3 thinking (554
+    // reasoning tokens), while `enable_thinking:false` suppressed it completely (0).
+    // Gated to `_isLocalUrl` so real OpenRouter/Nano-GPT are untouched — they read
+    // the `reasoning` object and could reject/misforward an unknown chat-template
+    // kwarg. Mirrors the KoboldCpp path (openai_chat_stream.dart). `thinkOn` matches
+    // Kobold's exactly: reasoning wanted, unless a caller hard-suppressed via
+    // reasoningMaxTokens==0 (Continue, evals, call mode). (A remote self-hosted
+    // vLLM/MLX endpoint would also want this, but that's not the localhost case
+    // this fixes; extend the gate if that need appears.)
+    if (_isLocalUrl) {
+      payload['chat_template_kwargs'] = {
+        'enable_thinking':
+            params.reasoningEnabled && params.reasoningMaxTokens != 0,
+      };
+    }
+
     // Add stop sequences if present
     if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
       // Remote providers commonly hard-cap `stop` at 4 (OpenAI spec). The

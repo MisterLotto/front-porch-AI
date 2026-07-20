@@ -172,6 +172,7 @@ class ChargenFacade {
         generateLorebook: fields['generateLorebook'] != false,
         loreCategories: _strList(fields['loreCategories'], const []),
         loreDepth: fields['loreDepth']?.toString() ?? 'Standard',
+        includeDynamicMacros: fields['includeDynamicMacros'] == true,
         age: fields['age']?.toString() ?? '',
         sex: fields['sex']?.toString() ?? '',
         relationship: fields['relationship']?.toString() ?? '',

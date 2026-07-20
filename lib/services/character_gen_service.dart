@@ -20,10 +20,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/utils/json_sanitizer.dart';
 import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/chargen/char_macro.dart';
+import 'package:front_porch_ai/services/chargen/lorebook_mechanics.dart';
 
 part 'chargen/character_gen_llm.dart';
 part 'chargen/character_gen_prompts.dart';
@@ -54,20 +54,48 @@ const _loreCategoryDescriptions = {
       'Forbidden knowledge, hidden locations, conspiracies, prophecies, sealed powers, forgotten truths that most people in the world don\'t know about',
 };
 
-const _interviewQuestions = [
-  'Describe your physical appearance in your own words. Be specific — what do you look like, and how do you carry yourself?',
-  'Who are you, and what do you want more than anything?',
-  'What are your goals and plans right now — what are you actively working toward?',
-  'And how do you intend to achieve them? What is your approach or strategy — and what might get in your way?',
-  'Tell me about a moment from your past that shaped who you are today.',
-  'What are you most afraid of, and what brings you genuine joy?',
-  'How do you treat people who have just met you versus people you trust completely?',
-  'How do you talk? Give me a sample of how you\'d explain something to someone you\'re trying to impress — then how you\'d say the same thing to a close friend.',
-];
+// The interview is assembled in _runCharacterInterview in a deliberate order:
+// VOICE first (it grounds the greeting + example dialogue, so establishing it
+// early keeps every later answer voice-consistent), then motive/wound, the
+// (conditional) relationship to {{user}}, the social gradient, pressure
+// behavior, joy, the (conditional) NSFW question, and APPEARANCE last (so the
+// character doesn't open with a vanity monologue before its voice exists). The
+// old "goal triad" (three overlapping questions about wants/plans/how) was
+// collapsed into one motive + one wound question.
+const _qVoice =
+    'How do you talk? Give me two quick samples of your voice: first, how you\'d '
+    'explain something to someone you\'re trying to impress — then how you\'d say '
+    'the same thing to someone you completely trust.';
+const _qWho =
+    'In your own words: who are you, and what do you want more than anything '
+    'right now?';
+const _qWound =
+    'Tell me about a moment from your past that shaped who you are — and what it '
+    'left you afraid of, or unable to do.';
+const _qSocial =
+    'How do you treat someone who\'s just met you versus someone you\'ve come to '
+    'trust completely? What changes?';
+const _qPressure =
+    'When you\'re cornered, or when someone truly angers you — what do you '
+    'actually do? Show me, don\'t tell me.';
+const _qJoy =
+    'What brings you genuine joy or peace — the thing that lets your guard down?';
+const _qAppearance =
+    'Now describe your physical appearance in your own words — what you look like '
+    'and how you carry yourself. Be specific.';
+
+/// Only asked when a relationship to {{user}} is set — voices the bond so the
+/// greeting and example dialogue carry real history. Skipped for strangers /
+/// one-shots (an empty relationship), where invented shared history would hurt.
+String _relationshipQuestion(String relationship) =>
+    'Your relationship to {{user}} is: $relationship. Who are they to you, '
+    'really — what do you want from them, and what\'s unresolved or unspoken '
+    'between you?';
 
 const _nsfwInterviewQuestion =
-    'Describe your sex life — how often do you fuck, what\'s your favorite position, '
-    'are you dominant or submissive, what kinks are you into, and what gets you off the hardest?';
+    'When it comes to sex and intimacy: what do you crave, where are your hard '
+    'limits, are you dominant or submissive — and if there\'s someone you '
+    'desire, what do they do to you?';
 
 /// Service for AI-powered character generation.
 ///
@@ -88,6 +116,11 @@ class CharacterGenService {
   int _generationEpoch = 0;
   bool _aborted = false;
   bool _reasoningEnabled = false;
+
+  /// Opt-in: when true, the lorebook + greeting prompts invite the model to add
+  /// dynamic `{{pick}}`/`{{roll}}` "living detail" macros. Off by default —
+  /// capable models use them well, weaker ones place them awkwardly.
+  bool _includeDynamicMacros = false;
 
   bool get isAborted => _aborted;
 
@@ -130,6 +163,7 @@ class CharacterGenService {
     bool generateDescription = false,
     bool nsfwEnabled = false,
     bool reasoningEnabled = false,
+    bool includeDynamicMacros = false,
     void Function(String accumulated)? onProgress,
     void Function(String error)? onError,
     void Function(String status)? onStatus,
@@ -161,6 +195,7 @@ class CharacterGenService {
     _aborted = false;
     _llmService.abortGeneration(); // clear stuck state just in case
     _reasoningEnabled = reasoningEnabled;
+    _includeDynamicMacros = includeDynamicMacros;
 
     int attempts = 0;
     CharacterCard? card;
@@ -286,6 +321,7 @@ class CharacterGenService {
       card: card,
       name: name,
       nsfwEnabled: nsfwEnabled,
+      relationship: relationship,
       onStatus: onStatus,
       onProgress: onProgress,
       worldLore: worldLore,
