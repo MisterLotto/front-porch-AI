@@ -552,6 +552,21 @@ extension ChatServiceSessionManage on ChatService {
 
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
+
+    // Inherit theme from the most recent prior session with this character/group.
+    _sessionThemeOverrides = ChatThemeOverrides();
+    try {
+      final lastThemeJson = await _db.getLastSessionThemeOverrides(
+        characterId: _activeCharacter?.dbId,
+        groupId: _activeGroup?.id,
+      );
+      if (lastThemeJson != null) {
+        _sessionThemeOverrides =
+            ChatThemeOverrides.fromJsonString(lastThemeJson);
+      }
+    } catch (_) {
+      _sessionThemeOverrides = ChatThemeOverrides();
+    }
     debugPrint(
       '[startNewChat] BEFORE SAVE: arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
     );
