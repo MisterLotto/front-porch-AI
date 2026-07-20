@@ -53,7 +53,8 @@ import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 
 /// A timer-free, IO-free [LLMProvider] double. Exposes the backend-type surface
-/// screens read (e.g. ReviewAvatarPanel checks `activeBackend`) without
+/// screens read (e.g. the shared AvatarGenerationPanel's vision peek checks
+/// `activeBackend`) without
 /// constructing any backend service.
 class FakeLLMProvider extends ChangeNotifier implements LLMProvider {
   FakeLLMProvider({this.activeBackend = BackendType.kobold});

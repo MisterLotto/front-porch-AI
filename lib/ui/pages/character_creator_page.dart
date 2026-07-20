@@ -20,7 +20,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
@@ -312,10 +311,6 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
                             listen: false,
                           ),
                           personaService: Provider.of<UserPersonaService>(
-                            context,
-                            listen: false,
-                          ),
-                          imageService: Provider.of<ImageGenService>(
                             context,
                             listen: false,
                           ),

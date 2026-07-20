@@ -60,6 +60,16 @@ extension GenLlm on CharacterGenService {
             minP: 0.05,
             topP: isJsonMode ? 0.90 : 0.95,
             reasoningEnabled: _reasoningEnabled,
+            // When reasoning is OFF, also pin the budget to 0. On oMLX/OpenRouter/
+            // Nano-GPT the `reasoning:{enabled:false}` signal is only emitted when a
+            // max_tokens is present (see OpenRouterService's payload guard); without
+            // this, hybrid thinking models (Qwen3, DeepSeek, Kimi:thinking) fall back
+            // to thinking-on and dump a <think> block into the output — which was
+            // leaking straight into the portrait-prompt seed. Matches the convention
+            // every other suppress path uses (evals, Continue, call mode). When the
+            // user turns reasoning ON for generation, leave it null so the model
+            // reasons normally.
+            reasoningMaxTokens: _reasoningEnabled ? null : 0,
             stopSequences: stops,
           ),
         )) {

@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
 import 'package:front_porch_ai/ui/character_creator/widgets/creator_section_card.dart';
+import 'package:front_porch_ai/ui/character_creator/widgets/dynamic_macros_toggle.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/alternate_greetings_slider.dart';
 import 'package:front_porch_ai/ui/widgets/avatar_art_style_selector.dart';
@@ -191,6 +192,15 @@ class GuidedOutputSettings extends StatelessWidget {
           const SizedBox(height: 8),
           _depthChips(context, accent),
         ],
+        const SizedBox(height: 16),
+        DynamicMacrosToggle(
+          value: state.includeDynamicMacros,
+          accentColor: accent,
+          onChanged: (val) {
+            state.includeDynamicMacros = val;
+            _save();
+          },
+        ),
       ],
     );
   }

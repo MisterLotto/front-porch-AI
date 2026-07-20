@@ -65,27 +65,7 @@ Future<String> promoteLookOverPortrait({
       .resolveFile(storage.characterBaseDir(card.name).path)
       .readAsBytes();
 
-  File? target;
-  final oldPath = card.imagePath;
-  if (oldPath != null && oldPath.isNotEmpty) {
-    final old = storage.resolveCharacterImage(oldPath);
-    if (p.isWithin(storage.charactersDir.path, old.path) && old.existsSync()) {
-      target = old;
-    }
-  }
-  if (target == null) {
-    final safe = card.name
-        .replaceAll(RegExp(r'[^\w\s\-]'), '')
-        .replaceAll(' ', '_');
-    await storage.charactersDir.create(recursive: true);
-    target = File(
-      p.join(
-        storage.charactersDir.path,
-        '${safe}_${DateTime.now().millisecondsSinceEpoch}.png',
-      ),
-    );
-    card.imagePath = target.path;
-  }
+  final target = portraitWriteTarget(card: card, storage: storage);
   await target.writeAsBytes(bytes);
   // Same path, new bytes — evict so Image.file doesn't serve stale pixels.
   await FileImage(target).evict();
@@ -97,4 +77,40 @@ Future<String> promoteLookOverPortrait({
   await updateCharacter(card);
   await removeAvatar(card.dbId!, promoted.id);
   return promoted.id;
+}
+
+/// The file a character's portrait PIXELS should be written to — the shared
+/// rule behind look-promotion and the creator's portrait apply.
+///
+/// When the card already has an in-app portrait file, that file is the target
+/// (overwrite IN PLACE: folders and the home-grid folder filter key members
+/// by the portrait's basename, so a renamed file silently orphans the
+/// character from its folder). When it doesn't — an external import whose
+/// original file isn't ours to touch, or a creator card saved without an
+/// avatar yet — a fresh `Characters/<safeName>_<epoch>.png` is created and
+/// its path stamped onto the card. Callers write the bytes, evict the image
+/// cache, and persist via updateCharacter (which re-embeds the V2 card data).
+File portraitWriteTarget({
+  required CharacterCard card,
+  required StorageService storage,
+}) {
+  final oldPath = card.imagePath;
+  if (oldPath != null && oldPath.isNotEmpty) {
+    final old = storage.resolveCharacterImage(oldPath);
+    if (p.isWithin(storage.charactersDir.path, old.path) && old.existsSync()) {
+      return old;
+    }
+  }
+  final safe = card.name
+      .replaceAll(RegExp(r'[^\w\s\-]'), '')
+      .replaceAll(' ', '_');
+  storage.charactersDir.createSync(recursive: true);
+  final target = File(
+    p.join(
+      storage.charactersDir.path,
+      '${safe}_${DateTime.now().millisecondsSinceEpoch}.png',
+    ),
+  );
+  card.imagePath = target.path;
+  return target;
 }

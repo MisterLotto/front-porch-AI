@@ -137,6 +137,19 @@ EditModelKind detectEditModel(String modelName) {
   return EditModelKind.none;
 }
 
+/// Loose "smells like an edit model" check for the CREATE slot's non-blocking
+/// warning and the one-time edit-slot migration seed (phase #12 model-slot
+/// split): true when either strict detector hits, or when the name carries an
+/// inpaint/instruct token. Warnings only — never gates generation, because a
+/// name heuristic can be wrong in both directions.
+bool looksLikeEditModel(String modelName) {
+  if (modelName.trim().isEmpty) return false;
+  if (detectEditModel(modelName) != EditModelKind.none) return true;
+  if (remoteEditSpec(modelName) != null) return true;
+  final s = modelName.toLowerCase();
+  return s.contains('inpaint') || s.contains('instruct');
+}
+
 /// "image edit" as an adjacent token ("image-edit", "image_edit", "imageedit",
 /// "image edit"), with "edit" not bleeding into "edited".
 final RegExp _qwenImageEditRe = RegExp(r'image[-_ ]?edit(?![a-z])');
