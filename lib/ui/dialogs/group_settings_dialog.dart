@@ -14,6 +14,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
@@ -1136,6 +1137,9 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
   // Group-wide Time & Day.
   String _groupTimeOfDay = 'morning';
   int _groupDayCount = 1;
+  // Story Calendar seed for fresh sessions (story-calendar.md §3a).
+  String? _groupStoryStartDate;
+  String? _groupStoryStartTime;
   late final TextEditingController _groupDayCountController;
 
   List<CharacterCard> _chars = [];
@@ -1193,6 +1197,8 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
         final map = (jsonDecode(gs) as Map<String, dynamic>?) ?? {};
         _groupTimeOfDay = (map['timeOfDay'] as String?) ?? 'morning';
         _groupDayCount = (map['dayCount'] as num?)?.toInt() ?? 1;
+        _groupStoryStartDate = map['storyStartDate'] as String?;
+        _groupStoryStartTime = map['storyStartTime'] as String?;
       }
     }
     _groupDayCountController = TextEditingController(
@@ -1533,6 +1539,16 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
           : <String, dynamic>{};
       map['timeOfDay'] = _groupTimeOfDay;
       map['dayCount'] = _groupDayCount;
+      if (_groupStoryStartDate != null) {
+        map['storyStartDate'] = _groupStoryStartDate;
+      } else {
+        map.remove('storyStartDate');
+      }
+      if (_groupStoryStartTime != null) {
+        map['storyStartTime'] = _groupStoryStartTime;
+      } else {
+        map.remove('storyStartTime');
+      }
       group.defaultMemberRealismState = jsonEncode(map);
     } catch (_) {
       // Non-fatal
@@ -1904,6 +1920,21 @@ class _RealismNeedsTabState extends State<_RealismNeedsTab> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Story Calendar seed for FRESH sessions (the live chat's
+                  // clock is set from the Story Calendar dialog instead).
+                  StoryBeginsRow(
+                    storyStartDate: _groupStoryStartDate,
+                    onStoryStartDateChanged: (v) {
+                      setState(() => _groupStoryStartDate = v);
+                      _persistGroupTimeDay();
+                    },
+                    storyStartTime: _groupStoryStartTime,
+                    onStoryStartTimeChanged: (v) {
+                      setState(() => _groupStoryStartTime = v);
+                      _persistGroupTimeDay();
+                    },
                   ),
 
                   const SizedBox(height: 14),

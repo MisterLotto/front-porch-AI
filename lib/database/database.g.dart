@@ -1618,6 +1618,28 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _storyClockMeta = const VerificationMeta(
+    'storyClock',
+  );
+  @override
+  late final GeneratedColumn<String> storyClock = GeneratedColumn<String>(
+    'story_clock',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _storyStartDateMeta = const VerificationMeta(
+    'storyStartDate',
+  );
+  @override
+  late final GeneratedColumn<String> storyStartDate = GeneratedColumn<String>(
+    'story_start_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _nsfwCooldownEnabledMeta =
       const VerificationMeta('nsfwCooldownEnabled');
   @override
@@ -1963,6 +1985,8 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     timeOfDay,
     dayCount,
     startDayOfWeek,
+    storyClock,
+    storyStartDate,
     nsfwCooldownEnabled,
     passageOfTimeEnabled,
     arousalLevel,
@@ -2199,6 +2223,21 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         startDayOfWeek.isAcceptableOrUnknown(
           data['start_day_of_week']!,
           _startDayOfWeekMeta,
+        ),
+      );
+    }
+    if (data.containsKey('story_clock')) {
+      context.handle(
+        _storyClockMeta,
+        storyClock.isAcceptableOrUnknown(data['story_clock']!, _storyClockMeta),
+      );
+    }
+    if (data.containsKey('story_start_date')) {
+      context.handle(
+        _storyStartDateMeta,
+        storyStartDate.isAcceptableOrUnknown(
+          data['story_start_date']!,
+          _storyStartDateMeta,
         ),
       );
     }
@@ -2533,6 +2572,14 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.int,
         data['${effectivePrefix}start_day_of_week'],
       )!,
+      storyClock: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}story_clock'],
+      ),
+      storyStartDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}story_start_date'],
+      ),
       nsfwCooldownEnabled: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}nsfw_cooldown_enabled'],
@@ -2672,6 +2719,8 @@ class Session extends DataClass implements Insertable<Session> {
   final String timeOfDay;
   final int dayCount;
   final int startDayOfWeek;
+  final String? storyClock;
+  final String? storyStartDate;
   final bool nsfwCooldownEnabled;
   final bool passageOfTimeEnabled;
   final int arousalLevel;
@@ -2734,6 +2783,8 @@ class Session extends DataClass implements Insertable<Session> {
     required this.timeOfDay,
     required this.dayCount,
     required this.startDayOfWeek,
+    this.storyClock,
+    this.storyStartDate,
     required this.nsfwCooldownEnabled,
     required this.passageOfTimeEnabled,
     required this.arousalLevel,
@@ -2805,6 +2856,12 @@ class Session extends DataClass implements Insertable<Session> {
     map['time_of_day'] = Variable<String>(timeOfDay);
     map['day_count'] = Variable<int>(dayCount);
     map['start_day_of_week'] = Variable<int>(startDayOfWeek);
+    if (!nullToAbsent || storyClock != null) {
+      map['story_clock'] = Variable<String>(storyClock);
+    }
+    if (!nullToAbsent || storyStartDate != null) {
+      map['story_start_date'] = Variable<String>(storyStartDate);
+    }
     map['nsfw_cooldown_enabled'] = Variable<bool>(nsfwCooldownEnabled);
     map['passage_of_time_enabled'] = Variable<bool>(passageOfTimeEnabled);
     map['arousal_level'] = Variable<int>(arousalLevel);
@@ -2887,6 +2944,12 @@ class Session extends DataClass implements Insertable<Session> {
       timeOfDay: Value(timeOfDay),
       dayCount: Value(dayCount),
       startDayOfWeek: Value(startDayOfWeek),
+      storyClock: storyClock == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storyClock),
+      storyStartDate: storyStartDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storyStartDate),
       nsfwCooldownEnabled: Value(nsfwCooldownEnabled),
       passageOfTimeEnabled: Value(passageOfTimeEnabled),
       arousalLevel: Value(arousalLevel),
@@ -2961,6 +3024,8 @@ class Session extends DataClass implements Insertable<Session> {
       timeOfDay: serializer.fromJson<String>(json['timeOfDay']),
       dayCount: serializer.fromJson<int>(json['dayCount']),
       startDayOfWeek: serializer.fromJson<int>(json['startDayOfWeek']),
+      storyClock: serializer.fromJson<String?>(json['storyClock']),
+      storyStartDate: serializer.fromJson<String?>(json['storyStartDate']),
       nsfwCooldownEnabled: serializer.fromJson<bool>(
         json['nsfwCooldownEnabled'],
       ),
@@ -3036,6 +3101,8 @@ class Session extends DataClass implements Insertable<Session> {
       'timeOfDay': serializer.toJson<String>(timeOfDay),
       'dayCount': serializer.toJson<int>(dayCount),
       'startDayOfWeek': serializer.toJson<int>(startDayOfWeek),
+      'storyClock': serializer.toJson<String?>(storyClock),
+      'storyStartDate': serializer.toJson<String?>(storyStartDate),
       'nsfwCooldownEnabled': serializer.toJson<bool>(nsfwCooldownEnabled),
       'passageOfTimeEnabled': serializer.toJson<bool>(passageOfTimeEnabled),
       'arousalLevel': serializer.toJson<int>(arousalLevel),
@@ -3093,6 +3160,8 @@ class Session extends DataClass implements Insertable<Session> {
     String? timeOfDay,
     int? dayCount,
     int? startDayOfWeek,
+    Value<String?> storyClock = const Value.absent(),
+    Value<String?> storyStartDate = const Value.absent(),
     bool? nsfwCooldownEnabled,
     bool? passageOfTimeEnabled,
     int? arousalLevel,
@@ -3151,6 +3220,10 @@ class Session extends DataClass implements Insertable<Session> {
     timeOfDay: timeOfDay ?? this.timeOfDay,
     dayCount: dayCount ?? this.dayCount,
     startDayOfWeek: startDayOfWeek ?? this.startDayOfWeek,
+    storyClock: storyClock.present ? storyClock.value : this.storyClock,
+    storyStartDate: storyStartDate.present
+        ? storyStartDate.value
+        : this.storyStartDate,
     nsfwCooldownEnabled: nsfwCooldownEnabled ?? this.nsfwCooldownEnabled,
     passageOfTimeEnabled: passageOfTimeEnabled ?? this.passageOfTimeEnabled,
     arousalLevel: arousalLevel ?? this.arousalLevel,
@@ -3249,6 +3322,12 @@ class Session extends DataClass implements Insertable<Session> {
       startDayOfWeek: data.startDayOfWeek.present
           ? data.startDayOfWeek.value
           : this.startDayOfWeek,
+      storyClock: data.storyClock.present
+          ? data.storyClock.value
+          : this.storyClock,
+      storyStartDate: data.storyStartDate.present
+          ? data.storyStartDate.value
+          : this.storyStartDate,
       nsfwCooldownEnabled: data.nsfwCooldownEnabled.present
           ? data.nsfwCooldownEnabled.value
           : this.nsfwCooldownEnabled,
@@ -3352,6 +3431,8 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('timeOfDay: $timeOfDay, ')
           ..write('dayCount: $dayCount, ')
           ..write('startDayOfWeek: $startDayOfWeek, ')
+          ..write('storyClock: $storyClock, ')
+          ..write('storyStartDate: $storyStartDate, ')
           ..write('nsfwCooldownEnabled: $nsfwCooldownEnabled, ')
           ..write('passageOfTimeEnabled: $passageOfTimeEnabled, ')
           ..write('arousalLevel: $arousalLevel, ')
@@ -3409,6 +3490,8 @@ class Session extends DataClass implements Insertable<Session> {
     timeOfDay,
     dayCount,
     startDayOfWeek,
+    storyClock,
+    storyStartDate,
     nsfwCooldownEnabled,
     passageOfTimeEnabled,
     arousalLevel,
@@ -3465,6 +3548,8 @@ class Session extends DataClass implements Insertable<Session> {
           other.timeOfDay == this.timeOfDay &&
           other.dayCount == this.dayCount &&
           other.startDayOfWeek == this.startDayOfWeek &&
+          other.storyClock == this.storyClock &&
+          other.storyStartDate == this.storyStartDate &&
           other.nsfwCooldownEnabled == this.nsfwCooldownEnabled &&
           other.passageOfTimeEnabled == this.passageOfTimeEnabled &&
           other.arousalLevel == this.arousalLevel &&
@@ -3519,6 +3604,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String> timeOfDay;
   final Value<int> dayCount;
   final Value<int> startDayOfWeek;
+  final Value<String?> storyClock;
+  final Value<String?> storyStartDate;
   final Value<bool> nsfwCooldownEnabled;
   final Value<bool> passageOfTimeEnabled;
   final Value<int> arousalLevel;
@@ -3572,6 +3659,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.timeOfDay = const Value.absent(),
     this.dayCount = const Value.absent(),
     this.startDayOfWeek = const Value.absent(),
+    this.storyClock = const Value.absent(),
+    this.storyStartDate = const Value.absent(),
     this.nsfwCooldownEnabled = const Value.absent(),
     this.passageOfTimeEnabled = const Value.absent(),
     this.arousalLevel = const Value.absent(),
@@ -3626,6 +3715,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.timeOfDay = const Value.absent(),
     this.dayCount = const Value.absent(),
     this.startDayOfWeek = const Value.absent(),
+    this.storyClock = const Value.absent(),
+    this.storyStartDate = const Value.absent(),
     this.nsfwCooldownEnabled = const Value.absent(),
     this.passageOfTimeEnabled = const Value.absent(),
     this.arousalLevel = const Value.absent(),
@@ -3680,6 +3771,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? timeOfDay,
     Expression<int>? dayCount,
     Expression<int>? startDayOfWeek,
+    Expression<String>? storyClock,
+    Expression<String>? storyStartDate,
     Expression<bool>? nsfwCooldownEnabled,
     Expression<bool>? passageOfTimeEnabled,
     Expression<int>? arousalLevel,
@@ -3736,6 +3829,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (timeOfDay != null) 'time_of_day': timeOfDay,
       if (dayCount != null) 'day_count': dayCount,
       if (startDayOfWeek != null) 'start_day_of_week': startDayOfWeek,
+      if (storyClock != null) 'story_clock': storyClock,
+      if (storyStartDate != null) 'story_start_date': storyStartDate,
       if (nsfwCooldownEnabled != null)
         'nsfw_cooldown_enabled': nsfwCooldownEnabled,
       if (passageOfTimeEnabled != null)
@@ -3800,6 +3895,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String>? timeOfDay,
     Value<int>? dayCount,
     Value<int>? startDayOfWeek,
+    Value<String?>? storyClock,
+    Value<String?>? storyStartDate,
     Value<bool>? nsfwCooldownEnabled,
     Value<bool>? passageOfTimeEnabled,
     Value<int>? arousalLevel,
@@ -3856,6 +3953,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       timeOfDay: timeOfDay ?? this.timeOfDay,
       dayCount: dayCount ?? this.dayCount,
       startDayOfWeek: startDayOfWeek ?? this.startDayOfWeek,
+      storyClock: storyClock ?? this.storyClock,
+      storyStartDate: storyStartDate ?? this.storyStartDate,
       nsfwCooldownEnabled: nsfwCooldownEnabled ?? this.nsfwCooldownEnabled,
       passageOfTimeEnabled: passageOfTimeEnabled ?? this.passageOfTimeEnabled,
       arousalLevel: arousalLevel ?? this.arousalLevel,
@@ -3970,6 +4069,12 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     }
     if (startDayOfWeek.present) {
       map['start_day_of_week'] = Variable<int>(startDayOfWeek.value);
+    }
+    if (storyClock.present) {
+      map['story_clock'] = Variable<String>(storyClock.value);
+    }
+    if (storyStartDate.present) {
+      map['story_start_date'] = Variable<String>(storyStartDate.value);
     }
     if (nsfwCooldownEnabled.present) {
       map['nsfw_cooldown_enabled'] = Variable<bool>(nsfwCooldownEnabled.value);
@@ -4093,6 +4198,8 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('timeOfDay: $timeOfDay, ')
           ..write('dayCount: $dayCount, ')
           ..write('startDayOfWeek: $startDayOfWeek, ')
+          ..write('storyClock: $storyClock, ')
+          ..write('storyStartDate: $storyStartDate, ')
           ..write('nsfwCooldownEnabled: $nsfwCooldownEnabled, ')
           ..write('passageOfTimeEnabled: $passageOfTimeEnabled, ')
           ..write('arousalLevel: $arousalLevel, ')
@@ -15236,6 +15343,8 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String> timeOfDay,
       Value<int> dayCount,
       Value<int> startDayOfWeek,
+      Value<String?> storyClock,
+      Value<String?> storyStartDate,
       Value<bool> nsfwCooldownEnabled,
       Value<bool> passageOfTimeEnabled,
       Value<int> arousalLevel,
@@ -15291,6 +15400,8 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String> timeOfDay,
       Value<int> dayCount,
       Value<int> startDayOfWeek,
+      Value<String?> storyClock,
+      Value<String?> storyStartDate,
       Value<bool> nsfwCooldownEnabled,
       Value<bool> passageOfTimeEnabled,
       Value<int> arousalLevel,
@@ -15451,6 +15562,16 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<int> get startDayOfWeek => $composableBuilder(
     column: $table.startDayOfWeek,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storyClock => $composableBuilder(
+    column: $table.storyClock,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storyStartDate => $composableBuilder(
+    column: $table.storyStartDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15719,6 +15840,16 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get storyClock => $composableBuilder(
+    column: $table.storyClock,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storyStartDate => $composableBuilder(
+    column: $table.storyStartDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get nsfwCooldownEnabled => $composableBuilder(
     column: $table.nsfwCooldownEnabled,
     builder: (column) => ColumnOrderings(column),
@@ -15970,6 +16101,16 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get storyClock => $composableBuilder(
+    column: $table.storyClock,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get storyStartDate => $composableBuilder(
+    column: $table.storyStartDate,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get nsfwCooldownEnabled => $composableBuilder(
     column: $table.nsfwCooldownEnabled,
     builder: (column) => column,
@@ -16148,6 +16289,8 @@ class $$SessionsTableTableManager
                 Value<String> timeOfDay = const Value.absent(),
                 Value<int> dayCount = const Value.absent(),
                 Value<int> startDayOfWeek = const Value.absent(),
+                Value<String?> storyClock = const Value.absent(),
+                Value<String?> storyStartDate = const Value.absent(),
                 Value<bool> nsfwCooldownEnabled = const Value.absent(),
                 Value<bool> passageOfTimeEnabled = const Value.absent(),
                 Value<int> arousalLevel = const Value.absent(),
@@ -16201,6 +16344,8 @@ class $$SessionsTableTableManager
                 timeOfDay: timeOfDay,
                 dayCount: dayCount,
                 startDayOfWeek: startDayOfWeek,
+                storyClock: storyClock,
+                storyStartDate: storyStartDate,
                 nsfwCooldownEnabled: nsfwCooldownEnabled,
                 passageOfTimeEnabled: passageOfTimeEnabled,
                 arousalLevel: arousalLevel,
@@ -16256,6 +16401,8 @@ class $$SessionsTableTableManager
                 Value<String> timeOfDay = const Value.absent(),
                 Value<int> dayCount = const Value.absent(),
                 Value<int> startDayOfWeek = const Value.absent(),
+                Value<String?> storyClock = const Value.absent(),
+                Value<String?> storyStartDate = const Value.absent(),
                 Value<bool> nsfwCooldownEnabled = const Value.absent(),
                 Value<bool> passageOfTimeEnabled = const Value.absent(),
                 Value<int> arousalLevel = const Value.absent(),
@@ -16309,6 +16456,8 @@ class $$SessionsTableTableManager
                 timeOfDay: timeOfDay,
                 dayCount: dayCount,
                 startDayOfWeek: startDayOfWeek,
+                storyClock: storyClock,
+                storyStartDate: storyStartDate,
                 nsfwCooldownEnabled: nsfwCooldownEnabled,
                 passageOfTimeEnabled: passageOfTimeEnabled,
                 arousalLevel: arousalLevel,

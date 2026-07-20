@@ -174,43 +174,23 @@ BehavioralInjection createTestBehavioral({
   );
 }
 
-class _StubTimeService extends TimeService {
-  final String _tod;
-  final int _dc;
-  final int _sd;
-  _StubTimeService({
-    required String timeOfDay,
-    required int dayCount,
-    required int startDayOfWeekAnchor,
-  }) : _tod = timeOfDay,
-       _dc = dayCount,
-       _sd = startDayOfWeekAnchor,
-       super(
-         onNotify: () {},
-         onSaveChat: () async {},
-         onSetPendingRealismMetadata: (_, _) {},
-         onNudgePatchLastMessageRealismState: (_, _) {},
-       );
-  @override
-  String get timeOfDay => _tod;
-  @override
-  int get dayCount => _dc;
-  @override
-  int get startDayOfWeekAnchor => _sd;
-}
-
 TimeInjection createTestTime({
   String timeOfDay = 'morning',
   int dayCount = 1,
-  int startDay = 1,
+  String storyStartDate = '2026-06-30', // a Tuesday — deterministic weekday
 }) {
-  return TimeInjection(
-    timeService: _StubTimeService(
-      timeOfDay: timeOfDay,
+  final time = TimeService(
+    onNotify: () {},
+    onSaveChat: () async {},
+    onSetPendingRealismMetadata: (_, _) {},
+    onPatchLastMessageRealismState: (_, _, _) {},
+  )..seedFromV2OrExt(
       dayCount: dayCount,
-      startDayOfWeekAnchor: startDay,
-    ),
-  );
+      timeOfDay: timeOfDay,
+      passageOfTimeEnabled: true,
+      storyStartDate: storyStartDate,
+    );
+  return TimeInjection(timeService: time);
 }
 
 NsfwService createTestNsfwSvc() => NsfwService(
@@ -435,10 +415,11 @@ void main() {
       expect(createTestEmotion(emotion: '').buildEmotionInjection(), isEmpty);
     });
 
-    test('time: one line with weekday + day count', () {
-      final t = createTestTime(timeOfDay: 'evening', dayCount: 3, startDay: 2);
+    test('time: one line with clock, weekday, and day count', () {
+      // Start Tue 2026-06-30; Day 3 = Thu 2026-07-02, evening rep = 6:30 PM.
+      final t = createTestTime(timeOfDay: 'evening', dayCount: 3);
       final txt = t.buildTimeInjection();
-      expect(txt, contains('It is evening on Thursday'));
+      expect(txt, contains('It is 6:30 in the evening on Thursday, July 2nd'));
       expect(txt, contains('(day 3 of the story)'));
     });
 
@@ -698,9 +679,14 @@ void main() {
       expect(block, contains('Position:'));
 
       // The scalar invariant. Free-text fields are masked (they may carry
-      // legitimate digits); the scene-time day token is the one allowed digit.
+      // legitimate digits); the scene-time sentence is the one allowed digit
+      // carrier (clock digits and dates are normal fiction, unlike meters —
+      // story-calendar.md §7).
       var masked = block
-          .replaceAll(RegExp(r'\(day \d+ of the story\)'), '(day N)')
+          .replaceAll(
+            RegExp(r'It is .+ \(day \d+ of the story\)\.'),
+            '<scene-time>',
+          )
           .replaceAll('the promise Ben made last night', '<fixation>')
           .replaceAll('sitting beside Ben on the porch steps', '<stance>');
       expect(RegExp(r'\d').hasMatch(masked), isFalse,
@@ -718,11 +704,12 @@ void main() {
         nsfwSvc: createTestNsfwSvc(), // cooldown disabled
         needsSim: needsSim,
         emotion: 'neutral',
-        timeOfDay: 'midday',
+        timeOfDay: 'late_morning',
         dayCount: 1,
       );
       final block = composer.buildRealismStateInjection();
-      expect(block, contains('It is midday'));
+      // Start Tue 2026-06-30, Day 1, late-morning rep 11:30.
+      expect(block, contains('It is 11:30 in the late morning'));
       expect(block, contains('merits of the moment'));
       expect(block, isNot(contains('Mood:')));
       expect(block, isNot(contains('Hunger:')));

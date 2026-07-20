@@ -1127,11 +1127,10 @@ class RealismEvals {
         isOneShot: true,
       );
 
-      // ── Deterministic time clock (parity with the multi-call path) ──
-      // Ticks every turn; fires the hold/new_day eval only when an advance is
-      // due (one extra LLM call per threshold). Without this, one-shot mode
-      // froze the in-game clock forever. Posture on non-advance turns rides
-      // the fused JSON parsed above (oneShotMode skips the posture-only calls).
+      // ── Story clock (parity with the multi-call path) ──
+      // The fused JSON above already carries minutes_elapsed/new_day (and
+      // posture); this applies the same clamp/floor/backstop clock math the
+      // dedicated per-turn scene-time eval uses — no extra LLM call.
       await timeService.evaluateTimeProgressAndPostureIfNeeded(
         charName: charName,
         recent: recent,
@@ -1145,6 +1144,7 @@ class RealismEvals {
         getCharacterEmotion: getCharacterEmotion,
         getEmotionIntensity: getEmotionIntensity,
         oneShotMode: true,
+        oneShotText: textForOneShot,
       );
 
       final reasonMatch = RegExp(

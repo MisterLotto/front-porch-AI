@@ -1273,7 +1273,7 @@ class ChatService extends ChangeNotifier {
       _pendingRealismMetadata ??= {};
       _pendingRealismMetadata![key] = value;
     },
-    onNudgePatchLastMessageRealismState: (tod, dc) {
+    onPatchLastMessageRealismState: (tod, dc, clockIso) {
       if (_messages.isNotEmpty) {
         final lastMsg = _messages.last;
         lastMsg.activeMetadata ??= {};
@@ -1281,6 +1281,7 @@ class ChatService extends ChangeNotifier {
         if (existingState is Map<String, dynamic>) {
           existingState['timeOfDay'] = tod;
           existingState['dayCount'] = dc;
+          existingState['storyClock'] = clockIso;
           existingState['time_nudged'] = true;
         } else {
           lastMsg.activeMetadata!['realism_state'] = _captureRealismState();
@@ -2097,7 +2098,12 @@ class ChatService extends ChangeNotifier {
         stopSequences: const [],
       ),
       tools,
-    );
+      // Whole-call deadline: a backend that accepts the request and never
+      // answers (cold model reload after an idle unload, dead server queue)
+      // must not park a journal/realism pass forever. Timeout → null, which
+      // every caller already treats as a failed call (the probe falls back
+      // to the text path, which carries its own between-chunk timeout).
+    ).timeout(kEvalToolCallTimeout, onTimeout: () => null);
   }
 
   /// Backend+model identity key for the tools probe. Remote model name AND
@@ -2172,6 +2178,8 @@ class ChatService extends ChangeNotifier {
     getMaxCards: () => _storageService.memorySettings.journalMaxCards,
     onNotify: notifyListeners,
     onSaveChat: _saveChat,
+    getCurrentStoryDay: () => _timeService.dayCount,
+    getCurrentStoryClockIso: () => _timeService.storyClockIso,
   );
 
   /// Public door for the Journal UI (phase 3): the sidebar panel and the
@@ -2189,6 +2197,8 @@ class ChatService extends ChangeNotifier {
     // load-into-scalars dance has set it to the upcoming speaker's emotion
     // by assembly time, so mood-congruent recall is per-speaker (parity).
     getCurrentEmotion: () => _realismEnabled ? _characterEmotion : '',
+    getCurrentStoryDay: () => _timeService.dayCount,
+    getStoryStartDate: () => _timeService.startDate,
   );
 
   // ── Growth Rings (docs/design/growth-rings.md) ──

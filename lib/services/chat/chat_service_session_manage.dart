@@ -343,6 +343,8 @@ extension ChatServiceSessionManage on ChatService {
       _timeService.seedFromV2OrExt(
         dayCount: extSeed.dayCount.clamp(1, 9999),
         timeOfDay: extSeed.timeOfDay,
+        storyStartDate: extSeed.storyStartDate,
+        storyStartTime: extSeed.storyStartTime,
         passageOfTimeEnabled:
             extSeed.passageOfTimeEnabled &&
             _storageService.realismSettings.passageOfTimeDefault,
@@ -425,6 +427,25 @@ extension ChatServiceSessionManage on ChatService {
         _relationshipService.resetForFreshChat();
         _expressionService.resetForFreshChat();
         _timeService.resetForFreshChat();
+        // Fresh GROUP chat: apply the group's authored scene-time seed on top
+        // of the reset (story-calendar "As built" gap fix). Keep in sync with
+        // the _loadLastSession 0-session branch.
+        if (_activeGroup != null) {
+          final timeSeed = parseGroupTimeSeed(
+            _activeGroup!.defaultMemberRealismState,
+            _activeGroup!.baselineRealismState,
+          );
+          if (timeSeed != null) {
+            _timeService.seedFromV2OrExt(
+              dayCount: timeSeed.dayCount,
+              timeOfDay: timeSeed.timeOfDay,
+              storyStartDate: timeSeed.storyStartDate,
+              storyStartTime: timeSeed.storyStartTime,
+              passageOfTimeEnabled:
+                  _storageService.realismSettings.passageOfTimeDefault,
+            );
+          }
+        }
         _nsfwService.resetForFreshChat();
         // Lorebook trigger reset via extracted service (keeps reset blocks in sync with setActiveCharacter:1572 / _loadLast empty / setActiveGroup / startNew ext-seed; see "incomplete zeroing of secondary ... on 0-session/new-character/group" + startNew 1:1+group now complete + full list in keep-sync comments incl llm_eval_engine). (cross-ref setActiveCharacter:1572 etc)
         // See "keep reset blocks in sync" comments (setActiveGroup, startNewChat, load* , setActive* all must hit this; now includes needs/chaos/... + leaves (see CLAUDE.md for full; incomplete zeroing now complete) + " )" for group/0-session/new-chat hygiene; incomplete zeroing now complete).

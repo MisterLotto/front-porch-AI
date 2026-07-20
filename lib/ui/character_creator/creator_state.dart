@@ -254,6 +254,10 @@ class CreatorState extends ChangeNotifier {
   int realismTrustLevel = 0;
   int realismDayCount = 1;
   String realismTimeOfDay = 'morning';
+  // Story Calendar authoring (story-calendar.md §3a): null start date =
+  // "the day the chat starts"; null time = period default.
+  String? realismStoryStartDate;
+  String? realismStoryStartTime;
   String realismEmotion = 'neutral';
   String realismEmotionIntensity = 'moderate';
   bool realismNsfwCooldown = false;

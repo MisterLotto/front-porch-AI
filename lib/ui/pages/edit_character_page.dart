@@ -109,6 +109,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   bool _realismSettingsModified = false;
   String _realismTimeOfDay = 'morning';
   int _realismDayCount = 1;
+  // Story Calendar authoring (story-calendar.md §3a): null start date =
+  // "the day the chat starts"; null time = period default.
+  String? _realismStoryStartDate;
+  String? _realismStoryStartTime;
   int _realismShortTermBond = 0;
   int _realismLongTermBond = 0;
   int _realismTrustLevel = 0;
@@ -198,6 +202,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       _realismEnabled = ext.realismEnabled;
       _realismTimeOfDay = ext.timeOfDay;
       _realismDayCount = ext.dayCount;
+      _realismStoryStartDate = ext.storyStartDate;
+      _realismStoryStartTime = ext.storyStartTime;
       _realismShortTermBond = ext.shortTermBond;
       _realismLongTermBond = ext.longTermBond;
       _realismTrustLevel = ext.trustLevel;
@@ -376,6 +382,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         needsDecayHygiene: _needsDecayHygiene,
         needsDecayComfort: _needsDecayComfort,
       );
+      // Direct assignment (not copyWith): its `?? this.x` pattern cannot
+      // CLEAR a nullable field, and "clear the fixed start date back to 'the
+      // day the chat starts'" is a real edit.
+      widget.character.frontPorchExtensions!
+        ..storyStartDate = _realismStoryStartDate
+        ..storyStartTime = _realismStoryStartTime;
       widget.character.frontPorchExtensions!.ensureStableId();
     }
 
@@ -1559,6 +1571,16 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           dayCount: _realismDayCount,
           onDayCountChanged: (v) => setState(() {
             _realismDayCount = v;
+            _realismSettingsModified = true;
+          }),
+          storyStartDate: _realismStoryStartDate,
+          onStoryStartDateChanged: (v) => setState(() {
+            _realismStoryStartDate = v;
+            _realismSettingsModified = true;
+          }),
+          storyStartTime: _realismStoryStartTime,
+          onStoryStartTimeChanged: (v) => setState(() {
+            _realismStoryStartTime = v;
             _realismSettingsModified = true;
           }),
           shortTermBond: _realismShortTermBond,

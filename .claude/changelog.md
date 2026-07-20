@@ -5289,3 +5289,134 @@ Gates: flutter analyze 0 issues; dart fix --dry-run nothing; flutter test 2180 p
 ## 2026-07-18 — Grok review fixes for the Portrait & Avatars series
 Files: lib/ui/character_creator/creator_state_engine.dart, lib/ui/avatar_creation/{avatar_creation_controller,avatar_creation_run,avatar_generation_panel}.dart, lib/ui/pages/create_character_page.dart, lib/services/image_gen_service.dart, test/golden/creator/creator_engine_golden_test.dart
 Reason: independent Grok review of the branch (session b9bb7e46). Accepted+fixed: (1) multi-shot AI-creator save minted a fresh stableId every save — extensions rebuild now carries stableId+favoriteAvatarId (+ regression test); (3) first-persist race could addCharacter twice — _ensureCard is single-flight; (4) manual Done mid-run could dispose the panel and drop finishing work — onBusyChanged locks Done while running (+ busy-clear on dispose); (6) stale generateImage edit-intent doc. Dismissed with rationale Grok accepted: (2) cancel-during-portrait keeps the finished image (identical to the pack session's finish-then-stop contract). (5) golden PNG regen = Linux-runner process step, flagged for the merge.
+
+## 2026-07-18 (UTC) — Website refreshed for the 1.0 release (deployed)
+**Files:** `website/build.mjs`, `website/src/index.html`
+**Why:** STABLE_VERSION bumped v0.9.9.1.3 → v1.0.0 (stamps the Stable download card);
+hero gained the "🎉 Version 1.0 is here — stay awhile and listen" announcement linking
+to releases/latest; Stable card bullets refreshed to the 1.0 headliners (Stoop,
+Realism, Journal, voice/expressions/phone); Stoop section eyebrow now says "New in
+1.0". Built (link check green, 15 screenshots regenerated from the retaken 1.0 set)
+and rsync-deployed to the droplet; live verification: announcement + v1.0.0 served,
+zero stale sidecar strings (the de-staled docs from 6aa97646 render clean).
+Playwright desktop+phone screenshots in ~/Desktop/fpai-review/website-1.0-*.png.
+
+## 2026-07-20 (UTC) — Story Calendar design sketch (docs only, no code)
+**Files:** `docs/design/story-calendar.md`
+**Why:** Design proposal for replacing the bare day tracker with a real
+calendar (accurate months/days/years): one additive `storyStartDate` anchor on
+Sessions with everything derived from the existing `dayCount` (the clock,
+nudges, OOC skips, parity contracts all untouched), deterministic date
+stamping of Journal cards via the metadata pouch (memories know *when*), a
+month-grid calendar surface with memory-marked days on desktop + web, and
+retirement of the now-redundant `startDayOfWeek` modulo-7 logic. Blocked on
+maintainer approval for the `sessions` column (Character Card Forge raw-SQL
+writer); open questions listed in the doc. No code changed.
+
+## 2026-07-20 (UTC) — Story Calendar sketch upgraded to a full time-subsystem rewrite
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer green-lit rewriting the whole time-of-day subsystem, so the
+sketch moved from "derive dates from dayCount" to a canonical minute-level
+story clock (`_clock` + `_startDate` DateTimes) with timeOfDay/dayCount/
+weekday all derived. The four hand-rolled period-array walks (nudge, AFK,
+OOC skip, eval rollover) collapse into one pure leaf (`chat/story_clock.dart`),
+the hold/new_day veto eval upgrades to `minutes_elapsed`, and every external
+shape (sessions columns, realism_state snapshots, group blobs, V2 card
+extensions via The Stoop, web facade) is kept as written-derived /
+read-as-seed with one legacy synthesis function. Journal stamping now carries
+a full timestamp ("that night on the pier"). Still docs-only; sessions
+columns remain gated on maintainer approval (Character Card Forge).
+
+## 2026-07-20 (UTC) — Story Calendar sketch: creator/editor seeding + OOC detail
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer required the calendar be authorable from the character
+creators and edit menus. Added §3a: the shared RealismFormSection (manual
+creator, AI creator Realism step, edit page) gains a "Story begins…" block
+(anchored-to-today default vs fixed-date mode, optional exact clock time,
+existing period/day pickers kept as friendly input), CharacterCard exports
+additive story_start_date/story_clock alongside kept day_count/time_of_day,
+group surfaces seed at group level (time is chat-scoped). Also expanded the
+OOC bullet to make explicit that both marker-style and in-narrative skip
+phrasing keep working, now mapped to real durations. Docs only.
+
+## 2026-07-20 (UTC) — Story Calendar sketch: continuous per-turn time replaces the 6-turn gate
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer asked whether AI-driven advancement should change now that
+time is "actual". Yes: the 6-turn eligibility gate + hold_time veto are
+retired in favor of per-turn minutes_elapsed riding the scene-time eval that
+ALREADY fires every turn (posture-only branch / fused one-shot JSON), so the
+upgrade costs zero extra LLM calls. Guardrails: per-turn clamp [0,180], +5min
+deterministic floor on eval failure, 12-turn stall backstop snapping to the
+next period (preserves the never-freezes guarantee). Deletion list grows:
+turnsPerTimePeriod, hold_time, the triple prompt branching. Pacing feel
+deliberately changes from frozen-then-lurch to a creeping clock. Docs only.
+
+## 2026-07-20 (UTC) — The Story Calendar: full time-subsystem rewrite (implemented)
+**Files:** `lib/services/chat/story_clock.dart` (new pure leaf),
+`lib/services/chat/time_service.dart` (rewritten), `lib/database/database.dart`
+(+`database.g.dart`, v38: sessions.story_clock/story_start_date, nullable
+additive, maintainer-approved), `realism_tools.dart` + `realism_prompt_builder.dart`
++ `realism_evals.dart` (scene-time eval: minutes_elapsed replaces hold_time;
+one-shot fused JSON carries the same fields), `character_card.dart`
+(story_start_date/story_start_time ext), session save/load/capture/restore +
+group-fork sites, `time_injection.dart` (clock+date line),
+journal stamping (`journal_store.dart` metadata pouch + stampOf,
+`journal_review.dart` op fields, `journal_maintenance.dart` _dateStamp,
+`journal_injection.dart` relative-time suffix), desktop UI
+(`story_calendar_dialog.dart` new, `time_strip.dart` clock+tappable date,
+diary/panel date lines + plant stamping, `realism_form_section.dart`
+"Story begins" block wired through both creators + edit page +
+`creator_state*.dart`), web parity (`chat_tools_facade.dart` additive time
+fields + calendar payload + setStoryClock/setStartDate,
+`chat_tools_routes.dart` GET calendar + additive time POST forms,
+`web_ui` StoryCalendarModal.tsx + ChatTools + styles.css + rebuilt bundle),
+tests (story_clock_test.dart new, time_service_test.dart rewritten for the
+continuous model, journal/prompt-injection/golden fakes updated, goldens
+regenerated deterministically via a pinned story date, schema version test 38).
+**Why:** design docs/design/story-calendar.md — canonical minute-level clock,
+continuous per-turn advancement (6-turn gate + hold_time veto deleted; zero
+extra LLM calls since the scene-time eval already fired every turn),
+real dates everywhere, journal memories know WHEN, month-grid calendar with
+memory dots on desktop + web. Deleted: resolveStartDayOfWeek,
+ensureStartDayOfWeekAnchored, turnsPerTimePeriod, both modulo-7 weekday
+computations, TimeService's duplicate buildTimeInjection, the triple prompt
+branching. All 2296 tests pass; flutter analyze clean; web tsc/build/vitest
+clean.
+
+## 2026-07-20 (UTC) — Group wizard's story-calendar seed finally reaches the clock
+**Files:** `lib/utils/group_realism_blobs.dart` (top-level time keys on
+defaultMemberJson + new parseGroupTimeSeed with per-member baseline fallback),
+`lib/services/chat/chat_service_session_load.dart` +
+`chat_service_session_manage.dart` (fresh-group paths seed TimeService via the
+same seedFromV2OrExt the 1:1 card path uses), `lib/ui/widgets/story_begins_row.dart`
+(new shared widget, extracted from RealismFormSection's private row — deleted),
+`realism_form_section.dart`, `create_group_chat_page.dart` (global scene time
+gains the row + passes fields to blobs), `group_realism_dynamics_editor.dart`
+(loads via parseGroupTimeSeed so the editor shows what a fresh session actually
+seeds), `group_settings_dialog.dart` (top-level read/write + row),
+`test/utils/group_realism_blobs_test.dart` (parseGroupTimeSeed coverage:
+canonical, baseline fallback, precedence, garbage).
+**Why:** The group creator's scene-time seed was editor-carried state that
+never reached the runtime clock (latent gap flagged in the Story Calendar
+as-built notes; the settings dialog even wrote a second dead copy at the blob
+top level). That top-level spot is now canonical and actually read on fresh
+group sessions — including for pre-fix groups via the baseline fallback — and
+every group authoring surface gains "Story begins…"/"Opens at…" through ONE
+shared widget. Analyze clean; 2300 tests pass.
+
+## 2026-07-20 (UTC) — Eval hang guards: streams and tool calls can no longer spin forever
+**Files:** `lib/services/chat/llm_eval_engine.dart` (kEvalStreamChunkTimeout
+180s between-chunk guard on fireLLMEval, injectable via ctor for tests;
+kEvalToolCallTimeout 6min), `lib/services/chat_service.dart` (_fireToolEval
+whole-call deadline → null on timeout), `test/services/chat/llm_eval_engine_test.dart`
+(3 hang-guard tests: never-emits, stalls-after-first-chunk, slow-but-alive
+untouched; factory gains streamFactory/streamChunkTimeout).
+**Why:** Discord report (Aelivar): with oMLX unloading the model after 15min
+idle, the Journal pass's request could hang forever on a stalled cold reload —
+the retry loop only fired on thrown errors or completed-empty streams, so the
+"Where we are" spinner spun indefinitely. A between-chunk timeout now throws
+into the existing retry/give-up path (silent fail, retry next interval — the
+pass's designed failure mode), and the non-streaming tools call gets a
+whole-call deadline (a timed-out probe just marks the backend XML-only).
+Hardens ALL realism/needs/journal/growth evals, not just the Journal.
+Analyze clean; 2303 tests pass.

@@ -113,7 +113,6 @@ class FakeChatService extends ChangeNotifier implements ChatService {
     this.isProcessingGreeting = false,
     String timeOfDay = 'evening',
     int dayCount = 3,
-    int startDayOfWeek = 1,
     int shortTermBond = 120,
     int longTermBond = 60,
     int trustLevel = 40,
@@ -127,16 +126,19 @@ class FakeChatService extends ChangeNotifier implements ChatService {
       'comfort': 60,
     },
   }) : _messages = messages {
+    // Goldens must be date-stable: pin the canonical clock to a fixed anchor
+    // (Tue 2026-06-30) instead of the legacy today-anchored synthesis, which
+    // would repaint the TimeStrip's date every real-world day.
     _time = TimeService(
       onNotify: () {},
       onSaveChat: () async {},
       onSetPendingRealismMetadata: (_, _) {},
-      onNudgePatchLastMessageRealismState: (_, _) {},
-    )..loadTimeScalars(
+      onPatchLastMessageRealismState: (_, _, _) {},
+    )..seedFromV2OrExt(
         timeOfDay: timeOfDay,
         dayCount: dayCount,
-        startDayOfWeek: startDayOfWeek,
         passageOfTimeEnabled: true,
+        storyStartDate: '2026-06-30',
       );
     _nsfw = NsfwService(
       getGroupInt: (_, _) => 0,

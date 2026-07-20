@@ -62,6 +62,12 @@ class JournalProposedOp {
   /// Review checkbox state; every op ships accepted.
   bool accepted = true;
 
+  /// Deterministic story-date stamp (story-calendar §4), resolved from the
+  /// cited messages' realism_state at proposal time — same snapshot-while-live
+  /// contract as the emotion stamp.
+  final int? storyDay;
+  final String? storyClock;
+
   JournalProposedOp({
     required this.action,
     this.cardId,
@@ -72,6 +78,8 @@ class JournalProposedOp {
     this.emotionLabel,
     this.emotionIntensity,
     this.sourcePositions = const [],
+    this.storyDay,
+    this.storyClock,
   });
 }
 
@@ -164,6 +172,8 @@ class JournalReview {
             emotionLabel: op.emotionLabel,
             emotionIntensity: op.emotionIntensity,
             sourcePositions: op.sourcePositions,
+            storyDay: op.storyDay,
+            storyClock: op.storyClock,
             maxCards: getMaxCards(),
           );
           break;

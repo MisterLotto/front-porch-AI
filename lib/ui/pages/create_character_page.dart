@@ -85,6 +85,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   bool _realismEnabled = false;
   String _realismTimeOfDay = 'morning';
   int _realismDayCount = 1;
+  // Story Calendar authoring (story-calendar.md §3a): null start date =
+  // "the day the chat starts"; null time = period default.
+  String? _realismStoryStartDate;
+  String? _realismStoryStartTime;
   int _realismShortTermBond = 0;
   int _realismLongTermBond = 0;
   int _realismTrustLevel = 0;
@@ -1123,6 +1127,12 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
                     setState(() => _realismTimeOfDay = v),
                 dayCount: _realismDayCount,
                 onDayCountChanged: (v) => setState(() => _realismDayCount = v),
+                storyStartDate: _realismStoryStartDate,
+                onStoryStartDateChanged: (v) =>
+                    setState(() => _realismStoryStartDate = v),
+                storyStartTime: _realismStoryStartTime,
+                onStoryStartTimeChanged: (v) =>
+                    setState(() => _realismStoryStartTime = v),
                 shortTermBond: _realismShortTermBond,
                 onShortTermBondChanged: (v) =>
                     setState(() => _realismShortTermBond = v),
@@ -1739,6 +1749,8 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         trustLevel: _realismTrustLevel,
         dayCount: _realismDayCount,
         timeOfDay: _realismTimeOfDay,
+        storyStartDate: _realismStoryStartDate,
+        storyStartTime: _realismStoryStartTime,
         characterEmotion: _realismEmotion,
         emotionIntensity: _realismEmotionIntensity,
         nsfwCooldownEnabled: _realismNsfwCooldown,
@@ -1814,6 +1826,11 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
 
       if (mounted) {
         setState(() {
+          // p12 flow: advance to the Portrait & Avatars step (6) instead of
+          // resetting to step 0. The old reset block (including Rawhide's
+          // _realismStoryStartDate/_realismStoryStartTime resets) is obsolete
+          // here — the wizard continues to the avatar panel and then closes, so
+          // there is nothing to reset for a fresh start in this path.
           _savedCard = card;
           _currentStep = 6;
         });

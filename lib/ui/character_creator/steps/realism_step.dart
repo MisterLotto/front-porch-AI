@@ -104,6 +104,16 @@ class RealismStep extends StatelessWidget {
                   state.realismDayCount = v;
                   state.notify();
                 },
+                storyStartDate: state.realismStoryStartDate,
+                onStoryStartDateChanged: (v) {
+                  state.realismStoryStartDate = v;
+                  state.notify();
+                },
+                storyStartTime: state.realismStoryStartTime,
+                onStoryStartTimeChanged: (v) {
+                  state.realismStoryStartTime = v;
+                  state.notify();
+                },
                 shortTermBond: state.realismShortTermBond,
                 onShortTermBondChanged: (v) {
                   state.realismShortTermBond = v;
