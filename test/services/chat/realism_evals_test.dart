@@ -140,7 +140,7 @@ RealismEvals createTestRealismEvals({
         onNotify: () {},
         onSaveChat: () async {},
         onSetPendingRealismMetadata: (k, v) {},
-        onNudgePatchLastMessageRealismState: (tod, dc) {},
+        onPatchLastMessageRealismState: (tod, dc, iso) {},
       );
   final char =
       activeCharFn?.call() ??
@@ -270,7 +270,7 @@ void main() {
           onNotify: () {},
           onSaveChat: () async {},
           onSetPendingRealismMetadata: (k, v) {},
-          onNudgePatchLastMessageRealismState: (tod, dc) {},
+          onPatchLastMessageRealismState: (tod, dc, iso) {},
         );
         final svc = createTestRealismEvals(time: time);
         await svc

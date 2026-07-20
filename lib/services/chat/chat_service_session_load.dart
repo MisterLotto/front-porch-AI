@@ -111,6 +111,8 @@ extension ChatServiceSessionLoad on ChatService {
       timeOfDay: lastSession.timeOfDay,
       dayCount: lastSession.dayCount,
       startDayOfWeek: lastSession.startDayOfWeek,
+      storyClock: lastSession.storyClock,
+      storyStartDate: lastSession.storyStartDate,
       passageOfTimeEnabled:
           lastSession.passageOfTimeEnabled &&
           _storageService.realismSettings.passageOfTimeDefault,
@@ -471,6 +473,8 @@ extension ChatServiceSessionLoad on ChatService {
         timeOfDay: session.timeOfDay,
         dayCount: session.dayCount,
         startDayOfWeek: session.startDayOfWeek,
+        storyClock: session.storyClock,
+        storyStartDate: session.storyStartDate,
         passageOfTimeEnabled:
             session.passageOfTimeEnabled &&
             _storageService.realismSettings.passageOfTimeDefault,

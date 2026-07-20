@@ -16,33 +16,23 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/services/chat/time_service.dart';
 
 /// Scene-time fragment for the words-only state block
-/// (docs/design/prompt-state-injection.md §3). One line; the day count is the
-/// one digit deliberately allowed in the composed block (dates are normal
-/// fiction, unlike meters). State stays in TimeService.
+/// (docs/design/prompt-state-injection.md §3). One line; clock digits and
+/// dates are normal fiction, unlike meters (design: story-calendar.md §7).
+/// The year appears only when the story isn't set in the current real-world
+/// year. State stays in TimeService.
 class TimeInjection {
   final TimeService timeService;
 
   TimeInjection({required this.timeService});
 
   String buildTimeInjection() {
-    if (timeService.timeOfDay.isEmpty) return '';
-    final timeLabel = timeService.timeOfDay.replaceAll('_', ' ');
-    const days = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
-    final narrativeDayIndex =
-        (timeService.startDayOfWeekAnchor - 1 + (timeService.dayCount - 1)) % 7;
-    final weekdayName = days[narrativeDayIndex];
-    return 'It is $timeLabel on $weekdayName (day ${timeService.dayCount} of '
-        'the story).';
+    final clock = timeService.clock;
+    return 'It is ${StoryClock.clockPhrase(clock)} on '
+        '${timeService.displayDate} '
+        '(day ${timeService.dayCount} of the story).';
   }
 }

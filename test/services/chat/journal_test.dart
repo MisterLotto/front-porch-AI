@@ -382,6 +382,8 @@ void main() {
         getMaxCards: () => 200,
         onNotify: () {},
         onSaveChat: () async {},
+        getCurrentStoryDay: () => 1,
+        getCurrentStoryClockIso: () => '2026-06-30T09:00:00.000Z',
       );
     }
 
@@ -528,6 +530,8 @@ void main() {
         getMaxCards: () => 200,
         onNotify: () {},
         onSaveChat: () async {},
+        getCurrentStoryDay: () => 1,
+        getCurrentStoryClockIso: () => '2026-06-30T09:00:00.000Z',
       );
       await m.runMaintenancePass();
 

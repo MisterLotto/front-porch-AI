@@ -131,7 +131,11 @@ class Sessions extends Table {
       integer().withDefault(const Constant(1))(); // starts at Day 1
   IntColumn get startDayOfWeek => integer().withDefault(
     const Constant(0),
-  )(); // 1=Mon..7=Sun anchor for narrativeWeekday; 0=legacy/unset (compute on first load)
+  )(); // 1=Mon..7=Sun; legacy anchor, now WRITTEN as weekday(storyStartDate) so external readers stay consistent
+  TextColumn get storyClock =>
+      text().nullable()(); // ISO-8601 story datetime — canonical clock (design: story-calendar.md)
+  TextColumn get storyStartDate =>
+      text().nullable()(); // ISO-8601 date of Day 1 — canonical anchor; null = legacy row (synthesized on load)
   BoolColumn get nsfwCooldownEnabled =>
       boolean().withDefault(const Constant(false))(); // sub-toggle
   BoolColumn get passageOfTimeEnabled => boolean().withDefault(
@@ -1132,7 +1136,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1779,6 +1783,24 @@ class AppDatabase extends _$AppDatabase {
         try {
           await customStatement(
             'ALTER TABLE sessions ADD COLUMN selected_look_avatar_id TEXT',
+          );
+        } catch (_) {}
+      }
+      if (from < 38) {
+        // v37→v38: the Story Calendar (docs/design/story-calendar.md).
+        // Canonical minute-level clock + Day 1 anchor, both nullable additive
+        // (maintainer-approved sessions change, 2026-07-20) — legacy rows stay
+        // NULL and synthesize on first load; Character Card Forge's raw SQL
+        // keeps working (timeOfDay/dayCount/startDayOfWeek are still written,
+        // now derived from the clock). Guarded like v37 (rollback re-runs).
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN story_clock TEXT',
+          );
+        } catch (_) {}
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN story_start_date TEXT',
           );
         } catch (_) {}
       }

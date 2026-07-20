@@ -343,6 +343,8 @@ extension ChatServiceSessionManage on ChatService {
       _timeService.seedFromV2OrExt(
         dayCount: extSeed.dayCount.clamp(1, 9999),
         timeOfDay: extSeed.timeOfDay,
+        storyStartDate: extSeed.storyStartDate,
+        storyStartTime: extSeed.storyStartTime,
         passageOfTimeEnabled:
             extSeed.passageOfTimeEnabled &&
             _storageService.realismSettings.passageOfTimeDefault,

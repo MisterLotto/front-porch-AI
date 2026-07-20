@@ -312,6 +312,8 @@ void main() {
       store: store,
       getSessionId: () => 's1',
       getCurrentEmotion: () => currentEmotion,
+      getCurrentStoryDay: () => 1,
+      getStoryStartDate: () => DateTime.utc(2026, 6, 30),
     );
 
     Future<JournalMemoryData> addOne(String content, {String? emotion}) async {

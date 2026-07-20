@@ -1,6 +1,7 @@
-# The Story Clock & Calendar (design sketch — full time-subsystem rewrite)
+# The Story Clock & Calendar (full time-subsystem rewrite)
 
-**Status:** proposal — not yet implemented. Targets Rawhide.
+**Status:** IMPLEMENTED (2026-07-20, Rawhide) — see "As built" at the end for
+the deltas from this sketch.
 **Scope:** rewrites the passage-of-time subsystem (`lib/services/chat/time_service.dart`)
 around a real datetime clock, adds the calendar surface, and dates the Journal
 (`docs/design/journal-memory.md`).
@@ -343,3 +344,37 @@ stamping path); phase 3 may follow immediately after in the same effort.
 4. Group calendar dots: focused participant only (matches the journal
    panel — recommended) or union of all members?
 5. OOC week/month vocabulary in the same PR (recommended) or parked?
+
+## 11. As built (2026-07-20)
+
+Everything above shipped as designed, with these deltas:
+
+- **Card extension field:** the exact opening time ships as
+  `story_start_time` ("HH:MM"), not a full `story_clock` datetime — a card
+  seeds *relative* time (Day N + clock time), and a full datetime would have
+  fought `day_count`. `story_start_date` is as designed.
+- **Diary date headers (§4):** the diary dialog KEEPS its category grouping
+  (About-you / About-us / Moments / Promises are meaningful) and instead
+  stamps each card with "Day 5 · Tue, Mar 3" on its feeling line; the
+  **calendar dialog is the date-grouped view** (tap a day → that day's
+  memories). Two groupings, each on the surface where it reads best.
+- **Passage-of-time toggle:** stays in Character State settings — the
+  calendar gear carries only "story begins on…" and "set date & time"
+  (relocating the toggle would have duplicated a control for no UX gain).
+- **Group creation wizard:** did NOT gain the calendar block. Investigation
+  showed the group creator's scene-time seed (baseline blob
+  `timeOfDay`/`dayCount`) has **no runtime application path** to the
+  chat-scoped clock — it's editor-carried state only, a pre-existing latent
+  gap. Groups author dates live via the calendar dialog (works fully in
+  groups; time is chat-scoped). Wiring the wizard seed through is its own
+  small fix if wanted.
+- **Web parity:** `GET /api/chat/tools/calendar` (owner-scoped day/card
+  payload), additive `time.{clock,date,dateLong,storyClock,storyStartDate}`
+  fields, `POST /api/chat/tools/time` additive `{setClock}`/`{setStartDate}`
+  forms, and `StoryCalendarModal.tsx` (phone: full-screen via the shared
+  `[data-layout="phone"]` override). Journal memory *cards* themselves
+  remain desktop-only outside the calendar view — the web diary is a
+  pre-existing gap owned by the journal effort, not widened here.
+- **Open questions 2-5** resolved as recommended (continuous per-turn time;
+  clock digits in the injection; focused-participant dots; week/month OOC
+  vocabulary shipped).

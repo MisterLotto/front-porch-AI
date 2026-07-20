@@ -203,6 +203,8 @@ extension ChatServiceChatEntry on ChatService {
           _timeService.seedFromV2OrExt(
             dayCount: ext.dayCount.clamp(1, 9999),
             timeOfDay: ext.timeOfDay,
+            storyStartDate: ext.storyStartDate,
+            storyStartTime: ext.storyStartTime,
             passageOfTimeEnabled:
                 ext.passageOfTimeEnabled &&
                 _storageService.realismSettings.passageOfTimeDefault,

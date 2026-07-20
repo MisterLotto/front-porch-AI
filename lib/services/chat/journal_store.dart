@@ -63,9 +63,29 @@ class JournalStore {
     return db.getJournalCards(sessionId, characterId);
   }
 
+  /// Decode a card's story-date stamp from the metadata pouch
+  /// (design: story-calendar.md §4). Returns (storyDay, storyClock) — either
+  /// may be null (pre-calendar cards, legacy source messages).
+  static (int?, DateTime?) stampOf(JournalMemoryData card) {
+    final raw = card.metadata;
+    if (raw == null || raw.isEmpty) return (null, null);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return (null, null);
+      final day = (decoded['storyDay'] as num?)?.toInt();
+      final clockRaw = decoded['storyClock'] as String?;
+      final clock = clockRaw == null ? null : DateTime.tryParse(clockRaw);
+      return (day, clock?.toUtc());
+    } catch (_) {
+      return (null, null);
+    }
+  }
+
   /// Insert a new memory. Enforces the per-owner cap by retiring the coldest
   /// unpinned card (lowest heat; oldest wins the tie — design §4.4). The raw
   /// transcript stays in RAG, so a trimmed card is a demotion, not a loss.
+  /// [storyDay]/[storyClock] stamp WHEN the memory happened (story-calendar
+  /// §4) into the metadata pouch — deterministic, never model-supplied.
   Future<void> addCard({
     required String sessionId,
     required String characterId,
@@ -74,6 +94,8 @@ class JournalStore {
     String? emotionLabel,
     String? emotionIntensity,
     List<int> sourcePositions = const [],
+    int? storyDay,
+    String? storyClock,
     required int maxCards,
   }) async {
     final db = getDb();
@@ -101,6 +123,14 @@ class JournalStore {
         emotionIntensity: Value(emotionIntensity),
         sourceMessageIds: Value(
           sourcePositions.isEmpty ? null : jsonEncode(sourcePositions),
+        ),
+        metadata: Value(
+          storyDay == null && storyClock == null
+              ? null
+              : jsonEncode({
+                  'storyDay': ?storyDay,
+                  'storyClock': ?storyClock,
+                }),
         ),
       ),
     );

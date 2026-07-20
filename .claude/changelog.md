@@ -5260,3 +5260,35 @@ deterministic floor on eval failure, 12-turn stall backstop snapping to the
 next period (preserves the never-freezes guarantee). Deletion list grows:
 turnsPerTimePeriod, hold_time, the triple prompt branching. Pacing feel
 deliberately changes from frozen-then-lurch to a creeping clock. Docs only.
+
+## 2026-07-20 (UTC) — The Story Calendar: full time-subsystem rewrite (implemented)
+**Files:** `lib/services/chat/story_clock.dart` (new pure leaf),
+`lib/services/chat/time_service.dart` (rewritten), `lib/database/database.dart`
+(+`database.g.dart`, v38: sessions.story_clock/story_start_date, nullable
+additive, maintainer-approved), `realism_tools.dart` + `realism_prompt_builder.dart`
++ `realism_evals.dart` (scene-time eval: minutes_elapsed replaces hold_time;
+one-shot fused JSON carries the same fields), `character_card.dart`
+(story_start_date/story_start_time ext), session save/load/capture/restore +
+group-fork sites, `time_injection.dart` (clock+date line),
+journal stamping (`journal_store.dart` metadata pouch + stampOf,
+`journal_review.dart` op fields, `journal_maintenance.dart` _dateStamp,
+`journal_injection.dart` relative-time suffix), desktop UI
+(`story_calendar_dialog.dart` new, `time_strip.dart` clock+tappable date,
+diary/panel date lines + plant stamping, `realism_form_section.dart`
+"Story begins" block wired through both creators + edit page +
+`creator_state*.dart`), web parity (`chat_tools_facade.dart` additive time
+fields + calendar payload + setStoryClock/setStartDate,
+`chat_tools_routes.dart` GET calendar + additive time POST forms,
+`web_ui` StoryCalendarModal.tsx + ChatTools + styles.css + rebuilt bundle),
+tests (story_clock_test.dart new, time_service_test.dart rewritten for the
+continuous model, journal/prompt-injection/golden fakes updated, goldens
+regenerated deterministically via a pinned story date, schema version test 38).
+**Why:** design docs/design/story-calendar.md — canonical minute-level clock,
+continuous per-turn advancement (6-turn gate + hold_time veto deleted; zero
+extra LLM calls since the scene-time eval already fired every turn),
+real dates everywhere, journal memories know WHEN, month-grid calendar with
+memory dots on desktop + web. Deleted: resolveStartDayOfWeek,
+ensureStartDayOfWeekAnchored, turnsPerTimePeriod, both modulo-7 weekday
+computations, TimeService's duplicate buildTimeInjection, the triple prompt
+branching. All 2296 tests pass; flutter analyze clean; web tsc/build/vitest
+clean.

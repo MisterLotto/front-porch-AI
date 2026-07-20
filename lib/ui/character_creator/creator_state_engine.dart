@@ -111,6 +111,8 @@ extension CreatorEngine on CreatorState {
         trustLevel: realismTrustLevel,
         dayCount: realismDayCount,
         timeOfDay: realismTimeOfDay,
+        storyStartDate: realismStoryStartDate,
+        storyStartTime: realismStoryStartTime,
         characterEmotion: realismEmotion,
         emotionIntensity: realismEmotionIntensity,
         nsfwCooldownEnabled: realismNsfwCooldown,
