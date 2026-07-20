@@ -5222,3 +5222,17 @@ month-grid calendar surface with memory-marked days on desktop + web, and
 retirement of the now-redundant `startDayOfWeek` modulo-7 logic. Blocked on
 maintainer approval for the `sessions` column (Character Card Forge raw-SQL
 writer); open questions listed in the doc. No code changed.
+
+## 2026-07-20 (UTC) — Story Calendar sketch upgraded to a full time-subsystem rewrite
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer green-lit rewriting the whole time-of-day subsystem, so the
+sketch moved from "derive dates from dayCount" to a canonical minute-level
+story clock (`_clock` + `_startDate` DateTimes) with timeOfDay/dayCount/
+weekday all derived. The four hand-rolled period-array walks (nudge, AFK,
+OOC skip, eval rollover) collapse into one pure leaf (`chat/story_clock.dart`),
+the hold/new_day veto eval upgrades to `minutes_elapsed`, and every external
+shape (sessions columns, realism_state snapshots, group blobs, V2 card
+extensions via The Stoop, web facade) is kept as written-derived /
+read-as-seed with one legacy synthesis function. Journal stamping now carries
+a full timestamp ("that night on the pier"). Still docs-only; sessions
+columns remain gated on maintainer approval (Character Card Forge).

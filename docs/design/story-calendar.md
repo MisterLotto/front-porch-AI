@@ -1,241 +1,270 @@
-# The Story Calendar (design sketch)
+# The Story Clock & Calendar (design sketch — full time-subsystem rewrite)
 
 **Status:** proposal — not yet implemented. Targets Rawhide.
-**Depends on:** TimeService (`lib/services/chat/time_service.dart`), The Journal
+**Scope:** rewrites the passage-of-time subsystem (`lib/services/chat/time_service.dart`)
+around a real datetime clock, adds the calendar surface, and dates the Journal
 (`docs/design/journal-memory.md`).
+**Maintainer license:** a full rewrite of the time-of-day subsystem is
+explicitly approved (conversation 2026-07-20); the `sessions` schema addition
+still needs its own sign-off (§5).
 
 ## 1. Motivation
 
-Passage of time today is a *day tracker*: `dayCount` (an integer starting at
-Day 1), a six-period `timeOfDay`, and a `startDayOfWeek` anchor that lets the
-UI and prompt say "Tuesday (Day 5)". That gives scenes a rhythm, but no
-*dates*. Characters can remember (via the Journal) how they felt about
-something — they cannot remember **when** it happened, and "Day 47" is not how
-anyone talks about a memory.
+Passage of time today is four loosely-coupled scalars: a six-period
+`timeOfDay` string, an integer `dayCount`, a `startDayOfWeek` weekday anchor,
+and a turn counter. Every behavior — nudges, OOC skips, AFK advancement, the
+hold/new_day eval — is a hand-rolled walk over the six-period array, and the
+system cannot express dates, durations shorter than "a period", or anything
+like "a week later". Characters can remember (via the Journal) how they felt —
+never *when*.
 
-The Story Calendar gives every chat a real calendar — accurate months, days,
-years (Gregorian, leap years and all) — so that:
+The rewrite collapses all of it into one canonical value: **the story clock**,
+an actual datetime. Accurate months, days, years, weekdays, and leap years
+come from Dart's calendar for free; every current behavior becomes a
+one-line clock mutation; and the Journal, the prompt, and a new calendar UI
+all get real dates and times of day.
 
-- The scene has a real date ("It is morning on Tuesday, March 3rd, 2026").
-- Journal memories are stamped with the story date they happened on, so a
-  character remembers not only the feeling but the *when* ("that Friday on the
-  pier, two weeks ago").
-- The user gets an actual calendar surface: a month grid showing where the
-  story is, with the days that hold memories marked on it.
+## 2. The new model
 
-## 2. Design principle: the calendar is a projection, not a second clock
-
-**`dayCount` remains the single source of truth for elapsed story time.**
-Nothing about the existing state machine changes: the deterministic 6-turn
-clock, the LLM hold/new_day veto, manual nudge chevrons, the OOC time-skip
-detector, AFK `advanceTimePeriods`, swipe/regen restore, 1:1↔group conversion
-carry — all untouched.
-
-We add exactly one new persisted scalar — a **story start date** — and derive
-everything else:
-
-```
-storyDate(dayCount)   = storyStartDate + (dayCount − 1) days
-narrativeWeekday      = weekday(storyDate)          // replaces the modulo-7 math
-displayDate           = "Tuesday, March 3rd, 2026"  // via intl (already a dep)
-```
-
-Date arithmetic uses `DateTime.utc` (+ `Duration(days:)`) so DST can never
-shift a story day, and Dart's calendar handles month lengths and leap years —
-that is the "accurate months, days and years" requirement, for free.
-
-This mirrors how `narrativeWeekday` already works (anchor + elapsed days) —
-the weekday anchor simply grows into a full date anchor.
-
-### What happens to `startDayOfWeek`
-
-It becomes redundant: `weekday(storyStartDate)` for Day 1 gives the same
-answer. Per the overlapping-features rule, the *logic* around
-`startDayOfWeek` (the modulo-7 weekday computation in TimeService and
-TimeInjection, `resolveStartDayOfWeek`, `ensureStartDayOfWeekAnchored`) is
-retired in the same work and replaced by the date derivation. The DB *column*
-stays (legacy rows, Character Card Forge reads, additive-only migrations) but
-is no longer written with new meaning — it is populated on save purely as
-`weekday(storyStartDate)` so any external reader keeps seeing a consistent
-value.
-
-## 3. Anchoring rules
-
-- **Fresh chat:** `storyStartDate` = today's real-world date (UTC date of the
-  local wall clock), same spirit as the current "anchor weekday to today"
-  behavior. Day 1 is "today" unless the user says otherwise.
-- **User override (the period-roleplay door):** the calendar UI lets the user
-  set the story's start date to *anything* — 1887, 2187, last summer. Editing
-  re-anchors the whole timeline; `dayCount` is untouched, so the current
-  scene simply lands on `newStart + (dayCount − 1)`.
-- **Legacy sessions (null `storyStartDate`):** resolved on first load the same
-  way `resolveStartDayOfWeek` handles its legacy `0`: synthesize an anchor so
-  the *currently displayed* weekday does not jump. Concretely: pick the most
-  recent date such that Day `dayCount` falls on today, then — if the stored
-  `startDayOfWeek` is set and disagrees — slide the anchor back 0–6 days so
-  `weekday(anchor)` matches it. The visible "Tue · Day 5" stays identical
-  across the upgrade; it just gains "Mar 3".
-
-## 4. Persistence
-
-One additive, nullable column on `Sessions`:
+### Canonical state (TimeService, rewritten)
 
 ```dart
-TextColumn get storyStartDate => text().nullable()(); // ISO-8601 'YYYY-MM-DD'
+DateTime _clock;          // the story's current moment (UTC, minute granularity)
+DateTime _startDate;      // Day 1's date (date-only, UTC midnight)
+bool _passageOfTimeEnabled;
+int  _turnsSinceLastTimeAdvance;   // pacing counter — unchanged concept
 ```
 
-plus the usual load/seed/reset/capture wiring through the existing helpers
-(`loadTimeScalars`, `seedFromV2OrExt`, `resetForFreshChat`,
-`restoreTimeFromRealismState`, and the `realism_state` message snapshot so
-conversion/swipe paths carry it).
+### Everything else is derived (nothing else is stored in memory)
 
-> ⚠️ **Maintainer approval required before implementation.** `sessions` is
-> written directly by Character Card Forge with raw SQL. The column is
-> nullable-with-no-default-needed (safest additive shape), but a raw
-> `INSERT` that does not name its columns would still break. This needs the
-> explicit sign-off CLAUDE.md requires for `sessions` schema changes —
-> including a check of how Card Forge writes its inserts.
+```dart
+String get timeOfDay;        // dawn/morning/late_morning/afternoon/evening/night, from _clock.hour
+int    get dayCount;         // _clock.date − _startDate + 1  (Day 1-based, as today)
+String get narrativeWeekday; // weekday(_clock) — the modulo-7 math dies
+DateTime get storyDate;      // date part of _clock
+String get displayClock;     // "9:40 AM"
+String get displayDate;      // "Tuesday, March 3rd" (+ ", 1887" when ≠ current real year) — intl
+```
 
-Journal cards need **no migration**: `JournalMemories.metadata` is the JSON
-pouch reserved for exactly this kind of additive growth.
+Period boundaries (hour → period) and the reverse map (period → representative
+time, used when seeding from legacy period-only data):
 
-## 5. Journal linkage — memories that know *when*
+| period       | hours   | representative |
+|--------------|---------|----------------|
+| dawn         | 05–08   | 06:00          |
+| morning      | 08–11   | 09:00          |
+| late_morning | 11–13   | 11:30          |
+| afternoon    | 13–17   | 14:30          |
+| evening      | 17–21   | 18:30          |
+| night        | 21–05   | 22:30          |
 
-### Stamping (deterministic, no LLM)
+All boundary/representative constants and pure conversions live in one new
+pure leaf, **`chat/story_clock.dart`** (no I/O, fully unit-testable — the
+subsystem's `journal_physics.dart` analog). TimeService keeps ownership,
+orchestration, and the callbacks; the math lives in the leaf.
 
-Same philosophy as emotion stamping: the pass never asks the model for the
-date. When `journal_maintenance` creates a card, it stamps the pouch:
+### Behaviors, rewritten as clock mutations
+
+Every hand-rolled six-element array walk in the current service (nudge,
+advanceTimePeriods, OOC skip, hold-eval rollover — four separate copies)
+reduces to `_clock = _clock.add(...)` / snap-to-period helpers in the leaf:
+
+- **Deterministic pacing (unchanged cadence):** the 6-turn eligibility
+  counter stays. The clock only moves on the events below — no per-turn
+  drift — so the observable rhythm users know is preserved.
+- **Eligible advance + LLM eval (upgraded):** the scene-time eval stops being
+  a boolean veto and reports elapsed time. Tool/JSON schema (flat, no
+  grammar — the GBNF gotcha stands):
+  `{"minutes_elapsed": 0–480, "new_day": bool, "posture": "..."}`.
+  `minutes_elapsed: 0` is the old "hold"; the deterministic floor on eval
+  failure/absence is "advance to the next period's representative time"
+  (exactly today's failure behavior, expressed in minutes). `new_day` jumps
+  to 08:00 next day (valid from evening onward, as today). Clamped hard —
+  the LLM can pace a scene, never teleport the timeline.
+- **Nudge chevrons (±1):** snap to the previous/next period's representative
+  time; day rollover falls out of the datetime math instead of the manual
+  wrap. Same last-message `realism_state` patch callback for swipe survival.
+- **OOC time-skip detector:** finally speaks real durations — existing
+  vocabulary maps to minutes/hours ("an hour" +60, "a few hours" +180,
+  "next morning" → next day 08:00), and the vocabulary grows the cases the
+  old model could not express: "a week later" +7 days, "next month" → the
+  1st of the following month, "that winter…" parked as a future nicety.
+  Same `passageOfTimeEnabled` gate, same pending-metadata chip
+  ("Skipped to Mon, Mar 9").
+- **AFK idle mode:** `advanceTimePeriods(count)` becomes count
+  snap-to-next-period steps — identical observable result.
+- **One-shot parity (contract upheld):** the fused one-shot JSON carries the
+  same `minutes_elapsed`/`new_day` fields; both paths tick the same counter
+  and mutate the same clock. Parity holds because there is only one clock
+  and one mutation site.
+
+### Explicitly out of scope
+
+Needs decay, mood decay, and the long-term relationship counters stay
+**turn-based**. Driving simulation decay off elapsed story time is a
+tempting sequel but a behavioral change to the Realism/Needs parity surface —
+its own proposal if ever.
+
+## 3. Compatibility: the wire formats keep speaking period + day
+
+`timeOfDay`/`dayCount` are not private state — they are interchange contracts.
+The rewrite treats each as *written-derived, read-as-seed*:
+
+| Surface | Written as | Read as |
+|---|---|---|
+| `Sessions.timeOfDay/dayCount/startDayOfWeek` | derived from the clock on every save (Card Forge + rollback keep working) | legacy seed when `storyClock` is null |
+| `Sessions.storyClock`, `Sessions.storyStartDate` (new, §5) | canonical ISO-8601 | canonical |
+| `realism_state` message snapshots | legacy keys **and** additive `storyClock`/`storyStartDate` | prefer new keys; synthesize from legacy (swipe/regen/convert on old chats) |
+| Group realism blobs (`group_realism_blobs.dart`) | same additive-keys pattern | same |
+| V2 card extensions (`day_count`, `time_of_day` — travels via The Stoop) | keep both, add `story_clock`/`story_start_date` | prefer new; old cards seed via synthesis |
+| Web facade (`chat_tools_facade.dart`) | existing fields unchanged + additive `clock`, `storyDate`, `storyStartDate` | n/a |
+| Seeding editors (`group_realism_dynamics_editor`, `group_member_realism_editor`, speaker-objective seeding) | keep their period+day pickers, now writing through synthesis; the dynamics editor gains an optional date/time picker | n/a |
+
+**One synthesis function** (in `story_clock.dart`) covers every legacy read:
+
+```dart
+StoryClockState fromLegacy({timeOfDay, dayCount, startDayOfWeek})
+// clock = anchorDate + (dayCount−1) days, at timeOfDay's representative time
+// anchorDate chosen so Day dayCount falls on today, slid 0–6 days back so
+// weekday(anchor) honors a set startDayOfWeek — the visible "Tue · Day 5"
+// never jumps across the upgrade; it just gains "Mar 3, 9:40 AM".
+```
+
+This is the successor to `resolveStartDayOfWeek`'s legacy-row trick, applied
+once, in one place, instead of per-consumer.
+
+### User override (the period-roleplay door)
+
+The calendar UI lets the user set the story's start date to anything — 1887,
+2187 — and set the current clock directly. Re-anchoring shifts `_startDate`
+and `_clock` together (elapsed days preserved); setting the clock inside the
+current day is just a set. Weekdays and month lengths follow the real
+(proleptic) Gregorian calendar at any year.
+
+## 4. Journal linkage — memories that know *when*
+
+Deterministic stamping, no LLM, no new pass — same philosophy as emotion
+stamping. When the maintenance pass creates a card it writes the
+`JournalMemories.metadata` pouch (reserved for exactly this; **zero journal
+migration**):
 
 ```json
-{ "storyDay": 5, "storyDate": "2026-03-03" }
+{ "storyDay": 5, "storyClock": "2026-03-03T21:40" }
 ```
 
-`storyDay` is derived from the cited source messages: each message's
-`realism_state` snapshot already carries `dayCount` at the moment it was
-written, so the card's day is the modal/most-common `dayCount` among its
-cited positions (fallback: the pass-time `dayCount`). `storyDate` is the
-projection through the anchor, stored denormalized so a later anchor edit is
-visible as such (the diary can show both "Day 5" — stable — and the date —
-re-derived live from `storyDay` so anchor edits retro-date every memory
-consistently; the stored string is only a fallback for exports).
+`storyDay` comes from the cited source messages: their `realism_state`
+snapshots already carry the time state at writing (modal `dayCount` among
+cited positions; fallback: pass-time value). The full timestamp means a
+memory knows it happened *at night* — "that night on the pier" — not just on
+Day 5. Displayed dates re-derive live from `storyDay` + the anchor, so a
+later anchor edit retro-dates every memory consistently.
 
-Revisions keep the stamp (a memory reworked later still happened when it
-happened). Cards written before this feature simply have no stamp — every
-consumer treats it as optional (nullable-pouch floor).
+- **Injection suffix** (words-only, per the prompt-state-injection doctrine):
+  `- I still think about the pier. (felt: warm · Day 5, last Tuesday night — 9 days ago)`
+  Unstamped (pre-feature) cards render exactly as today.
+- **Diary UI:** cards grouped under date headers ("Day 5 — Tuesday, March
+  3rd"); sidebar peek shows the compact form. Unstamped cards group under
+  "Before the calendar".
+- Invariants untouched: cards stay session-scoped; no-RAG floor unaffected;
+  revisions keep their stamp (a reworked memory still happened when it
+  happened).
 
-### Injection
+## 5. Persistence & migration
 
-The journal injection builder gains a relative-time suffix per card, computed
-from `storyDay` vs current `dayCount`:
+Two additive, nullable TEXT columns on `Sessions`:
 
+```dart
+TextColumn get storyClock => text().nullable()();      // ISO-8601 datetime
+TextColumn get storyStartDate => text().nullable()();  // ISO-8601 date
 ```
-- I still think about the pier. (felt: warm · Day 5, last Tuesday — 9 days ago)
-```
 
-Cheap, words-only (fits the prompt-state-injection doctrine), and gives the
-model the material to say "remember two Fridays ago?" unprompted. Unstamped
-cards render exactly as today.
+> ⚠️ **Maintainer approval required before implementation.** `sessions` is
+> written directly by Character Card Forge with raw SQL. Nullable additive
+> columns are the safest shape, but a raw `INSERT` that does not name its
+> columns would still break — needs a check of how Card Forge writes.
 
-### Diary UI
-
-`journal_dialog` groups cards under date headers ("Day 5 — Tuesday, March
-3rd") instead of a flat list; the sidebar peek shows the compact form ("Tue
-Mar 3"). Unstamped cards group under "Before the calendar".
+`startDayOfWeek` logic (`resolveStartDayOfWeek`,
+`ensureStartDayOfWeekAnchored`, both modulo-7 weekday computations) is
+**deleted**; the column remains, written as `weekday(storyStartDate)` so any
+external reader sees consistent values. Migration is lazy — no data
+rewrite; legacy rows synthesize on first load and persist the canonical
+columns on first save.
 
 ## 6. The calendar surface
 
-**Desktop:** `TimeStrip` (the ONE scene-time widget) gains the date — the
-"Tue · Day 5" chip becomes "Tue, Mar 3 · Day 5" — and tapping it opens the
-new **calendar dialog**: a month grid (pure Dart/Drift-free, AppColors +
-porch amber only) with
+**Desktop:** `TimeStrip` (still the ONE scene-time widget) shows
+`🌙 9:40 PM · Tue, Mar 3 · Day 5` with the existing chevrons and period dots
+(dots derive from the period as before). Tapping the date opens the
+**calendar dialog** (AppColors + porch amber; not a wizard — the
+step-indicator rule doesn't apply):
 
-- the current story date highlighted (amber, `onChaosAccent` ink),
-- a dot on every day that holds at least one journal memory for the focused
-  participant (group: follows the same focused-participant convention as the
-  journal panel; the data is one `cardsFor` read — cards are capped per
-  owner, so grouping by `storyDay` in memory is trivial),
-- tap a marked day → that day's memories (the diary dialog, pre-filtered),
-- a gear → "story begins on…" date picker (the anchor override), plus the
-  existing passage-of-time toggle relocated alongside for one coherent "time"
-  settings spot,
-- month/year chevrons for browsing; days before Day 1 and after "today" are
-  dimmed (the story has no memories there yet).
+- month grid, current story date highlighted (amber fill, `onChaosAccent` ink),
+- a dot on each day holding journal memories for the focused participant
+  (one `cardsFor` read on open — cards are capped, in-memory grouping;
+  async, never in `build`),
+- tap a marked day → that day's memories (diary dialog, pre-filtered),
+- gear → "story begins on…" date picker, "set current date & time" picker,
+  and the relocated passage-of-time toggle — one coherent time-settings spot,
+- month/year chevrons; days outside [Day 1, today] dimmed.
 
-This is a viewer/settings dialog, not a Create-X wizard — the step-indicator
-rule does not apply.
-
-**Web/mobile (`web_ui/`) — parity is part of the same body of work, not a
-follow-up.** The facade (`chat_tools_facade.dart`) additively adds
-`storyDate` + `storyStartDate` next to the existing
-`timeOfDay`/`dayCount`/`weekday` fields; journal card payloads additively
-carry the stamp. The web UI ships the same calendar (marked days, tap-to-see
-memories, anchor editing), with distinct phone and desktop presentations per
-the layout addendum (phone: full-screen sheet; desktop: dialog like the
-native app).
+**Web/mobile (`web_ui/`) — same body of work, not a follow-up.** Facade
+fields per §3; journal payloads additively carry the stamp; the web UI ships
+the same calendar with distinct phone (full-screen sheet) and desktop
+(dialog) presentations per the layout addendum.
 
 ## 7. Prompt changes
 
-`TimeInjection` (words-only state block) becomes:
+`TimeInjection` becomes:
 
 ```
-It is morning on Tuesday, March 3rd (day 5 of the story).
+It is 9:40 at night on Tuesday, March 3rd (day 5 of the story).
 ```
 
-The year is appended only when the story is not anchored in the current
-real-world year ("…March 3rd, 1887") — modern-day chats don't pay tokens for
-a redundant year, period chats get the year that defines them.
-
-**Optional extension (same work, small):** with real dates in hand, the OOC
-time-skip detector's vocabulary can finally grow past "next day" — "a week
-later" → `dayCount += 7`, "next month" → advance to the 1st of the following
-month via the calendar. Kept behind the same `passageOfTimeEnabled` gate and
-the same pending-metadata chip path ("Skipped to Mon, Mar 9").
+Clock digits and the day digit are normal fiction (the doctrine's meter ban
+is about stats, not dates); the year appears only when it isn't the current
+real-world year. `buildTimeInjection` inside TimeService (the "thin wrapper"
+duplicate of TimeInjection) is deleted in the same pass — one builder.
 
 ## 8. Contracts honored
 
-- **1:1 ↔ group parity:** time is chat-scoped (single per-chat scalars, not
-  per-speaker) — the anchor rides the exact same load/save/capture sites, so
-  parity holds by construction. No `_groupRealism` involvement.
-- **One-shot vs normal path parity:** untouched — the clock tick and
-  hold/new_day eval are unchanged; the date is a pure derivation of state
-  both paths already maintain identically.
-- **Journal invariants:** cards stay strictly session-scoped; stamping is
-  deterministic metadata (no new LLM call, no new pass); no-RAG floor
-  unaffected (dates never need embeddings).
-- **Cross-platform:** pure `DateTime.utc` math + `intl` formatting — no
-  paths, no processes, no natives.
-- **Sync I/O:** the calendar dialog reads cards once on open (async), never
-  in `build`.
+- **1:1 ↔ group parity:** time stays chat-scoped — one clock per chat, same
+  load/save/capture sites. No `_groupRealism` involvement.
+- **One-shot vs normal:** identical fields, one clock, one mutation site (§2).
+- **Cross-platform:** pure `DateTime.utc` math (DST-proof) + `intl`
+  formatting — no paths, no processes, no natives.
+- **Local-model floor:** flat JSON / single tool call, stop-sequences + regex,
+  no grammar; deterministic fallback advances on any eval failure so time
+  never freezes (as today).
 
-## 9. Implementation shape (one PR, or two at most)
+## 9. Implementation shape
 
-1. **Core:** `storyStartDate` on Sessions (approval first!), TimeService
-   gains the anchor scalar + `storyDate`/`displayDate` getters, weekday
-   derivation replaces the modulo-7 math (delete `resolveStartDayOfWeek` /
-   `ensureStartDayOfWeekAnchored` in favor of the date-anchor equivalents),
-   TimeInjection updated, capture/restore + all documented keep-in-sync
-   reset sites.
-2. **Journal stamping:** maintenance pass writes the pouch; injection builder
-   adds the relative-time suffix; diary/panel render date groups.
-3. **Calendar UI** (desktop dialog + TimeStrip entry) and **web parity**
-   (facade fields + web calendar, phone + desktop layouts).
-4. **Docs:** this file graduates from sketch to as-built; `docs/Rawhide.md`
-   gets the user-facing bullet ("📅 A real calendar — your story has actual
+1. **Core rewrite:** `chat/story_clock.dart` (pure leaf: conversions,
+   synthesis, formatting) + TimeService rewritten around `_clock`/`_startDate`
+   (nudge/OOC/AFK/eval collapse onto the leaf; the four period-array walks,
+   both weekday computations, `resolveStartDayOfWeek`,
+   `ensureStartDayOfWeekAnchored`, and TimeService's duplicate
+   `buildTimeInjection` are deleted). Eval schema upgrade with parity across
+   one-shot. Sessions columns (post-approval) + every wire format in §3.
+   Unit tests target the leaf (boundary/rollover/leap-year/synthesis) and the
+   service (eligibility, floors, restore paths).
+2. **Journal stamping** (§4): pass writes the pouch; injection suffix;
+   diary/panel date groups.
+3. **Calendar UI** desktop + **web parity** (§6).
+4. **Docs:** this file graduates to as-built; `docs/Rawhide.md` gets the
+   user-facing bullet ("📅 A real calendar and clock — your story has actual
    dates now, and characters remember *when* things happened").
 
-Estimated new files: `chat/story_calendar.dart` (pure date math + formatting,
-< 150 LOC), `ui/dialogs/story_calendar_dialog.dart`, web counterparts. No new
-services, no new passes, no new toggles (the feature is always-on once the
-anchor exists — it is a display/memory upgrade, not a new simulation).
+Phases 1–2 are one PR (the rewrite plus its first consumer proves the
+stamping path); phase 3 may follow immediately after in the same effort.
 
 ## 10. Open questions for the maintainer
 
-1. **Sessions column approval** (§4) — the hard gate. If Card Forge's raw
-   inserts name their columns, the nullable column is safe; needs checking.
-2. Default anchor = chat-creation day (recommended) — or should the picker be
-   part of chat creation for new chats?
-3. Should the marked-days dots in a *group* chat show the union of all
-   members' memories or only the focused participant's (sketch says focused,
-   matching the journal panel)?
-4. Is the OOC week/month skip vocabulary (§7) wanted in the same PR, or
-   parked?
+1. **Sessions columns approval** (§5) — the hard gate.
+2. **`minutes_elapsed` eval** (§2): comfortable letting local models pace
+   minutes (clamped, deterministic floor), or keep the veto-only eval for
+   v1 and advance by whole periods? The rewrite works either way; minutes
+   is recommended (it's what makes "9:40" mean something).
+3. Clock digits in the injection (§7) — recommended yes; confirm.
+4. Group calendar dots: focused participant only (matches the journal
+   panel — recommended) or union of all members?
+5. OOC week/month vocabulary in the same PR (recommended) or parked?
