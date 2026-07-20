@@ -23,6 +23,50 @@ part of 'avatar_creation_controller.dart';
 /// settings_page). Direct access to the controller's private state, so
 /// behavior is identical to living inline.
 extension _AvatarCreationRunSteps on AvatarCreationController {
+  /// Generate + apply the base portrait from the current prompt. Drives the
+  /// portrait stage (spinner), returns true on success (portraitBytes set) or
+  /// false after calling [_fail]. Shared by the initial run and the review
+  /// gate's regenerate so both behave identically.
+  Future<bool> _generatePortrait() async {
+    _setStage(AvatarRunStage.portrait);
+    Uint8List? bytes;
+    try {
+      bytes = await imageGen.generateImage(
+        prompt: promptController.text.trim(),
+        isPortrait: true,
+      );
+    } catch (e) {
+      debugPrint('[AvatarCreation] portrait generation failed: $e');
+      bytes = null;
+    }
+    if (_disposed) return false;
+    if (bytes == null) {
+      _fail(
+        imageGen.statusMessage.isNotEmpty
+            ? imageGen.statusMessage
+            : 'Portrait generation returned no image.',
+      );
+      return false;
+    }
+    // Deliberately applied even when cancel arrived mid-generation: the same
+    // contract as the pack session, whose in-flight slot "finishes, then stops"
+    // and KEEPS the result — cancel skips future work, it never discards an
+    // image the user already waited for.
+    await applyPortrait(bytes);
+    if (_disposed) return false;
+    return true;
+  }
+
+  /// Run the expression pack (when enabled) off [base], then land on done.
+  /// Shared by the uploaded-base run and the review gate's continue.
+  Future<void> _generatePackAndFinish(Uint8List? base) async {
+    if (packEnabled && packPossible && !_cancelRequested) {
+      await _runPack(base);
+      if (_disposed || stage == AvatarRunStage.failed) return;
+    }
+    _setStage(AvatarRunStage.done);
+  }
+
   Future<void> _runPack(Uint8List? base) async {
     if (base == null) {
       _fail('The expression pack needs a portrait to build from.');

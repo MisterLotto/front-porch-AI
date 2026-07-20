@@ -62,7 +62,11 @@ class PortraitSection extends StatelessWidget {
           EngineStrip(controller: c),
           const SizedBox(height: 12),
           _promptField(context, c),
-          if (c.portraitBytes != null) ...[
+          // The compact "saved as card image" preview — hidden during the
+          // review pause, where the large zoomable preview in the review card
+          // shows the same portrait (avoids the same image in two spots).
+          if (c.portraitBytes != null &&
+              c.stage != AvatarRunStage.portraitReview) ...[
             const SizedBox(height: 10),
             _portraitPreview(context, c),
           ],
@@ -105,32 +109,42 @@ class PortraitSection extends StatelessWidget {
                 color: selected ? accent : AppColors.borderOf(context),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 15,
-                  color: !enabled
-                      ? AppColors.textTertiary(context)
-                      : selected
-                      ? accent
-                      : AppColors.iconSecondary(context),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            // FittedBox(scaleDown) so the icon + label shrink a hair instead of
+            // overflowing when the three equal-width buttons get narrow (the
+            // longest label, "Upload my own", overran its third by ~6px on
+            // smaller windows). scaleDown never enlarges, so at normal widths
+            // this is a no-op; when cramped it scales down imperceptibly with no
+            // text clipping — robust across the three platforms' font metrics.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 15,
                     color: !enabled
                         ? AppColors.textTertiary(context)
                         : selected
                         ? accent
-                        : AppColors.textSecondary(context),
+                        : AppColors.iconSecondary(context),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                      color: !enabled
+                          ? AppColors.textTertiary(context)
+                          : selected
+                          ? accent
+                          : AppColors.textSecondary(context),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -221,7 +235,7 @@ class PortraitSection extends StatelessWidget {
         const SizedBox(height: 6),
         TextField(
           controller: c.promptController,
-          enabled: !c.running,
+          enabled: c.promptEditable,
           maxLines: 3,
           minLines: 2,
           style: TextStyle(color: AppColors.textPrimary(context), fontSize: 13),

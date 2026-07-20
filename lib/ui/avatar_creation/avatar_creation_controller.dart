@@ -42,11 +42,16 @@ part 'avatar_creation_run.dart';
 /// Where the card's portrait comes from in the "Portrait & Avatars" step.
 enum PortraitSource { upload, generate, none }
 
-/// Stage of the one-shot creator generation run (drives the progress list).
+/// Stage of the creator generation run (drives the progress list).
+///
+/// [portraitReview] is the veto gate: after the base portrait generates and a
+/// pack is pending, the run PAUSES here so the user can regenerate (after
+/// tweaking the prompt) or accept it before the expensive expression pass.
 enum AvatarRunStage {
   idle,
   saving,
   portrait,
+  portraitReview,
   switching,
   pack,
   qc,
@@ -218,6 +223,17 @@ class AvatarCreationController extends ChangeNotifier {
     return portraitBytes != null;
   }
 
+  /// Inputs lock while running, but the prompt stays editable at the review
+  /// gate so the user can tweak it before regenerating the portrait.
+  bool get promptEditable =>
+      !running || stage == AvatarRunStage.portraitReview;
+
+  /// The review gate can regenerate only with a non-empty prompt.
+  bool get canRegeneratePortrait =>
+      stage == AvatarRunStage.portraitReview &&
+      source == PortraitSource.generate &&
+      promptController.text.trim().isNotEmpty;
+
   // ── Choice setters ────────────────────────────────────────────────────────
   void setSource(PortraitSource v) {
     if (running || source == v) return;
@@ -375,7 +391,7 @@ class AvatarCreationController extends ChangeNotifier {
     return (added, result.unrecognized);
   }
 
-  // ── The one-shot run ──────────────────────────────────────────────────────
+  // ── The run (portrait → veto gate → pack) ─────────────────────────────────
   Future<void> run() async {
     if (running || ctaLabel == null) return;
     _cancelRequested = false;
@@ -389,43 +405,52 @@ class AvatarCreationController extends ChangeNotifier {
       _fail('The character could not be saved.');
       return;
     }
+    if (_cancelRequested) {
+      // Cancelled during the save — nothing has generated yet, so settle
+      // without spending a portrait (preserves the pre-gate short-circuit).
+      _setStage(AvatarRunStage.done);
+      return;
+    }
 
-    var base = portraitBytes;
-    if (wantPortrait && !_cancelRequested) {
-      _setStage(AvatarRunStage.portrait);
-      Uint8List? bytes;
-      try {
-        bytes = await imageGen.generateImage(
-          prompt: promptController.text.trim(),
-          isPortrait: true,
-        );
-      } catch (e) {
-        debugPrint('[AvatarCreation] portrait generation failed: $e');
-        bytes = null;
-      }
+    if (wantPortrait) {
+      if (!await _generatePortrait()) return; // _fail already set on error
       if (_disposed) return;
-      if (bytes == null) {
-        _fail(
-          imageGen.statusMessage.isNotEmpty
-              ? imageGen.statusMessage
-              : 'Portrait generation returned no image.',
-        );
+      // Veto gate: with a pack pending, PAUSE on the generated portrait so the
+      // user can regenerate it (after tweaking the prompt) before we spend time
+      // on the expression pass. A cancel mid-portrait, or no pack, skips on.
+      if (packEnabled && packPossible && !_cancelRequested) {
+        _setStage(AvatarRunStage.portraitReview);
         return;
       }
-      // Deliberately applied even when cancel arrived mid-generation: the
-      // same contract as the pack session, whose in-flight slot "finishes,
-      // then stops" and KEEPS the result — cancel skips future work, it
-      // never discards an image the user already waited for.
-      await applyPortrait(bytes);
-      if (_disposed) return;
-      base = bytes;
+      _setStage(AvatarRunStage.done);
+      return;
     }
 
-    if (packEnabled && packPossible && !_cancelRequested) {
-      await _runPack(base);
-      if (_disposed || stage == AvatarRunStage.failed) return;
+    // Uploaded/none base — the user already chose it; nothing to review.
+    await _generatePackAndFinish(portraitBytes);
+  }
+
+  /// Review gate: regenerate the base portrait with the (possibly edited)
+  /// prompt and stay paused, so the user can keep vetoing before committing to
+  /// the expression pass. No-op outside the gate or with an empty prompt.
+  Future<void> regeneratePortrait() async {
+    if (!canRegeneratePortrait) return;
+    _cancelRequested = false;
+    if (!await _generatePortrait()) return; // _fail set on error
+    if (_disposed) return;
+    _setStage(AvatarRunStage.portraitReview);
+  }
+
+  /// Review gate: accept the shown portrait. [withPack] true → run the
+  /// expression pass then finish; false → finish with just the portrait.
+  Future<void> continueFromReview({bool withPack = true}) async {
+    if (stage != AvatarRunStage.portraitReview) return;
+    _cancelRequested = false;
+    if (!withPack) {
+      _setStage(AvatarRunStage.done);
+      return;
     }
-    _setStage(AvatarRunStage.done);
+    await _generatePackAndFinish(portraitBytes);
   }
 
   /// Stop after whatever is in flight; completed images always stay.

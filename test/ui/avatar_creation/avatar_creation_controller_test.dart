@@ -301,7 +301,8 @@ void main() {
   });
 
   group('run orchestration', () {
-    test('img2img path: portrait then pack, everything imported', () async {
+    test('img2img path: portrait → review gate → pack, everything imported',
+        () async {
       // DT backend, EMPTY edit slot → packEditMode false → img2img.
       final c = controller();
       final stages = <AvatarRunStage>[];
@@ -310,13 +311,19 @@ void main() {
       });
       await c.run();
 
+      // Pauses at the veto gate: only the portrait is generated so far.
+      expect(c.stage, AvatarRunStage.portraitReview);
+      expect(gen.calls.length, 1);
+      expect(gen.calls.first['isPortrait'], isTrue);
+      expect(c.portraitBytes, isNotNull);
+
+      // Accept → the pack runs and everything imports.
+      await c.continueFromReview();
       expect(c.stage, AvatarRunStage.done);
       expect(stages, isNot(contains(AvatarRunStage.switching)),
           reason: 'no edit model → no switching stage');
-      expect(c.portraitBytes, isNotNull);
       // 1 portrait + 8 curated slots.
       expect(gen.calls.length, 9);
-      expect(gen.calls.first['isPortrait'], isTrue);
       for (final call in gen.calls.skip(1)) {
         expect(call['intent'], StudioIntent.create);
         expect(call['hasReference'], isTrue);
@@ -338,6 +345,8 @@ void main() {
         if (stages.isEmpty || stages.last != c.stage) stages.add(c.stage);
       });
       await c.run();
+      expect(c.stage, AvatarRunStage.portraitReview);
+      await c.continueFromReview();
 
       expect(stages, contains(AvatarRunStage.switching));
       expect(gen.comfyNudges, 1);
@@ -345,6 +354,72 @@ void main() {
         expect(call['intent'], StudioIntent.edit);
         expect(call['editStrength'], kCreatorPackDenoise);
       }
+      expect(c.importedCount, 8);
+    });
+
+    test('review gate: regenerate re-runs the portrait with the edited prompt',
+        () async {
+      final c = controller();
+      await c.run();
+      expect(c.stage, AvatarRunStage.portraitReview);
+      expect(gen.calls.length, 1);
+
+      // Veto: change the prompt and regenerate — a second portrait call, still
+      // paused at the gate, no pack yet.
+      c.promptController.text = 'golden armor, different face';
+      expect(c.canRegeneratePortrait, isTrue);
+      await c.regeneratePortrait();
+      expect(c.stage, AvatarRunStage.portraitReview);
+      expect(gen.calls.length, 2);
+      expect(gen.calls.last['isPortrait'], isTrue);
+      expect(gen.calls.last['prompt'], 'golden armor, different face');
+      expect(c.importedCount, 0);
+    });
+
+    test('review gate: continue still works with an emptied prompt (not stuck)',
+        () async {
+      final c = controller();
+      await c.run();
+      expect(c.stage, AvatarRunStage.portraitReview);
+      // Emptying the prompt only disables Regenerate — continue is unguarded.
+      c.promptController.text = '';
+      expect(c.canRegeneratePortrait, isFalse);
+      await c.regeneratePortrait(); // no-op with empty prompt
+      expect(gen.calls.length, 1);
+      await c.continueFromReview();
+      expect(c.stage, AvatarRunStage.done);
+      expect(c.importedCount, 8);
+    });
+
+    test('review gate: "skip expressions" finishes with just the portrait',
+        () async {
+      final c = controller();
+      await c.run();
+      expect(c.stage, AvatarRunStage.portraitReview);
+      await c.continueFromReview(withPack: false);
+      expect(c.stage, AvatarRunStage.done);
+      expect(c.importedCount, 0);
+      expect(gen.calls.length, 1); // portrait only
+      expect((await repo.getAvatarImages(card.dbId!)), isEmpty);
+    });
+
+    test('no review gate when there is no pack (portrait-only)', () async {
+      final c = controller();
+      c.setPackEnabled(false);
+      await c.run();
+      expect(c.stage, AvatarRunStage.done);
+      expect(gen.calls.length, 1);
+    });
+
+    test('no review gate for a pack-only run off an uploaded portrait',
+        () async {
+      final c = controller();
+      c.setSource(PortraitSource.upload);
+      await c.applyPortrait(_realPng());
+      c.setPackEnabled(true);
+      await c.run();
+      expect(c.stage, AvatarRunStage.done);
+      expect(gen.calls.where((x) => x['isPortrait'] == true), isEmpty);
       expect(c.importedCount, 8);
     });
 
@@ -382,6 +457,8 @@ void main() {
       expect(c.qcEnabled, isTrue);
 
       await c.run();
+      expect(c.stage, AvatarRunStage.portraitReview);
+      await c.continueFromReview();
       expect(c.stage, AvatarRunStage.done);
       // Only neutral + anger were generated; anger was flagged (not the same
       // person) and held back.
@@ -400,6 +477,9 @@ void main() {
         }
       });
       await c.run();
+      // The pack only starts once past the review gate.
+      expect(c.stage, AvatarRunStage.portraitReview);
+      await c.continueFromReview();
       expect(c.stage, AvatarRunStage.done);
       expect(c.importedCount, greaterThanOrEqualTo(1));
       expect(c.importedCount, lessThan(8));
