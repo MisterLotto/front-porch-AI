@@ -5210,3 +5210,15 @@ Realism, Journal, voice/expressions/phone); Stoop section eyebrow now says "New 
 and rsync-deployed to the droplet; live verification: announcement + v1.0.0 served,
 zero stale sidecar strings (the de-staled docs from 6aa97646 render clean).
 Playwright desktop+phone screenshots in ~/Desktop/fpai-review/website-1.0-*.png.
+
+## 2026-07-20 (UTC) — Story Calendar design sketch (docs only, no code)
+**Files:** `docs/design/story-calendar.md`
+**Why:** Design proposal for replacing the bare day tracker with a real
+calendar (accurate months/days/years): one additive `storyStartDate` anchor on
+Sessions with everything derived from the existing `dayCount` (the clock,
+nudges, OOC skips, parity contracts all untouched), deterministic date
+stamping of Journal cards via the metadata pouch (memories know *when*), a
+month-grid calendar surface with memory-marked days on desktop + web, and
+retirement of the now-redundant `startDayOfWeek` modulo-7 logic. Blocked on
+maintainer approval for the `sessions` column (Character Card Forge raw-SQL
+writer); open questions listed in the doc. No code changed.
