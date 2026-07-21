@@ -41,6 +41,45 @@ function dartColorToCss(color: number): string {
   return '#' + hex.substring(2);
 }
 
+/** Resolve theme overrides into CSS custom-property values for the chat container. */
+export function resolveThemeColors(
+  overrides: ChatThemeOverrides | null,
+): Record<string, string> {
+  if (!overrides?.themeId) return {};
+  const preset = PRESETS.find((p) => p.id === overrides.themeId);
+  if (!preset) return {};
+
+  const userBubble = overrides.userBubbleColor
+    ? `#${overrides.userBubbleColor}`
+    : dartColorToCss(preset.defaultUserBubbleColor);
+  const userText = overrides.userTextColor
+    ? `#${overrides.userTextColor}`
+    : dartColorToCss(preset.defaultUserTextColor);
+  const aiBubble = overrides.aiBubbleColor
+    ? `#${overrides.aiBubbleColor}`
+    : dartColorToCss(preset.defaultAiBubbleColor);
+  const aiText = overrides.aiTextColor
+    ? `#${overrides.aiTextColor}`
+    : dartColorToCss(preset.defaultAiTextColor);
+  const border = overrides.borderColor
+    ? `#${overrides.borderColor}`
+    : preset.defaultBorderColor
+      ? dartColorToCss(preset.defaultBorderColor)
+      : dartColorToCss(preset.defaultUserTextColor);
+
+  const vars: Record<string, string> = {
+    '--chat-user-bubble': userBubble,
+    '--chat-user-text': userText,
+    '--chat-ai-bubble': aiBubble,
+    '--chat-ai-text': aiText,
+    '--chat-border': border,
+  };
+  if (overrides.fontFamily || preset.defaultFontFamily) {
+    vars['--chat-font'] = overrides.fontFamily ?? preset.defaultFontFamily;
+  }
+  return vars;
+}
+
 export function ChatThemeSettings({ overrides, onSave }: {
   overrides: ChatThemeOverrides | null;
   onSave: (o: ChatThemeOverrides) => void;

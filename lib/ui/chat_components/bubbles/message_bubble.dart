@@ -29,7 +29,7 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 import '../widgets/inline_chat_image.dart';
 import 'styled_chat_message.dart';
-import 'border_painters.dart';
+import 'theme_border_resolver.dart';
 
 /// Message bubble widget (extracted from chat_page god file).
 /// Preserves all original behavior for 1:1 + group, swipes, TTS, realism indicators, thoughts, actions, Chance Time, etc.
@@ -127,11 +127,13 @@ class _MessageBubbleState extends State<MessageBubble> {
         message.activeMetadata?['is_chance_time_narration'] == true;
     final bubbleOpacity = Provider.of<StorageService>(context).bubbleOpacity;
     final storage = Provider.of<StorageService>(context);
-    final themeOverrides = widget.chatService?.sessionThemeOverrides;
-    final themePreset = ChatThemePreset.byId(themeOverrides?.themeId);
-    final themeAccent = themePreset != null
-        ? storage.getUserTextColor(character, themePreset, themeOverrides)
-        : null;
+    final theme = ThemeBorderResolver.resolve(
+      chatService: widget.chatService,
+      storage: storage,
+      character: character,
+      isUser: message.isUser,
+      isDirectorNote: isDirectorNote,
+    );
 
     // Centered narration banners: Chance Time and Dreams share ONE builder
     // (the chance-time banner was inlined here before dreams arrived; the
@@ -152,32 +154,6 @@ class _MessageBubbleState extends State<MessageBubble> {
         text: '${message.sender} dreamt: ${message.text}',
       );
     }
-
-    // Compute border painter from active theme
-    final borderRadius = BorderRadius.only(
-      topLeft: const Radius.circular(12),
-      topRight: const Radius.circular(12),
-      bottomLeft: message.isUser && !isDirectorNote
-          ? const Radius.circular(12)
-          : Radius.zero,
-      bottomRight: message.isUser && !isDirectorNote
-          ? Radius.zero
-          : const Radius.circular(12),
-    );
-    final textColor = message.isUser
-        ? storage.getUserTextColor(character, themePreset, themeOverrides)
-        : storage.getAiTextColor(character, themePreset, themeOverrides);
-    final borderColor = themePreset != null
-        ? (themeOverrides?.resolvedBorderColor(themePreset) ?? textColor)
-        : textColor;
-    final borderStyle = themePreset != null
-        ? (themeOverrides?.resolvedBorderStyle(themePreset) ??
-              themePreset.defaultBorderStyle)
-        : null;
-    final borderPainter =
-        borderStyle != null && borderPainterFactories.containsKey(borderStyle)
-        ? borderPainterFactories[borderStyle]!(borderColor)
-        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -221,18 +197,18 @@ class _MessageBubbleState extends State<MessageBubble> {
                         ? storage
                               .getUserBubbleColor(
                                 character,
-                                themePreset,
-                                themeOverrides,
+                                theme.preset,
+                                theme.overrides,
                               )
                               .withValues(alpha: bubbleOpacity)
                         : storage
                               .getAiBubbleColor(
                                 character,
-                                themePreset,
-                                themeOverrides,
+                                theme.preset,
+                                theme.overrides,
                               )
                               .withValues(alpha: bubbleOpacity),
-                    borderRadius: borderRadius,
+                    borderRadius: theme.borderRadius,
                     border: isDirectorNote
                         ? Border.all(
                             color: AppColors.resolve(
@@ -300,7 +276,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                     fontSize: 12,
                                     color:
                                         widget.senderColor ??
-                                        themeAccent ??
+                                        theme.accent ??
                                         storage.getDialogueColor(character),
                                   ),
                                 );
@@ -479,7 +455,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 Icons.edit_outlined,
                                 size: 16,
                                 color:
-                                    themeAccent ??
+                                    theme.accent ??
                                     AppColors.textTertiary(context),
                               ),
                               padding: EdgeInsets.zero,
@@ -495,7 +471,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                 Icons.call_split,
                                 size: 16,
                                 color:
-                                    themeAccent ??
+                                    theme.accent ??
                                     AppColors.textTertiary(context),
                               ),
                               padding: EdgeInsets.zero,
@@ -511,7 +487,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                               Icons.delete_outline,
                               size: 16,
                               color:
-                                  themeAccent ??
+                                  theme.accent ??
                                   AppColors.textTertiary(context),
                             ),
                             padding: EdgeInsets.zero,
@@ -664,8 +640,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                         character:
                             widget.character ??
                             widget.chatService?.activeCharacter,
-                        themePreset: themePreset,
-                        themeOverrides: themeOverrides,
+                        themePreset: theme.preset,
+                        themeOverrides: theme.overrides,
                       ),
                       // Locally generated image (from /image or the Image Studio's
                       // "Send to chat") — click to zoom, right-click to save.
@@ -683,8 +659,9 @@ class _MessageBubbleState extends State<MessageBubble> {
                         Consumer<ChatService>(
                           builder: (context, chatService, _) {
                             final character = chatService.activeCharacter;
-                            if (character == null)
+                            if (character == null) {
                               return const SizedBox.shrink();
+                            }
                             final allGreetings = character.allGreetings;
                             if (allGreetings.length <= 1) {
                               return const SizedBox.shrink();
@@ -936,7 +913,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                               Icons.lightbulb_outline,
                                               size: 13,
                                               color:
-                                                  themeAccent ??
+                                                  theme.accent ??
                                                   AppColors.textTertiary(
                                                     context,
                                                   ),
@@ -949,7 +926,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                             style: TextStyle(
                                               fontSize: 11,
                                               color:
-                                                  themeAccent ??
+                                                  theme.accent ??
                                                   AppColors.textTertiary(
                                                     context,
                                                   ),
@@ -994,7 +971,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color:
-                                                    themeAccent ??
+                                                    theme.accent ??
                                                     AppColors.textSecondary(
                                                       context,
                                                     ),
@@ -1035,11 +1012,11 @@ class _MessageBubbleState extends State<MessageBubble> {
                       );
                     },
                   ),
-                if (borderPainter != null)
+                if (theme.borderPainter != null)
                   Positioned.fill(
                     child: ClipRRect(
-                      borderRadius: borderRadius,
-                      child: CustomPaint(painter: borderPainter),
+                      borderRadius: theme.borderRadius,
+                      child: CustomPaint(painter: theme.borderPainter),
                     ),
                   ),
               ],

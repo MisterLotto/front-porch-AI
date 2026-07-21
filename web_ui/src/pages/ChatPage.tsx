@@ -17,7 +17,7 @@ import { ReprocessNeedsModal } from '../components/ReprocessNeedsModal';
 import { ChanceTimeModal } from '../components/ChanceTimeModal';
 import { ImagePromptReviewModal } from '../components/ImagePromptReviewModal';
 import { type Message, type Realism, type LoreEntry, type ChatThemeOverrides } from '../components/chatTypes';
-import { ChatThemeSettings } from '../components/ChatThemeSettings';
+import { ChatThemeSettings, resolveThemeColors } from '../components/ChatThemeSettings';
 
 interface ChatState {
   character: { name: string; id: string } | null;
@@ -281,6 +281,17 @@ export function ChatPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [editIndex, showStats, showSessions]);
+
+  // Apply per-chat theme overrides as CSS custom properties on the chat container.
+  useEffect(() => {
+    const vars = resolveThemeColors(state?.themeOverrides ?? null);
+    const el = document.querySelector('.chat-view') as HTMLElement | null;
+    if (!el) return;
+    Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
+    return () => {
+      Object.keys(vars).forEach((k) => el.style.removeProperty(k));
+    };
+  }, [state?.themeOverrides]);
 
   // Drag the insight sidebar's left edge to resize it (clamped 260–560px),
   // persisting the chosen width. Dragging left widens (handle is on the left).
