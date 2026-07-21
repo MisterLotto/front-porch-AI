@@ -7,7 +7,6 @@
 // POST /api/chat/theme-overrides.
 
 import { useState, useEffect } from 'react';
-import { api } from '../api/client';
 import type { ChatThemeOverrides, ChatThemePreset } from './chatTypes';
 
 // Mirror of the 10 desktop presets (ChatThemePreset.presets).
