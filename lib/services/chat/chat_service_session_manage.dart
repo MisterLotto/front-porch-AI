@@ -102,6 +102,7 @@ extension ChatServiceSessionManage on ChatService {
     _messages.clear();
     _messages.addAll(forkedMessages);
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
     _parentSessionId = oldSessionId;
     _forkIndex = messageIndex;
     _sessionGenSettings = _sessionGenSettings
@@ -276,6 +277,7 @@ extension ChatServiceSessionManage on ChatService {
 
     // Create new session ID for the new chat
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
 
     // Clear memory sources to prevent old memories from being retrieved
     // Cross-character memory can still be re-selected by user after new chat starts
@@ -549,6 +551,7 @@ extension ChatServiceSessionManage on ChatService {
     }
 
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
     debugPrint(
       '[startNewChat] BEFORE SAVE: arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
     );

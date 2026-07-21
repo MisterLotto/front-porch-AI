@@ -81,6 +81,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
+import 'package:front_porch_ai/services/chat/absence_tracker.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
@@ -1025,6 +1026,14 @@ class ChatService extends ChangeNotifier {
   int _generationEpoch = 0;
   String? _currentSessionId;
   double _generationProgress = 0.0;
+
+  // ── Real-absence awareness (Living Time §2) ──
+  // Computed in-memory at session load from the last saved message's
+  // updatedAt; nothing is stored or transmitted (privacy-by-design contract
+  // in absence_tracker.dart). Story clock untouched.
+  Duration _absenceGap = Duration.zero;
+  bool _absenceAckPending = false;
+  bool _absenceAckConsumed = false;
   int _tokensGenerated = 0;
   int _maxTokens = 0;
   DateTime? _generationStartTime;
@@ -1709,7 +1718,30 @@ class ChatService extends ChangeNotifier {
     getRealismEnabled: () => _realismEnabled,
   );
 
-  late final _timeInjection = TimeInjection(timeService: _timeService);
+  late final _timeInjection = TimeInjection(
+    timeService: _timeService,
+    // One-shot, opt-in (default OFF), coarse-worded, speculation-forbidding —
+    // living-time-features.md §2 "Privacy by design".
+    getAbsenceNote: () {
+      if (!_storageService.absenceAckEnabled || !_absenceAckPending) {
+        return null;
+      }
+      final phrase = absencePhrase;
+      return phrase == null ? null : AbsenceTracker.ackNote(phrase);
+    },
+  );
+
+  /// Coarse absence bucket ("a few days"), or null under the threshold /
+  /// fresh chat. Words only — never digits (see AbsenceTracker).
+  String? get absencePhrase => AbsenceTracker.bucketPhrase(
+    _absenceGap,
+    thresholdHours: _storageService.absenceThresholdHours,
+  );
+
+  /// [absencePhrase] gated by the welcome-back-banner setting — the ONE gate
+  /// both the desktop banner and the web facade read, so they can't drift.
+  String? get absenceBannerPhrase =>
+      _storageService.absenceBannerEnabled ? absencePhrase : null;
 
   /// Today's story weather, or null when off (living-time-features.md §3).
   /// Pure recompute from existing state — nothing stored, so save/load and
@@ -2949,6 +2981,16 @@ class ChatService extends ChangeNotifier {
     // A photo turn's captioning windows run while _isGenerating is false; this
     // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
     if (_photoTurnInFlight) return;
+    // One-shot absence acknowledgment: pending survives exactly the first
+    // user turn after load (all of that turn's prompt builds see it); the
+    // second turn clears it for good.
+    if (_absenceAckPending) {
+      if (_absenceAckConsumed) {
+        _absenceAckPending = false;
+      } else {
+        _absenceAckConsumed = true;
+      }
+    }
     // Start-of-turn clear: cancelRealismEval only sets this while an eval is
     // live, and each turn's consumers clear it — but this guarantees a stray
     // set flag can never bleed into THIS turn and abort a reply the user did

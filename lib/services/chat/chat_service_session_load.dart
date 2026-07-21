@@ -20,6 +20,25 @@ part of '../chat_service.dart';
 
 /// Session load + listing — _loadLastSession, getSessionsForId, getSessions, loadSession. Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceSessionLoad on ChatService {
+  /// Real-absence gap (Living Time §2) from the freshly loaded DB rows —
+  /// computed BEFORE any save this session can refresh their updatedAt, so
+  /// the anchor is genuinely "when this chat last had activity". Shared by
+  /// both load paths (keep them in sync). Fresh/empty chats stay at zero.
+  void _computeAbsenceGap(List<Message> dbMessages) {
+    _absenceGap = Duration.zero;
+    _absenceAckPending = false;
+    _absenceAckConsumed = false;
+    DateTime? last;
+    for (final m in dbMessages) {
+      if (last == null || m.updatedAt.isAfter(last)) last = m.updatedAt;
+    }
+    if (last == null) return;
+    final gap = DateTime.now().difference(last);
+    if (gap.isNegative) return;
+    _absenceGap = gap;
+    _absenceAckPending = absencePhrase != null;
+  }
+
   Future<void> _loadLastSession() async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
@@ -215,6 +234,7 @@ extension ChatServiceSessionLoad on ChatService {
         false; // growth-pass flag zero in _loadLast loaded path (transient guard; keep reset blocks in sync)
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
+      _computeAbsenceGap(dbMessages);
       debugPrint(
         '[ChatService] 🟢 _loadLastSession: loading ${dbMessages.length} '
         'messages for session $_currentSessionId',
@@ -357,6 +377,7 @@ extension ChatServiceSessionLoad on ChatService {
 
     try {
       final dbMessages = await _db.getMessagesForSession(sessionId);
+      _computeAbsenceGap(dbMessages);
       debugPrint(
         '[ChatService] 🟢 loadSession: loading ${dbMessages.length} '
         'messages for session $sessionId',

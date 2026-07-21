@@ -1840,3 +1840,46 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border-radius: 0;
   overflow-y: auto;
 }
+
+/* ── Living Time §2: welcome-back ("Previously on…") banner ─────────────── */
+/* App-voice, dismissible; warm-porch accent border like desktop's banner.  */
+.absence-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 12px 0;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 10px;
+}
+.absence-banner-icon {
+  font-size: 15px;
+  line-height: 1.3;
+}
+.absence-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+.absence-banner-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.absence-banner-recap {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted, #94a3b8);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.absence-banner-close {
+  background: none;
+  border: none;
+  color: var(--muted, #94a3b8);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}

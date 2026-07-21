@@ -587,6 +587,15 @@ class StorageService extends ChangeNotifier {
   bool get weatherEnabled => realismSettings.weatherEnabled;
   Future<void> setWeatherEnabled(bool v) =>
       realismSettings.setWeatherEnabled(v);
+  bool get absenceBannerEnabled => realismSettings.absenceBannerEnabled;
+  Future<void> setAbsenceBannerEnabled(bool v) =>
+      realismSettings.setAbsenceBannerEnabled(v);
+  bool get absenceAckEnabled => realismSettings.absenceAckEnabled;
+  Future<void> setAbsenceAckEnabled(bool v) =>
+      realismSettings.setAbsenceAckEnabled(v);
+  int get absenceThresholdHours => realismSettings.absenceThresholdHours;
+  Future<void> setAbsenceThresholdHours(int v) =>
+      realismSettings.setAbsenceThresholdHours(v);
   Future<void> setPassageOfTimeDefault(bool v) =>
       realismSettings.setPassageOfTimeDefault(v);
   List<String> get bannedPhrases => realismSettings.bannedPhrases;

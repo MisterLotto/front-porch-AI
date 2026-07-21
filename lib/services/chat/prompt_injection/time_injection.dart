@@ -27,12 +27,22 @@ import 'package:front_porch_ai/services/chat/time_service.dart';
 class TimeInjection {
   final TimeService timeService;
 
-  TimeInjection({required this.timeService});
+  /// Optional one-shot real-absence note (living-time-features.md §2).
+  /// Null (the default, and whenever the opt-in is off or nothing is
+  /// pending) appends nothing — the fragment stays byte-identical to the
+  /// pre-absence block. State/gating live in ChatService; this leaf only
+  /// renders words.
+  final String? Function()? getAbsenceNote;
+
+  TimeInjection({required this.timeService, this.getAbsenceNote});
 
   String buildTimeInjection() {
     final clock = timeService.clock;
-    return 'It is ${StoryClock.clockPhrase(clock)} on '
+    final line =
+        'It is ${StoryClock.clockPhrase(clock)} on '
         '${timeService.displayDate} '
         '(day ${timeService.dayCount} of the story).';
+    final note = getAbsenceNote?.call();
+    return (note == null || note.isEmpty) ? line : '$line\n$note';
   }
 }

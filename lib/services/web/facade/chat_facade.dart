@@ -190,6 +190,11 @@ class ChatFacade {
       // expression portrait and only refetch when the mood actually changes.
       // Read-only — no reclassification here, so 1:1/group parity is unaffected.
       'expressionLabel': _chat.currentExpressionLabel,
+      // Living Time §2 welcome-back banner — additive nullable; the shared
+      // ChatService gate mirrors desktop (setting off / under threshold →
+      // null). Coarse words only, computed locally from the chat's own
+      // last-save time.
+      'absencePhrase': _chat.absenceBannerPhrase,
       // Unified participant cast (host + scene guests in 1:1; members in group).
       // The single roster the unified chat UI iterates — no mode branching.
       'cast': _castJson(),

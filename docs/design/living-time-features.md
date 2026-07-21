@@ -143,6 +143,10 @@ The honest technical answer, stated up front and enforced by the design:
 Toggle + threshold (12h/24h/3d/1w) in General; acknowledgment sub-toggle
 default OFF, banner default ON.
 
+**Shipped 2026-07-21** as designed (banner + opt-in ack + threshold +
+privacy copy + web parity). Gap anchor: the last message row's `updatedAt`,
+read at load before any save can refresh it.
+
 ### Risks
 Essentially none. Guard: never fire for gaps while the app was merely
 backgrounded mid-session (anchor to last *message*, not last app-open).

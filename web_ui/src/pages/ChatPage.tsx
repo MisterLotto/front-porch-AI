@@ -41,6 +41,10 @@ interface ChatState {
   greetingIndex?: number;
   totalGreetings?: number;
   expressionLabel?: string;
+  // Living Time §2 welcome-back banner (additive — absent on older facades;
+  // null when off/under threshold). Coarse words only.
+  absencePhrase?: string | null;
+  summary?: string;
   cast?: CastMember[];
   guestActivity?: { status: string | null; isError: boolean; busy: boolean };
   pendingDetection?: string | null;
@@ -59,6 +63,8 @@ export function ChatPage() {
   const navigate = useNavigate();
   const [state, setState] = useState<ChatState | null>(null);
   const [streaming, setStreaming] = useState('');
+  // Living Time §2: sessions whose welcome-back banner was dismissed (ephemeral).
+  const [absenceDismissed, setAbsenceDismissed] = useState<Set<string>>(new Set());
   // Composer draft mirror — powers the lorebook "would trigger next" preview.
   const [draft, setDraft] = useState('');
   // Chaos "Chance Time" reveal modal. Opened by the `chance_time` WS event (or a
@@ -489,6 +495,28 @@ export function ChatPage() {
           onCommand={sendMessage}
         />
 
+        {state.absencePhrase && state.sessionId && !absenceDismissed.has(state.sessionId) && (
+          <div className="absence-banner">
+            <span className="absence-banner-icon">🕰️</span>
+            <div className="absence-banner-body">
+              <div className="absence-banner-title">
+                It's been {state.absencePhrase} — where we left off:
+              </div>
+              {state.summary?.trim() ? (
+                <div className="absence-banner-recap">{state.summary.trim()}</div>
+              ) : null}
+            </div>
+            <button
+              className="absence-banner-close"
+              aria-label="Dismiss"
+              onClick={() =>
+                setAbsenceDismissed((prev) => new Set(prev).add(state.sessionId!))
+              }
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <ChatMessageList
           messages={state.messages}
           castById={castById}

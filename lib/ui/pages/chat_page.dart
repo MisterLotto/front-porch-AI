@@ -29,6 +29,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
+import 'package:front_porch_ai/ui/chat_components/overlays/absence_recap_banner.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -554,6 +555,26 @@ class _ChatPageState extends State<ChatPage> {
                   Expanded(
                     child: Column(
                       children: [
+                        // "Previously on…" welcome-back banner (Living Time
+                        // §2). App-voice, dismissible, gated: enabled +
+                        // over-threshold gap + a real session.
+                        Builder(
+                          builder: (context) {
+                            // Subscribe so a settings toggle updates live;
+                            // the gate itself lives once on ChatService.
+                            Provider.of<StorageService>(context);
+                            final phrase = chatService.absenceBannerPhrase;
+                            final sid = chatService.currentSessionId;
+                            if (phrase == null || sid == null) {
+                              return const SizedBox.shrink();
+                            }
+                            return AbsenceRecapBanner(
+                              sessionId: sid,
+                              phrase: phrase,
+                              recap: chatService.summary,
+                            );
+                          },
+                        ),
                         Expanded(
                           child: Builder(
                             builder: (context) {
