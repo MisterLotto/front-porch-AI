@@ -178,6 +178,32 @@ class JournalStore {
     await getDb()?.deleteJournalCard(id);
   }
 
+  /// Merge keys into a card's metadata JSON (Living Time §6 ambition
+  /// progress). Additive-only merge over the forgiving metadata blob —
+  /// existing keys (storyDay/storyClock/kind) survive untouched.
+  Future<void> updateCardMetadata(
+    JournalMemoryData card,
+    Map<String, dynamic> merge,
+  ) async {
+    final db = getDb();
+    if (db == null) return;
+    Map<String, dynamic> meta;
+    try {
+      final d = card.metadata == null ? null : jsonDecode(card.metadata!);
+      meta = d is Map<String, dynamic> ? d : <String, dynamic>{};
+    } catch (_) {
+      meta = <String, dynamic>{};
+    }
+    meta.addAll(merge);
+    await db.updateJournalCard(
+      card.id,
+      JournalMemoriesCompanion(
+        metadata: Value(jsonEncode(meta)),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   Future<void> setPinned(String id, bool pinned) async {
     final db = getDb();
     if (db == null) return;

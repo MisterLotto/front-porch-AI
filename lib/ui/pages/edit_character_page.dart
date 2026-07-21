@@ -102,6 +102,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   List<StyledTextController> _altGreetingControllers = [];
   List<String> _tags = [];
   final _tagController = TextEditingController();
+
+  /// Long-term ambitions (Living Time §6), one per line. Identity — travels
+  /// with the card; per-chat progress lives in the Journal.
+  final _ambitionsController = TextEditingController();
   final ValueNotifier<int> _tokenNotifier = ValueNotifier<int>(0);
 
   // ── Realism Engine state ──
@@ -237,6 +241,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       _needsDecayHygiene = ext.needsDecayHygiene;
       _needsDecayComfort = ext.needsDecayComfort;
     }
+    _ambitionsController.text =
+        (widget.character.frontPorchExtensions?.ambitions ?? const [])
+            .join('\n');
 
     _tabController = TabController(length: 4, vsync: this);
 
@@ -273,6 +280,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       c.dispose();
     }
     _tagController.dispose();
+    _ambitionsController.dispose();
     _tokenNotifier.dispose();
     _tabController.dispose();
     super.dispose();
@@ -361,6 +369,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         chaosModeEnabled: _realismChaosMode,
         needsSimEnabled: _realismNeedsSim,
         enjoysLowHygiene: _realismEnjoysLowHygiene,
+        ambitions: [
+          for (final line in _ambitionsController.text.split('\n'))
+            if (line.trim().isNotEmpty) line.trim(),
+        ],
         currentTask: _realismCurrentTask,
         realismVerificationEnabled: _realismVerificationEnabled,
         realismVerificationMaxReprocesses: _realismVerificationMaxReprocesses,
@@ -952,6 +964,19 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     hint: 'Injected after chat history (jailbreak/reminder)...',
                   ),
                 ],
+              ),
+              const SizedBox(height: 20),
+
+              // ── Ambitions (Living Time §6) ──
+              _styledField(
+                controller: _ambitionsController,
+                label: 'Long-term Ambitions (one per line)',
+                maxLines: 3,
+                hint:
+                    'e.g. Open my own bakery\nThe character works toward '
+                    'these across the whole story — progress moves when '
+                    'their objectives complete, and lands in the Journal '
+                    'and "Our Story" timeline.',
               ),
               const SizedBox(height: 20),
 

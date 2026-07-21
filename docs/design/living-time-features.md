@@ -356,6 +356,29 @@ become concrete rather than speculative once the rest has landed. It also
 completes the release story: past (milestones), present (weather, absence),
 inner life (dreams), future (ambitions), keepsake (novella).
 
+**Shipped 2026-07-21.** Deviations from the sketch, all deliberate:
+1. **Accrual is a tiny dedicated eval at quest completion, not a rider on
+   the completion check** — that check is a fragile numbered YES/NO regex
+   protocol on local models; overloading it risked the existing parse. The
+   intent ("no per-turn LLM cost") is preserved: the ambition eval fires
+   only at the rare whole-quest-retired moment, asks for one strict line
+   ("NONE" / "2 solid"), and parses forgivingly with a null floor.
+2. **Progress cards double as the storage** (`journal_cards`,
+   `metadata.kind='ambition'` + `ambition` + `progress`) — zero schema,
+   per-chat, per-character, delete-with-chat, diary + timeline visibility
+   for free. Waypoints/achievement plant `kind='milestone'` cards + the
+   journal/growth salience kick; achievement plants a pinned Growth Ring.
+3. **Character-proposed ambitions are deferred** (needs proposal-eval
+   surgery); v1 sources are card-authored + user-edited (editor field, one
+   per line). Not silent: recorded here + changelog.
+4. **No web editor field** — web character authoring exposes no
+   FrontPorchExtensions fields today, so desktop-only authoring is the
+   existing parity line; ambitions still surface on web via the timeline
+   (🧭/🏆 entries).
+5. Injection reads a lazy-warmed sync cache on AmbitionService (the growth
+   injection-cache pattern) — "just beginning" stages render until the
+   first read lands, one build later.
+
 ---
 
 ## Suggested build order & release plan

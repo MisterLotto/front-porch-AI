@@ -99,9 +99,17 @@ class MilestoneFeed {
     for (final card in await db.getJournalCards(sessionId, characterId)) {
       final pos = _maxPosition(card.sourceMessageIds);
       if (pos != null) timeIndex.add((card.createdAt, pos));
-      final kind = _kindOf(card) == 'dream' ? 'dream' : 'memory';
+      // Card kinds (Living Time): dreams §1, ambition progress + waypoint
+      // milestones §6 — all timeline-salient by nature; plain cards need
+      // pinning or a strong feeling to make the cut.
+      final kind = switch (_kindOf(card)) {
+        'dream' => 'dream',
+        'ambition' => 'ambition',
+        'milestone' => 'milestone',
+        _ => 'memory',
+      };
       final salient =
-          card.pinned || card.emotionIntensity == 'strong' || kind == 'dream';
+          card.pinned || card.emotionIntensity == 'strong' || kind != 'memory';
       if (!salient) continue;
       final (day, _) = JournalStore.stampOf(card);
       entries.add(

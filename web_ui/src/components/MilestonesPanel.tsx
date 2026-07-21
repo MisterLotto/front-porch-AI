@@ -28,6 +28,8 @@ const KIND_ICONS: Record<string, string> = {
   objective: '🎯',
   memory: '📔',
   dream: '🌙',
+  ambition: '🧭',
+  milestone: '🏆',
 };
 
 export function MilestonesPanel({

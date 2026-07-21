@@ -57,6 +57,12 @@ class FrontPorchExtensions {
   bool
   enjoysLowHygiene; // when true, low hygiene is desirable (inverted behavior for filthy/musky characters)
 
+  /// Long-term ambitions — the character's ends, distinct from short-lived
+  /// objectives (the means) and fixations (emotional obsessions). Identity,
+  /// not story state: they travel with the card; per-chat PROGRESS lives in
+  /// journal cards (Living Time §6). Authored in the character editor.
+  List<String> ambitions;
+
   // Optional director/verifier thread for Realism Engine + Needs (ingests full latent context + deltas JSON;
   // rules + optional reprocess with corrections up to full per-eval clamp limits; per-char in Optional Features).
   bool realismVerificationEnabled;
@@ -150,6 +156,9 @@ class FrontPorchExtensions {
     this.chaosModeEnabled = false,
     this.needsSimEnabled = false,
     this.enjoysLowHygiene = false,
+    // Never mutated in place — always replaced wholesale (copyWith/editor),
+    // so the const default is safe.
+    this.ambitions = const [],
 
     // Realism Verification (Director/Verifier) — optional, off by default (zero cost when off)
     this.realismVerificationEnabled = false,
@@ -222,6 +231,7 @@ class FrontPorchExtensions {
         'chaos_mode_enabled': chaosModeEnabled,
         'needs_sim_enabled': needsSimEnabled,
         'enjoys_low_hygiene': enjoysLowHygiene,
+        'ambitions': ambitions,
         'realism_verification_enabled': realismVerificationEnabled,
         'realism_verification_max_reprocesses':
             realismVerificationMaxReprocesses,
@@ -284,6 +294,10 @@ class FrontPorchExtensions {
       chaosModeEnabled: realism['chaos_mode_enabled'] as bool? ?? false,
       needsSimEnabled: realism['needs_sim_enabled'] as bool? ?? false,
       enjoysLowHygiene: realism['enjoys_low_hygiene'] as bool? ?? false,
+      ambitions: [
+        for (final a in realism['ambitions'] as List? ?? const [])
+          if (a is String && a.trim().isNotEmpty) a.trim(),
+      ],
       realismVerificationEnabled:
           realism['realism_verification_enabled'] as bool? ?? false,
       realismVerificationMaxReprocesses:
@@ -355,6 +369,7 @@ class FrontPorchExtensions {
     bool? chaosModeEnabled,
     bool? needsSimEnabled,
     bool? enjoysLowHygiene,
+    List<String>? ambitions,
     bool? realismVerificationEnabled,
     int? realismVerificationMaxReprocesses,
     int? realismVerificationStrictness,
@@ -408,6 +423,7 @@ class FrontPorchExtensions {
       chaosModeEnabled: chaosModeEnabled ?? this.chaosModeEnabled,
       needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
       enjoysLowHygiene: enjoysLowHygiene ?? this.enjoysLowHygiene,
+      ambitions: ambitions ?? this.ambitions,
       realismVerificationEnabled:
           realismVerificationEnabled ?? this.realismVerificationEnabled,
       realismVerificationMaxReprocesses:

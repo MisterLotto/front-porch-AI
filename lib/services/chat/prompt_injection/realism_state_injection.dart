@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
@@ -68,6 +69,7 @@ class RealismStateInjection {
   final EmotionInjection emotionInjection;
   final TimeInjection timeInjection;
   final WeatherInjection weatherInjection;
+  final AmbitionInjection ambitionInjection;
   final BehavioralInjection behavioralInjection;
   final NsfwInjection nsfwInjection;
   final NeedsInjection needsInjection;
@@ -84,6 +86,7 @@ class RealismStateInjection {
     required this.emotionInjection,
     required this.timeInjection,
     required this.weatherInjection,
+    required this.ambitionInjection,
     required this.behavioralInjection,
     required this.nsfwInjection,
     required this.needsInjection,
@@ -121,6 +124,7 @@ class RealismStateInjection {
       emotionInjection.buildEmotionInjection(),
       needsInjection.buildNeedsInjection(),
       nsfwInjection.buildNsfwCooldownInjection(),
+      ambitionInjection.buildAmbitionInjection(),
       behavioralInjection.buildBehavioralMechanicsInjection(),
       relationshipInjection.buildInterCharacterFeelingsInjection(),
     ].where((f) => f.trim().isNotEmpty).map((f) => f.trim()).toList();

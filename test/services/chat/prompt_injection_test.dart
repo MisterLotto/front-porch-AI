@@ -27,6 +27,10 @@ import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
+import 'package:front_porch_ai/services/chat/ambition_service.dart';
+import 'package:front_porch_ai/services/chat/growth_store.dart';
+import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
@@ -637,6 +641,23 @@ void main() {
         // block shape stays identical to pre-weather expectations. The
         // weather-on path is covered in weather_engine_test.dart.
         weatherInjection: WeatherInjection(getWeather: () => null),
+        // Ambitions off in composer tests — active char has none, so the
+        // fragment contributes '' (weather-off precedent). Ambition-on paths
+        // are covered in ambition_service_test.dart.
+        ambitionInjection: AmbitionInjection(
+          ambitionService: AmbitionService(
+            journalStore: JournalStore(getDb: () => null),
+            growthStore: GrowthStore(getDb: () => null),
+            fireEval: (_) async => null,
+            getMaxCards: () => 30,
+          ),
+          getSessionId: () => null,
+          getActiveCharacter: () => active,
+          getIsGroupNonObserverMode: () => false,
+          getCurrentSpeakerIdForRealism: () => '',
+          getGroupCharacters: () => const [],
+          getCharacterIdFromCard: (c) => c.name,
+        ),
         behavioralInjection: createTestBehavioral(relSvc: relSvc),
         nsfwInjection: createTestNsfw(nsfwSvc: nsfwSvc, activeChar: active),
         needsInjection: createTestNeeds(needsSvc: needsSim),

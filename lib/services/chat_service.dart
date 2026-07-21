@@ -82,7 +82,9 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/absence_tracker.dart';
+import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/dream_service.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
 import 'package:front_porch_ai/services/chat/milestone_feed.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
@@ -1769,6 +1771,31 @@ class ChatService extends ChangeNotifier {
     getWeather: () => currentWeather,
   );
 
+  // ── Ambitions (Living Time §6) ──
+  late final _ambitionService = AmbitionService(
+    journalStore: _journalStore,
+    growthStore: _growthStore,
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    onWaypoint: () {
+      _journalMaintenance.eventKickPending = true;
+      _growthService.eventKickPending = true;
+    },
+  );
+
+  late final _ambitionInjection = AmbitionInjection(
+    ambitionService: _ambitionService,
+    getSessionId: () => _currentSessionId,
+    getActiveCharacter: () => _activeCharacter,
+    getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+    getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+    getGroupCharacters: () => _groupCharacters,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
+  );
+
   // ── Dreams (Living Time §1) ──
   late final _dreamService = DreamService(
     fireEval: (prompt) async {
@@ -1818,6 +1845,7 @@ class ChatService extends ChangeNotifier {
     emotionInjection: _emotionInjection,
     timeInjection: _timeInjection,
     weatherInjection: _weatherInjection,
+    ambitionInjection: _ambitionInjection,
     behavioralInjection: _behavioralInjection,
     nsfwInjection: _nsfwInjection,
     needsInjection: _needsInjection,
@@ -2106,6 +2134,35 @@ class ChatService extends ChangeNotifier {
     onObjectiveCompleted: () {
       _journalMaintenance.eventKickPending = true;
       _growthService.eventKickPending = true;
+    },
+    // Ambitions (Living Time §6): a whole quest finishing is the ONE moment
+    // ambition progress can move. Fire-and-forget; owner resolved from the
+    // objective row's characterId (per-character in groups by construction).
+    onQuestAchieved: (obj) {
+      final sessionId = _currentSessionId;
+      if (sessionId == null) return;
+      final card =
+          _groupCharacters
+              .where((c) => _getCharacterIdFromCard(c) == obj.characterId)
+              .firstOrNull ??
+          (_activeCharacter != null &&
+                  _getCharacterIdFromCard(_activeCharacter!) ==
+                      obj.characterId
+              ? _activeCharacter
+              : null);
+      final ambitions = card?.frontPorchExtensions?.ambitions ?? const [];
+      if (card == null || ambitions.isEmpty) return;
+      unawaited(
+        _ambitionService.onQuestAchieved(
+          sessionId: sessionId,
+          characterId: obj.characterId,
+          characterName: card.name,
+          objectiveText: obj.objective,
+          ambitions: ambitions,
+          storyDay: _timeService.dayCount,
+          storyClock: _timeService.storyClockIso,
+        ),
+      );
     },
   );
 
@@ -3126,6 +3183,7 @@ class ChatService extends ChangeNotifier {
               null => null,
               final w => WeatherEngine.prose(w),
             },
+            ambitions: ownerCard.frontPorchExtensions?.ambitions ?? const [],
           );
           if (dream != null) {
             _messages.insert(

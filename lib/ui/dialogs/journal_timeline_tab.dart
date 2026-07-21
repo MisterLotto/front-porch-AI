@@ -46,6 +46,8 @@ class JournalTimelineTab extends ConsumerWidget {
     'objective': '🎯',
     'memory': '📔',
     'dream': '🌙',
+    'ambition': '🧭',
+    'milestone': '🏆',
   };
 
   @override

@@ -64,17 +64,23 @@ class DreamService {
     required String emotion,
     required String recap,
     String? weatherLine,
+    List<String> ambitions = const [],
   }) async {
     final fragments = memoryFragments
         .take(5)
         .map((m) => '- $m')
         .join('\n');
+    final ambitionLine = ambitions.isEmpty
+        ? ''
+        : 'Long-held ambition (aspiration or anxiety may color the dream): '
+            '${ambitions.first}\n';
     final prompt =
         'Write the dream $characterName had last night: a brief, hazy, '
         'first-person dream of two to four sentences.\n\n'
         'Weave in fragments of what actually occupies $characterName:\n'
         '${fragments.isEmpty ? '- (no strong memories yet — keep it vague and atmospheric)' : fragments}\n'
         '${fixation != null && fixation.isNotEmpty ? 'Current fixation: $fixation\n' : ''}'
+        '$ambitionLine'
         '${emotion.isNotEmpty ? 'Mood carried to sleep: $emotion\n' : ''}'
         '${weatherLine != null && weatherLine.isNotEmpty ? 'Outside: $weatherLine\n' : ''}'
         '${recap.isNotEmpty ? 'Where the story stands: $recap\n' : ''}'
