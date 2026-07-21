@@ -47,6 +47,11 @@ class GenerationSettings with SettingsBase {
   bool _dynamicResponses = false;
   int _dynamicResponseInterval = 60;
   int _dynamicResponseMaxMessages = 3;
+
+  /// Away pace (Living Time): story periods each AFK snapshot advances.
+  /// 1 = a few hours (legacy default), 3 = half the day, 6 = a full day.
+  /// Deterministic by design — the model never chooses the span.
+  int _dynamicResponsePacePeriods = 1;
   double _xtcThreshold = 0.1;
   // 0 = XTC off. The old default was 0.5, but XTC never actually reached the
   // model back then — now that samplers are delivered, defaulting it ON would
@@ -92,6 +97,7 @@ class GenerationSettings with SettingsBase {
   bool get dynamicResponses => _dynamicResponses;
   int get dynamicResponseInterval => _dynamicResponseInterval;
   int get dynamicResponseMaxMessages => _dynamicResponseMaxMessages;
+  int get dynamicResponsePacePeriods => _dynamicResponsePacePeriods;
   double get xtcThreshold => _xtcThreshold;
   double get xtcProbability => _xtcProbability;
   int get maxLength => _maxLength;
@@ -116,6 +122,8 @@ class GenerationSettings with SettingsBase {
         prefs?.getBool(k('dynamic_responses')) ?? _dynamicResponses;
     _dynamicResponseInterval =
         prefs?.getInt(k('dynamic_response_interval')) ?? _dynamicResponseInterval;
+    _dynamicResponsePacePeriods =
+        (prefs?.getInt(k('dynamic_response_pace_periods')) ?? 1).clamp(1, 6);
     _dynamicResponseMaxMessages =
         prefs?.getInt(k('dynamic_response_max_messages')) ??
         _dynamicResponseMaxMessages;
@@ -214,6 +222,15 @@ class GenerationSettings with SettingsBase {
   Future<void> setDynamicResponseMaxMessages(int value) async {
     _dynamicResponseMaxMessages = value;
     await prefs?.setInt(k('dynamic_response_max_messages'), value);
+    notify();
+  }
+
+  Future<void> setDynamicResponsePacePeriods(int value) async {
+    _dynamicResponsePacePeriods = value.clamp(1, 6);
+    await prefs?.setInt(
+      k('dynamic_response_pace_periods'),
+      _dynamicResponsePacePeriods,
+    );
     notify();
   }
 

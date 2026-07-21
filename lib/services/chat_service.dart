@@ -82,6 +82,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/absence_tracker.dart';
+import 'package:front_porch_ai/services/chat/afk_flavor.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/dream_service.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';

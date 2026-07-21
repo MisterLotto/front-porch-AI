@@ -68,6 +68,8 @@ class SettingsFacade {
         'dynamicResponses': g.dynamicResponses,
         'dynamicResponseInterval': g.dynamicResponseInterval,
         'dynamicResponseMaxMessages': g.dynamicResponseMaxMessages,
+        // Away pace (Living Time) — additive.
+        'dynamicResponsePacePeriods': g.dynamicResponsePacePeriods,
       },
     };
   }
@@ -146,6 +148,8 @@ class SettingsFacade {
       if (dri is num) await g.setDynamicResponseInterval(dri.toInt());
       final drm = gen['dynamicResponseMaxMessages'];
       if (drm is num) await g.setDynamicResponseMaxMessages(drm.toInt());
+      final drp = gen['dynamicResponsePacePeriods'];
+      if (drp is num) await g.setDynamicResponsePacePeriods(drp.toInt());
     }
   }
 
