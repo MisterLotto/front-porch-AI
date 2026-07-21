@@ -53,13 +53,13 @@ class JournalTimelineTab extends ConsumerWidget {
     final sessionId = chat.currentSessionId;
     if (sessionId == null) return const SizedBox.shrink();
     final entriesAsync = ref.watch(
-      milestoneFeedProvider((
+      milestoneTimelineProvider(
         feed: chat.milestoneFeed,
         sessionId: sessionId,
         characterId: ownerId,
         revision: chat.messages.length,
         messages: chat.messages,
-      )),
+      ),
     );
     final accent = AppColors.porchAmberOf(context);
 

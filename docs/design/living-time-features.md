@@ -9,18 +9,20 @@ through their days, and your story together becomes a book."*
 **Cross-cutting design wins (deliberate, all five):**
 - **Based on Rawhide.** All work branches from and lands on `Rawhide` (new
   features per the branch workflow).
-- **Riverpod-compliant (maintainer directive, 2026-07-21).** All new code
-  follows the Riverpod patterns from CLAUDE.md: domain leaves stay pure Dart
-  classes with constructor-injected deps (unchanged — they are not state
-  management), but every NEW piece of exposed state and every NEW UI surface
-  goes through Riverpod — `Provider`/`AsyncNotifier` definitions (e.g.
-  `weatherProvider`, `milestoneFeedProvider` as an `AsyncNotifier` over the
-  DB queries, `absenceStateProvider`), UI consumes via `ref.watch`, one-shot
-  actions via `ref.read`, async surfaces render through `AsyncValue`
-  (loading/error states handled, never swallowed). Where a feature must read
-  the legacy Provider-based `ChatService`, it does so through a single
-  documented bridge provider per feature — no new `ChangeNotifier`s, no new
-  `Provider.of` in new widgets.
+- **Riverpod-compliant, CODEGEN style (maintainer directive, 2026-07-21;
+  tightened same day).** All new code uses `@riverpod` annotations with
+  `riverpod_generator` — NOT hand-rolled provider globals: functional
+  providers for pure derivations (family params are plain named args,
+  autoDispose by default), `@riverpod class … extends _$…` Notifiers /
+  AsyncNotifiers for state (async `build` IS the fetch; mutations are
+  methods on the class), UI consumes via `ref.watch` + `AsyncValue`, and
+  every provider must be exercisable in a bare `ProviderContainer` (see
+  `test/services/chat/riverpod_providers_test.dart`). Domain leaves stay
+  pure Dart with constructor injection — they are not state management.
+  Where a feature must read the legacy Provider-based `ChatService`, values
+  cross at the widget boundary as plain arguments — no new
+  `ChangeNotifier`s, no new `Provider.of` in new widgets. Generated
+  `.g.dart` files are committed (same policy as Drift).
 - **Zero schema changes.** Weather is recomputed (pure function of existing
   state), milestones ride the existing `journal_cards` table, absence is
   computed from existing timestamps, dreams are ordinary messages + journal

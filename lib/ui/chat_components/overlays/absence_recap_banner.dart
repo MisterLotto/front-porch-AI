@@ -18,23 +18,23 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
+part 'absence_recap_banner.g.dart';
+
 /// Ephemeral per-session dismissed state for the "Previously on…" banner —
-/// Riverpod Notifier (no family: a plain set of dismissed session ids keeps
-/// the API version-stable and covers every session in one provider).
-class DismissedAbsenceBanners extends Notifier<Set<String>> {
+/// @riverpod Notifier (project codegen standard). One set of dismissed
+/// session ids covers every session; keepAlive because a dismissal should
+/// survive the banner unmounting (autoDispose would resurrect it).
+@Riverpod(keepAlive: true)
+class DismissedAbsenceBanners extends _$DismissedAbsenceBanners {
   @override
   Set<String> build() => <String>{};
 
   void dismiss(String sessionId) => state = {...state, sessionId};
 }
-
-final dismissedAbsenceBannersProvider =
-    NotifierProvider<DismissedAbsenceBanners, Set<String>>(
-      DismissedAbsenceBanners.new,
-    );
 
 /// "Previously on…" welcome-back banner (living-time-features.md §2).
 ///

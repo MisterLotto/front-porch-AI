@@ -16,28 +16,27 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 
-/// Riverpod surface for weather (Living Time, first Riverpod-native feature
-/// per the 2026-07-21 maintainer directive).
-///
-/// The engine is pure, so the provider layer is a memoizing family over a
-/// value-typed inputs record: widgets watch [dailyWeatherProvider(inputs)]
-/// and rebuild only when the inputs actually change (records have structural
-/// ==). The inputs are handed down from the existing Provider-based widget
-/// tree (TimeStrip already holds the ChatService) — this is the documented
-/// bridge for this feature: state crosses at the widget boundary as plain
-/// values, so no ChangeNotifier is wrapped and no Provider.of appears in new
-/// widgets.
-typedef WeatherInputs = ({String sessionSeed, int dayCount, DateTime date});
+part 'weather_providers.g.dart';
 
-final dailyWeatherProvider = Provider.autoDispose
-    .family<DailyWeather, WeatherInputs>(
-      (ref, inputs) => WeatherEngine.weatherFor(
-        sessionSeed: inputs.sessionSeed,
-        dayCount: inputs.dayCount,
-        date: inputs.date,
-      ),
-    );
+/// Riverpod surface for weather (Living Time §3) — @riverpod codegen style
+/// (project standard, maintainer directive 2026-07-21): family parameters
+/// are plain named args, autoDispose is the default, and the provider is
+/// memoized per-argument so the deterministic recompute runs only when the
+/// story day/session actually changes. The engine stays pure; inputs cross
+/// the Provider→Riverpod boundary as plain values handed down by the
+/// existing widget tree (TimeStrip).
+@riverpod
+DailyWeather dailyWeather(
+  Ref ref, {
+  required String sessionSeed,
+  required int dayCount,
+  required DateTime date,
+}) => WeatherEngine.weatherFor(
+  sessionSeed: sessionSeed,
+  dayCount: dayCount,
+  date: date,
+);

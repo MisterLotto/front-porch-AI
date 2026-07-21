@@ -24,19 +24,33 @@ import 'package:front_porch_ai/services/chat/weather_providers.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Sidebar weather glyph (Living Time §3) — emoji + banded label, rendered
-/// inside TimeStrip's header row. Riverpod-native: the parent hands down
-/// value-typed [WeatherInputs] and this widget watches the memoizing
-/// [dailyWeatherProvider] family, so the deterministic recompute runs only
-/// when the story day/session actually changes, not on every sidebar
-/// rebuild. Parent gates rendering (weather off → widget absent).
+/// inside TimeStrip's header row. Riverpod codegen-native: the parent hands
+/// down plain values and this widget watches the generated
+/// [dailyWeatherProvider] family (named args, per-argument memoization), so
+/// the deterministic recompute runs only when the story day/session actually
+/// changes, not on every sidebar rebuild. Parent gates rendering (weather
+/// off → widget absent).
 class WeatherChip extends ConsumerWidget {
-  final WeatherInputs inputs;
+  final String sessionSeed;
+  final int dayCount;
+  final DateTime date;
 
-  const WeatherChip({super.key, required this.inputs});
+  const WeatherChip({
+    super.key,
+    required this.sessionSeed,
+    required this.dayCount,
+    required this.date,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final weather = ref.watch(dailyWeatherProvider(inputs));
+    final weather = ref.watch(
+      dailyWeatherProvider(
+        sessionSeed: sessionSeed,
+        dayCount: dayCount,
+        date: date,
+      ),
+    );
     return Tooltip(
       message:
           '${WeatherEngine.label(weather)} · ${weather.season}\n'

@@ -16,32 +16,33 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/services/chat/milestone_feed.dart';
 
-/// Riverpod surface for the "Our Story" timeline (Living Time §7).
-///
-/// FutureProvider (not AsyncNotifier) is the deliberate choice: this is a
-/// pure read-model with no mutations, and family-memoized async reads are
-/// exactly what FutureProvider models. The inputs record carries the stable
-/// MilestoneFeed instance (identity ==) and a `revision` the host widget
-/// bumps (message count) so the feed refetches when the chat moves — the
-/// same widget-boundary bridge pattern as weather.
-typedef MilestoneFeedInputs = ({
-  MilestoneFeed feed,
-  String sessionId,
-  String characterId,
-  int revision,
-  List<ChatMessage> messages,
-});
+part 'milestone_providers.g.dart';
 
-final milestoneFeedProvider = FutureProvider.autoDispose
-    .family<List<MilestoneEntry>, MilestoneFeedInputs>((ref, i) {
-      return i.feed.entriesFor(
-        sessionId: i.sessionId,
-        characterId: i.characterId,
-        messages: i.messages,
-      );
-    });
+/// "Our Story" timeline state (Living Time §7) — an @riverpod AsyncNotifier
+/// (project standard): the async build IS the fetch, consumers render
+/// through AsyncValue, and the class is unit-testable in a bare
+/// ProviderContainer with a fake feed. Family args are plain named build
+/// params; `revision` (message count) is bumped by the host widget so the
+/// feed refetches when the chat moves. When v1.5 milestone writes land,
+/// mutation methods go on this notifier — the reason it's a class, not a
+/// FutureProvider.
+@riverpod
+class MilestoneTimeline extends _$MilestoneTimeline {
+  @override
+  Future<List<MilestoneEntry>> build({
+    required MilestoneFeed feed,
+    required String sessionId,
+    required String characterId,
+    required int revision,
+    required List<ChatMessage> messages,
+  }) => feed.entriesFor(
+    sessionId: sessionId,
+    characterId: characterId,
+    messages: messages,
+  );
+}
