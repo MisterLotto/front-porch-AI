@@ -96,6 +96,11 @@ class JournalStore {
     List<int> sourcePositions = const [],
     int? storyDay,
     String? storyClock,
+
+    /// Optional card kind rider in the metadata JSON (e.g. 'dream',
+    /// 'milestone' — Living Time). Readers parse metadata forgivingly, so
+    /// this is additive-safe for every existing card and consumer.
+    String? kind,
     required int maxCards,
   }) async {
     final db = getDb();
@@ -125,11 +130,12 @@ class JournalStore {
           sourcePositions.isEmpty ? null : jsonEncode(sourcePositions),
         ),
         metadata: Value(
-          storyDay == null && storyClock == null
+          storyDay == null && storyClock == null && kind == null
               ? null
               : jsonEncode({
                   'storyDay': ?storyDay,
                   'storyClock': ?storyClock,
+                  'kind': ?kind,
                 }),
         ),
       ),

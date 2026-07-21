@@ -33,6 +33,7 @@ class RealismSettings with SettingsBase {
   bool _absenceBannerEnabled = true;
   bool _absenceAckEnabled = false;
   int _absenceThresholdHours = 24;
+  bool _dreamsEnabled = true;
   List<String> _bannedPhrases = [];
 
   bool get realismDefault => _realismDefault;
@@ -51,6 +52,10 @@ class RealismSettings with SettingsBase {
   bool get absenceBannerEnabled => _absenceBannerEnabled;
   bool get absenceAckEnabled => _absenceAckEnabled;
   int get absenceThresholdHours => _absenceThresholdHours;
+
+  /// Living Time dreams (living-time-features.md §1). Effective only when
+  /// realism + passage-of-time + the Journal are on — ChatService gates.
+  bool get dreamsEnabled => _dreamsEnabled;
   List<String> get bannedPhrases => List.unmodifiable(_bannedPhrases);
 
   void load() {
@@ -65,6 +70,7 @@ class RealismSettings with SettingsBase {
     _absenceAckEnabled = prefs?.getBool(k('absence_ack_enabled')) ?? false;
     _absenceThresholdHours =
         prefs?.getInt(k('absence_threshold_hours')) ?? 24;
+    _dreamsEnabled = prefs?.getBool(k('dreams_enabled')) ?? true;
 
     final bannedJson = prefs?.getString(k('banned_phrases'));
     if (bannedJson != null) {
@@ -97,6 +103,12 @@ class RealismSettings with SettingsBase {
   Future<void> setAbsenceThresholdHours(int value) async {
     _absenceThresholdHours = value;
     await prefs?.setInt(k('absence_threshold_hours'), value);
+    notify();
+  }
+
+  Future<void> setDreamsEnabled(bool value) async {
+    _dreamsEnabled = value;
+    await prefs?.setBool(k('dreams_enabled'), value);
     notify();
   }
 

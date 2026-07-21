@@ -76,11 +76,15 @@ class ChatFacade {
         final pr = md['image_prompt'];
         if (pr is String && pr.isNotEmpty) imagePrompt = pr;
       }
+      // Living Time §1 dream narration flag — additive; older bundles render
+      // the dream as a plain message (same info, no special chrome).
+      final bool? isDream = md?['is_dream'] == true ? true : null;
       return {
         'index': e.key,
         'sender': m.sender,
         'text': m.displayText,
         'isUser': m.isUser,
+        'isDream': ?isDream,
         'hasThinking': m.hasThinking,
         'thinkingContent': m.thinkingContent,
         'thinkingDurationMs': m.thinkingDurationMs,

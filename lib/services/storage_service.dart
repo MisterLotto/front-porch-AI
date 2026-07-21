@@ -596,6 +596,9 @@ class StorageService extends ChangeNotifier {
   int get absenceThresholdHours => realismSettings.absenceThresholdHours;
   Future<void> setAbsenceThresholdHours(int v) =>
       realismSettings.setAbsenceThresholdHours(v);
+  bool get dreamsEnabled => realismSettings.dreamsEnabled;
+  Future<void> setDreamsEnabled(bool v) =>
+      realismSettings.setDreamsEnabled(v);
   Future<void> setPassageOfTimeDefault(bool v) =>
       realismSettings.setPassageOfTimeDefault(v);
   List<String> get bannedPhrases => realismSettings.bannedPhrases;

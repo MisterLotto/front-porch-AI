@@ -32,6 +32,8 @@ export interface Message {
   hasThinking?: boolean;
   thinkingContent?: string;
   characterId?: string;
+  /** Living Time §1 dream narration (additive — absent on older facades). */
+  isDream?: boolean;
   /** Generated-image message: saved basename, served at /api/image/saved/<image>. */
   image?: string;
   /** The prompt that produced the image (tooltip / alt text). */

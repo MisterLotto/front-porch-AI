@@ -82,6 +82,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/absence_tracker.dart';
+import 'package:front_porch_ai/services/chat/dream_service.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
@@ -1767,6 +1768,19 @@ class ChatService extends ChangeNotifier {
     getWeather: () => currentWeather,
   );
 
+  // ── Dreams (Living Time §1) ──
+  late final _dreamService = DreamService(
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    isEnabled: () =>
+        _realismEnabled &&
+        _timeService.passageOfTimeEnabled &&
+        _storageService.journalEnabled &&
+        _storageService.dreamsEnabled,
+  );
+
   late final _nsfwInjection = NsfwInjection(
     nsfwService: _nsfwService,
     getRealismEnabled: () => _realismEnabled,
@@ -3050,6 +3064,95 @@ class ChatService extends ChangeNotifier {
     _messages.add(userMsg);
     await _saveChat();
     notifyListeners();
+
+    // ── Dreams (Living Time §1) — a night passed since the last turn, so the
+    // dream surfaces before this morning's exchange. Owner = the character
+    // who ended the previous day (last assistant speaker): ONE rule for 1:1
+    // and group, so parity holds by construction. Any failure skips silently
+    // (the local-model floor: a bad dream is worse than no dream).
+    _dreamService.checkRollover(
+      sessionId: _currentSessionId,
+      dayCount: _timeService.dayCount,
+    );
+    if (_dreamService.pending && _currentSessionId != null) {
+      _dreamService.clear();
+      try {
+        String? lastCharId;
+        var lastSpeakerFound = false;
+        for (final m in _messages.reversed) {
+          if (!m.isUser &&
+              m.sender != 'System' &&
+              m.activeMetadata?['is_dream'] != true) {
+            lastCharId = m.characterId;
+            lastSpeakerFound = true;
+            break;
+          }
+        }
+        final ownerCard = !lastSpeakerFound
+            ? null
+            : lastCharId == null
+            ? _activeCharacter
+            : (_groupCharacters
+                      .where((c) => _getCharacterIdFromCard(c) == lastCharId)
+                      .firstOrNull ??
+                  _activeCharacter);
+        if (ownerCard != null) {
+          final ownerId = _getCharacterIdFromCard(ownerCard);
+          final cards = await _journalStore.cardsFor(
+            _currentSessionId!,
+            ownerId,
+          );
+          final sorted = [...cards]
+            ..sort(
+              (a, b) => JournalPhysics.cooledHeat(
+                b,
+              ).compareTo(JournalPhysics.cooledHeat(a)),
+            );
+          final dream = await _dreamService.generateDream(
+            characterName: ownerCard.name,
+            memoryFragments: [for (final c in sorted.take(5)) c.content],
+            fixation: _relationshipService.activeFixation,
+            emotion: _characterEmotion,
+            recap: _summary.length > 300
+                ? _summary.substring(0, 300)
+                : _summary,
+            weatherLine: switch (currentWeather) {
+              null => null,
+              final w => WeatherEngine.prose(w),
+            },
+          );
+          if (dream != null) {
+            _messages.insert(
+              _messages.length - 1,
+              ChatMessage(
+                text: dream,
+                sender: ownerCard.name,
+                isUser: false,
+                characterId: lastCharId,
+                metadata: {'is_dream': true},
+              ),
+            );
+            notifyListeners();
+            await _journalStore.addCard(
+              sessionId: _currentSessionId!,
+              characterId: ownerId,
+              content: dream,
+              category: 'moment',
+              kind: 'dream',
+              emotionLabel: _characterEmotion.isEmpty
+                  ? null
+                  : _characterEmotion,
+              storyDay: _timeService.dayCount,
+              storyClock: _timeService.storyClockIso,
+              maxCards: _storageService.memorySettings.journalMaxCards,
+            );
+            await _saveChat();
+          }
+        }
+      } catch (e) {
+        debugPrint('[Dreams] skipped: $e');
+      }
+    }
 
     // ── Blind-model photo fallback: caption BEFORE generating ───────────────
     // Vision-capable models return true immediately (their pixels ride along

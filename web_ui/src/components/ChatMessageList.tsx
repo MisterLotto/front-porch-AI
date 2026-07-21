@@ -139,6 +139,17 @@ export function ChatMessageList({
     <div className="chat-messages" ref={scrollRef}>
       {messages.map((m) => {
         const speaker = !m.isUser && m.characterId ? castById.get(m.characterId) : undefined;
+        // Living Time §1: dreams render as a centered narration banner
+        // (desktop parity — same treatment as Chance Time).
+        if (m.isDream) {
+          return (
+            <div key={m.index} className="msg-row">
+              <div className="dream-banner">
+                🌙 <em>{m.sender} dreamt: {m.text}</em>
+              </div>
+            </div>
+          );
+        }
         return (
           <div key={m.index} className="msg-row">
             {multiCast && speaker && <span className="msg-speaker">{speaker.name}</span>}

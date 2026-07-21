@@ -78,6 +78,18 @@ passage-of-time on. Default ON when both are on.
 Local-model dream quality → mitigated by skip-on-garbage floor. One extra
 LLM call per story-day maximum (bounded, off the hot path).
 
+**Shipped 2026-07-21.** Two deviations from the sketch above, both
+deliberate: (1) rollover detection is session-scoped bookkeeping inside
+DreamService checked once at sendMessage entry (covers every advancement
+path — evals, AFK, manual nudge — with zero TimeService/AFK surgery, and a
+fresh load can never fire for days that passed while the app was closed);
+(2) the dream owner is the character who ended the previous day (last
+assistant speaker) — ONE rule for 1:1 and group, parity by construction,
+rather than the "upcoming speaker" idea which is unresolvable at insertion
+time in groups. Dream message inserts before the user's morning message;
+card kind='dream' rides the new additive `kind` metadata field on
+JournalStore.addCard (also the base primitive milestones will use).
+
 ---
 
 ## 2. Real-absence awareness + "Previously on…" 📺 (Effort: S, ~1–2 days)

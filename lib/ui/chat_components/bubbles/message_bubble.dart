@@ -66,6 +66,59 @@ class _MessageBubbleState extends State<MessageBubble> {
   int get index => widget.index;
   CharacterCard? get character => widget.character;
 
+  /// The one centered narration banner (Chance Time 🎰, Dreams 🌙 — Living
+  /// Time §1). Warm-porch amber tints, italic center text.
+  Widget _narrationBanner(
+    BuildContext context, {
+    required String emoji,
+    required String text,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.resolve(
+            context,
+            const Color(0xFFFFD166).withValues(alpha: 0.12),
+            const Color(0xFFF59E0B).withValues(alpha: 0.18),
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.resolve(
+              context,
+              const Color(0xFFFFD166).withValues(alpha: 0.35),
+              const Color(0xFFF59E0B).withValues(alpha: 0.4),
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.resolve(
+                    context,
+                    const Color(0xFFFFD166),
+                    const Color(0xFFB45309),
+                  ),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDirectorNote = message.characterId == '__director__';
@@ -74,53 +127,23 @@ class _MessageBubbleState extends State<MessageBubble> {
     final bubbleOpacity = Provider.of<StorageService>(context).bubbleOpacity;
     final storage = Provider.of<StorageService>(context);
 
-    // Chance Time narrations get a special centered banner
+    // Centered narration banners: Chance Time and Dreams share ONE builder
+    // (the chance-time banner was inlined here before dreams arrived; the
+    // extraction deletes that duplication rather than adding a parallel copy).
     if (isChanceTimeNarration) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.resolve(
-              context,
-              const Color(0xFFFFD166).withValues(alpha: 0.12),
-              const Color(0xFFF59E0B).withValues(alpha: 0.18),
-            ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: AppColors.resolve(
-                context,
-                const Color(0xFFFFD166).withValues(alpha: 0.35),
-                const Color(0xFFF59E0B).withValues(alpha: 0.4),
-              ),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('🎰', style: TextStyle(fontSize: 16)),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  message.text
-                      .replaceAll('[🎰 CHANCE TIME! ', '')
-                      .replaceAll(']', ''),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.resolve(
-                      context,
-                      const Color(0xFFFFD166),
-                      const Color(0xFFB45309),
-                    ),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      return _narrationBanner(
+        context,
+        emoji: '🎰',
+        text: message.text
+            .replaceAll('[🎰 CHANCE TIME! ', '')
+            .replaceAll(']', ''),
+      );
+    }
+    if (message.activeMetadata?['is_dream'] == true) {
+      return _narrationBanner(
+        context,
+        emoji: '🌙',
+        text: '${message.sender} dreamt: ${message.text}',
       );
     }
 

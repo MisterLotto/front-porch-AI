@@ -194,6 +194,16 @@ class GeneralTab extends StatelessWidget {
               onChanged: (val) => storageService.setWeatherEnabled(val),
             ),
             subToggle(
+              icon: Icons.nightlight_outlined,
+              label: 'Dreams',
+              blurb:
+                  'When a story night passes, the character dreams — a short, '
+                  'hazy scene woven from their Journal memories, mood, and '
+                  'the weather. Needs the Journal and Passage of Time.',
+              value: storageService.dreamsEnabled,
+              onChanged: (val) => storageService.setDreamsEnabled(val),
+            ),
+            subToggle(
               icon: Icons.history,
               label: 'Welcome-back recap',
               blurb:

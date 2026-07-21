@@ -1883,3 +1883,16 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   font-size: 13px;
   padding: 0 2px;
 }
+
+/* ── Living Time §1: dream narration banner (desktop parity) ────────────── */
+.dream-banner {
+  margin: 8px 32px;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--porch-honey);
+  background: color-mix(in srgb, var(--porch-honey) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--porch-honey) 35%, transparent);
+  border-radius: 12px;
+}
