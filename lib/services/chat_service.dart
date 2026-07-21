@@ -83,6 +83,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dar
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/absence_tracker.dart';
 import 'package:front_porch_ai/services/chat/dream_service.dart';
+import 'package:front_porch_ai/services/chat/milestone_feed.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
@@ -2263,6 +2264,11 @@ class ChatService extends ChangeNotifier {
   /// plumbing. Instance getter (not extension) so FakeChatService can
   /// override it via `implements` (see isGrowthPassRunning precedent).
   JournalStore get journalStore => _journalStore;
+
+  /// "Our Story" timeline read-model (Living Time §7) — pure aggregation
+  /// over data already persisted; the journal dialog's timeline tab and the
+  /// web facade both read through this one instance.
+  late final MilestoneFeed milestoneFeed = MilestoneFeed(getDb: () => _db);
 
   late final _journalInjection = JournalInjection(
     store: _journalStore,

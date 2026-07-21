@@ -32,6 +32,7 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/toggle', _toggle);
     router.post('/api/chat/tools/time', _time);
     router.get('/api/chat/tools/calendar', _calendar);
+    router.get('/api/chat/tools/timeline', _timeline);
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
     router.post('/api/chat/tools/task', _task);
@@ -131,6 +132,12 @@ class WebChatToolsRoutes {
   Future<shelf.Response> _calendar(shelf.Request request) async {
     final owner = request.url.queryParameters['owner'];
     return JsonResponse.ok(await _facade.calendar(owner));
+  }
+
+  /// "Our Story" milestones timeline (Living Time §7) for one diary owner.
+  Future<shelf.Response> _timeline(shelf.Request request) async {
+    final owner = request.url.queryParameters['owner'];
+    return JsonResponse.ok(await _facade.timeline(owner));
   }
 
   /// Summary actions: regenerate, or set the summary text directly.

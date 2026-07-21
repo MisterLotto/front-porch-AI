@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
+import { MilestonesPanel } from './MilestonesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
 
 interface ObjectiveTask {
@@ -237,6 +238,13 @@ export function ChatTools({
               <GrowthPanel focusedId={focusedId} reloadKey={reloadKey} />
             </>
           )}
+        </div>
+      </details>
+
+      <details className="tool-section">
+        <summary>Our story</summary>
+        <div className="tool-body">
+          <MilestonesPanel focusedId={focusedId} reloadKey={reloadKey} />
         </div>
       </details>
 

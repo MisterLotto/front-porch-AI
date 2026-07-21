@@ -1896,3 +1896,27 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border: 1px solid color-mix(in srgb, var(--porch-honey) 35%, transparent);
   border-radius: 12px;
 }
+
+/* ── Living Time §7: "Our Story" milestones timeline ────────────────────── */
+.milestone-day {
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.milestone-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.milestone-icon { flex: none; }
+.milestone-text { flex: 1; min-width: 0; }
+.milestone-emotion {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.milestones-empty { font-size: 12px; }

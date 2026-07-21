@@ -289,6 +289,16 @@ Historical bond thresholds (before the feature existed) are only
 approximately reconstructable from per-message realism metadata — v1 simply
 starts recording from feature-on, which is honest and cheap.
 
+**v1 shipped 2026-07-21** (read-model + Diary|Our Story tab + web "Our
+story" panel over the same `ChatService.milestoneFeed` instance +
+`/api/chat/tools/timeline`). Ordering note: entries sort by story position
+where a receipt exists; position-less sources (objectives, receipt-less
+rings) interleave via the diary's own (wallTime → position) index. **v1.5
+(threshold-crossing milestone cards via RelationshipService) is explicitly
+deferred** — the delta-application hook site needs its own careful pass; the
+timeline still shows big relationship moments indirectly through salient
+journal cards.
+
 ---
 
 ## 6. Ambitions — long-term goals 🎯 (Effort: M–L, build LAST)

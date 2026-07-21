@@ -461,6 +461,40 @@ class ChatToolsFacade {
     };
   }
 
+  /// "Our Story" milestones timeline (Living Time §7) — the same read-model
+  /// the desktop journal dialog's timeline tab uses (ChatService.milestoneFeed),
+  /// so the two surfaces cannot drift. Additive endpoint; owner defaults to
+  /// the first diary owner like [calendar].
+  Future<Map<String, dynamic>> timeline(String? ownerId) async {
+    final sessionId = _chat.currentSessionId;
+    final owners = _chat.cast.where((p) => !p.isLite).toList();
+    final owner = owners.where((p) => p.id == ownerId).firstOrNull ??
+        owners.firstOrNull;
+    final entries = <Map<String, dynamic>>[];
+    if (sessionId != null && owner != null) {
+      for (final e in await _chat.milestoneFeed.entriesFor(
+        sessionId: sessionId,
+        characterId: owner.id,
+        messages: _chat.messages,
+      )) {
+        entries.add({
+          'kind': e.kind,
+          'text': e.text,
+          'day': ?e.storyDay,
+          'position': ?e.position,
+          'emotion': ?e.emotion,
+        });
+      }
+    }
+    return {
+      'owner': owner?.id,
+      'owners': [
+        for (final p in owners) {'id': p.id, 'name': p.name},
+      ],
+      'entries': entries,
+    };
+  }
+
   /// Manually nudge the scene clock forward/back one period (desktop chevrons).
   Future<void> nudgeTime(int delta) async {
     await _chat.nudgeTimePeriod(delta);
