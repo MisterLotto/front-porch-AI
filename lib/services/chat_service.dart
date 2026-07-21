@@ -3515,6 +3515,9 @@ class ChatService extends ChangeNotifier {
       if (newIndex >= 0) {
         msg.swipeIndex = newIndex;
         if (!isGuestMsg) _syncRealismStateForSwipe(msg, oldIndex, newIndex);
+        // Timeline integrity: the active variant at this position changed —
+        // cards journaled from the other swipe are now phantom.
+        _invalidateJournalFrom(messageIndex);
         await _saveChat();
         notifyListeners();
       }
@@ -3526,6 +3529,8 @@ class ChatService extends ChangeNotifier {
       // Navigate to existing swipe
       msg.swipeIndex = newIndex;
       if (!isGuestMsg) _syncRealismStateForSwipe(msg, oldIndex, newIndex);
+      // Timeline integrity — same as the left-swipe branch above.
+      _invalidateJournalFrom(messageIndex);
       await _saveChat();
       notifyListeners();
     } else if (messageIndex == _messages.length - 1 && !_isGenerating) {
@@ -3635,17 +3640,13 @@ class ChatService extends ChangeNotifier {
       final deleted = _messages[index];
       _messages.removeAt(index);
 
-      // Keep the journal/memory cursor aligned. _summaryLastIndex is the
-      // EXCLUSIVE start of the un-journaled window (== count of journaled
-      // messages), so only a delete strictly BELOW it (index < cursor, i.e. a
-      // journaled message) shifts the boundary down by one; deleting the
-      // message AT the cursor removes an un-journaled one and leaves the
-      // boundary where it is. Without this, receipts drift by one per deletion.
+      // Timeline integrity: the delete rewrites history from [index] on
+      // (later positions shift down), so cards citing that region and the
+      // pass cursor both roll back — replaces the old cursor-decrement drift
+      // fix, which kept phantom cards alive (smoke-test bug 2026-07-21).
       // (Growth uses a DB-backed per-session cursor; it re-reads its stored
       // index on the next pass.)
-      if (_summaryLastIndex > index) {
-        _summaryLastIndex = (_summaryLastIndex - 1).clamp(0, _messages.length);
-      }
+      _invalidateJournalFrom(index);
 
       // Time-travel rollback for realism when deleting a character message.
       // Restore from the new last message if it has a snapshot, regardless
@@ -3716,9 +3717,41 @@ class ChatService extends ChangeNotifier {
       // while preserving all realism metadata, swipes, swipeMetadata, durations, etc.
       // This prevents chips (needs_deltas, bond/trust deltas, emotion, etc.) from disappearing on edit.
       msg.text = newText;
+      // Timeline integrity: an edit at a journaled position rewrites what
+      // the diary already read (smoke-test bug 2026-07-21).
+      _invalidateJournalFrom(index);
       await _saveChat();
       notifyListeners();
     }
+  }
+
+  /// Timeline-integrity invalidation (Journal): content at [position] was
+  /// rewritten — regen, swipe navigation, edit, or delete. Cards citing
+  /// positions ≥ [position] describe events that no longer happened, so they
+  /// are removed (all diary owners), the pass cursor rolls back so the next
+  /// pass re-reads the rewritten window, and a salience kick refreshes the
+  /// recap soon. Cheap no-op when the pass never consumed the region: cards
+  /// only ever cite positions below the cursor. The recap TEXT may still
+  /// carry a stale sentence until the next pass rewrites it — a full recap
+  /// rewind is deliberately out of scope (documented, not silent).
+  void _invalidateJournalFrom(int position) {
+    final sessionId = _currentSessionId;
+    if (sessionId == null || position >= _summaryLastIndex) return;
+    _summaryLastIndex = position;
+    unawaited(
+      _journalStore.invalidateCardsCitingFrom(sessionId, position).then((
+        removed,
+      ) {
+        if (removed > 0 && !_disposed) {
+          _journalMaintenance.eventKickPending = true;
+          debugPrint(
+            '[Journal] Timeline rewrite at $position — removed $removed '
+            'card(s) citing the discarded region',
+          );
+          notifyListeners();
+        }
+      }),
+    );
   }
 
   // ── The Journal recap ("Where we are") ──────────────────────────────

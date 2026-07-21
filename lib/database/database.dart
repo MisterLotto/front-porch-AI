@@ -2682,6 +2682,15 @@ class AppDatabase extends _$AppDatabase {
 
   /// All cards for one diary owner in one chat — pinned first, then oldest
   /// first (stable reading order for prompt handles and the UI).
+  /// Every diary owner's cards for one session — the timeline-integrity
+  /// invalidation sweep (regen/edit/delete) must cover owners no longer in
+  /// the cast, so it cannot iterate the live participant list.
+  Future<List<JournalMemoryData>> getJournalCardsForSession(
+    String sessionId,
+  ) => (select(
+    journalMemories,
+  )..where((j) => j.sessionId.equals(sessionId))).get();
+
   Future<List<JournalMemoryData>> getJournalCards(
     String sessionId,
     String characterId,

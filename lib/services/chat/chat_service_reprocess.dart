@@ -394,6 +394,11 @@ extension ChatServiceReprocess on ChatService {
       // Instead of removing the message, we generate a new swipe
       // Temporarily remove the last message so the prompt doesn't include it
       final lastMsg = _messages.removeLast();
+      // Timeline integrity: the regen replaces this position's active
+      // content — journal cards citing it (or anything after) are phantom
+      // (smoke-test bug 2026-07-21). regenerateMainCharacter's guest-pop
+      // path is covered too: it delegates here with an even lower position.
+      _invalidateJournalFrom(_messages.length);
       // Is this a Scene Guest message? If so the whole regen must stay a
       // parity-safe GUEST turn: skip every Realism/Needs revert + re-eval below
       // and regenerate spoken as the guest (guestSpeaker), exactly like the

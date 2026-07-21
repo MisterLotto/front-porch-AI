@@ -178,6 +178,39 @@ class JournalStore {
     await getDb()?.deleteJournalCard(id);
   }
 
+  /// Timeline-integrity invalidation: content at/after [fromPosition] was
+  /// rewritten (regen, swipe, edit, delete), so every card CITING that
+  /// region describes events that no longer happened — delete them, pinned
+  /// included (a pin can't keep a phantom true). Cards with no receipts
+  /// (manual plants, dreams, ambitions, milestones) are never touched.
+  /// Sweeps ALL diary owners for the session. Returns the removal count.
+  Future<int> invalidateCardsCitingFrom(
+    String sessionId,
+    int fromPosition,
+  ) async {
+    final db = getDb();
+    if (db == null) return 0;
+    var removed = 0;
+    for (final card in await db.getJournalCardsForSession(sessionId)) {
+      final raw = card.sourceMessageIds;
+      if (raw == null || raw.isEmpty) continue;
+      List<dynamic> positions;
+      try {
+        positions = jsonDecode(raw) as List<dynamic>;
+      } catch (_) {
+        continue;
+      }
+      final cites = positions.whereType<num>().any(
+        (p) => p.toInt() >= fromPosition,
+      );
+      if (cites) {
+        await db.deleteJournalCard(card.id);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   /// Merge keys into a card's metadata JSON (Living Time §6 ambition
   /// progress). Additive-only merge over the forgiving metadata blob —
   /// existing keys (storyDay/storyClock/kind) survive untouched.
