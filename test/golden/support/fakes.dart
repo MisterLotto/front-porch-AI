@@ -31,6 +31,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
@@ -357,6 +358,19 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   // is what was making the MessageBubble goldens fail on CI.
   @override
   int? get regenerableHostBelowGuestsIndex => null;
+
+  // Living Time weather. Null (off) by default so every pre-weather sidebar
+  // baseline renders byte-identical — TimeStrip omits the chip entirely on
+  // null. The dedicated weather-chip golden sets this non-null (the VALUE only
+  // gates rendering; the chip's pixels come from WeatherEngine recomputing
+  // over currentSessionId/dayCount/clock, which are seeded deterministically).
+  DailyWeather? currentWeatherValue;
+
+  @override
+  DailyWeather? get currentWeather => currentWeatherValue;
+
+  @override
+  String? get currentSessionId => 'golden-session';
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
