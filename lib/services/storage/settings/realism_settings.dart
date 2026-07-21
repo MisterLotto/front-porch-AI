@@ -29,12 +29,17 @@ class RealismSettings with SettingsBase {
   bool _nsfwCooldownDefault = false;
   bool _passageOfTimeDefault = true;
   bool _realismOneShotEval = false;
+  bool _weatherEnabled = true;
   List<String> _bannedPhrases = [];
 
   bool get realismDefault => _realismDefault;
   bool get nsfwCooldownDefault => _nsfwCooldownDefault;
   bool get passageOfTimeDefault => _passageOfTimeDefault;
   bool get realismOneShotEval => _realismOneShotEval;
+
+  /// Living Time story weather (living-time-features.md §3). Effective only
+  /// when realism + passage-of-time are on — ChatService gates that.
+  bool get weatherEnabled => _weatherEnabled;
   List<String> get bannedPhrases => List.unmodifiable(_bannedPhrases);
 
   void load() {
@@ -43,6 +48,7 @@ class RealismSettings with SettingsBase {
     _passageOfTimeDefault =
         prefs?.getBool(k('passage_of_time_default')) ?? true;
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
+    _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
 
     final bannedJson = prefs?.getString(k('banned_phrases'));
     if (bannedJson != null) {
@@ -52,6 +58,12 @@ class RealismSettings with SettingsBase {
         _bannedPhrases = [];
       }
     }
+  }
+
+  Future<void> setWeatherEnabled(bool value) async {
+    _weatherEnabled = value;
+    await prefs?.setBool(k('weather_enabled'), value);
+    notify();
   }
 
   Future<void> setRealismOneShotEval(bool value) async {

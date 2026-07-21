@@ -82,6 +82,7 @@ dependencies:
   # sidecar remains as automatic fallback for one release cycle —
   # docs/design/sidecar-retirement.md phase 3).
   sherpa_onnx: ^1.13.4
+  flutter_riverpod: ^3.3.2
 
 dev_dependencies:
   flutter_test:

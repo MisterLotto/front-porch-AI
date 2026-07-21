@@ -182,9 +182,14 @@ the sidebar.
 - **Future (explicitly out of scope now):** auto-background switching.
 
 ### Settings
-"Weather" toggle, default ON when passage-of-time is on; per-chat override
-("always sunny here") stored in the existing session `generation_settings`
-JSON blob — additive, no schema.
+"Weather" toggle (Settings → General → Story Weather), default ON, effective
+only when realism + passage-of-time are on (gated in
+`ChatService.currentWeather`).
+
+**v1 note (shipped 2026-07-21):** the global toggle shipped; the per-chat
+override ("always sunny here", via the session `generation_settings` JSON
+blob) was explicitly deferred — small, additive, and independently shippable
+later. Not a silent deferral: recorded here and in the changelog.
 
 ### Risks
 Needs balance — keep deltas ±1-grade and behind the toggle. Parity audit is

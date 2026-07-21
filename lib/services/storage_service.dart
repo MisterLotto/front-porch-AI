@@ -584,6 +584,9 @@ class StorageService extends ChangeNotifier {
   Future<void> setNsfwCooldownDefault(bool v) =>
       realismSettings.setNsfwCooldownDefault(v);
   bool get passageOfTimeDefault => realismSettings.passageOfTimeDefault;
+  bool get weatherEnabled => realismSettings.weatherEnabled;
+  Future<void> setWeatherEnabled(bool v) =>
+      realismSettings.setWeatherEnabled(v);
   Future<void> setPassageOfTimeDefault(bool v) =>
       realismSettings.setPassageOfTimeDefault(v);
   List<String> get bannedPhrases => realismSettings.bannedPhrases;

@@ -28,6 +28,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' as riverpod;
 
 import 'package:window_manager/window_manager.dart';
 // screen_retriever is a transitive dep of window_manager (used here to validate
@@ -343,7 +344,12 @@ void main(List<String> args) async {
     await windowManager.setPreventClose(true);
   });
   runApp(
-    MultiProvider(
+    // ProviderScope: Riverpod root for new-code state (CLAUDE.md Riverpod
+    // migration; first consumer: Living Time weather). Wraps the existing
+    // Provider tree without touching service init order — legacy providers
+    // below are unchanged.
+    riverpod.ProviderScope(
+      child: MultiProvider(
       providers: [
         Provider<AppDatabase>.value(value: db),
         Provider<bool>.value(value: needsMigration), // migration flag
@@ -743,6 +749,7 @@ void main(List<String> args) async {
         ),
       ],
       child: const MyApp(),
+      ),
     ),
   );
 }

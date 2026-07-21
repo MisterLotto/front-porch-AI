@@ -19,6 +19,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/needs_impact.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
 
 /// Documented decay modifier for the `tickDecay` pipeline.
 /// Name for logs; condition decides applicability; factor the multiplier.
@@ -56,6 +57,13 @@ class NeedsSimulation {
   final bool Function() getNeedsSimEnabled;
   final Map<String, int>? Function()? getCustomDecayRates;
 
+  /// Today's story weather, or null when the feature is off. Optional so
+  /// existing construction sites/tests are untouched; the weather decay
+  /// modifiers below no-op on null. Per-chat shared state → both the 1:1 and
+  /// group ticks see the identical value through [decayedValueFor] (parity
+  /// by construction).
+  final DailyWeather? Function()? getWeather;
+
   Map<String, int> _vector = {};
   String? _pendingCatastrophe;
   String? _lastSceneReason; // from model/Director for better chip reasons on scene deltas
@@ -73,6 +81,7 @@ class NeedsSimulation {
     required this.getEnjoysLowHygiene,
     required this.getNeedsSimEnabled,
     this.getCustomDecayRates,
+    this.getWeather,
   });
 
   Map<String, int> get vector => Map<String, int>.unmodifiable(_vector);
@@ -251,6 +260,30 @@ class NeedsSimulation {
       factor: (key, current, ctx) => 1.25,
     ),
     // (enjoys low hygiene arousal mutation and other buffer-dependent modifiers removed with the buffers)
+    // Living Time weather (living-time-features.md §3) — deliberately tiny.
+    // Comfort: base 2 ×1.25 → rounds to 3/turn in rough weather.
+    // Fun: base 2 ×0.5 → 1/turn on clear days (a plain ×0.75 would round back
+    // to 2 and do nothing). Both vanish when weather is off (getWeather null).
+    (
+      name: 'weather_rough_comfort',
+      condition: (key, vector, ctx) {
+        if (key != 'comfort') return false;
+        final w = ctx.getWeather?.call();
+        if (w == null) return false;
+        return w.condition == WeatherCondition.storm ||
+            w.condition == WeatherCondition.rain ||
+            w.temp == TempBand.hot ||
+            w.temp == TempBand.cold;
+      },
+      factor: (key, current, ctx) => 1.25,
+    ),
+    (
+      name: 'weather_clear_fun',
+      condition: (key, vector, ctx) =>
+          key == 'fun' &&
+          ctx.getWeather?.call()?.condition == WeatherCondition.clear,
+      factor: (key, current, ctx) => 0.5,
+    ),
   ];
 
   void initializeFresh() {

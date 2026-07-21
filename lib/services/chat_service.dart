@@ -80,6 +80,8 @@ import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injec
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
@@ -1525,6 +1527,7 @@ class ChatService extends ChangeNotifier {
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getNeedsSimEnabled: () => _needsSimEnabled,
     getCustomDecayRates: () => _activeDecayRates(),
+    getWeather: () => currentWeather,
   );
 
   late final _relationshipService = RelationshipService(
@@ -1708,6 +1711,30 @@ class ChatService extends ChangeNotifier {
 
   late final _timeInjection = TimeInjection(timeService: _timeService);
 
+  /// Today's story weather, or null when off (living-time-features.md §3).
+  /// Pure recompute from existing state — nothing stored, so save/load and
+  /// group re-entry agree for free. Gate: realism + passage-of-time + the
+  /// global toggle. Consumed by the injection leaf, the needs decay
+  /// modifiers, the sidebar TimeStrip, and the web facade — one source.
+  DailyWeather? get currentWeather {
+    if (!_realismEnabled ||
+        !_timeService.passageOfTimeEnabled ||
+        !_storageService.weatherEnabled) {
+      return null;
+    }
+    final seed = _currentSessionId;
+    if (seed == null) return null;
+    return WeatherEngine.weatherFor(
+      sessionSeed: seed,
+      dayCount: _timeService.dayCount,
+      date: _timeService.clock,
+    );
+  }
+
+  late final _weatherInjection = WeatherInjection(
+    getWeather: () => currentWeather,
+  );
+
   late final _nsfwInjection = NsfwInjection(
     nsfwService: _nsfwService,
     getRealismEnabled: () => _realismEnabled,
@@ -1743,6 +1770,7 @@ class ChatService extends ChangeNotifier {
     relationshipInjection: _relationshipInjection,
     emotionInjection: _emotionInjection,
     timeInjection: _timeInjection,
+    weatherInjection: _weatherInjection,
     behavioralInjection: _behavioralInjection,
     nsfwInjection: _nsfwInjection,
     needsInjection: _needsInjection,

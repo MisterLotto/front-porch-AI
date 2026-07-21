@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/story_calendar_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'weather_chip.dart';
 
 /// THE one scene-time widget: time-of-day emoji + label + story clock,
 /// tappable date (opens the Story Calendar), manual nudge chevrons, and the
@@ -97,6 +98,18 @@ class TimeStrip extends StatelessWidget {
               ),
           ],
         ),
+        // Story weather (Living Time §3) — absent entirely when the feature
+        // is gated off, so the strip is byte-identical for weather-off users.
+        if (chat.currentWeather != null) ...[
+          const SizedBox(height: 4),
+          WeatherChip(
+            inputs: (
+              sessionSeed: chat.currentSessionId ?? '',
+              dayCount: chat.timeService.dayCount,
+              date: chat.timeService.clock,
+            ),
+          ),
+        ],
         const SizedBox(height: 4),
         // Time period dots
         Row(

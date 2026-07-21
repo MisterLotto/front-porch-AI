@@ -183,6 +183,16 @@ class GeneralTab extends StatelessWidget {
                 chatService.setPassageOfTimeEnabled(val);
               },
             ),
+            subToggle(
+              icon: Icons.wb_cloudy_outlined,
+              label: 'Story Weather',
+              blurb:
+                  'Deterministic weather rolls through the story\'s days — '
+                  'felt in the character\'s mood, comfort, and the scene. '
+                  'Needs Passage of Time.',
+              value: storageService.weatherEnabled,
+              onChanged: (val) => storageService.setWeatherEnabled(val),
+            ),
           ],
         ],
       ),

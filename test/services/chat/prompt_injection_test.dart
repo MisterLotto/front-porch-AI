@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injec
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
@@ -632,6 +633,10 @@ void main() {
           timeOfDay: timeOfDay,
           dayCount: dayCount,
         ),
+        // Weather off in composer tests — the fragment contributes '' and the
+        // block shape stays identical to pre-weather expectations. The
+        // weather-on path is covered in weather_engine_test.dart.
+        weatherInjection: WeatherInjection(getWeather: () => null),
         behavioralInjection: createTestBehavioral(relSvc: relSvc),
         nsfwInjection: createTestNsfw(nsfwSvc: nsfwSvc, activeChar: active),
         needsInjection: createTestNeeds(needsSvc: needsSim),

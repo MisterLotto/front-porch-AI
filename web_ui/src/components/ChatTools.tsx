@@ -55,6 +55,15 @@ interface ToolsState {
     dayCount: number;
     weekday: string;
     passageEnabled: boolean;
+    // Living Time story weather (additive — absent on older facades, null
+    // when the feature is off).
+    weather?: {
+      condition: string;
+      temp: string;
+      season: string;
+      label: string;
+      emoji: string;
+    } | null;
     // Story Calendar (additive — absent on older facades).
     clock?: string;
     date?: string;
@@ -375,6 +384,14 @@ export function ChatTools({
               {t.time.clock ? ` · ${t.time.clock}` : ''}
             </span>
           </div>
+          {t.time.weather && (
+            <div className="stat-line">
+              <span title={`${t.time.weather.label} · ${t.time.weather.season}`}>
+                {t.time.weather.emoji} {t.time.weather.label}
+              </span>
+              <span className="muted">{t.time.weather.season}</span>
+            </div>
+          )}
           {t.time.storyClock && (
             <button className="link-btn story-cal-open" onClick={() => setShowCalendar(true)}>
               📅 Story Calendar

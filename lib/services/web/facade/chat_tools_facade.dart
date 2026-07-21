@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/chat/growth_physics.dart';
 import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 
@@ -46,6 +47,7 @@ class ChatToolsFacade {
     final chaos = _chat.chaosModeService;
     final nsfw = _chat.nsfwService;
     final time = _chat.timeService;
+    final weather = _chat.currentWeather;
     final focused = _focusedParticipant(participantId);
     final focusedCard = focused?.card ?? _chat.activeCharacter;
     final focusedIsMember =
@@ -106,6 +108,17 @@ class ChatToolsFacade {
         'dayCount': time.dayCount,
         'weekday': time.narrativeWeekday,
         'passageEnabled': time.passageOfTimeEnabled,
+        // Living Time story weather (living-time-features.md §3) — additive
+        // and nullable; older web bundles simply ignore it.
+        'weather': weather == null
+            ? null
+            : {
+                'condition': weather.condition.name,
+                'temp': weather.temp.name,
+                'season': weather.season,
+                'label': WeatherEngine.label(weather),
+                'emoji': WeatherEngine.emoji(weather.condition),
+              },
         // Story Calendar (story-calendar.md) — additive; older web bundles
         // simply ignore these.
         'clock': time.displayClock,
