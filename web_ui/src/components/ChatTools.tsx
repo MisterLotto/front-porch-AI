@@ -140,6 +140,8 @@ export function ChatTools({
   onCommand?: (cmd: string) => void;
 }) {
   const [t, setT] = useState<ToolsState | null>(null);
+  // Living Time §4: feedback line for "turn this chat into a story".
+  const [storyMsg, setStoryMsg] = useState<string | null>(null);
   const [goal, setGoal] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
 
@@ -245,6 +247,25 @@ export function ChatTools({
         <summary>Our story</summary>
         <div className="tool-body">
           <MilestonesPanel focusedId={focusedId} reloadKey={reloadKey} />
+          <div className="tool-row">
+            <button
+              onClick={async () => {
+                setStoryMsg(null);
+                try {
+                  const r = await api.post<{ id: string; title: string }>(
+                    '/api/chat/tools/to-story',
+                    {},
+                  );
+                  setStoryMsg(`Created "${r.title}" — open Stories to run it.`);
+                } catch {
+                  setStoryMsg('Needs a 1:1 chat with a character.');
+                }
+              }}
+            >
+              📖 Turn this chat into a story
+            </button>
+          </div>
+          {storyMsg && <p className="muted milestones-empty">{storyMsg}</p>}
         </div>
       </details>
 

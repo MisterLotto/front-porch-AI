@@ -251,6 +251,15 @@ Very long chats vs context — the distiller already chunks; verify at 1k+
 messages. Set expectations in UI copy: it produces a *draft* the user can
 regenerate per scene (existing per-scene controls).
 
+**Shipped 2026-07-21.** As designed, with one scope note: the chat-menu
+entry is **1:1 only for now** (multi-protagonist novelization of groups is a
+future effort; the menu item hides in groups). The shared
+`buildChatStoryProject` in `services/story/faithful_mode.dart` is the ONE
+builder behind both the desktop dialog and the web
+POST /api/chat/tools/to-story, and the web entry uses one-tap defaults
+(faithful novella) as its form-factor adaptation — full config remains
+available in the web story setup like any project.
+
 ---
 
 ## 7. Milestones timeline — "Our Story" 🏆 (Effort: M, ~3–4 days)

@@ -30,6 +30,7 @@ import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'package:front_porch_ai/ui/chat_components/overlays/absence_recap_banner.dart';
+import 'package:front_porch_ai/ui/dialogs/chat_to_story_dialog.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -2256,6 +2257,11 @@ class _ChatPageState extends State<ChatPage> {
                           builder: (_) =>
                               ContextViewerDialog(chatService: chatService),
                         );
+                      } else if (value == 'to_story') {
+                        ChatToStoryDialog.show(
+                          context,
+                          chatService: chatService,
+                        );
                       } else if (value == 'fork_group') {
                         _showConvertToGroupPicker(chatService);
                       } else if (value == 'kobold_log') {
@@ -2320,6 +2326,20 @@ class _ChatPageState extends State<ChatPage> {
                           ],
                         ),
                       ),
+                      // Living Time §4: chat → novella. 1:1 only for now
+                      // (multi-protagonist novelization is a future effort).
+                      if (chatService.activeCharacter != null &&
+                          chatService.activeGroup == null)
+                        const PopupMenuItem(
+                          value: 'to_story',
+                          child: Row(
+                            children: [
+                              Icon(Icons.auto_stories_outlined, size: 20),
+                              SizedBox(width: 12),
+                              Text('Turn Into a Story…'),
+                            ],
+                          ),
+                        ),
                       // (The old Character Evolution dialog was replaced by the
                       // Growth panel in the sidebar — Journal & Memory group —
                       // which hosts the toggle, timeline, and all actions.)

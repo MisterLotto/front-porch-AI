@@ -33,6 +33,7 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/time', _time);
     router.get('/api/chat/tools/calendar', _calendar);
     router.get('/api/chat/tools/timeline', _timeline);
+    router.post('/api/chat/tools/to-story', _toStory);
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
     router.post('/api/chat/tools/task', _task);
@@ -138,6 +139,19 @@ class WebChatToolsRoutes {
   Future<shelf.Response> _timeline(shelf.Request request) async {
     final owner = request.url.queryParameters['owner'];
     return JsonResponse.ok(await _facade.timeline(owner));
+  }
+
+  /// Living Time §4: create the pre-configured "this chat as a story" project.
+  Future<shelf.Response> _toStory(shelf.Request request) async {
+    final body = await _json(request);
+    final result = await _facade.toStory(
+      faithful: body['faithful'] as bool? ?? true,
+      length: body['length'] as String? ?? 'Novella',
+      pov: body['pov'] as String? ?? 'Third Person Limited',
+    );
+    return result.containsKey('error')
+        ? JsonResponse.badRequest(result['error'] as String)
+        : JsonResponse.ok(result);
   }
 
   /// Summary actions: regenerate, or set the summary text directly.

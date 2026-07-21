@@ -24,6 +24,9 @@ import 'package:front_porch_ai/services/chat/growth_physics.dart';
 import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/story/faithful_mode.dart';
+import 'package:front_porch_ai/services/story_repository.dart';
+import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 
@@ -33,11 +36,23 @@ import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 /// [StorageService] methods the desktop sidebar calls, so 1:1↔group parity and
 /// the simulation behavior are inherited (never reimplemented here).
 class ChatToolsFacade {
-  ChatToolsFacade(this._chat, this._storage, this._hub);
+  ChatToolsFacade(
+    this._chat,
+    this._storage,
+    this._hub, {
+    StoryRepository? storyRepo,
+    UserPersonaService? personas,
+  }) : _storyRepo = storyRepo,
+       _personas = personas;
 
   final ChatService _chat;
   final StorageService _storage;
   final StreamHub? _hub;
+
+  /// Living Time §4 "turn this chat into a story" deps — optional so hosts
+  /// without Porch Stories wired keep working; the endpoint 400s without.
+  final StoryRepository? _storyRepo;
+  final UserPersonaService? _personas;
 
   /// Full tools snapshot mirroring the desktop sidebar sections. When
   /// [participantId] is given (a cast member's stableGroupId), the per-character
@@ -493,6 +508,35 @@ class ChatToolsFacade {
       ],
       'entries': entries,
     };
+  }
+
+  /// Living Time §4: create the pre-configured "this chat as a story"
+  /// project — same shared builder as the desktop dialog (faithful_mode.dart)
+  /// so the entries cannot drift. Returns {id,title} or an {error}.
+  Future<Map<String, dynamic>> toStory({
+    required bool faithful,
+    required String length,
+    required String pov,
+  }) async {
+    final repo = _storyRepo;
+    final character = _chat.activeCharacter;
+    final sessionId = _chat.currentSessionId;
+    if (repo == null) return {'error': 'stories unavailable'};
+    if (character == null || sessionId == null || _chat.isGroupMode) {
+      return {'error': '1:1 chat with a character required'};
+    }
+    final project = buildChatStoryProject(
+      sessionId: sessionId,
+      character: character,
+      characterId: character.dbId ?? character.name,
+      userName: _personas?.persona.name ?? 'User',
+      recap: _chat.summary,
+      faithful: faithful,
+      length: length,
+      pov: pov,
+    );
+    await repo.saveProject(project);
+    return {'id': project.dbId, 'title': project.title};
   }
 
   /// Manually nudge the scene clock forward/back one period (desktop chevrons).
