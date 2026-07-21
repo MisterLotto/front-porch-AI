@@ -7,6 +7,20 @@ character lives in time — they dream, they notice your absence, weather rolls
 through their days, and your story together becomes a book."*
 
 **Cross-cutting design wins (deliberate, all five):**
+- **Based on Rawhide.** All work branches from and lands on `Rawhide` (new
+  features per the branch workflow).
+- **Riverpod-compliant (maintainer directive, 2026-07-21).** All new code
+  follows the Riverpod patterns from CLAUDE.md: domain leaves stay pure Dart
+  classes with constructor-injected deps (unchanged — they are not state
+  management), but every NEW piece of exposed state and every NEW UI surface
+  goes through Riverpod — `Provider`/`AsyncNotifier` definitions (e.g.
+  `weatherProvider`, `milestoneFeedProvider` as an `AsyncNotifier` over the
+  DB queries, `absenceStateProvider`), UI consumes via `ref.watch`, one-shot
+  actions via `ref.read`, async surfaces render through `AsyncValue`
+  (loading/error states handled, never swallowed). Where a feature must read
+  the legacy Provider-based `ChatService`, it does so through a single
+  documented bridge provider per feature — no new `ChangeNotifier`s, no new
+  `Provider.of` in new widgets.
 - **Zero schema changes.** Weather is recomputed (pure function of existing
   state), milestones ride the existing `journal_cards` table, absence is
   computed from existing timestamps, dreams are ordinary messages + journal
@@ -75,12 +89,43 @@ The character notices you were gone; the app reminds you where you left off.
   a real-world gap ≥ threshold (default 24h) shows a dismissible banner:
   *"It's been 4 days — where we left off:"* + the existing `Sessions.summary`
   recap. Pure read-model.
-- **In-character acknowledgment (opt-in, one-shot):** the first exchange
-  after the gap carries a single injection line telling the model N real days
-  passed and to acknowledge naturally without dwelling. Consumed after one
-  response — never repeats. The *story* clock is untouched; this is
-  meta-awareness, deliberately opt-in (some users find it
-  immersion-breaking).
+- **In-character acknowledgment (opt-in, DEFAULT OFF — maintainer decision
+  2026-07-21):** the first exchange after the gap carries a single injection
+  line telling the model roughly how long passed and to acknowledge naturally
+  without dwelling. Consumed after one response — never repeats. The *story*
+  clock is untouched; this is meta-awareness, deliberately opt-in because a
+  character spontaneously commenting on your real-world absence can read as
+  creepy rather than charming.
+
+### Privacy by design (preempting "this app is tracking me!")
+The honest technical answer, stated up front and enforced by the design:
+
+1. **No new data is collected — at all.** The gap is computed in memory on
+   chat open from the timestamp of the last message, which the local SQLite
+   DB has stored since day one (every chat app on earth stores message
+   times). The feature writes nothing, reads nothing new, and transmits
+   nothing — the app is local-first and offline by default, and being
+   AGPL-open-source, anyone can verify that claim in the code.
+2. **The character knows only what a pen-pal would know.** "Your last letter
+   was dated the 12th" — that is the entire information content. Not app
+   opens, not what you did, not where you were, not usage patterns.
+3. **Coarse granularity, always.** The banner and the injection both use
+   buckets — "a day", "a few days", "about a week", "a long while" — never
+   "4 days, 7 hours, 23 minutes". Precision is what makes time-awareness feel
+   like surveillance; coarseness is what makes it feel like a friend.
+4. **The banner speaks in the app's voice, not the character's.** "It's been
+   a few days — where we left off:" reads like a game's "welcome back"
+   screen: a familiar, obviously-mechanical convenience. Only the opt-in
+   feature puts the awareness in the character's mouth.
+5. **The prompt forbids speculation.** The injection instructs: acknowledge
+   the gap briefly and naturally; do NOT guess what the user was doing, imply
+   monitoring, or bring it up again. A character saying "you were gone a
+   while" is warm; a character saying "where were you?" is not.
+6. **Transparent settings copy.** The toggle's description states exactly the
+   mechanism: *"Uses the time of your last message — already saved with your
+   chat. Nothing new is collected and nothing leaves your device."* A
+   matching FAQ entry goes in the website docs alongside this feature's
+   release notes.
 
 ### Architecture
 - Gap computation on session load in `chat_service_session_load.dart` from
