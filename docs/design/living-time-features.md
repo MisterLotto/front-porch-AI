@@ -270,6 +270,52 @@ starts recording from feature-on, which is honest and cheap.
 
 ---
 
+## 6. Ambitions — long-term goals 🎯 (Effort: M–L, build LAST)
+
+The current objectives system is short-sighted by construction: propose →
+task-gen → background completion, all resolved within a scene. Ambitions add
+the missing **future axis** — the five features above are all past/present.
+
+### Design
+- **Two tiers, no parallel system.** Ambitions are long-horizon ends ("open
+  my own bakery", "win back her trust"); the existing objectives become the
+  *means* and keep their proposal/dedup/task-gen/completion machinery
+  unchanged. An objective may carry a parent ambition.
+- **Sources:** card-authored (a `FrontPorchExtensions` field creators can
+  seed), character-proposed during play (rarer, gated, like objectives), and
+  user-editable.
+- **Progress accrues, never "completes" in one check.** Slow ticks from
+  completed objectives, salient events, and Chance Time — with waypoints
+  (25/50/75%) that feed the milestones timeline and the journal salience
+  kick. Achieving or abandoning an ambition plants a **Growth Ring** — that
+  is an identity change, which is exactly what EvolutionService models.
+- **No new LLM calls:** the "did this advance an ambition?" question rides
+  the existing objective-completion eval.
+- **Session-scoping resolved cleanly** (unlike a soul.md-style import, which
+  was considered and rejected 2026-07-21): ambition *definitions* are
+  identity and live on the card; ambition *progress* is story state and is
+  strictly per-chat. Same character, fresh chat = same dreams, new journey.
+- **Integrations:** AFK/dynamic responses gain direction (off-screen time
+  spent working toward the ambition); dreams seed from ambitions alongside
+  fixations (aspiration/anxiety dreams); the recap can mention the arc.
+  Fixations stay distinct — short-lived emotional obsessions vs. stable
+  long-horizon ends.
+
+### Storage
+Prefer zero-schema like everything else in this release: progress as journal
+cards (`metadata.kind = 'ambition'`) or session JSON; whether the objectives
+table can carry a parent/tier without a column must be verified at build
+time. A schema change requires explicit maintainer approval per CLAUDE.md.
+
+### Why build last
+It feeds on dreams + milestones (both must exist), touches the Realism eval
+pipeline (mandatory 1:1/group parity audit), and its integration points
+become concrete rather than speculative once the rest has landed. It also
+completes the release story: past (milestones), present (weather, absence),
+inner life (dreams), future (ambitions), keepsake (novella).
+
+---
+
 ## Suggested build order & release plan
 
 | # | Feature | Effort | Depends on |
@@ -279,8 +325,9 @@ starts recording from feature-on, which is honest and cheap.
 | 3 | Dreams | S–M | Journal (exists); weather line enriches dream prompts |
 | 4 | Milestones timeline | M | Dreams adds `kind='dream'` cards to the feed |
 | 5 | Novella export | M | — (independent; biggest UX surface) |
+| 6 | Ambitions | M–L | Dreams + milestones (integration points); builds last |
 
-≈ 3–4 weeks of focused work including web parity, tests, and Rawhide.md
+≈ 4–5 weeks of focused work including web parity, tests, and Rawhide.md
 copy. Each feature is independently shippable — nothing blocks on anything
 else, so nightly users get value incrementally.
 
