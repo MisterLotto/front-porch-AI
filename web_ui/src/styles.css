@@ -675,6 +675,13 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
   padding-top: calc(16px + env(safe-area-inset-top));
   padding-bottom: calc(16px + env(safe-area-inset-bottom));
 }
+.settings-drawer {
+  width: min(440px, 92%); height: 100%; background: var(--surface);
+  border-left: 1px solid var(--border); padding: 16px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
 .drawer-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; }
 .new-chat { width: 100%; }
 .conv-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -1180,6 +1187,33 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 }
 .color-preview { padding: 12px; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }
 @media (max-width: 768px) { .color-rows { grid-template-columns: 1fr; } }
+
+/* ── Chat theme settings (per-chat theme presets + customization) ────────── */
+.theme-settings { margin-bottom: 16px; }
+.theme-presets {
+  display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.theme-preset-card {
+  flex-shrink: 0; width: 72px; display: flex; flex-direction: column;
+  align-items: center; gap: 4px; padding: 10px 6px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; color: var(--text);
+  font-size: 0.75rem; text-align: center;
+}
+.theme-preset-card:hover { border-color: var(--accent); }
+.theme-preset-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.theme-preset-swatches { display: flex; gap: 3px; }
+.theme-swatch { width: 16px; height: 16px; border-radius: 3px; display: inline-block; }
+.theme-preset-none { font-size: 1.2rem; line-height: 16px; color: var(--muted); }
+.theme-preset-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.theme-preset-style { font-size: 0.65rem; color: var(--muted); }
+.theme-select {
+  width: 100%; padding: 8px 10px; margin: 4px 0 12px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 0.85rem;
+}
+.theme-actions { display: flex; gap: 8px; margin-top: 12px; }
 
 /* ── Image-gen settings two-up rows ────────────────────────────────────── */
 .img-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }

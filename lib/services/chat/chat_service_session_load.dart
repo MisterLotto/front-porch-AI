@@ -184,17 +184,9 @@ extension ChatServiceSessionLoad on ChatService {
     _enjoysLowHygiene =
         _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
 
-    // Load per-chat theme overrides from the session's raw JSON column.
+    // Load per-chat theme overrides.
     try {
-      final themeRows = await _db
-          .customSelect(
-            'SELECT theme_overrides FROM sessions WHERE id = ?',
-            variables: [drift.Variable(_currentSessionId)],
-          )
-          .get();
-      final themeJson = themeRows.isNotEmpty
-          ? themeRows.first.read<String?>('theme_overrides')
-          : null;
+      final themeJson = await _db.getThemeOverrides(_currentSessionId!);
       _sessionThemeOverrides =
           ChatThemeOverrides.fromJsonString(themeJson);
     } catch (_) {
@@ -588,17 +580,9 @@ extension ChatServiceSessionLoad on ChatService {
         _sessionGenSettings = ChatGenerationSettings();
       }
 
-      // Per-chat theme overrides — loaded via raw SQL to avoid build_runner.
+      // Per-chat theme overrides.
       try {
-        final themeRows = await _db
-            .customSelect(
-              'SELECT theme_overrides FROM sessions WHERE id = ?',
-              variables: [drift.Variable(sessionId)],
-            )
-            .get();
-        final themeJson = themeRows.isNotEmpty
-            ? themeRows.first.read<String?>('theme_overrides')
-            : null;
+        final themeJson = await _db.getThemeOverrides(sessionId);
         _sessionThemeOverrides =
             ChatThemeOverrides.fromJsonString(themeJson);
       } catch (_) {

@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -109,13 +108,33 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
       'waifu_beach': 'Waifu Beach',
     };
     const borderStyles = [
-      'scalloped', 'dualLine', 'grid', 'wavy', 'shadow',
-      'vine', 'wave', 'glitch', 'floral', 'gear', 'greekKey',
+      'scalloped',
+      'dualLine',
+      'grid',
+      'wavy',
+      'shadow',
+      'vine',
+      'wave',
+      'glitch',
+      'floral',
+      'gear',
+      'greekKey',
     ];
     const fontOptions = [
-      'serif', 'sans-serif', 'monospace', 'Georgia', 'Times New Roman',
-      'Arial', 'Helvetica', 'Courier New', 'Verdana', 'Roboto',
-      'Open Sans', 'Lato', 'Merriweather', 'Playfair Display',
+      'serif',
+      'sans-serif',
+      'monospace',
+      'Georgia',
+      'Times New Roman',
+      'Arial',
+      'Helvetica',
+      'Courier New',
+      'Verdana',
+      'Roboto',
+      'Open Sans',
+      'Lato',
+      'Merriweather',
+      'Playfair Display',
       'Source Code Pro',
     ];
 
@@ -123,7 +142,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-        const Divider(color: Colors.white10),
+        Divider(color: AppColors.borderOf(context)),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -143,7 +162,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
             child: Text(
               '${activePreset?.displayName ?? 'Theme'} (Customized)',
               style: TextStyle(
-                color: Colors.amber.shade300,
+                color: AppColors.porchAmberOf(context),
                 fontSize: 11,
                 fontStyle: FontStyle.italic,
               ),
@@ -152,13 +171,19 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
         Row(
           children: [
             IconButton(
-              icon: const Icon(Icons.chevron_left, color: Colors.white54),
+              icon: Icon(
+                Icons.chevron_left,
+                color: AppColors.textTertiary(context),
+              ),
               constraints: const BoxConstraints(minWidth: 28, minHeight: 72),
               padding: EdgeInsets.zero,
               onPressed: () {
                 final offset = _themeScrollController.offset;
                 _themeScrollController.animateTo(
-                  (offset - 144).clamp(0, _themeScrollController.position.maxScrollExtent),
+                  (offset - 144).clamp(
+                    0,
+                    _themeScrollController.position.maxScrollExtent,
+                  ),
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
                 );
@@ -173,108 +198,134 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                   itemCount: ChatThemePreset.presets.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
-              if (index == 0) {
-                // "None" card
-                final isSelected = !_themeOverrides.hasTheme;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _themeOverrides = ChatThemeOverrides();
-                    });
-                    _saveTheme();
+                    if (index == 0) {
+                      // "None" card
+                      final isSelected = !_themeOverrides.hasTheme;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _themeOverrides = ChatThemeOverrides();
+                          });
+                          _saveTheme();
+                        },
+                        child: Container(
+                          width: 64,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.white.withValues(alpha: 0.15)
+                                : const Color(0xFF374151),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.formMasterAccent
+                                  : Colors.white12,
+                            ),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'None',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    final preset = ChatThemePreset.presets[index - 1];
+                    final isSelected = _themeOverrides.themeId == preset.id;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _themeOverrides = ChatThemeOverrides(
+                            themeId: preset.id,
+                          );
+                        });
+                        _saveTheme();
+                      },
+                      child: Container(
+                        width: 64,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF374151),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppColors.formMasterAccent
+                                : Colors.white12,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: preset.defaultUserBubbleColor,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: preset.defaultAiBubbleColor,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              preset.displayName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              preset.defaultBorderStyle,
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
                   },
-                  child: Container(
-                    width: 64,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.white.withValues(alpha: 0.15)
-                          : const Color(0xFF374151),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isSelected ? AppColors.formMasterAccent : Colors.white12,
-                      ),
-                    ),
-                    child: const Center(
-                      child: Text('None', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    ),
-                  ),
-                );
-              }
-              final preset = ChatThemePreset.presets[index - 1];
-              final isSelected = _themeOverrides.themeId == preset.id;
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _themeOverrides = ChatThemeOverrides(themeId: preset.id);
-                  });
-                  _saveTheme();
-                },
-                child: Container(
-                  width: 64,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF374151),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected ? AppColors.formMasterAccent : Colors.white12,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 16, height: 16,
-                            decoration: BoxDecoration(
-                              color: preset.defaultUserBubbleColor,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          Container(
-                            width: 16, height: 16,
-                            decoration: BoxDecoration(
-                              color: preset.defaultAiBubbleColor,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        preset.displayName,
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        preset.defaultBorderStyle,
-                        style: const TextStyle(color: Colors.white38, fontSize: 8),
-                      ),
-                    ],
-                  ),
                 ),
-              );
-            },
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right, color: Colors.white54),
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 72),
-            padding: EdgeInsets.zero,
-            onPressed: () {
-              final offset = _themeScrollController.offset;
-              _themeScrollController.animateTo(
-                (offset + 144).clamp(0, _themeScrollController.position.maxScrollExtent),
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-              );
-            },
-          ),
-        ],
-      ),
+            IconButton(
+              icon: Icon(
+                Icons.chevron_right,
+                color: AppColors.textTertiary(context),
+              ),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 72),
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                final offset = _themeScrollController.offset;
+                _themeScrollController.animateTo(
+                  (offset + 144).clamp(
+                    0,
+                    _themeScrollController.position.maxScrollExtent,
+                  ),
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                );
+              },
+            ),
+          ],
+        ),
 
         if (activePreset != null) ...[
           const SizedBox(height: 16),
@@ -283,7 +334,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           Row(
             children: [
               const SizedBox(width: 8),
-              const Text('Font', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const Text(
+                'Font',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -293,13 +347,19 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _themeOverrides.fontFamily ?? activePreset.defaultFontFamily,
+                    value:
+                        _themeOverrides.fontFamily ??
+                        activePreset.defaultFontFamily,
                     dropdownColor: const Color(0xFF374151),
                     style: const TextStyle(color: Colors.white, fontSize: 12),
-                    items: fontOptions.map((f) => DropdownMenuItem(
-                      value: f,
-                      child: Text(f, style: TextStyle(fontFamily: f)),
-                    )).toList(),
+                    items: fontOptions
+                        .map(
+                          (f) => DropdownMenuItem(
+                            value: f,
+                            child: Text(f, style: TextStyle(fontFamily: f)),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       if (val != null) {
                         setState(() {
@@ -317,7 +377,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
               ),
               if (_themeOverrides.fontFamily != null)
                 IconButton(
-                  icon: const Icon(Icons.restart_alt, size: 14, color: Colors.amber),
+                  icon: Icon(
+                    Icons.restart_alt,
+                    size: 14,
+                    color: AppColors.porchAmberOf(context),
+                  ),
                   onPressed: () {
                     setState(() => _themeOverrides.fontFamily = null);
                     _saveTheme();
@@ -393,7 +457,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           Row(
             children: [
               const SizedBox(width: 8),
-              const Text('Background', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const Text(
+                'Background',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -403,13 +470,22 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _themeOverrides.backgroundKey ?? activePreset.defaultBackgroundKey,
+                    value:
+                        _themeOverrides.backgroundKey ??
+                        activePreset.defaultBackgroundKey,
                     dropdownColor: const Color(0xFF374151),
                     style: const TextStyle(color: Colors.white, fontSize: 12),
-                    items: bgAssets.entries.map((e) => DropdownMenuItem(
-                      value: e.key,
-                      child: Text(e.value, style: const TextStyle(fontSize: 12)),
-                    )).toList(),
+                    items: bgAssets.entries
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(
+                              e.value,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       if (val != null) {
                         setState(() {
@@ -427,7 +503,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
               ),
               if (_themeOverrides.backgroundKey != null)
                 IconButton(
-                  icon: const Icon(Icons.restart_alt, size: 14, color: Colors.amber),
+                  icon: Icon(
+                    Icons.restart_alt,
+                    size: 14,
+                    color: AppColors.porchAmberOf(context),
+                  ),
                   onPressed: () {
                     setState(() => _themeOverrides.backgroundKey = null);
                     _saveTheme();
@@ -443,7 +523,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           Row(
             children: [
               const SizedBox(width: 8),
-              const Text('Border', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const Text(
+                'Border',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -453,13 +536,22 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _themeOverrides.borderStyle ?? activePreset.defaultBorderStyle,
+                    value:
+                        _themeOverrides.borderStyle ??
+                        activePreset.defaultBorderStyle,
                     dropdownColor: const Color(0xFF374151),
                     style: const TextStyle(color: Colors.white, fontSize: 12),
-                    items: borderStyles.map((b) => DropdownMenuItem(
-                      value: b,
-                      child: Text(b, style: const TextStyle(fontSize: 12)),
-                    )).toList(),
+                    items: borderStyles
+                        .map(
+                          (b) => DropdownMenuItem(
+                            value: b,
+                            child: Text(
+                              b,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       if (val != null) {
                         setState(() {
@@ -477,7 +569,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
               ),
               if (_themeOverrides.borderStyle != null)
                 IconButton(
-                  icon: const Icon(Icons.restart_alt, size: 14, color: Colors.amber),
+                  icon: Icon(
+                    Icons.restart_alt,
+                    size: 14,
+                    color: AppColors.porchAmberOf(context),
+                  ),
                   onPressed: () {
                     setState(() => _themeOverrides.borderStyle = null);
                     _saveTheme();
@@ -493,7 +589,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           _buildColorRow(
             label: 'Border',
             hexValue: _themeOverrides.borderColor,
-            defaultColor: activePreset.defaultBorderColor ?? activePreset.defaultUserTextColor,
+            defaultColor:
+                activePreset.defaultBorderColor ??
+                activePreset.defaultUserTextColor,
             onChanged: (hex) {
               setState(() => _themeOverrides.borderColor = hex);
               _saveTheme();
@@ -516,8 +614,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
     required VoidCallback onReset,
   }) {
     final currentColor = hexValue != null
-        ? ChatThemeOverrides.fromJsonString('{"userBubbleColor":"$hexValue"}')
-            .resolvedUserBubbleColor(ChatThemePreset.presets.first)
+        ? ChatThemeOverrides.fromJsonString(
+            '{"userBubbleColor":"$hexValue"}',
+          ).resolvedUserBubbleColor(ChatThemePreset.presets.first)
         : defaultColor;
 
     return Padding(
@@ -527,29 +626,39 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () {
-              showColorPicker(
-                context,
-                currentColor,
-                (picked) {
-                  final hex = picked.toARGB32()
-                      .toRadixString(16).padLeft(8, '0')
-                      .substring(2).toUpperCase();
-                  onChanged(hex);
-                },
-              );
+              showColorPicker(context, currentColor, (picked) {
+                final hex = picked
+                    .toARGB32()
+                    .toRadixString(16)
+                    .padLeft(8, '0')
+                    .substring(2)
+                    .toUpperCase();
+                onChanged(hex);
+              });
             },
             child: Container(
-              width: 22, height: 22,
+              width: 22,
+              height: 22,
               decoration: BoxDecoration(
                 color: currentColor,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.white24),
               ),
-              child: const Icon(Icons.colorize, size: 14, color: Colors.white54),
+              child: Icon(
+                Icons.colorize,
+                size: 14,
+                color: AppColors.textTertiary(context),
+              ),
             ),
           ),
           const SizedBox(width: 8),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 13,
+            ),
+          ),
           const Spacer(),
           Text(
             _colorToHex(currentColor),
@@ -557,7 +666,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.restart_alt, size: 14, color: Colors.amber),
+            icon: Icon(
+              Icons.restart_alt,
+              size: 14,
+              color: AppColors.porchAmberOf(context),
+            ),
             onPressed: onReset,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -610,17 +723,21 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.15),
+                          color: AppColors.porchAmberOf(
+                            context,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.4),
+                            color: AppColors.porchAmberOf(
+                              context,
+                            ).withValues(alpha: 0.4),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Custom',
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.amber,
+                            color: AppColors.porchAmberOf(context),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -635,9 +752,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       Tooltip(
                         message: 'Reset to global defaults',
                         child: IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.restart_alt,
-                            color: Colors.amber,
+                            color: AppColors.porchAmberOf(context),
                             size: 20,
                           ),
                           onPressed: () {
@@ -665,7 +782,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 child: Text(
                   'This chat has custom generation settings that override global defaults.',
                   style: TextStyle(
-                    color: Colors.amber.withValues(alpha: 0.7),
+                    color: AppColors.porchAmberOf(
+                      context,
+                    ).withValues(alpha: 0.7),
                     fontSize: 11,
                   ),
                 ),
@@ -771,11 +890,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           ),
                         ),
                       const SizedBox(height: 8),
-                      const Divider(color: Colors.white10),
+                      Divider(color: AppColors.borderOf(context)),
                       const SizedBox(height: 8),
                     ],
-
-
 
                     // Generation
                     const Text(
@@ -1106,7 +1223,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                               ],
                             ),
                           ),
-                          const Divider(height: 1, color: Colors.white10),
+                          Divider(
+                            height: 1,
+                            color: AppColors.borderOf(context),
+                          ),
                           ..._gen
                               .resolveStopSequences(storage)
                               .map(
@@ -1216,7 +1336,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           child: Text(
                             '${_gen.resolveBannedPhrases(storage).length} phrase${_gen.resolveBannedPhrases(storage).length == 1 ? '' : 's'} banned',
                             style: TextStyle(
-                              color: Colors.amber.shade300,
+                              color: AppColors.porchAmberOf(context),
                               fontSize: 11,
                             ),
                           ),
