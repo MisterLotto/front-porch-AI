@@ -69,6 +69,27 @@ class JournalPhysics {
   /// Max cold cards resurfaced per turn.
   static const int kColdRetrievalLimit = 3;
 
+  // ── Expand-memory (two-tier memory: the card is the feeling, the
+  //    receipts hold the exact words — "remember our wedding vows?") ──
+
+  /// Minimum query-similarity for a card to expand into its verbatim source
+  /// lines. Deliberately stricter than resurfacing: verbatim costs tokens,
+  /// so only a card the conversation is clearly REACHING FOR expands.
+  static const double kMinExpandSimilarity = 0.45;
+
+  /// At most one card expands per turn (the moment being asked about).
+  static const int kMaxExpandedCards = 1;
+
+  /// Per-source-message and total character budgets for the excerpt.
+  static const int kExpandPerMessageChars = 400;
+  static const int kExpandTotalChars = 1000;
+
+  /// Only receipts at least this many messages old expand — younger lines
+  /// are still in (or near) the visible transcript, and quoting them back
+  /// would duplicate context. In the thousand-message chats this feature
+  /// exists for, the wedding is ancient history.
+  static const int kExpandMinAgeMessages = 30;
+
   /// Engine-stamped deltas at or above these magnitudes count as a
   /// significant event and trigger an immediate maintenance pass.
   static const int kEventBondSwing = 12;

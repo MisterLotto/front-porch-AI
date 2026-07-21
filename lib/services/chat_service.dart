@@ -2350,6 +2350,10 @@ class ChatService extends ChangeNotifier {
   late final _journalInjection = JournalInjection(
     store: _journalStore,
     getSessionId: () => _currentSessionId,
+    // Two-tier memory: receipts → live verbatim lines (positions are the
+    // stable indices cards already store).
+    getMessageAt: (p) =>
+        p >= 0 && p < _messages.length ? _messages[p] : null,
     // Same scalar EmotionInjection reads — in group non-obs the pre-gen
     // load-into-scalars dance has set it to the upcoming speaker's emotion
     // by assembly time, so mood-congruent recall is per-speaker (parity).

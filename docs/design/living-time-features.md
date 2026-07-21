@@ -381,6 +381,40 @@ inner life (dreams), future (ambitions), keepsake (novella).
 
 ---
 
+## 8. Two-tier memory — expand-memory + RAG dedupe 🧠 (shipped 2026-07-21)
+
+Born from the maintainer's "is RAG even needed anymore?" audit: the Journal
+and RAG remember different KINDS of things (lossy emotional distillation vs
+lossless verbatim), so instead of deleting one, the seam was tightened into
+a two-tier memory — a semantic index (cards) over an episodic store (the
+transcript).
+
+**Expand-memory** — the wedding-vows scenario: in a thousand-message chat,
+"remember our wedding vows?" makes the character recall the EXACT words plus
+how it felt. Mechanism: `buildJournalBlock` computes ONE query embedding
+(shared with cold-card resurfacing), scores every injected card against it,
+and the single best card above `kMinExpandSimilarity` (stricter than the
+resurfacing floor — verbatim costs tokens) expands: its receipts (the
+positions cards already store) are fetched from the live message list via a
+`getMessageAt` callback, trimmed (`kExpandPerMessageChars`/`kExpandTotalChars`),
+and quoted under the block as "the exact words from that moment". Gates:
+embeddings present (same floor as resurfacing — no-RAG installs simply never
+expand), similarity threshold, and an age gate (`kExpandMinAgeMessages`) so
+lines still in the visible transcript are never quoted back. Per-speaker in
+groups by construction (the block already is).
+
+**RAG dedupe** — retrieval already excluded in-context messages
+(`inContextStart`); now it also excludes spans overlapping the positions the
+journal expanded this turn (`RetrievedMemory.excludingPositions`, pure,
+current-session only — cross-session sources use a different position
+space). The exact lines ride the prompt once, never twice.
+
+Timeline-integrity note: expanded verbatim comes from receipts, and the
+regen-invalidation fix (2026-07-21) deletes cards whose receipts were
+rewritten — so expansion can never quote a discarded timeline.
+
+---
+
 ## Suggested build order & release plan
 
 | # | Feature | Effort | Depends on |

@@ -41,6 +41,27 @@ class RetrievedMemory {
     required this.positionEnd,
     required this.score,
   });
+
+  /// Two-tier memory dedupe (living-time-features.md §8): drop retrievals
+  /// whose span overlaps positions the Journal already expanded verbatim
+  /// this turn — the exact lines are in the prompt once; twice is budget
+  /// spent teaching the model to repeat itself. Pure; current-session only
+  /// (cross-session sources use a different position space).
+  static List<RetrievedMemory> excludingPositions(
+    List<RetrievedMemory> memories,
+    Set<int> positions, {
+    required String currentSessionId,
+  }) {
+    if (positions.isEmpty) return memories;
+    return [
+      for (final m in memories)
+        if (m.sessionId != currentSessionId ||
+            !positions.any(
+              (p) => p >= m.positionStart && p <= m.positionEnd,
+            ))
+          m,
+    ];
+  }
 }
 
 /// Orchestrates RAG memory: embedding message windows and retrieving relevant

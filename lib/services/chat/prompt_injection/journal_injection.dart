@@ -16,9 +16,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import '../journal_physics.dart';
 import '../journal_store.dart';
@@ -59,12 +62,19 @@ class JournalInjection {
   final int Function() getCurrentStoryDay;
   final DateTime Function() getStoryStartDate;
 
+  /// Verbatim lookup behind a card's receipts (two-tier memory): position →
+  /// the live in-memory message, or null when out of range. Wired to
+  /// ChatService's message list; positions are the same stable receipt
+  /// indices cards already store.
+  final ChatMessage? Function(int position)? getMessageAt;
+
   JournalInjection({
     required this.store,
     required this.getSessionId,
     required this.getCurrentEmotion,
     required this.getCurrentStoryDay,
     required this.getStoryStartDate,
+    this.getMessageAt,
   });
 
   /// ~600 tokens at the shared chars/4 heuristic (same estimator the
@@ -74,19 +84,31 @@ class JournalInjection {
   /// [queryText] is the recent-turn text used to resurface cold cards
   /// semantically (same last-3-messages recipe as RAG retrieval); empty
   /// skips cold retrieval entirely.
-  Future<String> buildJournalBlock({
+  Future<({String text, Set<int> expandedPositions})> buildJournalBlock({
     required String characterId,
     required String characterName,
     required String userName,
     String queryText = '',
+    int messageCount = 0,
   }) async {
+    const empty = (text: '', expandedPositions: <int>{});
     final sessionId = getSessionId();
-    if (sessionId == null || characterId.isEmpty) return '';
+    if (sessionId == null || characterId.isEmpty) return empty;
 
     final cards = await store.cardsFor(sessionId, characterId);
-    if (cards.isEmpty) return '';
+    if (cards.isEmpty) return empty;
 
     final currentEmotion = getCurrentEmotion();
+
+    // ONE query embedding per build, shared by cold-card resurfacing and
+    // expand-memory scoring (they ask the same "what is the conversation
+    // reaching for?" question).
+    List<double>? queryVector;
+    final embed = store.embedText;
+    if (embed != null && queryText.trim().isNotEmpty) {
+      queryVector = await embed(queryText);
+      if (queryVector != null && queryVector.isEmpty) queryVector = null;
+    }
 
     // Hot set: pinned first (store order), then warm cards by heat + mood
     // boost, newest first on ties — so when the budget bites, the character
@@ -104,21 +126,34 @@ class JournalInjection {
 
     final resurfaced = await _retrieveColdCards(
       cards.where((c) => !JournalPhysics.isHot(c)).toList(),
-      queryText,
+      queryVector,
       currentEmotion,
     );
 
+    final injected = [...pinned, ...hot, ...resurfaced];
     final lines = <String>[];
     var usedChars = 0;
     const budgetChars = kHotSetTokenBudget * 4;
-    for (final card in [...pinned, ...hot, ...resurfaced]) {
+    for (final card in injected) {
       final line =
           '- (${_label(card, userName)}${_when(card)}) ${card.content}';
       if (usedChars + line.length > budgetChars && lines.isNotEmpty) break;
       usedChars += line.length;
       lines.add(line);
     }
-    if (lines.isEmpty) return '';
+    if (lines.isEmpty) return empty;
+
+    // Expand-memory (two-tier memory, living-time-features.md §8): when the
+    // conversation clearly reaches for ONE remembered moment ("remember our
+    // wedding vows?"), the card supplies the feeling and its receipts supply
+    // the exact words. Strictly gated: needs embeddings (same floor as cold
+    // resurfacing), a similarity above the expand threshold, and receipts
+    // old enough to be out of the visible transcript.
+    final (excerpt, expandedPositions) = _expandBestCard(
+      injected,
+      queryVector,
+      messageCount,
+    );
 
     // Role frame (docs/design/prompt-state-injection.md §6): the journal is
     // the FEELINGS channel — when a card covers the same moment as the recap
@@ -127,12 +162,93 @@ class JournalInjection {
     // trailing newline), so like memoriesBlock it carries its own separator;
     // the "not new messages" clause is the anti-echo guard for sitting near
     // the generation point.
-    return "\n[$characterName's private journal — personal memories from "
+    final text =
+        "\n[$characterName's private journal — personal memories from "
         'this chat, in their own words. Not new messages, and nothing here '
         'needs a reply. These shape how they feel and behave, and when they '
         'cover the same moments as the story recap or the lines above, the '
         'feelings here are the truer guide:\n'
-        '${lines.join('\n')}\n]\n';
+        '${lines.join('\n')}'
+        '$excerpt\n]\n';
+    return (text: text, expandedPositions: expandedPositions);
+  }
+
+  /// Top-1 card the query is reaching for, expanded into trimmed verbatim
+  /// source lines. Returns ('', {}) whenever any gate fails — the block is
+  /// then byte-identical to the pre-expansion format.
+  (String, Set<int>) _expandBestCard(
+    List<JournalMemoryData> injected,
+    List<double>? queryVector,
+    int messageCount,
+  ) {
+    const none = ('', <int>{});
+    final lookup = getMessageAt;
+    if (queryVector == null || lookup == null || messageCount <= 0) {
+      return none;
+    }
+
+    JournalMemoryData? best;
+    var bestScore = JournalPhysics.kMinExpandSimilarity;
+    for (final card in injected) {
+      if (card.embedding == null || card.sourceMessageIds == null) continue;
+      final vector = MemoryService.bytesToVector(
+        card.embedding!,
+        card.dimensions,
+      );
+      if (vector == null) continue;
+      final similarity = MemoryService.cosineSimilarity(queryVector, vector);
+      if (similarity >= bestScore) {
+        bestScore = similarity;
+        best = card;
+      }
+    }
+    if (best == null) return none;
+
+    List<int> positions;
+    try {
+      positions = (jsonDecode(best.sourceMessageIds!) as List)
+          .whereType<num>()
+          .map((n) => n.toInt())
+          .toList();
+    } catch (_) {
+      return none;
+    }
+    // Age gate: younger receipts are still in (or near) the transcript.
+    positions = positions
+        .where((p) => p < messageCount - JournalPhysics.kExpandMinAgeMessages)
+        .toList();
+    if (positions.isEmpty) return none;
+
+    final quoted = <String>[];
+    final used = <int>{};
+    var chars = 0;
+    for (final p in positions) {
+      final msg = lookup(p);
+      if (msg == null) continue;
+      var text = msg.displayText.trim();
+      if (text.isEmpty) continue;
+      if (text.length > JournalPhysics.kExpandPerMessageChars) {
+        text = '${text.substring(0, JournalPhysics.kExpandPerMessageChars)}…';
+      }
+      final line = '  «${msg.sender}: $text»';
+      if (chars + line.length > JournalPhysics.kExpandTotalChars &&
+          quoted.isNotEmpty) {
+        break;
+      }
+      chars += line.length;
+      quoted.add(line);
+      used.add(p);
+    }
+    if (quoted.isEmpty) return none;
+    debugPrint(
+      '[Journal] 🔍 Expanded "${best.content.substring(0, best.content.length.clamp(0, 40))}…" '
+      '(${used.length} verbatim line(s), similarity ${bestScore.toStringAsFixed(2)})',
+    );
+    return (
+      '\nOne memory stands out sharply right now — they recall the exact '
+          'words from that moment:\n${quoted.join('\n')}',
+      used,
+    );
   }
 
   /// Cold cards come back when the conversation drifts near them: cosine
@@ -141,18 +257,12 @@ class JournalInjection {
   /// re-warmed into the hot set with their access recorded (design §4.4).
   Future<List<JournalMemoryData>> _retrieveColdCards(
     List<JournalMemoryData> cold,
-    String queryText,
+    List<double>? query,
     String currentEmotion,
   ) async {
-    final embed = store.embedText;
-    if (cold.isEmpty || queryText.trim().isEmpty || embed == null) {
-      return const [];
-    }
+    if (cold.isEmpty || query == null) return const [];
     final withVectors = cold.where((c) => c.embedding != null).toList();
     if (withVectors.isEmpty) return const [];
-
-    final query = await embed(queryText);
-    if (query == null || query.isEmpty) return const [];
 
     final scored = <(JournalMemoryData, double)>[];
     for (final card in withVectors) {

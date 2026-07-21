@@ -359,10 +359,14 @@ extension ChatServiceGeneration on ChatService {
       // journal). Built HERE, before the fixed-content token count below, so
       // history budgeting accounts for it (async, unlike the sync builders).
       String journalBlock = '';
+      // Two-tier memory (living-time-features.md §8): positions the journal
+      // expanded verbatim this turn — RAG retrieval below excludes them so
+      // the exact lines never ride the prompt twice.
+      var expandedJournalPositions = const <int>{};
       if (_storageService.memorySettings.journalEnabled &&
           guestSpeaker == null &&
           _currentSessionId != null) {
-        journalBlock = await _journalInjection.buildJournalBlock(
+        final journal = await _journalInjection.buildJournalBlock(
           characterId: _getCharacterIdFromCard(speakingCharacter),
           characterName: speakingCharacter.name,
           userName: userName,
@@ -373,7 +377,10 @@ extension ChatServiceGeneration on ChatService {
               .take(3)
               .map((m) => '${m.sender}: ${m.displayText}')
               .join('\n'),
+          messageCount: _messages.length,
         );
+        journalBlock = journal.text;
+        expandedJournalPositions = journal.expandedPositions;
       }
 
       // ── Continue mode: remove the last message from history ──
@@ -729,7 +736,7 @@ extension ChatServiceGeneration on ChatService {
           // reach. Applies identically to 1:1 and group (same retrieve() path).
           final selfSourceId = sourceIds.isNotEmpty ? sourceIds.first : '';
 
-          final memories = await _memoryService!.retrieve(
+          final rawMemories = await _memoryService!.retrieve(
             queryText: queryMessages,
             sourceCharacterIds: sourceIds,
             currentSessionId: _currentSessionId ?? '',
@@ -741,6 +748,19 @@ extension ChatServiceGeneration on ChatService {
                 ? const {}
                 : {selfSourceId},
           );
+          // Two-tier memory dedupe: the journal expanded these exact lines
+          // above — never pay for them twice.
+          final memories = RetrievedMemory.excludingPositions(
+            rawMemories,
+            expandedJournalPositions,
+            currentSessionId: _currentSessionId ?? '',
+          );
+          if (memories.length < rawMemories.length) {
+            debugPrint(
+              '[RAG:Chat] Deduped ${rawMemories.length - memories.length} '
+              'retrieval(s) already expanded by the journal',
+            );
+          }
 
           if (memories.isNotEmpty) {
             // Cap memory injection to the group's (or global) memory budget % of context.
