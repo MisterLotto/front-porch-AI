@@ -144,7 +144,11 @@ Map<String, dynamic> _chatPayload(
 /// tool calling with template-aware models (Qwen3 family and friends); older
 /// servers or non-tool models simply produce no tool calls and the Journal's
 /// transport negotiation falls back to (and remembers) the XML floor.
-/// Returns null on any failure — a best-effort upgrade, never an error.
+/// Returns null when the server ANSWERED but the call yielded nothing usable
+/// (a definitive non-200 such as 400/404); transport failures (socket down,
+/// client torn down by an app-side abortGeneration, busy/5xx server) THROW so
+/// callers can tell a network event apart from a capability verdict — see the
+/// [LLMService.generateWithTools] contract.
 Future<LlmToolResponse?> postOpenAiChatWithTools(
   String baseUrl,
   GenerationParams params,
@@ -170,6 +174,14 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(payload),
     );
+    if (response.statusCode == 429 || response.statusCode >= 500) {
+      // Busy/unavailable is transient (e.g. a non-multiuser KoboldCpp mid-
+      // generation answers 503) — surface it as a transport failure so the
+      // probe doesn't brand the model tool-less for the run.
+      throw LlmToolTransportException(
+        'tool call HTTP ${response.statusCode} (server busy/unavailable)',
+      );
+    }
     if (response.statusCode != 200) {
       debugPrint(
         '[OpenAiChat] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -179,8 +191,12 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
     }
     return parseOpenAiToolResponse(response.body);
   } catch (e) {
-    debugPrint('[OpenAiChat] Tool call failed: $e — falling back');
-    return null;
+    // Rethrow instead of collapsing to null: a torn-down connection (e.g.
+    // CharacterGenService firing abortGeneration while a background pass's
+    // tool call is in flight) used to look identical to "model can't speak
+    // tools" and permanently branded the backend XML-only for the run.
+    debugPrint('[OpenAiChat] Tool call transport failure: $e');
+    rethrow;
   } finally {
     onDone?.call();
     client.close();

@@ -2227,10 +2227,11 @@ class ChatService extends ChangeNotifier {
   Future<LlmToolResponse?> _fireToolEval(
     String prompt,
     List<Map<String, dynamic>> tools,
-  ) {
+  ) async {
     final service =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
-    return service.generateWithTools(
+    try {
+      return await service.generateWithTools(
       GenerationParams(
         prompt: prompt,
         maxLength: 4000,
@@ -2250,12 +2251,23 @@ class ChatService extends ChangeNotifier {
         stopSequences: const [],
       ),
       tools,
-      // Whole-call deadline: a backend that accepts the request and never
-      // answers (cold model reload after an idle unload, dead server queue)
-      // must not park a journal/realism pass forever. Timeout → null, which
-      // every caller already treats as a failed call (the probe falls back
-      // to the text path, which carries its own between-chunk timeout).
-    ).timeout(kEvalToolCallTimeout, onTimeout: () => null);
+        // Whole-call deadline: a backend that accepts the request and never
+        // answers (cold model reload after an idle unload, dead server queue,
+        // or the call queued behind a long generation like character
+        // creation) must not park a journal/realism pass forever. The timeout
+        // THROWS — isToolTransportFailure classifies it so verdict sites fall
+        // back to text for the round without branding the backend XML-only.
+      ).timeout(kEvalToolCallTimeout);
+    } on TimeoutException {
+      // The deadline abandoned an in-flight call. On the single-slot local
+      // backend that orphan holds the shared idle slot (_pendingRequest), so
+      // waitForIdle callers — text evals, the Scene Guest mint — would hang
+      // behind it indefinitely; tear it down. (If the server is hung on the
+      // orphan, the server-side abort also frees anything queued behind it.)
+      // Remote backends don't serialize on the slot — nothing to release.
+      if (service is KoboldService) service.abortGeneration();
+      rethrow;
+    }
   }
 
   /// Backend+model identity key for the tools probe. Remote model name AND

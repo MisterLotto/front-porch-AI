@@ -22,7 +22,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/llm_service.dart'
-    show LlmToolResponse, looksLikeBackendUnreachable;
+    show LlmToolResponse, isToolTransportFailure;
 
 /// Shared support for the two background maintenance passes (the Journal and
 /// Growth Rings) — extracted from JournalMaintenance so the growth pass
@@ -156,7 +156,7 @@ Future<String?> fireStructuredEval({
   void Function(String)? onChunk,
 }) async {
   if (!probe.isXmlOnly(backendIdentity)) {
-    var backendUnreachable = false;
+    var transportFailure = false;
     try {
       final resp = await fireToolEval(buildPrompt(toolsMode: true), tools);
       if (isCancelled?.call() ?? false) return null;
@@ -177,16 +177,15 @@ Future<String?> fireStructuredEval({
     } catch (e) {
       debugPrint('[Eval:Tools] $debugLabel attempt failed: $e');
       if (isCancelled?.call() ?? false) return null;
-      // A dead/unreachable backend is a connectivity problem, not a verdict
-      // on the MODEL's tool support — don't brand it unsupported for the run.
-      // NOTE: transient failures (timeout/5xx) can't be distinguished here yet
-      // because generateWithTools collapses ALL failures to null instead of
-      // throwing — so a transient hiccup on the first probe still brands the
-      // backend XML-only for the session. Fixing that needs generateWithTools
-      // to surface transient errors; deferred out of the 1.0 stability freeze.
-      backendUnreachable = looksLikeBackendUnreachable(e);
+      // A transport failure (unreachable backend, client torn down by an
+      // app-side abortGeneration — the "visiting character creation resets
+      // tool calling to not-supported" bug — a whole-call timeout, or a
+      // busy/5xx server) is a network event, not a verdict on the MODEL's
+      // tool support. generateWithTools rethrows those, so they land here
+      // and are filtered instead of branding the backend XML-only.
+      transportFailure = isToolTransportFailure(e);
     }
-    if (!backendUnreachable) {
+    if (!transportFailure) {
       probe.markXmlOnly(backendIdentity);
       debugPrint(
         '[Eval:Tools] Tools unavailable on $backendIdentity — using text '

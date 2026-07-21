@@ -40,7 +40,15 @@ extension GenLlm on CharacterGenService {
       bool repetitionDetected = false;
       try {
         if (_llmService is KoboldService) {
-          await _llmService.ensureServerIdle();
+          // Wizard runs force the server idle (aborting a stuck/runaway
+          // generation from a previous run). Background runs (Scene Guest
+          // mint) WAIT instead — the server-side abort would kill a
+          // background pass's eval mid-request, and a tools call cut down
+          // that way returns an empty 200 that reads as "model can't speak
+          // tools" (see generateCharacter's abortInFlight doc).
+          _abortInFlight
+              ? await _llmService.ensureServerIdle()
+              : await _llmService.waitForIdle();
         }
         if (_aborted || _generationEpoch != myEpoch) return null;
 

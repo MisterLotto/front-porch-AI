@@ -117,6 +117,14 @@ class CharacterGenService {
   bool _aborted = false;
   bool _reasoningEnabled = false;
 
+  /// Whether this run may tear down other in-flight work on the shared LLM
+  /// service (the client abort at start + the server-side abort each step
+  /// takes on local KoboldCpp). True for the interactive wizard (clear stuck
+  /// state from a previous run); false for background runs like the Scene
+  /// Guest mint, which must WAIT for the backend instead of killing the
+  /// journal/growth/realism evals that legitimately share it.
+  bool _abortInFlight = true;
+
   /// Opt-in: when true, the lorebook + greeting prompts invite the model to add
   /// dynamic `{{pick}}`/`{{roll}}` "living detail" macros. Off by default —
   /// capable models use them well, weaker ones place them awkwardly.
@@ -164,6 +172,7 @@ class CharacterGenService {
     bool nsfwEnabled = false,
     bool reasoningEnabled = false,
     bool includeDynamicMacros = false,
+    bool abortInFlight = true,
     void Function(String accumulated)? onProgress,
     void Function(String error)? onError,
     void Function(String status)? onStatus,
@@ -193,7 +202,15 @@ class CharacterGenService {
     _generationEpoch++;
     final int currentEpoch = _generationEpoch;
     _aborted = false;
-    _llmService.abortGeneration(); // clear stuck state just in case
+    // Clear stuck state from a previous interactive run. abortGeneration is
+    // SERVICE-WIDE: it closes whatever request the shared backend has in
+    // flight, so background callers (the Scene Guest mint, which runs inside
+    // a live chat where journal/growth/realism evals are expected to be
+    // mid-request) pass abortInFlight: false to avoid killing them.
+    // _abortInFlight also gates the per-step server-side idle handling in
+    // _callLLM (force-abort vs wait) for the same reason.
+    _abortInFlight = abortInFlight;
+    if (abortInFlight) _llmService.abortGeneration();
     _reasoningEnabled = reasoningEnabled;
     _includeDynamicMacros = includeDynamicMacros;
 
