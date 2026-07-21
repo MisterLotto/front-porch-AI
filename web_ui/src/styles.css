@@ -1920,3 +1920,35 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   color: var(--muted);
 }
 .milestones-empty { font-size: 12px; }
+
+/* ── Living Time §6: Ambitions rows (chat tools) ────────────────────────── */
+.ambition-row { margin-bottom: 8px; }
+.ambition-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.ambition-line > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ambition-stage {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.ambition-bar {
+  margin-top: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  overflow: hidden;
+}
+.ambition-bar-fill {
+  height: 100%;
+  background: var(--accent);
+}

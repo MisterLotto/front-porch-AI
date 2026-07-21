@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/chat/growth_physics.dart';
 import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
+import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/story/faithful_mode.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
@@ -118,6 +119,18 @@ class ChatToolsFacade {
             : nsfw.arousalLevel,
         'arousalTier': focusedIsMember ? '' : nsfw.arousalTierName,
       },
+      // Ambitions (Living Time §6) for the focused participant — additive;
+      // same ChatService.ambitionsFor merge the desktop sidebar reads.
+      'ambitions': focusedCard == null || (focused?.isLite ?? false)
+          ? const []
+          : [
+              for (final a in _chat.ambitionsFor(focusedCard))
+                {
+                  'text': a.text,
+                  'progress': a.progress,
+                  'stage': AmbitionService.stageWord(a.progress),
+                },
+            ],
       'time': {
         'timeOfDay': time.timeOfDay,
         'dayCount': time.dayCount,

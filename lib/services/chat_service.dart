@@ -1784,7 +1784,26 @@ class ChatService extends ChangeNotifier {
       _journalMaintenance.eventKickPending = true;
       _growthService.eventKickPending = true;
     },
+    onCacheWarmed: () {
+      if (!_disposed) notifyListeners();
+    },
   );
+
+  /// Sidebar/web read surface (Living Time §6): [card]'s ambitions with
+  /// live progress — triggers the lazy cache warm, so first render may show
+  /// "just beginning" and correct itself one notify later. The ONE merge of
+  /// card-authored definitions + per-chat progress; desktop and web both
+  /// read through it so they can't drift.
+  List<({String text, int progress})> ambitionsFor(CharacterCard card) {
+    final sessionId = _currentSessionId;
+    final list = card.frontPorchExtensions?.ambitions ?? const [];
+    if (sessionId == null || list.isEmpty) return const [];
+    final cid = _getCharacterIdFromCard(card);
+    _ambitionService.ensureCacheWarm(sessionId, cid);
+    final progress =
+        _ambitionService.cachedProgress(sessionId, cid) ?? const {};
+    return [for (final a in list) (text: a, progress: progress[a] ?? 0)];
+  }
 
   late final _ambitionInjection = AmbitionInjection(
     ambitionService: _ambitionService,

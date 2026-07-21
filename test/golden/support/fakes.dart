@@ -372,6 +372,15 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   String? get currentSessionId => 'golden-session';
 
+  /// Ambitions shown by the Character State accordion / group member card.
+  /// Empty by default so pre-ambition goldens render unchanged; a fixture
+  /// can seed values to golden the row itself.
+  List<({String text, int progress})> ambitionsValue = const [];
+
+  @override
+  List<({String text, int progress})> ambitionsFor(CharacterCard card) =>
+      ambitionsValue;
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);

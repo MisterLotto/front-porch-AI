@@ -51,6 +51,8 @@ interface ToolsState {
   };
   chaos: { enabled: boolean; nsfwEnabled: boolean; pressure: number; hasPendingEvent: boolean };
   nsfw: { cooldownEnabled: boolean; cooldownTurnsRemaining: number; arousalLevel: number; arousalTier: string };
+  // Ambitions (Living Time §6, additive — absent on older facades).
+  ambitions?: Array<{ text: string; progress: number; stage: string }>;
   time: {
     timeOfDay: string;
     dayCount: number;
@@ -242,6 +244,28 @@ export function ChatTools({
           )}
         </div>
       </details>
+
+      {(t.ambitions?.length ?? 0) > 0 && (
+        <details className="tool-section" open>
+          <summary>Ambitions</summary>
+          <div className="tool-body">
+            {t.ambitions!.map((a, i) => (
+              <div key={i} className="ambition-row" title={`${a.text} — ${a.stage}`}>
+                <div className="ambition-line">
+                  <span>🧭 {a.text}</span>
+                  <em className="ambition-stage">{a.stage}</em>
+                </div>
+                <div className="ambition-bar">
+                  <div
+                    className="ambition-bar-fill"
+                    style={{ width: `${Math.min(100, Math.max(0, a.progress))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       <details className="tool-section">
         <summary>Our story</summary>

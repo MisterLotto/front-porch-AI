@@ -44,12 +44,18 @@ class AmbitionService {
   /// Journal/growth salience kick (same signal objective completion sends).
   final VoidCallback? onWaypoint;
 
+  /// Fired when a lazy cache load lands, so UI reading [cachedProgress]
+  /// (sidebar ambitions row) rebuilds with real stages instead of sitting on
+  /// "just beginning" until some unrelated notify.
+  final VoidCallback? onCacheWarmed;
+
   AmbitionService({
     required this.journalStore,
     required this.growthStore,
     required this.fireEval,
     required this.getMaxCards,
     this.onWaypoint,
+    this.onCacheWarmed,
   });
 
   /// Stage words for prompts + card content — words only, never numbers.
@@ -94,9 +100,10 @@ class AmbitionService {
     final key = '$sessionId|$characterId';
     if (_progressCache.containsKey(key) || _warming.contains(key)) return;
     _warming.add(key);
-    _loadProgress(sessionId, characterId).whenComplete(
-      () => _warming.remove(key),
-    );
+    _loadProgress(sessionId, characterId).whenComplete(() {
+      _warming.remove(key);
+      onCacheWarmed?.call();
+    });
   }
 
   Future<Map<String, int>> _loadProgress(
