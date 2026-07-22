@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:front_porch_ai/database/database.dart';
@@ -99,9 +100,29 @@ class JournalPhysics {
   /// many trailing messages on its first pass.
   static const int kFirstPassCap = 50;
 
+  /// Optional `metadata.kind` rider (Living Time: dream / ambition / milestone).
+  /// Forgiving parse — missing or garbage metadata → null.
+  static String? cardKind(JournalMemoryData card) {
+    final raw = card.metadata;
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map ? decoded['kind'] as String? : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Relationship / ambition waypoint milestones (Living Time §7 v1.5): never
+  /// cool, protected from cap-trim, timeline-salient. Not always-injected
+  /// (would crowd the hot set on long chats); they still resurface via cold
+  /// retrieval and always appear in Our Story.
+  static bool isMilestone(JournalMemoryData card) =>
+      cardKind(card) == 'milestone';
+
   /// One card's heat after one maintenance pass of cooling.
   static double cooledHeat(JournalMemoryData card) {
-    if (card.pinned) return card.heat;
+    if (card.pinned || isMilestone(card)) return card.heat;
     final factor = switch (card.emotionIntensity) {
       'strong' => kStrongDecayFactor,
       'moderate' => kModerateDecayFactor,
@@ -111,8 +132,11 @@ class JournalPhysics {
   }
 
   /// Whether a card belongs to the always-injected hot set.
-  static bool isHot(JournalMemoryData card) =>
-      card.pinned || card.heat >= kColdThreshold;
+  /// Milestone cards are timeline-only (never cool, but not auto-injected).
+  static bool isHot(JournalMemoryData card) {
+    if (isMilestone(card)) return false;
+    return card.pinned || card.heat >= kColdThreshold;
+  }
 
   /// Standard emotion family for a (possibly nuanced) label — 'wistful' and
   /// 'melancholy' both land on 'sadness'. Unknown labels are their own family.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-21 — feat(realism): Living Time §7 v1.5 + v1.5.1 — bond / long-term bond / trust tier milestones in Our Story
+- **Why:** timeline v1 only aggregated existing sources; big relationship steps (Warm→Friendly, deep long-bond climate, trust crater) lived only as ephemeral chips. v1.5 records the crossing as a durable diary card the moment the named *tier* changes. Chips stay for per-message deltas; Our Story keeps chapter marks.
+- **Files (new):** `relationship_milestones.dart` (TierCrossing + pure text/emotion + plant for bond / long_term / trust), tests `relationship_milestones_test.dart`.
+- **Files (modified):** `relationship_service.dart` (`onTierCrossing`; `applyScoreDelta`/`applyTrustDelta` + `_evalLongTermGrowth(recordMilestone:)` fire only on named tier change), `chat_service.dart` (wire plant to JournalStore for current speaker + receipt), `chat_service_reprocess.dart` (revert with recordMilestone:false), `journal_physics.dart` (`cardKind`/`isMilestone`; never cool; isHot false for milestones), `journal_store.dart` (cap-trim skips milestones), `milestone_feed.dart` (kind comment), docs Rawhide + living-time. Tests: relationship_service_test (+6), journal_physics_test (+1), relationship_milestones_test (text + plant).
+- **Web:** free — MilestonesPanel already icons `milestone` 🏆 over the same feed.
+- **Verification:** targeted suites + analyze (see session).
+
 ## 2026-07-21 — fix(rag): retrieval defaults caused parroting; dead RAG controls wired; macOS quit no longer logged as a crash
 - **RAG parroting (maintainer report: characters repeat themselves / revive events the chat moved past).** Five compounding causes, all fixed:
   1. The 1:1 "Memories per turn" slider (`memorySettings.ragRetrievalCount`) was NEVER read by generation — 1:1 silently used the group default (8). Now 1:1 uses the real setting (0 = All, same convention); default lowered 5→4 (and the field-initializer 10 vs load-default 5 mismatch removed). Group default 8→4 at all four sites (field, both entry resets, session-state fallback; stored sessions keep their value).

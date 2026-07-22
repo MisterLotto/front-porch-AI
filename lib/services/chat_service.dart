@@ -69,6 +69,7 @@ import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
 import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
+import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
 import 'package:front_porch_ai/services/chat/expression_classifier.dart'; // leaf for ExpressionService (post-extraction)
 import 'package:front_porch_ai/services/chat/time_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
@@ -1626,6 +1627,29 @@ class ChatService extends ChangeNotifier {
     getGroupCounter: (charId, key, {int defaultValue = 0}) =>
         (_groupRealism[charId]?[key] as num?)?.toInt() ?? defaultValue,
     setGroupCounter: (charId, key, v) => _setGroupRealismValue(charId, key, v),
+    // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
+    // Fire-and-forget; plant never throws into the eval path. Diary owner is
+    // the current speaker (1:1 host or group speaker whose scalars just moved).
+    onTierCrossing: (crossing) {
+      final sessionId = _currentSessionId;
+      if (sessionId == null) return;
+      final charId = _getCurrentSpeakerIdForRealism();
+      if (charId.isEmpty) return;
+      unawaited(
+        RelationshipMilestones.plant(
+          store: _journalStore,
+          sessionId: sessionId,
+          characterId: charId,
+          crossing: crossing,
+          sourcePositions: _messages.isEmpty
+              ? const <int>[]
+              : <int>[_messages.length - 1],
+          storyDay: _timeService.dayCount,
+          storyClock: _timeService.storyClockIso,
+          maxCards: _storageService.memorySettings.journalMaxCards,
+        ),
+      );
+    },
   );
 
   // ── Expression label selection / manual / avatar resolve / reclass / ONNX (extracted) ────

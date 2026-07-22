@@ -553,7 +553,12 @@ extension ChatServiceReprocess on ChatService {
               lastMsg.activeMetadata!['trust_delta'] as int? ?? 0;
 
           if (bondDelta != 0) {
-            _relationshipService.applyScoreDelta(-bondDelta);
+            // recordMilestone: false — undoing a rejected reply must not plant
+            // reverse "Bond cooled…" story beats in Our Story (Living Time v1.5).
+            _relationshipService.applyScoreDelta(
+              -bondDelta,
+              recordMilestone: false,
+            );
           }
           // Session-level mood cadence: 1:1 zeroes it here as an intermediate
           // (the baseline restore below then sets the real value and the 1:1
