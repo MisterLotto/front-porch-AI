@@ -104,7 +104,7 @@ extension ChatServiceSessionLoad on ChatService {
       return;
     }
 
-    // Sessions are already sorted descending by createdAt
+    // Sessions are already sorted descending by updatedAt
     final lastSession = sessions.first;
     _currentSessionId = lastSession.id;
     _authorNote = lastSession.authorNote;
@@ -459,6 +459,12 @@ extension ChatServiceSessionLoad on ChatService {
       // (v30: _hydrateGroupRealismCheckpointIfPresent removed — state now loads from DB column)
 
       _currentSessionId = sessionId;
+      // Touch updatedAt so this session becomes the "last active" for the
+      // character/group — _loadLastSession sorts by updatedAt DESC.
+      _db.patchSession(SessionsCompanion(
+        id: drift.Value(sessionId),
+        updatedAt: drift.Value(DateTime.now()),
+      ));
       // Scene Guests are per-session. Without this, switching to a different
       // session via the history picker leaves the PREVIOUS session's guests
       // (and their evolution/detection state) in place — they keep chiming in

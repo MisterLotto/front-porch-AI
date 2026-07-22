@@ -360,7 +360,10 @@ class GearBorderPainter extends ThemeBorderPainter {
       ..strokeWidth = strokeWidth;
 
     final center = Offset(size.width / 2, size.height / 2);
-    final pitchR = size.width / 3;
+    // All three gears together span ~1/3 of the bubble width.
+    // Cluster width ≈ 2 * (pitchR + outerR) = 2 * 2.16 * pitchR = 4.32 * pitchR.
+    // Solve: 4.32 * pitchR = size.width / 3  →  pitchR ≈ size.width / 13.
+    final pitchR = size.width / 13;
     final addendum = pitchR * 0.16;
     final dedendum = pitchR * 0.20;
     final outerR = pitchR + addendum;
@@ -372,7 +375,8 @@ class GearBorderPainter extends ThemeBorderPainter {
     // With 3 identical gears in a triangle, only 2 of 3 pairs can mesh.
     // A-B and A-C get perfect half-pitch offset. B-C naturally align
     // but present valleys (not teeth) at the contact region.
-    final offsets = [0.0, pi / teeth, pi / teeth];
+    final offset5deg = 10 * pi / 180;
+    final offsets = [0.0, pi / teeth + offset5deg, pi / teeth - offset5deg];
     final positions = <Offset>[
       Offset(center.dx, center.dy - triR),
       Offset(center.dx + triR * cos(pi / 6), center.dy + triR * sin(pi / 6)),
