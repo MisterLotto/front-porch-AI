@@ -1569,6 +1569,13 @@ extension ChatServiceGeneration on ChatService {
           // Cursor-based like the journal, so it is naturally regen-safe.
           _maybeRunGrowthPass();
 
+          // Promise/debt ledger (Train B) — fire-and-forget on new turns only.
+          // Keyword gate + open-list gate live inside the service so most
+          // turns cost nothing. Regen/continue never invent commitments.
+          if (mode == GenerationMode.normal) {
+            _maybeRunPromiseDebtPass();
+          }
+
           // Embed messages for RAG memory (fire-and-forget)
           _maybeEmbedMessages();
 

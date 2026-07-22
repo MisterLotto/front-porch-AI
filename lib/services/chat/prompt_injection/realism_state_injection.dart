@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
@@ -70,6 +71,7 @@ class RealismStateInjection {
   final TimeInjection timeInjection;
   final WeatherInjection weatherInjection;
   final AmbitionInjection ambitionInjection;
+  final PromiseDebtInjection promiseDebtInjection;
   final BehavioralInjection behavioralInjection;
   final NsfwInjection nsfwInjection;
   final NeedsInjection needsInjection;
@@ -87,6 +89,7 @@ class RealismStateInjection {
     required this.timeInjection,
     required this.weatherInjection,
     required this.ambitionInjection,
+    required this.promiseDebtInjection,
     required this.behavioralInjection,
     required this.nsfwInjection,
     required this.needsInjection,
@@ -125,6 +128,7 @@ class RealismStateInjection {
       needsInjection.buildNeedsInjection(),
       nsfwInjection.buildNsfwCooldownInjection(),
       ambitionInjection.buildAmbitionInjection(),
+      promiseDebtInjection.buildPromiseDebtInjection(),
       behavioralInjection.buildBehavioralMechanicsInjection(),
       relationshipInjection.buildInterCharacterFeelingsInjection(),
     ].where((f) => f.trim().isNotEmpty).map((f) => f.trim()).toList();

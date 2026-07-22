@@ -109,12 +109,12 @@ class JournalStore {
     if (existing.length >= maxCards) {
       // getJournalCards orders pinned DESC then createdAt ASC, so scanning in
       // order and keeping strict `<` makes the oldest lowest-heat unpinned
-      // card the victim. Milestone cards never cool (Living Time v1.5) and
-      // are cap-protected like pinned — otherwise threshold history would
-      // evaporate on long diaries.
+      // card the victim. Ledger cards (milestones, promises) never cool and
+      // are cap-protected like pinned — otherwise threshold / commitment
+      // history would evaporate on long diaries.
       JournalMemoryData? coldest;
       for (final card in existing) {
-        if (card.pinned || JournalPhysics.isMilestone(card)) continue;
+        if (card.pinned || JournalPhysics.isLedgerCard(card)) continue;
         if (coldest == null || card.heat < coldest.heat) coldest = card;
       }
       if (coldest != null) await db.deleteJournalCard(coldest.id);

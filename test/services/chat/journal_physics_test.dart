@@ -75,6 +75,14 @@ void main() {
       expect(JournalPhysics.cardKind(m), 'milestone');
     });
 
+    test('promise cards are ledger-class (Train B)', () {
+      final p = card(kind: 'promise', heat: 1.0, intensity: 'mild');
+      expect(JournalPhysics.isPromise(p), isTrue);
+      expect(JournalPhysics.isLedgerCard(p), isTrue);
+      expect(JournalPhysics.cooledHeat(p), 1.0);
+      expect(JournalPhysics.isHot(p), isFalse);
+    });
+
     test('hot/cold threshold, pinned always hot', () {
       expect(JournalPhysics.isHot(card(heat: JournalPhysics.kColdThreshold)), isTrue);
       expect(JournalPhysics.isHot(card(heat: 0.1)), isFalse);

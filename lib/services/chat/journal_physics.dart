@@ -120,9 +120,19 @@ class JournalPhysics {
   static bool isMilestone(JournalMemoryData card) =>
       cardKind(card) == 'milestone';
 
+  /// Promise/debt ledger cards (Train B): open commitments must not fade out
+  /// of the diary or get cap-trimmed; closed kept/broken still stay on the
+  /// timeline via kind salience. Not always-injected — a dedicated injection
+  /// line carries open items into the state block.
+  static bool isPromise(JournalMemoryData card) => cardKind(card) == 'promise';
+
+  /// Ledger-class cards that never cool and skip hot-set injection.
+  static bool isLedgerCard(JournalMemoryData card) =>
+      isMilestone(card) || isPromise(card);
+
   /// One card's heat after one maintenance pass of cooling.
   static double cooledHeat(JournalMemoryData card) {
-    if (card.pinned || isMilestone(card)) return card.heat;
+    if (card.pinned || isLedgerCard(card)) return card.heat;
     final factor = switch (card.emotionIntensity) {
       'strong' => kStrongDecayFactor,
       'moderate' => kModerateDecayFactor,
@@ -132,9 +142,9 @@ class JournalPhysics {
   }
 
   /// Whether a card belongs to the always-injected hot set.
-  /// Milestone cards are timeline-only (never cool, but not auto-injected).
+  /// Ledger cards (milestones, promises) are timeline/injection-line only.
   static bool isHot(JournalMemoryData card) {
-    if (isMilestone(card)) return false;
+    if (isLedgerCard(card)) return false;
     return card.pinned || card.heat >= kColdThreshold;
   }
 

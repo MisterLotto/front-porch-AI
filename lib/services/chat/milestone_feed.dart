@@ -24,7 +24,8 @@ import 'package:front_porch_ai/services/chat/journal_store.dart';
 
 /// One "Our Story" timeline entry (living-time-features.md §7 v1).
 class MilestoneEntry {
-  /// 'ring' | 'chance' | 'objective' | 'memory' | 'dream' | 'ambition' | 'milestone'
+  /// 'ring' | 'chance' | 'objective' | 'memory' | 'dream' | 'ambition' |
+  /// 'milestone' | 'promise'
   final String kind;
   final String text;
   final int? storyDay;
@@ -106,6 +107,7 @@ class MilestoneFeed {
         'dream' => 'dream',
         'ambition' => 'ambition',
         'milestone' => 'milestone',
+        'promise' => 'promise',
         _ => 'memory',
       };
       final salient =

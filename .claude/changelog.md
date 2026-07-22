@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-22 — feat(realism): Train B — promise & debt ledger (detect / inject / resolve)
+- **Why:** gold-standard RP needs commitments that scar — kept words warm trust, broken ones crater it, open ones color the next reply. Chips stay for per-turn deltas; this is the long-horizon ledger.
+- **Files (new):** `promise_debt_service.dart` (keyword gate, one-line eval protocol, plant open `kind=promise` cards, resolve kept/broken → trust/bond deltas + milestone outcome, max 3 open), `promise_debt_injection.dart` (words-only open commitments fragment), `promise_debt_service_test.dart`.
+- **Files (modified):** `chat_service.dart` (wire service + `_maybeRunPromiseDebtPass`), `chat_service_generation.dart` (normal turns only), `realism_state_injection.dart` (composer fragment), `journal_physics.dart` / `journal_store.dart` (ledger-class: promise+milestone never cool / not hot-injected / cap-safe), `milestone_feed.dart` + desktop/web timeline icons `🤝`, `prompt_injection_test.dart`, docs Rawhide.
+- **Rules:** only user-party outcomes move trust (Realism invariant); char-party moves bond only; broken user trust −22 arms repair window via existing applyTrustDelta; regen never runs the pass.
+- **Verification:** targeted suites + analyze (see session).
+
 ## 2026-07-21 — feat(realism): Living Time §7 v1.5 + v1.5.1 — bond / long-term bond / trust tier milestones in Our Story
 - **Why:** timeline v1 only aggregated existing sources; big relationship steps (Warm→Friendly, deep long-bond climate, trust crater) lived only as ephemeral chips. v1.5 records the crossing as a durable diary card the moment the named *tier* changes. Chips stay for per-message deltas; Our Story keeps chapter marks.
 - **Files (new):** `relationship_milestones.dart` (TierCrossing + pure text/emotion + plant for bond / long_term / trust), tests `relationship_milestones_test.dart`.

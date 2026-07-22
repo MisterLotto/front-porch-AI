@@ -28,7 +28,9 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
+import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
 import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
@@ -657,6 +659,24 @@ void main() {
           getCurrentSpeakerIdForRealism: () => '',
           getGroupCharacters: () => const [],
           getCharacterIdFromCard: (c) => c.name,
+        ),
+        // Promises off in composer tests — null session → '' (ambition/weather
+        // precedent). Promise-on paths live in promise_debt_service_test.dart.
+        promiseDebtInjection: PromiseDebtInjection(
+          promiseDebtService: PromiseDebtService(
+            journalStore: JournalStore(getDb: () => null),
+            fireEval: (_) async => null,
+            getMaxCards: () => 30,
+            applyTrustDelta: (_) {},
+            applyBondDelta: (_) {},
+          ),
+          getSessionId: () => null,
+          getActiveCharacter: () => active,
+          getIsGroupNonObserverMode: () => false,
+          getCurrentSpeakerIdForRealism: () => '',
+          getGroupCharacters: () => const [],
+          getCharacterIdFromCard: (c) => c.name,
+          getUserName: () => 'Ben',
         ),
         behavioralInjection: createTestBehavioral(relSvc: relSvc),
         nsfwInjection: createTestNsfw(nsfwSvc: nsfwSvc, activeChar: active),

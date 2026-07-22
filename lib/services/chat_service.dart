@@ -87,7 +87,9 @@ import 'package:front_porch_ai/services/chat/absence_tracker.dart';
 import 'package:front_porch_ai/services/chat/afk_flavor.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/dream_service.dart';
+import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/milestone_feed.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
@@ -1841,6 +1843,36 @@ class ChatService extends ChangeNotifier {
     getCharacterIdFromCard: _getCharacterIdFromCard,
   );
 
+  // ── Promise & debt ledger (Train B) ──
+  late final _promiseDebtService = PromiseDebtService(
+    journalStore: _journalStore,
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    applyTrustDelta: (d) => _relationshipService.applyTrustDelta(d),
+    applyBondDelta: (d) => _relationshipService.applyScoreDelta(d),
+    onSalienceKick: () {
+      _journalMaintenance.eventKickPending = true;
+      _growthService.eventKickPending = true;
+    },
+    onCacheWarmed: () {
+      if (!_disposed) notifyListeners();
+    },
+  );
+
+  late final _promiseDebtInjection = PromiseDebtInjection(
+    promiseDebtService: _promiseDebtService,
+    getSessionId: () => _currentSessionId,
+    getActiveCharacter: () => _activeCharacter,
+    getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+    getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+    getGroupCharacters: () => _groupCharacters,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
+    getUserName: () => _userPersonaService.persona.name,
+  );
+
   // ── Dreams (Living Time §1) ──
   late final _dreamService = DreamService(
     fireEval: (prompt) async {
@@ -1891,6 +1923,7 @@ class ChatService extends ChangeNotifier {
     timeInjection: _timeInjection,
     weatherInjection: _weatherInjection,
     ambitionInjection: _ambitionInjection,
+    promiseDebtInjection: _promiseDebtInjection,
     behavioralInjection: _behavioralInjection,
     nsfwInjection: _nsfwInjection,
     needsInjection: _needsInjection,
@@ -3841,6 +3874,49 @@ class ChatService extends ChangeNotifier {
   Future<void> forceSummaryUpdate() async {
     if (_isSummaryGenerating) return;
     await _journalMaintenance.runMaintenancePass(force: true);
+  }
+
+  /// Train B — promise/debt ledger pass (fire-and-forget). Runs after a
+  /// normal generation when realism + journal are on. Detects new
+  /// commitments or kept/broken resolutions for the current speaker's diary.
+  void _maybeRunPromiseDebtPass() {
+    if (!_realismEnabled) return;
+    if (!_storageService.memorySettings.journalEnabled) return;
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return;
+    final charId = _getCurrentSpeakerIdForRealism();
+    if (charId.isEmpty) return;
+
+    String characterName = _activeCharacter?.name ?? 'the character';
+    if (_activeGroup != null && !_observerMode) {
+      final card = _groupCharacters
+          .where((c) => _getCharacterIdFromCard(c) == charId)
+          .firstOrNull;
+      if (card != null) characterName = card.name;
+    }
+
+    final recent = _messages.length < 2
+        ? (_messages.isEmpty ? '' : _messages.last.displayText)
+        : _messages.reversed
+              .take(4)
+              .toList()
+              .reversed
+              .map((m) => '${m.sender}: ${m.displayText}')
+              .join('\n');
+    if (recent.trim().isEmpty) return;
+
+    unawaited(
+      _promiseDebtService.evaluateTurn(
+        sessionId: sessionId,
+        characterId: charId,
+        characterName: characterName,
+        userName: _userPersonaService.persona.name,
+        recentExchange: recent,
+        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
+        storyDay: _timeService.dayCount,
+        storyClock: _timeService.storyClockIso,
+      ),
+    );
   }
 
   /// Check if a Journal maintenance pass is due and trigger it non-blockingly.
