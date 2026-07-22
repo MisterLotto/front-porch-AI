@@ -350,24 +350,25 @@ class FloralBorderPainter extends ThemeBorderPainter {
 }
 
 class GearBorderPainter extends ThemeBorderPainter {
-  GearBorderPainter({required super.color, super.strokeWidth});
+  GearBorderPainter({required super.color, super.strokeWidth = 1.0});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
+      ..color = color.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
 
     final center = Offset(size.width / 2, size.height / 2);
-    const pitchR = 50.0;
-    const addendum = 8.0;
-    const dedendum = 10.0;
-    const outerR = pitchR + addendum;
-    const rootR = pitchR - dedendum;
+    final pitchR = size.width / 3;
+    final addendum = pitchR * 0.16;
+    final dedendum = pitchR * 0.20;
+    final outerR = pitchR + addendum;
+    final rootR = pitchR - dedendum;
     const teeth = 10;
-    const dist = 2 * pitchR;
+    final dist = 2 * pitchR;
     final triR = dist / sqrt(3);
+    final hubR = pitchR * 0.24;
     // With 3 identical gears in a triangle, only 2 of 3 pairs can mesh.
     // A-B and A-C get perfect half-pitch offset. B-C naturally align
     // but present valleys (not teeth) at the contact region.
@@ -382,8 +383,8 @@ class GearBorderPainter extends ThemeBorderPainter {
       final pos = positions[g];
       final rot = offsets[g];
       final path = Path();
-      const rootHW = pi * 0.55 / teeth;
-      const tipHW = pi * 0.30 / teeth;
+      final rootHW = pi * 0.55 / teeth;
+      final tipHW = pi * 0.30 / teeth;
       for (int i = 0; i < teeth; i++) {
         final seg = i * 2 * pi / teeth + rot;
         final rootL = seg - rootHW;
@@ -424,7 +425,7 @@ class GearBorderPainter extends ThemeBorderPainter {
       // Rim ring at dedendum circle
       canvas.drawCircle(pos, rootR, paint);
       // Hub
-      canvas.drawCircle(pos, 12, paint);
+      canvas.drawCircle(pos, hubR, paint);
     }
   }
 }

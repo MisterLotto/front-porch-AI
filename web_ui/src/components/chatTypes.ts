@@ -83,6 +83,8 @@ export interface ChatThemeOverrides {
   userTextColor?: string | null;
   aiBubbleColor?: string | null;
   aiTextColor?: string | null;
+  dialogueColor?: string | null;
+  actionColor?: string | null;
   backgroundKey?: string | null;
   borderStyle?: string | null;
   borderColor?: string | null;
@@ -97,6 +99,8 @@ export interface ChatThemePreset {
   defaultUserTextColor: number;
   defaultAiBubbleColor: number;
   defaultAiTextColor: number;
+  defaultDialogueColor: number;
+  defaultActionColor: number;
   defaultBorderColor?: number;
   defaultFontFamily: string;
   defaultBackgroundKey: string;

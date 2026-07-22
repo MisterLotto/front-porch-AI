@@ -11,28 +11,30 @@ import type { ChatThemeOverrides, ChatThemePreset } from './chatTypes';
 
 // Mirror of the 10 desktop presets (ChatThemePreset.presets).
 const PRESETS: ChatThemePreset[] = [
-  { id: 'fantasy', displayName: 'Fantasy', description: 'Rich purples and soft gold', defaultUserBubbleColor: 0xFFFFE57F, defaultUserTextColor: 0xFF6D4C41, defaultAiBubbleColor: 0xFFFFE57F, defaultAiTextColor: 0xFF3E2723, defaultBorderColor: 0xFF007E1B, defaultFontFamily: 'serif', defaultBackgroundKey: 'fantasy', defaultBorderStyle: 'vine' },
-  { id: 'galactic', displayName: 'Galactic', description: 'Deep space blues and cyan', defaultUserBubbleColor: 0xFF0D1B2A, defaultUserTextColor: 0xFF00D4FF, defaultAiBubbleColor: 0xFF0D1B2A, defaultAiTextColor: 0xFFE0E0FF, defaultBorderColor: 0xFF00D4FF, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'space_station', defaultBorderStyle: 'dualLine' },
-  { id: 'neon_grid', displayName: 'Neon Grid', description: 'Black backdrop with neon glow', defaultUserBubbleColor: 0xFF0A0A0A, defaultUserTextColor: 0xFFFF00FF, defaultAiBubbleColor: 0xFF0A0A0A, defaultAiTextColor: 0xFF00FFFF, defaultBorderColor: 0xFFFF00FF, defaultFontFamily: 'monospace', defaultBackgroundKey: 'grid', defaultBorderStyle: 'glitch' },
-  { id: 'sakura', displayName: 'Sakura', description: 'Soft pinks and pale tones', defaultUserBubbleColor: 0xFFFFE4E9, defaultUserTextColor: 0xFF2D5A27, defaultAiBubbleColor: 0xFFFFE4E9, defaultAiTextColor: 0xFF2D5A27, defaultBorderColor: 0xFF2D5A27, defaultFontFamily: 'serif', defaultBackgroundKey: 'cherry_blossom', defaultBorderStyle: 'wavy' },
-  { id: 'noir', displayName: 'Noir', description: 'Monochrome shadows', defaultUserBubbleColor: 0xFF2D2D2D, defaultUserTextColor: 0xFFF5F5F5, defaultAiBubbleColor: 0xFF1A1A1A, defaultAiTextColor: 0xFFCCCCCC, defaultBorderColor: 0xFF888888, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'noir', defaultBorderStyle: 'shadow' },
-  { id: 'enchanted_forest', displayName: 'Enchanted Forest', description: 'Deep greens and warm earth', defaultUserBubbleColor: 0xFF2D5A27, defaultUserTextColor: 0xFFF0E6D3, defaultAiBubbleColor: 0xFF4A7C3F, defaultAiTextColor: 0xFFFFF8E7, defaultBorderColor: 0xFF5E3D04, defaultFontFamily: 'serif', defaultBackgroundKey: 'enchanted_wood', defaultBorderStyle: 'vine' },
-  { id: 'ocean_depths', displayName: 'Ocean Depths', description: 'Deep blues and teal', defaultUserBubbleColor: 0xFF003049, defaultUserTextColor: 0xFFE0F7FA, defaultAiBubbleColor: 0xFF006D77, defaultAiTextColor: 0xFFE0F7FA, defaultBorderColor: 0xFF00BCD4, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'ocean_depth', defaultBorderStyle: 'dualLine' },
-  { id: 'cyberpunk', displayName: 'Cyberpunk', description: 'Neon on dark', defaultUserBubbleColor: 0xFF0A0A23, defaultUserTextColor: 0xFF00FF41, defaultAiBubbleColor: 0xFF1A0A2E, defaultAiTextColor: 0xFFFF00FF, defaultBorderColor: 0xFF00FF41, defaultFontFamily: 'monospace', defaultBackgroundKey: 'futuristic_city', defaultBorderStyle: 'glitch' },
-  { id: 'roman_empire', displayName: 'Roman Empire', description: 'Rich browns and warm cream', defaultUserBubbleColor: 0xFFFDE68A, defaultUserTextColor: 0xFF5D4037, defaultAiBubbleColor: 0xFFFDE68A, defaultAiTextColor: 0xFF451A03, defaultBorderColor: 0xFF451A03, defaultFontFamily: 'serif', defaultBackgroundKey: 'roman_market', defaultBorderStyle: 'greekKey' },
-  { id: 'steampunk', displayName: 'Steampunk', description: 'Brass and copper tones', defaultUserBubbleColor: 0xFF3E2723, defaultUserTextColor: 0xFFFFD54F, defaultAiBubbleColor: 0xFF5D4037, defaultAiTextColor: 0xFFE0C9A6, defaultBorderColor: 0xFFFFD54F, defaultFontFamily: 'serif', defaultBackgroundKey: 'steampunk_bg', defaultBorderStyle: 'gear' },
+  { id: 'fantasy', displayName: 'Fantasy', description: 'Rich purples and soft gold', defaultUserBubbleColor: 0xFFFFE57F, defaultUserTextColor: 0xFF6D4C41, defaultAiBubbleColor: 0xFFFFE57F, defaultAiTextColor: 0xFF3E2723, defaultDialogueColor: 0xFFFFD54F, defaultActionColor: 0xFFA5D6A7, defaultBorderColor: 0xFF007E1B, defaultFontFamily: 'serif', defaultBackgroundKey: 'fantasy', defaultBorderStyle: 'vine' },
+  { id: 'galactic', displayName: 'Galactic', description: 'Deep space blues and cyan', defaultUserBubbleColor: 0xFF0D1B2A, defaultUserTextColor: 0xFF00D4FF, defaultAiBubbleColor: 0xFF0D1B2A, defaultAiTextColor: 0xFFE0E0FF, defaultDialogueColor: 0xFF80DEEA, defaultActionColor: 0xFF7C4DFF, defaultBorderColor: 0xFF00D4FF, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'space_station', defaultBorderStyle: 'dualLine' },
+  { id: 'neon_grid', displayName: 'Neon Grid', description: 'Black backdrop with neon glow', defaultUserBubbleColor: 0xFF0A0A0A, defaultUserTextColor: 0xFFFF00FF, defaultAiBubbleColor: 0xFF0A0A0A, defaultAiTextColor: 0xFF00FFFF, defaultDialogueColor: 0xFFFFFF00, defaultActionColor: 0xFFFF00FF, defaultBorderColor: 0xFFFF00FF, defaultFontFamily: 'monospace', defaultBackgroundKey: 'grid', defaultBorderStyle: 'glitch' },
+  { id: 'sakura', displayName: 'Sakura', description: 'Soft pinks and pale tones', defaultUserBubbleColor: 0xFFFFE4E9, defaultUserTextColor: 0xFF2D5A27, defaultAiBubbleColor: 0xFFFFE4E9, defaultAiTextColor: 0xFF2D5A27, defaultDialogueColor: 0xFFF8BBD0, defaultActionColor: 0xFFC8E6C9, defaultBorderColor: 0xFF2D5A27, defaultFontFamily: 'serif', defaultBackgroundKey: 'cherry_blossom', defaultBorderStyle: 'wavy' },
+  { id: 'noir', displayName: 'Noir', description: 'Monochrome shadows', defaultUserBubbleColor: 0xFF2D2D2D, defaultUserTextColor: 0xFFF5F5F5, defaultAiBubbleColor: 0xFF1A1A1A, defaultAiTextColor: 0xFFCCCCCC, defaultDialogueColor: 0xFFBDBDBD, defaultActionColor: 0xFF78909C, defaultBorderColor: 0xFF888888, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'noir', defaultBorderStyle: 'shadow' },
+  { id: 'enchanted_forest', displayName: 'Enchanted Forest', description: 'Deep greens and warm earth', defaultUserBubbleColor: 0xFF2D5A27, defaultUserTextColor: 0xFFF0E6D3, defaultAiBubbleColor: 0xFF4A7C3F, defaultAiTextColor: 0xFFFFF8E7, defaultDialogueColor: 0xFFA5D6A7, defaultActionColor: 0xFFD7CCC8, defaultBorderColor: 0xFF5E3D04, defaultFontFamily: 'serif', defaultBackgroundKey: 'enchanted_wood', defaultBorderStyle: 'vine' },
+  { id: 'ocean_depths', displayName: 'Ocean Depths', description: 'Deep blues and teal', defaultUserBubbleColor: 0xFF003049, defaultUserTextColor: 0xFFE0F7FA, defaultAiBubbleColor: 0xFF006D77, defaultAiTextColor: 0xFFE0F7FA, defaultDialogueColor: 0xFF80DEEA, defaultActionColor: 0xFF80CBC4, defaultBorderColor: 0xFF00BCD4, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'ocean_depth', defaultBorderStyle: 'dualLine' },
+  { id: 'cyberpunk', displayName: 'Cyberpunk', description: 'Neon on dark', defaultUserBubbleColor: 0xFF0A0A23, defaultUserTextColor: 0xFF00FF41, defaultAiBubbleColor: 0xFF1A0A2E, defaultAiTextColor: 0xFFFF00FF, defaultDialogueColor: 0xFF00FF41, defaultActionColor: 0xFFFF00FF, defaultBorderColor: 0xFF00FF41, defaultFontFamily: 'monospace', defaultBackgroundKey: 'futuristic_city', defaultBorderStyle: 'glitch' },
+  { id: 'roman_empire', displayName: 'Roman Empire', description: 'Rich browns and warm cream', defaultUserBubbleColor: 0xFFFDE68A, defaultUserTextColor: 0xFF5D4037, defaultAiBubbleColor: 0xFFFDE68A, defaultAiTextColor: 0xFF451A03, defaultDialogueColor: 0xFFFFCC80, defaultActionColor: 0xFFBCAAA4, defaultBorderColor: 0xFF451A03, defaultFontFamily: 'serif', defaultBackgroundKey: 'roman_market', defaultBorderStyle: 'greekKey' },
+  { id: 'steampunk', displayName: 'Steampunk', description: 'Brass and copper tones', defaultUserBubbleColor: 0xFF3E2723, defaultUserTextColor: 0xFFFFD54F, defaultAiBubbleColor: 0xFF5D4037, defaultAiTextColor: 0xFFE0C9A6, defaultDialogueColor: 0xFFFFE082, defaultActionColor: 0xFFD7CCC8, defaultBorderColor: 0xFFFFD54F, defaultFontFamily: 'serif', defaultBackgroundKey: 'steampunk_bg', defaultBorderStyle: 'gear' },
 ];
 
 const FONT_OPTIONS = ['sans-serif', 'serif', 'monospace'];
 
 const BORDER_STYLES = ['vine', 'dualLine', 'glitch', 'wavy', 'shadow', 'greekKey', 'gear'];
 
-const COLOR_LABELS: { key: keyof ChatThemeOverrides; label: string }[] = [
-  { key: 'userBubbleColor', label: 'Your bubble' },
-  { key: 'userTextColor', label: 'Your text' },
-  { key: 'aiBubbleColor', label: 'AI bubble' },
-  { key: 'aiTextColor', label: 'AI text' },
-  { key: 'borderColor', label: 'Border' },
+const COLOR_LABELS: { key: keyof ChatThemeOverrides; label: string; defaultKey?: keyof ChatThemePreset }[] = [
+  { key: 'userBubbleColor', label: 'Your bubble', defaultKey: 'defaultUserBubbleColor' },
+  { key: 'userTextColor', label: 'Your text', defaultKey: 'defaultUserTextColor' },
+  { key: 'aiBubbleColor', label: 'AI bubble', defaultKey: 'defaultAiBubbleColor' },
+  { key: 'aiTextColor', label: 'AI text', defaultKey: 'defaultAiTextColor' },
+  { key: 'dialogueColor', label: 'Dialogue (quoted)', defaultKey: 'defaultDialogueColor' },
+  { key: 'actionColor', label: 'Actions (*text*)', defaultKey: 'defaultActionColor' },
+  { key: 'borderColor', label: 'Border', defaultKey: 'defaultBorderColor' },
 ];
 
 // Convert a Dart int color (0xAARRGGBB or 0xRRGGBB) to a CSS hex string.
@@ -61,6 +63,12 @@ export function resolveThemeColors(
   const aiText = overrides.aiTextColor
     ? `#${overrides.aiTextColor}`
     : dartColorToCss(preset.defaultAiTextColor);
+  const dialogue = overrides.dialogueColor
+    ? `#${overrides.dialogueColor}`
+    : dartColorToCss(preset.defaultDialogueColor);
+  const action = overrides.actionColor
+    ? `#${overrides.actionColor}`
+    : dartColorToCss(preset.defaultActionColor);
   const border = overrides.borderColor
     ? `#${overrides.borderColor}`
     : preset.defaultBorderColor
@@ -72,6 +80,11 @@ export function resolveThemeColors(
     '--chat-user-text': userText,
     '--chat-ai-bubble': aiBubble,
     '--chat-ai-text': aiText,
+    '--chat-dialogue': dialogue,
+    '--chat-action': action,
+    // Also set the base vars that the CSS .dlg/.act rules consume.
+    '--dialogue': dialogue,
+    '--action': action,
     '--chat-border': border,
   };
   if (overrides.fontFamily || preset.defaultFontFamily) {
@@ -131,14 +144,9 @@ export function ChatThemeSettings({ overrides, onSave }: {
         <div className="color-rows">
           {COLOR_LABELS.map((c) => {
             const val = local[c.key];
-            const defaultVal = c.key === 'borderColor' && selectedPreset.defaultBorderColor
-              ? dartColorToCss(selectedPreset.defaultBorderColor)
-              : dartColorToCss(
-                  c.key === 'userBubbleColor' ? selectedPreset.defaultUserBubbleColor
-                  : c.key === 'userTextColor' ? selectedPreset.defaultUserTextColor
-                  : c.key === 'aiBubbleColor' ? selectedPreset.defaultAiBubbleColor
-                  : selectedPreset.defaultAiTextColor
-                );
+            const defaultVal = c.defaultKey && selectedPreset[c.defaultKey] != null
+              ? dartColorToCss(selectedPreset[c.defaultKey] as number)
+              : dartColorToCss(selectedPreset.defaultUserBubbleColor);
             return (
               <label key={c.key} className="color-row">
                 <span>{c.label}</span>

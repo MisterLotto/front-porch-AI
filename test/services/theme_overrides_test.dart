@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart';
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
+import 'package:front_porch_ai/models/chat_theme_preset.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -103,6 +105,90 @@ void main() {
       final inherited =
           await db.getLastSessionThemeOverrides(characterId: charId);
       expect(inherited, '{"themeId":"ocean"}');
+    });
+  });
+
+  group('ChatThemeOverrides — dialogue/action fields', () {
+    test('toJson/fromJson round-trips dialogueColor and actionColor', () {
+      final overrides = ChatThemeOverrides(
+        themeId: 'fantasy',
+        dialogueColor: 'FFD54F',
+        actionColor: 'A5D6A7',
+      );
+      final json = overrides.toJson();
+      final restored = ChatThemeOverrides.fromJson(json);
+
+      expect(restored.dialogueColor, 'FFD54F');
+      expect(restored.actionColor, 'A5D6A7');
+    });
+
+    test('toJson omits null dialogue/action fields', () {
+      final overrides = ChatThemeOverrides(themeId: 'noir');
+      final json = overrides.toJson();
+      expect(json.containsKey('dialogueColor'), isFalse);
+      expect(json.containsKey('actionColor'), isFalse);
+    });
+
+    test('isCustomized returns true when only dialogueColor is set', () {
+      final overrides = ChatThemeOverrides(
+        themeId: 'fantasy',
+        dialogueColor: 'FFD54F',
+      );
+      expect(overrides.isCustomized, isTrue);
+    });
+
+    test('resolvedDialogueColor falls back to preset default', () {
+      final empty = ChatThemeOverrides(themeId: 'fantasy');
+      final preset = ChatThemePreset.byId('fantasy')!;
+      expect(empty.resolvedDialogueColor(preset), preset.defaultDialogueColor);
+    });
+
+    test('resolvedActionColor falls back to preset default', () {
+      final empty = ChatThemeOverrides(themeId: 'steampunk');
+      final preset = ChatThemePreset.byId('steampunk')!;
+      expect(empty.resolvedActionColor(preset), preset.defaultActionColor);
+    });
+
+    test('resolvedDialogueColor uses override when set', () {
+      final overrides = ChatThemeOverrides(
+        themeId: 'fantasy',
+        dialogueColor: 'FF0000',
+      );
+      final preset = ChatThemePreset.byId('fantasy')!;
+      expect(
+        overrides.resolvedDialogueColor(preset).toARGB32(),
+        0xFFFF0000,
+      );
+    });
+
+    test('copy() preserves dialogue/action fields', () {
+      final overrides = ChatThemeOverrides(
+        themeId: 'galactic',
+        dialogueColor: '80DEEA',
+        actionColor: '7C4DFF',
+      );
+      final copy = overrides.copy();
+      expect(copy.dialogueColor, '80DEEA');
+      expect(copy.actionColor, '7C4DFF');
+    });
+
+    test('fromJsonString round-trips with dialogue/action', () {
+      final overrides = ChatThemeOverrides(
+        themeId: 'cyberpunk',
+        dialogueColor: '00FF41',
+        actionColor: 'FF00FF',
+      );
+      final str = overrides.toJsonString();
+      final restored = ChatThemeOverrides.fromJsonString(str);
+      expect(restored.dialogueColor, '00FF41');
+      expect(restored.actionColor, 'FF00FF');
+    });
+
+    test('every preset has dialogue and action colors', () {
+      for (final preset in ChatThemePreset.presets) {
+        expect(preset.defaultDialogueColor.toARGB32(), isNot(0));
+        expect(preset.defaultActionColor.toARGB32(), isNot(0));
+      }
     });
   });
 }

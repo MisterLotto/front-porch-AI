@@ -411,16 +411,36 @@ class UiSettings with SettingsBase {
     return _isDark ? _globalAiTextColor : _lightAiTextColor;
   }
 
-  /// Get effective dialogue color (per-character overrides global)
-  Color getDialogueColor(CharacterCard? character) {
-    final fallback = _isDark ? _globalDialogueColor : _lightDialogueColor;
-    return character?.frontPorchExtensions?.dialogueColor ?? fallback;
+  /// Get effective dialogue color.
+  /// Resolution: per-character override → theme override → theme preset → global.
+  Color getDialogueColor(
+    CharacterCard? character, {
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  }) {
+    final charColor = character?.frontPorchExtensions?.dialogueColor;
+    if (charColor != null) return charColor;
+    if (themeOverrides?.dialogueColor != null && themePreset != null) {
+      return themeOverrides!.resolvedDialogueColor(themePreset);
+    }
+    if (themePreset != null) return themePreset.defaultDialogueColor;
+    return _isDark ? _globalDialogueColor : _lightDialogueColor;
   }
 
-  /// Get effective action color (per-character overrides global)
-  Color getActionColor(CharacterCard? character) {
-    final fallback = _isDark ? _globalActionColor : _lightActionColor;
-    return character?.frontPorchExtensions?.actionColor ?? fallback;
+  /// Get effective action color.
+  /// Resolution: per-character override → theme override → theme preset → global.
+  Color getActionColor(
+    CharacterCard? character, {
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  }) {
+    final charColor = character?.frontPorchExtensions?.actionColor;
+    if (charColor != null) return charColor;
+    if (themeOverrides?.actionColor != null && themePreset != null) {
+      return themeOverrides!.resolvedActionColor(themePreset);
+    }
+    if (themePreset != null) return themePreset.defaultActionColor;
+    return _isDark ? _globalActionColor : _lightActionColor;
   }
 
   /// Get effective chat font family.

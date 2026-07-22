@@ -219,7 +219,16 @@ class StorageService extends ChangeNotifier {
         themePreset: themePreset,
         themeOverrides: themeOverrides,
       );
-  Color getDialogueColor([CharacterCard? c]) => uiSettings.getDialogueColor(c);
+  Color getDialogueColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getDialogueColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
   Color getUserTextColor([
     CharacterCard? c,
     ChatThemePreset? themePreset,
@@ -250,7 +259,16 @@ class StorageService extends ChangeNotifier {
         themePreset: themePreset,
         themeOverrides: themeOverrides,
       );
-  Color getActionColor([CharacterCard? c]) => uiSettings.getActionColor(c);
+  Color getActionColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getActionColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
   Future<void> setIsDark(bool v) => uiSettings.setIsDark(v);
 
   // Web server

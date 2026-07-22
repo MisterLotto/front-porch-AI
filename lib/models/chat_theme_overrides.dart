@@ -9,6 +9,8 @@ class ChatThemeOverrides {
   String? userTextColor;
   String? aiBubbleColor;
   String? aiTextColor;
+  String? dialogueColor;
+  String? actionColor;
   String? backgroundKey;
   String? borderStyle;
   String? borderColor;
@@ -20,6 +22,8 @@ class ChatThemeOverrides {
     this.userTextColor,
     this.aiBubbleColor,
     this.aiTextColor,
+    this.dialogueColor,
+    this.actionColor,
     this.backgroundKey,
     this.borderStyle,
     this.borderColor,
@@ -36,6 +40,8 @@ class ChatThemeOverrides {
         userTextColor != null ||
         aiBubbleColor != null ||
         aiTextColor != null ||
+        dialogueColor != null ||
+        actionColor != null ||
         backgroundKey != null ||
         borderStyle != null ||
         borderColor != null;
@@ -73,6 +79,16 @@ class ChatThemeOverrides {
   Color? resolvedBorderColor(ChatThemePreset preset) =>
       borderColor != null ? _parseColor(borderColor!) : preset.defaultBorderColor;
 
+  Color resolvedDialogueColor(ChatThemePreset preset) =>
+      dialogueColor != null
+          ? _parseColor(dialogueColor!)
+          : preset.defaultDialogueColor;
+
+  Color resolvedActionColor(ChatThemePreset preset) =>
+      actionColor != null
+          ? _parseColor(actionColor!)
+          : preset.defaultActionColor;
+
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
     if (themeId != null) map['themeId'] = themeId;
@@ -81,6 +97,8 @@ class ChatThemeOverrides {
     if (userTextColor != null) map['userTextColor'] = userTextColor;
     if (aiBubbleColor != null) map['aiBubbleColor'] = aiBubbleColor;
     if (aiTextColor != null) map['aiTextColor'] = aiTextColor;
+    if (dialogueColor != null) map['dialogueColor'] = dialogueColor;
+    if (actionColor != null) map['actionColor'] = actionColor;
     if (backgroundKey != null) map['backgroundKey'] = backgroundKey;
     if (borderStyle != null) map['borderStyle'] = borderStyle;
     if (borderColor != null) map['borderColor'] = borderColor;
@@ -95,6 +113,8 @@ class ChatThemeOverrides {
       userTextColor: json['userTextColor'] as String?,
       aiBubbleColor: json['aiBubbleColor'] as String?,
       aiTextColor: json['aiTextColor'] as String?,
+      dialogueColor: json['dialogueColor'] as String?,
+      actionColor: json['actionColor'] as String?,
       backgroundKey: json['backgroundKey'] as String?,
       borderStyle: json['borderStyle'] as String?,
       borderColor: json['borderColor'] as String?,

@@ -23,7 +23,6 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/chat_theme_panel.dart';
 import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
 
 class ChatSettingsDialog extends StatefulWidget {
@@ -69,11 +68,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final storage = Provider.of<StorageService>(context);
-    final chatService = Provider.of<ChatService>(context);
     final llmProvider = Provider.of<LLMProvider>(context);
     final isRemote = !llmProvider.isLocal;
     final hasOverrides = _gen.hasOverrides;
-    final overrides = chatService.sessionThemeOverrides;
 
     return Dialog(
       backgroundColor: const Color(0xFF1F2937),
@@ -180,10 +177,6 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ChatThemePanel(
-                      overrides: overrides.copy(),
-                      onChanged: (o) => chatService.sessionThemeOverrides = o,
-                    ),
                     // Reasoning toggle — all backends. KoboldCpp honors
                     // thinking too now (native chat_template_kwargs +
                     // reasoning_effort in openai_chat_stream.dart), so this is
