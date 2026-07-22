@@ -51,7 +51,7 @@ extension ChatServiceGroupEntry on ChatService {
     _groupAuthorNoteStrengths = {};
     _groupCharacterSystemPrompts = {};
     _groupRagEnabled = true;
-    _groupRetrievalCount = 8;
+    _groupRetrievalCount = 4;
     _groupMemoryBudgetPercent = 10.0;
     _groupCharacterRAGPriorities = {};
 

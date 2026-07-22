@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -1176,7 +1177,7 @@ class ChatService extends ChangeNotifier {
 
   // RAG settings for the active group (stored in the hidden checkpoint, no DB schema change)
   bool _groupRagEnabled = true;
-  int _groupRetrievalCount = 8;
+  int _groupRetrievalCount = 4;
   double _groupMemoryBudgetPercent = 10.0;
   Map<String, double> _groupCharacterRAGPriorities = {};
 
