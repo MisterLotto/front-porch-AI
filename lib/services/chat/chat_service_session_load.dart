@@ -40,6 +40,13 @@ extension ChatServiceSessionLoad on ChatService {
   }
 
   Future<void> _loadLastSession() async {
+    // NOTE: This method contains multiple await boundaries (DB queries).
+    // If the user rapidly switches characters/groups, Dart's cooperative
+    // scheduler may interleave a second setActiveCharacter call during one
+    // of these awaits. The sanitizer below runs synchronously on already-
+    // fetched local variables (swipes), so it does not introduce a new race
+    // window — but it also cannot prevent pre-existing interleaving where
+    // the later load overwrites _messages.
     if (_activeCharacter == null && _activeGroup == null) return;
 
     // Get sessions from DB

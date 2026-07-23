@@ -1435,6 +1435,11 @@ extension ChatServiceGeneration on ChatService {
         }
 
         // ── Output Sanitizer ──────────────────────────────────────────────
+        // NOTE: This runs BEFORE _lorebookScanner.scanLatest() below, so
+        // lorebook keyword triggers operate on the sanitized text. If a rule
+        // replaces text that a lorebook keyword was matching, the trigger
+        // would stop matching. This is intentional — sanitized output is the
+        // "final" text that enters history and is scanned for lore.
         if (g2.resolveOutputSanitizerEnabled(_storageService)) {
           final rules = g2.resolveOutputSanitizerRules(_storageService);
           finalResponse = sanitizeOutput(finalResponse, rules);
