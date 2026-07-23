@@ -82,7 +82,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
     final hasOverrides = _gen.hasOverrides;
 
     return Dialog(
-      backgroundColor: const Color(0xFF1F2937),
+      backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 500,
@@ -97,12 +97,12 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'Chat Settings',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: AppColors.textPrimary(context),
                       ),
                     ),
                     if (hasOverrides) ...[
@@ -127,7 +127,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           'Custom',
                           style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.porchAmberOf(context),
+                              color: AppColors.porchAmberOf(context),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -159,7 +159,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         ),
                       ),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
+                      icon: Icon(Icons.close, color: AppColors.iconSecondary(context)),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -201,9 +201,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Text(
+                          Text(
                             'Request Reasoning',
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: AppColors.textPrimary(context)),
                           ),
                           const Spacer(),
                           Switch(
@@ -221,9 +221,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
-                              const Text(
+                              Text(
                                 'Effort Level',
-                                style: TextStyle(color: Colors.white70),
+                                style: TextStyle(color: AppColors.textSecondary(context)),
                               ),
                               const Spacer(),
                               Container(
@@ -231,14 +231,14 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                   horizontal: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF374151),
+                                  color: AppColors.surfaceContainer,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<String>(
                                     value: _gen.resolveReasoningEffort(storage),
-                                    dropdownColor: const Color(0xFF374151),
-                                    style: const TextStyle(color: Colors.white),
+                                    dropdownColor: AppColors.surfaceContainer,
+                                    style: TextStyle(color: AppColors.textPrimary(context)),
                                     items: const [
                                       DropdownMenuItem(
                                         value: 'low',
@@ -273,7 +273,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           child: Text(
                             'Enable to request thinking/reasoning from compatible models',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.4),
+                              color: AppColors.textTertiary(context),
                               fontSize: 12,
                             ),
                           ),
@@ -497,19 +497,19 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        const Text(
+                        Text(
                           'Dynamic Temperature',
-                          style: TextStyle(color: Colors.white),
+                          style: TextStyle(color: AppColors.textPrimary(context)),
                         ),
                         Tooltip(
                           message:
                               'Varies temperature randomly within a range each generation for more varied outputs.',
-                          child: const Padding(
-                            padding: EdgeInsets.only(left: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 4),
                             child: Icon(
                               Icons.info_outline,
                               size: 16,
-                              color: Colors.white38,
+                              color: AppColors.textTertiary(context),
                             ),
                           ),
                         ),
@@ -551,7 +551,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF374151),
+                        color: AppColors.surfaceContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(
@@ -563,11 +563,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                 Expanded(
                                   child: TextField(
                                     controller: _stopSequenceController,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: const InputDecoration(
+                                    style: TextStyle(color: AppColors.textPrimary(context)),
+                                    decoration: InputDecoration(
                                       hintText: 'Add stop sequence...',
                                       hintStyle: TextStyle(
-                                        color: Colors.white38,
+                                        color: AppColors.textTertiary(context),
                                       ),
                                       border: InputBorder.none,
                                     ),
@@ -612,10 +612,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                               ],
                             ),
                           ),
-                          Divider(
-                            height: 1,
-                            color: AppColors.borderOf(context),
-                          ),
+                          Divider(height: 1, color: AppColors.borderOf(context)),
                           ..._gen
                               .resolveStopSequences(storage)
                               .map(
@@ -629,16 +626,16 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                       Expanded(
                                         child: Text(
                                           seq.replaceAll('\n', '\\n'),
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: AppColors.textPrimary(context),
                                             fontSize: 13,
                                           ),
                                         ),
                                       ),
                                       IconButton(
-                                        icon: const Icon(
+                                        icon: Icon(
                                           Icons.remove_circle_outline,
-                                          color: Colors.redAccent,
+                                          color: AppColors.negativeAccentOf(context),
                                           size: 22,
                                         ),
                                         onPressed: () {
@@ -678,10 +675,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           Tooltip(
                             message:
                                 'If any of these phrases appear during generation, the model backtracks and regenerates without them.',
-                            child: const Icon(
+                            child: Icon(
                               Icons.info_outline,
                               size: 16,
-                              color: Colors.white38,
+                              color: AppColors.textTertiary(context),
                             ),
                           ),
                         ],
@@ -690,14 +687,14 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       Text(
                         'One phrase per line',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
+                          color: AppColors.textTertiary(context),
                           fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF374151),
+                          color: AppColors.surfaceContainer,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         padding: const EdgeInsets.all(8.0),
@@ -705,15 +702,15 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           controller: _bannedPhrasesController,
                           maxLines: 5,
                           minLines: 2,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
                             fontSize: 13,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText:
                                 'shivers down\na cold shiver\nher eyes sparkled',
                             hintStyle: TextStyle(
-                              color: Colors.white24,
+                              color: AppColors.textTertiary(context),
                               fontSize: 13,
                             ),
                             border: InputBorder.none,
@@ -739,7 +736,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           child: Text(
                             '${_gen.resolveBannedPhrases(storage).length} phrase${_gen.resolveBannedPhrases(storage).length == 1 ? '' : 's'} banned',
                             style: TextStyle(
-                              color: AppColors.porchAmberOf(context),
+                            color: AppColors.porchAmberOf(context),
                               fontSize: 11,
                             ),
                           ),
