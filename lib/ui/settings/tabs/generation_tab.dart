@@ -519,7 +519,7 @@ class _GenerationTabState extends State<GenerationTab> {
                       ),
                       Text(
                         'When enabled, opening a chat will permanently '
-                        'apply the rules above to all messages already '
+                        'apply the rules below to all messages already '
                         'saved in that chat\'s history. This cannot be '
                         'undone.',
                         style: TextStyle(
