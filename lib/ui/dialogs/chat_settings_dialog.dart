@@ -25,6 +25,7 @@ import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
+import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 
 class ChatSettingsDialog extends StatefulWidget {
   const ChatSettingsDialog({super.key});
@@ -40,6 +41,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
       TextEditingController();
   final TextEditingController _sanitizerReplaceController =
       TextEditingController();
+  bool _sanitizerFindError = false;
   late ChatGenerationSettings _gen;
   bool _initialised = false;
 
@@ -811,31 +813,44 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                         color: Colors.white,
                                         fontSize: 13,
                                       ),
-                                      decoration: const InputDecoration(
+                                      onChanged: (_) {
+                                        if (_sanitizerFindError) {
+                                          setState(() =>
+                                              _sanitizerFindError = false);
+                                        }
+                                      },
+                                      decoration: InputDecoration(
                                         hintText: 'Find...',
-                                        hintStyle: TextStyle(
+                                        hintStyle: const TextStyle(
                                           color: Colors.white38,
                                           fontSize: 13,
                                         ),
                                         isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
                                           horizontal: 4,
                                           vertical: 6,
                                         ),
                                         border: UnderlineInputBorder(
                                           borderSide: BorderSide(
-                                            color: Colors.white24,
+                                            color: _sanitizerFindError
+                                                ? Colors.red
+                                                : Colors.white24,
                                           ),
                                         ),
                                         enabledBorder: UnderlineInputBorder(
                                           borderSide: BorderSide(
-                                            color: Colors.white24,
+                                            color: _sanitizerFindError
+                                                ? Colors.red
+                                                : Colors.white24,
                                           ),
                                         ),
                                         focusedBorder: UnderlineInputBorder(
                                           borderSide: BorderSide(
-                                            color:
-                                                AppColors.formMasterAccent,
+                                            color: _sanitizerFindError
+                                                ? Colors.red
+                                                : AppColors
+                                                    .formMasterAccent,
                                           ),
                                         ),
                                       ),
@@ -898,24 +913,29 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                           _sanitizerFindController.text;
                                       final replace =
                                           _sanitizerReplaceController.text;
-                                      if (find.isNotEmpty) {
-                                        setState(() {
-                                          final resolved = _gen
-                                              .resolveOutputSanitizerRules(
-                                                storage,
-                                              );
-                                          _gen.outputSanitizerRules = [
-                                            ...resolved,
-                                            OutputSanitizerRule(
-                                              find: find,
-                                              replace: replace,
-                                            ),
-                                          ];
-                                        });
-                                        _sanitizerFindController.clear();
-                                        _sanitizerReplaceController.clear();
-                                        _save();
+                                      if (find.isEmpty) return;
+                                      if (!isValidFindPattern(find)) {
+                                        setState(() =>
+                                            _sanitizerFindError = true);
+                                        return;
                                       }
+                                      setState(() {
+                                        final resolved = _gen
+                                            .resolveOutputSanitizerRules(
+                                              storage,
+                                            );
+                                        _gen.outputSanitizerRules = [
+                                          ...resolved,
+                                          OutputSanitizerRule(
+                                            find: find,
+                                            replace: replace,
+                                          ),
+                                        ];
+                                      });
+                                      _sanitizerFindController.clear();
+                                      _sanitizerReplaceController.clear();
+                                      _sanitizerFindError = false;
+                                      _save();
                                     },
                                   ),
                                 ],

@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
 import 'package:front_porch_ai/ui/settings/widgets/slider_setting.dart';
+import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 
 /// Generation-settings tab extracted from settings_page (Stage 5, remaining
 /// tabs). Pure lift of _buildGenerationTab: reasoning, sampling parameters,
@@ -47,6 +48,7 @@ class _GenerationTabState extends State<GenerationTab> {
       TextEditingController();
   final TextEditingController _sanitizerReplaceController =
       TextEditingController();
+  bool _sanitizerFindError = false;
 
   @override
   void dispose() {
@@ -567,6 +569,11 @@ class _GenerationTabState extends State<GenerationTab> {
                                 color: AppColors.textPrimary(context),
                                 fontSize: 13,
                               ),
+                              onChanged: (_) {
+                                if (_sanitizerFindError) {
+                                  setState(() => _sanitizerFindError = false);
+                                }
+                              },
                               decoration: InputDecoration(
                                 hintText: 'Find...',
                                 hintStyle: TextStyle(
@@ -580,16 +587,24 @@ class _GenerationTabState extends State<GenerationTab> {
                                 ),
                                 border: UnderlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: AppColors.borderOf(context),
+                                    color: _sanitizerFindError
+                                        ? Colors.red
+                                        : AppColors.borderOf(context),
                                   ),
                                 ),
                                 enabledBorder: UnderlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: AppColors.borderOf(context),
+                                    color: _sanitizerFindError
+                                        ? Colors.red
+                                        : AppColors.borderOf(context),
                                   ),
                                 ),
                                 focusedBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(color: accent),
+                                  borderSide: BorderSide(
+                                    color: _sanitizerFindError
+                                        ? Colors.red
+                                        : accent,
+                                  ),
                                 ),
                               ),
                             ),
@@ -645,20 +660,24 @@ class _GenerationTabState extends State<GenerationTab> {
                                   _sanitizerFindController.text;
                               final replace =
                                   _sanitizerReplaceController.text;
-                              if (find.isNotEmpty) {
-                                final current = storage
-                                    .generationSettings.outputSanitizerRules
-                                    .toList();
-                                current.add(
-                                  OutputSanitizerRule(
-                                    find: find,
-                                    replace: replace,
-                                  ),
-                                );
-                                storage.generationSettings.setOutputSanitizerRules(current);
-                                _sanitizerFindController.clear();
-                                _sanitizerReplaceController.clear();
+                              if (find.isEmpty) return;
+                              if (!isValidFindPattern(find)) {
+                                setState(() => _sanitizerFindError = true);
+                                return;
                               }
+                              final current = storage
+                                  .generationSettings.outputSanitizerRules
+                                  .toList();
+                              current.add(
+                                OutputSanitizerRule(
+                                  find: find,
+                                  replace: replace,
+                                ),
+                              );
+                              storage.generationSettings.setOutputSanitizerRules(current);
+                              _sanitizerFindController.clear();
+                              _sanitizerReplaceController.clear();
+                              setState(() => _sanitizerFindError = false);
                             },
                           ),
                         ],

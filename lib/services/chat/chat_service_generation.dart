@@ -1737,18 +1737,27 @@ extension ChatServiceGeneration on ChatService {
     }
   }
 
-  /// Applies output sanitizer rules to [text], replacing each matched
-  /// sequence with its configured replacement. Used both during generation
-  /// (to sanitise the stored message) and on DB load (legacy messages).
+  /// Applies output sanitizer rules to [text] using the limited regex syntax.
+  ///
+  /// Each rule's find pattern is compiled to a case-insensitive [RegExp].
+  /// Invalid rules are silently skipped (defensive — the UI should prevent
+  /// them from being saved).
   static String sanitizeOutput(
     String text,
     List<OutputSanitizerRule> rules,
   ) {
     var result = text;
     for (final rule in rules) {
-      if (rule.find.isNotEmpty) {
-        result = result.replaceAll(rule.find, rule.replace);
-      }
+      if (rule.find.isEmpty) continue;
+      final compiled = tryCompileRule(rule.find, rule.replace);
+      if (compiled == null) continue;
+      result = result.replaceAllMapped(compiled.regex, (m) {
+        var out = compiled.replacement;
+        for (var i = 1; i <= m.groupCount; i++) {
+          out = out.replaceAll('\$$i', m.group(i) ?? '');
+        }
+        return out;
+      });
     }
     return result;
   }
