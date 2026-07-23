@@ -320,64 +320,11 @@ class _GenerationTabState extends State<GenerationTab> {
           // ── Banned Phrases (KoboldCpp only) ────────────────────────────
           if (!isRemote) ...[
             const SectionHeader('Banned Phrases'),
-            const SizedBox(height: 4),
-            Text(
-              'One phrase per line. If any appear during generation the model '
-              'backtracks and retries.',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 12,
-              ),
+            BannedPhrasesEditor(
+              controller: widget.bannedPhrasesController,
+              onChanged: (phrases) => storage.setBannedPhrases(phrases),
+              phraseCount: storage.bannedPhrases.length,
             ),
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.cardOf(context),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.all(8),
-              child: TextField(
-                controller: widget.bannedPhrasesController,
-                maxLines: 6,
-                minLines: 2,
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontSize: 13,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'shivers down\na cold shiver\nher eyes sparkled',
-                  hintStyle: TextStyle(
-                    color: AppColors.textTertiary(context),
-                    fontSize: 13,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                ),
-                onChanged: (val) {
-                  final phrases = val
-                      .split('\n')
-                      .where((s) => s.trim().isNotEmpty)
-                      .map((s) => s.trim())
-                      .toList();
-                  storage.setBannedPhrases(phrases);
-                },
-              ),
-            ),
-            if (storage.bannedPhrases.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  '${storage.bannedPhrases.length} phrase'
-                  '${storage.bannedPhrases.length == 1 ? '' : 's'} banned',
-                  style: TextStyle(
-                    color: AppColors.porchHoneyOf(context),
-                    fontSize: 11,
-                  ),
-                ),
-              ),
           ],
 
           const SizedBox(height: 24),

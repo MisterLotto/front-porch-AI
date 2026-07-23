@@ -53,5 +53,6 @@ export 'needs_bar.dart';
 export 'fixation_chip.dart';
 export 'group_avatar_montage.dart';
 export 'group_member_card.dart';
+export 'banned_phrases_editor.dart';
 export 'output_sanitizer_rule_editor.dart';
 export 'vision_projector_field.dart';

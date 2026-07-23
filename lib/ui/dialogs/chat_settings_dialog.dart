@@ -571,64 +571,16 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'One phrase per line',
-                        style: TextStyle(
-                          color: AppColors.textTertiary(context),
-                          fontSize: 12,
-                        ),
+                      BannedPhrasesEditor(
+                        controller: _bannedPhrasesController,
+                        onChanged: (phrases) {
+                          _gen.bannedPhrases = phrases;
+                          _save();
+                        },
+                        phraseCount: _gen.resolveBannedPhrases(storage).length,
+                        description: 'One phrase per line',
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(8.0),
-                        child: TextField(
-                          controller: _bannedPhrasesController,
-                          maxLines: 5,
-                          minLines: 2,
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                            fontSize: 13,
-                          ),
-                          decoration: InputDecoration(
-                            hintText:
-                                'shivers down\na cold shiver\nher eyes sparkled',
-                            hintStyle: TextStyle(
-                              color: AppColors.textTertiary(context),
-                              fontSize: 13,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                          ),
-                          onChanged: (val) {
-                            final phrases = val
-                                .split('\n')
-                                .where((s) => s.trim().isNotEmpty)
-                                .map((s) => s.trim())
-                                .toList();
-                            _gen.bannedPhrases = phrases;
-                            _save();
-                          },
-                        ),
-                      ),
-                      if (_gen.resolveBannedPhrases(storage).isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            '${_gen.resolveBannedPhrases(storage).length} phrase${_gen.resolveBannedPhrases(storage).length == 1 ? '' : 's'} banned',
-                            style: TextStyle(
-                            color: AppColors.porchAmberOf(context),
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
+
                     ],
 
                     // ── Output Sanitizer ─────────────────────────────────
