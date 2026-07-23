@@ -36,6 +36,7 @@ class BackendSettings with SettingsBase {
   bool _koboldThinkingModel = false;
 
   bool _autostartBackend = false;
+  bool _autostartOnChatOpen = true;
   String? _lastUsedModelPath;
   String? _activeKcppsPath;
   bool _kcppsHasModel = false;
@@ -65,6 +66,7 @@ class BackendSettings with SettingsBase {
   String get reasoningEffort => _reasoningEffort;
   bool get koboldThinkingModel => _koboldThinkingModel;
   bool get autostartBackend => _autostartBackend;
+  bool get autostartOnChatOpen => _autostartOnChatOpen;
   String? get lastUsedModelPath => _lastUsedModelPath;
   String? get activeKcppsPath => _activeKcppsPath;
   bool get kcppsHasModel => _kcppsHasModel;
@@ -129,6 +131,8 @@ class BackendSettings with SettingsBase {
 
     _autostartBackend =
         prefs?.getBool(k('autostart_backend')) ?? _autostartBackend;
+    _autostartOnChatOpen =
+        prefs?.getBool(k('autostart_on_chat_open')) ?? _autostartOnChatOpen;
 
     // ── Migration: the removed 'pseudoRemote' backend is now the local Kobold
     // backend launching a .kcpps preset. Rewrite the persisted value so nothing
@@ -217,6 +221,12 @@ class BackendSettings with SettingsBase {
   Future<void> setAutostartBackend(bool value) async {
     _autostartBackend = value;
     await prefs?.setBool(k('autostart_backend'), value);
+    notify();
+  }
+
+  Future<void> setAutostartOnChatOpen(bool value) async {
+    _autostartOnChatOpen = value;
+    await prefs?.setBool(k('autostart_on_chat_open'), value);
     notify();
   }
 
