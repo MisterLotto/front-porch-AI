@@ -93,6 +93,7 @@ class GenerationSettings with SettingsBase {
   ];
 
   bool _outputSanitizerEnabled = false;
+  bool _sanitiseExistingHistory = false;
   List<OutputSanitizerRule> _outputSanitizerRules =
       List.of(kDefaultSanitizerRules);
 
@@ -116,6 +117,7 @@ class GenerationSettings with SettingsBase {
   int get minLength => _minLength;
   List<String> get stopSequences => List.unmodifiable(_stopSequences);
   bool get outputSanitizerEnabled => _outputSanitizerEnabled;
+  bool get sanitiseExistingHistory => _sanitiseExistingHistory;
   List<OutputSanitizerRule> get outputSanitizerRules =>
       List.unmodifiable(_outputSanitizerRules);
 
@@ -163,6 +165,9 @@ class GenerationSettings with SettingsBase {
 
     _outputSanitizerEnabled =
         prefs?.getBool(k('output_sanitizer_enabled')) ?? _outputSanitizerEnabled;
+    _sanitiseExistingHistory =
+        prefs?.getBool(k('sanitise_existing_history')) ??
+        _sanitiseExistingHistory;
     final rulesJson = prefs?.getString(k('output_sanitizer_rules'));
     if (rulesJson != null) {
       try {
@@ -311,6 +316,12 @@ class GenerationSettings with SettingsBase {
   Future<void> setOutputSanitizerEnabled(bool value) async {
     _outputSanitizerEnabled = value;
     await prefs?.setBool(k('output_sanitizer_enabled'), value);
+    notify();
+  }
+
+  Future<void> setSanitiseExistingHistory(bool value) async {
+    _sanitiseExistingHistory = value;
+    await prefs?.setBool(k('sanitise_existing_history'), value);
     notify();
   }
 

@@ -265,7 +265,10 @@ extension ChatServiceSessionLoad on ChatService {
 
         // Output sanitizer: apply configured replacements to loaded swipes
         // so legacy messages (saved before this feature) are also normalised.
-        if (_storageService.generationSettings.outputSanitizerEnabled) {
+        // Gated by sanitiseExistingHistory — when off, even chats with
+        // per-chat sanitizer enabled keep their raw saved text on load.
+        if (_storageService.generationSettings.outputSanitizerEnabled &&
+            _storageService.generationSettings.sanitiseExistingHistory) {
           final rules =
               _storageService.generationSettings.outputSanitizerRules;
           if (rules.isNotEmpty && swipes.isNotEmpty) {
@@ -421,7 +424,10 @@ extension ChatServiceSessionLoad on ChatService {
 
         // Output sanitizer: apply configured replacements to loaded swipes
         // so legacy messages (saved before this feature) are also normalised.
-        if (_storageService.generationSettings.outputSanitizerEnabled) {
+        // Gated by sanitiseExistingHistory — when off, even chats with
+        // per-chat sanitizer enabled keep their raw saved text on load.
+        if (_storageService.generationSettings.outputSanitizerEnabled &&
+            _storageService.generationSettings.sanitiseExistingHistory) {
           final rules =
               _storageService.generationSettings.outputSanitizerRules;
           if (rules.isNotEmpty && swipes.isNotEmpty) {

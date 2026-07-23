@@ -503,6 +503,49 @@ class _GenerationTabState extends State<GenerationTab> {
           ),
           if (storage.generationSettings.outputSanitizerEnabled) ...[
             const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sanitise Existing History',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                        ),
+                      ),
+                      Text(
+                        'When enabled, opening a chat will permanently '
+                        'apply the rules above to all messages already '
+                        'saved in that chat\'s history. This cannot be '
+                        'undone.',
+                        style: TextStyle(
+                          color: AppColors.textTertiary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: storage.generationSettings.sanitiseExistingHistory,
+                  onChanged: (val) async {
+                    storage.generationSettings
+                        .setSanitiseExistingHistory(val);
+                    if (val && mounted) {
+                      final chatService = Provider.of<ChatService>(
+                        context,
+                        listen: false,
+                      );
+                      await chatService.reloadCurrentSession();
+                    }
+                  },
+                  activeTrackColor: accent,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Container(
               decoration: BoxDecoration(
                 color: AppColors.cardOf(context),
