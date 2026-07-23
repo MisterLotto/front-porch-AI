@@ -33,7 +33,6 @@ class ChatSettingsDialog extends StatefulWidget {
 }
 
 class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
-  final TextEditingController _stopSequenceController = TextEditingController();
   late final TextEditingController _bannedPhrasesController;
   late ChatGenerationSettings _gen;
   bool _initialised = false;
@@ -54,7 +53,6 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
 
   @override
   void dispose() {
-    _stopSequenceController.dispose();
     _bannedPhrasesController.dispose();
     super.dispose();
   }
@@ -540,114 +538,13 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _stopSequenceController,
-                                    style: TextStyle(color: AppColors.textPrimary(context)),
-                                    decoration: InputDecoration(
-                                      hintText: 'Add stop sequence...',
-                                      hintStyle: TextStyle(
-                                        color: AppColors.textTertiary(context),
-                                      ),
-                                      border: InputBorder.none,
-                                    ),
-                                    onSubmitted: (val) {
-                                      if (val.isNotEmpty) {
-                                        setState(() {
-                                          final resolved = _gen
-                                              .resolveStopSequences(storage);
-                                          _gen.stopSequences = [
-                                            ...resolved,
-                                            val,
-                                          ];
-                                        });
-                                        _stopSequenceController.clear();
-                                        _save();
-                                      }
-                                    },
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.add_circle,
-                                    color: AppColors.formMasterAccent,
-                                  ),
-                                  onPressed: () {
-                                    if (_stopSequenceController
-                                        .text
-                                        .isNotEmpty) {
-                                      setState(() {
-                                        final resolved = _gen
-                                            .resolveStopSequences(storage);
-                                        _gen.stopSequences = [
-                                          ...resolved,
-                                          _stopSequenceController.text,
-                                        ];
-                                      });
-                                      _stopSequenceController.clear();
-                                      _save();
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          Divider(height: 1, color: AppColors.borderOf(context)),
-                          ..._gen
-                              .resolveStopSequences(storage)
-                              .map(
-                                (seq) => Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 2,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          seq.replaceAll('\n', '\\n'),
-                                          style: TextStyle(
-                                            color: AppColors.textPrimary(context),
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(
-                                          Icons.remove_circle_outline,
-                                          color: AppColors.negativeAccentOf(context),
-                                          size: 22,
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            final resolved = _gen
-                                                .resolveStopSequences(
-                                                  storage,
-                                                )
-                                                .toList();
-                                            resolved.remove(seq);
-                                            _gen.stopSequences = resolved;
-                                          });
-                                          _save();
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                        ],
-                      ),
+                    StopSequenceList(
+                      sequences: _gen.resolveStopSequences(storage),
+                      onSequencesChanged: (newList) {
+                        setState(() => _gen.stopSequences = newList);
+                        _save();
+                      },
+                      backgroundColor: AppColors.surfaceContainer,
                     ),
 
                     // ── Banned Phrases (Anti-Slop) — local KoboldCpp only ──

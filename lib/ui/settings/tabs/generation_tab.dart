@@ -41,15 +41,6 @@ class GenerationTab extends StatefulWidget {
 }
 
 class _GenerationTabState extends State<GenerationTab> {
-  final TextEditingController _stopSequenceController =
-      TextEditingController();
-
-  @override
-  void dispose() {
-    _stopSequenceController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final storage = Provider.of<StorageService>(context);
@@ -319,87 +310,10 @@ class _GenerationTabState extends State<GenerationTab> {
           // ── Stop Sequences ─────────────────────────────────────────────
           const SectionHeader('Stop Sequences'),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.cardOf(context),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _stopSequenceController,
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Add stop sequence...',
-                            hintStyle: TextStyle(
-                              color: AppColors.textTertiary(context),
-                            ),
-                            border: InputBorder.none,
-                          ),
-                          onSubmitted: (val) {
-                            if (val.isNotEmpty) {
-                              storage.addStopSequence(val);
-                              _stopSequenceController.clear();
-                            }
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.add_circle,
-                          color: accent,
-                          size: 22,
-                        ),
-                        onPressed: () {
-                          final val = _stopSequenceController.text;
-                          if (val.isNotEmpty) {
-                            storage.addStopSequence(val);
-                            _stopSequenceController.clear();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(height: 1, color: AppColors.borderOf(context)),
-                  ...storage.stopSequences.map(
-                    (seq) => Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 2,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              seq.replaceAll('\n', '\\n'),
-                              style: TextStyle(
-                                color: AppColors.textPrimary(context),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.remove_circle_outline,
-                              color: AppColors.negativeAccentOf(context),
-                              size: 22,
-                            ),
-                            onPressed: () => storage.removeStopSequence(seq),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+          StopSequenceList(
+            sequences: storage.stopSequences,
+            onSequencesChanged: (newList) =>
+                storage.setStopSequences(newList),
           ),
           const SizedBox(height: 24),
 
