@@ -16,6 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+
 import 'settings_base.dart';
 
 /// Generation / sampling settings (system prompt, temperature, penalties,
@@ -84,6 +88,14 @@ class GenerationSettings with SettingsBase {
 
   List<String> _stopSequences = List.of(kDefaultStopSequences);
 
+  static const List<OutputSanitizerRule> kDefaultSanitizerRules = [
+    OutputSanitizerRule(find: '\u2014', replace: ' - '),
+  ];
+
+  bool _outputSanitizerEnabled = false;
+  List<OutputSanitizerRule> _outputSanitizerRules =
+      List.of(kDefaultSanitizerRules);
+
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
   double get topP => _topP;
@@ -103,6 +115,9 @@ class GenerationSettings with SettingsBase {
   int get maxLength => _maxLength;
   int get minLength => _minLength;
   List<String> get stopSequences => List.unmodifiable(_stopSequences);
+  bool get outputSanitizerEnabled => _outputSanitizerEnabled;
+  List<OutputSanitizerRule> get outputSanitizerRules =>
+      List.unmodifiable(_outputSanitizerRules);
 
   void load() {
     _systemPrompt = prefs?.getString(k('system_prompt')) ?? _systemPrompt;
@@ -144,6 +159,20 @@ class GenerationSettings with SettingsBase {
     }
     if (added) {
       prefs?.setStringList(k('stop_sequences'), _stopSequences);
+    }
+
+    _outputSanitizerEnabled =
+        prefs?.getBool(k('output_sanitizer_enabled')) ?? _outputSanitizerEnabled;
+    final rulesJson = prefs?.getString(k('output_sanitizer_rules'));
+    if (rulesJson != null) {
+      try {
+        final list = jsonDecode(rulesJson) as List;
+        _outputSanitizerRules = list
+            .map((e) => OutputSanitizerRule.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        // Keep default on corrupt data
+      }
     }
   }
 
@@ -277,5 +306,20 @@ class GenerationSettings with SettingsBase {
       await prefs?.setStringList(k('stop_sequences'), _stopSequences);
       notify();
     }
+  }
+
+  Future<void> setOutputSanitizerEnabled(bool value) async {
+    _outputSanitizerEnabled = value;
+    await prefs?.setBool(k('output_sanitizer_enabled'), value);
+    notify();
+  }
+
+  Future<void> setOutputSanitizerRules(List<OutputSanitizerRule> value) async {
+    _outputSanitizerRules = value;
+    await prefs?.setString(
+      k('output_sanitizer_rules'),
+      jsonEncode(value.map((r) => r.toJson()).toList()),
+    );
+    notify();
   }
 }

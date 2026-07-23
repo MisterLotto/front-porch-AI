@@ -262,6 +262,19 @@ extension ChatServiceSessionLoad on ChatService {
         } catch (_) {
           swipes = [''];
         }
+
+        // Output sanitizer: apply configured replacements to loaded swipes
+        // so legacy messages (saved before this feature) are also normalised.
+        if (_storageService.generationSettings.outputSanitizerEnabled) {
+          final rules =
+              _storageService.generationSettings.outputSanitizerRules;
+          if (rules.isNotEmpty && swipes.isNotEmpty) {
+            swipes = swipes
+                .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
+                .toList();
+          }
+        }
+
         List<int> swipeDurations;
         try {
           swipeDurations = List<int>.from(
@@ -405,6 +418,19 @@ extension ChatServiceSessionLoad on ChatService {
         } catch (_) {
           swipes = [''];
         }
+
+        // Output sanitizer: apply configured replacements to loaded swipes
+        // so legacy messages (saved before this feature) are also normalised.
+        if (_storageService.generationSettings.outputSanitizerEnabled) {
+          final rules =
+              _storageService.generationSettings.outputSanitizerRules;
+          if (rules.isNotEmpty && swipes.isNotEmpty) {
+            swipes = swipes
+                .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
+                .toList();
+          }
+        }
+
         List<int> swipeDurations;
         try {
           swipeDurations = List<int>.from(

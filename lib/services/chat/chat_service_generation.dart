@@ -1434,6 +1434,13 @@ extension ChatServiceGeneration on ChatService {
           finalResponse = _stripThinkBlocks(finalResponse);
         }
 
+        // ── Output Sanitizer ──────────────────────────────────────────────
+        if (g2.resolveOutputSanitizerEnabled(_storageService)) {
+          final rules = g2.resolveOutputSanitizerRules(_storageService);
+          finalResponse = sanitizeOutput(finalResponse, rules);
+          _messages.last.text = finalResponse;
+        }
+
         // Snapshot which entries were already triggered before scanning the AI response.
         // We will only decrement those — newly AI-triggered entries must keep their
         // full depth budget so they are visible on the next user turn.
@@ -1728,5 +1735,21 @@ extension ChatServiceGeneration on ChatService {
       // nextCharacter-based behaviour instead of seeing a stale speaker.
       _turnSpeakerIdForRealism = null;
     }
+  }
+
+  /// Applies output sanitizer rules to [text], replacing each matched
+  /// sequence with its configured replacement. Used both during generation
+  /// (to sanitise the stored message) and on DB load (legacy messages).
+  static String sanitizeOutput(
+    String text,
+    List<OutputSanitizerRule> rules,
+  ) {
+    var result = text;
+    for (final rule in rules) {
+      if (rule.find.isNotEmpty) {
+        result = result.replaceAll(rule.find, rule.replace);
+      }
+    }
+    return result;
   }
 }

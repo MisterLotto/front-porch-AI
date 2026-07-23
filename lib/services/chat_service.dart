@@ -48,6 +48,7 @@ import 'package:front_porch_ai/models/chat_participant.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/group_member.dart';
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 import 'package:front_porch_ai/services/chat/member_origin_resolver.dart';
 import 'package:front_porch_ai/services/group_turn_manager.dart';
 import 'package:front_porch_ai/models/lorebook.dart';

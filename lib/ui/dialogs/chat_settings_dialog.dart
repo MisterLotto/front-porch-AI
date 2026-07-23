@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
 
@@ -35,6 +36,10 @@ class ChatSettingsDialog extends StatefulWidget {
 class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   final TextEditingController _stopSequenceController = TextEditingController();
   late final TextEditingController _bannedPhrasesController;
+  final TextEditingController _sanitizerFindController =
+      TextEditingController();
+  final TextEditingController _sanitizerReplaceController =
+      TextEditingController();
   late ChatGenerationSettings _gen;
   bool _initialised = false;
 
@@ -56,6 +61,8 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   void dispose() {
     _stopSequenceController.dispose();
     _bannedPhrasesController.dispose();
+    _sanitizerFindController.dispose();
+    _sanitizerReplaceController.dispose();
     super.dispose();
   }
 
@@ -717,6 +724,216 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                             '${_gen.resolveBannedPhrases(storage).length} phrase${_gen.resolveBannedPhrases(storage).length == 1 ? '' : 's'} banned',
                             style: TextStyle(
                               color: AppColors.porchAmberOf(context),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                    ],
+
+                    // ── Output Sanitizer ─────────────────────────────────
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        const Text(
+                          'Output Sanitizer',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.formMasterAccent,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message:
+                              'Replace specific character sequences in model output '
+                              'before saving to chat history.',
+                          child: const Icon(
+                            Icons.info_outline,
+                            size: 16,
+                            color: Colors.white38,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Text(
+                          'Enable Output Sanitizer',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        const Spacer(),
+                        Switch(
+                          value: _gen.resolveOutputSanitizerEnabled(storage),
+                          onChanged: (val) {
+                            setState(
+                              () => _gen.outputSanitizerEnabled = val,
+                            );
+                            _save();
+                          },
+                          activeTrackColor: AppColors.formMasterAccent,
+                        ),
+                      ],
+                    ),
+                    if (_gen.resolveOutputSanitizerEnabled(storage)) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF374151),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _sanitizerFindController,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText: 'Find...',
+                                        hintStyle: TextStyle(
+                                          color: Colors.white38,
+                                          fontSize: 13,
+                                        ),
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      controller:
+                                          _sanitizerReplaceController,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText: 'Replace with...',
+                                        hintStyle: TextStyle(
+                                          color: Colors.white38,
+                                          fontSize: 13,
+                                        ),
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.add_circle,
+                                      color: AppColors.formMasterAccent,
+                                      size: 22,
+                                    ),
+                                    onPressed: () {
+                                      final find =
+                                          _sanitizerFindController.text;
+                                      final replace =
+                                          _sanitizerReplaceController.text;
+                                      if (find.isNotEmpty) {
+                                        setState(() {
+                                          final resolved = _gen
+                                              .resolveOutputSanitizerRules(
+                                                storage,
+                                              );
+                                          _gen.outputSanitizerRules = [
+                                            ...resolved,
+                                            OutputSanitizerRule(
+                                              find: find,
+                                              replace: replace,
+                                            ),
+                                          ];
+                                        });
+                                        _sanitizerFindController.clear();
+                                        _sanitizerReplaceController.clear();
+                                        _save();
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Divider(
+                              height: 1,
+                              color: Colors.white10,
+                            ),
+                            ..._gen
+                                .resolveOutputSanitizerRules(storage)
+                                .map(
+                                  (rule) => ListTile(
+                                    title: Text.rich(
+                                      TextSpan(
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                        ),
+                                        children: [
+                                          TextSpan(
+                                            text: rule.find,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const TextSpan(text: ' → '),
+                                          TextSpan(text: rule.replace),
+                                        ],
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                        color: Colors.redAccent,
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          final resolved = _gen
+                                              .resolveOutputSanitizerRules(
+                                                storage,
+                                              )
+                                              .toList();
+                                          resolved.remove(rule);
+                                          _gen.outputSanitizerRules =
+                                              resolved;
+                                        });
+                                        _save();
+                                      },
+                                    ),
+                                    dense: true,
+                                  ),
+                                ),
+                          ],
+                        ),
+                      ),
+                      if (_gen
+                          .resolveOutputSanitizerRules(storage)
+                          .isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'No rules configured',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.4),
+                              fontSize: 11,
+                            ),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            '${_gen.resolveOutputSanitizerRules(storage).length} rule${_gen.resolveOutputSanitizerRules(storage).length == 1 ? '' : 's'}',
+                            style: TextStyle(
+                              color: Colors.amber.shade300,
                               fontSize: 11,
                             ),
                           ),

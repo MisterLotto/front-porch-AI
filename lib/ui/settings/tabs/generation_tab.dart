@@ -19,6 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
@@ -30,10 +31,27 @@ import 'package:front_porch_ai/ui/settings/widgets/slider_setting.dart';
 /// backends only) banned phrases. Reads storage/LLM state via Provider; the
 /// banned-phrases controller is the only shared state, passed via ctor.
 /// AppColors exclusive, warm-porch accents.
-class GenerationTab extends StatelessWidget {
+class GenerationTab extends StatefulWidget {
   const GenerationTab({super.key, required this.bannedPhrasesController});
 
   final TextEditingController bannedPhrasesController;
+
+  @override
+  State<GenerationTab> createState() => _GenerationTabState();
+}
+
+class _GenerationTabState extends State<GenerationTab> {
+  final TextEditingController _sanitizerFindController =
+      TextEditingController();
+  final TextEditingController _sanitizerReplaceController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    _sanitizerFindController.dispose();
+    _sanitizerReplaceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,9 +66,6 @@ class GenerationTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Reasoning (thinking models — local KoboldCpp & remote) ─────
-          // Not gated by backend: KoboldCpp honors thinking too (via native
-          // chat_template_kwargs.enable_thinking + reasoning_effort — see
-          // openai_chat_stream.dart). Only applies to reasoning-capable models.
           const SectionHeader('Reasoning'),
           const SizedBox(height: 8),
           Row(
@@ -381,7 +396,7 @@ class GenerationTab extends StatelessWidget {
               ),
               padding: const EdgeInsets.all(8),
               child: TextField(
-                controller: bannedPhrasesController,
+                controller: widget.bannedPhrasesController,
                 maxLines: 6,
                 minLines: 2,
                 style: TextStyle(
@@ -416,6 +431,186 @@ class GenerationTab extends StatelessWidget {
                 child: Text(
                   '${storage.bannedPhrases.length} phrase'
                   '${storage.bannedPhrases.length == 1 ? '' : 's'} banned',
+                  style: TextStyle(
+                    color: AppColors.porchHoneyOf(context),
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // ── Output Sanitizer ───────────────────────────────────────────
+          const SectionHeader('Output Sanitizer'),
+          const SizedBox(height: 4),
+          Text(
+            'Replace specific character sequences in model output before '
+            'saving to chat history.',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'Enable Output Sanitizer',
+                style: TextStyle(color: AppColors.textSecondary(context)),
+              ),
+              const Spacer(),
+              Switch(
+                value: storage.generationSettings.outputSanitizerEnabled,
+                onChanged: (val) =>
+                    storage.generationSettings.setOutputSanitizerEnabled(val),
+                activeTrackColor: accent,
+              ),
+            ],
+          ),
+          if (storage.generationSettings.outputSanitizerEnabled) ...[
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.cardOf(context),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _sanitizerFindController,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 13,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Find...',
+                              hintStyle: TextStyle(
+                                color: AppColors.textTertiary(context),
+                                fontSize: 13,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _sanitizerReplaceController,
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 13,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: 'Replace with...',
+                              hintStyle: TextStyle(
+                                color: AppColors.textTertiary(context),
+                                fontSize: 13,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.add_circle,
+                            color: AppColors.formMasterAccent,
+                            size: 22,
+                          ),
+                          onPressed: () {
+                            final find =
+                                _sanitizerFindController.text;
+                            final replace =
+                                _sanitizerReplaceController.text;
+                            if (find.isNotEmpty) {
+                              final current = storage
+                                  .generationSettings.outputSanitizerRules
+                                  .toList();
+                              current.add(
+                                OutputSanitizerRule(
+                                  find: find,
+                                  replace: replace,
+                                ),
+                              );
+                              storage.generationSettings.setOutputSanitizerRules(current);
+                              _sanitizerFindController.clear();
+                              _sanitizerReplaceController.clear();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: AppColors.borderOf(context),
+                  ),
+                  ...storage.generationSettings.outputSanitizerRules.map(
+                    (rule) => ListTile(
+                      title: Text.rich(
+                        TextSpan(
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                            fontSize: 13,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: rule.find,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const TextSpan(text: ' → '),
+                            TextSpan(text: rule.replace),
+                          ],
+                        ),
+                      ),
+                      trailing: IconButton(
+                        icon: Icon(
+                          Icons.remove_circle_outline,
+                          color: AppColors.negativeAccentOf(context),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          final current = storage
+                              .generationSettings.outputSanitizerRules
+                              .toList();
+                          current.remove(rule);
+                          storage.generationSettings.setOutputSanitizerRules(current);
+                        },
+                      ),
+                      dense: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (storage.generationSettings.outputSanitizerRules.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'No rules configured',
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 11,
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${storage.generationSettings.outputSanitizerRules.length} rule${storage.generationSettings.outputSanitizerRules.length == 1 ? '' : 's'}',
                   style: TextStyle(
                     color: AppColors.porchHoneyOf(context),
                     fontSize: 11,
