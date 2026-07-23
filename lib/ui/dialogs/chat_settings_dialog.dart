@@ -762,10 +762,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           message:
                               'Replace specific character sequences in model output '
                               'before saving to chat history.',
-                          child: const Icon(
+                          child: Icon(
                             Icons.info_outline,
                             size: 16,
-                            color: Colors.white38,
+                            color: AppColors.textTertiary(context),
                           ),
                         ),
                       ],
@@ -773,9 +773,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Text(
+                        Text(
                           'Enable Output Sanitizer',
-                          style: TextStyle(color: Colors.white),
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                          ),
                         ),
                         const Spacer(),
                         Switch(
@@ -794,7 +796,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       const SizedBox(height: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF374151),
+                          color: AppColors.aiBubble,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Column(
@@ -809,8 +811,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                   Expanded(
                                     child: TextField(
                                       controller: _sanitizerFindController,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color:
+                                            AppColors.textPrimary(context),
                                         fontSize: 13,
                                       ),
                                       onChanged: (_) {
@@ -821,8 +824,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                       },
                                       decoration: InputDecoration(
                                         hintText: 'Find...',
-                                        hintStyle: const TextStyle(
-                                          color: Colors.white38,
+                                        hintStyle: TextStyle(
+                                          color:
+                                              AppColors.textTertiary(context),
                                           fontSize: 13,
                                         ),
                                         isDense: true,
@@ -834,21 +838,24 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                         border: UnderlineInputBorder(
                                           borderSide: BorderSide(
                                             color: _sanitizerFindError
-                                                ? Colors.red
-                                                : Colors.white24,
+                                                ? AppColors
+                                                    .negativeAccentOf(context)
+                                                : AppColors.borderOf(context),
                                           ),
                                         ),
                                         enabledBorder: UnderlineInputBorder(
                                           borderSide: BorderSide(
                                             color: _sanitizerFindError
-                                                ? Colors.red
-                                                : Colors.white24,
+                                                ? AppColors
+                                                    .negativeAccentOf(context)
+                                                : AppColors.borderOf(context),
                                           ),
                                         ),
                                         focusedBorder: UnderlineInputBorder(
                                           borderSide: BorderSide(
                                             color: _sanitizerFindError
-                                                ? Colors.red
+                                                ? AppColors
+                                                    .negativeAccentOf(context)
                                                 : AppColors
                                                     .formMasterAccent,
                                           ),
@@ -862,35 +869,40 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                     margin: const EdgeInsets.symmetric(
                                       horizontal: 8,
                                     ),
-                                    color: Colors.white24,
+                                    color: AppColors.borderOf(context),
                                   ),
                                   Expanded(
                                     child: TextField(
                                       controller:
                                           _sanitizerReplaceController,
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color:
+                                            AppColors.textPrimary(context),
                                         fontSize: 13,
                                       ),
-                                      decoration: const InputDecoration(
+                                      decoration: InputDecoration(
                                         hintText: 'Replace with...',
                                         hintStyle: TextStyle(
-                                          color: Colors.white38,
+                                          color:
+                                              AppColors.textTertiary(context),
                                           fontSize: 13,
                                         ),
                                         isDense: true,
-                                        contentPadding: EdgeInsets.symmetric(
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
                                           horizontal: 4,
                                           vertical: 6,
                                         ),
                                         border: UnderlineInputBorder(
                                           borderSide: BorderSide(
-                                            color: Colors.white24,
+                                            color:
+                                                AppColors.borderOf(context),
                                           ),
                                         ),
                                         enabledBorder: UnderlineInputBorder(
                                           borderSide: BorderSide(
-                                            color: Colors.white24,
+                                            color:
+                                                AppColors.borderOf(context),
                                           ),
                                         ),
                                         focusedBorder: UnderlineInputBorder(
@@ -941,9 +953,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                 ],
                               ),
                             ),
-                            const Divider(
+                            Divider(
                               height: 1,
-                              color: Colors.white10,
+                              color: AppColors.borderOf(context),
                             ),
                             ..._gen
                                 .resolveOutputSanitizerRules(storage)
@@ -958,8 +970,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                         Expanded(
                                           child: Text.rich(
                                             TextSpan(
-                                              style: const TextStyle(
-                                                color: Colors.white,
+                                              style: TextStyle(
+                                                color: AppColors
+                                                    .textPrimary(context),
                                                 fontSize: 13,
                                               ),
                                               children: [
@@ -979,9 +992,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                           ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(
+                                          icon: Icon(
                                             Icons.remove_circle_outline,
-                                            color: Colors.redAccent,
+                                            color: AppColors
+                                                .negativeAccentOf(context),
                                             size: 22,
                                           ),
                                           onPressed: () {
@@ -1013,7 +1027,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           child: Text(
                             'No rules configured',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.4),
+                              color: AppColors.textTertiary(context),
                               fontSize: 11,
                             ),
                           ),
@@ -1024,7 +1038,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           child: Text(
                             '${_gen.resolveOutputSanitizerRules(storage).length} rule${_gen.resolveOutputSanitizerRules(storage).length == 1 ? '' : 's'}',
                             style: TextStyle(
-                              color: Colors.amber.shade300,
+                              color: AppColors.porchHoneyOf(context),
                               fontSize: 11,
                             ),
                           ),
