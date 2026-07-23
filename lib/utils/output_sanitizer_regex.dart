@@ -26,7 +26,12 @@
 ///   `\p` – any punctuation, symbol, or space
 ///   `\\` – literal backslash
 ///
-/// Quantifiers (appended after mask):
+/// Capture groups:
+///   `\(...\)` – creates a regex capture group; the content between `\(` and
+///   the matching `)` is passed through as raw regex.  Quantifiers after the
+///   closing `)` apply to the whole group (e.g. `\(\d+\)+`).
+///
+/// Quantifiers (appended after mask or capture group):
 ///   (none) – exactly one
 ///   `?`    – zero or one
 ///   `+`    – one or more
@@ -68,6 +73,33 @@ String compileFindPattern(String input) {
         // literal backslash
         out.write(r'\\');
         i += 2;
+      } else if (next == '(') {
+        // Capture group: raw regex until matching ).
+        // Count nesting to handle inner groups; skip escaped chars.
+        var depth = 1;
+        var j = i + 2;
+        while (j < input.length && depth > 0) {
+          if (input[j] == r'\') {
+            j += 2; // skip escaped character
+          } else if (input[j] == '(') {
+            depth++;
+            j++;
+          } else if (input[j] == ')') {
+            depth--;
+            if (depth > 0) j++;
+          } else {
+            j++;
+          }
+        }
+        if (depth != 0) {
+          throw const FormatException('Unclosed capture group \\(');
+        }
+        out.write('(');
+        out.write(input.substring(i + 2, j));
+        out.write(')');
+        i = j + 1;
+        // consume optional quantifier
+        i = _consumeQuantifier(input, i, out);
       } else {
         final regex = _maskRegex[next];
         if (regex == null) {

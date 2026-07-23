@@ -182,6 +182,48 @@ void main() {
         expect(() => compileFindPattern(r'\d{1,2,3}'), throwsFormatException);
       });
     });
+
+    group('capture groups', () {
+      test('\\(...\\) creates a capture group', () {
+        // Content between \\( and ) is raw regex — not re-parsed.
+        final pattern = compileFindPattern(r'\(\d+)');
+        expect(pattern, r'(\d+)');
+        final re = RegExp(pattern);
+        final m = re.firstMatch('abc 123 def');
+        expect(m, isNotNull);
+        expect(m!.group(1), '123');
+      });
+
+      test('quantifier on capture group', () {
+        final pattern = compileFindPattern(r'\(\d+)+');
+        expect(pattern, r'(\d+)+');
+        final re = RegExp(pattern);
+        expect(re.firstMatch('123')!.end, 3);
+        expect(re.firstMatch('12345')!.end, 5);
+      });
+
+      test('nested raw regex inside group', () {
+        // Inner ( ) are raw regex; paren counting finds the matching ) .
+        final pattern = compileFindPattern(r'\((\w+)\s(\d+))');
+        expect(pattern, r'((\w+)\s(\d+))');
+        final re = RegExp(pattern);
+        final m = re.firstMatch('hello world 42');
+        expect(m, isNotNull);
+        expect(m!.group(1), 'world 42');
+        expect(m.group(2), 'world');
+        expect(m.group(3), '42');
+      });
+
+      test('bare ( without backslash is still a literal', () {
+        final pattern = compileFindPattern(r'(');
+        expect(pattern, r'\(');
+        expect(RegExp(pattern).hasMatch('('), isTrue);
+      });
+
+      test('unclosed capture group throws FormatException', () {
+        expect(() => compileFindPattern(r'\(\d+'), throwsFormatException);
+      });
+    });
   });
 
   group('compileReplacePattern()', () {
@@ -305,16 +347,31 @@ void main() {
       expect(result, 'xxx bbb xxx');
     });
 
-    test('backreference with no capture group stays literal', () {
-      // The find-field parser escapes ( and ) as regex literals, so there
-      // are never capture groups. The regex becomes \(…\d+\) which matches
-      // literal parens, not the digits alone. Since the text has no
-      // "(123)" the rule finds nothing and text is unchanged.
+    test('backreference expands capture group content', () {
+      // \\( in find creates a capture group, \\1 in replace references it.
       final result = sanitizeOutputWithRegex(
         'abc 123 def',
-        [(find: r'(\d+)', replace: r'[\1]')],
+        [(find: r'\(\d+)', replace: r'[\1]')],
       );
-      expect(result, 'abc 123 def');
+      expect(result, 'abc [123] def');
+    });
+
+    test('multiple capture groups with backreferences', () {
+      // Two separate \\( groups: group 1 = \\w+, group 2 = \\d+.
+      final result = sanitizeOutputWithRegex(
+        'hello 42',
+        [(find: r'\(\w+) \(\d+)', replace: r'\2 \1')],
+      );
+      expect(result, '42 hello');
+    });
+
+    test('capture group without backreference works fine', () {
+      // The group captures but replace doesn't reference it — no error.
+      final result = sanitizeOutputWithRegex(
+        'abc 123 def',
+        [(find: r'\(\d+)', replace: 'NUMBER')],
+      );
+      expect(result, 'abc NUMBER def');
     });
 
     test('empty replace string deletes matches', () {
