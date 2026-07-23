@@ -617,29 +617,43 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           ..._gen
                               .resolveStopSequences(storage)
                               .map(
-                                (seq) => ListTile(
-                                  title: Text(
-                                    seq.replaceAll('\n', '\\n'),
-                                    style: const TextStyle(color: Colors.white),
+                                (seq) => Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 2,
                                   ),
-                                  trailing: IconButton(
-                                    icon: const Icon(
-                                      Icons.remove_circle_outline,
-                                      color: Colors.redAccent,
-                                      size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        final resolved = _gen
-                                            .resolveStopSequences(storage)
-                                            .toList();
-                                        resolved.remove(seq);
-                                        _gen.stopSequences = resolved;
-                                      });
-                                      _save();
-                                    },
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          seq.replaceAll('\n', '\\n'),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.redAccent,
+                                          size: 22,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            final resolved = _gen
+                                                .resolveStopSequences(
+                                                  storage,
+                                                )
+                                                .toList();
+                                            resolved.remove(seq);
+                                            _gen.stopSequences = resolved;
+                                          });
+                                          _save();
+                                        },
+                                      ),
+                                    ],
                                   ),
-                                  dense: true,
                                 ),
                               ),
                         ],
@@ -803,12 +817,38 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                           color: Colors.white38,
                                           fontSize: 13,
                                         ),
-                                        border: InputBorder.none,
                                         isDense: true,
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 6,
+                                        ),
+                                        border: UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Colors.white24,
+                                          ),
+                                        ),
+                                        enabledBorder: UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Colors.white24,
+                                          ),
+                                        ),
+                                        focusedBorder: UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color:
+                                                AppColors.formMasterAccent,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  Container(
+                                    width: 1,
+                                    height: 24,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    color: Colors.white24,
+                                  ),
                                   Expanded(
                                     child: TextField(
                                       controller:
@@ -823,8 +863,27 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                           color: Colors.white38,
                                           fontSize: 13,
                                         ),
-                                        border: InputBorder.none,
                                         isDense: true,
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 6,
+                                        ),
+                                        border: UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Colors.white24,
+                                          ),
+                                        ),
+                                        enabledBorder: UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Colors.white24,
+                                          ),
+                                        ),
+                                        focusedBorder: UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color:
+                                                AppColors.formMasterAccent,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -869,46 +928,58 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                             ..._gen
                                 .resolveOutputSanitizerRules(storage)
                                 .map(
-                                  (rule) => ListTile(
-                                    title: Text.rich(
-                                      TextSpan(
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                        ),
-                                        children: [
-                                          TextSpan(
-                                            text: rule.find,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
+                                  (rule) => Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text.rich(
+                                            TextSpan(
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                              ),
+                                              children: [
+                                                TextSpan(
+                                                  text: rule.find,
+                                                  style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const TextSpan(
+                                                  text: ' → ',
+                                                ),
+                                                TextSpan(text: rule.replace),
+                                              ],
                                             ),
                                           ),
-                                          const TextSpan(text: ' → '),
-                                          TextSpan(text: rule.replace),
-                                        ],
-                                      ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline,
+                                            color: Colors.redAccent,
+                                            size: 22,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              final resolved = _gen
+                                                  .resolveOutputSanitizerRules(
+                                                    storage,
+                                                  )
+                                                  .toList();
+                                              resolved.remove(rule);
+                                              _gen.outputSanitizerRules =
+                                                  resolved;
+                                            });
+                                            _save();
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                    trailing: IconButton(
-                                      icon: const Icon(
-                                        Icons.remove_circle_outline,
-                                        color: Colors.redAccent,
-                                        size: 20,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          final resolved = _gen
-                                              .resolveOutputSanitizerRules(
-                                                storage,
-                                              )
-                                              .toList();
-                                          resolved.remove(rule);
-                                          _gen.outputSanitizerRules =
-                                              resolved;
-                                        });
-                                        _save();
-                                      },
-                                    ),
-                                    dense: true,
                                   ),
                                 ),
                           ],
