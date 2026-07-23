@@ -19,12 +19,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
 import 'package:front_porch_ai/ui/settings/widgets/slider_setting.dart';
-import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Generation-settings tab extracted from settings_page (Stage 5, remaining
 /// tabs). Pure lift of _buildGenerationTab: reasoning, sampling parameters,
@@ -44,17 +43,10 @@ class GenerationTab extends StatefulWidget {
 class _GenerationTabState extends State<GenerationTab> {
   final TextEditingController _stopSequenceController =
       TextEditingController();
-  final TextEditingController _sanitizerFindController =
-      TextEditingController();
-  final TextEditingController _sanitizerReplaceController =
-      TextEditingController();
-  bool _sanitizerFindError = false;
 
   @override
   void dispose() {
     _stopSequenceController.dispose();
-    _sanitizerFindController.dispose();
-    _sanitizerReplaceController.dispose();
     super.dispose();
   }
 
@@ -548,216 +540,11 @@ class _GenerationTabState extends State<GenerationTab> {
               ],
             ),
             const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.cardOf(context),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _sanitizerFindController,
-                              style: TextStyle(
-                                color: AppColors.textPrimary(context),
-                                fontSize: 13,
-                              ),
-                              onChanged: (_) {
-                                if (_sanitizerFindError) {
-                                  setState(() => _sanitizerFindError = false);
-                                }
-                              },
-                              decoration: InputDecoration(
-                                hintText: 'Find...',
-                                hintStyle: TextStyle(
-                                  color: AppColors.textTertiary(context),
-                                  fontSize: 13,
-                                ),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 6,
-                                ),
-                                border: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: _sanitizerFindError
-                                        ? Colors.red
-                                        : AppColors.borderOf(context),
-                                  ),
-                                ),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: _sanitizerFindError
-                                        ? Colors.red
-                                        : AppColors.borderOf(context),
-                                  ),
-                                ),
-                                focusedBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: _sanitizerFindError
-                                        ? Colors.red
-                                        : accent,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            margin: const EdgeInsets.symmetric(horizontal: 8),
-                            color: AppColors.borderOf(context),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _sanitizerReplaceController,
-                              style: TextStyle(
-                                color: AppColors.textPrimary(context),
-                                fontSize: 13,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Replace with...',
-                                hintStyle: TextStyle(
-                                  color: AppColors.textTertiary(context),
-                                  fontSize: 13,
-                                ),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 6,
-                                ),
-                                border: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: AppColors.borderOf(context),
-                                  ),
-                                ),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: AppColors.borderOf(context),
-                                  ),
-                                ),
-                                focusedBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(color: accent),
-                                ),
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.add_circle,
-                              color: accent,
-                              size: 22,
-                            ),
-                            onPressed: () {
-                              final find =
-                                  _sanitizerFindController.text;
-                              final replace =
-                                  _sanitizerReplaceController.text;
-                              if (find.isEmpty) return;
-                              if (!isValidFindPattern(find)) {
-                                setState(() => _sanitizerFindError = true);
-                                return;
-                              }
-                              final current = storage
-                                  .generationSettings.outputSanitizerRules
-                                  .toList();
-                              current.add(
-                                OutputSanitizerRule(
-                                  find: find,
-                                  replace: replace,
-                                ),
-                              );
-                              storage.generationSettings.setOutputSanitizerRules(current);
-                              _sanitizerFindController.clear();
-                              _sanitizerReplaceController.clear();
-                              setState(() => _sanitizerFindError = false);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  Divider(
-                    height: 1,
-                    color: AppColors.borderOf(context),
-                  ),
-                  ...storage.generationSettings.outputSanitizerRules.map(
-                    (rule) => Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text.rich(
-                              TextSpan(
-                                style: TextStyle(
-                                  color: AppColors.textPrimary(context),
-                                  fontSize: 13,
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: rule.find,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const TextSpan(text: ' → '),
-                                  TextSpan(text: rule.replace),
-                                ],
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.remove_circle_outline,
-                              color: AppColors.negativeAccentOf(context),
-                              size: 22,
-                            ),
-                            onPressed: () {
-                              final current = storage
-                                  .generationSettings.outputSanitizerRules
-                                  .toList();
-                              current.remove(rule);
-                              storage.generationSettings.setOutputSanitizerRules(current);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            OutputSanitizerRuleEditor(
+              rules: storage.generationSettings.outputSanitizerRules,
+              onRulesChanged: (newRules) =>
+                  storage.generationSettings.setOutputSanitizerRules(newRules),
             ),
-            if (storage.generationSettings.outputSanitizerRules.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'No rules configured',
-                  style: TextStyle(
-                    color: AppColors.textTertiary(context),
-                    fontSize: 11,
-                  ),
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  '${storage.generationSettings.outputSanitizerRules.length} rule${storage.generationSettings.outputSanitizerRules.length == 1 ? '' : 's'}',
-                  style: TextStyle(
-                    color: AppColors.porchHoneyOf(context),
-                    fontSize: 11,
-                  ),
-                ),
-              ),
           ],
 
           const SizedBox(height: 32),

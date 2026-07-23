@@ -22,10 +22,8 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
-import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
-import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 class ChatSettingsDialog extends StatefulWidget {
   const ChatSettingsDialog({super.key});
@@ -37,11 +35,6 @@ class ChatSettingsDialog extends StatefulWidget {
 class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   final TextEditingController _stopSequenceController = TextEditingController();
   late final TextEditingController _bannedPhrasesController;
-  final TextEditingController _sanitizerFindController =
-      TextEditingController();
-  final TextEditingController _sanitizerReplaceController =
-      TextEditingController();
-  bool _sanitizerFindError = false;
   late ChatGenerationSettings _gen;
   bool _initialised = false;
 
@@ -63,8 +56,6 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
   void dispose() {
     _stopSequenceController.dispose();
     _bannedPhrasesController.dispose();
-    _sanitizerFindController.dispose();
-    _sanitizerReplaceController.dispose();
     super.dispose();
   }
 
@@ -791,255 +782,14 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                     ),
                     if (_gen.resolveOutputSanitizerEnabled(storage)) ...[
                       const SizedBox(height: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.aiBubble,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _sanitizerFindController,
-                                      style: TextStyle(
-                                        color:
-                                            AppColors.textPrimary(context),
-                                        fontSize: 13,
-                                      ),
-                                      onChanged: (_) {
-                                        if (_sanitizerFindError) {
-                                          setState(() =>
-                                              _sanitizerFindError = false);
-                                        }
-                                      },
-                                      decoration: InputDecoration(
-                                        hintText: 'Find...',
-                                        hintStyle: TextStyle(
-                                          color:
-                                              AppColors.textTertiary(context),
-                                          fontSize: 13,
-                                        ),
-                                        isDense: true,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 4,
-                                          vertical: 6,
-                                        ),
-                                        border: UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: _sanitizerFindError
-                                                ? AppColors
-                                                    .negativeAccentOf(context)
-                                                : AppColors.borderOf(context),
-                                          ),
-                                        ),
-                                        enabledBorder: UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: _sanitizerFindError
-                                                ? AppColors
-                                                    .negativeAccentOf(context)
-                                                : AppColors.borderOf(context),
-                                          ),
-                                        ),
-                                        focusedBorder: UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: _sanitizerFindError
-                                                ? AppColors
-                                                    .negativeAccentOf(context)
-                                                : AppColors
-                                                    .formMasterAccent,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: 1,
-                                    height: 24,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                    ),
-                                    color: AppColors.borderOf(context),
-                                  ),
-                                  Expanded(
-                                    child: TextField(
-                                      controller:
-                                          _sanitizerReplaceController,
-                                      style: TextStyle(
-                                        color:
-                                            AppColors.textPrimary(context),
-                                        fontSize: 13,
-                                      ),
-                                      decoration: InputDecoration(
-                                        hintText: 'Replace with...',
-                                        hintStyle: TextStyle(
-                                          color:
-                                              AppColors.textTertiary(context),
-                                          fontSize: 13,
-                                        ),
-                                        isDense: true,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 4,
-                                          vertical: 6,
-                                        ),
-                                        border: UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color:
-                                                AppColors.borderOf(context),
-                                          ),
-                                        ),
-                                        enabledBorder: UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color:
-                                                AppColors.borderOf(context),
-                                          ),
-                                        ),
-                                        focusedBorder: UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color:
-                                                AppColors.formMasterAccent,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.add_circle,
-                                      color: AppColors.formMasterAccent,
-                                      size: 22,
-                                    ),
-                                    onPressed: () {
-                                      final find =
-                                          _sanitizerFindController.text;
-                                      final replace =
-                                          _sanitizerReplaceController.text;
-                                      if (find.isEmpty) return;
-                                      if (!isValidFindPattern(find)) {
-                                        setState(() =>
-                                            _sanitizerFindError = true);
-                                        return;
-                                      }
-                                      setState(() {
-                                        final resolved = _gen
-                                            .resolveOutputSanitizerRules(
-                                              storage,
-                                            );
-                                        _gen.outputSanitizerRules = [
-                                          ...resolved,
-                                          OutputSanitizerRule(
-                                            find: find,
-                                            replace: replace,
-                                          ),
-                                        ];
-                                      });
-                                      _sanitizerFindController.clear();
-                                      _sanitizerReplaceController.clear();
-                                      _sanitizerFindError = false;
-                                      _save();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Divider(
-                              height: 1,
-                              color: AppColors.borderOf(context),
-                            ),
-                            ..._gen
-                                .resolveOutputSanitizerRules(storage)
-                                .map(
-                                  (rule) => Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 4,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text.rich(
-                                            TextSpan(
-                                              style: TextStyle(
-                                                color: AppColors
-                                                    .textPrimary(context),
-                                                fontSize: 13,
-                                              ),
-                                              children: [
-                                                TextSpan(
-                                                  text: rule.find,
-                                                  style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.bold,
-                                                  ),
-                                                ),
-                                                const TextSpan(
-                                                  text: ' → ',
-                                                ),
-                                                TextSpan(text: rule.replace),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        IconButton(
-                                          icon: Icon(
-                                            Icons.remove_circle_outline,
-                                            color: AppColors
-                                                .negativeAccentOf(context),
-                                            size: 22,
-                                          ),
-                                          onPressed: () {
-                                            setState(() {
-                                              final resolved = _gen
-                                                  .resolveOutputSanitizerRules(
-                                                    storage,
-                                                  )
-                                                  .toList();
-                                              resolved.remove(rule);
-                                              _gen.outputSanitizerRules =
-                                                  resolved;
-                                            });
-                                            _save();
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                          ],
-                        ),
+                      OutputSanitizerRuleEditor(
+                        rules: _gen.resolveOutputSanitizerRules(storage),
+                        onRulesChanged: (newRules) {
+                          setState(() => _gen.outputSanitizerRules = newRules);
+                          _save();
+                        },
+                        backgroundColor: AppColors.aiBubble,
                       ),
-                      if (_gen
-                          .resolveOutputSanitizerRules(storage)
-                          .isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            'No rules configured',
-                            style: TextStyle(
-                              color: AppColors.textTertiary(context),
-                              fontSize: 11,
-                            ),
-                          ),
-                        )
-                      else
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            '${_gen.resolveOutputSanitizerRules(storage).length} rule${_gen.resolveOutputSanitizerRules(storage).length == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              color: AppColors.porchHoneyOf(context),
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
                     ],
                   ],
                 ),

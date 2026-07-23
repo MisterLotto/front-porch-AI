@@ -1,0 +1,273 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+import 'package:flutter/material.dart';
+
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
+
+/// Reusable find/replace rule editor for the Output Sanitizer.
+///
+/// Displays paired text fields for find and replace patterns, an add button,
+/// the current rule list with remove buttons, and a count/empty footer.
+/// The parent controls the data source and persistence via [rules] and
+/// [onRulesChanged]; this widget owns the controllers and validation state.
+class OutputSanitizerRuleEditor extends StatefulWidget {
+  const OutputSanitizerRuleEditor({
+    super.key,
+    required this.rules,
+    required this.onRulesChanged,
+    this.backgroundColor,
+  });
+
+  final List<OutputSanitizerRule> rules;
+  final ValueChanged<List<OutputSanitizerRule>> onRulesChanged;
+
+  /// Container background color. Defaults to [AppColors.cardOf].
+  final Color? backgroundColor;
+
+  @override
+  State<OutputSanitizerRuleEditor> createState() =>
+      _OutputSanitizerRuleEditorState();
+}
+
+class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
+  final TextEditingController _findController = TextEditingController();
+  final TextEditingController _replaceController = TextEditingController();
+  bool _findError = false;
+
+  @override
+  void dispose() {
+    _findController.dispose();
+    _replaceController.dispose();
+    super.dispose();
+  }
+
+  void _addRule() {
+    final find = _findController.text;
+    final replace = _replaceController.text;
+    if (find.isEmpty) return;
+    if (!isValidFindPattern(find)) {
+      setState(() => _findError = true);
+      return;
+    }
+    widget.onRulesChanged([
+      ...widget.rules,
+      OutputSanitizerRule(find: find, replace: replace),
+    ]);
+    _findController.clear();
+    _replaceController.clear();
+    setState(() => _findError = false);
+  }
+
+  void _removeRule(OutputSanitizerRule rule) {
+    widget.onRulesChanged([...widget.rules]..remove(rule));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor =
+        widget.backgroundColor ?? AppColors.cardOf(context);
+
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _findController,
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 13,
+                        ),
+                        onChanged: (_) {
+                          if (_findError) {
+                            setState(() => _findError = false);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Find...',
+                          hintStyle: TextStyle(
+                            color: AppColors.textTertiary(context),
+                            fontSize: 13,
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 6,
+                          ),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: _findError
+                                  ? AppColors.negativeAccentOf(context)
+                                  : AppColors.borderOf(context),
+                            ),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: _findError
+                                  ? AppColors.negativeAccentOf(context)
+                                  : AppColors.borderOf(context),
+                            ),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: _findError
+                                  ? AppColors.negativeAccentOf(context)
+                                  : AppColors.formMasterAccent,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 24,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      color: AppColors.borderOf(context),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _replaceController,
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 13,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Replace with...',
+                          hintStyle: TextStyle(
+                            color: AppColors.textTertiary(context),
+                            fontSize: 13,
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 6,
+                          ),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: AppColors.borderOf(context),
+                            ),
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: AppColors.borderOf(context),
+                            ),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: AppColors.formMasterAccent,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: AppColors.formMasterAccent,
+                        size: 22,
+                      ),
+                      onPressed: _addRule,
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: AppColors.borderOf(context)),
+              ...widget.rules.map(
+                (rule) => Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            style: TextStyle(
+                              color: AppColors.textPrimary(context),
+                              fontSize: 13,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: rule.find,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const TextSpan(text: ' → '),
+                              TextSpan(text: rule.replace),
+                            ],
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.remove_circle_outline,
+                          color: AppColors.negativeAccentOf(context),
+                          size: 22,
+                        ),
+                        onPressed: () => _removeRule(rule),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (widget.rules.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'No rules configured',
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 11,
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              '${widget.rules.length} rule${widget.rules.length == 1 ? '' : 's'}',
+              style: TextStyle(
+                color: AppColors.porchHoneyOf(context),
+                fontSize: 11,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
