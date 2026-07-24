@@ -117,7 +117,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           'Custom',
                           style: TextStyle(
                             fontSize: 10,
-                              color: AppColors.porchAmberOf(context),
+                            color: AppColors.porchAmberOf(context),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
