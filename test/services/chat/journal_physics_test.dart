@@ -36,6 +36,7 @@ void main() {
       String? intensity,
       String? emotion,
       bool pinned = false,
+      String? kind,
     }) => JournalMemoryData(
       id: 'x',
       sessionId: 's1',
@@ -48,6 +49,7 @@ void main() {
       accessCount: 0,
       pinned: pinned,
       dimensions: 0,
+      metadata: kind == null ? null : '{"kind":"$kind"}',
       createdAt: DateTime(2026),
       lastAccessedAt: DateTime(2026),
       updatedAt: DateTime(2026),
@@ -63,6 +65,22 @@ void main() {
     test('pinned never decays and heat floors at zero', () {
       expect(JournalPhysics.cooledHeat(card(pinned: true)), 1.0);
       expect(JournalPhysics.cooledHeat(card(heat: 0.05)), 0.0);
+    });
+
+    test('milestone cards never cool but are not always-injected (Living Time v1.5)', () {
+      final m = card(kind: 'milestone', heat: 1.0, intensity: 'mild');
+      expect(JournalPhysics.isMilestone(m), isTrue);
+      expect(JournalPhysics.cooledHeat(m), 1.0);
+      expect(JournalPhysics.isHot(m), isFalse);
+      expect(JournalPhysics.cardKind(m), 'milestone');
+    });
+
+    test('promise cards are ledger-class (Train B)', () {
+      final p = card(kind: 'promise', heat: 1.0, intensity: 'mild');
+      expect(JournalPhysics.isPromise(p), isTrue);
+      expect(JournalPhysics.isLedgerCard(p), isTrue);
+      expect(JournalPhysics.cooledHeat(p), 1.0);
+      expect(JournalPhysics.isHot(p), isFalse);
     });
 
     test('hot/cold threshold, pinned always hot', () {

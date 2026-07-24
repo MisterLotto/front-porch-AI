@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -69,6 +70,7 @@ import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
 import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
+import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
 import 'package:front_porch_ai/services/chat/expression_classifier.dart'; // leaf for ExpressionService (post-extraction)
 import 'package:front_porch_ai/services/chat/time_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
@@ -86,7 +88,9 @@ import 'package:front_porch_ai/services/chat/absence_tracker.dart';
 import 'package:front_porch_ai/services/chat/afk_flavor.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/dream_service.dart';
+import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/milestone_feed.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
@@ -1177,7 +1181,7 @@ class ChatService extends ChangeNotifier {
 
   // RAG settings for the active group (stored in the hidden checkpoint, no DB schema change)
   bool _groupRagEnabled = true;
-  int _groupRetrievalCount = 8;
+  int _groupRetrievalCount = 4;
   double _groupMemoryBudgetPercent = 10.0;
   Map<String, double> _groupCharacterRAGPriorities = {};
 
@@ -1626,6 +1630,29 @@ class ChatService extends ChangeNotifier {
     getGroupCounter: (charId, key, {int defaultValue = 0}) =>
         (_groupRealism[charId]?[key] as num?)?.toInt() ?? defaultValue,
     setGroupCounter: (charId, key, v) => _setGroupRealismValue(charId, key, v),
+    // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
+    // Fire-and-forget; plant never throws into the eval path. Diary owner is
+    // the current speaker (1:1 host or group speaker whose scalars just moved).
+    onTierCrossing: (crossing) {
+      final sessionId = _currentSessionId;
+      if (sessionId == null) return;
+      final charId = _getCurrentSpeakerIdForRealism();
+      if (charId.isEmpty) return;
+      unawaited(
+        RelationshipMilestones.plant(
+          store: _journalStore,
+          sessionId: sessionId,
+          characterId: charId,
+          crossing: crossing,
+          sourcePositions: _messages.isEmpty
+              ? const <int>[]
+              : <int>[_messages.length - 1],
+          storyDay: _timeService.dayCount,
+          storyClock: _timeService.storyClockIso,
+          maxCards: _storageService.memorySettings.journalMaxCards,
+        ),
+      );
+    },
   );
 
   // ── Expression label selection / manual / avatar resolve / reclass / ONNX (extracted) ────
@@ -1817,6 +1844,36 @@ class ChatService extends ChangeNotifier {
     getCharacterIdFromCard: _getCharacterIdFromCard,
   );
 
+  // ── Promise & debt ledger (Train B) ──
+  late final _promiseDebtService = PromiseDebtService(
+    journalStore: _journalStore,
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    applyTrustDelta: (d) => _relationshipService.applyTrustDelta(d),
+    applyBondDelta: (d) => _relationshipService.applyScoreDelta(d),
+    onSalienceKick: () {
+      _journalMaintenance.eventKickPending = true;
+      _growthService.eventKickPending = true;
+    },
+    onCacheWarmed: () {
+      if (!_disposed) notifyListeners();
+    },
+  );
+
+  late final _promiseDebtInjection = PromiseDebtInjection(
+    promiseDebtService: _promiseDebtService,
+    getSessionId: () => _currentSessionId,
+    getActiveCharacter: () => _activeCharacter,
+    getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+    getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+    getGroupCharacters: () => _groupCharacters,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
+    getUserName: () => _userPersonaService.persona.name,
+  );
+
   // ── Dreams (Living Time §1) ──
   late final _dreamService = DreamService(
     fireEval: (prompt) async {
@@ -1867,6 +1924,7 @@ class ChatService extends ChangeNotifier {
     timeInjection: _timeInjection,
     weatherInjection: _weatherInjection,
     ambitionInjection: _ambitionInjection,
+    promiseDebtInjection: _promiseDebtInjection,
     behavioralInjection: _behavioralInjection,
     nsfwInjection: _nsfwInjection,
     needsInjection: _needsInjection,
@@ -2228,10 +2286,11 @@ class ChatService extends ChangeNotifier {
   Future<LlmToolResponse?> _fireToolEval(
     String prompt,
     List<Map<String, dynamic>> tools,
-  ) {
+  ) async {
     final service =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
-    return service.generateWithTools(
+    try {
+      return await service.generateWithTools(
       GenerationParams(
         prompt: prompt,
         maxLength: 4000,
@@ -2251,12 +2310,23 @@ class ChatService extends ChangeNotifier {
         stopSequences: const [],
       ),
       tools,
-      // Whole-call deadline: a backend that accepts the request and never
-      // answers (cold model reload after an idle unload, dead server queue)
-      // must not park a journal/realism pass forever. Timeout → null, which
-      // every caller already treats as a failed call (the probe falls back
-      // to the text path, which carries its own between-chunk timeout).
-    ).timeout(kEvalToolCallTimeout, onTimeout: () => null);
+        // Whole-call deadline: a backend that accepts the request and never
+        // answers (cold model reload after an idle unload, dead server queue,
+        // or the call queued behind a long generation like character
+        // creation) must not park a journal/realism pass forever. The timeout
+        // THROWS — isToolTransportFailure classifies it so verdict sites fall
+        // back to text for the round without branding the backend XML-only.
+      ).timeout(kEvalToolCallTimeout);
+    } on TimeoutException {
+      // The deadline abandoned an in-flight call. On the single-slot local
+      // backend that orphan holds the shared idle slot (_pendingRequest), so
+      // waitForIdle callers — text evals, the Scene Guest mint — would hang
+      // behind it indefinitely; tear it down. (If the server is hung on the
+      // orphan, the server-side abort also frees anything queued behind it.)
+      // Remote backends don't serialize on the slot — nothing to release.
+      if (service is KoboldService) service.abortGeneration();
+      rethrow;
+    }
   }
 
   /// Backend+model identity key for the tools probe. Remote model name AND
@@ -3822,6 +3892,49 @@ class ChatService extends ChangeNotifier {
   Future<void> forceSummaryUpdate() async {
     if (_isSummaryGenerating) return;
     await _journalMaintenance.runMaintenancePass(force: true);
+  }
+
+  /// Train B — promise/debt ledger pass (fire-and-forget). Runs after a
+  /// normal generation when realism + journal are on. Detects new
+  /// commitments or kept/broken resolutions for the current speaker's diary.
+  void _maybeRunPromiseDebtPass() {
+    if (!_realismEnabled) return;
+    if (!_storageService.memorySettings.journalEnabled) return;
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return;
+    final charId = _getCurrentSpeakerIdForRealism();
+    if (charId.isEmpty) return;
+
+    String characterName = _activeCharacter?.name ?? 'the character';
+    if (_activeGroup != null && !_observerMode) {
+      final card = _groupCharacters
+          .where((c) => _getCharacterIdFromCard(c) == charId)
+          .firstOrNull;
+      if (card != null) characterName = card.name;
+    }
+
+    final recent = _messages.length < 2
+        ? (_messages.isEmpty ? '' : _messages.last.displayText)
+        : _messages.reversed
+              .take(4)
+              .toList()
+              .reversed
+              .map((m) => '${m.sender}: ${m.displayText}')
+              .join('\n');
+    if (recent.trim().isEmpty) return;
+
+    unawaited(
+      _promiseDebtService.evaluateTurn(
+        sessionId: sessionId,
+        characterId: charId,
+        characterName: characterName,
+        userName: _userPersonaService.persona.name,
+        recentExchange: recent,
+        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
+        storyDay: _timeService.dayCount,
+        storyClock: _timeService.storyClockIso,
+      ),
+    );
   }
 
   /// Check if a Journal maintenance pass is due and trigger it non-blockingly.

@@ -18,6 +18,8 @@
 
 import 'package:flutter/foundation.dart';
 
+import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
+
 /// Plain (non-ChangeNotifier) domain service owning relationship / affection /
 /// trust / fixation / inter-character feelings state and logic (scores, bond+trust
 /// deltas via apply, tier calculation, fixation lifespan+update, short/long term
@@ -129,6 +131,13 @@ class RelationshipService {
   getGroupCounter;
   final void Function(String charId, String key, int value)? setGroupCounter;
 
+  /// Living Time §7 v1.5 / v1.5.1: fired when short-term bond, long-term bond,
+  /// or trust *tier* changes via a forward apply. Null in tests that don't
+  /// care. ChatService plants a journal milestone card. Never fires on
+  /// load/seed/snapshot restore or when [applyScoreDelta] /
+  /// [applyTrustDelta] run with recordMilestone: false (regen revert).
+  final void Function(TierCrossing crossing)? onTierCrossing;
+
   // Owned simulation state (moved verbatim from ChatService).
   int _affectionScore = 0;
   int _relationshipTier = 0;
@@ -185,6 +194,7 @@ class RelationshipService {
     required this.setGroupSpatialStance,
     required this.getGroupInterCharacterRelationships,
     required this.setGroupInterCharacterRelationships,
+    this.onTierCrossing,
   });
 
   // ── Public surface (for @Deprecated shims in ChatService + direct test/UI callers) ──────
@@ -644,17 +654,24 @@ class RelationshipService {
 
   // ── Deltas, growth, decay, fixation (verbatim) ─────────────────────────────
 
-  void applyScoreDelta(int delta) {
+  /// Apply a short-term bond delta. When the named short-term tier changes
+  /// and [recordMilestone] is true, fires [onTierCrossing] (Living Time
+  /// v1.5). Every 5 applies also runs long-term growth, which may fire a
+  /// separate `long_term` crossing (v1.5.1). Regen/reprocess passes
+  /// [recordMilestone]: false so undoing a rejected reply never invents
+  /// reverse story beats (short- or long-term).
+  void applyScoreDelta(int delta, {bool recordMilestone = true}) {
     _shortTermDeltasSummary += delta;
     _turnsSinceLongTermCheck++;
 
     if (_turnsSinceLongTermCheck >= 5) {
-      _evalLongTermGrowth();
+      _evalLongTermGrowth(recordMilestone: recordMilestone);
     }
 
     if (delta == 0) return;
     final oldScore = _affectionScore;
     final oldTier = _relationshipTier;
+    final oldLabel = bondTierLabel(oldTier);
 
     _affectionScore = (_affectionScore + delta).clamp(-300, 300);
     _relationshipTier = _calculateTier(_affectionScore);
@@ -666,11 +683,29 @@ class RelationshipService {
       );
       onNotify();
     }
+    if (recordMilestone &&
+        oldTier != _relationshipTier &&
+        onTierCrossing != null) {
+      onTierCrossing!(
+        TierCrossing(
+          axis: 'bond',
+          oldTier: oldTier,
+          newTier: _relationshipTier,
+          oldLabel: oldLabel,
+          newLabel: shortTermTierName,
+        ),
+      );
+    }
   }
 
-  void applyTrustDelta(int delta) {
+  /// Apply a trust delta. Tier crossings fire [onTierCrossing] when
+  /// [recordMilestone] is true (default). Severe drops still arm repair.
+  void applyTrustDelta(int delta, {bool recordMilestone = true}) {
     if (delta == 0) return;
+    final oldTier = trustTier;
+    final oldLabel = trustTierLabel(oldTier);
     _trustLevel = (_trustLevel + delta).clamp(-100, 100);
+    final newTier = trustTier;
     debugPrint(
       '[Realism:Relationship] Trust shifted by $delta -> $_trustLevel',
     );
@@ -680,11 +715,23 @@ class RelationshipService {
       _pendingTrustRepair = true;
       debugPrint('[Realism:Trust] Severe drop — repair window armed');
     }
+    if (recordMilestone && oldTier != newTier && onTierCrossing != null) {
+      onTierCrossing!(
+        TierCrossing(
+          axis: 'trust',
+          oldTier: oldTier,
+          newTier: newTier,
+          oldLabel: oldLabel,
+          newLabel: trustTierLabel(newTier),
+        ),
+      );
+    }
   }
 
-  void _evalLongTermGrowth() {
+  void _evalLongTermGrowth({bool recordMilestone = true}) {
     final oldLTScore = _longTermScore;
     final oldLTTier = _longTermTier;
+    final oldLabel = longTermTierLabel(oldLTTier);
 
     // Proportional growth based on average short-term tier over the evaluation window
     // (use current tier as proxy for recent average)
@@ -718,6 +765,21 @@ class RelationshipService {
     } else {
       debugPrint(
         '[Realism] Long-Term Bond check (No change) - Status: $_longTermScore ($longTermTierName)',
+      );
+    }
+    // Living Time v1.5.1: plant only when the *named* long-term tier moves.
+    // Score ticks inside the same tier stay silent (climate, not weather).
+    if (recordMilestone &&
+        oldLTTier != _longTermTier &&
+        onTierCrossing != null) {
+      onTierCrossing!(
+        TierCrossing(
+          axis: 'long_term',
+          oldTier: oldLTTier,
+          newTier: _longTermTier,
+          oldLabel: oldLabel,
+          newLabel: longTermTierName,
+        ),
       );
     }
   }

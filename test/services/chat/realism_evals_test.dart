@@ -838,5 +838,34 @@ void main() {
       expect(emotion, isEmpty); // aborted quietly
       expect(probe.isXmlOnly('test-backend'), isFalse); // capability unjudged
     });
+
+    test('transport failure falls back to text without branding xml-only',
+        () async {
+      var toolFires = 0;
+      var textFires = 0;
+      final probe = ToolTransportProbe();
+      String emotion = '';
+      final svc = createTestRealismEvals(
+        probe: probe,
+        setEmotionFn: (v) => emotion = v,
+        fireToolFn: (p, t) async {
+          toolFires++;
+          // Connection torn down mid-call (e.g. character creation fired an
+          // app-wide abortGeneration) — generateWithTools rethrows transport
+          // failures instead of collapsing them to null.
+          throw Exception('SocketException: Connection reset by peer');
+        },
+        fireFn: (p, {onChunk}) async {
+          textFires++;
+          return '{"emotion":"steady","emotion_intensity":"mild"}';
+        },
+      );
+      await svc.evaluateEmotionalStateCall();
+      await svc.evaluateEmotionalStateCall();
+      expect(emotion, 'steady'); // the round still landed over text
+      expect(textFires, 2);
+      expect(toolFires, 2); // tools re-tried — a network event is no verdict
+      expect(probe.isXmlOnly('test-backend'), isFalse);
+    });
   });
 }

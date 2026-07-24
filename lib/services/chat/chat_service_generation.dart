@@ -18,6 +18,13 @@
 
 part of '../chat_service.dart';
 
+/// Absolute ceiling on the RAG memories block, applied on top of the
+/// percentage budget (1:1's 10% / the group's configurable %). The block is
+/// verbatim old transcript injected AFTER the history; past ~2,500 tokens
+/// models start replaying it as if it were the current scene, so the cap
+/// keeps large-context setups (10% of 32k = 3,200) under that line too.
+const int kRagMemoryBudgetCapTokens = 1200;
+
 /// The core response generation orchestrator (`_generateResponse`): speaker
 /// selection, the single per-speaker realism eval trigger (group path), system
 /// prompt + context assembly, streaming, and post-generation needs/realism
@@ -736,13 +743,21 @@ extension ChatServiceGeneration on ChatService {
           // reach. Applies identically to 1:1 and group (same retrieve() path).
           final selfSourceId = sourceIds.isNotEmpty ? sourceIds.first : '';
 
+          // Retrieval limit: groups use the per-session group setting; 1:1
+          // uses the user's "Memories per turn" slider (memory panel + web).
+          // The slider was previously DEAD here — 1:1 silently rode the group
+          // default (8) and turning it down did nothing. 0 = "All" on both.
+          final retrievalLimit = _activeGroup != null
+              ? groupRetrievalCount
+              : _storageService.memorySettings.ragRetrievalCount;
+
           final rawMemories = await _memoryService!.retrieve(
             queryText: queryMessages,
             sourceCharacterIds: sourceIds,
             currentSessionId: _currentSessionId ?? '',
             inContextStart:
                 droppedMessages, // only search messages that are out of context
-            limit: groupRetrievalCount == 0 ? 9999 : groupRetrievalCount,
+            limit: retrievalLimit == 0 ? 9999 : retrievalLimit,
             characterPriorities: currentGroupRAGPriorities,
             sessionScopedCharacterIds: selfSourceId.isEmpty
                 ? const {}
@@ -767,12 +782,17 @@ extension ChatServiceGeneration on ChatService {
             // The summary carries the weight of context compression; RAG only
             // supplements with specific details the summary missed. Too much
             // RAG (2500+ tokens) overwhelms the model and causes it to
-            // reference stale events as if they're current ("going back in time").
+            // reference stale events as if they're current ("going back in
+            // time") — so the percentage is ALSO capped absolutely: 10% of a
+            // 32k context is 3,200 tokens, past the documented failure line.
             final contextSize = _storageService.backendSettings.contextSize;
             final budgetFraction = _activeGroup != null
                 ? (groupMemoryBudgetPercent / 100.0)
                 : 0.10;
-            final memoryBudget = (contextSize * budgetFraction).round();
+            final memoryBudget = math.min(
+              (contextSize * budgetFraction).round(),
+              kRagMemoryBudgetCapTokens,
+            );
             final includedMemories = <String>[];
             int usedTokens = 0;
             for (final m in memories) {
@@ -1548,6 +1568,13 @@ extension ChatServiceGeneration on ChatService {
           // growth rides this shared pass; there is no per-guest trigger).
           // Cursor-based like the journal, so it is naturally regen-safe.
           _maybeRunGrowthPass();
+
+          // Promise/debt ledger (Train B) — fire-and-forget on new turns only.
+          // Keyword gate + open-list gate live inside the service so most
+          // turns cost nothing. Regen/continue never invent commitments.
+          if (mode == GenerationMode.normal) {
+            _maybeRunPromiseDebtPass();
+          }
 
           // Embed messages for RAG memory (fire-and-forget)
           _maybeEmbedMessages();

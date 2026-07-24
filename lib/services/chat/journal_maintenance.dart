@@ -74,7 +74,9 @@ class JournalMaintenance {
   final Future<String?> Function(String prompt) fireLLMEval;
 
   /// Tool-calling door (LLMService.generateWithTools): null result means the
-  /// backend can't (or won't) speak tools and this run should use XML.
+  /// backend can't (or won't) speak tools and this run should use XML; a
+  /// THROW is a transport failure (unreachable/aborted/timeout/busy) and
+  /// must not brand the backend — see isToolTransportFailure.
   final Future<LlmToolResponse?> Function(
     String prompt,
     List<Map<String, dynamic>> tools,
@@ -314,7 +316,19 @@ class JournalMaintenance {
 
     final backend = getBackendIdentity();
     if (!probe.isXmlOnly(backend)) {
-      final resp = await fireToolEval(prompt(toolsMode: true), kJournalTools);
+      LlmToolResponse? resp;
+      var transportFailure = false;
+      try {
+        resp = await fireToolEval(prompt(toolsMode: true), kJournalTools);
+      } catch (e) {
+        // Transport failure (unreachable backend, the call torn down by an
+        // app-side abortGeneration — e.g. character creation clearing state —
+        // a whole-call timeout, or a busy/5xx server): a network event, never
+        // a capability verdict. Fall back to XML for THIS round only; the
+        // next pass probes tools again.
+        debugPrint('[Journal] Tools attempt failed in transport: $e');
+        transportFailure = isToolTransportFailure(e);
+      }
       if (resp != null) {
         if (resp.calls.isNotEmpty) probe.markSupported(backend);
         var (ops, recap) = parseJournalToolCalls(resp.calls);
@@ -336,11 +350,14 @@ class JournalMaintenance {
         }
         // resp non-null but no calls and no usable text: the model answered
         // without tools — a capability verdict. (A null resp also lands here:
-        // generateWithTools collapses every failure to null, and the probe is
-        // deliberately one-shot per backend identity.)
+        // the backend answered but the call yielded nothing usable; transport
+        // failures threw and were filtered above. The probe is deliberately
+        // one-shot per backend identity.)
       }
-      probe.markXmlOnly(backend);
-      debugPrint('[Journal] Tools unavailable on $backend — using XML');
+      if (!transportFailure) {
+        probe.markXmlOnly(backend);
+        debugPrint('[Journal] Tools unavailable on $backend — using XML');
+      }
     }
 
     final raw = await fireLLMEval(prompt(toolsMode: false));

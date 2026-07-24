@@ -764,6 +764,44 @@ void main() {
       expect(xmlPrompts, hasLength(2)); // both passes journaled over XML
     });
 
+    test('transport failure → XML this round only, probe left untested',
+        () async {
+      var toolAttempts = 0;
+      final xmlPrompts = <String>[];
+      final recaps = <String>[];
+      final m = build(
+        responses: ['<recap>round one</recap>'],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        onRecap: recaps.add,
+        fireToolEval: (p, t) async {
+          toolAttempts++;
+          if (toolAttempts == 1) {
+            // Connection torn down mid-call (e.g. character creation fired an
+            // app-wide abortGeneration): a network event, not a capability
+            // verdict — must NOT brand the backend XML-only for the run.
+            throw Exception('SocketException: Connection reset by peer');
+          }
+          return const LlmToolResponse(
+            calls: [
+              LlmToolCall(
+                name: 'write_recap',
+                arguments: {'text': 'Back on tools.'},
+              ),
+            ],
+            text: '',
+          );
+        },
+      );
+      await m.runMaintenancePass();
+      await m.runMaintenancePass(force: true);
+
+      expect(toolAttempts, 2); // tools re-tried next pass (no XML branding)
+      expect(xmlPrompts, hasLength(1)); // failed round fell back to XML once
+      expect(recaps, ['round one', 'Back on tools.']);
+    });
+
     test('model ignores tools but writes tags — salvaged, no refire',
         () async {
       final xmlPrompts = <String>[];

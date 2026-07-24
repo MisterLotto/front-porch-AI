@@ -501,13 +501,29 @@ class KoboldService extends ChangeNotifier
     List<Map<String, dynamic>> tools,
   ) async {
     if (!isReady) return null;
-    return postOpenAiChatWithTools(
-      _baseUrl,
-      params,
-      tools,
-      registerClient: (client) => _activeClient = client,
-      onDone: () => _activeClient = null,
-    );
+    // Serialize politely on the single-slot local engine: wait for any
+    // in-flight request first, and register on the SAME _pendingRequest slot
+    // generateStream uses — so waitForIdle callers (text evals, the Scene
+    // Guest mint's background-safe path) genuinely wait for an in-flight
+    // tools call instead of racing it.
+    await waitForIdle();
+    final completer = Completer<void>();
+    _pendingRequest = completer.future;
+    try {
+      return await postOpenAiChatWithTools(
+        _baseUrl,
+        params,
+        tools,
+        registerClient: (client) => _activeClient = client,
+        onDone: () => _activeClient = null,
+      );
+    } finally {
+      if (!completer.isCompleted) completer.complete();
+      // Only release the slot if it is still OURS — a stream that started
+      // meanwhile (the main chat path doesn't waitForIdle) must not have its
+      // registration nulled by this call's late finally.
+      if (identical(_pendingRequest, completer.future)) _pendingRequest = null;
+    }
   }
 
   /// `_activeClient` is registered for [abortGeneration]; `_pendingRequest`
@@ -525,7 +541,9 @@ class KoboldService extends ChangeNotifier
       );
     } finally {
       if (!completer.isCompleted) completer.complete();
-      _pendingRequest = null;
+      // Same slot-ownership guard as generateWithTools: don't null a newer
+      // request's registration from this one's late finally.
+      if (identical(_pendingRequest, completer.future)) _pendingRequest = null;
     }
   }
 

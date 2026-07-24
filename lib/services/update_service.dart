@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/utils/native_exit.dart';
 
 // Note: app_version.dart was already imported — UpdateService already used
 // appVersion for _currentVersion. The isPreRelease getter now also guards
@@ -351,7 +352,9 @@ class UpdateService extends ChangeNotifier {
       } else {
         await _launchWindowsInstaller(_pendingInstallerPath!);
       }
-      exit(0);
+      // macOS must skip C++ finalizers or the install-and-relaunch gets
+      // logged as an "Abort trap: 6" crash (see exitWithoutNativeFinalizers).
+      Platform.isMacOS ? exitWithoutNativeFinalizers(0) : exit(0);
     } catch (e) {
       debugPrint('Install now failed: $e');
       rethrow;

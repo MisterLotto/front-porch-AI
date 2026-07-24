@@ -304,11 +304,27 @@ starts recording from feature-on, which is honest and cheap.
 story" panel over the same `ChatService.milestoneFeed` instance +
 `/api/chat/tools/timeline`). Ordering note: entries sort by story position
 where a receipt exists; position-less sources (objectives, receipt-less
-rings) interleave via the diary's own (wallTime → position) index. **v1.5
-(threshold-crossing milestone cards via RelationshipService) is explicitly
-deferred** — the delta-application hook site needs its own careful pass; the
-timeline still shows big relationship moments indirectly through salient
-journal cards.
+rings) interleave via the diary's own (wallTime → position) index.
+
+**v1.5 shipped 2026-07-21** (threshold-crossing milestone cards):
+`RelationshipService.applyScoreDelta` / `applyTrustDelta` fire an optional
+`onTierCrossing` callback only when the *named tier* changes (not every
+score wiggle). `ChatService` plants a `journal_cards` row with
+`metadata.kind='milestone'` via `relationship_milestones.dart` (pure text +
+plant). Regen revert uses `recordMilestone: false` so undoing a rejected
+reply never invents reverse beats. Physics: milestones never cool and are
+cap-trim protected (`JournalPhysics.isMilestone`) but are **not**
+always-injected (would crowd the hot set) — they stay on the timeline and
+can still resurface via cold retrieval. Web free (same feed + 🏆 icon).
+Historical crossings before feature-on remain absent by design. **Message
+chips (per-turn deltas) are unchanged** — milestones are the long-horizon
+diary, not a chip replacement.
+
+**v1.5.1 shipped 2026-07-21** (long-term bond tier crossings):
+`_evalLongTermGrowth` fires `axis: 'long_term'` when the long-term *named*
+tier moves (same plant path; climate wording: "Something deeper settled /
+cracked"). Score ticks inside the same long-term tier stay silent.
+`recordMilestone: false` is threaded through growth so regen never plants.
 
 ---
 

@@ -346,10 +346,12 @@ class OpenRouterService extends LLMService {
   };
 
   /// OpenAI-style tool calling (non-streaming) — used by the Journal's
-  /// tool transport. Returns null on ANY failure (model/provider without
-  /// tool support, network error, malformed body): the caller treats null
-  /// as "use the text transport instead", so this never surfaces an error
-  /// for what is a best-effort upgrade.
+  /// tool transport. Returns null when the provider ANSWERED but the call
+  /// yielded nothing usable (non-200 status, e.g. a model without tool
+  /// support): the caller treats null as "use the text transport instead".
+  /// Transport failures (host unreachable, client torn down by an app-side
+  /// abortGeneration) THROW so callers never record a capability verdict
+  /// for what was a network event — see the base-class contract.
   @override
   Future<LlmToolResponse?> generateWithTools(
     GenerationParams params,
@@ -365,13 +367,20 @@ class OpenRouterService extends LLMService {
     try {
       // No wall-clock timeout: a tool/eval call (incl. local oMLX via this same
       // client) can legitimately run long on a slow model or reasoning pass. A
-      // dead connection throws (handled → null) and Cancel aborts, so a fixed
-      // cap only killed working calls.
+      // dead connection throws (rethrown below as a transport failure) and
+      // Cancel aborts, so a fixed cap only killed working calls.
       final response = await client.post(
         Uri.parse('$_apiUrl/chat/completions'),
         headers: _chatHeaders,
         body: jsonEncode(payload),
       );
+      if (response.statusCode == 429 || response.statusCode >= 500) {
+        // Rate-limited / provider hiccup: transient, not a capability
+        // verdict — must not brand the model tool-less for the run.
+        throw LlmToolTransportException(
+          'tool call HTTP ${response.statusCode} (server busy/unavailable)',
+        );
+      }
       if (response.statusCode != 200) {
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -381,8 +390,11 @@ class OpenRouterService extends LLMService {
       }
       return parseOpenAiToolResponse(response.body);
     } catch (e) {
-      debugPrint('[RemoteAPI] Tool call failed: $e — falling back');
-      return null;
+      // Rethrow instead of collapsing to null — a killed connection must not
+      // read as "model can't speak tools" (it branded the backend XML-only
+      // for the whole run). Callers filter via looksLikeBackendUnreachable.
+      debugPrint('[RemoteAPI] Tool call transport failure: $e');
+      rethrow;
     } finally {
       if (identical(_activeClient, client)) _activeClient = null;
       client.close();

@@ -135,7 +135,7 @@ extension ChatServiceSessionState on ChatService {
           }
           if (map.containsKey('retrievalCount')) {
             _groupRetrievalCount =
-                (map['retrievalCount'] as num?)?.toInt() ?? 8;
+                (map['retrievalCount'] as num?)?.toInt() ?? 4;
           }
           if (map.containsKey('memoryBudgetPercent')) {
             _groupMemoryBudgetPercent =
