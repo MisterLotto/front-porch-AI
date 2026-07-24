@@ -990,28 +990,6 @@ class _MessageBubbleState extends State<MessageBubble> {
                   ),
                 ),
 
-                if (message.isUser) const SizedBox(width: 12),
-                if (message.isUser)
-                  Consumer<UserPersonaService>(
-                    builder: (context, service, _) {
-                      final persona = service.personas
-                          .where((p) => p.name == message.sender)
-                          .firstOrNull;
-                      if (persona?.avatarPath != null) {
-                        return CircleAvatar(
-                          backgroundImage: FileImage(
-                            File(persona!.avatarPath!),
-                          ),
-                          radius: 16,
-                        );
-                      }
-                      return const CircleAvatar(
-                        backgroundColor: Colors.purple,
-                        radius: 16,
-                        child: Icon(Icons.person, color: Colors.white),
-                      );
-                    },
-                  ),
                 if (theme.borderPainter != null)
                   Positioned.fill(
                     child: ClipRRect(
@@ -1022,6 +1000,29 @@ class _MessageBubbleState extends State<MessageBubble> {
               ],
             ),
           ),
+
+          if (message.isUser) const SizedBox(width: 12),
+          if (message.isUser)
+            Consumer<UserPersonaService>(
+              builder: (context, service, _) {
+                final persona = service.personas
+                    .where((p) => p.name == message.sender)
+                    .firstOrNull;
+                if (persona?.avatarPath != null) {
+                  return CircleAvatar(
+                    backgroundImage: FileImage(
+                      File(persona!.avatarPath!),
+                    ),
+                    radius: 16,
+                  );
+                }
+                return const CircleAvatar(
+                  backgroundColor: Colors.purple,
+                  radius: 16,
+                  child: Icon(Icons.person, color: Colors.white),
+                );
+              },
+            ),
         ],
       ),
     );
