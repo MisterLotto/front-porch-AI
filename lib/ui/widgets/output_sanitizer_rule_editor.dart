@@ -228,6 +228,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                 ReorderableListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
                   itemCount: widget.rules.length,
                   onReorder: _reorderRule,
                   itemBuilder: (ctx, i) {
@@ -244,64 +245,53 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 2,
+                          horizontal: 12,
+                          vertical: 4,
                         ),
                         child: Row(
                           children: [
                             ReorderableDragStartListener(
                               index: i,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
+                              child: Icon(
+                                Icons.drag_handle,
+                                size: 18,
+                                color: AppColors.textTertiary(context),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => _toggleStopAfterMatch(i),
+                              child: Tooltip(
+                                message: rule.stopAfterMatch
+                                    ? 'Stop after match (on)'
+                                    : 'Stop after match (off)',
                                 child: Icon(
-                                  Icons.drag_handle,
+                                  Icons.stop_circle,
                                   size: 18,
-                                  color: AppColors.textTertiary(context),
+                                  color: rule.stopAfterMatch
+                                      ? AppColors.formMasterAccent
+                                      : AppColors.textTertiary(context),
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: Text.rich(
-                                  TextSpan(
-                                    style: TextStyle(
-                                      color: AppColors.textPrimary(context),
-                                      fontSize: 13,
-                                    ),
-                                    children: [
-                                      TextSpan(
-                                        text: rule.find,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                              child: Text.rich(
+                                TextSpan(
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(context),
+                                    fontSize: 13,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: rule.find,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                       ),
-                                      const TextSpan(text: ' → '),
-                                      TextSpan(text: rule.replace),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Tooltip(
-                              message: rule.stopAfterMatch
-                                  ? 'Stop after match (on)'
-                                  : 'Stop after match (off)',
-                              child: GestureDetector(
-                                onTap: () => _toggleStopAfterMatch(i),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    Icons.stop_circle,
-                                    size: 18,
-                                    color: rule.stopAfterMatch
-                                        ? AppColors.formMasterAccent
-                                        : AppColors.textTertiary(context),
-                                  ),
+                                    ),
+                                    const TextSpan(text: ' → '),
+                                    TextSpan(text: rule.replace),
+                                  ],
                                 ),
                               ),
                             ),
