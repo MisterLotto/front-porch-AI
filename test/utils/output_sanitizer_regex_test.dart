@@ -6,6 +6,7 @@
 // backreference translation, and end-to-end sanitization.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 
 void main() {
@@ -407,6 +408,133 @@ void main() {
       final result = sanitizeOutputWithRegex(bigText, rules);
       // First rule replaces all "word" → "w0", subsequent rules find nothing.
       expect(result, startsWith('w0 '));
+    });
+  });
+
+  // ─── OutputSanitizerRule model — stopAfterMatch ─────────────────────
+
+  group('OutputSanitizerRule', () {
+    test('stopAfterMatch defaults to false', () {
+      final rule = OutputSanitizerRule(find: 'a', replace: 'b');
+      expect(rule.stopAfterMatch, isFalse);
+    });
+
+    test('stopAfterMatch round-trips through JSON', () {
+      final rule = OutputSanitizerRule(
+        find: 'em',
+        replace: '—',
+        stopAfterMatch: true,
+      );
+      final json = rule.toJson();
+      expect(json['stop_after_match'], isTrue);
+
+      final restored = OutputSanitizerRule.fromJson(json);
+      expect(restored.stopAfterMatch, isTrue);
+      expect(restored.find, 'em');
+      expect(restored.replace, '—');
+    });
+
+    test('stopAfterMatch false is omitted from JSON', () {
+      final rule = OutputSanitizerRule(find: 'a', replace: 'b');
+      final json = rule.toJson();
+      expect(json.containsKey('stop_after_match'), isFalse);
+    });
+
+    test('fromJson missing stop_after_match defaults to false', () {
+      final rule = OutputSanitizerRule.fromJson({'find': 'x', 'replace': 'y'});
+      expect(rule.stopAfterMatch, isFalse);
+    });
+
+    test('equality includes stopAfterMatch', () {
+      final a = OutputSanitizerRule(find: 'x', replace: 'y');
+      final b = OutputSanitizerRule(find: 'x', replace: 'y', stopAfterMatch: true);
+      final c = OutputSanitizerRule(find: 'x', replace: 'y');
+
+      expect(a, equals(c));
+      expect(a == b, isFalse);
+    });
+  });
+
+  // ─── stopAfterMatch behaviour in sanitizeOutput ─────────────────────
+
+  group('sanitizeOutput with stopAfterMatch', () {
+    /// Mirrors ChatServiceGeneration.sanitizeOutput logic for testing
+    /// without importing the full chat service.
+    String sanitize(
+      String text,
+      List<OutputSanitizerRule> rules,
+    ) {
+      var result = text;
+      for (final rule in rules) {
+        if (rule.find.isEmpty) continue;
+        final compiled = tryCompileRule(rule.find, rule.replace);
+        if (compiled == null) continue;
+        final before = result;
+        result = result.replaceAllMapped(compiled.regex, (m) {
+          var out = compiled.replacement;
+          for (var i = 1; i <= m.groupCount; i++) {
+            out = out.replaceAll('\$$i', m.group(i) ?? '');
+          }
+          return out;
+        });
+        if (rule.stopAfterMatch && result != before) break;
+      }
+      return result;
+    }
+
+    test('stopAfterMatch=true breaks after first matching rule', () {
+      final rules = [
+        OutputSanitizerRule(find: 'foo', replace: 'bar', stopAfterMatch: true),
+        OutputSanitizerRule(find: 'bar', replace: 'baz'),
+      ];
+      // First rule: foo→bar (matches, stopAfterMatch fires).
+      // Second rule should NOT run even though 'bar' is now in the text.
+      expect(sanitize('foo foo', rules), 'bar bar');
+    });
+
+    test('stopAfterMatch=true does NOT break when rule does not match', () {
+      final rules = [
+        OutputSanitizerRule(
+          find: 'zzz',
+          replace: 'YYY',
+          stopAfterMatch: true,
+        ),
+        OutputSanitizerRule(find: 'foo', replace: 'bar'),
+      ];
+      // First rule doesn't match → continue. Second rule matches.
+      expect(sanitize('foo', rules), 'bar');
+    });
+
+    test('stopAfterMatch=false allows all rules to run', () {
+      final rules = [
+        OutputSanitizerRule(find: 'foo', replace: 'bar'),
+        OutputSanitizerRule(find: 'bar', replace: 'baz'),
+      ];
+      // Both rules run: foo→bar→baz.
+      expect(sanitize('foo', rules), 'baz');
+    });
+
+    test('multiple stopAfterMatch rules — first matching one wins', () {
+      final rules = [
+        OutputSanitizerRule(find: 'a', replace: 'b'),
+        OutputSanitizerRule(find: 'b', replace: 'c', stopAfterMatch: true),
+        OutputSanitizerRule(find: 'c', replace: 'd'),
+      ];
+      // Rule 1: a→b. Rule 2: b→c (stopAfterMatch, matches → break).
+      // Rule 3 never runs.
+      expect(sanitize('a', rules), 'c');
+    });
+
+    test('stopAfterMatch with no text change does not break early', () {
+      final rules = [
+        OutputSanitizerRule(
+          find: 'nomatch',
+          replace: 'nope',
+          stopAfterMatch: true,
+        ),
+        OutputSanitizerRule(find: 'foo', replace: 'bar'),
+      ];
+      expect(sanitize('foo', rules), 'bar');
     });
   });
 }

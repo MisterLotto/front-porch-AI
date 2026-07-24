@@ -1756,6 +1756,7 @@ extension ChatServiceGeneration on ChatService {
       if (rule.find.isEmpty) continue;
       final compiled = tryCompileRule(rule.find, rule.replace);
       if (compiled == null) continue;
+      final before = result;
       result = result.replaceAllMapped(compiled.regex, (m) {
         var out = compiled.replacement;
         for (var i = 1; i <= m.groupCount; i++) {
@@ -1763,6 +1764,7 @@ extension ChatServiceGeneration on ChatService {
         }
         return out;
       });
+      if (rule.stopAfterMatch && result != before) break;
     }
     return result;
   }

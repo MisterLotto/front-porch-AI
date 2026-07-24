@@ -25,9 +25,10 @@ import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 /// Reusable find/replace rule editor for the Output Sanitizer.
 ///
 /// Displays paired text fields for find and replace patterns, an add button,
-/// the current rule list with remove buttons, and a count/empty footer.
-/// The parent controls the data source and persistence via [rules] and
-/// [onRulesChanged]; this widget owns the controllers and validation state.
+/// the current rule list with drag-to-reorder handles, per-rule early-exit
+/// toggles, and remove buttons.  The parent controls the data source and
+/// persistence via [rules] and [onRulesChanged]; this widget owns the
+/// controllers and validation state.
 class OutputSanitizerRuleEditor extends StatefulWidget {
   const OutputSanitizerRuleEditor({
     super.key,
@@ -80,6 +81,25 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
     widget.onRulesChanged([...widget.rules]..remove(rule));
   }
 
+  void _reorderRule(int oldIndex, int newIndex) {
+    if (oldIndex == newIndex) return;
+    final list = [...widget.rules];
+    final item = list.removeAt(oldIndex);
+    list.insert(newIndex, item);
+    widget.onRulesChanged(list);
+  }
+
+  void _toggleStopAfterMatch(int index) {
+    final list = [...widget.rules];
+    final old = list[index];
+    list[index] = OutputSanitizerRule(
+      find: old.find,
+      replace: old.replace,
+      stopAfterMatch: !old.stopAfterMatch,
+    );
+    widget.onRulesChanged(list);
+  }
+
   @override
   Widget build(BuildContext context) {
     final bgColor =
@@ -94,6 +114,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
           ),
           child: Column(
             children: [
+              // ── Find / Replace input row ──────────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -202,46 +223,102 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                 ),
               ),
               Divider(height: 1, color: AppColors.borderOf(context)),
-              ...widget.rules.map(
-                (rule) => Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 13,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: rule.find,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const TextSpan(text: ' → '),
-                              TextSpan(text: rule.replace),
-                            ],
+              // ── Rule list (reorderable) ──────────────────────────
+              if (widget.rules.isNotEmpty)
+                ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: widget.rules.length,
+                  onReorder: _reorderRule,
+                  itemBuilder: (ctx, i) {
+                    final rule = widget.rules[i];
+                    return Container(
+                      key: ValueKey('rule_$i'),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: AppColors.borderOf(context),
+                            width: 0.5,
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.remove_circle_outline,
-                          color: AppColors.negativeAccentOf(context),
-                          size: 22,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
                         ),
-                        onPressed: () => _removeRule(rule),
+                        child: Row(
+                          children: [
+                            ReorderableDragStartListener(
+                              index: i,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Icon(
+                                  Icons.drag_handle,
+                                  size: 18,
+                                  color: AppColors.textTertiary(context),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Text.rich(
+                                  TextSpan(
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary(context),
+                                      fontSize: 13,
+                                    ),
+                                    children: [
+                                      TextSpan(
+                                        text: rule.find,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const TextSpan(text: ' → '),
+                                      TextSpan(text: rule.replace),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Tooltip(
+                              message: rule.stopAfterMatch
+                                  ? 'Stop after match (on)'
+                                  : 'Stop after match (off)',
+                              child: GestureDetector(
+                                onTap: () => _toggleStopAfterMatch(i),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.stop_circle,
+                                    size: 18,
+                                    color: rule.stopAfterMatch
+                                        ? AppColors.formMasterAccent
+                                        : AppColors.textTertiary(context),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.remove_circle_outline,
+                                color: AppColors.negativeAccentOf(context),
+                                size: 22,
+                              ),
+                              onPressed: () => _removeRule(rule),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              ),
             ],
           ),
         ),

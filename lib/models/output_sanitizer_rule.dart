@@ -21,18 +21,31 @@
 /// Applied to model output text before it enters chat history,
 /// allowing procedural normalisation of character sequences
 /// (e.g. em dash → " - ", smart quotes → straight quotes).
+///
+/// When [stopAfterMatch] is true, no subsequent rules are applied
+/// after this rule matches at least once in the text.
 class OutputSanitizerRule {
   final String find;
   final String replace;
+  final bool stopAfterMatch;
 
-  const OutputSanitizerRule({required this.find, required this.replace});
+  const OutputSanitizerRule({
+    required this.find,
+    required this.replace,
+    this.stopAfterMatch = false,
+  });
 
-  Map<String, dynamic> toJson() => {'find': find, 'replace': replace};
+  Map<String, dynamic> toJson() => {
+        'find': find,
+        'replace': replace,
+        if (stopAfterMatch) 'stop_after_match': true,
+      };
 
   factory OutputSanitizerRule.fromJson(Map<String, dynamic> json) =>
       OutputSanitizerRule(
         find: json['find'] as String? ?? '',
         replace: json['replace'] as String? ?? '',
+        stopAfterMatch: json['stop_after_match'] as bool? ?? false,
       );
 
   @override
@@ -41,8 +54,9 @@ class OutputSanitizerRule {
       other is OutputSanitizerRule &&
           runtimeType == other.runtimeType &&
           find == other.find &&
-          replace == other.replace;
+          replace == other.replace &&
+          stopAfterMatch == other.stopAfterMatch;
 
   @override
-  int get hashCode => find.hashCode ^ replace.hashCode;
+  int get hashCode => find.hashCode ^ replace.hashCode ^ stopAfterMatch.hashCode;
 }
