@@ -86,6 +86,44 @@ describe('stoop session store', () => {
     expect(localStorage.getItem('stoop_install_id')).toBe(id);
     expect(hasStoopSession()).toBe(false);
   });
+
+  // Issue #160: served over plain http:// on a LAN IP the browser is in an
+  // INSECURE context, where crypto.randomUUID is undefined. Login threw a
+  // TypeError before the request was sent and surfaced as the generic
+  // "Something went wrong". localhost is a secure context, which is exactly
+  // why it never reproduced on a dev machine.
+  it('signs in from an insecure context (no crypto.randomUUID)', async () => {
+    // getRandomValues stays: it is NOT secure-context-gated, unlike randomUUID.
+    vi.stubGlobal('crypto', {
+      getRandomValues: (a: Uint8Array) => {
+        for (let i = 0; i < a.length; i++) a[i] = (i * 7 + 3) & 0xff;
+        return a;
+      },
+    });
+    mockFetch(() =>
+      jsonResponse(200, { user: {}, accessToken: 'a', refreshToken: 'r' }),
+    );
+
+    await expect(stoop.login('a@b.c', 'password123')).resolves.toBeTruthy();
+
+    const id = localStorage.getItem('stoop_install_id') ?? '';
+    expect(id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    const body = JSON.parse(String(calls[0].init.body)) as { installId: string };
+    expect(body.installId).toBe(id);
+  });
+
+  it('still signs in with no crypto object at all (Math.random floor)', async () => {
+    vi.stubGlobal('crypto', undefined);
+    mockFetch(() =>
+      jsonResponse(200, { user: {}, accessToken: 'a', refreshToken: 'r' }),
+    );
+    await expect(stoop.login('a@b.c', 'password123')).resolves.toBeTruthy();
+    expect(localStorage.getItem('stoop_install_id')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
 });
 
 describe('401 refresh-and-retry', () => {
