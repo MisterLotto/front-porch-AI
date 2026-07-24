@@ -279,74 +279,7 @@ extension ChatServiceSessionLoad on ChatService {
         'messages for session $_currentSessionId',
       );
       _messages.clear();
-      for (final m in dbMessages) {
-        List<String> swipes;
-        try {
-          swipes = List<String>.from(jsonDecode(m.swipes));
-        } catch (_) {
-          swipes = [''];
-        }
-
-        // Output sanitizer: apply configured replacements to loaded swipes
-        // so legacy messages (saved before this feature) are also normalised.
-        // Gated by sanitiseExistingHistory — when off, even chats with
-        // per-chat sanitizer enabled keep their raw saved text on load.
-        // Resolves per-chat override + rules (falls back to global).
-        if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
-            _storageService.generationSettings.sanitiseExistingHistory) {
-          final rules =
-              _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
-          if (rules.isNotEmpty && swipes.isNotEmpty) {
-            swipes = swipes
-                .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
-                .toList();
-          }
-        }
-
-        List<int> swipeDurations;
-        try {
-          swipeDurations = List<int>.from(
-            (jsonDecode(m.swipeDurations) as List).map(
-              (e) => (e as num).toInt(),
-            ),
-          );
-        } catch (_) {
-          swipeDurations = [0];
-        }
-
-        final safeSwipeIndex =
-            (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-            ? m.swipeIndex
-            : 0;
-
-        _messages.add(
-          ChatMessage(
-            text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
-            sender: m.sender,
-            isUser: m.isUser,
-            characterId: m.characterId,
-            swipes: swipes,
-            swipeIndex: safeSwipeIndex,
-            swipeDurations: swipeDurations,
-            metadata: m.metadata != null
-                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
-                : null,
-            swipeMetadata: m.swipeMetadata != null
-                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
-                      .map(
-                        (e) => e != null
-                            ? Map<String, dynamic>.from(e as Map)
-                            : null,
-                      )
-                      .toList()
-                : null,
-          ),
-        );
-      }
-
-      if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLatest();
-      }
+      _hydrateMessagesFromRows(dbMessages);
     } catch (e) {
       print('Error loading chat session: $e');
     }
@@ -417,6 +350,80 @@ extension ChatServiceSessionLoad on ChatService {
     return getSessionsForId(charId);
   }
 
+  /// Decode DB [Message] rows into [_messages], applying retroactive output
+  /// sanitisation when the per-chat or global setting requests it.
+  /// Caller must clear `_messages` and set `_sessionGenSettings` beforehand.
+  void _hydrateMessagesFromRows(List<Message> dbMessages) {
+    for (final m in dbMessages) {
+      List<String> swipes;
+      try {
+        swipes = List<String>.from(jsonDecode(m.swipes));
+      } catch (_) {
+        swipes = [''];
+      }
+
+      // Output sanitizer: apply configured replacements to loaded swipes
+      // so legacy messages (saved before this feature) are also normalised.
+      // Gated by sanitiseExistingHistory — when off, even chats with
+      // per-chat sanitizer enabled keep their raw saved text on load.
+      // Resolves per-chat override + rules (falls back to global).
+      if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
+          _storageService.generationSettings.sanitiseExistingHistory) {
+        final rules =
+            _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
+        if (rules.isNotEmpty && swipes.isNotEmpty) {
+          swipes = swipes
+              .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
+              .toList();
+        }
+      }
+
+      List<int> swipeDurations;
+      try {
+        swipeDurations = List<int>.from(
+          (jsonDecode(m.swipeDurations) as List).map(
+            (e) => (e as num).toInt(),
+          ),
+        );
+      } catch (_) {
+        swipeDurations = [0];
+      }
+
+      final safeSwipeIndex =
+          (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
+              ? m.swipeIndex
+              : 0;
+
+      _messages.add(
+        ChatMessage(
+          text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
+          sender: m.sender,
+          isUser: m.isUser,
+          characterId: m.characterId,
+          swipes: swipes,
+          swipeIndex: safeSwipeIndex,
+          swipeDurations: swipeDurations,
+          metadata: m.metadata != null
+              ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
+              : null,
+          swipeMetadata: m.swipeMetadata != null
+              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
+                    .map(
+                      (e) => e != null
+                          ? Map<String, dynamic>.from(e as Map)
+                          : null,
+                    )
+                    .toList()
+              : null,
+        ),
+      );
+    }
+
+    if (_messages.isNotEmpty) {
+      _lorebookScanner.scanLatest();
+    }
+  }
+
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
@@ -457,70 +464,7 @@ extension ChatServiceSessionLoad on ChatService {
         'messages for session $sessionId',
       );
       _messages.clear();
-      for (final m in dbMessages) {
-        List<String> swipes;
-        try {
-          swipes = List<String>.from(jsonDecode(m.swipes));
-        } catch (_) {
-          swipes = [''];
-        }
-
-        // Output sanitizer: apply configured replacements to loaded swipes
-        // so legacy messages (saved before this feature) are also normalised.
-        // Gated by sanitiseExistingHistory — when off, even chats with
-        // per-chat sanitizer enabled keep their raw saved text on load.
-        // Resolves per-chat override + rules (falls back to global).
-        if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
-            _storageService.generationSettings.sanitiseExistingHistory) {
-          final rules =
-              _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
-          if (rules.isNotEmpty && swipes.isNotEmpty) {
-            swipes = swipes
-                .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
-                .toList();
-          }
-        }
-
-        List<int> swipeDurations;
-        try {
-          swipeDurations = List<int>.from(
-            (jsonDecode(m.swipeDurations) as List).map(
-              (e) => (e as num).toInt(),
-            ),
-          );
-        } catch (_) {
-          swipeDurations = [0];
-        }
-
-        final safeSwipeIndex =
-            (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-            ? m.swipeIndex
-            : 0;
-
-        _messages.add(
-          ChatMessage(
-            text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
-            sender: m.sender,
-            isUser: m.isUser,
-            characterId: m.characterId,
-            swipes: swipes,
-            swipeIndex: safeSwipeIndex,
-            swipeDurations: swipeDurations,
-            metadata: m.metadata != null
-                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
-                : null,
-            swipeMetadata: m.swipeMetadata != null
-                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
-                      .map(
-                        (e) => e != null
-                            ? Map<String, dynamic>.from(e as Map)
-                            : null,
-                      )
-                      .toList()
-                : null,
-          ),
-        );
-      }
+      _hydrateMessagesFromRows(dbMessages);
 
       // Post-load sanitization: force valid swipe indices and clamp absurdly long fixation text.
       // This protects against any legacy corrupted rows or previous buggy saves, even if the
