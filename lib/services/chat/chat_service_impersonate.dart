@@ -343,7 +343,7 @@ extension ChatServiceImpersonate on ChatService {
       // the sanitized form is presented.
       if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService)) {
         final rules = _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
-        final sanitized = ChatServiceGeneration.sanitizeOutput(accumulated, rules);
+        final sanitized = sanitizeOutput(accumulated, rules);
         if (sanitized != accumulated) {
           onToken(sanitized);
         }

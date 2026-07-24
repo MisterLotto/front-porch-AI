@@ -1741,31 +1741,4 @@ extension ChatServiceGeneration on ChatService {
       _turnSpeakerIdForRealism = null;
     }
   }
-
-  /// Applies output sanitizer rules to [text] using the limited regex syntax.
-  ///
-  /// Each rule's find pattern is compiled to a case-insensitive [RegExp].
-  /// Invalid rules are silently skipped (defensive — the UI should prevent
-  /// them from being saved).
-  static String sanitizeOutput(
-    String text,
-    List<OutputSanitizerRule> rules,
-  ) {
-    var result = text;
-    for (final rule in rules) {
-      if (rule.find.isEmpty) continue;
-      final compiled = tryCompileRule(rule.find, rule.replace);
-      if (compiled == null) continue;
-      final before = result;
-      result = result.replaceAllMapped(compiled.regex, (m) {
-        var out = compiled.replacement;
-        for (var i = 1; i <= m.groupCount; i++) {
-          out = out.replaceAll('\$$i', m.group(i) ?? '');
-        }
-        return out;
-      });
-      if (rule.stopAfterMatch && result != before) break;
-    }
-    return result;
-  }
 }

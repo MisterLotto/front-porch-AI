@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+
 /// Limited regex support for the Output Sanitizer find field.
 ///
 /// Masks (prefixed with `\`):
@@ -210,32 +212,32 @@ bool isValidFindPattern(String input) {
   }
 }
 
-/// Applies a single compiled rule to [text], expanding backreferences.
-String _applyRule(String text, RegExp regex, String compiledReplace) {
-  return text.replaceAllMapped(regex, (m) {
-    var out = compiledReplace;
-    for (var i = 1; i <= m.groupCount; i++) {
-      out = out.replaceAll('\$$i', m.group(i) ?? '');
-    }
-    return out;
-  });
-}
-
 /// Applies output sanitizer rules to [text] using the limited regex syntax.
 ///
 /// Each rule's find pattern is compiled to a case-insensitive [RegExp].
 /// Invalid rules are silently skipped (defensive — the UI should prevent
 /// them from being saved).
-String sanitizeOutputWithRegex(
+///
+/// When a rule has [OutputSanitizerRule.stopAfterMatch] set, no subsequent
+/// rules are applied after this rule matches at least once in the text.
+String sanitizeOutput(
   String text,
-  List<({String find, String replace})> rules,
+  List<OutputSanitizerRule> rules,
 ) {
   var result = text;
   for (final rule in rules) {
     if (rule.find.isEmpty) continue;
     final compiled = tryCompileRule(rule.find, rule.replace);
     if (compiled == null) continue;
-    result = _applyRule(result, compiled.regex, compiled.replacement);
+    final before = result;
+    result = result.replaceAllMapped(compiled.regex, (m) {
+      var out = compiled.replacement;
+      for (var i = 1; i <= m.groupCount; i++) {
+        out = out.replaceAll('\$$i', m.group(i) ?? '');
+      }
+      return out;
+    });
+    if (rule.stopAfterMatch && result != before) break;
   }
   return result;
 }

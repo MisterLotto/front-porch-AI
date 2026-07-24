@@ -373,7 +373,7 @@ extension ChatServiceSessionLoad on ChatService {
             _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
         if (rules.isNotEmpty && swipes.isNotEmpty) {
           swipes = swipes
-              .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
+              .map((s) => sanitizeOutput(s, rules))
               .toList();
         }
       }

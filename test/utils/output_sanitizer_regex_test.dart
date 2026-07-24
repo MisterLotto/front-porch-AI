@@ -292,109 +292,109 @@ void main() {
     });
   });
 
-  group('sanitizeOutputWithRegex()', () {
+  group('sanitizeOutput()', () {
     test('single rule application', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'she said \u2014 hello',
-        [(find: '\u2014', replace: ' - ')],
+        [OutputSanitizerRule(find: '\u2014', replace: ' - ')],
       );
       expect(result, 'she said  -  hello');
     });
 
     test('multiple rules applied in order', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'hello world',
         [
-          (find: 'hello', replace: 'goodbye'),
-          (find: 'world', replace: 'earth'),
+          OutputSanitizerRule(find: 'hello', replace: 'goodbye'),
+          OutputSanitizerRule(find: 'world', replace: 'earth'),
         ],
       );
       expect(result, 'goodbye earth');
     });
 
     test('empty find string skips rule', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'text',
-        [(find: '', replace: 'x')],
+        [OutputSanitizerRule(find: '', replace: 'x')],
       );
       expect(result, 'text');
     });
 
     test('invalid find string skips rule silently', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'text',
-        [(find: r'\x', replace: 'x')],
+        [OutputSanitizerRule(find: r'\x', replace: 'x')],
       );
       expect(result, 'text');
     });
 
     test('no matches leaves text unchanged', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'hello',
-        [(find: 'xyz', replace: 'abc')],
+        [OutputSanitizerRule(find: 'xyz', replace: 'abc')],
       );
       expect(result, 'hello');
     });
 
     test('empty rules list returns text unchanged', () {
-      expect(sanitizeOutputWithRegex('hello', []), 'hello');
+      expect(sanitizeOutput('hello', []), 'hello');
     });
 
     test('multiple matches in same text', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'aaa bbb aaa',
-        [(find: 'aaa', replace: 'xxx')],
+        [OutputSanitizerRule(find: 'aaa', replace: 'xxx')],
       );
       expect(result, 'xxx bbb xxx');
     });
 
     test('backreference expands capture group content', () {
       // \\( in find creates a capture group, \\1 in replace references it.
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'abc 123 def',
-        [(find: r'\(\d+)', replace: r'[\1]')],
+        [OutputSanitizerRule(find: r'\(\d+)', replace: r'[\1]')],
       );
       expect(result, 'abc [123] def');
     });
 
     test('multiple capture groups with backreferences', () {
       // Two separate \\( groups: group 1 = \\w+, group 2 = \\d+.
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'hello 42',
-        [(find: r'\(\w+) \(\d+)', replace: r'\2 \1')],
+        [OutputSanitizerRule(find: r'\(\w+) \(\d+)', replace: r'\2 \1')],
       );
       expect(result, '42 hello');
     });
 
     test('capture group without backreference works fine', () {
       // The group captures but replace doesn't reference it — no error.
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'abc 123 def',
-        [(find: r'\(\d+)', replace: 'NUMBER')],
+        [OutputSanitizerRule(find: r'\(\d+)', replace: 'NUMBER')],
       );
       expect(result, 'abc NUMBER def');
     });
 
     test('empty replace string deletes matches', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         'hello 123 world',
-        [(find: r'\d+', replace: '')],
+        [OutputSanitizerRule(find: r'\d+', replace: '')],
       );
       expect(result, 'hello  world');
     });
 
     test('literal backslash in find matches backslash in text', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         r'path\to\file',
-        [(find: r'\\', replace: '/')],
+        [OutputSanitizerRule(find: r'\\', replace: '/')],
       );
       expect(result, 'path/to/file');
     });
 
     test('brackets in find are treated as literals', () {
-      final result = sanitizeOutputWithRegex(
+      final result = sanitizeOutput(
         '[bold] text [/bold]',
-        [(find: '[bold]', replace: '**')],
+        [OutputSanitizerRule(find: '[bold]', replace: '**')],
       );
       expect(result, '** text [/bold]');
     });
@@ -403,9 +403,9 @@ void main() {
       final bigText = 'word ' * 2000; // 10k chars
       final rules = List.generate(
         50,
-        (i) => (find: 'word', replace: 'w$i'),
+        (i) => OutputSanitizerRule(find: 'word', replace: 'w$i'),
       );
-      final result = sanitizeOutputWithRegex(bigText, rules);
+      final result = sanitizeOutput(bigText, rules);
       // First rule replaces all "word" → "w0", subsequent rules find nothing.
       expect(result, startsWith('w0 '));
     });
@@ -458,30 +458,6 @@ void main() {
   // ─── stopAfterMatch behaviour in sanitizeOutput ─────────────────────
 
   group('sanitizeOutput with stopAfterMatch', () {
-    /// Mirrors ChatServiceGeneration.sanitizeOutput logic for testing
-    /// without importing the full chat service.
-    String sanitize(
-      String text,
-      List<OutputSanitizerRule> rules,
-    ) {
-      var result = text;
-      for (final rule in rules) {
-        if (rule.find.isEmpty) continue;
-        final compiled = tryCompileRule(rule.find, rule.replace);
-        if (compiled == null) continue;
-        final before = result;
-        result = result.replaceAllMapped(compiled.regex, (m) {
-          var out = compiled.replacement;
-          for (var i = 1; i <= m.groupCount; i++) {
-            out = out.replaceAll('\$$i', m.group(i) ?? '');
-          }
-          return out;
-        });
-        if (rule.stopAfterMatch && result != before) break;
-      }
-      return result;
-    }
-
     test('stopAfterMatch=true breaks after first matching rule', () {
       final rules = [
         OutputSanitizerRule(find: 'foo', replace: 'bar', stopAfterMatch: true),
@@ -489,7 +465,7 @@ void main() {
       ];
       // First rule: foo→bar (matches, stopAfterMatch fires).
       // Second rule should NOT run even though 'bar' is now in the text.
-      expect(sanitize('foo foo', rules), 'bar bar');
+      expect(sanitizeOutput('foo foo', rules), 'bar bar');
     });
 
     test('stopAfterMatch=true does NOT break when rule does not match', () {
@@ -502,7 +478,7 @@ void main() {
         OutputSanitizerRule(find: 'foo', replace: 'bar'),
       ];
       // First rule doesn't match → continue. Second rule matches.
-      expect(sanitize('foo', rules), 'bar');
+      expect(sanitizeOutput('foo', rules), 'bar');
     });
 
     test('stopAfterMatch=false allows all rules to run', () {
@@ -511,7 +487,7 @@ void main() {
         OutputSanitizerRule(find: 'bar', replace: 'baz'),
       ];
       // Both rules run: foo→bar→baz.
-      expect(sanitize('foo', rules), 'baz');
+      expect(sanitizeOutput('foo', rules), 'baz');
     });
 
     test('multiple stopAfterMatch rules — first matching one wins', () {
@@ -522,7 +498,7 @@ void main() {
       ];
       // Rule 1: a→b. Rule 2: b→c (stopAfterMatch, matches → break).
       // Rule 3 never runs.
-      expect(sanitize('a', rules), 'c');
+      expect(sanitizeOutput('a', rules), 'c');
     });
 
     test('stopAfterMatch with no text change does not break early', () {
@@ -534,7 +510,7 @@ void main() {
         ),
         OutputSanitizerRule(find: 'foo', replace: 'bar'),
       ];
-      expect(sanitize('foo', rules), 'bar');
+      expect(sanitizeOutput('foo', rules), 'bar');
     });
   });
 }
