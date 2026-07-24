@@ -11,15 +11,15 @@ import type { ChatThemeOverrides, ChatThemePreset } from './chatTypes';
 
 // Mirror of the 10 desktop presets (ChatThemePreset.presets).
 const PRESETS: ChatThemePreset[] = [
-  { id: 'fantasy', displayName: 'Fantasy', description: 'Rich purples and soft gold', defaultUserBubbleColor: 0xFFFFE57F, defaultUserTextColor: 0xFF6D4C41, defaultAiBubbleColor: 0xFFFFE57F, defaultAiTextColor: 0xFF3E2723, defaultDialogueColor: 0xFFFFD54F, defaultActionColor: 0xFFA5D6A7, defaultBorderColor: 0xFF007E1B, defaultFontFamily: 'serif', defaultBackgroundKey: 'fantasy', defaultBorderStyle: 'vine' },
+  { id: 'fantasy', displayName: 'Fantasy', description: 'Rich purples and soft gold', defaultUserBubbleColor: 0xFF332054, defaultUserTextColor: 0xFFF5E7C4, defaultAiBubbleColor: 0xFF332054, defaultAiTextColor: 0xFFF5E7C4, defaultDialogueColor: 0xFFFFD54F, defaultActionColor: 0xFFCBB4EC, defaultBorderColor: 0xFFD4AF37, defaultFontFamily: 'serif', defaultBackgroundKey: 'fantasy', defaultBorderStyle: 'vine' },
   { id: 'galactic', displayName: 'Galactic', description: 'Deep space blues and cyan', defaultUserBubbleColor: 0xFF0D1B2A, defaultUserTextColor: 0xFF00D4FF, defaultAiBubbleColor: 0xFF0D1B2A, defaultAiTextColor: 0xFFE0E0FF, defaultDialogueColor: 0xFF80DEEA, defaultActionColor: 0xFF7C4DFF, defaultBorderColor: 0xFF00D4FF, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'space_station', defaultBorderStyle: 'dualLine' },
   { id: 'neon_grid', displayName: 'Neon Grid', description: 'Black backdrop with neon glow', defaultUserBubbleColor: 0xFF0A0A0A, defaultUserTextColor: 0xFFFF00FF, defaultAiBubbleColor: 0xFF0A0A0A, defaultAiTextColor: 0xFF00FFFF, defaultDialogueColor: 0xFFFFFF00, defaultActionColor: 0xFFFF00FF, defaultBorderColor: 0xFFFF00FF, defaultFontFamily: 'monospace', defaultBackgroundKey: 'grid', defaultBorderStyle: 'glitch' },
-  { id: 'sakura', displayName: 'Sakura', description: 'Soft pinks and pale tones', defaultUserBubbleColor: 0xFFFFE4E9, defaultUserTextColor: 0xFF2D5A27, defaultAiBubbleColor: 0xFFFFE4E9, defaultAiTextColor: 0xFF2D5A27, defaultDialogueColor: 0xFFF8BBD0, defaultActionColor: 0xFFC8E6C9, defaultBorderColor: 0xFF2D5A27, defaultFontFamily: 'serif', defaultBackgroundKey: 'cherry_blossom', defaultBorderStyle: 'wavy' },
+  { id: 'sakura', displayName: 'Sakura', description: 'Soft pinks and pale tones', defaultUserBubbleColor: 0xFFFCE4EC, defaultUserTextColor: 0xFF5D2A3E, defaultAiBubbleColor: 0xFFFCE4EC, defaultAiTextColor: 0xFF5D2A3E, defaultDialogueColor: 0xFFAD1457, defaultActionColor: 0xFF33691E, defaultBorderColor: 0xFF880E4F, defaultFontFamily: 'serif', defaultBackgroundKey: 'cherry_blossom', defaultBorderStyle: 'wavy' },
   { id: 'noir', displayName: 'Noir', description: 'Monochrome shadows', defaultUserBubbleColor: 0xFF2D2D2D, defaultUserTextColor: 0xFFF5F5F5, defaultAiBubbleColor: 0xFF1A1A1A, defaultAiTextColor: 0xFFCCCCCC, defaultDialogueColor: 0xFFBDBDBD, defaultActionColor: 0xFF78909C, defaultBorderColor: 0xFF888888, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'noir', defaultBorderStyle: 'shadow' },
   { id: 'enchanted_forest', displayName: 'Enchanted Forest', description: 'Deep greens and warm earth', defaultUserBubbleColor: 0xFF2D5A27, defaultUserTextColor: 0xFFF0E6D3, defaultAiBubbleColor: 0xFF4A7C3F, defaultAiTextColor: 0xFFFFF8E7, defaultDialogueColor: 0xFFA5D6A7, defaultActionColor: 0xFFD7CCC8, defaultBorderColor: 0xFF5E3D04, defaultFontFamily: 'serif', defaultBackgroundKey: 'enchanted_wood', defaultBorderStyle: 'vine' },
   { id: 'ocean_depths', displayName: 'Ocean Depths', description: 'Deep blues and teal', defaultUserBubbleColor: 0xFF003049, defaultUserTextColor: 0xFFE0F7FA, defaultAiBubbleColor: 0xFF006D77, defaultAiTextColor: 0xFFE0F7FA, defaultDialogueColor: 0xFF80DEEA, defaultActionColor: 0xFF80CBC4, defaultBorderColor: 0xFF00BCD4, defaultFontFamily: 'sans-serif', defaultBackgroundKey: 'ocean_depth', defaultBorderStyle: 'dualLine' },
   { id: 'cyberpunk', displayName: 'Cyberpunk', description: 'Neon on dark', defaultUserBubbleColor: 0xFF0A0A23, defaultUserTextColor: 0xFF00FF41, defaultAiBubbleColor: 0xFF1A0A2E, defaultAiTextColor: 0xFFFF00FF, defaultDialogueColor: 0xFF00FF41, defaultActionColor: 0xFFFF00FF, defaultBorderColor: 0xFF00FF41, defaultFontFamily: 'monospace', defaultBackgroundKey: 'futuristic_city', defaultBorderStyle: 'glitch' },
-  { id: 'roman_empire', displayName: 'Roman Empire', description: 'Rich browns and warm cream', defaultUserBubbleColor: 0xFFFDE68A, defaultUserTextColor: 0xFF5D4037, defaultAiBubbleColor: 0xFFFDE68A, defaultAiTextColor: 0xFF451A03, defaultDialogueColor: 0xFFFFCC80, defaultActionColor: 0xFFBCAAA4, defaultBorderColor: 0xFF451A03, defaultFontFamily: 'serif', defaultBackgroundKey: 'roman_market', defaultBorderStyle: 'greekKey' },
+  { id: 'roman_empire', displayName: 'Roman Empire', description: 'Rich browns and warm cream', defaultUserBubbleColor: 0xFFEFE1C0, defaultUserTextColor: 0xFF4A2C1A, defaultAiBubbleColor: 0xFFEFE1C0, defaultAiTextColor: 0xFF3B2410, defaultDialogueColor: 0xFF9C1C1C, defaultActionColor: 0xFF6B4E1A, defaultBorderColor: 0xFF6B1414, defaultFontFamily: 'serif', defaultBackgroundKey: 'roman_market', defaultBorderStyle: 'greekKey' },
   { id: 'steampunk', displayName: 'Steampunk', description: 'Brass and copper tones', defaultUserBubbleColor: 0xFF3E2723, defaultUserTextColor: 0xFFFFD54F, defaultAiBubbleColor: 0xFF5D4037, defaultAiTextColor: 0xFFE0C9A6, defaultDialogueColor: 0xFFFFE082, defaultActionColor: 0xFFD7CCC8, defaultBorderColor: 0xFFFFD54F, defaultFontFamily: 'serif', defaultBackgroundKey: 'steampunk_bg', defaultBorderStyle: 'gear' },
 ];
 
@@ -41,6 +41,31 @@ const COLOR_LABELS: { key: keyof ChatThemeOverrides; label: string; defaultKey?:
 function dartColorToCss(color: number): string {
   const hex = color.toString(16).padStart(8, '0');
   return '#' + hex.substring(2);
+}
+
+// Desktop paints decorative bubble borders (vine/gear/greekKey/glitch/…) with
+// CustomPainters that CSS can't reproduce pixel-for-pixel. On web we approximate
+// each with the theme's border color + a per-style CSS treatment. Returns
+// [border, boxShadow]. `${color}NN` appends an alpha byte (color is #RRGGBB).
+function webBorderCss(style: string, color: string): [string, string] {
+  switch (style) {
+    case 'dualLine':
+      return [`3px double ${color}`, 'none'];
+    case 'shadow':
+      return [`1px solid ${color}`, `0 3px 12px ${color}66`];
+    case 'wavy':
+      return [`2px dashed ${color}`, 'none'];
+    case 'glitch':
+      return [`2px solid ${color}`, `2px 0 0 ${color}55, -2px 0 0 ${color}33`];
+    case 'greekKey':
+      return [`3px solid ${color}`, `inset 0 0 0 2px ${color}`];
+    case 'gear':
+      return [`2px solid ${color}`, `0 0 0 2px ${color}44`];
+    case 'grid':
+      return [`2px solid ${color}`, `inset 0 0 0 1px ${color}55`];
+    default: // vine, scalloped, wave, and any unknown style
+      return [`2px solid ${color}`, 'none'];
+  }
 }
 
 /** Resolve theme overrides into CSS custom-property values for the chat container. */
@@ -90,6 +115,19 @@ export function resolveThemeColors(
   if (overrides.fontFamily || preset.defaultFontFamily) {
     vars['--chat-font'] = overrides.fontFamily ?? preset.defaultFontFamily;
   }
+  // Per-chat background scene (parity with desktop). The app's web server serves
+  // these from the shared assets/backgrounds dir as /backgrounds/<key>.png; the
+  // CSS layers a dark veil over it (matching the desktop 0.45 black overlay) so
+  // message text stays readable.
+  const bgKey = overrides.backgroundKey ?? preset.defaultBackgroundKey;
+  if (bgKey) {
+    vars['--chat-bg-image'] = `url('/backgrounds/${bgKey}.png')`;
+  }
+  // Decorative bubble border (approximated from the desktop painters).
+  const borderStyle = overrides.borderStyle ?? preset.defaultBorderStyle;
+  const [bubbleBorder, bubbleShadow] = webBorderCss(borderStyle, border);
+  vars['--chat-bubble-border'] = bubbleBorder;
+  vars['--chat-bubble-shadow'] = bubbleShadow;
   return vars;
 }
 

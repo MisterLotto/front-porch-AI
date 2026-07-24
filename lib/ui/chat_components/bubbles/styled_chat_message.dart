@@ -198,7 +198,11 @@ class StyledChatMessage extends StatelessWidget {
     final dialogueStyle = _applyGoogleFont(
       fontFamily,
       TextStyle(
-        color: storageService.getDialogueColor(character),
+        color: storageService.getDialogueColor(
+          character,
+          themePreset,
+          themeOverrides,
+        ),
         fontWeight: FontWeight.w500,
         fontSize: scaledSize,
       ),
@@ -206,7 +210,11 @@ class StyledChatMessage extends StatelessWidget {
     final actionStyle = _applyGoogleFont(
       fontFamily,
       TextStyle(
-        color: storageService.getActionColor(character),
+        color: storageService.getActionColor(
+          character,
+          themePreset,
+          themeOverrides,
+        ),
         fontSize: scaledSize,
       ),
     );

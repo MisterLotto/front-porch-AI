@@ -52,22 +52,22 @@ class ChatThemeOverrides {
 
   Color resolvedUserBubbleColor(ChatThemePreset preset) =>
       userBubbleColor != null
-          ? _parseColor(userBubbleColor!)
+          ? _parseColor(userBubbleColor!, preset.defaultUserBubbleColor)
           : preset.defaultUserBubbleColor;
 
   Color resolvedUserTextColor(ChatThemePreset preset) =>
       userTextColor != null
-          ? _parseColor(userTextColor!)
+          ? _parseColor(userTextColor!, preset.defaultUserTextColor)
           : preset.defaultUserTextColor;
 
   Color resolvedAiBubbleColor(ChatThemePreset preset) =>
       aiBubbleColor != null
-          ? _parseColor(aiBubbleColor!)
+          ? _parseColor(aiBubbleColor!, preset.defaultAiBubbleColor)
           : preset.defaultAiBubbleColor;
 
   Color resolvedAiTextColor(ChatThemePreset preset) =>
       aiTextColor != null
-          ? _parseColor(aiTextColor!)
+          ? _parseColor(aiTextColor!, preset.defaultAiTextColor)
           : preset.defaultAiTextColor;
 
   String resolvedBackgroundKey(ChatThemePreset preset) =>
@@ -77,16 +77,21 @@ class ChatThemeOverrides {
       borderStyle ?? preset.defaultBorderStyle;
 
   Color? resolvedBorderColor(ChatThemePreset preset) =>
-      borderColor != null ? _parseColor(borderColor!) : preset.defaultBorderColor;
+      borderColor != null
+          ? _parseColor(
+              borderColor!,
+              preset.defaultBorderColor ?? const Color(0x00000000),
+            )
+          : preset.defaultBorderColor;
 
   Color resolvedDialogueColor(ChatThemePreset preset) =>
       dialogueColor != null
-          ? _parseColor(dialogueColor!)
+          ? _parseColor(dialogueColor!, preset.defaultDialogueColor)
           : preset.defaultDialogueColor;
 
   Color resolvedActionColor(ChatThemePreset preset) =>
       actionColor != null
-          ? _parseColor(actionColor!)
+          ? _parseColor(actionColor!, preset.defaultActionColor)
           : preset.defaultActionColor;
 
   Map<String, dynamic> toJson() {
@@ -142,11 +147,20 @@ class ChatThemeOverrides {
   ChatThemeOverrides copy() =>
       ChatThemeOverrides.fromJson(Map<String, dynamic>.from(toJson()));
 
-  static Color _parseColor(String hex) {
-    final h = hex.replaceFirst('#', '');
-    if (h.length == 6) {
-      return Color(int.parse('FF$h', radix: 16));
+  // A stored/foreign/corrupt override string can be a non-hex value (old
+  // export, hand-edited JSON, a future web payload). int.parse throws on those,
+  // and these resolvers run during message-bubble build — an unguarded parse
+  // would take down the whole chat paint. Fall back to the preset's channel
+  // color instead of crashing.
+  static Color _parseColor(String hex, Color fallback) {
+    try {
+      final h = hex.replaceFirst('#', '');
+      if (h.length == 6) {
+        return Color(int.parse('FF$h', radix: 16));
+      }
+      return Color(int.parse(h, radix: 16));
+    } catch (_) {
+      return fallback;
     }
-    return Color(int.parse(h, radix: 16));
   }
 }

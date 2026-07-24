@@ -2759,10 +2759,13 @@ class ChatService extends ChangeNotifier {
   ChatThemeOverrides get sessionThemeOverrides => _sessionThemeOverrides;
   set sessionThemeOverrides(ChatThemeOverrides value) {
     _sessionThemeOverrides = value;
-    _db.setThemeOverrides(
-      _currentSessionId!,
-      value.toJsonString(),
-    );
+    // Persist only when a chat is actually open. The web facade already guards
+    // this, but a bare `_currentSessionId!` would crash any other caller that
+    // sets the theme with no active session (session close mid-save, tests).
+    final sid = _currentSessionId;
+    if (sid != null) {
+      _db.setThemeOverrides(sid, value.toJsonString());
+    }
     notifyListeners();
   }
 

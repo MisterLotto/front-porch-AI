@@ -288,8 +288,11 @@ export function ChatPage() {
     const el = document.querySelector('.chat-view') as HTMLElement | null;
     if (!el) return;
     Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
+    // Only veil the chat when a theme actually supplies a background scene.
+    el.classList.toggle('has-theme-bg', '--chat-bg-image' in vars);
     return () => {
       Object.keys(vars).forEach((k) => el.style.removeProperty(k));
+      el.classList.remove('has-theme-bg');
     };
   }, [state?.themeOverrides]);
 

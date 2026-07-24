@@ -2310,13 +2310,13 @@ class AppDatabase extends _$AppDatabase {
             ..where(
               (s) => s.characterId.equals(characterId) & s.deletedAt.isNull(),
             )
-            ..orderBy([(s) => OrderingTerm.desc(s.updatedAt)]))
+            ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
           .get();
 
   Future<List<Session>> getSessionsForGroup(String groupId) =>
       (select(sessions)
             ..where((s) => s.groupId.equals(groupId) & s.deletedAt.isNull())
-            ..orderBy([(s) => OrderingTerm.desc(s.updatedAt)]))
+            ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
           .get();
 
   Future<Session?> getSessionById(String id) =>

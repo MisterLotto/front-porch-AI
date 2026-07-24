@@ -64,7 +64,7 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
     final hasTheme = activePreset != null;
 
     return Dialog(
-      backgroundColor: const Color(0xFF1F2937),
+      backgroundColor: AppColors.surfaceOf(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 500,
@@ -82,14 +82,17 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                     _characterNotifier.value != null
                         ? '${_characterNotifier.value!.name} - UI Settings'
                         : 'UI Settings',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.textPrimary(context),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
+                    icon: Icon(
+                      Icons.close,
+                      color: AppColors.iconSecondary(context),
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -292,8 +295,8 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                   icon: const Icon(Icons.image, size: 18),
                   label: const Text('Manage Chat Backgrounds'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white24),
+                    foregroundColor: AppColors.textPrimary(context),
+                    side: BorderSide(color: AppColors.borderOf(context)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -320,6 +323,14 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
     if (overrides.hasTheme && themeColor != null) return themeColor;
     return charColor ?? globalColor;
   }
+
+  /// Ink that stays legible over an arbitrary user-picked swatch color (the
+  /// color-picker swatches and the current-color chip can be any hue, so no
+  /// fixed chrome color can guarantee contrast).
+  static Color _swatchInk(Color bg) =>
+      ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
+      ? Colors.white
+      : Colors.black87; // theme-keep: contrast over a user-chosen color
 
   // ── Theme preset picker ──────────────────────────────────────────────────
 
@@ -366,20 +377,22 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                       width: 64,
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? Colors.white.withValues(alpha: 0.15)
-                            : const Color(0xFF374151),
+                            ? AppColors.porchAmberOf(
+                                context,
+                              ).withValues(alpha: 0.15)
+                            : AppColors.surfaceContainerOf(context),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected
                               ? AppColors.formMasterAccent
-                              : Colors.white12,
+                              : AppColors.borderOf(context),
                         ),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
                           'None',
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: AppColors.textSecondary(context),
                             fontSize: 12,
                           ),
                         ),
@@ -397,12 +410,12 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                   child: Container(
                     width: 64,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF374151),
+                      color: AppColors.surfaceContainerOf(context),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: isSelected
                             ? AppColors.formMasterAccent
-                            : Colors.white12,
+                            : AppColors.borderOf(context),
                       ),
                     ),
                     child: Column(
@@ -433,8 +446,8 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                         const SizedBox(height: 4),
                         Text(
                           preset.displayName,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
                             fontSize: 10,
                           ),
                           textAlign: TextAlign.center,
@@ -442,8 +455,8 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                         ),
                         Text(
                           preset.defaultBorderStyle,
-                          style: const TextStyle(
-                            color: Colors.white38,
+                          style: TextStyle(
+                            color: AppColors.textTertiary(context),
                             fontSize: 8,
                           ),
                         ),
@@ -522,22 +535,28 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       child: Row(
         children: [
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'Font',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 13,
+            ),
           ),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF374151),
+              color: AppColors.surfaceContainerOf(context),
               borderRadius: BorderRadius.circular(6),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: overrides.fontFamily ?? preset.defaultFontFamily,
-                dropdownColor: const Color(0xFF374151),
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+                dropdownColor: AppColors.surfaceContainerOf(context),
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
+                  fontSize: 12,
+                ),
                 items: _fontOptions
                     .map(
                       (f) => DropdownMenuItem(
@@ -586,22 +605,28 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
       child: Row(
         children: [
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'Border',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 13,
+            ),
           ),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF374151),
+              color: AppColors.surfaceContainerOf(context),
               borderRadius: BorderRadius.circular(6),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: overrides.borderStyle ?? preset.defaultBorderStyle,
-                dropdownColor: const Color(0xFF374151),
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+                dropdownColor: AppColors.surfaceContainerOf(context),
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
+                  fontSize: 12,
+                ),
                 items: _borderStyles
                     .map(
                       (b) => DropdownMenuItem(
@@ -678,12 +703,12 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
             children: [
               Text(
                 'Lock Avatar Size',
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: AppColors.textSecondary(context)),
               ),
               Text(
                 'Avatar won\'t grow past default size when sidebar is wider',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
+                  color: AppColors.textTertiary(context),
                   fontSize: 11,
                 ),
               ),
@@ -715,12 +740,15 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: Colors.white70)),
+            Text(
+              label,
+              style: TextStyle(color: AppColors.textSecondary(context)),
+            ),
             Text(
               value.toStringAsFixed(2),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppColors.textPrimary(context),
               ),
             ),
           ],
@@ -732,7 +760,7 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
           divisions: divisions,
           onChanged: onChanged,
           activeColor: AppColors.formMasterAccent,
-          inactiveColor: Colors.white24,
+          inactiveColor: AppColors.borderOf(context),
         ),
       ],
     );
@@ -750,7 +778,10 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(
+              color: AppColors.textSecondary(context),
+              fontSize: 13,
+            ),
           ),
           const Spacer(),
           Container(
@@ -759,10 +790,14 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white24, width: 1),
+              border: Border.all(color: AppColors.borderOf(context), width: 1),
             ),
             child: IconButton(
-              icon: const Icon(Icons.color_lens, size: 20, color: Colors.white),
+              icon: Icon(
+                Icons.color_lens,
+                size: 20,
+                color: _swatchInk(color),
+              ),
               onPressed: () => _showColorPicker(context, color, onChanged),
             ),
           ),
@@ -813,7 +848,7 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                         'Quick Select',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white70,
+                          color: AppColors.textSecondary(context),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -834,15 +869,15 @@ class _UiSettingsDialogState extends State<UiSettingsDialog> {
                                   border: Border.all(
                                     color: color == selectedColor
                                         ? AppColors.formMasterAccent
-                                        : Colors.white24,
+                                        : AppColors.borderOf(context),
                                     width: 2,
                                   ),
                                 ),
                                 child: color == selectedColor
-                                    ? const Icon(
+                                    ? Icon(
                                         Icons.check,
                                         size: 18,
-                                        color: Colors.white,
+                                        color: _swatchInk(color),
                                       )
                                     : null,
                               ),

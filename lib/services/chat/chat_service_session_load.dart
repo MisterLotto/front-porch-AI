@@ -104,8 +104,14 @@ extension ChatServiceSessionLoad on ChatService {
       return;
     }
 
-    // Sessions are already sorted descending by updatedAt
-    final lastSession = sessions.first;
+    // Auto-load the most recently ACTIVE session (loadSession bumps updatedAt
+    // when a chat is opened). The shared session queries deliberately order by
+    // createdAt (story-export, group/cast and the history list rely on that), so
+    // "last active" is derived here from updatedAt instead of the list order —
+    // keeping this feature isolated from those other callers.
+    final lastSession = sessions.reduce(
+      (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
+    );
     _currentSessionId = lastSession.id;
     _authorNote = lastSession.authorNote;
     _authorNoteStrength = lastSession.authorNoteDepth;

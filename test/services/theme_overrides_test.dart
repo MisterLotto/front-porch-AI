@@ -161,6 +161,30 @@ void main() {
       );
     });
 
+    test('malformed color string falls back to preset default (no throw)', () {
+      // A corrupt/foreign override string (old export, hand-edited JSON, bad web
+      // payload) must not crash message-bubble build — resolve to the preset
+      // default instead. Covers every color channel that parses a stored hex.
+      final preset = ChatThemePreset.byId('fantasy')!;
+      final bad = ChatThemeOverrides(
+        themeId: 'fantasy',
+        userBubbleColor: 'zzzzzz',
+        userTextColor: '#rgb',
+        aiBubbleColor: '',
+        aiTextColor: 'not-a-color',
+        dialogueColor: 'GGGGGG',
+        actionColor: 'nothex',
+        borderColor: 'oops',
+      );
+      expect(bad.resolvedUserBubbleColor(preset), preset.defaultUserBubbleColor);
+      expect(bad.resolvedUserTextColor(preset), preset.defaultUserTextColor);
+      expect(bad.resolvedAiBubbleColor(preset), preset.defaultAiBubbleColor);
+      expect(bad.resolvedAiTextColor(preset), preset.defaultAiTextColor);
+      expect(bad.resolvedDialogueColor(preset), preset.defaultDialogueColor);
+      expect(bad.resolvedActionColor(preset), preset.defaultActionColor);
+      expect(bad.resolvedBorderColor(preset), preset.defaultBorderColor);
+    });
+
     test('copy() preserves dialogue/action fields', () {
       final overrides = ChatThemeOverrides(
         themeId: 'galactic',
