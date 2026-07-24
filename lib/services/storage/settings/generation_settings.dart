@@ -316,6 +316,10 @@ class GenerationSettings with SettingsBase {
   Future<void> setOutputSanitizerEnabled(bool value) async {
     _outputSanitizerEnabled = value;
     await prefs?.setBool(k('output_sanitizer_enabled'), value);
+    if (!value) {
+      _sanitiseExistingHistory = false;
+      await prefs?.setBool(k('sanitise_existing_history'), false);
+    }
     notify();
   }
 

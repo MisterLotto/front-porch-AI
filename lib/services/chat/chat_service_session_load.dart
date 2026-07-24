@@ -254,6 +254,23 @@ extension ChatServiceSessionLoad on ChatService {
         false; // secondary flag zero for the journal recap state (stateless/prompt-only; incomplete zeroing ... now complete)
     _isGrowthPassRunning =
         false; // growth-pass flag zero in _loadLast loaded path (transient guard; keep reset blocks in sync)
+
+    // Load per-chat generation settings override for this session.
+    try {
+      final genRows = await _db
+          .customSelect(
+            'SELECT generation_settings FROM sessions WHERE id = ?',
+            variables: [drift.Variable(_currentSessionId!)],
+          )
+          .get();
+      final genJson = genRows.isNotEmpty
+          ? genRows.first.read<String?>('generation_settings')
+          : null;
+      _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
+    } catch (_) {
+      _sessionGenSettings = ChatGenerationSettings();
+    }
+
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
       _computeAbsenceGap(dbMessages);
@@ -274,10 +291,11 @@ extension ChatServiceSessionLoad on ChatService {
         // so legacy messages (saved before this feature) are also normalised.
         // Gated by sanitiseExistingHistory — when off, even chats with
         // per-chat sanitizer enabled keep their raw saved text on load.
-        if (_storageService.generationSettings.outputSanitizerEnabled &&
+        // Resolves per-chat override + rules (falls back to global).
+        if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
             _storageService.generationSettings.sanitiseExistingHistory) {
           final rules =
-              _storageService.generationSettings.outputSanitizerRules;
+              _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
           if (rules.isNotEmpty && swipes.isNotEmpty) {
             swipes = swipes
                 .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
@@ -413,6 +431,24 @@ extension ChatServiceSessionLoad on ChatService {
       await _userPersonaService.setActivePersona(session.userPersonaId!);
     }
 
+    // Load per-chat generation settings override for this session (must
+    // happen before the message loop so retroactive sanitization can
+    // consult per-chat override + rules).
+    try {
+      final genRows = await _db
+          .customSelect(
+            'SELECT generation_settings FROM sessions WHERE id = ?',
+            variables: [drift.Variable(sessionId)],
+          )
+          .get();
+      final genJson = genRows.isNotEmpty
+          ? genRows.first.read<String?>('generation_settings')
+          : null;
+      _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
+    } catch (_) {
+      _sessionGenSettings = ChatGenerationSettings();
+    }
+
     try {
       final dbMessages = await _db.getMessagesForSession(sessionId);
       _computeAbsenceGap(dbMessages);
@@ -433,10 +469,11 @@ extension ChatServiceSessionLoad on ChatService {
         // so legacy messages (saved before this feature) are also normalised.
         // Gated by sanitiseExistingHistory — when off, even chats with
         // per-chat sanitizer enabled keep their raw saved text on load.
-        if (_storageService.generationSettings.outputSanitizerEnabled &&
+        // Resolves per-chat override + rules (falls back to global).
+        if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
             _storageService.generationSettings.sanitiseExistingHistory) {
           final rules =
-              _storageService.generationSettings.outputSanitizerRules;
+              _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
           if (rules.isNotEmpty && swipes.isNotEmpty) {
             swipes = swipes
                 .map((s) => ChatServiceGeneration.sanitizeOutput(s, rules))
@@ -613,23 +650,6 @@ extension ChatServiceSessionLoad on ChatService {
 
       // (Growth rings + legacy blobs were cached by the _refreshGrowthCache
       // call above — session-scoped, both 1:1 and group.)
-
-      // Per-session generation parameter overrides (v22) — loaded via raw SQL
-      // so this works even before build_runner regenerates database.g.dart.
-      try {
-        final genRows = await _db
-            .customSelect(
-              'SELECT generation_settings FROM sessions WHERE id = ?',
-              variables: [drift.Variable(sessionId)],
-            )
-            .get();
-        final genJson = genRows.isNotEmpty
-            ? genRows.first.read<String?>('generation_settings')
-            : null;
-        _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
-      } catch (_) {
-        _sessionGenSettings = ChatGenerationSettings();
-      }
 
       // Per-chat theme overrides.
       try {
