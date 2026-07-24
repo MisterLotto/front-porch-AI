@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-22 — fix(import): same-name cards no longer clobber (#161) + Keep both/Replace dialog
+- **Bug:** `_persistImportedCharacterCard` fell back to display-name match and soft-deleted peer same-name rows. Bulk import of three same-name variants reported 3 successes but left 1 card; reimport of same-name vanilla cards overwrote library entries.
+- **Fix:** update-in-place **only** on `stableId` match (FP reimport / chat history path) or explicit `forceReplaceTarget` (user chose Replace). Name-only collision always inserts. Soft-delete-by-name removed.
+- **Phase 2 UX:** single-file desktop import (V2 PNG/JSON + single BYAF) peeks name/stableId and shows Keep both / Replace / Cancel via `import_name_collision_dialog.dart`. Bulk stays keep-both.
+- **Web parity:** `POST /api/characters/import?collision=ask|keepBoth|replace&replaceId=` — single-file UI uses ask→409→dialog; multi always keepBoth. `ImportNameCollisionDialog` in LibraryDialogs.
+- **Files:** character_repository.dart, import_name_collision_dialog.dart, home_page.dart, home_page_dialogs.dart, character_facade.dart, character_routes.dart, useLibrary.ts, CharactersPage.tsx, LibraryDialogs.tsx, character_repository_test.dart (+4), docs/Rawhide.md.
+- **Verification:** targeted character_repository tests + analyze (see session).
+
 ## 2026-07-22 — feat(realism): Train B — promise & debt ledger (detect / inject / resolve)
 - **Why:** gold-standard RP needs commitments that scar — kept words warm trust, broken ones crater it, open ones color the next reply. Chips stay for per-turn deltas; this is the long-horizon ledger.
 - **Files (new):** `promise_debt_service.dart` (keyword gate, one-line eval protocol, plant open `kind=promise` cards, resolve kept/broken → trust/bond deltas + milestone outcome, max 3 open), `promise_debt_injection.dart` (words-only open commitments fragment), `promise_debt_service_test.dart`.
