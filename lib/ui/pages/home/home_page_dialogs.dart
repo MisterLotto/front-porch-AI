@@ -238,9 +238,14 @@ extension _HomePageDialogs on _HomePageState {
           return;
         }
 
-        // Normal character card
+        // Normal character card — single-file: offer Keep both / Replace when
+        // the display name already exists and stableId does not match.
         final repo = Provider.of<CharacterRepository>(context, listen: false);
-        final card = await repo.importCharacter(file);
+        final card = await importCharacterWithNameCollision(
+          context,
+          repo,
+          file,
+        );
         if (context.mounted && card != null) {
           // Show tag dialog
           final tags = await TagDialog.show(context, card);
@@ -325,9 +330,14 @@ extension _HomePageDialogs on _HomePageState {
       final v2Service = V2CardService();
       await v2Service.saveCardAsPng(card, pngPath, preview.extractedImagePath);
 
-      // Import via CharacterRepository (reads PNG metadata + inserts into DB)
+      // Import via CharacterRepository (reads PNG metadata + inserts into DB).
+      // Single-file BYAF: same name-collision prompt as V2 PNG import.
       final repo = Provider.of<CharacterRepository>(context, listen: false);
-      final importedCard = await repo.importCharacter(File(pngPath));
+      final importedCard = await importCharacterWithNameCollision(
+        context,
+        repo,
+        File(pngPath),
+      );
 
       // Create the imported session: chat history and/or Backyard sampler
       // settings, per the dialog toggles.
