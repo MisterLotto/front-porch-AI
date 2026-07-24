@@ -30,6 +30,7 @@ import 'package:front_porch_ai/database/database.dart' show Objective;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/live_gen_progress.dart';
@@ -330,6 +331,14 @@ class FakeChatService extends ChangeNotifier implements ChatService {
       ChatGenerationSettings(bannedPhrases: const <String>[]);
   @override
   set sessionGenSettings(ChatGenerationSettings _) {}
+
+  // Chat theme overrides — MessageBubble and ChatSettingsDialog read this
+  // at build time via widget.chatService?.sessionThemeOverrides and
+  // didChangeDependencies respectively. Default (empty) is fine for goldens.
+  @override
+  ChatThemeOverrides get sessionThemeOverrides => ChatThemeOverrides();
+  @override
+  set sessionThemeOverrides(ChatThemeOverrides _) {}
 
   // Message bubble surface.
   @override

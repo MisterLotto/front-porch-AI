@@ -16,7 +16,8 @@ import { ConversationsDrawer, type SessionSummary } from '../components/Conversa
 import { ReprocessNeedsModal } from '../components/ReprocessNeedsModal';
 import { ChanceTimeModal } from '../components/ChanceTimeModal';
 import { ImagePromptReviewModal } from '../components/ImagePromptReviewModal';
-import { type Message, type Realism, type LoreEntry } from '../components/chatTypes';
+import { type Message, type Realism, type LoreEntry, type ChatThemeOverrides } from '../components/chatTypes';
+import { ChatThemeSettings, resolveThemeColors } from '../components/ChatThemeSettings';
 
 interface ChatState {
   character: { name: string; id: string } | null;
@@ -57,6 +58,8 @@ interface ChatState {
   // Current model's tool-calling verdict (desktop sidebar pill parity);
   // retest via POST /api/chat/tool-test.
   toolSupport?: { state: string; testing: boolean };
+  // Per-chat theme overrides (preset + font/color/background/border).
+  themeOverrides?: ChatThemeOverrides;
 }
 
 export function ChatPage() {
@@ -86,6 +89,7 @@ export function ChatPage() {
   });
   const [showSessions, setShowSessions] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -278,6 +282,20 @@ export function ChatPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [editIndex, showStats, showSessions]);
 
+  // Apply per-chat theme overrides as CSS custom properties on the chat container.
+  useEffect(() => {
+    const vars = resolveThemeColors(state?.themeOverrides ?? null);
+    const el = document.querySelector('.chat-view') as HTMLElement | null;
+    if (!el) return;
+    Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
+    // Only veil the chat when a theme actually supplies a background scene.
+    el.classList.toggle('has-theme-bg', '--chat-bg-image' in vars);
+    return () => {
+      Object.keys(vars).forEach((k) => el.style.removeProperty(k));
+      el.classList.remove('has-theme-bg');
+    };
+  }, [state?.themeOverrides]);
+
   // Drag the insight sidebar's left edge to resize it (clamped 260–560px),
   // persisting the chosen width. Dragging left widens (handle is on the left).
   const startAsideResize = (e: ReactMouseEvent) => {
@@ -346,6 +364,11 @@ export function ChatPage() {
   };
   const saveAuthorNote = async (note: string, strength: number) => {
     await api.post('/api/chat/author-note', { authorNote: note, strength });
+    await refresh();
+  };
+  const saveTheme = async (overrides: ChatThemeOverrides) => {
+    await api.post('/api/chat/theme-overrides', overrides);
+    setShowTheme(false);
     await refresh();
   };
 
@@ -477,6 +500,9 @@ export function ChatPage() {
                 Stats ▾
               </button>
             )}
+            <button className="link-btn" onClick={() => setShowTheme(true)}>
+              Theme
+            </button>
             <button className="link-btn conversations-btn" onClick={openSessions}>
               Conversations ▾
             </button>
@@ -637,6 +663,21 @@ export function ChatPage() {
           onNew={newChat}
           onClose={() => setShowSessions(false)}
         />
+      )}
+
+      {showTheme && (
+        <div className="drawer-backdrop" onClick={() => setShowTheme(false)}>
+          <div className="settings-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-head">
+              <span>Chat theme</span>
+              <button className="link-btn" onClick={() => setShowTheme(false)}>Close</button>
+            </div>
+            <ChatThemeSettings
+              overrides={state.themeOverrides ?? null}
+              onSave={saveTheme}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

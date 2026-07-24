@@ -20,6 +20,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
@@ -228,6 +229,8 @@ class ChatFacade {
         'state': _chat.toolCallSupport.name,
         'testing': _chat.isTestingToolSupport,
       },
+      // Per-chat theme overrides (preset + font/color/background/border).
+      'themeOverrides': _chat.sessionThemeOverrides.toJson(),
     };
   }
 
@@ -587,6 +590,15 @@ class ChatFacade {
       ..clear()
       ..addAll(built?.entries ?? const []);
     await _chat.commitChatLorebookEdit();
+    _notify();
+    return true;
+  }
+
+  /// Save per-chat theme overrides from the web UI.
+  Future<bool> setThemeOverrides(Map<String, dynamic> json) async {
+    if (_chat.currentSessionId == null) return false;
+    _chat.sessionThemeOverrides =
+        ChatThemeOverrides.fromJson(json);
     _notify();
     return true;
   }

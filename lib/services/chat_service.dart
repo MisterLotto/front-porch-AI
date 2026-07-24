@@ -42,6 +42,7 @@ import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
@@ -2558,6 +2559,9 @@ class ChatService extends ChangeNotifier {
   // ── Per-session generation overrides ──
   ChatGenerationSettings _sessionGenSettings = ChatGenerationSettings();
 
+  // ── Per-chat theme ──
+  ChatThemeOverrides _sessionThemeOverrides = ChatThemeOverrides();
+
   // ── Chat Branching ──
   String? _parentSessionId;
   int? _forkIndex;
@@ -2818,6 +2822,20 @@ class ChatService extends ChangeNotifier {
   set sessionGenSettings(ChatGenerationSettings value) {
     _sessionGenSettings = value;
     _saveChat();
+    notifyListeners();
+  }
+
+  /// Per-chat theme overrides (preset + customized colors/font/background/border).
+  ChatThemeOverrides get sessionThemeOverrides => _sessionThemeOverrides;
+  set sessionThemeOverrides(ChatThemeOverrides value) {
+    _sessionThemeOverrides = value;
+    // Persist only when a chat is actually open. The web facade already guards
+    // this, but a bare `_currentSessionId!` would crash any other caller that
+    // sets the theme with no active session (session close mid-save, tests).
+    final sid = _currentSessionId;
+    if (sid != null) {
+      _db.setThemeOverrides(sid, value.toJsonString());
+    }
     notifyListeners();
   }
 

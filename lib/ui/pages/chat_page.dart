@@ -581,8 +581,32 @@ class _ChatPageState extends State<ChatPage> {
                             builder: (context) {
                               final storageService =
                                   Provider.of<StorageService>(context);
-                              final bgKey = storageService.chatBackground;
+                              final chatService = Provider.of<ChatService>(
+                                context,
+                                listen: false,
+                              );
+                              final themeOverrides =
+                                  chatService.sessionThemeOverrides;
+                              final themePreset = ChatThemePreset.byId(
+                                themeOverrides.themeId,
+                              );
+                              final bgKey = themePreset != null
+                                  ? themeOverrides.resolvedBackgroundKey(
+                                      themePreset,
+                                    )
+                                  : storageService.chatBackground;
                               const bgAssets = {
+                                'noir': 'assets/backgrounds/noir.png',
+                                'fantasy': 'assets/backgrounds/fantasy.png',
+                                'grid': 'assets/backgrounds/grid.png',
+                                'roman_market':
+                                    'assets/backgrounds/roman_market.png',
+                                'enchanted_wood':
+                                    'assets/backgrounds/enchanted_wood.png',
+                                'ocean_depth':
+                                    'assets/backgrounds/ocean_depth.png',
+                                'steampunk_bg':
+                                    'assets/backgrounds/steampunk_bg.png',
                                 'cyberpunk_bedroom':
                                     'assets/backgrounds/cyberpunk_bedroom.png',
                                 'coffee_shop':
@@ -1116,9 +1140,7 @@ class _ChatPageState extends State<ChatPage> {
                                   : null,
                               child: cover == null
                                   ? Text(
-                                      card.name.isNotEmpty
-                                          ? card.name[0]
-                                          : '?',
+                                      card.name.isNotEmpty ? card.name[0] : '?',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,

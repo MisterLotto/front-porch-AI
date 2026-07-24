@@ -104,8 +104,14 @@ extension ChatServiceSessionLoad on ChatService {
       return;
     }
 
-    // Sessions are already sorted descending by createdAt
-    final lastSession = sessions.first;
+    // Auto-load the most recently ACTIVE session (loadSession bumps updatedAt
+    // when a chat is opened). The shared session queries deliberately order by
+    // createdAt (story-export, group/cast and the history list rely on that), so
+    // "last active" is derived here from updatedAt instead of the list order —
+    // keeping this feature isolated from those other callers.
+    final lastSession = sessions.reduce(
+      (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
+    );
     _currentSessionId = lastSession.id;
     _authorNote = lastSession.authorNote;
     _authorNoteStrength = lastSession.authorNoteDepth;
@@ -183,6 +189,15 @@ extension ChatServiceSessionLoad on ChatService {
     // "Enjoys low hygiene" on the character affects existing chats on next load.
     _enjoysLowHygiene =
         _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
+
+    // Load per-chat theme overrides.
+    try {
+      final themeJson = await _db.getThemeOverrides(_currentSessionId!);
+      _sessionThemeOverrides =
+          ChatThemeOverrides.fromJsonString(themeJson);
+    } catch (_) {
+      _sessionThemeOverrides = ChatThemeOverrides();
+    }
 
     _needsSimulation.resetBuffers();
     // trust/fixation/spatial/pending/affection/tiers already loaded via _relationshipService.loadScalars above.
@@ -450,6 +465,12 @@ extension ChatServiceSessionLoad on ChatService {
       // (v30: _hydrateGroupRealismCheckpointIfPresent removed — state now loads from DB column)
 
       _currentSessionId = sessionId;
+      // Touch updatedAt so this session becomes the "last active" for the
+      // character/group — _loadLastSession sorts by updatedAt DESC.
+      _db.patchSession(SessionsCompanion(
+        id: drift.Value(sessionId),
+        updatedAt: drift.Value(DateTime.now()),
+      ));
       // Scene Guests are per-session. Without this, switching to a different
       // session via the history picker leaves the PREVIOUS session's guests
       // (and their evolution/detection state) in place — they keep chiming in
@@ -569,6 +590,15 @@ extension ChatServiceSessionLoad on ChatService {
         _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
       } catch (_) {
         _sessionGenSettings = ChatGenerationSettings();
+      }
+
+      // Per-chat theme overrides.
+      try {
+        final themeJson = await _db.getThemeOverrides(sessionId);
+        _sessionThemeOverrides =
+            ChatThemeOverrides.fromJsonString(themeJson);
+      } catch (_) {
+        _sessionThemeOverrides = ChatThemeOverrides();
       }
 
       if (_messages.isNotEmpty) {

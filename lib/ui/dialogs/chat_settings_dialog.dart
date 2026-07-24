@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -105,17 +104,21 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.15),
+                          color: AppColors.porchAmberOf(
+                            context,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.4),
+                            color: AppColors.porchAmberOf(
+                              context,
+                            ).withValues(alpha: 0.4),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Custom',
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.amber,
+                            color: AppColors.porchAmberOf(context),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -130,9 +133,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       Tooltip(
                         message: 'Reset to global defaults',
                         child: IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.restart_alt,
-                            color: Colors.amber,
+                            color: AppColors.porchAmberOf(context),
                             size: 20,
                           ),
                           onPressed: () {
@@ -160,7 +163,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 child: Text(
                   'This chat has custom generation settings that override global defaults.',
                   style: TextStyle(
-                    color: Colors.amber.withValues(alpha: 0.7),
+                    color: AppColors.porchAmberOf(
+                      context,
+                    ).withValues(alpha: 0.7),
                     fontSize: 11,
                   ),
                 ),
@@ -265,11 +270,9 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           ),
                         ),
                       const SizedBox(height: 8),
-                      const Divider(color: Colors.white10),
+                      Divider(color: AppColors.borderOf(context)),
                       const SizedBox(height: 8),
                     ],
-
-
 
                     // Generation
                     const Text(
@@ -600,7 +603,10 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                               ],
                             ),
                           ),
-                          const Divider(height: 1, color: Colors.white10),
+                          Divider(
+                            height: 1,
+                            color: AppColors.borderOf(context),
+                          ),
                           ..._gen
                               .resolveStopSequences(storage)
                               .map(
@@ -710,7 +716,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           child: Text(
                             '${_gen.resolveBannedPhrases(storage).length} phrase${_gen.resolveBannedPhrases(storage).length == 1 ? '' : 's'} banned',
                             style: TextStyle(
-                              color: Colors.amber.shade300,
+                              color: AppColors.porchAmberOf(context),
                               fontSize: 11,
                             ),
                           ),
