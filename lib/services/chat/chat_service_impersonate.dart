@@ -336,6 +336,18 @@ extension ChatServiceImpersonate on ChatService {
         accumulated += token;
         onToken(accumulated);
       }
+
+      // Sanitize once at completion (or after user cancel).
+      // During streaming the raw text is shown — acceptable because the
+      // user can only edit AFTER generation finishes, at which point
+      // the sanitized form is presented.
+      if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService)) {
+        final rules = _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
+        final sanitized = ChatServiceGeneration.sanitizeOutput(accumulated, rules);
+        if (sanitized != accumulated) {
+          onToken(sanitized);
+        }
+      }
     } catch (e) {
       print('Impersonate error: $e');
     } finally {
