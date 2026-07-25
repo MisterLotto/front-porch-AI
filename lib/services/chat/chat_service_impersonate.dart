@@ -349,7 +349,7 @@ extension ChatServiceImpersonate on ChatService {
         }
       }
     } catch (e) {
-      print('Impersonate error: $e');
+      debugPrint('[ChatService] Impersonate error: $e');
     } finally {
       _isGenerating = false;
       notifyListeners();

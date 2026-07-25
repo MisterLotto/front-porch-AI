@@ -3470,6 +3470,25 @@ class ChatService extends ChangeNotifier {
       return;
     }
 
+    // If the local backend isn't running and autostart is off, tell the
+    // user rather than silently failing with a "Connection refused" that
+    // gets swallowed as a cancel.
+    if (_llmProvider?.hasManagedProcess == true &&
+        !_storageService.autostartOnChatOpen &&
+        _llmProvider?.hasAnyManagedProcessRunning != true) {
+      _messages.add(
+        ChatMessage(
+          text: 'Backend is not running. Start it in Settings → Backend, '
+              "or enable 'Auto-start on chat open'.",
+          sender: 'System',
+          isUser: false,
+        ),
+      );
+      await _saveChat();
+      notifyListeners();
+      return;
+    }
+
     await _generateResponse(GenerationMode.normal);
     // First exchange complete — arm idle timer
     _hasCompletedExchange = true;

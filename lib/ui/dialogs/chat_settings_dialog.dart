@@ -392,7 +392,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                           setState(() => _gen.outputSanitizerRules = newRules);
                           _save();
                         },
-                        backgroundColor: AppColors.aiBubble,
+                        backgroundColor: AppColors.resolve(context, AppColors.aiBubble, AppColors.aiBubbleLight),
                       ),
                     ],
                   ],

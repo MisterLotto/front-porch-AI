@@ -232,7 +232,7 @@ String sanitizeOutput(
     final before = result;
     result = result.replaceAllMapped(compiled.regex, (m) {
       var out = compiled.replacement;
-      for (var i = 1; i <= m.groupCount; i++) {
+      for (var i = m.groupCount; i >= 1; i--) {
         out = out.replaceAll('\$$i', m.group(i) ?? '');
       }
       return out;
