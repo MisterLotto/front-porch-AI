@@ -372,7 +372,12 @@ extension ChatServiceSessionLoad on ChatService {
       // gate, a broad rule + retroactive-on rewrote the USER's own words in
       // memory, and the next _saveChat persisted the corruption. (Impersonate
       // drafts are sanitized at creation time, before they become user rows.)
-      if (!m.isUser && compiledRules.isNotEmpty && swipes.isNotEmpty) {
+      // System rows (backend notices, app status) are skipped too — rules
+      // rewriting those could break the backend-notice dedupe comparison.
+      if (!m.isUser &&
+          m.sender != 'System' &&
+          compiledRules.isNotEmpty &&
+          swipes.isNotEmpty) {
         swipes = swipes
             .map((s) => sanitizeOutputCompiled(s, compiledRules))
             .toList();

@@ -3487,6 +3487,13 @@ class ChatService extends ChangeNotifier {
     }
 
     await _generateResponse(GenerationMode.normal);
+    // Backend-down abort: no response was generated, so none of the
+    // post-turn work below may run — no idle-timer arming, no chip attach,
+    // no guest chime-ins against the notice text (pre-move parity: the old
+    // in-sendMessage guard returned before all of this).
+    if (_messages.isNotEmpty && _messages.last.text == _kBackendDownNotice) {
+      return;
+    }
     // First exchange complete — arm idle timer
     _hasCompletedExchange = true;
     if (_storageService.generationSettings.dynamicResponses) {

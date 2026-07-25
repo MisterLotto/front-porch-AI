@@ -372,9 +372,9 @@ class _GenerationTabState extends State<GenerationTab> {
                       ),
                       Text(
                         'When enabled, opening a chat will permanently '
-                        'apply the rules below to all messages already '
-                        'saved in that chat\'s history. This cannot be '
-                        'undone.',
+                        'apply the rules below to the AI messages already '
+                        'saved in that chat\'s history — your own messages '
+                        'are never touched. This cannot be undone.',
                         style: TextStyle(
                           color: AppColors.textTertiary(context),
                           fontSize: 11,

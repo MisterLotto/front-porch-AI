@@ -45,6 +45,13 @@ extension ChatServiceGeneration on ChatService {
   /// auto-advance and idle retries can't stack copies), so every entry point
   /// — send, regenerate, continue, swipe, group advance, impersonate — fails
   /// the same friendly way instead of a connection error or silent cancel.
+  ///
+  /// Deliberately does NOT _saveChat: the notice is transient status, and
+  /// persisting here from inside _generateResponse would write the transcript
+  /// mid-mutation for callers that pop a message before generating (regen
+  /// popped the last AI reply, abort saved the hole — permanent data loss).
+  /// Callers that pop MUST also run this check BEFORE their pop (regen paths
+  /// do); this deep guard is the backstop for the non-mutating entries.
   Future<bool> _abortIfBackendDown() async {
     if (_llmProvider?.hasManagedProcess != true ||
         _storageService.autostartOnChatOpen ||
@@ -59,7 +66,6 @@ extension ChatServiceGeneration on ChatService {
           isUser: false,
         ),
       );
-      await _saveChat();
       notifyListeners();
     }
     return true;
