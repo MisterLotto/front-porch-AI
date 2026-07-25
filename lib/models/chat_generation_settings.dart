@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 /// Per-session generation parameter overrides.
@@ -43,6 +44,8 @@ class ChatGenerationSettings {
   List<String>? bannedPhrases;
   bool? reasoningEnabled;
   String? reasoningEffort;
+  bool? outputSanitizerEnabled;
+  List<OutputSanitizerRule>? outputSanitizerRules;
 
   ChatGenerationSettings({
     this.temperature,
@@ -63,6 +66,8 @@ class ChatGenerationSettings {
     this.bannedPhrases,
     this.reasoningEnabled,
     this.reasoningEffort,
+    this.outputSanitizerEnabled,
+    this.outputSanitizerRules,
   });
 
   /// Whether any field has a non-null override.
@@ -84,7 +89,9 @@ class ChatGenerationSettings {
       stopSequences != null ||
       bannedPhrases != null ||
       reasoningEnabled != null ||
-      reasoningEffort != null;
+      reasoningEffort != null ||
+      outputSanitizerEnabled != null ||
+      outputSanitizerRules != null;
 
   // ── Resolved getters ────────────────────────────────────────────────────
   // Each returns the per-session override if set, otherwise the global value.
@@ -122,6 +129,11 @@ class ChatGenerationSettings {
       reasoningEnabled ?? s.backendSettings.reasoningEnabled;
   String resolveReasoningEffort(StorageService s) =>
       reasoningEffort ?? s.backendSettings.reasoningEffort;
+  bool resolveOutputSanitizerEnabled(StorageService s) =>
+      outputSanitizerEnabled ?? s.generationSettings.outputSanitizerEnabled;
+  List<OutputSanitizerRule> resolveOutputSanitizerRules(StorageService s) =>
+      outputSanitizerRules ??
+      s.generationSettings.outputSanitizerRules.toList();
 
   // ── JSON serialisation ──────────────────────────────────────────────────
 
@@ -150,6 +162,13 @@ class ChatGenerationSettings {
     if (bannedPhrases != null) map['banned_phrases'] = bannedPhrases;
     if (reasoningEnabled != null) map['reasoning_enabled'] = reasoningEnabled;
     if (reasoningEffort != null) map['reasoning_effort'] = reasoningEffort;
+    if (outputSanitizerEnabled != null) {
+      map['output_sanitizer_enabled'] = outputSanitizerEnabled;
+    }
+    if (outputSanitizerRules != null) {
+      map['output_sanitizer_rules'] =
+          outputSanitizerRules!.map((r) => r.toJson()).toList();
+    }
     return map;
   }
 
@@ -180,6 +199,11 @@ class ChatGenerationSettings {
       bannedPhrases: (json['banned_phrases'] as List?)?.cast<String>(),
       reasoningEnabled: json['reasoning_enabled'] as bool?,
       reasoningEffort: json['reasoning_effort'] as String?,
+      outputSanitizerEnabled: json['output_sanitizer_enabled'] as bool?,
+      outputSanitizerRules: switch (json['output_sanitizer_rules'] as List?) {
+        null => null,
+        final list => OutputSanitizerRule.listFromJson(list),
+      },
     );
   }
 

@@ -56,6 +56,7 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
 import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
@@ -3486,6 +3487,13 @@ class ChatService extends ChangeNotifier {
     }
 
     await _generateResponse(GenerationMode.normal);
+    // Backend-down abort: no response was generated, so none of the
+    // post-turn work below may run — no idle-timer arming, no chip attach,
+    // no guest chime-ins against the notice text (pre-move parity: the old
+    // in-sendMessage guard returned before all of this).
+    if (_messages.isNotEmpty && _messages.last.text == _kBackendDownNotice) {
+      return;
+    }
     // First exchange complete — arm idle timer
     _hasCompletedExchange = true;
     if (_storageService.generationSettings.dynamicResponses) {

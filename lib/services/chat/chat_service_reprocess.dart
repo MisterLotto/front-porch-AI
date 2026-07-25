@@ -349,6 +349,9 @@ extension ChatServiceReprocess on ChatService {
   /// delegates to [regenerateLastMessage].
   Future<void> regenerateMainCharacter() async {
     if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    // Backend gate BEFORE any guest-tail splice — same restore problem as
+    // regenerateLastMessage (see _abortIfBackendDown).
+    if (await _abortIfBackendDown()) return;
 
     // Walk back past the trailing guest replies to the host message beneath them.
     int hostIndex = -1;
@@ -388,6 +391,10 @@ extension ChatServiceReprocess on ChatService {
 
   Future<void> regenerateLastMessage() async {
     if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    // Backend gate BEFORE the pop below — aborting after removeLast would
+    // drop the popped reply (the deep guard in _generateResponse cannot
+    // restore it; see _abortIfBackendDown).
+    if (await _abortIfBackendDown()) return;
 
     // Check if the last message is from the character
     if (!_messages.last.isUser && _messages.last.sender != 'System') {

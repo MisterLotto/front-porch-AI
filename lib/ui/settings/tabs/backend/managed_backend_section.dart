@@ -188,6 +188,31 @@ class ManagedBackendSection extends StatelessWidget {
             },
           ),
         ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardOf(context),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SwitchListTile(
+            title: const Text(
+              'Auto-start on chat open',
+              style: TextStyle(fontSize: 14),
+            ),
+            subtitle: Text(
+              'Automatically start the backend when entering a chat',
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 11,
+              ),
+            ),
+            value: storageService.autostartOnChatOpen,
+            activeTrackColor: AppColors.porchAmberOf(context),
+            onChanged: (val) {
+              storageService.setAutostartOnChatOpen(val);
+            },
+          ),
+        ),
         const SizedBox(height: 24),
         const SectionHeader('Model Selection'),
         const SizedBox(height: 16),

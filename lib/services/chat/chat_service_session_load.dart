@@ -40,6 +40,13 @@ extension ChatServiceSessionLoad on ChatService {
   }
 
   Future<void> _loadLastSession() async {
+    // NOTE: This method contains multiple await boundaries (DB queries).
+    // If the user rapidly switches characters/groups, Dart's cooperative
+    // scheduler may interleave a second setActiveCharacter call during one
+    // of these awaits. The sanitizer below runs synchronously on already-
+    // fetched local variables (swipes), so it does not introduce a new race
+    // window — but it also cannot prevent pre-existing interleaving where
+    // the later load overwrites _messages.
     if (_activeCharacter == null && _activeGroup == null) return;
 
     // Get sessions from DB
@@ -101,6 +108,8 @@ extension ChatServiceSessionLoad on ChatService {
       _growthStore.invalidate(); // no session — nothing to inject
       _selectedLooks
           .clear(); // 0-session: no per-chat look selection (keep reset blocks in sync)
+      _sessionGenSettings =
+          ChatGenerationSettings(); // 0-session: no per-chat gen overrides — without this, character B's first chat ran (and could SAVE) character A's temp/stops/sanitizer (keep reset blocks in sync)
       return;
     }
 
@@ -247,6 +256,12 @@ extension ChatServiceSessionLoad on ChatService {
         false; // secondary flag zero for the journal recap state (stateless/prompt-only; incomplete zeroing ... now complete)
     _isGrowthPassRunning =
         false; // growth-pass flag zero in _loadLast loaded path (transient guard; keep reset blocks in sync)
+
+    // Load per-chat generation settings override for this session.
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      lastSession.generationSettings,
+    );
+
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
       _computeAbsenceGap(dbMessages);
@@ -255,57 +270,7 @@ extension ChatServiceSessionLoad on ChatService {
         'messages for session $_currentSessionId',
       );
       _messages.clear();
-      for (final m in dbMessages) {
-        List<String> swipes;
-        try {
-          swipes = List<String>.from(jsonDecode(m.swipes));
-        } catch (_) {
-          swipes = [''];
-        }
-        List<int> swipeDurations;
-        try {
-          swipeDurations = List<int>.from(
-            (jsonDecode(m.swipeDurations) as List).map(
-              (e) => (e as num).toInt(),
-            ),
-          );
-        } catch (_) {
-          swipeDurations = [0];
-        }
-
-        final safeSwipeIndex =
-            (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-            ? m.swipeIndex
-            : 0;
-
-        _messages.add(
-          ChatMessage(
-            text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
-            sender: m.sender,
-            isUser: m.isUser,
-            characterId: m.characterId,
-            swipes: swipes,
-            swipeIndex: safeSwipeIndex,
-            swipeDurations: swipeDurations,
-            metadata: m.metadata != null
-                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
-                : null,
-            swipeMetadata: m.swipeMetadata != null
-                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
-                      .map(
-                        (e) => e != null
-                            ? Map<String, dynamic>.from(e as Map)
-                            : null,
-                      )
-                      .toList()
-                : null,
-          ),
-        );
-      }
-
-      if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLatest();
-      }
+      _hydrateMessagesFromRows(dbMessages);
     } catch (e) {
       print('Error loading chat session: $e');
     }
@@ -376,6 +341,94 @@ extension ChatServiceSessionLoad on ChatService {
     return getSessionsForId(charId);
   }
 
+  /// Decode DB [Message] rows into [_messages], applying retroactive output
+  /// sanitisation when the per-chat or global setting requests it.
+  /// Caller must clear `_messages` and set `_sessionGenSettings` beforehand.
+  void _hydrateMessagesFromRows(List<Message> dbMessages) {
+    // Output sanitizer: apply configured replacements to loaded swipes
+    // so legacy messages (saved before this feature) are also normalised.
+    // Gated by sanitiseExistingHistory — when off, even chats with
+    // per-chat sanitizer enabled keep their raw saved text on load.
+    // Resolved (per-chat override + rules, falling back to global) and
+    // compiled ONCE out here: this loop runs per message and sanitize runs
+    // per swipe, so compiling per swipe was thousands of RegExp
+    // constructions on the UI isolate per chat open (hot-path rule).
+    final compiledRules =
+        _sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
+            _storageService.generationSettings.sanitiseExistingHistory
+        ? compileSanitizerRules(
+            _sessionGenSettings.resolveOutputSanitizerRules(_storageService),
+          )
+        : const <CompiledSanitizerRule>[];
+    for (final m in dbMessages) {
+      List<String> swipes;
+      try {
+        swipes = List<String>.from(jsonDecode(m.swipes));
+      } catch (_) {
+        swipes = [''];
+      }
+
+      // Model output ONLY — the feature's contract. Without the isUser
+      // gate, a broad rule + retroactive-on rewrote the USER's own words in
+      // memory, and the next _saveChat persisted the corruption. (Impersonate
+      // drafts are sanitized at creation time, before they become user rows.)
+      // System rows (backend notices, app status) are skipped too — rules
+      // rewriting those could break the backend-notice dedupe comparison.
+      if (!m.isUser &&
+          m.sender != 'System' &&
+          compiledRules.isNotEmpty &&
+          swipes.isNotEmpty) {
+        swipes = swipes
+            .map((s) => sanitizeOutputCompiled(s, compiledRules))
+            .toList();
+      }
+
+      List<int> swipeDurations;
+      try {
+        swipeDurations = List<int>.from(
+          (jsonDecode(m.swipeDurations) as List).map(
+            (e) => (e as num).toInt(),
+          ),
+        );
+      } catch (_) {
+        swipeDurations = [0];
+      }
+
+      final safeSwipeIndex =
+          (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
+              ? m.swipeIndex
+              : 0;
+
+      _messages.add(
+        ChatMessage(
+          text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
+          sender: m.sender,
+          isUser: m.isUser,
+          characterId: m.characterId,
+          swipes: swipes,
+          swipeIndex: safeSwipeIndex,
+          swipeDurations: swipeDurations,
+          metadata: m.metadata != null
+              ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
+              : null,
+          swipeMetadata: m.swipeMetadata != null
+              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
+                    .map(
+                      (e) => e != null
+                          ? Map<String, dynamic>.from(e as Map)
+                          : null,
+                    )
+                    .toList()
+              : null,
+        ),
+      );
+    }
+
+    if (_messages.isNotEmpty) {
+      _lorebookScanner.scanLatest();
+    }
+  }
+
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
@@ -390,6 +443,13 @@ extension ChatServiceSessionLoad on ChatService {
       await _userPersonaService.setActivePersona(session.userPersonaId!);
     }
 
+    // Load per-chat generation settings override for this session (must
+    // happen before the message loop so retroactive sanitization can
+    // consult per-chat override + rules).
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      session.generationSettings,
+    );
+
     try {
       final dbMessages = await _db.getMessagesForSession(sessionId);
       _computeAbsenceGap(dbMessages);
@@ -398,53 +458,7 @@ extension ChatServiceSessionLoad on ChatService {
         'messages for session $sessionId',
       );
       _messages.clear();
-      for (final m in dbMessages) {
-        List<String> swipes;
-        try {
-          swipes = List<String>.from(jsonDecode(m.swipes));
-        } catch (_) {
-          swipes = [''];
-        }
-        List<int> swipeDurations;
-        try {
-          swipeDurations = List<int>.from(
-            (jsonDecode(m.swipeDurations) as List).map(
-              (e) => (e as num).toInt(),
-            ),
-          );
-        } catch (_) {
-          swipeDurations = [0];
-        }
-
-        final safeSwipeIndex =
-            (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-            ? m.swipeIndex
-            : 0;
-
-        _messages.add(
-          ChatMessage(
-            text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
-            sender: m.sender,
-            isUser: m.isUser,
-            characterId: m.characterId,
-            swipes: swipes,
-            swipeIndex: safeSwipeIndex,
-            swipeDurations: swipeDurations,
-            metadata: m.metadata != null
-                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
-                : null,
-            swipeMetadata: m.swipeMetadata != null
-                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
-                      .map(
-                        (e) => e != null
-                            ? Map<String, dynamic>.from(e as Map)
-                            : null,
-                      )
-                      .toList()
-                : null,
-          ),
-        );
-      }
+      _hydrateMessagesFromRows(dbMessages);
 
       // Post-load sanitization: force valid swipe indices and clamp absurdly long fixation text.
       // This protects against any legacy corrupted rows or previous buggy saves, even if the
@@ -575,23 +589,6 @@ extension ChatServiceSessionLoad on ChatService {
       // (Growth rings + legacy blobs were cached by the _refreshGrowthCache
       // call above — session-scoped, both 1:1 and group.)
 
-      // Per-session generation parameter overrides (v22) — loaded via raw SQL
-      // so this works even before build_runner regenerates database.g.dart.
-      try {
-        final genRows = await _db
-            .customSelect(
-              'SELECT generation_settings FROM sessions WHERE id = ?',
-              variables: [drift.Variable(sessionId)],
-            )
-            .get();
-        final genJson = genRows.isNotEmpty
-            ? genRows.first.read<String?>('generation_settings')
-            : null;
-        _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
-      } catch (_) {
-        _sessionGenSettings = ChatGenerationSettings();
-      }
-
       // Per-chat theme overrides.
       try {
         final themeJson = await _db.getThemeOverrides(sessionId);
@@ -601,12 +598,11 @@ extension ChatServiceSessionLoad on ChatService {
         _sessionThemeOverrides = ChatThemeOverrides();
       }
 
-      if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLatest();
-      }
+      // (Lorebook scanLatest already ran inside _hydrateMessagesFromRows —
+      // the second scan here was pure duplicate work.)
       notifyListeners();
     } catch (e) {
-      print('Error loading session $sessionId: $e');
+      debugPrint('[ChatService] Error loading session $sessionId: $e');
     }
   }
 }

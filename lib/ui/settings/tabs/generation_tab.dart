@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
 import 'package:front_porch_ai/ui/settings/widgets/slider_setting.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Generation-settings tab extracted from settings_page (Stage 5, remaining
 /// tabs). Pure lift of _buildGenerationTab: reasoning, sampling parameters,
@@ -30,11 +31,16 @@ import 'package:front_porch_ai/ui/settings/widgets/slider_setting.dart';
 /// backends only) banned phrases. Reads storage/LLM state via Provider; the
 /// banned-phrases controller is the only shared state, passed via ctor.
 /// AppColors exclusive, warm-porch accents.
-class GenerationTab extends StatelessWidget {
+class GenerationTab extends StatefulWidget {
   const GenerationTab({super.key, required this.bannedPhrasesController});
 
   final TextEditingController bannedPhrasesController;
 
+  @override
+  State<GenerationTab> createState() => _GenerationTabState();
+}
+
+class _GenerationTabState extends State<GenerationTab> {
   @override
   Widget build(BuildContext context) {
     final storage = Provider.of<StorageService>(context);
@@ -48,9 +54,6 @@ class GenerationTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Reasoning (thinking models — local KoboldCpp & remote) ─────
-          // Not gated by backend: KoboldCpp honors thinking too (via native
-          // chat_template_kwargs.enable_thinking + reasoning_effort — see
-          // openai_chat_stream.dart). Only applies to reasoning-capable models.
           const SectionHeader('Reasoning'),
           const SizedBox(height: 8),
           Row(
@@ -307,121 +310,132 @@ class GenerationTab extends StatelessWidget {
           // ── Stop Sequences ─────────────────────────────────────────────
           const SectionHeader('Stop Sequences'),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.cardOf(context),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          style: TextStyle(
-                            color: AppColors.textPrimary(context),
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Add stop sequence...',
-                            hintStyle: TextStyle(
-                              color: AppColors.textTertiary(context),
-                            ),
-                            border: InputBorder.none,
-                          ),
-                          onSubmitted: (val) {
-                            if (val.isNotEmpty) storage.addStopSequence(val);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(height: 1, color: AppColors.borderOf(context)),
-                ...storage.stopSequences.map(
-                  (seq) => ListTile(
-                    title: Text(
-                      seq.replaceAll('\n', '\\n'),
-                      style: TextStyle(color: AppColors.textPrimary(context)),
-                    ),
-                    trailing: IconButton(
-                      icon: Icon(
-                        Icons.remove_circle_outline,
-                        color: AppColors.negativeAccentOf(context),
-                        size: 20,
-                      ),
-                      onPressed: () => storage.removeStopSequence(seq),
-                    ),
-                    dense: true,
-                  ),
-                ),
-              ],
-            ),
+          StopSequenceList(
+            sequences: storage.stopSequences,
+            onSequencesChanged: (newList) =>
+                storage.setStopSequences(newList),
           ),
           const SizedBox(height: 24),
 
           // ── Banned Phrases (KoboldCpp only) ────────────────────────────
           if (!isRemote) ...[
             const SectionHeader('Banned Phrases'),
-            const SizedBox(height: 4),
-            Text(
-              'One phrase per line. If any appear during generation the model '
-              'backtracks and retries.',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 12,
+            BannedPhrasesEditor(
+              controller: widget.bannedPhrasesController,
+              onChanged: (phrases) => storage.setBannedPhrases(phrases),
+              phraseCount: storage.bannedPhrases.length,
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // ── Output Sanitizer ───────────────────────────────────────────
+          const SectionHeader('Output Sanitizer'),
+          const SizedBox(height: 4),
+          Text(
+            'Replace specific character sequences in model output before '
+            'saving to chat history.',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'Enable Output Sanitizer',
+                style: TextStyle(color: AppColors.textSecondary(context)),
               ),
+              const Spacer(),
+              Switch(
+                value: storage.generationSettings.outputSanitizerEnabled,
+                onChanged: (val) =>
+                    storage.generationSettings.setOutputSanitizerEnabled(val),
+                activeTrackColor: accent,
+              ),
+            ],
+          ),
+          if (storage.generationSettings.outputSanitizerEnabled) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sanitise Existing History',
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                        ),
+                      ),
+                      Text(
+                        'When enabled, opening a chat will permanently '
+                        'apply the rules below to the AI messages already '
+                        'saved in that chat\'s history — your own messages '
+                        'are never touched. This cannot be undone.',
+                        style: TextStyle(
+                          color: AppColors.textTertiary(context),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: storage.generationSettings.sanitiseExistingHistory,
+                  onChanged: (val) async {
+                    // Enabling is a destructive, global commitment (every
+                    // chat opened while ON gets its saved AI messages
+                    // rewritten on its next save) — confirm before arming.
+                    if (val) {
+                      final confirmed = await showWarmDialog<bool>(
+                        context,
+                        title: 'Rewrite saved chat history?',
+                        icon: Icons.warning_amber_rounded,
+                        destructive: true,
+                        content: const WarmDialogText(
+                          'Every chat you open while this is on will have '
+                          'the rules applied to its saved AI messages — '
+                          'permanently, on that chat\'s next save. Your own '
+                          'messages are never touched. This cannot be '
+                          'undone (automatic local backups are your safety '
+                          'net — Settings → General).',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Rewrite on open'),
+                          ),
+                        ],
+                      );
+                      if (confirmed != true) return;
+                    }
+                    storage.generationSettings
+                        .setSanitiseExistingHistory(val);
+                    if (val && mounted) {
+                      final chatService = Provider.of<ChatService>(
+                        context,
+                        listen: false,
+                      );
+                      await chatService.reloadCurrentSession();
+                    }
+                  },
+                  activeTrackColor: accent,
+                ),
+              ],
             ),
             const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.cardOf(context),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.all(8),
-              child: TextField(
-                controller: bannedPhrasesController,
-                maxLines: 6,
-                minLines: 2,
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontSize: 13,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'shivers down\na cold shiver\nher eyes sparkled',
-                  hintStyle: TextStyle(
-                    color: AppColors.textTertiary(context),
-                    fontSize: 13,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                ),
-                onChanged: (val) {
-                  final phrases = val
-                      .split('\n')
-                      .where((s) => s.trim().isNotEmpty)
-                      .map((s) => s.trim())
-                      .toList();
-                  storage.setBannedPhrases(phrases);
-                },
-              ),
+            OutputSanitizerRuleEditor(
+              rules: storage.generationSettings.outputSanitizerRules,
+              onRulesChanged: (newRules) =>
+                  storage.generationSettings.setOutputSanitizerRules(newRules),
             ),
-            if (storage.bannedPhrases.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  '${storage.bannedPhrases.length} phrase'
-                  '${storage.bannedPhrases.length == 1 ? '' : 's'} banned',
-                  style: TextStyle(
-                    color: AppColors.porchHoneyOf(context),
-                    fontSize: 11,
-                  ),
-                ),
-              ),
           ],
 
           const SizedBox(height: 32),

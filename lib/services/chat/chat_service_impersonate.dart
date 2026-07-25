@@ -29,6 +29,7 @@ extension ChatServiceImpersonate on ChatService {
         _guestBusy) {
       return;
     }
+    if (await _abortIfBackendDown()) return;
 
     _isGenerating = true;
     _cancelRequested = false;
@@ -336,8 +337,20 @@ extension ChatServiceImpersonate on ChatService {
         accumulated += token;
         onToken(accumulated);
       }
+
+      // Sanitize once at completion (or after user cancel).
+      // During streaming the raw text is shown — acceptable because the
+      // user can only edit AFTER generation finishes, at which point
+      // the sanitized form is presented.
+      if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService)) {
+        final rules = _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
+        final sanitized = sanitizeOutput(accumulated, rules);
+        if (sanitized != accumulated) {
+          onToken(sanitized);
+        }
+      }
     } catch (e) {
-      print('Impersonate error: $e');
+      debugPrint('[ChatService] Impersonate error: $e');
     } finally {
       _isGenerating = false;
       notifyListeners();

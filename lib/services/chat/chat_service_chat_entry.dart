@@ -72,7 +72,10 @@ extension ChatServiceChatEntry on ChatService {
 
     // Auto-start the local Kobold backend (native or a .kcpps preset) when
     // entering a chat so the user never has to manually start it just to talk.
-    _llmProvider?.ensureManagedBackendIsRunning();
+    // Gated by autostartOnChatOpen — when off, the user must start manually.
+    if (_storageService.autostartOnChatOpen) {
+      _llmProvider?.ensureManagedBackendIsRunning();
+    }
 
     // If extensions are missing (e.g., app was restarted after DB load that
     // didn't carry over PNG extensions), reload the PNG to get V2.5 card data.

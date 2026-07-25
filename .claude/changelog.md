@@ -5639,3 +5639,28 @@ tomorrow); web facade adds an additive nullable `tomorrow` object inside
 Golden fixture happened to land cloudy→rain, so time_strip_weather goldens
 were regenerated on the Linux CI image. 1:1/group parity is inherited:
 weather is per-chat shared state, injection sits in the shared state block.
+
+## 2026-07-25 (UTC) — PR #162 (output sanitizer) follow-ups: perf, data-loss fixes, goldens — dual-model review
+
+**Branch:** local `pr-162-review` (PR head bdd216bb + origin/Rawhide merge + 5 commits, NOT pushed).
+**Files:** `lib/utils/output_sanitizer_regex.dart`, `lib/models/output_sanitizer_rule.dart`,
+`lib/models/chat_generation_settings.dart`, `lib/services/storage/settings/generation_settings.dart`,
+`lib/services/chat/chat_service_session_load.dart`, `chat_service_session_manage.dart`,
+`chat_service_generation.dart`, `chat_service_impersonate.dart`, `chat_service_reprocess.dart`,
+`lib/services/chat_service.dart`, `lib/ui/widgets/output_sanitizer_rule_editor.dart`,
+`lib/ui/settings/tabs/generation_tab.dart`, `docs/Rawhide.md`, golden PNGs
+(chat_settings + bubble_user), sanitizer tests.
+
+**Why/what:** Finishing S-A-M-F's sanitizer PR to mergeable. My review's leftovers: compile-once
+rule application on chat open (was ~7.5k RegExp builds per open), legacy id-0 rules healing
+(duplicate ValueKey crash), danger badge stale-on-first-open (now computed in build), goldens
+regenerated on the Linux image (bubble_user 12% shift eyeballed = the intended avatar-outside-
+bubble fix). Grok hostile review (session e754e292) then found what BOTH prior reviews missed:
+gen-settings bleed still alive on 0-session/startNewChat paths (fresh chats could SAVE the prior
+chat's overrides), retroactive sanitize rewriting USER rows (permanent corruption on next save),
+ReDoS heuristic blind to inner nesting \((a+)+), isValidFindPattern accepting rules RegExp later
+rejects, backend-down guard only covering sendMessage. Fixed all + confirm dialog on the
+retroactive toggle. Grok round 2 then caught MY bug: the relocated guard saved mid-mutation
+during regen (popped reply persisted as deleted) — abort is now save-free + regen paths gate
+before popping. Round 3: CLEAN. Suite 2,508 green; docker golden suite green; analyze clean.
+Web-UI parity for the sanitizer/auto-start settings surfaces: DEFERRAL EXPLICITLY APPROVED by the maintainer 2026-07-25 (in-conversation, per the CLAUDE.md rule) — the web settings counterpart ships as a follow-up; web chats already receive sanitized output meanwhile.

@@ -25,6 +25,12 @@ part of '../chat_service.dart';
 /// keeps large-context setups (10% of 32k = 3,200) under that line too.
 const int kRagMemoryBudgetCapTokens = 1200;
 
+/// User-facing notice for "managed backend stopped + auto-start off". Const
+/// so [_abortIfBackendDown]'s dedupe can compare against the last message.
+const _kBackendDownNotice =
+    'Backend is not running. Start it in Settings → Backend, '
+    "or enable 'Auto-start on chat open'.";
+
 /// The core response generation orchestrator (`_generateResponse`): speaker
 /// selection, the single per-speaker realism eval trigger (group path), system
 /// prompt + context assembly, streaming, and post-generation needs/realism
@@ -33,10 +39,43 @@ const int kRagMemoryBudgetCapTokens = 1200;
 /// rather than carved up (which would be a behavioural risk) until a careful,
 /// separately-verified decomposition is warranted.
 extension ChatServiceGeneration on ChatService {
+  /// True when generation must not proceed: the managed local backend is not
+  /// running and auto-start on chat open is off. Appends ONE system notice
+  /// naming the toggle (deduped against the last message so group
+  /// auto-advance and idle retries can't stack copies), so every entry point
+  /// — send, regenerate, continue, swipe, group advance, impersonate — fails
+  /// the same friendly way instead of a connection error or silent cancel.
+  ///
+  /// Deliberately does NOT _saveChat: the notice is transient status, and
+  /// persisting here from inside _generateResponse would write the transcript
+  /// mid-mutation for callers that pop a message before generating (regen
+  /// popped the last AI reply, abort saved the hole — permanent data loss).
+  /// Callers that pop MUST also run this check BEFORE their pop (regen paths
+  /// do); this deep guard is the backstop for the non-mutating entries.
+  Future<bool> _abortIfBackendDown() async {
+    if (_llmProvider?.hasManagedProcess != true ||
+        _storageService.autostartOnChatOpen ||
+        _llmProvider?.hasAnyManagedProcessRunning == true) {
+      return false;
+    }
+    if (_messages.isEmpty || _messages.last.text != _kBackendDownNotice) {
+      _messages.add(
+        ChatMessage(
+          text: _kBackendDownNotice,
+          sender: 'System',
+          isUser: false,
+        ),
+      );
+      notifyListeners();
+    }
+    return true;
+  }
+
   Future<void> _generateResponse(
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
   }) async {
+    if (await _abortIfBackendDown()) return;
     final epoch = ++_generationEpoch;
     _isGenerating = true;
     _generationProgress = 0.0;
@@ -1432,6 +1471,18 @@ extension ChatServiceGeneration on ChatService {
         // This matches ST's "Strip Reasoning Tags" behavior as a client-side backstop.
         if (mode == GenerationMode.continue_ || _callMode) {
           finalResponse = _stripThinkBlocks(finalResponse);
+        }
+
+        // ── Output Sanitizer ──────────────────────────────────────────────
+        // NOTE: This runs BEFORE _lorebookScanner.scanLatest() below, so
+        // lorebook keyword triggers operate on the sanitized text. If a rule
+        // replaces text that a lorebook keyword was matching, the trigger
+        // would stop matching. This is intentional — sanitized output is the
+        // "final" text that enters history and is scanned for lore.
+        if (g2.resolveOutputSanitizerEnabled(_storageService)) {
+          final rules = g2.resolveOutputSanitizerRules(_storageService);
+          finalResponse = sanitizeOutput(finalResponse, rules);
+          _messages.last.text = finalResponse;
         }
 
         // Snapshot which entries were already triggered before scanning the AI response.
