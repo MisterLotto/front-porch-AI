@@ -271,6 +271,16 @@ void main() {
       expect(isValidFindPattern(r'\x'), isFalse);
       expect(isValidFindPattern(r'\d{'), isFalse);
     });
+
+    test('rejects capture-group content RegExp itself refuses', () {
+      // Survives the mask compiler but fails RegExp construction — before
+      // the RegExp check, this saved fine and was silently skipped at apply
+      // time (rule looked active, never ran).
+      expect(isValidFindPattern(r'\([)'), isFalse);
+      expect(isValidFindPattern(r'\((unclosed)'), isFalse);
+      // Sanity: valid raw-group content still accepted.
+      expect(isValidFindPattern(r'\((a|b))'), isTrue);
+    });
   });
 
   group('hasNestedQuantifierInGroup()', () {
@@ -300,6 +310,23 @@ void main() {
 
     test('unquantified group with inner quantifier → false', () {
       expect(hasNestedQuantifierInGroup(r'\(\d+)'), isFalse);
+    });
+
+    test('inner raw nesting flagged even when outer group unquantified', () {
+      // The classic ReDoS shape hiding INSIDE the group content — the outer
+      // \(...) carries no quantifier, so the outer-only check missed it.
+      expect(hasNestedQuantifierInGroup(r'\((a+)+)'), isTrue);
+      expect(hasNestedQuantifierInGroup(r'\(x(\w*)*y)'), isTrue);
+      expect(hasNestedQuantifierInGroup(r'\(((a+))+)'), isTrue);
+    });
+
+    test('safe inner groups stay unflagged', () {
+      // Quantified inner group whose content has no quantifier — linear.
+      expect(hasNestedQuantifierInGroup(r'\((abc)+)'), isFalse);
+      // Two sibling quantified elements, no nesting.
+      expect(hasNestedQuantifierInGroup(r'\((a+)(b+))'), isFalse);
+      // Escaped parens are literals, not groups.
+      expect(hasNestedQuantifierInGroup(r'\(\(a+\)+)'), isFalse);
     });
   });
 

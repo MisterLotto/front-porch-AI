@@ -183,22 +183,28 @@ String compileReplacePattern(String input) {
   return result;
 }
 
-/// Returns `true` if [input] compiles as a valid find pattern.
+/// Returns `true` if [input] compiles as a valid find pattern — INCLUDING
+/// [RegExp] construction. Capture groups pass raw regex through, so a
+/// pattern can survive the mask compiler yet still be rejected by RegExp
+/// (e.g. `\([)`); validating only the mask step let such rules be saved and
+/// then silently skipped at apply time, which read as "sanitizer is broken".
 bool isValidFindPattern(String input) {
   try {
-    compileFindPattern(input);
+    RegExp(compileFindPattern(input), caseSensitive: false);
     return true;
   } on FormatException {
     return false;
   }
 }
 
-/// Returns `true` if [input] contains a capture group `\(`...`)` whose inner
-/// regex has a quantified element **and** the group itself is quantified.
+/// Returns `true` if [input] contains a capture group `\(`...`)` where a
+/// quantified element sits inside a quantified enclosure — either the
+/// `\(...)` group itself is quantified and its content has a quantifier,
+/// or the RAW content nests a quantified group inside another quantifier
+/// (e.g. `\((a+)+)` — inner nesting, outer group unquantified).
 ///
-/// This heuristic catches patterns prone to catastrophic backtracking
-/// (e.g. `\((a+))+`) while avoiding false positives on safe patterns
-/// like `\(\d+)`.
+/// This heuristic flags patterns prone to catastrophic backtracking while
+/// avoiding false positives on safe patterns like `\(\d+)` or `\((abc)+)`.
 bool hasNestedQuantifierInGroup(String input) {
   var i = 0;
   while (i < input.length) {
@@ -231,6 +237,12 @@ bool hasNestedQuantifierInGroup(String input) {
         if (groupQuantified && _hasInnerQuantifier(groupContent)) {
           return true;
         }
+        // Inner nesting: the raw content itself may hold a quantified group
+        // under a quantifier (`\((a+)+)`) even when the outer group isn't
+        // quantified — the classic ReDoS shape the outer check misses.
+        if (_rawHasNestedQuantifiedGroup(groupContent)) {
+          return true;
+        }
         i = afterGroup + (groupQuantified ? 1 : 0);
       } else {
         i += 2;
@@ -244,6 +256,41 @@ bool hasNestedQuantifierInGroup(String input) {
 
 bool _isQuantifierChar(String ch) =>
     ch == '?' || ch == '+' || ch == '*' || ch == '{';
+
+/// Scans RAW regex text (a capture group's pass-through content) for a
+/// parenthesized group that both contains a quantified element and is
+/// itself followed by a quantifier — the nested shape (`(a+)+`) that
+/// backtracks catastrophically. Escapes (`\(`) are skipped as literals.
+bool _rawHasNestedQuantifiedGroup(String s) {
+  final enclosing = <bool>[];
+  var hasQuantified = false; // quantified element seen at the current depth
+  var i = 0;
+  while (i < s.length) {
+    final ch = s[i];
+    if (ch == r'\') {
+      i += 2;
+    } else if (ch == '(') {
+      enclosing.add(hasQuantified);
+      hasQuantified = false;
+      i++;
+    } else if (ch == ')') {
+      final innerQuantified = hasQuantified;
+      hasQuantified = enclosing.isEmpty ? false : enclosing.removeLast();
+      final groupQuantified =
+          i + 1 < s.length && _isQuantifierChar(s[i + 1]);
+      if (groupQuantified && innerQuantified) return true;
+      // A quantified group is itself a quantified element of its parent —
+      // and an UNquantified group passes its inner variable-length up
+      // (`((a+))+` is `(a+)+` with an extra capture; the wrapper hides it).
+      if (groupQuantified || innerQuantified) hasQuantified = true;
+      i += groupQuantified ? 2 : 1;
+    } else {
+      if (_isQuantifierChar(ch)) hasQuantified = true;
+      i++;
+    }
+  }
+  return false;
+}
 
 /// Returns `true` if [content] contains a quantified element (a non-empty
 /// string followed by `+`, `*`, `?`, or `{...}`).

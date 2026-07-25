@@ -25,6 +25,12 @@ part of '../chat_service.dart';
 /// keeps large-context setups (10% of 32k = 3,200) under that line too.
 const int kRagMemoryBudgetCapTokens = 1200;
 
+/// User-facing notice for "managed backend stopped + auto-start off". Const
+/// so [_abortIfBackendDown]'s dedupe can compare against the last message.
+const _kBackendDownNotice =
+    'Backend is not running. Start it in Settings → Backend, '
+    "or enable 'Auto-start on chat open'.";
+
 /// The core response generation orchestrator (`_generateResponse`): speaker
 /// selection, the single per-speaker realism eval trigger (group path), system
 /// prompt + context assembly, streaming, and post-generation needs/realism
@@ -33,10 +39,37 @@ const int kRagMemoryBudgetCapTokens = 1200;
 /// rather than carved up (which would be a behavioural risk) until a careful,
 /// separately-verified decomposition is warranted.
 extension ChatServiceGeneration on ChatService {
+  /// True when generation must not proceed: the managed local backend is not
+  /// running and auto-start on chat open is off. Appends ONE system notice
+  /// naming the toggle (deduped against the last message so group
+  /// auto-advance and idle retries can't stack copies), so every entry point
+  /// — send, regenerate, continue, swipe, group advance, impersonate — fails
+  /// the same friendly way instead of a connection error or silent cancel.
+  Future<bool> _abortIfBackendDown() async {
+    if (_llmProvider?.hasManagedProcess != true ||
+        _storageService.autostartOnChatOpen ||
+        _llmProvider?.hasAnyManagedProcessRunning == true) {
+      return false;
+    }
+    if (_messages.isEmpty || _messages.last.text != _kBackendDownNotice) {
+      _messages.add(
+        ChatMessage(
+          text: _kBackendDownNotice,
+          sender: 'System',
+          isUser: false,
+        ),
+      );
+      await _saveChat();
+      notifyListeners();
+    }
+    return true;
+  }
+
   Future<void> _generateResponse(
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
   }) async {
+    if (await _abortIfBackendDown()) return;
     final epoch = ++_generationEpoch;
     _isGenerating = true;
     _generationProgress = 0.0;

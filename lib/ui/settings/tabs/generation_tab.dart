@@ -386,6 +386,36 @@ class _GenerationTabState extends State<GenerationTab> {
                 Switch(
                   value: storage.generationSettings.sanitiseExistingHistory,
                   onChanged: (val) async {
+                    // Enabling is a destructive, global commitment (every
+                    // chat opened while ON gets its saved AI messages
+                    // rewritten on its next save) — confirm before arming.
+                    if (val) {
+                      final confirmed = await showWarmDialog<bool>(
+                        context,
+                        title: 'Rewrite saved chat history?',
+                        icon: Icons.warning_amber_rounded,
+                        destructive: true,
+                        content: const WarmDialogText(
+                          'Every chat you open while this is on will have '
+                          'the rules applied to its saved AI messages — '
+                          'permanently, on that chat\'s next save. Your own '
+                          'messages are never touched. This cannot be '
+                          'undone (automatic local backups are your safety '
+                          'net — Settings → General).',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Rewrite on open'),
+                          ),
+                        ],
+                      );
+                      if (confirmed != true) return;
+                    }
                     storage.generationSettings
                         .setSanitiseExistingHistory(val);
                     if (val && mounted) {

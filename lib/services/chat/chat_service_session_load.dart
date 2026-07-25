@@ -108,6 +108,8 @@ extension ChatServiceSessionLoad on ChatService {
       _growthStore.invalidate(); // no session — nothing to inject
       _selectedLooks
           .clear(); // 0-session: no per-chat look selection (keep reset blocks in sync)
+      _sessionGenSettings =
+          ChatGenerationSettings(); // 0-session: no per-chat gen overrides — without this, character B's first chat ran (and could SAVE) character A's temp/stops/sanitizer (keep reset blocks in sync)
       return;
     }
 
@@ -366,7 +368,11 @@ extension ChatServiceSessionLoad on ChatService {
         swipes = [''];
       }
 
-      if (compiledRules.isNotEmpty && swipes.isNotEmpty) {
+      // Model output ONLY — the feature's contract. Without the isUser
+      // gate, a broad rule + retroactive-on rewrote the USER's own words in
+      // memory, and the next _saveChat persisted the corruption. (Impersonate
+      // drafts are sanitized at creation time, before they become user rows.)
+      if (!m.isUser && compiledRules.isNotEmpty && swipes.isNotEmpty) {
         swipes = swipes
             .map((s) => sanitizeOutputCompiled(s, compiledRules))
             .toList();
@@ -587,12 +593,11 @@ extension ChatServiceSessionLoad on ChatService {
         _sessionThemeOverrides = ChatThemeOverrides();
       }
 
-      if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLatest();
-      }
+      // (Lorebook scanLatest already ran inside _hydrateMessagesFromRows —
+      // the second scan here was pure duplicate work.)
       notifyListeners();
     } catch (e) {
-      print('Error loading session $sessionId: $e');
+      debugPrint('[ChatService] Error loading session $sessionId: $e');
     }
   }
 }

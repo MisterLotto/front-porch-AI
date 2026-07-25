@@ -29,6 +29,7 @@ extension ChatServiceImpersonate on ChatService {
         _guestBusy) {
       return;
     }
+    if (await _abortIfBackendDown()) return;
 
     _isGenerating = true;
     _cancelRequested = false;
