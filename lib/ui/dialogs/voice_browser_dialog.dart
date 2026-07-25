@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/ui/dialogs/piper_import_voice_button.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Dialog for browsing, downloading, and managing Piper TTS voice models.
@@ -111,6 +112,12 @@ class _VoiceBrowserDialogState extends State<VoiceBrowserDialog> {
             ),
           ),
           const Spacer(),
+          // Custom raw Piper voices (community/self-trained .onnx pairs) —
+          // converted in-app to the sherpa bundle layout on import.
+          PiperImportVoiceButton(
+            onImported: (key) => setState(() => _installedVoices.add(key)),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.close, color: Colors.white54),
             onPressed: () => Navigator.pop(context),
@@ -278,8 +285,27 @@ class _VoiceBrowserDialogState extends State<VoiceBrowserDialog> {
           );
         }
 
+        // Imported custom voices have no catalog entry — synthesize rows so
+        // they are visible and deletable right where they were added
+        // (vm.deleteVoice already cleans their bundle like any other voice).
+        final catalogKeys = vm.catalog.map((v) => v.key).toSet();
+        final customRows = [
+          for (final key in _installedVoices)
+            if (!catalogKeys.contains(key))
+              PiperVoice(
+                key: key,
+                name: key,
+                languageCode: '',
+                languageEnglish: 'Custom import',
+                countryEnglish: '',
+                quality: 'custom',
+                numSpeakers: 1,
+                files: const {},
+              ),
+        ];
+
         // Filter catalog
-        var filtered = vm.catalog.where((v) {
+        var filtered = [...customRows, ...vm.catalog].where((v) {
           if (_selectedLanguage != 'All' &&
               v.languageEnglish != _selectedLanguage) {
             return false;

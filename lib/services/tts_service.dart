@@ -876,9 +876,9 @@ class TtsService extends ChangeNotifier {
       final ok = await SherpaPiperEngine.ensureVoice(root, voice);
       if (!ok) {
         _lastError =
-            'The voice "$voice" has no downloadable engine model '
-            '(custom voices are no longer supported) — pick a different '
-            'Piper voice.';
+            'The voice "$voice" has no engine model on this machine. '
+            'Official voices re-download from the Voice Model Browser; a '
+            'custom voice can be re-imported there via "Add custom voice".';
         EngineHealth.instance.reportFailure(
           EngineHealth.piper,
           'no sherpa export for "$voice"',

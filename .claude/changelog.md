@@ -5739,3 +5739,35 @@ light warm-porch, dark = visually identical to before — both eyeballed) and ve
 green. Shared Realism/Needs form sections were already AppColors-clean (67/16 usages, zero raw).
 Docker note: Desktop evicted the fpai-golden image 3× today; tarball cache now at
 ~/.cache/fpai/fpai-golden-3.41.1.tar.gz (docker load ≪ rebuild).
+
+## 2026-07-25 (UTC) — Custom Piper voice import (Discord feature request)
+
+**Files:** NEW `lib/services/tts/piper_voice_import.dart` (pure converters),
+NEW `lib/services/tts/piper_voice_installer.dart` (IO installer),
+NEW `lib/ui/dialogs/piper_import_voice_button.dart`, `lib/services/voice_manager.dart`
+(thin delegate; kept under cap via the installer extraction), `lib/ui/dialogs/voice_browser_dialog.dart`
+(header button + synthetic rows for custom voices so they're visible/deletable),
+`lib/services/tts_service.dart` (stale "custom voices no longer supported" copy fixed),
+goldens voice_browser.{light,dark} (header button; pre-existing right-edge stripe unchanged),
+NEW `test/services/tts/piper_voice_import_test.dart` (11 offline tests), `docs/Rawhide.md`.
+
+**What:** "Add custom voice" in the Voice Model Browser imports RAW Piper voices
+(.onnx + .onnx.json — community or self-trained, no sherpa re-export needed): tokens.txt
+derived from phoneme_id_map; the sherpa-required ONNX metadata (sample_rate/n_speakers/
+language/comment="piper"/voice/model_type/has_espeak) appended as pure-Dart protobuf
+field-14 wire bytes (no python, no sidecars — dual-verified against sherpa's docs +
+offline-tts-vits-model.cc); espeak-ng-data copied from any installed bundle (phontab
+presence check) or fetched once from sherpa's standalone artifact. Bundle materialized in
+SherpaPiperEngine's exact layout so ensureVoice/generate work untouched; deleteVoice cleans
+customs like any voice.
+
+**Hardening (self-review + Grok):** dot-only/leading/trailing-dot keys can't escape the
+bundle dir (a "...onnx" file keyed as ".." → delete would have wiped piper_models); sink
+closed in finally (Windows lock on failed import); official-key squatting blocked
+(catalog + orphan-bundle check) while re-imports still refuse cleanly; custom voices get
+browser rows (visible + deletable); register-last + full cleanup on failure. Grok's
+remaining secondaries all addressed; web upload flow = deferral to request.
+
+**Verification:** 11 new tests (wire-format round-trip via a real protobuf reader in-test,
+end-to-end offline import, traversal, dupes, cleanup); suite 2,524 green; analyze clean;
+goldens regenerated + eyeballed; golden verify green.

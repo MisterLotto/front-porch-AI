@@ -25,6 +25,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/services/tts_voice_info.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/tts/piper_voice_installer.dart';
 import 'package:front_porch_ai/services/tts/sherpa_piper_engine.dart';
 
 /// Metadata for a single Piper voice from the catalog.
@@ -344,6 +345,26 @@ class VoiceManager extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Import a CUSTOM raw Piper voice — a self-trained or community
+  /// `.onnx` + sibling `.onnx.json` pair with no sherpa re-export. Thin
+  /// delegate over [installCustomPiperVoice] (piper_voice_installer.dart),
+  /// which materializes the exact bundle layout [SherpaPiperEngine] expects
+  /// and registers the voice. Returns the voice key; throws
+  /// [FormatException] with a user-displayable message for non-Piper files.
+  /// deleteVoice() cleans custom voices up like any other.
+  Future<String> importCustomPiperVoice(String onnxPath) async {
+    final key = await installCustomPiperVoice(
+      onnxPath: onnxPath,
+      root: await _rootPath,
+      catalogKeys: _catalog.map((v) => v.key).toSet(),
+      isVoiceInstalled: isVoiceInstalled,
+      voicesDirPath: (await voicesDir).path,
+    );
+    notifyListeners();
+    return key;
+  }
+
 
   /// Delete an installed voice: the config, any legacy rhasspy `.onnx`,
   /// and the sherpa model bundle.
