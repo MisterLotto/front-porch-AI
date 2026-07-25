@@ -39,10 +39,8 @@ import 'package:front_porch_ai/utils/picker_prefs.dart';
 //  DESIGN TOKENS — Slate / Indigo dark theme
 // ═══════════════════════════════════════════════════════════════
 
-const _bgDeep = Color(0xFF0F172A);
-const _bgSurface = Color(0xFF1E293B);
-const _bgInput = Color(0xFF0F172A);
-const _borderSubtle = Color(0x14FFFFFF); // white 8%
+// Theme-aware surfaces (dark values identical to the old hardcoded navy
+// tokens, so dark mode is unchanged; light mode finally gets light).
 const _borderFocus = AppColors.formMasterAccent;
 
 class EditCharacterPage extends StatefulWidget {
@@ -516,12 +514,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             SnackBar(
               content: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                  Icon(Icons.check_circle, color: AppColors.textPrimary(context), size: 18),
                   const SizedBox(width: 8),
                   const Text('Character updated successfully!'),
                 ],
               ),
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: AppColors.cardOf(context),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -536,7 +534,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating character: $e'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppColors.negativeAccentOf(context),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -642,12 +640,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgDeep,
+      backgroundColor: AppColors.backgroundOf(context),
       appBar: AppBar(
-        backgroundColor: _bgSurface,
+        backgroundColor: AppColors.cardOf(context),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white70),
+          icon: Icon(Icons.arrow_back, color: AppColors.iconSecondary(context)),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Row(
@@ -657,8 +655,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             Flexible(
               child: Text(
                 'Edit ${widget.character.name}',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.textPrimary(context),
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
@@ -696,7 +694,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.formMasterAccent,
-          unselectedLabelColor: Colors.white38,
+          unselectedLabelColor: AppColors.textTertiary(context),
           indicatorColor: AppColors.formMasterAccent,
           indicatorWeight: 3,
           tabs: const [
@@ -741,14 +739,14 @@ class _EditCharacterPageState extends State<EditCharacterPage>
 
   Widget _buildTokenBadge(int estimatedTokens) {
     final color = estimatedTokens > 4000
-        ? Colors.redAccent
+        ? AppColors.negativeAccentOf(context)
         : estimatedTokens > 2000
-        ? Colors.orangeAccent
+        ? AppColors.porchTerracottaOf(context)
         : AppColors.formMasterAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: _bgSurface,
+        color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.4)),
         boxShadow: [
@@ -799,8 +797,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   height: 160,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    color: _bgSurface,
-                    border: Border.all(color: _borderSubtle),
+                    color: AppColors.cardOf(context),
+                    border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
                     image: _avatarFile != null && _avatarFile!.existsSync()
                         ? DecorationImage(
                             image: FileImage(_avatarFile!),
@@ -815,13 +813,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             Icon(
                               Icons.person,
                               size: 56,
-                              color: Colors.white.withValues(alpha: 0.15),
+                              color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.15), Colors.black.withValues(alpha: 0.15)),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
+                            Text(
                               'No avatar',
                               style: TextStyle(
-                                color: Colors.white24,
+                                color: AppColors.textTertiary(context),
                                 fontSize: 11,
                               ),
                             ),
@@ -852,17 +850,17 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             (tag) => Chip(
                               label: Text(
                                 tag,
-                                style: const TextStyle(
-                                  color: Colors.white70,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(context),
                                   fontSize: 12,
                                 ),
                               ),
-                              backgroundColor: const Color(0xFF374151),
+                              backgroundColor: AppColors.surfaceContainerOf(context),
                               side: BorderSide.none,
-                              deleteIcon: const Icon(
+                              deleteIcon: Icon(
                                 Icons.close,
                                 size: 14,
-                                color: Colors.white38,
+                                color: AppColors.textTertiary(context),
                               ),
                               onDeleted: () =>
                                   setState(() => _tags.remove(tag)),
@@ -880,8 +878,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       Expanded(
                         child: TextField(
                           controller: _tagController,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
                             fontSize: 14,
                           ),
                           decoration: _inputDecoration('Add a tag...'),
@@ -926,7 +924,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               _sectionCard(
                 icon: Icons.psychology_outlined,
                 title: 'Personality & World',
-                color: const Color(0xFF0EA5E9),
+                color: AppColors.porchHoneyOf(context),
                 children: [
                   _styledField(
                     controller: _descriptionController,
@@ -959,7 +957,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               _sectionCard(
                 icon: Icons.settings_suggest_outlined,
                 title: 'Advanced Prompts',
-                color: Colors.white38,
+                color: AppColors.textTertiary(context),
                 collapsed: true,
                 children: [
                   _styledField(
@@ -1041,7 +1039,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               _sectionCard(
                 icon: Icons.swap_horiz,
                 title: 'Alternate Greetings',
-                color: const Color(0xFF0EA5E9),
+                color: AppColors.porchHoneyOf(context),
                 trailing: TextButton.icon(
                   onPressed: () {
                     setState(() {
@@ -1064,7 +1062,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                         child: Text(
                           'No alternate greetings yet',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.25),
+                            color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.25), Colors.black.withValues(alpha: 0.25)),
                             fontSize: 13,
                           ),
                         ),
@@ -1101,9 +1099,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                                     _altGreetingControllers.removeAt(idx);
                                   });
                                 },
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.remove_circle_outline,
-                                  color: Colors.redAccent,
+                                  color: AppColors.negativeAccentOf(context),
                                   size: 20,
                                 ),
                                 tooltip: 'Remove greeting',
@@ -1121,7 +1119,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               _sectionCard(
                 icon: Icons.format_quote_outlined,
                 title: 'Example Dialogue',
-                color: const Color(0xFF10B981),
+                color: AppColors.porchTerracottaOf(context),
                 children: [
                   _styledField(
                     controller: _mesExampleController,
@@ -1158,7 +1156,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               // Header
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1167,13 +1165,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.textPrimary(context),
                           ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'World lore entries inject context when keywords are detected.',
-                          style: TextStyle(fontSize: 13, color: Colors.white54),
+                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
                         ),
                       ],
                     ),
@@ -1184,8 +1182,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     icon: const Icon(Icons.cloud_upload, size: 18),
                     label: const Text('Import'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF374151),
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.surfaceContainerOf(context),
+                      foregroundColor: AppColors.textPrimary(context),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -1212,9 +1210,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 Container(
                   padding: const EdgeInsets.all(40),
                   decoration: BoxDecoration(
-                    color: _bgSurface,
+                    color: AppColors.cardOf(context),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _borderSubtle),
+                    border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
                   ),
                   child: Center(
                     child: Column(
@@ -1222,17 +1220,17 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                         Icon(
                           Icons.menu_book_outlined,
                           size: 48,
-                          color: Colors.white.withValues(alpha: 0.12),
+                          color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.12), Colors.black.withValues(alpha: 0.12)),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           'No lorebook entries yet',
-                          style: TextStyle(color: Colors.white38, fontSize: 15),
+                          style: TextStyle(color: AppColors.textTertiary(context), fontSize: 15),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
+                        Text(
                           'Add entries to inject context-aware world lore.',
-                          style: TextStyle(color: Colors.white24, fontSize: 12),
+                          style: TextStyle(color: AppColors.textTertiary(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -1258,12 +1256,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _bgSurface,
+        color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           width: 1.5,
           color: entry.constant
-              ? Colors.amberAccent.withValues(alpha: 0.3)
+              ? AppColors.porchAmberOf(context).withValues(alpha: 0.3)
               : entry.enabled
               ? AppColors.formMasterAccent.withValues(alpha: 0.15)
               : AppColors.borderOf(context).withValues(alpha: 0.5),
@@ -1278,10 +1276,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 Icons.menu_book,
                 size: 14,
                 color: entry.constant
-                    ? Colors.amberAccent
+                    ? AppColors.porchAmberOf(context)
                     : entry.enabled
                     ? AppColors.formMasterAccent
-                    : Colors.white38,
+                    : AppColors.textTertiary(context),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -1289,8 +1287,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   entry.displayName,
                   style: TextStyle(
                     color: entry.enabled
-                        ? Colors.white
-                        : Colors.white38,
+                        ? AppColors.textPrimary(context)
+                        : AppColors.textTertiary(context),
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -1303,13 +1301,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.amberAccent.withValues(alpha: 0.15),
+                    color: AppColors.porchAmberOf(context).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Always Active',
                     style: TextStyle(
-                      color: Colors.amberAccent,
+                      color: AppColors.porchAmberOf(context),
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1353,10 +1351,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               IconButton(
                 onPressed: () => _editLoreEntry(index),
-                icon: const Icon(
+                icon: Icon(
                   Icons.edit_outlined,
                   size: 16,
-                  color: Colors.white38,
+                  color: AppColors.textTertiary(context),
                 ),
                 tooltip: 'Edit entry',
                 visualDensity: VisualDensity.compact,
@@ -1365,10 +1363,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               ),
               IconButton(
                 onPressed: () => _removeLoreEntry(index),
-                icon: const Icon(
+                icon: Icon(
                   Icons.delete_outline,
                   size: 16,
-                  color: Colors.redAccent,
+                  color: AppColors.negativeAccentOf(context),
                 ),
                 tooltip: 'Delete entry',
                 visualDensity: VisualDensity.compact,
@@ -1390,13 +1388,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                         vertical: 1,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
+                        color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.05), Colors.black.withValues(alpha: 0.05)),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         k.trim(),
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
                           fontSize: 10,
                         ),
                       ),
@@ -1425,18 +1423,18 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Linked Worlds',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.textPrimary(context),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Attach worlds to include their lorebooks in this character\'s conversations.',
-                    style: TextStyle(fontSize: 13, color: Colors.white54),
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
                   ),
                   const SizedBox(height: 20),
 
@@ -1444,9 +1442,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     Container(
                       padding: const EdgeInsets.all(40),
                       decoration: BoxDecoration(
-                        color: _bgSurface,
+                        color: AppColors.cardOf(context),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: _borderSubtle),
+                        border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
                       ),
                       child: Center(
                         child: Column(
@@ -1454,21 +1452,21 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             Icon(
                               Icons.public,
                               size: 48,
-                              color: Colors.white.withValues(alpha: 0.12),
+                              color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.12), Colors.black.withValues(alpha: 0.12)),
                             ),
                             const SizedBox(height: 12),
-                            const Text(
+                            Text(
                               'No worlds found',
                               style: TextStyle(
-                                color: Colors.white38,
+                                color: AppColors.textTertiary(context),
                                 fontSize: 15,
                               ),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
+                            Text(
                               'Create worlds in the Worlds section.',
                               style: TextStyle(
-                                color: Colors.white24,
+                                color: AppColors.textTertiary(context),
                                 fontSize: 12,
                               ),
                             ),
@@ -1482,12 +1480,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: _bgSurface,
+                          color: AppColors.cardOf(context),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isLinked
                                 ? AppColors.formMasterAccent.withValues(alpha: 0.4)
-                                : _borderSubtle,
+                                : AppColors.borderOf(context).withValues(alpha: 0.45),
                           ),
                         ),
                         child: ListTile(
@@ -1497,7 +1495,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             decoration: BoxDecoration(
                               color: isLinked
                                   ? AppColors.formMasterAccent.withValues(alpha: 0.2)
-                                  : Colors.white.withValues(alpha: 0.05),
+                                  : AppColors.resolve(context, Colors.white.withValues(alpha: 0.05), Colors.black.withValues(alpha: 0.05)),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
@@ -1505,13 +1503,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                               size: 20,
                               color: isLinked
                                   ? AppColors.formMasterAccent
-                                  : Colors.white38,
+                                  : AppColors.textTertiary(context),
                             ),
                           ),
                           title: Text(
                             world.name,
                             style: TextStyle(
-                              color: isLinked ? Colors.white : Colors.white70,
+                              color: isLinked ? AppColors.textPrimary(context) : AppColors.textSecondary(context),
                               fontWeight: isLinked
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -1523,8 +1521,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                                 : '${world.lorebook.entries.length} entries',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white38,
+                            style: TextStyle(
+                              color: AppColors.textTertiary(context),
                               fontSize: 12,
                             ),
                           ),
@@ -1809,9 +1807,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     if (collapsed) {
       return Container(
         decoration: BoxDecoration(
-          color: _bgSurface,
+          color: AppColors.cardOf(context),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _borderSubtle),
+          border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1838,8 +1836,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 fontWeight: FontWeight.w600,
               ),
             ),
-            iconColor: Colors.white38,
-            collapsedIconColor: Colors.white24,
+            iconColor: AppColors.iconSecondary(context),
+            collapsedIconColor: AppColors.iconSecondary(context),
             children: children,
           ),
         ),
@@ -1849,9 +1847,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _bgSurface,
+        color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _borderSubtle),
+        border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1892,7 +1890,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                     child: Icon(
                       Icons.open_in_full,
                       size: 14,
-                      color: Colors.white.withValues(alpha: 0.25),
+                      color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.25), Colors.black.withValues(alpha: 0.25)),
                     ),
                   ),
                 ),
@@ -1930,16 +1928,16 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+      hintStyle: TextStyle(color: AppColors.textTertiary(context), fontSize: 13),
       filled: true,
-      fillColor: _bgInput,
+      fillColor: AppColors.backgroundOf(context),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _borderSubtle),
+        borderSide: BorderSide(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _borderSubtle),
+        borderSide: BorderSide(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -1947,7 +1945,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       ),
       disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
+        borderSide: BorderSide(color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.04), Colors.black.withValues(alpha: 0.04))),
       ),
       contentPadding: const EdgeInsets.all(14),
     );

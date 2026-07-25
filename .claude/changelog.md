@@ -5717,3 +5717,25 @@ really did call setActiveCharacter).
 **Verification:** analyze clean; suite 2,513 green ×2; goldens: only edit_character.{light,dark}
 changed (eyeballed — full editor in dialog shell, correct in both themes), everything else
 byte-identical; golden verify green on the new baselines.
+
+## 2026-07-25 (UTC) — EditCharacterPage retheme: light mode means light mode (warm porch)
+
+**Files:** `lib/ui/pages/edit_character_page.dart`, `test/golden/widget/_goldens/dialogs_remaining/edit_character.{light,dark}.png`, `docs/Rawhide.md`.
+
+**Why:** The consolidated character editor was the app's last dark-hardcoded page (local navy
+tokens + ~55 raw Colors.white*/hex sites) — light-mode users got a dark editor everywhere it
+opened. Maintainer directive: retheme to AppColors/warm porch.
+
+**How:** The three navy surface tokens mapped to AppColors helpers whose DARK values are the
+identical hexes (backgroundOf/cardOf/surfaceContainerOf) so dark mode is pixel-stable;
+low-alpha white overlays wrapped in AppColors.resolve(dark: original, light: black-mirrored);
+text/icons to textPrimary/Secondary/Tertiary + iconSecondary; off-palette accents warmed
+(sky→porchHoney, emerald→porchTerracotta, amberAccent→porchAmberOf, redAccent→negativeAccentOf,
+orange→porchTerracotta); one const-strip pass for the now-context-dependent sites. Only the
+black drop-shadow stays raw (shadows are black in both themes).
+
+**Verification:** analyze clean; suite 2,513 green; goldens regenerated (light = genuinely
+light warm-porch, dark = visually identical to before — both eyeballed) and verify suite
+green. Shared Realism/Needs form sections were already AppColors-clean (67/16 usages, zero raw).
+Docker note: Desktop evicted the fpai-golden image 3× today; tarball cache now at
+~/.cache/fpai/fpai-golden-3.41.1.tar.gz (docker load ≪ rebuild).
