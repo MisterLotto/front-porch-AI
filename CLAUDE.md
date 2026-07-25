@@ -379,9 +379,14 @@ Barrel files reduce repetitive intra-package imports:
 When you add a new service or model used from 3+ locations and not purely internal, add the export to the appropriate barrel in the same PR.
 
 ### Riverpod patterns (for new code)
+- **The decision rule (maintainer-set, 2026-07-25): Riverpod is allowed when the state can be fully owned and tested without replacing `ChatService`, `StorageService`, or the `main.dart` provider graph; otherwise Provider stays.** There is NO project to migrate the whole codebase — a full Provider→Riverpod conversion was explicitly evaluated and rejected (dual-model review): it would churn ~634 consumer call sites, 39 ChangeNotifier services, the delicate `main.dart` init order, and the Realism/Needs parity hub for zero user-visible benefit. Do not start one, and do not convert files "while you're in there" unless the feature you're shipping needs it.
+- **Qualifies for Riverpod:** new self-contained features (the weather provider — pure engine + `@riverpod` codegen + `ProviderContainer` tests — is the template), UI-local ephemeral state, read-only projections over existing public APIs, greenfield modules outside the ProxyProvider chain.
+- **Off-limits as "migration work":** `ChatService` + Realism/Needs orchestration, `StorageService`, the `main.dart` MultiProvider/ProxyProvider graph, mass UI conversion, test-suite rewrites, backend/engine lifecycle services, the web facade's ChatService binding.
+- **Revisit full migration only when** ChatService has naturally shrunk to a thin coordinator via leaf extraction AND Realism parity has strong automated tests — then it's a modest finishing step, not a gamble.
 - Use `AsyncNotifier` for async operations.
 - `ref.watch` for reactive dependencies, `ref.read` for one-time actions.
 - Proper error handling with `AsyncValue`.
+- Prefer `@riverpod` codegen style (maintainer directive 2026-07-21): family parameters as plain named args, autoDispose default.
 
 ### Error handling
 - Never silently swallow errors; always log or surface to the user.
