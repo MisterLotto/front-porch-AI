@@ -5766,7 +5766,9 @@ bundle dir (a "...onnx" file keyed as ".." → delete would have wiped piper_mod
 closed in finally (Windows lock on failed import); official-key squatting blocked
 (catalog + orphan-bundle check) while re-imports still refuse cleanly; custom voices get
 browser rows (visible + deletable); register-last + full cleanup on failure. Grok's
-remaining secondaries all addressed; web upload flow = deferral to request.
+remaining secondaries all addressed. Maintainer ruling 2026-07-25 (in-conversation): custom
+voice import is DESKTOP/DART-ONLY BY DESIGN — no web upload counterpart owed; web keeps
+voice selection via the facade.
 
 **Verification:** 11 new tests (wire-format round-trip via a real protobuf reader in-test,
 end-to-end offline import, traversal, dupes, cleanup); suite 2,524 green; analyze clean;
