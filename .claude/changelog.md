@@ -5663,4 +5663,4 @@ rejects, backend-down guard only covering sendMessage. Fixed all + confirm dialo
 retroactive toggle. Grok round 2 then caught MY bug: the relocated guard saved mid-mutation
 during regen (popped reply persisted as deleted) — abort is now save-free + regen paths gate
 before popping. Round 3: CLEAN. Suite 2,508 green; docker golden suite green; analyze clean.
-Open: web-UI parity for sanitizer/auto-start settings surfaces (maintainer decision pending).
+Web-UI parity for the sanitizer/auto-start settings surfaces: DEFERRAL EXPLICITLY APPROVED by the maintainer 2026-07-25 (in-conversation, per the CLAUDE.md rule) — the web settings counterpart ships as a follow-up; web chats already receive sanitized output meanwhile.
