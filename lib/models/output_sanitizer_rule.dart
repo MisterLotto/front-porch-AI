@@ -25,17 +25,20 @@
 /// When [stopAfterMatch] is true, no subsequent rules are applied
 /// after this rule matches at least once in the text.
 class OutputSanitizerRule {
+  final int id;
   final String find;
   final String replace;
   final bool stopAfterMatch;
 
   const OutputSanitizerRule({
+    required this.id,
     required this.find,
     required this.replace,
     this.stopAfterMatch = false,
   });
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'find': find,
         'replace': replace,
         if (stopAfterMatch) 'stop_after_match': true,
@@ -43,6 +46,7 @@ class OutputSanitizerRule {
 
   factory OutputSanitizerRule.fromJson(Map<String, dynamic> json) =>
       OutputSanitizerRule(
+        id: json['id'] as int? ?? 0,
         find: json['find'] as String? ?? '',
         replace: json['replace'] as String? ?? '',
         stopAfterMatch: json['stop_after_match'] as bool? ?? false,

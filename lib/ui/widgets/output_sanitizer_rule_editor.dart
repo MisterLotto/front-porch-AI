@@ -60,6 +60,14 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
     super.dispose();
   }
 
+  int _nextId(List<OutputSanitizerRule> rules) {
+    if (rules.isEmpty) return 0;
+    final max = rules.map((r) => r.id).reduce((a, b) => a > b ? a : b);
+    // If you've somehow hit 9,223,372,036,854,775,807 rules,
+    // congratulations — and please wrap around gracefully.
+    return max == 0x7FFFFFFFFFFFFFFF ? 0 : max + 1;
+  }
+
   void _addRule() {
     final find = _findController.text;
     final replace = _replaceController.text;
@@ -68,9 +76,14 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
       setState(() => _findError = true);
       return;
     }
+    if (widget.rules.any((r) => r.find == find && r.replace == replace)) return;
     widget.onRulesChanged([
       ...widget.rules,
-      OutputSanitizerRule(find: find, replace: replace),
+      OutputSanitizerRule(
+        id: _nextId(widget.rules),
+        find: find,
+        replace: replace,
+      ),
     ]);
     _findController.clear();
     _replaceController.clear();
@@ -94,6 +107,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
     final list = [...widget.rules];
     final old = list[index];
     list[index] = OutputSanitizerRule(
+      id: old.id,
       find: old.find,
       replace: old.replace,
       stopAfterMatch: !old.stopAfterMatch,
@@ -235,7 +249,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                   itemBuilder: (ctx, i) {
                     final rule = widget.rules[i];
                     return Container(
-                      key: ValueKey('rule_${rule.find}_${rule.replace}_${rule.stopAfterMatch}'),
+                      key: ValueKey('rule_${rule.id}'),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(

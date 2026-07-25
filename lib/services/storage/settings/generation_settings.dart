@@ -89,7 +89,7 @@ class GenerationSettings with SettingsBase {
   List<String> _stopSequences = List.of(kDefaultStopSequences);
 
   static const List<OutputSanitizerRule> kDefaultSanitizerRules = [
-    OutputSanitizerRule(find: '\u2014', replace: ' - '),
+    OutputSanitizerRule(id: 0, find: '\u2014', replace: ' - '),
   ];
 
   bool _outputSanitizerEnabled = false;

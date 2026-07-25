@@ -139,8 +139,8 @@ void main() {
 
   group('resolveOutputSanitizerRules', () {
     late StorageService storage;
-    final globalRule = OutputSanitizerRule(find: 'alpha', replace: 'ALPHA');
-    final chatRule = OutputSanitizerRule(find: 'beta', replace: 'BETA');
+    final globalRule = OutputSanitizerRule(id: 0, find: 'alpha', replace: 'ALPHA');
+    final chatRule = OutputSanitizerRule(id: 1, find: 'beta', replace: 'BETA');
 
     setUp(() async {
       storage = await _createStorageService();
