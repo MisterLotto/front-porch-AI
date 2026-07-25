@@ -256,20 +256,9 @@ extension ChatServiceSessionLoad on ChatService {
         false; // growth-pass flag zero in _loadLast loaded path (transient guard; keep reset blocks in sync)
 
     // Load per-chat generation settings override for this session.
-    try {
-      final genRows = await _db
-          .customSelect(
-            'SELECT generation_settings FROM sessions WHERE id = ?',
-            variables: [drift.Variable(_currentSessionId!)],
-          )
-          .get();
-      final genJson = genRows.isNotEmpty
-          ? genRows.first.read<String?>('generation_settings')
-          : null;
-      _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
-    } catch (_) {
-      _sessionGenSettings = ChatGenerationSettings();
-    }
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      lastSession.generationSettings,
+    );
 
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
@@ -441,20 +430,9 @@ extension ChatServiceSessionLoad on ChatService {
     // Load per-chat generation settings override for this session (must
     // happen before the message loop so retroactive sanitization can
     // consult per-chat override + rules).
-    try {
-      final genRows = await _db
-          .customSelect(
-            'SELECT generation_settings FROM sessions WHERE id = ?',
-            variables: [drift.Variable(sessionId)],
-          )
-          .get();
-      final genJson = genRows.isNotEmpty
-          ? genRows.first.read<String?>('generation_settings')
-          : null;
-      _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
-    } catch (_) {
-      _sessionGenSettings = ChatGenerationSettings();
-    }
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      session.generationSettings,
+    );
 
     try {
       final dbMessages = await _db.getMessagesForSession(sessionId);
