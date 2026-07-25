@@ -185,7 +185,7 @@ void main() {
     });
 
     group('capture groups', () {
-      test('\\(...\\) creates a capture group', () {
+      test('\\( + matching ) creates a capture group', () {
         // Content between \\( and ) is raw regex — not re-parsed.
         final pattern = compileFindPattern(r'\(\d+)');
         expect(pattern, r'(\d+)');
@@ -270,6 +270,36 @@ void main() {
       expect(isValidFindPattern(r'\' ), isFalse);
       expect(isValidFindPattern(r'\x'), isFalse);
       expect(isValidFindPattern(r'\d{'), isFalse);
+    });
+  });
+
+  group('hasNestedQuantifierInGroup()', () {
+    test('nested quantifier inside quantified group → true', () {
+      expect(hasNestedQuantifierInGroup(r'\((a+))+'), isTrue);
+    });
+
+    test('inner quantifier with group quantifier → true', () {
+      expect(hasNestedQuantifierInGroup(r'\(\w*)*'), isTrue);
+    });
+
+    test('range quantifier on group with inner quantifier → true', () {
+      expect(hasNestedQuantifierInGroup(r'\((\d+){2,})+'), isTrue);
+    });
+
+    test('simple capture group without nested quantifier → false', () {
+      expect(hasNestedQuantifierInGroup(r'\(\d+)'), isFalse);
+    });
+
+    test('capture group with no quantifiers at all → false', () {
+      expect(hasNestedQuantifierInGroup(r'\(ab)'), isFalse);
+    });
+
+    test('no capture groups at all → false', () {
+      expect(hasNestedQuantifierInGroup(r'\w+'), isFalse);
+    });
+
+    test('unquantified group with inner quantifier → false', () {
+      expect(hasNestedQuantifierInGroup(r'\(\d+)'), isFalse);
     });
   });
 

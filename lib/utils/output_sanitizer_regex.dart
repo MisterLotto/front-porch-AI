@@ -29,9 +29,10 @@ import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 ///   `\\` – literal backslash
 ///
 /// Capture groups:
-///   `\(...\)` – creates a regex capture group; the content between `\(` and
-///   the matching `)` is passed through as raw regex.  Quantifiers after the
-///   closing `)` apply to the whole group (e.g. `\(\d+\)+`).
+///   `\(` + matching `)` – creates a regex capture group; the content
+///   between `\(` and the matching `)` is passed through as raw regex.
+///   Quantifiers after the closing `)` apply to the whole group
+///   (e.g. `\(\d+)+`).
 ///
 /// Quantifiers (appended after mask or capture group):
 ///   (none) – exactly one
@@ -190,6 +191,75 @@ bool isValidFindPattern(String input) {
   } on FormatException {
     return false;
   }
+}
+
+/// Returns `true` if [input] contains a capture group `\(`...`)` whose inner
+/// regex has a quantified element **and** the group itself is quantified.
+///
+/// This heuristic catches patterns prone to catastrophic backtracking
+/// (e.g. `\((a+))+`) while avoiding false positives on safe patterns
+/// like `\(\d+)`.
+bool hasNestedQuantifierInGroup(String input) {
+  var i = 0;
+  while (i < input.length) {
+    if (input[i] == r'\') {
+      if (i + 1 >= input.length) return false;
+      final next = input[i + 1];
+      if (next == '(') {
+        // Found a capture group — scan its raw content.
+        var depth = 1;
+        var j = i + 2;
+        while (j < input.length && depth > 0) {
+          if (input[j] == r'\') {
+            j += 2;
+          } else if (input[j] == '(') {
+            depth++;
+            j++;
+          } else if (input[j] == ')') {
+            depth--;
+            if (depth > 0) j++;
+          } else {
+            j++;
+          }
+        }
+        if (depth != 0) return false; // malformed — let compileFindPattern throw
+        final groupContent = input.substring(i + 2, j);
+        // Check if the group itself is quantified (quantifier follows closing `)`).
+        final afterGroup = j + 1;
+        final groupQuantified = afterGroup < input.length &&
+            _isQuantifierChar(input[afterGroup]);
+        if (groupQuantified && _hasInnerQuantifier(groupContent)) {
+          return true;
+        }
+        i = afterGroup + (groupQuantified ? 1 : 0);
+      } else {
+        i += 2;
+      }
+    } else {
+      i++;
+    }
+  }
+  return false;
+}
+
+bool _isQuantifierChar(String ch) =>
+    ch == '?' || ch == '+' || ch == '*' || ch == '{';
+
+/// Returns `true` if [content] contains a quantified element (a non-empty
+/// string followed by `+`, `*`, `?`, or `{...}`).
+bool _hasInnerQuantifier(String content) {
+  var i = 0;
+  while (i < content.length) {
+    final ch = content[i];
+    if (ch == r'\') {
+      i += 2;
+    } else if (_isQuantifierChar(ch)) {
+      return true;
+    } else {
+      i++;
+    }
+  }
+  return false;
 }
 
 /// Compiles a find/replace rule pair into a [RegExp] and its translated

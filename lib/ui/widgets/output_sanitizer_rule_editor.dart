@@ -52,6 +52,18 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
   final TextEditingController _findController = TextEditingController();
   final TextEditingController _replaceController = TextEditingController();
   bool _findError = false;
+  Set<int> _dangerousRuleIds = {};
+
+  @override
+  void didUpdateWidget(covariant OutputSanitizerRuleEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.rules != oldWidget.rules) {
+      _dangerousRuleIds = {
+        for (final r in widget.rules)
+          if (hasNestedQuantifierInGroup(r.find)) r.id,
+      };
+    }
+  }
 
   @override
   void dispose() {
@@ -290,6 +302,19 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            if (_dangerousRuleIds.contains(rule.id))
+                              Tooltip(
+                                message:
+                                    'This pattern may cause lag — nested quantifiers '
+                                    'in capture groups can trigger catastrophic backtracking',
+                                child: Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 18,
+                                  color: AppColors.porchHoneyOf(context),
+                                ),
+                              ),
+                            if (_dangerousRuleIds.contains(rule.id))
+                              const SizedBox(width: 4),
                             Expanded(
                               child: Text.rich(
                                 TextSpan(
@@ -300,8 +325,11 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                                   children: [
                                     TextSpan(
                                       text: rule.find,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
+                                        color: _dangerousRuleIds.contains(rule.id)
+                                            ? AppColors.porchHoneyOf(context)
+                                            : null,
                                       ),
                                     ),
                                     const TextSpan(text: ' → '),
