@@ -77,12 +77,13 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
     setState(() => _findError = false);
   }
 
-  void _removeRule(OutputSanitizerRule rule) {
-    widget.onRulesChanged([...widget.rules]..remove(rule));
+  void _removeRule(int index) {
+    widget.onRulesChanged([...widget.rules]..removeAt(index));
   }
 
   void _reorderRule(int oldIndex, int newIndex) {
     if (oldIndex == newIndex) return;
+    if (newIndex > oldIndex) newIndex -= 1;
     final list = [...widget.rules];
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
@@ -234,7 +235,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                   itemBuilder: (ctx, i) {
                     final rule = widget.rules[i];
                     return Container(
-                      key: ValueKey('rule_$i'),
+                      key: ValueKey('rule_${rule.find}_${rule.replace}_${rule.stopAfterMatch}'),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
@@ -301,7 +302,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                                 color: AppColors.negativeAccentOf(context),
                                 size: 22,
                               ),
-                              onPressed: () => _removeRule(rule),
+                              onPressed: () => _removeRule(i),
                             ),
                           ],
                         ),
