@@ -171,10 +171,9 @@ class GenerationSettings with SettingsBase {
     final rulesJson = prefs?.getString(k('output_sanitizer_rules'));
     if (rulesJson != null) {
       try {
-        final list = jsonDecode(rulesJson) as List;
-        _outputSanitizerRules = list
-            .map((e) => OutputSanitizerRule.fromJson(e as Map<String, dynamic>))
-            .toList();
+        _outputSanitizerRules = OutputSanitizerRule.listFromJson(
+          jsonDecode(rulesJson) as List,
+        );
       } catch (_) {
         // Keep default on corrupt data
       }

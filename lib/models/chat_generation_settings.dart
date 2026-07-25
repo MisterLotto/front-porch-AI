@@ -200,10 +200,10 @@ class ChatGenerationSettings {
       reasoningEnabled: json['reasoning_enabled'] as bool?,
       reasoningEffort: json['reasoning_effort'] as String?,
       outputSanitizerEnabled: json['output_sanitizer_enabled'] as bool?,
-      outputSanitizerRules: (json['output_sanitizer_rules'] as List?)
-          ?.map((e) =>
-              OutputSanitizerRule.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      outputSanitizerRules: switch (json['output_sanitizer_rules'] as List?) {
+        null => null,
+        final list => OutputSanitizerRule.listFromJson(list),
+      },
     );
   }
 

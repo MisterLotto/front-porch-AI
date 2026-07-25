@@ -504,6 +504,79 @@ void main() {
     });
   });
 
+  // ─── compiled path (hot loops compile once, apply many) ─────────────
+
+  group('compileSanitizerRules() + sanitizeOutputCompiled()', () {
+    test('compiled once, applied to many texts — matches one-shot path', () {
+      final rules = [
+        OutputSanitizerRule(id: 0, find: '—', replace: ' - '),
+        OutputSanitizerRule(id: 1, find: r'foo \(\d+)', replace: r'bar $1'),
+      ];
+      final compiled = compileSanitizerRules(rules);
+      for (final text in ['a—b', 'foo 42', 'plain', 'foo 1—foo 2']) {
+        expect(
+          sanitizeOutputCompiled(text, compiled),
+          sanitizeOutput(text, rules),
+          reason: 'compiled and one-shot paths must agree on "$text"',
+        );
+      }
+    });
+
+    test('invalid and empty-find rules are dropped at compile time', () {
+      final compiled = compileSanitizerRules([
+        OutputSanitizerRule(id: 0, find: '', replace: 'x'),
+        OutputSanitizerRule(id: 1, find: r'\d{', replace: 'x'), // malformed
+        OutputSanitizerRule(id: 2, find: 'ok', replace: 'fine'),
+      ]);
+      expect(compiled, hasLength(1));
+      expect(sanitizeOutputCompiled('ok', compiled), 'fine');
+    });
+
+    test('stopAfterMatch respected through the compiled path', () {
+      final compiled = compileSanitizerRules([
+        OutputSanitizerRule(id: 0, find: 'a', replace: 'b', stopAfterMatch: true),
+        OutputSanitizerRule(id: 1, find: 'b', replace: 'c'),
+      ]);
+      expect(sanitizeOutputCompiled('a', compiled), 'b');
+    });
+  });
+
+  // ─── legacy id healing on deserialization ───────────────────────────
+
+  group('OutputSanitizerRule.listFromJson()', () {
+    test('legacy rules without ids (all parse to 0) are renumbered', () {
+      final rules = OutputSanitizerRule.listFromJson([
+        {'find': 'a', 'replace': 'b'},
+        {'find': 'c', 'replace': 'd', 'stop_after_match': true},
+        {'find': 'e', 'replace': 'f'},
+      ]);
+      expect(rules.map((r) => r.id), [0, 1, 2]);
+      // Order and payloads survive the renumber — order is load-bearing.
+      expect(rules.map((r) => r.find), ['a', 'c', 'e']);
+      expect(rules[1].stopAfterMatch, isTrue);
+    });
+
+    test('distinct ids are preserved untouched', () {
+      final rules = OutputSanitizerRule.listFromJson([
+        {'id': 7, 'find': 'a', 'replace': 'b'},
+        {'id': 3, 'find': 'c', 'replace': 'd'},
+      ]);
+      expect(rules.map((r) => r.id), [7, 3]);
+    });
+
+    test('mixed legacy + new ids with a collision renumber sequentially', () {
+      final rules = OutputSanitizerRule.listFromJson([
+        {'find': 'a', 'replace': 'b'}, // legacy → 0
+        {'id': 0, 'find': 'c', 'replace': 'd'}, // collides with legacy
+      ]);
+      expect(rules.map((r) => r.id), [0, 1]);
+    });
+
+    test('empty list stays empty', () {
+      expect(OutputSanitizerRule.listFromJson([]), isEmpty);
+    });
+  });
+
   // ─── stopAfterMatch behaviour in sanitizeOutput ─────────────────────
 
   group('sanitizeOutput with stopAfterMatch', () {

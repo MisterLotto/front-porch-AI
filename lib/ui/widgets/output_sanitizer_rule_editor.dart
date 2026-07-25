@@ -52,18 +52,6 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
   final TextEditingController _findController = TextEditingController();
   final TextEditingController _replaceController = TextEditingController();
   bool _findError = false;
-  Set<int> _dangerousRuleIds = {};
-
-  @override
-  void didUpdateWidget(covariant OutputSanitizerRuleEditor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.rules != oldWidget.rules) {
-      _dangerousRuleIds = {
-        for (final r in widget.rules)
-          if (hasNestedQuantifierInGroup(r.find)) r.id,
-      };
-    }
-  }
 
   @override
   void dispose() {
@@ -131,6 +119,12 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
   Widget build(BuildContext context) {
     final bgColor =
         widget.backgroundColor ?? AppColors.cardOf(context);
+    // Computed per build (a trivial scan of a handful of short strings) so
+    // the warning is always current — a cached set went stale on first open.
+    final dangerousRuleIds = {
+      for (final r in widget.rules)
+        if (hasNestedQuantifierInGroup(r.find)) r.id,
+    };
 
     return Column(
       children: [
@@ -302,7 +296,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            if (_dangerousRuleIds.contains(rule.id))
+                            if (dangerousRuleIds.contains(rule.id))
                               Tooltip(
                                 message:
                                     'This pattern may cause lag — nested quantifiers '
@@ -313,7 +307,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                                   color: AppColors.porchHoneyOf(context),
                                 ),
                               ),
-                            if (_dangerousRuleIds.contains(rule.id))
+                            if (dangerousRuleIds.contains(rule.id))
                               const SizedBox(width: 4),
                             Expanded(
                               child: Text.rich(
@@ -327,7 +321,7 @@ class _OutputSanitizerRuleEditorState extends State<OutputSanitizerRuleEditor> {
                                       text: rule.find,
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: _dangerousRuleIds.contains(rule.id)
+                                        color: dangerousRuleIds.contains(rule.id)
                                             ? AppColors.porchHoneyOf(context)
                                             : null,
                                       ),
