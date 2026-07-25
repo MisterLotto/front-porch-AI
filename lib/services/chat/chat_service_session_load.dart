@@ -343,6 +343,21 @@ extension ChatServiceSessionLoad on ChatService {
   /// sanitisation when the per-chat or global setting requests it.
   /// Caller must clear `_messages` and set `_sessionGenSettings` beforehand.
   void _hydrateMessagesFromRows(List<Message> dbMessages) {
+    // Output sanitizer: apply configured replacements to loaded swipes
+    // so legacy messages (saved before this feature) are also normalised.
+    // Gated by sanitiseExistingHistory — when off, even chats with
+    // per-chat sanitizer enabled keep their raw saved text on load.
+    // Resolved (per-chat override + rules, falling back to global) and
+    // compiled ONCE out here: this loop runs per message and sanitize runs
+    // per swipe, so compiling per swipe was thousands of RegExp
+    // constructions on the UI isolate per chat open (hot-path rule).
+    final compiledRules =
+        _sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
+            _storageService.generationSettings.sanitiseExistingHistory
+        ? compileSanitizerRules(
+            _sessionGenSettings.resolveOutputSanitizerRules(_storageService),
+          )
+        : const <CompiledSanitizerRule>[];
     for (final m in dbMessages) {
       List<String> swipes;
       try {
@@ -351,20 +366,10 @@ extension ChatServiceSessionLoad on ChatService {
         swipes = [''];
       }
 
-      // Output sanitizer: apply configured replacements to loaded swipes
-      // so legacy messages (saved before this feature) are also normalised.
-      // Gated by sanitiseExistingHistory — when off, even chats with
-      // per-chat sanitizer enabled keep their raw saved text on load.
-      // Resolves per-chat override + rules (falls back to global).
-      if (_sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
-          _storageService.generationSettings.sanitiseExistingHistory) {
-        final rules =
-            _sessionGenSettings.resolveOutputSanitizerRules(_storageService);
-        if (rules.isNotEmpty && swipes.isNotEmpty) {
-          swipes = swipes
-              .map((s) => sanitizeOutput(s, rules))
-              .toList();
-        }
+      if (compiledRules.isNotEmpty && swipes.isNotEmpty) {
+        swipes = swipes
+            .map((s) => sanitizeOutputCompiled(s, compiledRules))
+            .toList();
       }
 
       List<int> swipeDurations;

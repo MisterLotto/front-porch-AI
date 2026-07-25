@@ -282,26 +282,50 @@ bool _hasInnerQuantifier(String content) {
   }
 }
 
-/// Applies output sanitizer rules to [text] using the limited regex syntax.
-///
-/// Each rule's find pattern is compiled to a case-insensitive [RegExp].
-/// Invalid rules are silently skipped (defensive — the UI should prevent
-/// them from being saved).
-///
-/// When a rule has [OutputSanitizerRule.stopAfterMatch] set, no subsequent
-/// rules are applied after this rule matches at least once in the text.
-String sanitizeOutput(
-  String text,
+/// A rule pre-compiled for repeated application. Hot paths (the session-load
+/// hydrate loop applies rules to every swipe of every message) must compile
+/// once via [compileSanitizerRules] and apply with [sanitizeOutputCompiled];
+/// constructing a fresh [RegExp] per swipe was thousands of compilations on
+/// the UI isolate per chat open.
+typedef CompiledSanitizerRule = ({
+  RegExp regex,
+  String replacement,
+  bool stopAfterMatch,
+});
+
+/// Compiles [rules] once for repeated use. Empty-find and invalid rules are
+/// silently skipped (defensive — the UI should prevent them being saved).
+List<CompiledSanitizerRule> compileSanitizerRules(
   List<OutputSanitizerRule> rules,
 ) {
-  var result = text;
+  final compiled = <CompiledSanitizerRule>[];
   for (final rule in rules) {
     if (rule.find.isEmpty) continue;
-    final compiled = tryCompileRule(rule.find, rule.replace);
-    if (compiled == null) continue;
+    final c = tryCompileRule(rule.find, rule.replace);
+    if (c == null) continue;
+    compiled.add((
+      regex: c.regex,
+      replacement: c.replacement,
+      stopAfterMatch: rule.stopAfterMatch,
+    ));
+  }
+  return compiled;
+}
+
+/// Applies pre-compiled sanitizer rules to [text].
+///
+/// When a rule has stopAfterMatch set, no subsequent rules are applied after
+/// this rule **changed the text** (a match whose replacement is identical to
+/// what it matched does not stop the chain — see the toggle test).
+String sanitizeOutputCompiled(
+  String text,
+  List<CompiledSanitizerRule> compiled,
+) {
+  var result = text;
+  for (final rule in compiled) {
     final before = result;
-    result = result.replaceAllMapped(compiled.regex, (m) {
-      var out = compiled.replacement;
+    result = result.replaceAllMapped(rule.regex, (m) {
+      var out = rule.replacement;
       for (var i = m.groupCount; i >= 1; i--) {
         out = out.replaceAll('\$$i', m.group(i) ?? '');
       }
@@ -311,3 +335,11 @@ String sanitizeOutput(
   }
   return result;
 }
+
+/// One-shot convenience for cold paths (a single generation's final text):
+/// compiles [rules] and applies them once. Loops must not call this per
+/// item — use [compileSanitizerRules] + [sanitizeOutputCompiled] instead.
+String sanitizeOutput(
+  String text,
+  List<OutputSanitizerRule> rules,
+) => sanitizeOutputCompiled(text, compileSanitizerRules(rules));

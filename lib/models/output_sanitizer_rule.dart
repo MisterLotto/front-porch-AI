@@ -22,8 +22,9 @@
 /// allowing procedural normalisation of character sequences
 /// (e.g. em dash → " - ", smart quotes → straight quotes).
 ///
-/// When [stopAfterMatch] is true, no subsequent rules are applied
-/// after this rule matches at least once in the text.
+/// When [stopAfterMatch] is true, no subsequent rules are applied after
+/// this rule **changed the text** (a match replaced by identical text does
+/// not stop the chain — deliberate; see the toggle test).
 class OutputSanitizerRule {
   final int id;
   final String find;
@@ -51,6 +52,28 @@ class OutputSanitizerRule {
         replace: json['replace'] as String? ?? '',
         stopAfterMatch: json['stop_after_match'] as bool? ?? false,
       );
+
+  /// Parses a JSON list of rules, healing legacy ids: rules saved before the
+  /// [id] field existed all parse to id 0, and duplicate ids break the rule
+  /// editor's identity-keyed ReorderableListView. On any collision the whole
+  /// list is renumbered sequentially — order is preserved (it's load-bearing:
+  /// rules run top to bottom and stopAfterMatch halts the chain).
+  static List<OutputSanitizerRule> listFromJson(List<dynamic> json) {
+    final rules = [
+      for (final e in json)
+        OutputSanitizerRule.fromJson(e as Map<String, dynamic>),
+    ];
+    if (rules.map((r) => r.id).toSet().length == rules.length) return rules;
+    return [
+      for (var i = 0; i < rules.length; i++)
+        OutputSanitizerRule(
+          id: i,
+          find: rules[i].find,
+          replace: rules[i].replace,
+          stopAfterMatch: rules[i].stopAfterMatch,
+        ),
+    ];
+  }
 
   @override
   bool operator ==(Object other) =>
