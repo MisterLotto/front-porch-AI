@@ -21,6 +21,39 @@ part of '../chat_service.dart';
 
 /// Chat-entry point — setActiveCharacter (open/seed a 1:1 chat). Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceChatEntry on ChatService {
+  /// Light in-place refresh after the active/focused character's card was
+  /// edited: swap the reference (matched by dbId, so RENAMES stay light) and
+  /// repaint — WITHOUT the full chat-entry dance. Never cancels an in-flight
+  /// generation, never reloads the session, and is group-safe: editing a
+  /// focused group member updates that member's reference instead of tearing
+  /// the group down. (The deleted EditCharacterDialog called
+  /// setActiveCharacter for this, which cancels generation, full-reloads on
+  /// rename, and leaves the group — the exact failure modes this exists to
+  /// avoid.)
+  void refreshActiveCharacterCard(CharacterCard card) {
+    if (_activeGroup != null) {
+      // identical() first: group member cards are library-decoupled copies
+      // whose dbId is often null — the editor mutates the same instance, so
+      // identity is the reliable key; dbId covers reloaded-copy callers.
+      final i = _groupCharacters.indexWhere(
+        (c) =>
+            identical(c, card) || (c.dbId != null && c.dbId == card.dbId),
+      );
+      if (i != -1) {
+        _groupCharacters[i] = card;
+        if (_activeCharacter?.dbId == card.dbId) {
+          _activeCharacter = card;
+        }
+      }
+    } else if (_activeCharacter != null &&
+        (_activeCharacter!.dbId == null ||
+            _activeCharacter!.dbId == card.dbId)) {
+      _activeCharacter = card;
+    }
+    refreshEnjoysLowHygieneFromActiveCharacter();
+    notifyListeners();
+  }
+
   Future<void> setActiveCharacter(CharacterCard? character) async {
     // Cancel any in-flight generation before switching context
     await _cancelAndWaitForGeneration();

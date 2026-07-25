@@ -37,7 +37,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
+import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/model_settings_dialog.dart';
@@ -3087,14 +3087,43 @@ class _ChatPageState extends State<ChatPage> {
                 onSelected: (value) async {
                   switch (value) {
                     case 'edit_character':
-                      final result = await showDialog(
-                        context: context,
-                        builder: (context) =>
-                            EditCharacterDialog(character: character),
+                      // The ONE character editor (EditCharacterPage) in a
+                      // dialog shell — full feature set (realism, ambitions,
+                      // token count) with honest Save/Cancel; nothing
+                      // persists until Save. Replaces the deleted
+                      // EditCharacterDialog (a ~73%-duplicate fork that
+                      // saved colors/needs instantly and lacked the realism
+                      // form). Chat colors live in UI Settings now.
+                      final chatService = Provider.of<ChatService>(
+                        context,
+                        listen: false,
                       );
-                      if (result == true) {
-                        setState(() {});
-                      }
+                      await showDialog(
+                        context: context,
+                        builder: (dialogCtx) => Dialog(
+                          insetPadding: const EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 24,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: SizedBox(
+                            width: 780,
+                            height:
+                                MediaQuery.of(dialogCtx).size.height - 96,
+                            child: EditCharacterPage(
+                              character: character,
+                              // Light refresh only — never the full
+                              // setActiveCharacter dance, which cancels
+                              // in-flight generation, full-reloads on
+                              // rename, and leaves group mode.
+                              onSaved: (saved) async => chatService
+                                  .refreshActiveCharacterCard(saved),
+                            ),
+                          ),
+                        ),
+                      );
+                      if (!mounted) return;
+                      setState(() {});
                       break;
                     case 'expressions':
                       final storage = Provider.of<StorageService>(

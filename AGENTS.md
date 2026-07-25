@@ -224,7 +224,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
-import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart'; // single-use dialog, direct import is fine
+import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart'; // single-use dialog, direct import is fine
 ```
 
 Direct imports of individual files (`import 'package:front_porch_ai/services/storage_service.dart';`) remain fully supported and are the right choice for one-off or internal-only modules.

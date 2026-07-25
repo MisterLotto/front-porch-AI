@@ -41,8 +41,8 @@ library;
 //                              FakeStorageService + FakeImageGenService.
 //   CharacterAvatarsDialog   — 0 avatars; all deps injected as constructor
 //                              params, no Provider tree needed.
-//   EditCharacterDialog      — tab 0 (Details); FakeStorageService required for
-//                              _buildColorRow() globalXxxColor fallbacks.
+//   Edit character           — EditCharacterPage in the chat's Dialog shell
+//                              (the EditCharacterDialog fork was deleted).
 //   ImageCropDialog          — 64×64 grey PNG generated via image package.
 //   GroupSettingsDialog      — activeGroup==null renders "No active group chat"
 //                              empty state in tab 0. Constructor-injected.
@@ -64,7 +64,7 @@ import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/voice_manager.dart';
-import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
+import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
@@ -234,7 +234,10 @@ void main() {
     );
   });
 
-  testWidgets('EditCharacterDialog — tab 0 (Details) at rest', (tester) async {
+  testWidgets('Edit character (page in dialog shell) — tab 0 at rest', (tester) async {
+    // The in-chat editor is EditCharacterPage inside a Dialog since the
+    // EditCharacterDialog consolidation (the dialog was a ~73% duplicate).
+    // Same construction chat_page's "Edit Character" menu item uses.
     final storage = FakeStorageService();
     addTearDown(storage.dispose);
 
@@ -242,7 +245,14 @@ void main() {
       tester,
       child: ChangeNotifierProvider<StorageService>.value(
         value: storage,
-        child: EditCharacterDialog(character: CharacterCard(name: 'Test')),
+        child: Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: 780,
+            child: EditCharacterPage(character: CharacterCard(name: 'Test')),
+          ),
+        ),
       ),
       group: 'dialogs_remaining',
       name: 'edit_character',

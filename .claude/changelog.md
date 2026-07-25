@@ -5686,3 +5686,34 @@ suite green against UNCHANGED baselines (pixel-identical); line-multiset audit o
 new reconciled every delta to the three dedups + scaffolding; Grok verified the shell
 contract (tab order/plumbing/save) — its splice-boundary pass was cut short by CLI
 truncation, covered instead by the multiset audit.
+
+## 2026-07-25 (UTC) — God-file kill #2: EditCharacterDialog deleted (character-editor consolidation)
+
+**Files:** `lib/ui/dialogs/edit_character_dialog.dart` (DELETED, 1,836 lines),
+`lib/ui/pages/edit_character_page.dart` (+onSaved hook), `lib/ui/pages/chat_page.dart`
+(Edit Character → EditCharacterPage in a Dialog shell), `lib/services/chat/chat_service_chat_entry.dart`
+(+refreshActiveCharacterCard), golden repoint + regen (edit_character.{light,dark}),
+AGENTS.md/COVERAGE.md doc leftovers, docs/Rawhide.md bullet.
+
+**Why:** The dialog was a ~73%-duplicate fork of the page (measured): its lorebook editor 93%
+identical, needs/verification UI re-implementing existing shared widgets, missing the whole
+Realism form/Ambitions/token counter, instant-persisting colors/needs (Cancel lied), and its
+live-chat refresh read the card by raw path (silent stale-state bug). Its only unique feature
+(Chat Colors) became redundant when the Themes work moved colors to UiSettingsDialog.
+
+**Decisions (maintainer, in-convo):** dialog-overlay shell in chat; honest Save/Cancel;
+one identical full editor. Dark-styled page in light mode accepted (matches library editing;
+page retheme = follow-up).
+
+**Grok round 1 blockers (all real, all fixed):** my onSaved wiring reused setActiveCharacter —
+which cancels in-flight generation, full-reloads on rename, and tears down groups (the const
+menu shows Edit Character in group mode). Fixed with ChatService.refreshActiveCharacterCard:
+dbId/identity-matched reference swap + notify, no cancel/epoch/reload, group-safe. Plus
+mounted-guard, onSaved contract doc, doc leftovers. Round 2: CLEAN for ship; residual
+group-match hardened with identical(); Grok's snackbar finding dismissed with evidence
+(root ScaffoldMessenger survives pops), its history nit dismissed (the dialog's _updateColor
+really did call setActiveCharacter).
+
+**Verification:** analyze clean; suite 2,513 green ×2; goldens: only edit_character.{light,dark}
+changed (eyeballed — full editor in dialog shell, correct in both themes), everything else
+byte-identical; golden verify green on the new baselines.

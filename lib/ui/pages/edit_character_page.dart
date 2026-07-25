@@ -71,6 +71,15 @@ class EditCharacterPage extends StatefulWidget {
   /// pass, since a member's avatar lives at a private group path.
   final bool allowAvatarChange;
 
+  /// Called after a successful save with the freshly-saved card — a
+  /// persistence-agnostic notification (fires on the library path AND the
+  /// [onSaveOverride] path, though no current caller passes both). The
+  /// in-chat editor (this page in a Dialog, chat_page's "Edit Character")
+  /// uses it for ChatService.refreshActiveCharacterCard — the light,
+  /// group-safe live refresh that replaced the deleted EditCharacterDialog's
+  /// per-control persistence dance.
+  final Future<void> Function(CharacterCard saved)? onSaved;
+
   const EditCharacterPage({
     super.key,
     required this.character,
@@ -79,6 +88,7 @@ class EditCharacterPage extends StatefulWidget {
     this.onSaveOverride,
     this.showRealismTab = true,
     this.allowAvatarChange = true,
+    this.onSaved,
   });
 
   @override
@@ -490,6 +500,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             // ChatService not available in this context — that's fine.
           }
         }
+      }
+
+      if (widget.onSaved != null) {
+        await widget.onSaved!(widget.character);
       }
 
       if (mounted) {
