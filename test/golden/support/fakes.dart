@@ -378,6 +378,18 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   DailyWeather? get currentWeather => currentWeatherValue;
 
+  // Same shape as the real getter: gated on currentWeather, recomputed by the
+  // engine over the deterministic seed/day/clock — so facade and chip tests
+  // see the exact forecast the shipped code would produce.
+  @override
+  DailyWeather? get upcomingWeather => currentWeatherValue == null
+      ? null
+      : WeatherEngine.weatherFor(
+          sessionSeed: currentSessionId!,
+          dayCount: _time.dayCount + 1,
+          date: _time.clock.add(const Duration(days: 1)),
+        );
+
   @override
   String? get currentSessionId => 'golden-session';
 

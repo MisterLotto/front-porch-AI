@@ -54,6 +54,13 @@
 - **Grok co-review (3 rounds):** caught the `ensureServerIdle` per-step hole (fix layer 2's waitForIdle switch), the timeout/5xx branding gap, the unmatched abort-string case, and the orphaned-call `waitForIdle` pin — all fixed; the pre-existing shared-`_activeClient` last-writer-wins crosstalk is acknowledged and out of scope.
 - **Files:** llm_service.dart, openai_chat_stream.dart, open_router_service.dart, kobold_service.dart, chat_service.dart (`_fireToolEval`), chat/pass_support.dart, chat/journal_maintenance.dart, chat/growth_service.dart, chat/tool_support_tester.dart, character_gen_service.dart, chargen/character_gen_llm.dart, chat/scene_guest_factory.dart. Tests: journal_test (+1), growth_test (+1, harness gains optional probe/fireToolEval), realism_evals_test (+1), llm_unreachable_test (+isToolTransportFailure group), open_router_tools_test (+429/503 door tests on both doors, +a real loopback client-teardown test).
 - **Verification:** `flutter analyze` clean; `dart fix --dry-run` nothing; targeted suites 152 green; full `flutter test` regression (2334) green ×3.
+## 2026-07-22 — fix(web/stoop): Stoop sign-in failed over plain-http LAN access (issue #160) + surface the real error
+- **Bug:** `installId()` called `crypto.randomUUID()`, which is **secure-context-only**. Served over `http://<lan-ip>:8085` (the normal remote-access setup) the browser is in an INSECURE context, so `randomUUID` is `undefined` → TypeError thrown INSIDE `stoop.login`/`signup` **before** the fetch → caught by StoopAuthView → not a `StoopError` → generic "Something went wrong. Please try again." Never reproduced on the dev machine because **localhost IS a secure context**, and the desktop Stoop tab uses the Dart client entirely (different code path) — which is why the reporter's curl to the API returned a healthy 401 while the UI still failed, and why macOS Console was empty (browser-side JS error).
+- **Fix:** `newUuidV4()` — `crypto.randomUUID()` when available, else `crypto.getRandomValues()` (NOT secure-context-gated), else a `Math.random` floor; correct v4 version/variant bits. The id is an anonymous install trace, not a secret.
+- **Also (the diagnostics gap the maintainer flagged on the issue):** `stoopErrorText` no longer collapses non-API failures into a bare string — it appends the real `Error.message` and `console.error`s the raw object, so the next remote user has a breadcrumb to paste.
+- **Audit of sibling secure-context landmines:** `VoiceControls` (getUserMedia) and `RemoteAccessPage`/`StoryWriterPage` (clipboard) are already guarded — no other insecure-context break in the web UI.
+- **Files:** `web_ui/src/stoop/stoopApi.ts`, `web_ui/src/stoop/stoopApi.test.ts` (+2 regression tests: insecure context w/ getRandomValues, and no-crypto Math.random floor — both VERIFIED failing against the old line), rebuilt `assets/web_app`.
+- **Verification:** web `tsc --noEmit` clean; 29/29 vitest green; `flutter analyze` clean.
 
 ## 2026-07-21 — feat(journal): two-tier memory — expand-memory (verbatim recall behind cards) + RAG dedupe (Living Time §8)
 - **Origin:** maintainer's "is RAG still needed with the Journal?" audit → verdict: they remember different KINDS (lossy emotional distillation vs lossless verbatim); tighten the seam instead of deleting. North star: "remember our wedding vows?" in a 1000s-message chat → the character recites the exact vows + how they felt.
@@ -5552,3 +5559,83 @@ pass's designed failure mode), and the non-streaming tools call gets a
 whole-call deadline (a timed-out probe just marks the backend XML-only).
 Hardens ALL realism/needs/journal/growth evals, not just the Journal.
 Analyze clean; 2303 tests pass.
+
+## 2026-07-25 (UTC) — Issue #137: unexplained "exit code 2" on launch, and silent CPU-only on AMD APUs
+**Files:** `lib/services/model_file_check.dart` (NEW — GGUF pre-flight),
+`lib/services/kobold_service.dart` (pre-flight before Process.start; exit-2
+translation), `lib/services/hardware_service.dart` (gpuNamesMatch +
+_gpuNameTokens; shared-memory adapter selection rewritten),
+`lib/ui/pages/settings_page.controls.dart`, `lib/ui/pages/settings_page.dart`,
+`lib/ui/dialogs/model_settings_dialog.dart` (both weak existsSync launch gates
+now call the shared pre-flight so the snackbar carries the real reason),
+`test/services/model_file_check_test.dart` (9 tests),
+`test/services/hardware_gpu_name_match_test.dart` (9 tests).
+
+**Why (part 1 — the load failure):** Reporter's KoboldCpp printed "Cannot find
+text model file" and exited 2 for a .gguf that Front Porch could plainly see
+and had already existence-checked. Their whole data dir lives under
+`OneDrive\Documents\FrontPorchAI\`. `File.existsSync()` resolves through
+GetFileAttributesW, which answers for a cloud placeholder; KoboldCpp is frozen
+Python and resolves the same path through `os.stat`, which can fail on a cloud
+reparse point — so our check said yes and theirs said no. Two launch paths
+(LLMProvider.ensureManagedBackendIsRunning, SetupService autostart) did no
+check at all and would launch straight into the same silent exit 2. Fixed by
+actually opening the file and reading its GGUF magic (with a timeout, since a
+dehydrated file blocks while the sync client fetches it) at the one choke point
+every launch path goes through, plus translating a bare exit 2 into the same
+sentence when KoboldCpp rejects a file we could read.
+
+**Why (part 2 — the GPU layers):** Same log showed `--gpulayers 0` and
+"Unable to determine GPU Memory" on a Ryzen APU. Windows shared-memory
+detection compared WMI's `Win32_VideoController.Name` to the registry
+`DriverDesc` with `==`; on AMD those spellings differ ("AMD Radeon(TM) 780M
+Graphics" vs "AMD Radeon(TM) Graphics"), so the match failed on essentially
+every APU, isSharedMemory stayed false, vramMb stayed 0, and KoboldLayerSolver
+turned 0 VRAM into `--gpulayers 0` — a silent CPU-only launch presenting as
+"the app is slow" with no error anywhere. Now matches on normalized token sets
+(subset match, ≥2 shared tokens so a discrete card can't match an iGPU), and
+falls back to the highest-shared-memory adapter ONLY when no VRAM figure was
+found by any earlier method, so an iGPU can never overwrite a dGPU's real VRAM
+on a hybrid laptop.
+
+Analyze clean (3 pre-existing deprecation infos in untouched files, all from
+running a newer local Flutter). 18 new tests pass; whole non-golden suite
+passes. The 60 golden failures reproduce identically on unmodified
+origin/Rawhide with the same SDK — renderer version skew, not this change.
+
+## 2026-07-25 (UTC) — Story weather learns to foreshadow: characters see fronts coming
+
+**Files:** `lib/services/chat/weather_engine.dart`,
+`lib/services/chat/prompt_injection/weather_injection.dart`,
+`lib/services/chat_service.dart`,
+`lib/ui/chat_components/sidebar/character_state/weather_chip.dart`,
+`lib/ui/settings/tabs/general_tab.dart`,
+`lib/services/web/facade/chat_tools_facade.dart`,
+`web_ui/src/components/ChatTools.tsx` (+ rebuilt `assets/web_app` bundle),
+`test/golden/support/fakes.dart`,
+`test/services/chat/weather_engine_test.dart`,
+`test/services/chat/prompt_injection_test.dart`,
+`test/golden/widget/_goldens/sidebar/time_strip_weather.{light,dark}.png`,
+`docs/design/living-time-features.md`, `docs/Rawhide.md`.
+
+**Why:** Weather changed overnight with zero warning, so characters were
+perpetually surprised by every storm ("suddenly it's raining"). The user
+wanted foreshadowing — "a storm may be rolling in soon, did you bring an
+umbrella?".
+
+**How:** The engine's walk is prefix-stable (extending to day N+1 never
+changes days 1..N) and dayCount is derived from the calendar date, so
+tomorrow is exactly `weatherFor(dayCount+1, clock+1d)` — a forecast that
+always comes true, nothing stored. New `WeatherEngine.foreshadow(today,
+tomorrow)` returns ONE words-only sky-sign line, only for notable
+transitions (incoming rain/storm/snow/fog, real clear-ups after wet/grey
+weather, two-band temp swings; minor cloud shuffle is silent). New
+`ChatService.upcomingWeather` getter (same gate as currentWeather) feeds
+the injection leaf, which appends the sign to the existing weather line.
+Desktop chip watches the same Riverpod family at dayCount+1 and shows a
+"→ ⛈️" glyph when tomorrow's condition differs (tooltip always names
+tomorrow); web facade adds an additive nullable `tomorrow` object inside
+`weather` (old bundles ignore it) and ChatTools.tsx mirrors the arrow.
+Golden fixture happened to land cloudy→rain, so time_strip_weather goldens
+were regenerated on the Linux CI image. 1:1/group parity is inherited:
+weather is per-chat shared state, injection sits in the shared state block.

@@ -128,6 +128,140 @@ void main() {
     });
   });
 
+  group('WeatherEngine forecast & foreshadow', () {
+    test('forecast made today is what tomorrow actually becomes', () {
+      // The walk is prefix-stable and dayCount is derived from the calendar
+      // date, so the (dayCount+1, clock+1day) forecast call and the real
+      // arrival call are the same inputs — the foreshadowing can never lie.
+      final start = DateTime(2026, 3, 10);
+      for (int d = 1; d <= 40; d++) {
+        final todayDate = start.add(Duration(days: d - 1));
+        final forecast = WeatherEngine.weatherFor(
+          sessionSeed: 'forecast-check',
+          dayCount: d + 1,
+          date: todayDate.add(const Duration(days: 1)),
+        );
+        final arrival = WeatherEngine.weatherFor(
+          sessionSeed: 'forecast-check',
+          dayCount: d + 1,
+          date: start.add(Duration(days: d)),
+        );
+        expect(forecast, equals(arrival), reason: 'day $d forecast must hold');
+      }
+    });
+
+    const mildClear = DailyWeather(
+      condition: WeatherCondition.clear,
+      temp: TempBand.mild,
+      season: 'spring',
+    );
+
+    DailyWeather w(WeatherCondition c, [TempBand t = TempBand.mild]) =>
+        DailyWeather(condition: c, temp: t, season: 'spring');
+
+    test('no change → silent; minor cloud shuffle → silent', () {
+      expect(WeatherEngine.foreshadow(mildClear, mildClear), isEmpty);
+      expect(
+        WeatherEngine.foreshadow(mildClear, w(WeatherCondition.cloudy)),
+        isEmpty,
+      );
+      expect(
+        WeatherEngine.foreshadow(w(WeatherCondition.cloudy), mildClear),
+        isEmpty,
+      );
+    });
+
+    test('incoming precipitation and fog produce a sign', () {
+      expect(
+        WeatherEngine.foreshadow(mildClear, w(WeatherCondition.storm)),
+        contains('storm'),
+      );
+      expect(
+        WeatherEngine.foreshadow(mildClear, w(WeatherCondition.rain)),
+        contains('rain'),
+      );
+      expect(
+        WeatherEngine.foreshadow(
+          w(WeatherCondition.overcast),
+          w(WeatherCondition.snow, TempBand.cold),
+        ),
+        contains('snow'),
+      );
+      expect(
+        WeatherEngine.foreshadow(mildClear, w(WeatherCondition.fog)),
+        contains('fog'),
+      );
+    });
+
+    test('clearing after wet or grey weather produces a sign', () {
+      expect(
+        WeatherEngine.foreshadow(w(WeatherCondition.rain), mildClear),
+        contains('clear'),
+      );
+      expect(
+        WeatherEngine.foreshadow(w(WeatherCondition.overcast), mildClear),
+        contains('clear'),
+      );
+      expect(
+        WeatherEngine.foreshadow(
+          w(WeatherCondition.storm),
+          w(WeatherCondition.cloudy),
+        ),
+        contains('ease'),
+      );
+    });
+
+    test('storm easing into rain reads as easing, not incoming rain', () {
+      expect(
+        WeatherEngine.foreshadow(
+          w(WeatherCondition.storm),
+          w(WeatherCondition.rain),
+        ),
+        contains('easing'),
+      );
+    });
+
+    test('two-band temperature swing speaks; one band stays silent', () {
+      expect(
+        WeatherEngine.foreshadow(
+          w(WeatherCondition.clear, TempBand.warm),
+          w(WeatherCondition.clear, TempBand.cool),
+        ),
+        contains('colder'),
+      );
+      expect(
+        WeatherEngine.foreshadow(
+          w(WeatherCondition.clear, TempBand.cool),
+          w(WeatherCondition.clear, TempBand.warm),
+        ),
+        contains('warmer'),
+      );
+      expect(
+        WeatherEngine.foreshadow(
+          w(WeatherCondition.clear, TempBand.mild),
+          w(WeatherCondition.clear, TempBand.warm),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('foreshadow never contains digits (words-only contract)', () {
+      for (final from in WeatherCondition.values) {
+        for (final to in WeatherCondition.values) {
+          for (final tf in TempBand.values) {
+            for (final tt in TempBand.values) {
+              final line = WeatherEngine.foreshadow(
+                w(from, tf),
+                w(to, tt),
+              );
+              expect(line, isNot(matches(RegExp(r'\d'))));
+            }
+          }
+        }
+      }
+    });
+  });
+
   group('Weather needs decay modifiers (1:1/group parity by construction)', () {
     NeedsSimulation sim(DailyWeather? weather) => NeedsSimulation(
       onNotify: () {},

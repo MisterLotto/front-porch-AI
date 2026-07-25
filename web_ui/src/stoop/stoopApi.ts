@@ -59,12 +59,43 @@ export function clearStoopSession(): void {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+/** RFC-4122 v4 UUID that also works in an INSECURE browsing context.
+ *
+ *  `crypto.randomUUID()` is secure-context-only, so it is `undefined` when
+ *  the web UI is served over plain `http://` on a LAN IP — which is the
+ *  normal remote-access setup (`http://192.168.x.x:8085`). Calling it there
+ *  threw a TypeError before the login request was ever sent, surfacing as
+ *  the generic "Something went wrong. Please try again." on every Stoop
+ *  sign-in and sign-up (issue #160). localhost is a secure context, which is
+ *  why it never reproduced on the dev machine.
+ *
+ *  `crypto.getRandomValues()` is NOT secure-context-gated, so it is the
+ *  primary fallback; `Math.random` is the last-resort floor (this id is an
+ *  anonymous install trace, not a secret or an auth factor). */
+function newUuidV4(): string {
+  const c: Crypto | undefined = globalThis.crypto;
+  if (typeof c?.randomUUID === 'function') return c.randomUUID();
+  const b = new Uint8Array(16);
+  if (typeof c?.getRandomValues === 'function') {
+    c.getRandomValues(b);
+  } else {
+    for (let i = 0; i < b.length; i++) b[i] = Math.floor(Math.random() * 256);
+  }
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // variant 10xx
+  const hex = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return (
+    `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-` +
+    `${hex.slice(16, 20)}-${hex.slice(20)}`
+  );
+}
+
 /** Anonymous per-browser install id (parity with the desktop's per-install id;
  *  the AUP's anti-ban-evasion trace). Never cleared on logout. */
 function installId(): string {
   let id = localStorage.getItem(INSTALL_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = newUuidV4();
     localStorage.setItem(INSTALL_KEY, id);
   }
   return id;
@@ -274,7 +305,19 @@ export const stoop = {
 
 /** Human messages for the upstream machine codes the UI commonly hits. */
 export function stoopErrorText(e: unknown): string {
-  if (!(e instanceof StoopError)) return 'Something went wrong. Please try again.';
+  if (!(e instanceof StoopError)) {
+    // Diagnostics gap (issue #160): a non-API failure — a TypeError from a
+    // secure-context-only browser API, a dropped fetch — used to collapse
+    // into a bare "Something went wrong", leaving nothing in any log to act
+    // on. Surface the real reason; it is the only breadcrumb a remote user
+    // can copy into a bug report.
+    const detail = e instanceof Error ? e.message : '';
+    // eslint-disable-next-line no-console
+    console.error('[Stoop] request failed', e);
+    return detail
+      ? `Something went wrong: ${detail}`
+      : 'Something went wrong. Please try again.';
+  }
   switch (e.code) {
     case 'invalid_credentials':
       return 'Wrong email or password.';

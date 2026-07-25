@@ -1797,8 +1797,24 @@ class ChatService extends ChangeNotifier {
     );
   }
 
+  /// Tomorrow's story weather under the same gate as [currentWeather].
+  /// Because the engine is a prefix-stable deterministic walk, this forecast
+  /// is exactly what day dayCount+1 will be when the story clock reaches it
+  /// (dayCount is derived from the calendar date, so +1 day ⇔ +1 dayCount) —
+  /// foreshadowed fronts always arrive. Recompute is O(dayCount) integer
+  /// math, called once per turn by the injection and once per facade read.
+  DailyWeather? get upcomingWeather {
+    if (currentWeather == null) return null;
+    return WeatherEngine.weatherFor(
+      sessionSeed: _currentSessionId!,
+      dayCount: _timeService.dayCount + 1,
+      date: _timeService.clock.add(const Duration(days: 1)),
+    );
+  }
+
   late final _weatherInjection = WeatherInjection(
     getWeather: () => currentWeather,
+    getUpcoming: () => upcomingWeather,
   );
 
   // ── Ambitions (Living Time §6) ──

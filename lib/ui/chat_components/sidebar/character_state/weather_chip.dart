@@ -51,9 +51,22 @@ class WeatherChip extends ConsumerWidget {
         date: date,
       ),
     );
+    // Tomorrow via the same memoized family — the walk is prefix-stable, so
+    // this forecast is exactly what the next story day will be. The chip only
+    // grows an arrow glyph when the condition actually changes.
+    final tomorrow = ref.watch(
+      dailyWeatherProvider(
+        sessionSeed: sessionSeed,
+        dayCount: dayCount + 1,
+        date: date.add(const Duration(days: 1)),
+      ),
+    );
+    final changing = tomorrow.condition != weather.condition;
     return Tooltip(
       message:
           '${WeatherEngine.label(weather)} · ${weather.season}\n'
+          'Tomorrow: ${WeatherEngine.emoji(tomorrow.condition)} '
+          '${WeatherEngine.label(tomorrow)}\n'
           'Story weather — deterministic for this chat and day.',
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -70,6 +83,21 @@ class WeatherChip extends ConsumerWidget {
               color: AppColors.textTertiary(context),
             ),
           ),
+          if (changing) ...[
+            const SizedBox(width: 4),
+            Text(
+              '→',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textTertiary(context),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Text(
+              WeatherEngine.emoji(tomorrow.condition),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ],
         ],
       ),
     );

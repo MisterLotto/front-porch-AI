@@ -209,6 +209,20 @@ override ("always sunny here", via the session `generation_settings` JSON
 blob) was explicitly deferred — small, additive, and independently shippable
 later. Not a silent deferral: recorded here and in the changelog.
 
+**v2 note (shipped 2026-07-25) — forecast/foreshadowing:** because the walk
+is prefix-stable (day N's weather never changes when the walk extends to
+N+1) and `dayCount` is derived from the calendar date, tomorrow is simply
+`weatherFor(dayCount+1, clock+1d)` — a forecast that always comes true.
+`WeatherEngine.foreshadow(today, tomorrow)` renders ONE words-only "sign in
+the sky" (only for notable transitions: incoming rain/storm/snow/fog, a real
+clear-up after wet/grey weather, or a two-band temperature swing; minor
+cloud shuffle stays silent), appended to the injection line via
+`ChatService.upcomingWeather` so characters see fronts coming instead of
+being ambushed. UI: the sidebar chip grows a "→ ⛈️" glyph when tomorrow's
+condition differs (tooltip always names tomorrow); web facade adds an
+additive `tomorrow` object inside `weather` and the web chat tools mirror
+the arrow. Nothing stored, no schema — same recompute contract as v1.
+
 ### Risks
 Needs balance — keep deltas ±1-grade and behind the toggle. Parity audit is
 the real work item.
