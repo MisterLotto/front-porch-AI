@@ -5664,3 +5664,25 @@ retroactive toggle. Grok round 2 then caught MY bug: the relocated guard saved m
 during regen (popped reply persisted as deleted) — abort is now save-free + regen paths gate
 before popping. Round 3: CLEAN. Suite 2,508 green; docker golden suite green; analyze clean.
 Web-UI parity for the sanitizer/auto-start settings surfaces: DEFERRAL EXPLICITLY APPROVED by the maintainer 2026-07-25 (in-conversation, per the CLAUDE.md rule) — the web settings counterpart ships as a follow-up; web chats already receive sanitized output meanwhile.
+
+## 2026-07-25 (UTC) — God-file split #1: group_settings_dialog 4,251 → 14 files, all under cap
+
+**Files:** `lib/ui/dialogs/group_settings_dialog.dart` (4,251 → ~200-line shell) + new
+`lib/ui/dialogs/group_settings/` (6 public tab widgets, 5 part-file extensions per the
+settings_page rebuildState precedent, 1 shared support file).
+
+**Why:** First strike of the god-file shrink effort (maintainer-directed, order: this then
+the character-editor consolidation). The dialog was the app's #2 largest file but was
+already six self-contained private tab classes — a pure mechanical move.
+
+**Dedups deleted while moving:** _persistMemberVerificationPref (byte-identical in Realism +
+Needs tabs → shared persistGroupMemberPref), _buildSectionHeader (identical in General +
+Lorebook tabs → GroupSectionHeader widget), _charColors/_charAccentColor palette (identical
+in Realism + Needs → kGroupCharColors/groupCharAccentColor). Stale "Placeholder tabs"
+comment removed (Grok nit). dart fix added super.key to the now-public tab constructors.
+
+**Zero-behavior-change evidence:** analyze clean; full suite 2,513 green; docker golden
+suite green against UNCHANGED baselines (pixel-identical); line-multiset audit of old vs
+new reconciled every delta to the three dedups + scaffolding; Grok verified the shell
+contract (tab order/plumbing/save) — its splice-boundary pass was cut short by CLI
+truncation, covered instead by the multiset audit.
