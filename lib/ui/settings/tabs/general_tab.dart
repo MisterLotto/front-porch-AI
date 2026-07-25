@@ -189,7 +189,8 @@ class GeneralTab extends StatelessWidget {
               blurb:
                   'Deterministic weather rolls through the story\'s days — '
                   'felt in the character\'s mood, comfort, and the scene. '
-                  'Needs Passage of Time.',
+                  'Characters can see fronts coming ("looks like rain '
+                  'tomorrow"). Needs Passage of Time.',
               value: storageService.weatherEnabled,
               onChanged: (val) => storageService.setWeatherEnabled(val),
             ),

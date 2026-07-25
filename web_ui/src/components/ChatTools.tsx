@@ -66,6 +66,16 @@ interface ToolsState {
       season: string;
       label: string;
       emoji: string;
+      // Deterministic forecast (additive — absent on older facades). The
+      // desktop engine's walk is prefix-stable, so this is exactly what the
+      // next story day will be.
+      tomorrow?: {
+        condition: string;
+        temp: string;
+        season: string;
+        label: string;
+        emoji: string;
+      } | null;
     } | null;
     // Story Calendar (additive — absent on older facades).
     clock?: string;
@@ -439,8 +449,19 @@ export function ChatTools({
           </div>
           {t.time.weather && (
             <div className="stat-line">
-              <span title={`${t.time.weather.label} · ${t.time.weather.season}`}>
+              <span
+                title={
+                  `${t.time.weather.label} · ${t.time.weather.season}` +
+                  (t.time.weather.tomorrow
+                    ? `\nTomorrow: ${t.time.weather.tomorrow.emoji} ${t.time.weather.tomorrow.label}`
+                    : '')
+                }
+              >
                 {t.time.weather.emoji} {t.time.weather.label}
+                {t.time.weather.tomorrow &&
+                  t.time.weather.tomorrow.condition !== t.time.weather.condition && (
+                    <span className="muted"> → {t.time.weather.tomorrow.emoji}</span>
+                  )}
               </span>
               <span className="muted">{t.time.weather.season}</span>
             </div>

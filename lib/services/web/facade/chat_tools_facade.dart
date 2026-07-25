@@ -146,6 +146,19 @@ class ChatToolsFacade {
                 'season': weather.season,
                 'label': WeatherEngine.label(weather),
                 'emoji': WeatherEngine.emoji(weather.condition),
+                // Deterministic forecast (additive) — the prefix-stable walk
+                // means tomorrow is already decided, so the web UI can show
+                // incoming fronts exactly like the desktop chip.
+                'tomorrow': switch (_chat.upcomingWeather) {
+                  null => null,
+                  final n => {
+                    'condition': n.condition.name,
+                    'temp': n.temp.name,
+                    'season': n.season,
+                    'label': WeatherEngine.label(n),
+                    'emoji': WeatherEngine.emoji(n.condition),
+                  },
+                },
               },
         // Story Calendar (story-calendar.md) — additive; older web bundles
         // simply ignore these.

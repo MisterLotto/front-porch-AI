@@ -26,12 +26,19 @@ import 'package:front_porch_ai/services/chat/weather_engine.dart';
 /// the ChatService gate; this leaf only renders words.
 class WeatherInjection {
   final DailyWeather? Function() getWeather;
+  final DailyWeather? Function() getUpcoming;
 
-  WeatherInjection({required this.getWeather});
+  WeatherInjection({required this.getWeather, required this.getUpcoming});
 
   String buildWeatherInjection() {
     final w = getWeather();
     if (w == null) return '';
-    return WeatherEngine.prose(w);
+    final today = WeatherEngine.prose(w);
+    // Foreshadow tomorrow only on notable transitions (incoming rain/storm/
+    // snow/fog, a real clear-up, big temperature swings) so characters see
+    // fronts coming instead of being ambushed — '' keeps the line unchanged.
+    final next = getUpcoming();
+    final sign = next == null ? '' : WeatherEngine.foreshadow(w, next);
+    return sign.isEmpty ? today : '$today $sign';
   }
 }

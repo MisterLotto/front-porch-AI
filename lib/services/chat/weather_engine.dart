@@ -230,6 +230,67 @@ class WeatherEngine {
     }
   }
 
+  /// One words-only "sign in the sky" of tomorrow's weather, or '' when
+  /// nothing notable is coming (same condition, minor cloud shuffle).
+  /// Because [weatherFor] is a prefix-stable deterministic walk, tomorrow is
+  /// already decided today — so this foreshadowing never lies, and characters
+  /// can see fronts rolling in instead of being ambushed by every change.
+  /// Only meaningful transitions speak: incoming precipitation/fog, a real
+  /// clear-up after grey or wet weather, or a two-band temperature swing.
+  static String foreshadow(DailyWeather today, DailyWeather tomorrow) {
+    const wet = {
+      WeatherCondition.rain,
+      WeatherCondition.storm,
+      WeatherCondition.snow,
+      WeatherCondition.fog,
+    };
+    final from = today.condition;
+    final to = tomorrow.condition;
+    if (to != from) {
+      switch (to) {
+        case WeatherCondition.storm:
+          return 'The air is heavy and electric — a storm is building and '
+              'should break by tomorrow.';
+        case WeatherCondition.snow:
+          return 'There is a raw bite to the wind — snow is on its way.';
+        case WeatherCondition.rain:
+          return from == WeatherCondition.storm
+              ? 'The worst of the storm should pass by tomorrow, easing into '
+                    'steady rain.'
+              : 'Clouds are banking on the horizon — it smells like rain '
+                    'coming.';
+        case WeatherCondition.fog:
+          return 'The air is turning damp and still — fog will likely settle '
+              'in overnight.';
+        case WeatherCondition.clear:
+          if (wet.contains(from) || from == WeatherCondition.overcast) {
+            return 'The weather looks ready to break — clear skies are on '
+                'the way.';
+          }
+        case WeatherCondition.cloudy:
+          if (wet.contains(from)) {
+            return 'The weather should ease by tomorrow, breaking up into '
+                'scattered clouds.';
+          }
+        case WeatherCondition.overcast:
+          if (from == WeatherCondition.clear ||
+              from == WeatherCondition.cloudy) {
+            return 'High clouds are thickening — tomorrow looks flat and '
+                'grey.';
+          }
+      }
+    }
+    final swing = tomorrow.temp.index - today.temp.index;
+    if (swing <= -2) {
+      return 'A cold snap is moving in — tomorrow will feel much colder.';
+    }
+    if (swing >= 2) {
+      return 'A warm front is pushing through — tomorrow should feel a good '
+          'deal warmer.';
+    }
+    return '';
+  }
+
   static String _tempWord(TempBand t) {
     switch (t) {
       case TempBand.cold:

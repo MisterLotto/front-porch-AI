@@ -5602,3 +5602,40 @@ Analyze clean (3 pre-existing deprecation infos in untouched files, all from
 running a newer local Flutter). 18 new tests pass; whole non-golden suite
 passes. The 60 golden failures reproduce identically on unmodified
 origin/Rawhide with the same SDK — renderer version skew, not this change.
+
+## 2026-07-25 (UTC) — Story weather learns to foreshadow: characters see fronts coming
+
+**Files:** `lib/services/chat/weather_engine.dart`,
+`lib/services/chat/prompt_injection/weather_injection.dart`,
+`lib/services/chat_service.dart`,
+`lib/ui/chat_components/sidebar/character_state/weather_chip.dart`,
+`lib/ui/settings/tabs/general_tab.dart`,
+`lib/services/web/facade/chat_tools_facade.dart`,
+`web_ui/src/components/ChatTools.tsx` (+ rebuilt `assets/web_app` bundle),
+`test/golden/support/fakes.dart`,
+`test/services/chat/weather_engine_test.dart`,
+`test/services/chat/prompt_injection_test.dart`,
+`test/golden/widget/_goldens/sidebar/time_strip_weather.{light,dark}.png`,
+`docs/design/living-time-features.md`, `docs/Rawhide.md`.
+
+**Why:** Weather changed overnight with zero warning, so characters were
+perpetually surprised by every storm ("suddenly it's raining"). The user
+wanted foreshadowing — "a storm may be rolling in soon, did you bring an
+umbrella?".
+
+**How:** The engine's walk is prefix-stable (extending to day N+1 never
+changes days 1..N) and dayCount is derived from the calendar date, so
+tomorrow is exactly `weatherFor(dayCount+1, clock+1d)` — a forecast that
+always comes true, nothing stored. New `WeatherEngine.foreshadow(today,
+tomorrow)` returns ONE words-only sky-sign line, only for notable
+transitions (incoming rain/storm/snow/fog, real clear-ups after wet/grey
+weather, two-band temp swings; minor cloud shuffle is silent). New
+`ChatService.upcomingWeather` getter (same gate as currentWeather) feeds
+the injection leaf, which appends the sign to the existing weather line.
+Desktop chip watches the same Riverpod family at dayCount+1 and shows a
+"→ ⛈️" glyph when tomorrow's condition differs (tooltip always names
+tomorrow); web facade adds an additive nullable `tomorrow` object inside
+`weather` (old bundles ignore it) and ChatTools.tsx mirrors the arrow.
+Golden fixture happened to land cloudy→rain, so time_strip_weather goldens
+were regenerated on the Linux CI image. 1:1/group parity is inherited:
+weather is per-chat shared state, injection sits in the shared state block.

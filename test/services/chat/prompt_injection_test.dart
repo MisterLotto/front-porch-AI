@@ -642,7 +642,10 @@ void main() {
         // Weather off in composer tests — the fragment contributes '' and the
         // block shape stays identical to pre-weather expectations. The
         // weather-on path is covered in weather_engine_test.dart.
-        weatherInjection: WeatherInjection(getWeather: () => null),
+        weatherInjection: WeatherInjection(
+          getWeather: () => null,
+          getUpcoming: () => null,
+        ),
         // Ambitions off in composer tests — active char has none, so the
         // fragment contributes '' (weather-off precedent). Ambition-on paths
         // are covered in ambition_service_test.dart.
