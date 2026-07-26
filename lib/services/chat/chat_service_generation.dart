@@ -540,12 +540,19 @@ extension ChatServiceGeneration on ChatService {
         // Chance Time injection — independent of realism mode
         final chanceTimeBlock = _getChanceTimeInjection();
 
-        // LLMerta Mafia-night force-ack (Chance Time register; one-shot until
-        // the next user turn clears porchAckPending). Macro-resolve {{user}}/
-        // {{char}} like the catastrophe wrapper.
-        final porchNightRaw = _porchMemoryImport.takeInjectionForDiary(
-          _getCharacterIdFromCard(speakingCharacter),
-        );
+        // LLMerta Mafia-night force-ack (Chance Time register). Re-arms from
+        // diary if needed; stays armed through regen of this AI message until
+        // the *next* user send clears it.
+        final porchDiaryId = _getCharacterIdFromCard(speakingCharacter);
+        final porchSessionId = _currentSessionId;
+        if (porchSessionId != null) {
+          await _porchMemoryImport.ensureArmedForDiary(
+            sessionId: porchSessionId,
+            diaryCharacterId: porchDiaryId,
+          );
+        }
+        final porchNightRaw =
+            _porchMemoryImport.takeInjectionForDiary(porchDiaryId);
         final porchNightBlock = porchNightRaw.isEmpty
             ? ''
             : _macroResolver.resolve(

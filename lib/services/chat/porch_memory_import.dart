@@ -165,10 +165,13 @@ class PorchMemoryImportService {
     required List<PorchDiaryTarget> targets,
   }) => _armFromPendingCards(sessionId, targets);
 
-  /// Chance Time–style clear on the next user turn after delivery.
-  Future<void> clearDeliveredAcks() async {
-    final cardIds = ackState.deliveredCardIds();
-    ackState.clearDelivered();
+  /// Clear force-ack only after the user **continues past** a turn that
+  /// already showed the block (next [sendMessage]). Regen of the reacting
+  /// AI message must still re-inject until then.
+  Future<void> clearAfterAcceptedUserTurn() async {
+    if (!ackState.hasShownAny) return;
+    final cardIds = ackState.shownCardIds();
+    ackState.clearAfterAcceptedUserTurn();
     for (final id in cardIds) {
       try {
         final card = await _findCardById(id);
@@ -180,6 +183,20 @@ class PorchMemoryImportService {
         debugPrint('[PorchMemories] clear ack meta failed $id: $e');
       }
     }
+  }
+
+  /// Re-arm from diary if in-memory was lost (restart) but cards still pending.
+  Future<void> ensureArmedForDiary({
+    required String sessionId,
+    required String diaryCharacterId,
+  }) async {
+    if (ackState.isArmed(diaryCharacterId)) return;
+    await _armFromPendingCards(sessionId, [
+      PorchDiaryTarget(
+        libraryStableGroupId: diaryCharacterId,
+        diaryCharacterId: diaryCharacterId,
+      ),
+    ]);
   }
 
   String takeInjectionForDiary(String diaryCharacterId) =>

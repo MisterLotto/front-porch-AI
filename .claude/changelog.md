@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-26 — fix(journal): porch force-ack is table talk + regen-safe
+- **Why:** First force-ack was soft RECENT CANON; models buried Brasshollow in literary mood. Regen window needed to survive until the next *user* turn after a shown inject.
+- **FPA:** `PorchNightInjection` → TABLE TALK / HARD FACTS / REQUIRED OPENING (good game / roles / bus). `PorchNightAckState` keeps text through regen; clear only on next user send after show (`clearAfterAcceptedUserTurn`). `ensureArmedForDiary` before gen.
+- **LLMerta:** richer card prose (box-score frame with roles + winner, day-stamped bus/defend/vote, opposite-sides reveal, partner wording).
+- **Tests:** porch_memory_test updated; fixture game-fake-test-porch-002 on disk for manual retest.
+
 ## 2026-07-25 — feat(journal): LLMerta porch memories import + first-reply force-ack
 - **Why:** LLMerta already writes multi-card emotion-stamped bundles after Mafia nights (`llmerta_porch_memories/{gameId}.json`). FPA needed the consumer so characters remember the night in The Journal, and a Chance Time–style SCENE injection so the first reply can't ignore it.
 - **New:** `porch_memory_models.dart`, `porch_memory_mailbox.dart`, `porch_memory_import.dart`, `prompt_injection/porch_night_injection.dart`, fixture + `porch_memory_test.dart`, design `docs/design/llmerta-porch-memories.md`.

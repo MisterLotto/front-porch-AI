@@ -292,21 +292,19 @@ Macro-resolve `{{user}}` / `{{char}}` via the existing `_macroResolver` path
 (same fix that landed for needs catastrophe). Never mention LLMerta, systems,
 or “porch memories.”
 
-Template (build from pending cards, grouped by `gameId`):
+Template (build from pending cards — table talk, not soft mood):
 
 ```text
-[RECENT CANON — already happened between {{user}} and {{char}}, not optional:
+[TABLE TALK — Mafia night is real shared history, not a metaphor for the scene:
 
-{{user}} and {{char}} played a game of Mafia together earlier{{#town}} in {{town}}{{/town}}.
-{{char}} still feels this about that night:
-- (fond) Joseph and I played a game of Mafia together in Brasshollow.
-- (betrayed) Joseph bussed me in our game of Mafia to save themselves.
-- (grateful) Joseph defended me when everyone else teamed up on me.
+HARD FACTS (use literally — do not invent other roles/votes):
+- (shock) I thought {{user}} was Town — {{user}} was Mafia, I was Town.
+- (betrayed) Day 2 bus / vote beat …
+- (fond) Box-score frame with roles + winner …
 
-Open the reply with {{char}} bringing this up or reacting to it as lived history
-with {{user}} — do not skip it, pretends it never happened, or bury it under
-unrelated small talk. Write {{char}}'s feelings in their own voice first, then
-let the scene continue. Never mention game apps, exports, journals, or systems.]
+REQUIRED OPENING: first 2–4 sentences = spoken table talk ("good game",
+"I thought you were Town", bus/defend callouts). Then continue the scene.
+Regen of that AI reply still re-injects until the next user send.]
 ```
 
 Rules for the bullet list:

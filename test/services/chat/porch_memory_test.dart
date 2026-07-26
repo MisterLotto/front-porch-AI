@@ -88,7 +88,7 @@ void main() {
       expect(PorchNightInjection.build(bullets: const []), isEmpty);
     });
 
-    test('includes town, feelings, and force-ack register', () {
+    test('includes town, facts, and table-talk force-ack register', () {
       final text = PorchNightInjection.build(
         townName: 'Brasshollow',
         bullets: const [
@@ -96,13 +96,15 @@ void main() {
           (emotion: 'betrayed', content: 'They bussed me.'),
         ],
       );
-      expect(text, contains('RECENT CANON'));
+      expect(text, contains('TABLE TALK'));
+      expect(text, contains('HARD FACTS'));
+      expect(text, contains('REQUIRED OPENING'));
       expect(text, contains('Brasshollow'));
       expect(text, contains('{{user}}'));
       expect(text, contains('{{char}}'));
       expect(text, contains('(fond) We played Mafia together.'));
       expect(text, contains('(betrayed) They bussed me.'));
-      expect(text, contains('Open the reply'));
+      expect(text, contains('good game'));
       expect(text, isNot(contains('LLMerta')));
       expect(text, isNot(contains('Chance Time')));
     });
@@ -120,7 +122,7 @@ void main() {
   });
 
   group('PorchNightAckState', () {
-    test('take marks delivered; clearDelivered frees regen window', () {
+    test('take keeps block for regen; clear only after accepted user turn', () {
       final state = PorchNightAckState();
       state.arm(
         diaryCharacterId: 'alma',
@@ -128,10 +130,25 @@ void main() {
         journalCardIds: const ['c1', 'c2'],
       );
       expect(state.takeForPrompt('alma'), 'BLOCK');
-      expect(state.takeForPrompt('alma'), 'BLOCK'); // regen
-      expect(state.deliveredCardIds(), ['c1', 'c2']);
-      state.clearDelivered();
+      expect(state.takeForPrompt('alma'), 'BLOCK'); // regen of same AI reply
+      expect(state.wasShown('alma'), isTrue);
+      expect(state.shownCardIds(), ['c1', 'c2']);
+      // User has not continued yet — still armed.
+      expect(state.isArmed('alma'), isTrue);
+      state.clearAfterAcceptedUserTurn();
       expect(state.takeForPrompt('alma'), isEmpty);
+    });
+
+    test('clear without show is a no-op on pending', () {
+      final state = PorchNightAckState();
+      state.arm(
+        diaryCharacterId: 'alma',
+        injectionText: 'BLOCK',
+        journalCardIds: const ['c1'],
+      );
+      // Next user turn before any generation — must not wipe arm.
+      state.clearAfterAcceptedUserTurn();
+      expect(state.takeForPrompt('alma'), 'BLOCK');
     });
   });
 
@@ -264,7 +281,8 @@ void main() {
 
       final injection = import.takeInjectionForDiary('alma_card');
       expect(injection, contains('Mafia'));
-      expect(injection, contains('RECENT CANON'));
+      expect(injection, contains('TABLE TALK'));
+      expect(injection, contains('HARD FACTS'));
 
       // Dedupe: re-import does not double-plant
       final n2 = await import.tryImportForSession(

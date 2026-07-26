@@ -3406,8 +3406,9 @@ class ChatService extends ChangeNotifier {
     // This preserves manual-spin events that haven't been used yet.
     // Delegated to service (core state moved).
     _chaosModeService.clearDeliveredPendingIfAny();
-    // Same window for LLMerta Mafia-night force-ack (regen-safe until here).
-    unawaited(_porchMemoryImport.clearDeliveredAcks());
+    // Clear Mafia force-ack only after a prior turn *showed* it and the user
+    // is now continuing (regen of that AI reply still re-injects until here).
+    unawaited(_porchMemoryImport.clearAfterAcceptedUserTurn());
 
     // ── OOC Time-Skip Detection ───────────────────────────────────────────
     if (_realismActiveThisMode) {

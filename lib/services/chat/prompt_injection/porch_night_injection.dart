@@ -19,20 +19,19 @@
 /// One-shot "Mafia night" force-ack prompt block (Chance Time register).
 /// Design: docs/design/llmerta-porch-memories.md §7b.
 ///
-/// Pure text builder — no I/O. Callers place the result in a high-recency
-/// prompt slot (next to Chance Time / needs catastrophe) and clear
-/// `porchAckPending` after the reacting message is done.
+/// Pure text builder — no I/O. High-recency plan slot; [PorchNightAckState]
+/// keeps the block available for **regen of the reacting AI message** until
+/// the user sends their next turn (then clear).
 class PorchNightInjection {
   PorchNightInjection._();
 
-  /// Max feeling bullets so the block stays short for local models.
+  /// Max fact bullets so the block stays short for local models.
   static const int kMaxBullets = 6;
 
-  /// Build the SCENE / RECENT CANON block. Uses `{{user}}` / `{{char}}`
+  /// Build a TABLE TALK force-ack block. Uses `{{user}}` / `{{char}}`
   /// placeholders — resolve with MacroResolver before the model sees it.
   ///
-  /// [bullets] are `(emotionLabel, content)` from planted porch cards,
-  /// already sorted by salience (caller). Empty → empty string.
+  /// [bullets] are `(emotionLabel, content)` from planted porch cards.
   static String build({
     required List<({String emotion, String content})> bullets,
     String? townName,
@@ -41,50 +40,74 @@ class PorchNightInjection {
 
     final taken = bullets.take(kMaxBullets).toList();
     final town = (townName != null && townName.trim().isNotEmpty)
-        ? ' in ${townName.trim()}'
-        : '';
+        ? townName.trim()
+        : null;
+    final townClause = town == null ? '' : ' in $town';
 
     final lines = StringBuffer();
     lines.writeln(
-      '[RECENT CANON — already happened between {{user}} and {{char}}, '
-      'not optional:',
+      '[TABLE TALK — Mafia night is real shared history with {{user}}, '
+      'not a metaphor for the current scene:',
     );
     lines.writeln();
     lines.writeln(
-      '{{user}} and {{char}} played a game of Mafia together earlier$town.',
+      '{{user}} and {{char}} played a finished game of Mafia together$townClause. '
+      'This is post-game table talk energy (good game / I can\'t believe / '
+      'you bused me / I thought you were Town), not soft atmospheric mood only.',
     );
-    lines.writeln('{{char}} still feels this about that night:');
+    lines.writeln();
+    lines.writeln(
+      'HARD FACTS (use these literally — do NOT invent other roles, votes, '
+      'or outcomes not listed):',
+    );
     for (final b in taken) {
-      final emotion = b.emotion.trim().isEmpty ? 'reflective' : b.emotion.trim();
+      final emotion =
+          b.emotion.trim().isEmpty ? 'charged' : b.emotion.trim();
       final content = b.content.trim();
       if (content.isEmpty) continue;
       lines.writeln('- ($emotion) $content');
     }
     lines.writeln();
     lines.writeln(
-      'Open the reply with {{char}} bringing this up or reacting to it as '
-      'lived history with {{user}} — do not skip it, pretend it never '
-      'happened, or bury it under unrelated small talk. Write {{char}}\'s '
-      'feelings in their own voice first, then let the scene continue. '
-      'Never mention game apps, exports, journals, or systems.]',
+      'REQUIRED OPENING: the FIRST 2–4 sentences of the reply MUST be clear, '
+      'spoken (or strongly voiced) table talk about that Mafia game — e.g. '
+      '"good game", calling out a bus or defend, naming sides if the facts '
+      'say so ("I thought you were Town"), town name if known. '
+      'Do NOT only bury it in internal monologue, exhaustion metaphors, or '
+      'winks about the present scene. After that short debrief, continue the '
+      'current scene naturally. Never mention game apps, exports, journals, '
+      'or systems.]',
     );
     return '\n${lines.toString()}\n';
   }
 }
 
-/// Session-scoped one-shot delivery state (Chance Time pattern: re-inject on
-/// regen until the next user turn clears it).
+/// Session-scoped force-ack delivery (Chance Time pattern).
+///
+/// - [takeForPrompt] returns the block and marks *shown* but **keeps** the
+///   text so regen/swipe of that AI reply re-injects the same block.
+/// - [clearDelivered] runs on the **next user send** after a show — that is
+///   the "accepted the turn and continued" gate. Until then, regens still
+///   see the block. Cards keep `porchAckPending` until that clear so a
+///   process restart mid-window can re-arm from the diary.
 class PorchNightAckState {
   /// diaryCharacterId → rendered injection text (pre-macro).
   final Map<String, String> _pending = {};
 
-  /// diaryCharacterIds whose injection was used in a generation this window.
-  final Set<String> _delivered = {};
+  /// Shown in at least one prompt this window (regen still allowed).
+  final Set<String> _shown = {};
 
   /// diaryCharacterId → journal card ids that still need porchAckPending cleared.
   final Map<String, List<String>> _cardIdsByDiary = {};
 
   bool get hasAnyPending => _pending.isNotEmpty;
+
+  /// True when this diary owner has a live force-ack block armed.
+  bool isArmed(String diaryCharacterId) =>
+      (_pending[diaryCharacterId] ?? '').isNotEmpty;
+
+  /// True when the block was included in a generation (regen still re-takes).
+  bool wasShown(String diaryCharacterId) => _shown.contains(diaryCharacterId);
 
   void arm({
     required String diaryCharacterId,
@@ -93,40 +116,47 @@ class PorchNightAckState {
   }) {
     if (injectionText.trim().isEmpty) return;
     _pending[diaryCharacterId] = injectionText;
-    _delivered.remove(diaryCharacterId);
+    // Re-arming after re-load must not wipe "shown" if we're mid regen window;
+    // only replace text + card ids. Shown state stays so clear-on-next-user still works.
     _cardIdsByDiary[diaryCharacterId] = List<String>.from(journalCardIds);
   }
 
-  /// Return the block for this diary owner and mark delivered (regen-safe).
+  /// Return the block for this diary owner. Does **not** remove it (regen-safe).
   String takeForPrompt(String diaryCharacterId) {
     final text = _pending[diaryCharacterId];
     if (text == null || text.isEmpty) return '';
-    _delivered.add(diaryCharacterId);
+    _shown.add(diaryCharacterId);
     return text;
   }
 
-  /// Card ids for owners whose injection was delivered (for metadata clear).
-  List<String> deliveredCardIds() {
+  /// Card ids for owners whose injection was **shown** (clear metadata after
+  /// the user continues past that AI turn).
+  List<String> shownCardIds() {
     final ids = <String>[];
-    for (final diaryId in _delivered) {
+    for (final diaryId in _shown) {
       final list = _cardIdsByDiary[diaryId];
       if (list != null) ids.addAll(list);
     }
     return ids;
   }
 
-  /// Clear in-memory state for delivered owners (call on next user send).
-  void clearDelivered() {
-    for (final diaryId in _delivered) {
+  /// True when at least one diary had the block shown (safe to clear on user turn).
+  bool get hasShownAny => _shown.isNotEmpty;
+
+  /// Clear in-memory state for owners that already **showed** the block.
+  /// Call only from the next user [sendMessage] after a show.
+  void clearAfterAcceptedUserTurn() {
+    final toClear = Set<String>.from(_shown);
+    for (final diaryId in toClear) {
       _pending.remove(diaryId);
       _cardIdsByDiary.remove(diaryId);
+      _shown.remove(diaryId);
     }
-    _delivered.clear();
   }
 
   void clearAll() {
     _pending.clear();
-    _delivered.clear();
+    _shown.clear();
     _cardIdsByDiary.clear();
   }
 }
