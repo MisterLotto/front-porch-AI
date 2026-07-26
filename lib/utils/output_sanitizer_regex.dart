@@ -38,6 +38,7 @@ import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
 ///   (none) – exactly one
 ///   `?`    – zero or one
 ///   `+`    – one or more
+///   `*`    – zero or more
 ///   `{n}`  – exactly n
 ///   `{n,m}` – between n and m (inclusive)
 ///   `{n,}`  – n or more
@@ -130,7 +131,7 @@ String compileFindPattern(String input) {
 int _consumeQuantifier(String input, int pos, StringBuffer out) {
   if (pos >= input.length) return pos;
   final ch = input[pos];
-  if (ch == '?' || ch == '+') {
+  if (ch == '?' || ch == '+' || ch == '*') {
     out.write(ch);
     return pos + 1;
   }
