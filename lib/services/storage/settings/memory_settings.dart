@@ -40,6 +40,12 @@ class MemorySettings with SettingsBase {
   int _journalMaxCards = 200;
   bool _journalReviewFirst = false; // §4.3 review-first mode (phase 4)
 
+  // LLMerta → Journal porch memories (docs/design/llmerta-porch-memories.md).
+  // Default on (parity with LLMerta lobby toggle). Consumed block keys track
+  // multi-character bundle progress across sessions without a new table.
+  bool _importLlmertaPorchMemories = true;
+  Set<String> _porchConsumedBlockKeys = {};
+
   // Character Growth (Growth Rings — docs/design/growth-rings.md §6).
   // The enable key is the old character_evolution_enabled pref so existing
   // users keep their on/off choice; the interval is a NEW key because rings
@@ -59,6 +65,9 @@ class MemorySettings with SettingsBase {
   int get journalInterval => _journalInterval;
   int get journalMaxCards => _journalMaxCards;
   bool get journalReviewFirst => _journalReviewFirst;
+  bool get importLlmertaPorchMemories => _importLlmertaPorchMemories;
+  Set<String> get porchConsumedBlockKeys =>
+      Set<String>.unmodifiable(_porchConsumedBlockKeys);
 
   bool get characterEvolutionEnabled => _characterEvolutionEnabled;
   int get growthInterval => _growthInterval;
@@ -76,6 +85,12 @@ class MemorySettings with SettingsBase {
     _journalInterval = prefs?.getInt(k('journal_interval')) ?? 10;
     _journalMaxCards = prefs?.getInt(k('journal_max_cards')) ?? 200;
     _journalReviewFirst = prefs?.getBool(k('journal_review_first')) ?? false;
+
+    _importLlmertaPorchMemories =
+        prefs?.getBool(k('import_llmerta_porch_memories')) ?? true;
+    final consumed =
+        prefs?.getStringList(k('porch_consumed_block_keys')) ?? const [];
+    _porchConsumedBlockKeys = consumed.toSet();
 
     _characterEvolutionEnabled =
         prefs?.getBool(k('character_evolution_enabled')) ?? false;
@@ -135,6 +150,21 @@ class MemorySettings with SettingsBase {
     _journalReviewFirst = value;
     await prefs?.setBool(k('journal_review_first'), value);
     notify();
+  }
+
+  Future<void> setImportLlmertaPorchMemories(bool value) async {
+    _importLlmertaPorchMemories = value;
+    await prefs?.setBool(k('import_llmerta_porch_memories'), value);
+    notify();
+  }
+
+  Future<void> setPorchConsumedBlockKeys(Set<String> keys) async {
+    _porchConsumedBlockKeys = Set<String>.from(keys);
+    await prefs?.setStringList(
+      k('porch_consumed_block_keys'),
+      _porchConsumedBlockKeys.toList()..sort(),
+    );
+    // No notify — this is internal import bookkeeping, not a UI setting.
   }
 
   Future<void> setCharacterEvolutionEnabled(bool value) async {

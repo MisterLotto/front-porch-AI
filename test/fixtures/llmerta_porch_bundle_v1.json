@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "gameId": "game-test-001",
+  "finishedAt": "2026-07-25T12:00:00.000Z",
+  "townName": "Brasshollow",
+  "difficulty": "standard",
+  "userPersonaId": "persona-test-uuid",
+  "userPersonaName": "Alex",
+  "characters": [
+    {
+      "characterId": "alma_card",
+      "characterName": "Alma",
+      "cards": [
+        {
+          "id": "game-test-001:1:playedTogether",
+          "kind": "playedTogether",
+          "category": "about_us",
+          "content": "Alex and I played a game of Mafia together in Brasshollow.",
+          "emotionLabel": "fond",
+          "emotionIntensity": "moderate",
+          "salience": 0.35,
+          "source": { "kind": "playedTogether" }
+        },
+        {
+          "id": "game-test-001:1:busedByUser",
+          "kind": "busedByUser",
+          "category": "about_user",
+          "content": "Alex bussed me in our game of Mafia to save themselves.",
+          "emotionLabel": "betrayed",
+          "emotionIntensity": "strong",
+          "salience": 0.95,
+          "source": { "kind": "busedByUser" }
+        },
+        {
+          "id": "game-test-001:1:defendedByUser",
+          "kind": "defendedByUser",
+          "category": "about_user",
+          "content": "Alex defended me when everyone else teamed up on me.",
+          "emotionLabel": "grateful",
+          "emotionIntensity": "strong",
+          "salience": 0.85,
+          "source": { "kind": "defendedByUser" }
+        }
+      ]
+    }
+  ]
+}

@@ -540,6 +540,20 @@ extension ChatServiceGeneration on ChatService {
         // Chance Time injection — independent of realism mode
         final chanceTimeBlock = _getChanceTimeInjection();
 
+        // LLMerta Mafia-night force-ack (Chance Time register; one-shot until
+        // the next user turn clears porchAckPending). Macro-resolve {{user}}/
+        // {{char}} like the catastrophe wrapper.
+        final porchNightRaw = _porchMemoryImport.takeInjectionForDiary(
+          _getCharacterIdFromCard(speakingCharacter),
+        );
+        final porchNightBlock = porchNightRaw.isEmpty
+            ? ''
+            : _macroResolver.resolve(
+                porchNightRaw,
+                macroCtx,
+                section: 'realism',
+              );
+
         // Objective injection — always injected regardless of realism mode
         // Must sit in a fixed prompt section so it is NEVER trimmed by the budget system.
         // (thin delegation to author_note_builder per step 8; state/CRUD in god)
@@ -695,6 +709,9 @@ extension ChatServiceGeneration on ChatService {
         );
         plan.add(id: 'suffix', text: suffix);
         plan.add(id: 'chance_time', text: chanceTimeBlock);
+        // High-recency with Chance Time so the first post-import reply
+        // cannot bury the Mafia night (docs/design/llmerta-porch-memories.md §7b).
+        plan.add(id: 'porch_night', text: porchNightBlock);
 
         final fixedTokens = await _countTokens(plan.fixedCountText);
         final contextBudget = _sessionGenSettings.resolveContextSize(

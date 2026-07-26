@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-25 — feat(journal): LLMerta porch memories import + first-reply force-ack
+- **Why:** LLMerta already writes multi-card emotion-stamped bundles after Mafia nights (`llmerta_porch_memories/{gameId}.json`). FPA needed the consumer so characters remember the night in The Journal, and a Chance Time–style SCENE injection so the first reply can't ignore it.
+- **New:** `porch_memory_models.dart`, `porch_memory_mailbox.dart`, `porch_memory_import.dart`, `prompt_injection/porch_night_injection.dart`, fixture + `porch_memory_test.dart`, design `docs/design/llmerta-porch-memories.md`.
+- **Touched:** `JournalStore.addCard` (`extraMetadata` + `findCardById`), `database.getJournalCardById`, `MemorySettings` import toggle + consumed-block prefs, session load hooks, generation plan `porch_night` next to Chance Time, Journal sidebar gear toggle, web `chat_tools_facade` + `ChatTools.tsx` toggle parity, Rawhide.
+- **Rules:** identity = persona UUID + library stableGroupId only; plant per session; dedupe `porchCardId`; `porchAckPending` + in-memory regen window; delete bundle only when every character block consumed; never throw on chat open.
+- **Verification:** `flutter test test/services/chat/porch_memory_test.dart` + analyze on touched files.
+
 ## 2026-07-24 — fix(themes): PR #158 review fixes — dialogue/action theming, theme-wins precedence, isolated last-active, web bg/borders
 - **Context:** Code review of PR #158 (dazpants1, "Per-Chat Visual Themes") by Claude + Grok (independent adversarial pass via the grok-cc plugin). Grok agreed with all 8 of my findings and surfaced two real correctness bugs I'd missed. All blocking items now fixed; the three decision-required items were resolved with the maintainer (theme-wins, isolate the reorder, build full web parity).
 - **Fix #1 — dialogue/action colors ignored the active theme** (`styled_chat_message.dart`): the styled-text builder passed the theme to font + user/AI text colors but called `getDialogueColor(character)` / `getActionColor(character)` with NO theme args, so quoted *"dialogue"* and *\*actions\** always resolved to character/global — breaking the shipped claim "dialogue and action colors are part of every theme preset." Now forwards `themePreset, themeOverrides`.

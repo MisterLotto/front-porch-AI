@@ -108,6 +108,8 @@ import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
+import 'package:front_porch_ai/services/chat/porch_memory_import.dart';
+import 'package:front_porch_ai/services/chat/porch_memory_models.dart';
 import 'package:front_porch_ai/services/chat/growth_ops.dart';
 import 'package:front_porch_ai/services/chat/growth_physics.dart';
 import 'package:front_porch_ai/services/chat/growth_review.dart';
@@ -2278,6 +2280,27 @@ class ChatService extends ChangeNotifier {
     embedText: (text) async => await _memoryService?.embedText(text),
   );
 
+  /// LLMerta → Journal porch-memory import + one-shot force-ack arming.
+  /// Design: docs/design/llmerta-porch-memories.md.
+  late final _porchMemoryImport = PorchMemoryImportService(
+    journalStore: _journalStore,
+    getFpaRootPath: () => _storageService.rootPath,
+    isImportEnabled: () =>
+        _storageService.memorySettings.importLlmertaPorchMemories,
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    libraryStableGroupIds: () {
+      final repo = _characterRepository;
+      if (repo == null) return <String>{};
+      return {
+        for (final c in repo.characters) _getCharacterIdFromCard(c),
+      };
+    },
+    getConsumedBlockKeys: () =>
+        _storageService.memorySettings.porchConsumedBlockKeys,
+    setConsumedBlockKeys: (keys) =>
+        _storageService.memorySettings.setPorchConsumedBlockKeys(keys),
+  );
+
   // Review-first parking + the ONE proposal applier (both modes go through
   // it). Public via [journalReview] for the sidebar banner + review dialog.
   late final _journalReview = JournalReview(
@@ -3383,6 +3406,8 @@ class ChatService extends ChangeNotifier {
     // This preserves manual-spin events that haven't been used yet.
     // Delegated to service (core state moved).
     _chaosModeService.clearDeliveredPendingIfAny();
+    // Same window for LLMerta Mafia-night force-ack (regen-safe until here).
+    unawaited(_porchMemoryImport.clearDeliveredAcks());
 
     // ── OOC Time-Skip Detection ───────────────────────────────────────────
     if (_realismActiveThisMode) {

@@ -377,6 +377,41 @@ class SummarySectionState extends State<SummarySection> {
                         color: AppColors.textTertiary(context),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    // LLMerta Mafia nights → Journal (docs/design/llmerta-porch-memories.md)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Import Mafia game nights',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary(context),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          height: 24,
+                          child: FittedBox(
+                            child: Switch(
+                              value: storage.importLlmertaPorchMemories,
+                              activeThumbColor: accent,
+                              onChanged: (val) =>
+                                  storage.setImportLlmertaPorchMemories(val),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'When you open a chat, plant diary cards from finished '
+                      'LLMerta games (matching persona + character) and have '
+                      'the character bring up the night on their next reply.',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textTertiary(context),
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [

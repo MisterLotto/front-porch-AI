@@ -642,6 +642,10 @@ class StorageService extends ChangeNotifier {
   bool get journalReviewFirst => memorySettings.journalReviewFirst;
   Future<void> setJournalReviewFirst(bool v) =>
       memorySettings.setJournalReviewFirst(v);
+  bool get importLlmertaPorchMemories =>
+      memorySettings.importLlmertaPorchMemories;
+  Future<void> setImportLlmertaPorchMemories(bool v) =>
+      memorySettings.setImportLlmertaPorchMemories(v);
 
   // Realism / banned (bannedPhrases, defaults lifted to realismSettings)
   bool get realismOneShotEval => realismSettings.realismOneShotEval;

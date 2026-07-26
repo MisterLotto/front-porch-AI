@@ -37,6 +37,7 @@ interface ToolsState {
     ragWindowSize: number;
     journalEnabled: boolean;
     journalInterval: number;
+    importLlmertaPorchMemories?: boolean;
     growthEnabled: boolean;
     growthInterval: number;
     growthReviewFirst: boolean;
@@ -228,6 +229,15 @@ export function ChatTools({
               context window.
             </p>
           )}
+          <Toggle
+            label="Import Mafia game nights"
+            value={t.memory.importLlmertaPorchMemories ?? true}
+            onChange={(v) => settings({ importLlmertaPorchMemories: v })}
+          />
+          <p className="muted small">
+            Plant LLMerta Mafia nights into The Journal when you open a matching
+            chat; the character brings up the night on their next reply.
+          </p>
         </div>
       </details>
 

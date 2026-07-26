@@ -101,6 +101,11 @@ class JournalStore {
     /// 'milestone' — Living Time). Readers parse metadata forgivingly, so
     /// this is additive-safe for every existing card and consumer.
     String? kind,
+
+    /// Extra metadata keys merged into the pouch (e.g. porchCardId for
+    /// LLMerta imports). Overwrites same keys as story/kind only if the
+    /// caller passes them in the map.
+    Map<String, dynamic>? extraMetadata,
     required int maxCards,
   }) async {
     final db = getDb();
@@ -119,6 +124,12 @@ class JournalStore {
       }
       if (coldest != null) await db.deleteJournalCard(coldest.id);
     }
+    final meta = <String, dynamic>{
+      'storyDay': ?storyDay,
+      'storyClock': ?storyClock,
+      'kind': ?kind,
+      if (extraMetadata != null) ...extraMetadata,
+    };
     await db.insertJournalCard(
       // id deliberately absent — filled by insertJournalCard (UUID).
       JournalMemoriesCompanion(
@@ -131,17 +142,16 @@ class JournalStore {
         sourceMessageIds: Value(
           sourcePositions.isEmpty ? null : jsonEncode(sourcePositions),
         ),
-        metadata: Value(
-          storyDay == null && storyClock == null && kind == null
-              ? null
-              : jsonEncode({
-                  'storyDay': ?storyDay,
-                  'storyClock': ?storyClock,
-                  'kind': ?kind,
-                }),
-        ),
+        metadata: Value(meta.isEmpty ? null : jsonEncode(meta)),
       ),
     );
+  }
+
+  /// Lookup one card by id (porch-ack clear and rare paths). Null if missing.
+  Future<JournalMemoryData?> findCardById(String id) async {
+    final db = getDb();
+    if (db == null || id.isEmpty) return null;
+    return db.getJournalCardById(id);
   }
 
   /// Edit a card in place. On the first feeling change the original emotion

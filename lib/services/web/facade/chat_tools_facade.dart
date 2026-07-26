@@ -82,6 +82,7 @@ class ChatToolsFacade {
         'ragWindowSize': _storage.ragWindowSize,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
+        'importLlmertaPorchMemories': _storage.importLlmertaPorchMemories,
         'growthEnabled': _storage.characterEvolutionEnabled,
         'growthInterval': _storage.growthInterval,
         'growthReviewFirst': _storage.growthReviewFirst,
@@ -605,6 +606,10 @@ class ChatToolsFacade {
     await ifBool('journalEnabled', _storage.setJournalEnabled);
     await ifInt('journalInterval', _storage.setJournalInterval);
     await ifInt('journalMaxCards', _storage.setJournalMaxCards);
+    await ifBool(
+      'importLlmertaPorchMemories',
+      _storage.setImportLlmertaPorchMemories,
+    );
     await ifBool('growthEnabled', _storage.setCharacterEvolutionEnabled);
     await ifInt('growthInterval', _storage.setGrowthInterval);
     await ifBool('growthReviewFirst', _storage.setGrowthReviewFirst);

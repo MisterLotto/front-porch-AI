@@ -2757,6 +2757,11 @@ class AppDatabase extends _$AppDatabase {
     await into(journalMemories).insert(card);
   }
 
+  /// Single card by primary key (porch-ack clear, rare paths).
+  Future<JournalMemoryData?> getJournalCardById(String id) =>
+      (select(journalMemories)..where((j) => j.id.equals(id)))
+          .getSingleOrNull();
+
   /// Write-by-id partial update (mirrors [updateMessage] style).
   Future<void> updateJournalCard(String id, JournalMemoriesCompanion card) =>
       (update(journalMemories)..where((j) => j.id.equals(id))).write(card);

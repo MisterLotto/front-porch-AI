@@ -274,6 +274,8 @@ extension ChatServiceSessionLoad on ChatService {
     } catch (e) {
       print('Error loading chat session: $e');
     }
+    // LLMerta porch memories on last-session open (same as loadSession).
+    unawaited(_maybeImportPorchMemories());
   }
 
   /// Get sessions for a given character/group ID without setting it as active.
@@ -601,8 +603,86 @@ extension ChatServiceSessionLoad on ChatService {
       // (Lorebook scanLatest already ran inside _hydrateMessagesFromRows —
       // the second scan here was pure duplicate work.)
       notifyListeners();
+      // LLMerta porch memories: plant matching Mafia nights + arm force-ack.
+      // Fire-and-forget so open path never blocks on disk/DB.
+      unawaited(_maybeImportPorchMemories());
     } catch (e) {
       debugPrint('[ChatService] Error loading session $sessionId: $e');
+    }
+  }
+
+  /// Diary targets for LLMerta porch import: library stableGroupId (match) +
+  /// journal characterId (plant key). 1:1 uses the same id for both; group
+  /// members match on originStableId and plant under the live card id.
+  Future<List<PorchDiaryTarget>> _buildPorchDiaryTargets() async {
+    if (_activeGroup == null && _activeCharacter != null) {
+      final id = _getCharacterIdFromCard(_activeCharacter!);
+      return [
+        PorchDiaryTarget(libraryStableGroupId: id, diaryCharacterId: id),
+      ];
+    }
+    if (_activeGroup == null) return const [];
+
+    final repo = _groupChatRepository;
+    if (repo == null) {
+      // Fall back to live roster stable ids (origin may equal library for
+      // many members whose avatar stem matches the library basename).
+      return [
+        for (final c in _groupCharacters)
+          PorchDiaryTarget(
+            libraryStableGroupId: _getCharacterIdFromCard(c),
+            diaryCharacterId: _getCharacterIdFromCard(c),
+          ),
+      ];
+    }
+
+    final rows = await repo.getMembersForGroup(_activeGroup!.id);
+    final library = _characterRepository?.characters ?? const <CharacterCard>[];
+    final targets = <PorchDiaryTarget>[];
+    for (final m in rows) {
+      if (m.avatarFilename == null) continue;
+      final resolvedPath = path.join(
+        _storageService.groupsDir.path,
+        _activeGroup!.id,
+        'avatars',
+        m.avatarFilename!,
+      );
+      final diaryId = path.basenameWithoutExtension(resolvedPath);
+      final origin = m.originStableId;
+      final matchId = (origin != null && origin.isNotEmpty)
+          ? origin
+          : (MemberOriginResolver.resolve(
+                  stampedOriginStableId: null,
+                  memberName: m.name,
+                  libraryCharacters: library,
+                )?.stableGroupId ??
+                diaryId);
+      targets.add(
+        PorchDiaryTarget(
+          libraryStableGroupId: matchId,
+          diaryCharacterId: diaryId,
+        ),
+      );
+    }
+    return targets;
+  }
+
+  /// Scan mailbox and plant into this session; never throws into open path.
+  Future<void> _maybeImportPorchMemories() async {
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return;
+    final personaId = _userPersonaService.persona.id;
+    if (personaId.isEmpty) return;
+    try {
+      final targets = await _buildPorchDiaryTargets();
+      if (targets.isEmpty) return;
+      await _porchMemoryImport.tryImportForSession(
+        sessionId: sessionId,
+        userPersonaId: personaId,
+        targets: targets,
+      );
+    } catch (e) {
+      debugPrint('[PorchMemories] session hook failed: $e');
     }
   }
 }
