@@ -199,6 +199,83 @@ void main() {
     });
   });
 
+  group('shared session-scalar hydrate (refactor Step 2)', () {
+    test('history-picked session restores Chaos Mode state (bug #1)',
+        () async {
+      // Older session: chaos ON with built-up pressure.
+      await db.insertSession(
+        SessionsCompanion.insert(
+          id: 'sess-chaos',
+          characterId: const Value('char-a'),
+          chaosModeEnabled: const Value(true),
+          chaosPressure: const Value(42),
+          createdAt: Value(DateTime(2026, 1, 1)),
+          updatedAt: Value(DateTime(2026, 1, 1)),
+        ),
+      );
+      // Newer session: chaos off — this is what the library open loads.
+      await db.insertSession(
+        SessionsCompanion.insert(
+          id: 'sess-calm',
+          characterId: const Value('char-a'),
+          createdAt: Value(DateTime(2026, 6, 1)),
+          updatedAt: Value(DateTime(2026, 6, 1)),
+        ),
+      );
+
+      await chat.setActiveCharacter(_card('Alice', 'char-a'));
+      expect(chat.chaosModeService.chaosModeEnabled, isFalse,
+          reason: 'library open lands on the newest session (chaos off)');
+
+      // Resume the older chaotic session via the history picker.
+      await chat.loadSession('sess-chaos');
+      expect(chat.chaosModeService.chaosModeEnabled, isTrue,
+          reason: 'loadSession never loaded chaos scalars pre-fix — a '
+              'history-picked chat silently lost Chaos Mode');
+      expect(chat.chaosModeService.chaosPressure, 42,
+          reason: 'built-up Chance Time pressure must survive the picker');
+    });
+
+    test('both load paths hydrate identical scalars for the same session',
+        () async {
+      await db.insertSession(
+        SessionsCompanion.insert(
+          id: 'sess-full',
+          characterId: const Value('char-a'),
+          affectionScore: const Value(77),
+          trustLevel: const Value(33),
+          chaosModeEnabled: const Value(true),
+          chaosPressure: const Value(9),
+          characterEmotion: const Value('joy'),
+        ),
+      );
+
+      await chat.setActiveCharacter(_card('Alice', 'char-a'));
+      final viaLibrary = (
+        bond: chat.relationshipService.affectionScore,
+        trust: chat.relationshipService.trustLevel,
+        chaos: chat.chaosModeService.chaosModeEnabled,
+        pressure: chat.chaosModeService.chaosPressure,
+      );
+
+      // Perturb live state, then reload the same session via the picker.
+      await chat.setActiveCharacter(_card('Bob', 'char-b'));
+      await chat.setActiveCharacter(_card('Alice', 'char-a'));
+      await chat.loadSession('sess-full');
+      final viaPicker = (
+        bond: chat.relationshipService.affectionScore,
+        trust: chat.relationshipService.trustLevel,
+        chaos: chat.chaosModeService.chaosModeEnabled,
+        pressure: chat.chaosModeService.chaosPressure,
+      );
+
+      expect(viaLibrary, (bond: 77, trust: 33, chaos: true, pressure: 9));
+      expect(viaPicker, viaLibrary,
+          reason: 'the shared _hydrateSessionScalars must make the two '
+              'paths byte-identical for every shared scalar');
+    });
+  });
+
   group('retroactive sanitize scope (model output only)', () {
     Future<void> seedMessage({
       required String sessionId,

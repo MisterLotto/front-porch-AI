@@ -1,13 +1,15 @@
 # Session Load Refactor
 
-**Status: Steps 1a and 1b complete. Step 2 revised per code review —
-see updated plan below.**
+**Status: COMPLETE (2026-07-27). All steps shipped; all three bugs
+fixed. This document is now a historical record.**
 
 The output sanitizer PR introduced identical code in both
 `_loadLastSession` and `loadSession`. Step 1a extracted the shared
-message-hydration loop. Step 1b extracted the generation sliders from
-`chat_settings_dialog.dart`. Step 2 will extract shared session-scalar
-loading and fix three pre-existing bugs.
+message-hydration loop (`_hydrateMessagesFromRows`). Step 1b extracted
+the generation sliders from `chat_settings_dialog.dart`
+(`ChatSettingsGenerationSection`). Step 2 extracted the shared
+session-scalar loading (`_hydrateSessionScalars`) and closed out the
+three pre-existing bugs found during analysis.
 
 ## Background
 
@@ -38,15 +40,21 @@ to both methods:
 
 ### Bugs found during analysis
 
-1. **`loadSession` missing chaos mode load:** `_loadLastSession` calls
+1. **`loadSession` missing chaos mode load:** ~~`_loadLastSession` calls
    `_chaosModeService.loadScalars(modeEnabled:, pressure:)` at load
    time; `loadSession` does not. Sessions loaded via the history picker
-   lose their chaos mode state. (Pre-existing.)
+   lose their chaos mode state.~~ **FIXED 2026-07-27** by construction in
+   Step 2: the chaos load lives in the shared `_hydrateSessionScalars`,
+   so both paths get it. Regression-pinned in
+   `session_load_regression_test.dart` ("history-picked session restores
+   Chaos Mode state").
 
-2. **Duplicate legacy migration call:** `_loadLastSession` calls
+2. **Duplicate legacy migration call:** ~~`_loadLastSession` calls
    `_relationshipService.applyLegacyShortTermMigrationIfNeeded()`
-   twice — once at line 158 and again at line 224. The second call is
-   redundant (no scores change between the two). (Pre-existing.)
+   twice; the second call is redundant.~~ **FIXED 2026-07-27**, more
+   thoroughly than planned: the method itself was deleted with the rest
+   of the era-migration surface (see bug #3) — it was provably dead code
+   on every call path.
 
 3. **Migration wrappers inflate scores on every chat open:** ~~`_migrateShortTermScore` doubles any score with `|score| ≤ 150`, with no era flag or version guard; `_loadLastSession` passes the wrapped values to `loadScalars` and `_doSaveChat` writes them back — 40 → 80 → 160 across open→save cycles, crossing `_calculateTier` boundaries, while `loadSession` and groups pass raw values.~~ **FIXED 2026-07-27** (ahead of Step 2, variant A1: no DB heal): `_loadLastSession` now passes raw DB values exactly like `loadSession`; the whole era-migration surface was deleted (`_migrateShortTermScore`, `_migrateLongTermScore`, their public wrappers, the caller-less `seedFromV2OrExt`, and `applyLegacyShortTermMigrationIfNeeded` — the latter provably dead: it required score ≤ 15 AND tier ≥ 3, but `loadScalars` recomputes tier from score and 15 ⇒ tier 2). Pre-±300-era sessions never opened since that era load at their old half-scale value once and regrow — accepted trade-off vs. active corruption of every current 1:1 chat. Regression-pinned in `session_load_regression_test.dart` ("bond scores load raw" group: double open→save cycle byte-stability + library/picker parity).
 
@@ -91,34 +99,44 @@ which the dialog uses to trigger `setState` + `_save()`.
 - `flutter analyze` — zero warnings
 - `flutter test` — 2463 passed, 10 skipped, 2 pre-existing failures
 
-## Step 2: Extract session scalar loading
+## Step 2: Extract session scalar loading (shipped 2026-07-27)
 
 The session metadata load (authorNote, summary, name, fork), relationship
-`loadScalars`, time/nsfw/needs loading, and theme override fetch are
-nearly identical between the two methods (~80 lines each).
+`loadScalars`, time/nsfw/needs loading, theme override fetch, transient
+flag zeroing, and growth-cache refresh were nearly identical between the
+two methods (~90 lines each).
 
-Extract `_hydrateSessionScalars(Session s)` that loads all shared
-scalar fields from a `Session` object. This also fixes bug #1 (chaos mode)
-by construction — the shared method includes the chaos mode `loadScalars`
-call that `loadSession` was missing.
+**As built:** `_hydrateSessionScalars(Session s)` loads all shared
+scalar fields from a `Session` row; each path calls it once. Caller
+prerequisite: `_currentSessionId` set first (the theme fetch and growth
+cache are session-scoped). Two fixes landed by construction:
 
-The shared method should pass raw scores to `loadScalars` — `loadSession`
-is already correct. The `migrateShortTermScore`/`migrateLongTermScore`
-wrappers in `_loadLastSession` (lines 140-143) should be removed. The
-legacy ±150→±300 rescale (bug #3) is a one-time operation that should
-run once behind a version marker and write the corrected value back,
-rather than re-running on every chat open.
+- **Bug #1 (chaos mode):** the shared method includes the chaos
+  `loadScalars` call that `loadSession` was missing.
+- **Fixation truncation order:** `sanitizeFixationIfTooLong()` now runs
+  inside the shared method, immediately after the relationship load.
+  `loadSession` used to call it *before* loading scalars — sanitizing
+  the previous session's fixation while the newly loaded one went
+  unchecked — and `_loadLastSession` never called it at all.
 
-Bug #2 (duplicate `applyLegacyShortTermMigrationIfNeeded` call) is fixed
-by construction — the shared method calls it once, after `loadScalars`.
+The bond-scale era migration that earlier drafts planned to gate behind
+a version marker was instead deleted outright before Step 2 landed (bug
+#3 above, variant A1) — the shared method passes raw scores.
 
-**Asymmetry note:** `loadSession` calls
-`_userPersonaService.setActivePersona(session.userPersonaId)` (line 445);
-`_loadLastSession` does not. The shared method could unify this, but
-the call should be made optional or conditional on the caller's needs.
+**What stayed caller-specific (deliberate):**
 
-**Impact:** ~80 lines extracted per call site → one shared method.
-File: 641 → ~560 lines. One additional new private method (two total).
+- Group-realism / scene-guest restore branches (different reset needs).
+- Objectives zeroing — library path only, matching prior behavior.
+- Per-chat generation-settings load — position matters (must precede
+  message hydration for the retroactive sanitizer).
+- `_userPersonaService.setActivePersona` — **picker path only, by
+  design**: restoring a specific chat restores its persona, but tapping
+  a character in the library must not silently switch the user's active
+  persona.
+
+**Impact:** file 666 → 601 lines; both load paths now share one scalar
+source of truth. One additional private method (two total across the
+refactor, as planned).
 
 ## Verification
 
@@ -140,14 +158,14 @@ Step 1b (generation sliders extraction):
   toggle works, XTC/DRY show for Kobold only, Context Size greyed out
   when .kcpps active
 
-Step 2 (session scalar loading — planned):
+Step 2 (session scalar loading — shipped):
 
-- `flutter analyze` — zero warnings
-- `flutter test` — all pass, plus new regression test for
-  per-chat generation-settings bleed (added in PR #169)
-- Manual: open chat A → change gen-settings → open chat B →
-  confirm B's own settings load (not A's)
-- Manual: open chat with legacy ±150 bond → confirm score is
-  rescaled once and written back, not re-doubled on subsequent opens
-- Grep for `migrateShortTermScore` in `chat_service_session_load.dart`
-  to confirm it is no longer called from either load path
+- `flutter analyze` — zero warnings on touched files
+- `flutter test` — full non-golden suite green (2,533), including the
+  PR #169 gen-settings bleed harness and the bond-stability tests
+- New regression tests in `session_load_regression_test.dart`
+  ("shared session-scalar hydrate" group): a history-picked session
+  restores Chaos Mode enabled + pressure (fails pre-fix), and both load
+  paths hydrate byte-identical scalars for the same session
+- Grep confirms `migrateShortTermScore` (and the whole era surface) no
+  longer exists anywhere in `lib/`
