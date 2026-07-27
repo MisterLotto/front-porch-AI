@@ -82,6 +82,13 @@ void main() {
         expect(re.firstMatch('123')!.end, 3);
       });
 
+      test('* zero-or-more', () {
+        final re = RegExp(compileFindPattern(r'\d*'));
+        expect(re.firstMatch('')!.end, 0);
+        expect(re.firstMatch('3')!.end, 1);
+        expect(re.firstMatch('33')!.end, 2);
+      });
+
       test('{n} exactly n', () {
         final re = RegExp(compileFindPattern(r'\d{3}'));
         expect(re.firstMatch('123')!.end, 3);
