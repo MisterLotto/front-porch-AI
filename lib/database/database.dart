@@ -25,6 +25,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/database/session_gen_overrides_heal.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
 
 part 'database.g.dart';
@@ -1138,7 +1139,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1805,6 +1806,29 @@ class AppDatabase extends _$AppDatabase {
             'ALTER TABLE sessions ADD COLUMN story_start_date TEXT',
           );
         } catch (_) {}
+      }
+      if (from < 39) {
+        // v38→v39: data-only heal, NO schema change. The pre-fix
+        // generation-settings bleed persisted stale per-chat sampler
+        // overrides into session rows the user never configured; once the
+        // load path started reading them (the bleed fix itself), those rows
+        // silently shadowed global sampler settings and made models loop /
+        // repeat old messages. Strips all bleed-era keys, keeps only the
+        // post-bleed output_sanitizer_* keys. Full rationale + key list in
+        // session_gen_overrides_heal.dart.
+        try {
+          final healed = await healBledSessionGenOverrides(this);
+          if (healed > 0) {
+            debugPrint(
+              '[DB] v39: cleared bled generation overrides '
+              'from $healed session(s)',
+            );
+          }
+        } catch (e) {
+          // Non-fatal: stale overrides just stay active for this install.
+          // Never abort the migration chain (and thereby DB open) over it.
+          debugPrint('[DB] v39 gen-overrides heal failed: $e');
+        }
       }
     },
   );
