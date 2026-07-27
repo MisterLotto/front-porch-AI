@@ -7,6 +7,8 @@ The Output Sanitizer lets you automatically find text in AI responses and replac
 
 Rules run top to bottom. If a rule doesn't match anything, it's skipped.
 
+Each rule also has a **Stop after match** toggle (the icon beside the rule). When it is on and that rule actually changes the text, every rule below it is skipped for that response. If the rule matches but its replacement is identical to what it matched, nothing changed — so the remaining rules still run.
+
 ---
 
 ## Plain text
@@ -77,10 +79,13 @@ The saved part (`123`) can now be used in the replace field (see below).
 
 ### Inside a capture group
 
-The text between `\(` and `)` works a little differently from the rest of the find field:
+The text between `\(` and `)` is **not** read using the wildcard table above — it is handed straight to the underlying regular-expression engine. That has three consequences:
 
-- Wildcards like `\d`, `\w`, `\l` work the same way.
 - `\)` (backslash + close paren) matches a **literal `)` character** — it does NOT close the group. Only a bare `)` closes the group.
+- `\d` and `\w` still work, because standard regex has them too. (Small difference: inside a group, `\w` also matches the underscore `_`; the `\w` wildcard outside a group does not.)
+- **`\a`, `\l` and `\p` do NOT work inside a group.** Those three are Front Porch wildcards, not standard regex, so the engine reads them as the plain letters `a`, `l` and `p`. `\(\a+)` on `banana` captures the letter `a` — not "any printable character". Nothing warns you: the rule saves normally and simply matches the wrong thing.
+
+Inside a group, use standard character classes instead: `[a-zA-Z]` for any letter, `[0-9]` for any digit, `.` for any character. **Find:** `\([a-zA-Z]+)` on `hello` captures `hello`.
 
 **Example:** Find: `\(\w+\))` — this matches a word followed by a literal `)`, all inside a capture group. On the text `hello)`, it captures `hello)`.
 
@@ -97,14 +102,16 @@ If you also want to consume the literal parentheses in the match (so the replace
 
 - put them outside the group:
 
-**Find:** `(\(\w+)\)`
+**Find:** `(\(\w+))`
 - `(` (bare) = literal `(` in text (auto-escaped by the compiler)
 - `\(` = opens capture group
 - `\w+` = matches the word
-- `)` = closes capture group
-- `)` (bare) = literal `)` in text
+- first `)` = closes capture group
+- second `)` (bare) = literal `)` in text
 
 On text `(hello)`: matches `(hello)`, captures `hello`.
+
+> **Write the closing paren as a bare `)` here, not `\)`.** Outside a capture group a backslash is only valid before `(`, another backslash, or one of the five wildcard letters — so `\)` out there is rejected as an unknown wildcard and the rule will not save at all.
 
 - or use 
 
@@ -158,6 +165,8 @@ You can use backreferences more than once, or combine them with other text:
 If you need a literal `$` in the replacement, type `$$`:
 
 - Replace: `$$100` → outputs `$100`
+
+**One caveat:** if the same rule also uses capture groups, don't put a digit straight after `$$`. Backreferences are filled in *after* `$$` becomes `$`, so in a rule with one capture group a replacement of `$$100` is read as "group 1, then `00`". Either add a space (`$$ 100` → `$ 100`), or use a rule without capture groups. Without capture groups, `$$100` → `$100` works exactly as shown above.
 
 ### Literal backslash
 
