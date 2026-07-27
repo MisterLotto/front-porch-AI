@@ -131,18 +131,16 @@ extension ChatServiceSessionLoad on ChatService {
     _selectedLooks = decodeSelectedLooks(lastSession.selectedLookAvatarId);
     _parentSessionId = lastSession.parentSession;
     _forkIndex = lastSession.forkIndex;
-    // Relationship scalars + migration/tier calc now via service (keeps load parity).
-    // Migration: scale old scores (±150) to new range (±300). (Card-seed bypass: fresh V2.5
-    // ext seeds use seedFromCardV2OrExt plain clamp in setActiveCharacter/startNew 1:1 paths;
-    // this migrate path is *only* for legacy persisted sessions. See card-seed notes at the two
-    // ext-seed sites + relationship_service + full keep-sync lists + setActiveCharacter:1572.)
+    // Relationship scalars + tier calc via service. RAW persisted values, same
+    // as loadSession below — the legacy ±150→×2 migrate wrappers that used to
+    // sit here were DELETED 2026-07-27: they re-doubled any live bond ≤ 150 on
+    // every library-open→save cycle (40→80→160, silently crossing tiers),
+    // because |score| ≤ 150 is not evidence of the old era — every current
+    // chat passes through it. Groups and loadSession never migrated (parity).
+    // See the era-heuristic warning atop relationship_service.dart.
     _relationshipService.loadScalars(
-      affectionScore: _relationshipService.migrateShortTermScore(
-        lastSession.affectionScore,
-      ),
-      longTermScore: _relationshipService.migrateLongTermScore(
-        lastSession.longTermScore,
-      ),
+      affectionScore: lastSession.affectionScore,
+      longTermScore: lastSession.longTermScore,
       trustLevel: lastSession.trustLevel,
       activeFixation: lastSession.activeFixation,
       fixationLifespan: lastSession.fixationLifespan,
@@ -151,11 +149,6 @@ extension ChatServiceSessionLoad on ChatService {
       turnsSinceLongTermCheck: lastSession.turnsSinceLongTermCheck,
       shortTermDeltasSummary: lastSession.shortTermDeltasSummary,
     );
-    // Apply legacy migration (if needed) after load. (Card-seed bypass note: this *10 + migrate
-    // path is exclusively for legacy persisted sessions from pre-±300 era; fresh card seeds use
-    // the plain seedFromCardV2OrExt at the two 1:1 ext sites above. Expanded per "related load/reset
-    // sites" requirement + keep-sync full list + setActiveCharacter:1572 + both startNew.)
-    _relationshipService.applyLegacyShortTermMigrationIfNeeded();
     _realismEnabled = lastSession.realismEnabled;
     _moodDecayCounter = lastSession.moodDecayCounter;
     _characterEmotion = lastSession.characterEmotion;
@@ -217,17 +210,6 @@ extension ChatServiceSessionLoad on ChatService {
       modeEnabled: lastSession.chaosModeEnabled,
       pressure: lastSession.chaosPressure,
     );
-
-    // Realism Engine 2.0 Compatibility Migration (delegated to service). (Card-seed bypass:
-    // this legacy path for old persisted data; fresh 1:1 card ext seeds use seedFromCardV2OrExt
-    // (plain) at setActive/startNew 1:1 sites. See expanded keep-sync + setActiveCharacter:1572.)
-    _relationshipService.applyLegacyShortTermMigrationIfNeeded();
-    if (_relationshipService.affectionScore != lastSession.affectionScore ||
-        _relationshipService.relationshipTier != lastSession.relationshipTier) {
-      debugPrint(
-        '[Realism] Legacy session migrated to REv2 scales (loadLast).',
-      );
-    }
 
     // v30: Load live per-character group realism/needs (bond/trust/emotion/fixation/arousal/relationships/needs)
     // from the session column (or fall back to group defaults). Must happen for group entry paths
@@ -525,7 +507,7 @@ extension ChatServiceSessionLoad on ChatService {
       _selectedLooks = decodeSelectedLooks(session.selectedLookAvatarId);
       _parentSessionId = session.parentSession;
       _forkIndex = session.forkIndex;
-      // Relationship load + tier calc + legacy migration via service.
+      // Relationship load + tier calc via service (raw values, parity with _loadLastSession).
       _relationshipService.loadScalars(
         affectionScore: session.affectionScore,
         longTermScore: session.longTermScore,
@@ -537,10 +519,6 @@ extension ChatServiceSessionLoad on ChatService {
         turnsSinceLongTermCheck: session.turnsSinceLongTermCheck,
         shortTermDeltasSummary: session.shortTermDeltasSummary,
       );
-      _relationshipService.applyLegacyShortTermMigrationIfNeeded();
-      // (Card-seed bypass: legacy *10 migration only; see the two ext-seed sites + prior load sites
-      // for full "card seeds authored on current ±300" + keep-sync lists + relationship leaf.)
-
       // counters already via loadScalars on service.
       _realismEnabled = session.realismEnabled;
       _moodDecayCounter = session.moodDecayCounter;

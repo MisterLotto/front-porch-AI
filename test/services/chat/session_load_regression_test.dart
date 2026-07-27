@@ -28,7 +28,7 @@
 
 import 'dart:io';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -129,6 +129,73 @@ void main() {
       expect(chat.sessionGenSettings.temperature, isNull,
           reason: 'a new chat with the same character starts from global '
               'defaults; only forkSession inherits overrides (by design)');
+    });
+  });
+
+  group('bond scores load raw — no ±150→×2 era re-doubling', () {
+    // The deleted _migrateShortTermScore wrapper doubled any |score| ≤ 150 on
+    // the _loadLastSession path (library open), and _doSaveChat persisted the
+    // doubled value — so every open→save cycle compounded: 40 → 80 → 160,
+    // silently crossing tiers, until the score escaped the ≤150 window. The
+    // history-picker path and groups never doubled (parity break). These pin
+    // the fix: raw in, raw out, byte-stable across repeated open→save cycles.
+    Future<int?> dbAffection(String sessionId) async {
+      final row = await db
+          .customSelect(
+            'SELECT affection_score FROM sessions WHERE id = ?',
+            variables: [Variable(sessionId)],
+          )
+          .getSingle();
+      return row.read<int?>('affection_score');
+    }
+
+    test('open→save→reopen twice: bond 40 stays 40', () async {
+      await db.insertSession(
+        SessionsCompanion.insert(
+          id: 'sess-bond',
+          characterId: const Value('char-a'),
+          affectionScore: const Value(40),
+          longTermScore: const Value(30),
+        ),
+      );
+
+      for (var cycle = 1; cycle <= 2; cycle++) {
+        await chat.setActiveCharacter(_card('Alice', 'char-a'));
+        expect(chat.relationshipService.affectionScore, 40,
+            reason: 'cycle $cycle: library open must load the persisted bond '
+                'raw (the deleted era wrapper made this 80, then 160)');
+        expect(chat.relationshipService.longTermScore, 30,
+            reason: 'cycle $cycle: long-term bond had the same ×2 wrapper');
+        await chat.flushPendingSaves();
+        expect(await dbAffection('sess-bond'), 40,
+            reason: 'cycle $cycle: save must write back exactly what was '
+                'loaded — this write is what made the doubling compound');
+        // Switch away so the next setActiveCharacter re-runs a real load.
+        await chat.setActiveCharacter(_card('Bob', 'char-b'));
+      }
+    });
+
+    test('history-picker load path agrees with library open (parity)',
+        () async {
+      await db.insertSession(
+        SessionsCompanion.insert(
+          id: 'sess-bond2',
+          characterId: const Value('char-a'),
+          affectionScore: const Value(55),
+          longTermScore: const Value(22),
+        ),
+      );
+
+      await chat.setActiveCharacter(_card('Alice', 'char-a'));
+      final viaLibrary = chat.relationshipService.affectionScore;
+
+      await chat.loadSession('sess-bond2');
+      final viaPicker = chat.relationshipService.affectionScore;
+
+      expect(viaLibrary, 55);
+      expect(viaPicker, viaLibrary,
+          reason: 'the two 1:1 load paths must produce identical scalars — '
+              'pre-fix, library open doubled while the picker did not');
     });
   });
 

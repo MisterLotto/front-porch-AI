@@ -58,18 +58,22 @@ import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
 /// short/longTerm*Score/Tier + progress getters + tierName getters + inter-char
 /// public methods) for callers and tests.
 ///
-/// Reset helpers (resetForFreshChat, seedFromV2OrExt, seedFromCardV2OrExt,
-/// loadScalars, applyLegacyMigrationIfNeeded, loadRelationshipScalarsForSpeaker,
-/// saveRelationshipScalarsToGroup) support the documented "keep reset blocks in sync"
-/// sites in parent without adding private helpers to the god file.
+/// Reset helpers (resetForFreshChat, seedFromCardV2OrExt, loadScalars,
+/// loadRelationshipScalarsForSpeaker, saveRelationshipScalarsToGroup) support
+/// the documented "keep reset blocks in sync" sites in parent without adding
+/// private helpers to the god file.
 ///
-/// seedFromCardV2OrExt does *plain clamp only* (no migration) for fresh V2.5 card
-/// ext seeds on new 1:1 chats (card authors use the current ±300 scale). The
-/// original seedFromV2OrExt (which applies legacy ±150->*2 migration) is retained
-/// for direct test coverage of the migration path and any future legacy session
-/// seed compatibility; production legacy session loads use the explicit
-/// migrateShortTermScore / migrateLongTermScore + loadScalars + applyLegacy...
-/// paths in ChatService (see "card-seed bypass" notes in god keep-sync comments).
+/// seedFromCardV2OrExt does *plain clamp only* for fresh V2.5 card ext seeds
+/// on new 1:1 chats (card authors use the current ±300 scale), and loadScalars
+/// takes persisted session values raw. The legacy ±150→×2 era migration
+/// (migrate*Score wrappers, seedFromV2OrExt, applyLegacyShortTermMigration-
+/// IfNeeded) was DELETED 2026-07-27: it inferred "old era" from |score| ≤ 150,
+/// which every current chat passes through on its way up, so each library
+/// open→save cycle re-doubled live bonds (40→80→160) until they crossed 150 —
+/// while groups and the history-picker load path never migrated at all
+/// (parity break). Do not reintroduce an era heuristic keyed on score
+/// magnitude; a real era marker (schema version / column) is the only safe
+/// trigger for any future scale change.
 ///
 /// 0 new private methods added to ChatService as part of this step (thins + delegations only;
 /// deletions of moved code are mandatory part of the task).
@@ -451,13 +455,6 @@ class RelationshipService {
   double bondPercentForScore(int score) => bondScalePercent(score);
   double trustPercentForLevel(int level) => trustScalePercent(level);
 
-  /// Public migrate helpers for load paths (kept internal impl private; surface
-  /// only for the 2-3 legacy scale sites in ChatService that load persisted old
-  /// ±150 session data). Card V2/Ext fresh seeds use seedFromCardV2OrExt (plain
-  /// clamp, no migration) to avoid doubling author-intended values on new chats.
-  int migrateShortTermScore(int rawScore) => _migrateShortTermScore(rawScore);
-  int migrateLongTermScore(int rawScore) => _migrateLongTermScore(rawScore);
-
   // ── Core logic (verbatim mechanical extraction) ───────────────────────────
 
   int _calculateTier(int score) {
@@ -475,22 +472,6 @@ class RelationshipService {
     return score > 0 ? 10 : -10;
   }
 
-  /// Migration: scale old short-term scores (±150) to new range (±300)
-  int _migrateShortTermScore(int rawScore) {
-    if (rawScore.abs() <= 150) {
-      return (rawScore * 2).clamp(-300, 300);
-    }
-    return rawScore;
-  }
-
-  /// Migration: scale old long-term scores (±150) to new range (±300)
-  int _migrateLongTermScore(int rawScore) {
-    if (rawScore.abs() <= 150) {
-      return (rawScore * 2).clamp(-300, 300);
-    }
-    return rawScore;
-  }
-
   // ── Reset / seed / load helpers (support "keep reset blocks in sync" in parent) ──
 
   void resetForFreshChat() {
@@ -506,18 +487,6 @@ class RelationshipService {
     _fixationLifespan = 0;
     _spatialStance = '';
     _pendingTrustRepair = false;
-  }
-
-  void seedFromV2OrExt({
-    required int shortTermBond,
-    required int longTermBond,
-    required int trustLevel,
-  }) {
-    _affectionScore = _migrateShortTermScore(shortTermBond.clamp(-300, 300));
-    _longTermScore = _migrateLongTermScore(longTermBond.clamp(-300, 300));
-    _trustLevel = trustLevel.clamp(-100, 100);
-    _relationshipTier = _calculateTier(_affectionScore);
-    _longTermTier = _calculateTier(_longTermScore);
   }
 
   /// Card V2/Ext seed path: plain clamp (current ±300 scale authored by V2.5 cards
@@ -562,22 +531,6 @@ class RelationshipService {
 
     _relationshipTier = _calculateTier(_affectionScore);
     _longTermTier = _calculateTier(_longTermScore);
-  }
-
-  void applyLegacyShortTermMigrationIfNeeded() {
-    if (_affectionScore > 0 &&
-        _affectionScore <= 15 &&
-        _relationshipTier >= 3) {
-      _affectionScore = _affectionScore * 10;
-      if (_longTermScore == 0) {
-        _longTermScore = _affectionScore;
-        _longTermTier = _calculateTier(_longTermScore);
-      }
-      _relationshipTier = _calculateTier(_affectionScore);
-      debugPrint(
-        '[Realism] Legacy session migrated to REv2 scales (via RelationshipService).',
-      );
-    }
   }
 
   /// Load per-speaker relationship scalars (affection/trust/fixation/tiers/spatial)

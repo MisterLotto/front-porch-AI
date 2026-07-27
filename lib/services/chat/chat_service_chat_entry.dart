@@ -220,15 +220,13 @@ extension ChatServiceChatEntry on ChatService {
           _realismEnabled =
               ext.realismEnabled ||
               _storageService.realismSettings.realismDefault;
-          // Card-seed bypass (rec 1 from PR #47): use seedFromCardV2OrExt (plain .clamp only,
-          // no _migrate*) because V2.5 cards + creator UI author shortTermBond/longTermBond on the
-          // *current* ±300 scale (see models/character_card.dart:31-32 + FrontPorchExtensions).
-          // Legacy *2 migration must stay *only* on _loadLastSession loadScalars + migrate* wrappers
-          // + applyLegacyShortTermMigrationIfNeeded paths (and the public migrate surface).
-          // This was the root cause of bond-doubling (e.g. authored 55 -> 110) on every fresh 1:1
-          // card import / 0-session setActive / startNew. 1:1 only; group per-speaker paths were
-          // never affected (used loadRelationshipScalarsForSpeaker etc). See relationship_service.dart
-          // seedFromCardV2OrExt + god keep-sync comments (full list) + cross-ref setActiveCharacter:1572.
+          // Card-seed path (rec 1 from PR #47): seedFromCardV2OrExt is plain .clamp only,
+          // because V2.5 cards + creator UI author shortTermBond/longTermBond on the *current*
+          // ±300 scale (see models/character_card.dart:31-32 + FrontPorchExtensions). The old
+          // legacy ±150→×2 era migration doubled authored values here (55 → 110) and — worse —
+          // re-doubled live session bonds ≤ 150 on every _loadLastSession→save cycle; the whole
+          // migration surface was deleted 2026-07-27 (see era-heuristic warning atop
+          // relationship_service.dart). Session loads now pass raw values everywhere.
           _relationshipService.seedFromCardV2OrExt(
             shortTermBond: ext.shortTermBond,
             longTermBond: ext.longTermBond,

@@ -426,12 +426,13 @@ void main() {
       'reset/seed/loadScalars roundtrip and group per-char load/save scalars',
       () {
         final svc = createTestRelationship();
-        svc.seedFromV2OrExt(shortTermBond: 42, longTermBond: 17, trustLevel: 9);
-        expect(
-          svc.affectionScore,
-          84,
-        ); // migrate doubles <=150 per verbatim original logic (legacy path)
-        expect(svc.relationshipTier, 5); // 84 <120 ->5
+        svc.seedFromCardV2OrExt(
+          shortTermBond: 42,
+          longTermBond: 17,
+          trustLevel: 9,
+        );
+        expect(svc.affectionScore, 42); // plain clamp — authored ±300 scale
+        expect(svc.relationshipTier, 3); // 42 <50 ->3
         svc.resetForFreshChat();
         expect(svc.affectionScore, 0);
         expect(svc.trustLevel, 0);
@@ -574,20 +575,12 @@ void main() {
         expect(svc.trustLevel, -100);
         svc.resetForFreshChat();
 
-        // Legacy session data path (via public migrate wrappers + loadScalars in _loadLast) still migrates
-        final migratedShort = svc.migrateShortTermScore(42);
-        final migratedLong = svc.migrateLongTermScore(17);
-        expect(migratedShort, 84); // <=150 -> *2
-        expect(migratedLong, 34);
-        svc.loadScalars(
-          affectionScore: migratedShort,
-          longTermScore: migratedLong,
-          trustLevel: 5,
-        );
-        expect(svc.affectionScore, 84);
-        // Direct low-value <=150 still migrates (covers "legacy session data still migrates when appropriate")
-        expect(svc.migrateShortTermScore(55), 110);
-        expect(svc.migrateShortTermScore(200), 200); // >150 no change
+        // Session-load path: loadScalars stores persisted values RAW. The old
+        // ±150→×2 era migration was deleted 2026-07-27 — it re-doubled live
+        // bonds ≤ 150 on every library-open→save cycle (40→80→160).
+        svc.loadScalars(affectionScore: 42, longTermScore: 17, trustLevel: 5);
+        expect(svc.affectionScore, 42); // NOT 84
+        expect(svc.longTermScore, 17); // NOT 34
       },
     );
 
@@ -598,15 +591,6 @@ void main() {
       expect(svc.shortTermProgressBase, 15);
       expect(svc.shortTermProgressPercent > 0, true);
       expect(svc.shortTermTierName, 'Receptive'); // 25 <30 -> tier 2 per calc
-    });
-
-    test('applyLegacy migration *10 when old small positive high tier', () {
-      final svc = createTestRelationship();
-      svc.loadScalars(affectionScore: 12, longTermScore: 0, trustLevel: 0);
-      // load computes tier from current score (12 -> tier 1), so legacy condition (_affection>0 && <=15 && tier>=3) not met here.
-      // applyLegacyShortTermMigrationIfNeeded is a no-op smoke in this harness (real triggering exercised in ChatService V2.5 load/seed paths + dedicated migration tests).
-      svc.applyLegacyShortTermMigrationIfNeeded();
-      expect(svc.affectionScore, 12);
     });
 
     test('public inter update/get clamps and creates', () {

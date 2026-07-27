@@ -48,16 +48,7 @@ to both methods:
    twice — once at line 158 and again at line 224. The second call is
    redundant (no scores change between the two). (Pre-existing.)
 
-3. **Migration wrappers inflate scores on every chat open:**
-   `_migrateShortTermScore` (`relationship_service.dart:479`) doubles
-   any score with `|score| ≤ 150`, with no era flag or version guard.
-   `_loadLastSession` passes the wrapped values to `loadScalars` (lines
-   140-143), and `_doSaveChat` writes them back
-   (`chat_service_session_state.dart:327-334`). A bond of 40 inflates
-   to 80 on the second open, 160 on the third — up to 4× drift,
-   crossing several `_calculateTier` boundaries. `loadSession` passes
-   raw DB values and is the correct path. (Pre-existing. Promoted from
-   code review — see PR #162 discussion.)
+3. **Migration wrappers inflate scores on every chat open:** ~~`_migrateShortTermScore` doubles any score with `|score| ≤ 150`, with no era flag or version guard; `_loadLastSession` passes the wrapped values to `loadScalars` and `_doSaveChat` writes them back — 40 → 80 → 160 across open→save cycles, crossing `_calculateTier` boundaries, while `loadSession` and groups pass raw values.~~ **FIXED 2026-07-27** (ahead of Step 2, variant A1: no DB heal): `_loadLastSession` now passes raw DB values exactly like `loadSession`; the whole era-migration surface was deleted (`_migrateShortTermScore`, `_migrateLongTermScore`, their public wrappers, the caller-less `seedFromV2OrExt`, and `applyLegacyShortTermMigrationIfNeeded` — the latter provably dead: it required score ≤ 15 AND tier ≥ 3, but `loadScalars` recomputes tier from score and 15 ⇒ tier 2). Pre-±300-era sessions never opened since that era load at their old half-scale value once and regrow — accepted trade-off vs. active corruption of every current 1:1 chat. Regression-pinned in `session_load_regression_test.dart` ("bond scores load raw" group: double open→save cycle byte-stability + library/picker parity).
 
 ## Step 1a: Extract message hydration loop
 
