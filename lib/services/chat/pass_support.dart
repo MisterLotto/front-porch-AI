@@ -131,10 +131,14 @@ class ToolTransportProbe extends ChangeNotifier {
 /// Flow: unless [probe] already marked the backend text-only, fire the
 /// tools-mode prompt; a matching call is converted by [callToText] into the
 /// canonical text the downstream parser expects; a tool-less reply with text
-/// is salvaged through the same parser; anything else marks the backend
-/// text-only for the run and falls back to the streaming text path — UNLESS
-/// [isCancelled] fires, because a user-aborted request is a cancellation,
-/// never a capability verdict.
+/// is salvaged through the same parser. Verdict rule: only real evidence
+/// brands the backend — thrown non-transport rejections mark it text-only,
+/// while transport failures, cancellations ([isCancelled]), and EMPTY
+/// answers (null resp, or no call + no text — the shape a server-side abort
+/// produces as a clean 200) are inconclusive: fall back to text for the
+/// round and leave the probe untested to retry next pass. Capability
+/// branding of genuinely tool-less models is the ToolSupportTester ping's
+/// job.
 Future<String?> fireStructuredEval({
   required ToolTransportProbe probe,
   required String backendIdentity,
@@ -156,7 +160,7 @@ Future<String?> fireStructuredEval({
   void Function(String)? onChunk,
 }) async {
   if (!probe.isXmlOnly(backendIdentity)) {
-    var transportFailure = false;
+    var inconclusive = false;
     try {
       final resp = await fireToolEval(buildPrompt(toolsMode: true), tools);
       if (isCancelled?.call() ?? false) return null;
@@ -174,6 +178,20 @@ Future<String?> fireStructuredEval({
           return resp.text;
         }
       }
+      // Null resp, or a resp with no usable call AND no text: an EMPTY
+      // answer is never a capability verdict. A KoboldCpp server-side abort
+      // (/api/extra/abort — fired by stopGeneration, the eval-timeout
+      // teardown, or LlmEvalEngine's ensureServerIdle retry hygiene)
+      // completes the in-flight call NORMALLY: HTTP 200, zero tokens, no
+      // tool_calls — indistinguishable here from "model can't speak tools",
+      // and exactly how the tool-calling pill kept falling to
+      // "not supported" after a Scene Guest join (the guest flow stacks a
+      // long mint generation + a burst of concurrent evals + abort/idle
+      // traffic on the single-slot backend). Models that genuinely can't
+      // speak tools answer with PROSE (salvaged above) and are branded by
+      // the ToolSupportTester ping; an empty answer just falls back to text
+      // for THIS round and leaves the probe untested to retry next pass.
+      inconclusive = true;
     } catch (e) {
       debugPrint('[Eval:Tools] $debugLabel attempt failed: $e');
       if (isCancelled?.call() ?? false) return null;
@@ -183,9 +201,9 @@ Future<String?> fireStructuredEval({
       // busy/5xx server) is a network event, not a verdict on the MODEL's
       // tool support. generateWithTools rethrows those, so they land here
       // and are filtered instead of branding the backend XML-only.
-      transportFailure = isToolTransportFailure(e);
+      inconclusive = isToolTransportFailure(e);
     }
-    if (!transportFailure) {
+    if (!inconclusive) {
       probe.markXmlOnly(backendIdentity);
       debugPrint(
         '[Eval:Tools] Tools unavailable on $backendIdentity — using text '

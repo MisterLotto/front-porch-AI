@@ -744,7 +744,11 @@ void main() {
       expect(cursors, [2]);
     });
 
-    test('tools rejected once → XML fallback, probe not repeated', () async {
+    test('null tools answer is inconclusive → probed again next pass',
+        () async {
+      // Pre-fix, one null answer branded the backend XML-only for the run —
+      // but null/empty is also the shape a server-side abort produces (the
+      // Scene Guest "pill falls off" bug), so it is never a verdict now.
       var toolAttempts = 0;
       final xmlPrompts = <String>[];
       final m = build(
@@ -754,7 +758,31 @@ void main() {
         prompts: xmlPrompts,
         fireToolEval: (p, t) async {
           toolAttempts++;
-          return null; // backend can't speak tools
+          return null; // answered, nothing usable — inconclusive
+        },
+      );
+      await m.runMaintenancePass();
+      await m.runMaintenancePass(force: true);
+
+      expect(toolAttempts, 2); // re-probed: null is never a capability verdict
+      expect(xmlPrompts, hasLength(2)); // both rounds still landed over XML
+    });
+
+    test('prose with no tags brands XML-only after one probe', () async {
+      var toolAttempts = 0;
+      final xmlPrompts = <String>[];
+      final m = build(
+        responses: ['<recap>one</recap>', '<recap>two</recap>'],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        fireToolEval: (p, t) async {
+          toolAttempts++;
+          // The model ANSWERED and chose words over tools — real evidence.
+          return const LlmToolResponse(
+            calls: [],
+            text: 'I would rather describe the memories in plain prose.',
+          );
         },
       );
       await m.runMaintenancePass();

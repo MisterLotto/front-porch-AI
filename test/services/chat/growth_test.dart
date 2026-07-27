@@ -537,6 +537,50 @@ Some prose the model wrote.
       expect(probe.isXmlOnly('fake'), isFalse);
     });
 
+    test('EMPTY tools answer (server-side abort shape) → probe left untested',
+        () async {
+      xmlReply = '<ring action="add">Survived the abort</ring>';
+      final probe = ToolTransportProbe();
+      final svc = makeService(
+        messages: chatty,
+        probe: probe,
+        // A KoboldCpp /api/extra/abort completes an in-flight tool call as a
+        // clean HTTP 200 with zero tokens and no tool_calls — no exception
+        // for the transport classifier. This was the surviving "pill falls
+        // off after a Scene Guest joins" hole.
+        fireToolEval: (p, t) async =>
+            const LlmToolResponse(calls: [], text: ''),
+      );
+      await svc.runGrowthPass();
+      // The round still landed over the XML fallback…
+      expect(
+        (await store.ringsFor('s1', 'mira')).single.content,
+        'Survived the abort',
+      );
+      // …and the backend was NOT branded: empty is never a verdict.
+      expect(probe.isXmlOnly('fake'), isFalse);
+    });
+
+    test('prose answer with no tool call and no tags DOES brand XML-only',
+        () async {
+      xmlReply = '<ring action="add">Prose evidence</ring>';
+      final probe = ToolTransportProbe();
+      final svc = makeService(
+        messages: chatty,
+        probe: probe,
+        fireToolEval: (p, t) async => const LlmToolResponse(
+          calls: [],
+          text: 'I would rather just describe their growth in plain words.',
+        ),
+      );
+      await svc.runGrowthPass();
+      expect(
+        probe.isXmlOnly('fake'),
+        isTrue,
+        reason: 'words-instead-of-tools is real capability evidence',
+      );
+    });
+
     test('empty window (cursor caught up) does not fire; force does', () async {
       xmlReply = '<ring action="add">Bare growth</ring>';
       await store.setCursor('s1', chatty.length);

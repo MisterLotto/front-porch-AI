@@ -115,16 +115,28 @@ class ToolSupportTester {
       if (getBackendIdentity() == identity) {
         if (resp != null && resp.calls.isNotEmpty) {
           probe.markSupported(identity);
-        } else {
+        } else if (resp != null && resp.text.trim().isNotEmpty) {
+          // Prose instead of a call — the model answered and chose words:
+          // real capability evidence.
           probe.markXmlOnly(identity);
+        } else {
+          // Null/empty answer: the clean-200 shape a KoboldCpp server-side
+          // abort produces when it cuts down an in-flight call (the Scene
+          // Guest "pill falls off" bug) — inconclusive, never a verdict.
+          // Leave untested and re-arm the auto-test so the next
+          // backend-changed notify (or a pill tap) retries.
+          _lastAutoTestedIdentity = '';
         }
       }
     } catch (e) {
       debugPrint('[ToolSupport] Probe failed: $e');
       // Transport failure (unreachable, torn-down client, timeout, busy
-      // server) → leave untested: connectivity, not capability.
+      // server) → leave untested: connectivity, not capability — and re-arm
+      // the auto-test so a later backend notify retries.
       if (getBackendIdentity() == identity && !isToolTransportFailure(e)) {
         probe.markXmlOnly(identity);
+      } else if (getBackendIdentity() == identity) {
+        _lastAutoTestedIdentity = '';
       }
     } finally {
       _testing = false;

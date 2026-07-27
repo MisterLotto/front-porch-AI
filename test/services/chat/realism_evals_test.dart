@@ -733,8 +733,14 @@ void main() {
     );
 
     test(
-      'probe fallback: null tools response marks backend and uses text; no re-probe',
+      'probe fallback: null tools response is inconclusive — text this '
+      'round, probed again next eval',
       () async {
+        // Pre-fix, one null answer branded the backend XML-only — but
+        // null/empty is also the clean-200 shape a server-side abort
+        // produces (the Scene Guest "pill falls off" bug), so it is never a
+        // capability verdict now. Tool-less models are branded by the
+        // ToolSupportTester ping (and by prose-instead-of-tools answers).
         var toolFires = 0;
         var textFires = 0;
         final probe = ToolTransportProbe();
@@ -742,7 +748,7 @@ void main() {
           probe: probe,
           fireToolFn: (p, t) async {
             toolFires++;
-            return null; // backend can't speak tools
+            return null; // answered, nothing usable — inconclusive
           },
           fireFn: (p, {onChunk}) async {
             textFires++;
@@ -753,9 +759,9 @@ void main() {
         );
         await svc.evaluateEmotionalStateCall();
         await svc.evaluateEmotionalStateCall();
-        expect(toolFires, 1); // probed once, remembered
-        expect(textFires, 2);
-        expect(probe.isXmlOnly('test-backend'), isTrue);
+        expect(toolFires, 2); // re-probed: null is never a verdict
+        expect(textFires, 2); // both rounds still landed over text
+        expect(probe.isXmlOnly('test-backend'), isFalse);
       },
     );
 

@@ -388,15 +388,20 @@ class GrowthService {
           // "no growth" result, not a transport failure.
           return const [];
         }
-        // Non-null response, no calls, no usable text: the model answered
-        // without tools — a capability verdict. (A null resp also lands
-        // here: the backend answered but the call yielded nothing usable;
-        // transport failures threw and were filtered above. The probe is
-        // deliberately one-shot per backend identity.)
-      }
-      if (!transportFailure) {
-        probe.markXmlOnly(backend);
-        debugPrint('[Growth] Tools unavailable on $backend — using XML');
+        if (resp.text.trim().isNotEmpty) {
+          // Prose with no tool call and no parseable tags: the model
+          // ANSWERED and chose words over tools — real capability evidence.
+          probe.markXmlOnly(backend);
+          debugPrint('[Growth] Tools unavailable on $backend — using XML');
+        }
+        // Empty resp (no calls, no text): never a verdict — the clean empty
+        // 200 a server-side abort produces (the Scene Guest "pill falls
+        // off" bug). Fall back to XML for THIS round only; the next pass
+        // probes tools again. Mirrors the Journal's handling exactly.
+      } else if (!transportFailure) {
+        // Null resp: answered but nothing usable — same ambiguity; no
+        // verdict. The ToolSupportTester ping brands tool-less models.
+        debugPrint('[Growth] Tools inconclusive on $backend — XML this round');
       }
     }
 
