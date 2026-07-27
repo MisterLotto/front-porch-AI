@@ -67,6 +67,14 @@ interface ToolsState {
       season: string;
       label: string;
       emoji: string;
+      // Intra-day fields (additive — absent on older facades). label/emoji
+      // already lead with the current day-part; these expose the raw pieces.
+      segment?: string | null;
+      segmentCondition?: string | null;
+      tempC?: number | null;
+      tempF?: number | null;
+      unit?: string | null;
+      dayLabel?: string | null;
       // Deterministic forecast (additive — absent on older facades). The
       // desktop engine's walk is prefix-stable, so this is exactly what the
       // next story day will be.
@@ -462,6 +470,9 @@ export function ChatTools({
               <span
                 title={
                   `${t.time.weather.label} · ${t.time.weather.season}` +
+                  (t.time.weather.dayLabel
+                    ? `\nToday: ${t.time.weather.dayLabel}`
+                    : '') +
                   (t.time.weather.tomorrow
                     ? `\nTomorrow: ${t.time.weather.tomorrow.emoji} ${t.time.weather.tomorrow.label}`
                     : '')

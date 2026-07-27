@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/story_calendar_dialog.dart';
@@ -106,6 +107,9 @@ class TimeStrip extends StatelessWidget {
             sessionSeed: chat.currentSessionId ?? '',
             dayCount: chat.timeService.dayCount,
             date: chat.timeService.clock,
+            hour: chat.timeService.clock.hour,
+            fahrenheit:
+                Provider.of<StorageService>(context).weatherFahrenheit,
           ),
         ],
         const SizedBox(height: 4),

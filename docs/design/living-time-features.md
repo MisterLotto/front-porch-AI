@@ -223,6 +223,35 @@ condition differs (tooltip always names tomorrow); web facade adds an
 additive `tomorrow` object inside `weather` and the web chat tools mirror
 the arrow. Nothing stored, no schema — same recompute contract as v1.
 
+**v3 note (shipped 2026-07-27) — intra-day segments + temperatures:**
+maintainer-requested. The daily walk stays the UNTOUCHED anchor (its golden
+sequences must never change for existing chats); a new pure leaf
+`weather_segments.dart` derives everything from independent RNG streams off
+the same session seed:
+- **Day scripts:** each day seed-picks a weighted 4-segment pattern
+  (morning/afternoon/evening/night, from the story-clock hour) built around
+  the anchor condition — fog belongs to mornings and burns off, storms break
+  in the afternoon/evening, rain fronts arrive and clear. Every script
+  contains the anchor; storms only occur on storm days (test-pinned).
+- **Temperatures:** deterministic per-day °C within the band's range
+  (cold −8..2 … hot 26..34) + fixed diurnal offsets (morning −3, afternoon
+  +2, evening 0, night −6). **UI-only** — the injection stays words-only per
+  prompt-state-injection.md; a °C/°F display toggle sits under the Weather
+  toggle (Settings → General, `weather_fahrenheit`).
+- **Prompt:** the injection line is now the current day-part's prose opening
+  with a banded dressing cue ("Outside it is coat-and-gloves cold."), plus a
+  within-day transition sentence when the sky changed since the previous
+  segment (yesterday's night, for a morning), plus the unchanged v2
+  tomorrow-foreshadow.
+- **Needs:** the decay modifiers sample the current SEGMENT's condition
+  (afternoon storm = rough even on a "cloudy" day) via the same DailyWeather
+  view — NeedsSimulation untouched, 1:1/group parity inherited.
+- **Web:** facade `weather.label`/`emoji` lead with the current day-part
+  (temp in the user's unit — reaches old bundles as opaque text), plus
+  additive `segment`/`segmentCondition`/`tempC`/`tempF`/`unit`/`dayLabel`;
+  bundle rebuilt. The °C/°F toggle surface itself is desktop Settings only,
+  same as the Weather toggle it sits under (flagged, not silent).
+
 ### Risks
 Needs balance — keep deltas ±1-grade and behind the toggle. Parity audit is
 the real work item.

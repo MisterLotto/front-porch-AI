@@ -19,6 +19,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/chat/weather_segments.dart';
 
 part 'weather_providers.g.dart';
 
@@ -39,4 +40,22 @@ DailyWeather dailyWeather(
   sessionSeed: sessionSeed,
   dayCount: dayCount,
   date: date,
+);
+
+/// Current day-part weather (§3 v3) — same memoization contract as
+/// [dailyWeather]; the hour is a plain family arg so the recompute runs only
+/// when the story clock actually crosses a segment boundary (or the
+/// day/session changes), not on every sidebar rebuild.
+@riverpod
+SegmentWeather segmentWeather(
+  Ref ref, {
+  required String sessionSeed,
+  required int dayCount,
+  required DateTime date,
+  required int hour,
+}) => WeatherSegments.segmentWeatherFor(
+  sessionSeed: sessionSeed,
+  dayCount: dayCount,
+  date: date,
+  hour: hour,
 );

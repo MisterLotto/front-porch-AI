@@ -127,7 +127,7 @@ class WeatherEngine {
     for (int d = 1; d <= days; d++) {
       final dayDate = date.subtract(Duration(days: days - d));
       season = seasonOf(dayDate);
-      final rng = _Xorshift(base ^ (d * 0x9E3779B9));
+      final rng = WeatherRng(base ^ (d * 0x9E3779B9));
       final stay = d > 1 && rng.nextPermille() < _stayPermille;
       temp = _tempFor(season, rng);
       if (!stay) {
@@ -139,7 +139,7 @@ class WeatherEngine {
     return DailyWeather(condition: cond, temp: temp, season: season);
   }
 
-  static TempBand _tempFor(String season, _Xorshift rng) {
+  static TempBand _tempFor(String season, WeatherRng rng) {
     final jitter = rng.nextPermille() < 250
         ? -1
         : rng.nextPermille() < 250
@@ -155,7 +155,7 @@ class WeatherEngine {
   static WeatherCondition _conditionFor(
     String season,
     TempBand temp,
-    _Xorshift rng,
+    WeatherRng rng,
   ) {
     final weights = _seasonWeights[season] ?? _seasonWeights['spring']!;
     final total = weights.fold(0, (a, b) => a + b);
@@ -291,6 +291,16 @@ class WeatherEngine {
     return '';
   }
 
+  /// Public banded temperature word — shared with the intra-day segment
+  /// layer (weather_segments.dart) so the two files can't drift apart.
+  static String tempWord(TempBand t) => _tempWord(t);
+
+  /// Stable seed for [sessionSeed] — the same FNV-1a base the daily walk
+  /// uses, exposed so the segment layer derives its own INDEPENDENT RNG
+  /// streams from it (never drawing from the walk's RNG, which would
+  /// perturb the pinned daily sequences of existing chats).
+  static int seedFor(String sessionSeed) => _fnv1a(sessionSeed);
+
   static String _tempWord(TempBand t) {
     switch (t) {
       case TempBand.cold:
@@ -329,10 +339,13 @@ class WeatherEngine {
   }
 }
 
-/// Tiny xorshift32 — deterministic, allocation-free.
-class _Xorshift {
+/// Tiny xorshift32 — deterministic, allocation-free. Public (with a private
+/// alias below for the walk) so weather_segments.dart shares the exact PRNG
+/// instead of duplicating it; treat as internal to the weather subsystem.
+class WeatherRng {
   int _state;
-  _Xorshift(int seed) : _state = (seed & 0xFFFFFFFF) == 0 ? 0xDEADBEEF : (seed & 0xFFFFFFFF);
+  WeatherRng(int seed)
+      : _state = (seed & 0xFFFFFFFF) == 0 ? 0xDEADBEEF : (seed & 0xFFFFFFFF);
 
   int next() {
     var x = _state;

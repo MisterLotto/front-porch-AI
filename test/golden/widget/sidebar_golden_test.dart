@@ -97,11 +97,17 @@ void main() {
         season: 'autumn',
       );
     addTearDown(chat.dispose);
+    final storage = _storage();
+    addTearDown(storage.dispose);
     await expectThemedGoldens(
       tester,
       // ProviderScope: WeatherChip is the app's first Riverpod ConsumerWidget.
+      // StorageService: TimeStrip reads the °C/°F display preference (v3).
       child: ProviderScope(
-        child: SizedBox(width: 300, child: TimeStrip(chat: chat)),
+        child: ChangeNotifierProvider<StorageService>.value(
+          value: storage,
+          child: SizedBox(width: 300, child: TimeStrip(chat: chat)),
+        ),
       ),
       group: 'sidebar',
       name: 'time_strip_weather',

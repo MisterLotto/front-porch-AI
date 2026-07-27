@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/chat/weather_segments.dart';
 import 'package:front_porch_ai/services/story/faithful_mode.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
@@ -145,8 +146,32 @@ class ChatToolsFacade {
                 'condition': weather.condition.name,
                 'temp': weather.temp.name,
                 'season': weather.season,
-                'label': WeatherEngine.label(weather),
-                'emoji': WeatherEngine.emoji(weather.condition),
+                'label': switch (_chat.currentSegmentWeather) {
+                  // Intra-day (v3): the label leads with the CURRENT
+                  // day-part's condition + numeric temp in the user's unit —
+                  // older bundles render it as opaque text, so this upgrade
+                  // reaches every web client with zero TS changes.
+                  final seg? => WeatherSegments.label(
+                    seg,
+                    fahrenheit: _storage.weatherFahrenheit,
+                  ),
+                  null => WeatherEngine.label(weather),
+                },
+                'emoji': switch (_chat.currentSegmentWeather) {
+                  final seg? => WeatherEngine.emoji(seg.condition),
+                  null => WeatherEngine.emoji(weather.condition),
+                },
+                // Intra-day fields (additive, v3) — day-part identity plus
+                // both units so richer web UIs can format freely.
+                'segment': _chat.currentSegmentWeather?.segment.name,
+                'segmentCondition': _chat.currentSegmentWeather?.condition.name,
+                'tempC': _chat.currentSegmentWeather?.tempC,
+                'tempF': switch (_chat.currentSegmentWeather?.tempC) {
+                  null => null,
+                  final c => WeatherSegments.tempF(c),
+                },
+                'unit': _storage.weatherFahrenheit ? 'f' : 'c',
+                'dayLabel': WeatherEngine.label(weather),
                 // Deterministic forecast (additive) — the prefix-stable walk
                 // means tomorrow is already decided, so the web UI can show
                 // incoming fronts exactly like the desktop chip.

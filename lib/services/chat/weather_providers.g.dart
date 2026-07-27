@@ -139,3 +139,129 @@ final class DailyWeatherFamily extends $Family
   @override
   String toString() => r'dailyWeatherProvider';
 }
+
+/// Current day-part weather (§3 v3) — same memoization contract as
+/// [dailyWeather]; the hour is a plain family arg so the recompute runs only
+/// when the story clock actually crosses a segment boundary (or the
+/// day/session changes), not on every sidebar rebuild.
+
+@ProviderFor(segmentWeather)
+final segmentWeatherProvider = SegmentWeatherFamily._();
+
+/// Current day-part weather (§3 v3) — same memoization contract as
+/// [dailyWeather]; the hour is a plain family arg so the recompute runs only
+/// when the story clock actually crosses a segment boundary (or the
+/// day/session changes), not on every sidebar rebuild.
+
+final class SegmentWeatherProvider
+    extends $FunctionalProvider<SegmentWeather, SegmentWeather, SegmentWeather>
+    with $Provider<SegmentWeather> {
+  /// Current day-part weather (§3 v3) — same memoization contract as
+  /// [dailyWeather]; the hour is a plain family arg so the recompute runs only
+  /// when the story clock actually crosses a segment boundary (or the
+  /// day/session changes), not on every sidebar rebuild.
+  SegmentWeatherProvider._({
+    required SegmentWeatherFamily super.from,
+    required ({String sessionSeed, int dayCount, DateTime date, int hour})
+    super.argument,
+  }) : super(
+         retry: null,
+         name: r'segmentWeatherProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$segmentWeatherHash();
+
+  @override
+  String toString() {
+    return r'segmentWeatherProvider'
+        ''
+        '$argument';
+  }
+
+  @$internal
+  @override
+  $ProviderElement<SegmentWeather> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  SegmentWeather create(Ref ref) {
+    final argument =
+        this.argument
+            as ({String sessionSeed, int dayCount, DateTime date, int hour});
+    return segmentWeather(
+      ref,
+      sessionSeed: argument.sessionSeed,
+      dayCount: argument.dayCount,
+      date: argument.date,
+      hour: argument.hour,
+    );
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(SegmentWeather value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<SegmentWeather>(value),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is SegmentWeatherProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$segmentWeatherHash() => r'ae376be550e5d8628a22f2e43440965d3e68fe99';
+
+/// Current day-part weather (§3 v3) — same memoization contract as
+/// [dailyWeather]; the hour is a plain family arg so the recompute runs only
+/// when the story clock actually crosses a segment boundary (or the
+/// day/session changes), not on every sidebar rebuild.
+
+final class SegmentWeatherFamily extends $Family
+    with
+        $FunctionalFamilyOverride<
+          SegmentWeather,
+          ({String sessionSeed, int dayCount, DateTime date, int hour})
+        > {
+  SegmentWeatherFamily._()
+    : super(
+        retry: null,
+        name: r'segmentWeatherProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  /// Current day-part weather (§3 v3) — same memoization contract as
+  /// [dailyWeather]; the hour is a plain family arg so the recompute runs only
+  /// when the story clock actually crosses a segment boundary (or the
+  /// day/session changes), not on every sidebar rebuild.
+
+  SegmentWeatherProvider call({
+    required String sessionSeed,
+    required int dayCount,
+    required DateTime date,
+    required int hour,
+  }) => SegmentWeatherProvider._(
+    argument: (
+      sessionSeed: sessionSeed,
+      dayCount: dayCount,
+      date: date,
+      hour: hour,
+    ),
+    from: this,
+  );
+
+  @override
+  String toString() => r'segmentWeatherProvider';
+}

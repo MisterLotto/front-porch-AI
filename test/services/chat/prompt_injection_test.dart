@@ -644,6 +644,7 @@ void main() {
         // weather-on path is covered in weather_engine_test.dart.
         weatherInjection: WeatherInjection(
           getWeather: () => null,
+          getPreviousSegment: () => null,
           getUpcoming: () => null,
         ),
         // Ambitions off in composer tests — active char has none, so the

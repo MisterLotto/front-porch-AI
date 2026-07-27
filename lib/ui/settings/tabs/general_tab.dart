@@ -194,6 +194,18 @@ class GeneralTab extends StatelessWidget {
               value: storageService.weatherEnabled,
               onChanged: (val) => storageService.setWeatherEnabled(val),
             ),
+            if (storageService.weatherEnabled)
+              subToggle(
+                icon: Icons.thermostat_outlined,
+                label: 'Temperatures in °F',
+                blurb:
+                    'Show story-weather temperatures in Fahrenheit instead '
+                    'of Celsius. Display only — characters always experience '
+                    'the weather in words ("coat-and-gloves cold"), never '
+                    'numbers.',
+                value: storageService.weatherFahrenheit,
+                onChanged: (val) => storageService.setWeatherFahrenheit(val),
+              ),
             subToggle(
               icon: Icons.nightlight_outlined,
               label: 'Dreams',

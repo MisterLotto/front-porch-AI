@@ -661,6 +661,9 @@ class StorageService extends ChangeNotifier {
   bool get weatherEnabled => realismSettings.weatherEnabled;
   Future<void> setWeatherEnabled(bool v) =>
       realismSettings.setWeatherEnabled(v);
+  bool get weatherFahrenheit => realismSettings.weatherFahrenheit;
+  Future<void> setWeatherFahrenheit(bool v) =>
+      realismSettings.setWeatherFahrenheit(v);
   bool get absenceBannerEnabled => realismSettings.absenceBannerEnabled;
   Future<void> setAbsenceBannerEnabled(bool v) =>
       realismSettings.setAbsenceBannerEnabled(v);

@@ -94,6 +94,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection
 import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/milestone_feed.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/chat/weather_segments.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
@@ -1549,7 +1550,22 @@ class ChatService extends ChangeNotifier {
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getNeedsSimEnabled: () => _needsSimEnabled,
     getCustomDecayRates: () => _activeDecayRates(),
-    getWeather: () => currentWeather,
+    // Needs modifiers sample the CURRENT DAY-PART (v3): an afternoon storm
+    // speeds comfort decay even on a day whose headline is "cloudy", and a
+    // clear evening earns the fun bonus after a rainy morning. Same
+    // DailyWeather view the modifiers always took — condition swapped for
+    // the segment's, band/season stay the day's — so NeedsSimulation is
+    // untouched and 1:1/group parity is inherited (weather is per-chat
+    // shared; both paths tick through these same modifiers).
+    getWeather: () {
+      final seg = currentSegmentWeather;
+      if (seg == null) return null;
+      return DailyWeather(
+        condition: seg.condition,
+        temp: seg.day.temp,
+        season: seg.day.season,
+      );
+    },
   );
 
   late final _relationshipService = RelationshipService(
@@ -1814,8 +1830,54 @@ class ChatService extends ChangeNotifier {
     );
   }
 
+  /// The current DAY-PART's weather (Living Time §3 v3): the day script's
+  /// condition for the story-clock hour plus the deterministic °C. Same gate
+  /// and recompute contract as [currentWeather] — nothing stored. Consumed
+  /// by the injection, the needs decay view below, the sidebar chip, and the
+  /// web facade.
+  SegmentWeather? get currentSegmentWeather {
+    if (currentWeather == null) return null;
+    return WeatherSegments.segmentWeatherFor(
+      sessionSeed: _currentSessionId!,
+      dayCount: _timeService.dayCount,
+      date: _timeService.clock,
+      hour: _timeService.clock.hour,
+    );
+  }
+
+  /// The segment BEFORE the current one — same day for afternoon/evening/
+  /// night, yesterday's night for a morning (cross-day continuity, so
+  /// "the rain has eased off" can span the night). Null on day 1 mornings
+  /// (nothing came before) and whenever weather is off.
+  SegmentWeather? get previousSegmentWeather {
+    final now = currentSegmentWeather;
+    if (now == null) return null;
+    final day = _timeService.dayCount;
+    return switch (now.segment) {
+      DaySegment.morning => day <= 1
+          ? null
+          : WeatherSegments.segmentWeatherFor(
+              sessionSeed: _currentSessionId!,
+              dayCount: day - 1,
+              date: _timeService.clock.subtract(const Duration(days: 1)),
+              hour: 23,
+            ),
+      DaySegment.afternoon => _segmentAt(7),
+      DaySegment.evening => _segmentAt(14),
+      DaySegment.night => _segmentAt(18),
+    };
+  }
+
+  SegmentWeather _segmentAt(int hour) => WeatherSegments.segmentWeatherFor(
+    sessionSeed: _currentSessionId!,
+    dayCount: _timeService.dayCount,
+    date: _timeService.clock,
+    hour: hour,
+  );
+
   late final _weatherInjection = WeatherInjection(
-    getWeather: () => currentWeather,
+    getWeather: () => currentSegmentWeather,
+    getPreviousSegment: () => previousSegmentWeather,
     getUpcoming: () => upcomingWeather,
   );
 

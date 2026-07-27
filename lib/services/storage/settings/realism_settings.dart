@@ -30,6 +30,7 @@ class RealismSettings with SettingsBase {
   bool _passageOfTimeDefault = true;
   bool _realismOneShotEval = false;
   bool _weatherEnabled = true;
+  bool _weatherFahrenheit = false;
   bool _absenceBannerEnabled = true;
   bool _absenceAckEnabled = false;
   int _absenceThresholdHours = 24;
@@ -44,6 +45,11 @@ class RealismSettings with SettingsBase {
   /// Living Time story weather (living-time-features.md §3). Effective only
   /// when realism + passage-of-time are on — ChatService gates that.
   bool get weatherEnabled => _weatherEnabled;
+
+  /// Display temperatures in °F instead of °C (§3 v3). Display-only: the
+  /// canonical unit is °C everywhere internally, and the generation prompt
+  /// carries no numbers at all (words-only contract).
+  bool get weatherFahrenheit => _weatherFahrenheit;
 
   /// Living Time absence awareness (living-time-features.md §2). Banner is
   /// app-voice and default ON; the in-character acknowledgment is default
@@ -65,6 +71,7 @@ class RealismSettings with SettingsBase {
         prefs?.getBool(k('passage_of_time_default')) ?? true;
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
+    _weatherFahrenheit = prefs?.getBool(k('weather_fahrenheit')) ?? false;
     _absenceBannerEnabled =
         prefs?.getBool(k('absence_banner_enabled')) ?? true;
     _absenceAckEnabled = prefs?.getBool(k('absence_ack_enabled')) ?? false;
@@ -85,6 +92,12 @@ class RealismSettings with SettingsBase {
   Future<void> setWeatherEnabled(bool value) async {
     _weatherEnabled = value;
     await prefs?.setBool(k('weather_enabled'), value);
+    notify();
+  }
+
+  Future<void> setWeatherFahrenheit(bool value) async {
+    _weatherFahrenheit = value;
+    await prefs?.setBool(k('weather_fahrenheit'), value);
     notify();
   }
 
