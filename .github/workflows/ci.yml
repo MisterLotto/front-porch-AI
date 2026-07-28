@@ -113,6 +113,50 @@ jobs:
         run: flutter test --concurrency=1 --reporter expanded --exclude-tags golden
         timeout-minutes: 20
 
+  # Full-array E2E smoke: boots the REAL desktop app (windowed, on the runner's
+  # display session) through a sandboxed two-turn chat against an in-process
+  # fake backend, asserting realism evals, needs sim, chaos pressure, objective
+  # proposal + task-gen, and a real journal maintenance pass. See
+  # integration_test/app_smoke_test.dart for the isolation contract.
+  # Runner notes: no human mouse and no real KoboldCpp exist here, so the two
+  # local-run hazards (hover-wedge, zombie-kill) don't apply. Build time
+  # dominates (~6-10 min); the test itself is ~7s.
+  # Windows is experimental (continue-on-error) until it has a green run on
+  # record — flip `experimental: true` to `false` then. Linux would need xvfb
+  # and is deliberately not wired yet.
+  e2e-smoke:
+    name: E2E smoke (${{ matrix.device }})
+    needs: analyze
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            device: macos
+            experimental: false
+          - os: windows-latest
+            device: windows
+            experimental: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run E2E smoke suite
+        run: flutter test integration_test/app_smoke_test.dart -d ${{ matrix.device }}
+
   web-tests:
     name: WebUI tests (vitest)
     runs-on: ubuntu-latest

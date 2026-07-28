@@ -6099,3 +6099,14 @@ can miss silently). Fake gains journal-XML and task-list branches with their
 own counters, needs `<need>_delta` payloads, and streams via one _streamSse
 helper. Verification: analyze clean; suite green ~7s; log shows both turns'
 full 5-eval suites + 2 journal passes applied ("1 op(s) + recap" ×2).
+
+## 2026-07-28 (UTC) — E2E smoke suite wired into CI (macOS blocking, Windows experimental)
+
+**Files:** `.github/workflows/ci.yml`
+
+**What:** New `e2e-smoke` job (needs: analyze) runs the full-array suite on
+every PR/push to dev/main/Rawhide: macos-latest blocking, windows-latest
+`continue-on-error: true` until its first green run is on record (then flip
+`experimental` to false). Public repo → hosted macOS/Windows runners are free.
+30-min job timeout; build dominates, test is ~7s. Linux deliberately not wired
+(needs xvfb). Verified by pushing Rawhide and watching the run.
