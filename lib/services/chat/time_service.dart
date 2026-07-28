@@ -70,6 +70,9 @@ class TimeService {
   DateTime _startDate = StoryClock.todayAnchor();
   bool _passageOfTimeEnabled = true;
   int _turnsSinceClockMoved = 0; // stall backstop counter (not a pacing gate)
+  // One clock authority per turn: set when detectOocTimeSkip moves the clock,
+  // consumed by the per-turn eval so it can't re-count the same exchange.
+  bool _oocSkipMovedClockThisTurn = false;
 
   // Tools transport for the scene-time/posture eval (nullable — tests and
   // any host without the tools door stay on the text path).
@@ -149,6 +152,7 @@ class TimeService {
     _startDate = StoryClock.todayAnchor();
     _clock = StoryClock.representativeTime(_startDate, 'morning');
     _turnsSinceClockMoved = 0;
+    _oocSkipMovedClockThisTurn = false;
     _passageOfTimeEnabled = true;
   }
 
@@ -384,6 +388,7 @@ class TimeService {
 
     _clock = next;
     _turnsSinceClockMoved = 0;
+    _oocSkipMovedClockThisTurn = true;
     onSetPendingRealismMetadata(
       'time_skip_to',
       '$displayShortDate · $displayClock',
@@ -521,9 +526,24 @@ class TimeService {
       'in the recent exchange (hallucination guard)',
     );
 
+    // One clock authority per turn (chip/clock parity): when an OOC or
+    // narrative skip already moved the clock for this exchange, this eval
+    // must not count the same exchange again — the double-advance is how a
+    // "Time skip: 11:50 PM" chip ended up under a 1:05 AM sidebar clock.
+    // Posture still evaluates; no minutes, no new_day, no failure drift.
+    final skipOwnsClock = _oocSkipMovedClockThisTurn;
+    _oocSkipMovedClockThisTurn = false;
+
     if (oneShotMode) {
       // The fused JSON already carries minutes_elapsed/new_day (and posture,
       // parsed by the one-shot applier). Clock math only — no LLM call.
+      if (skipOwnsClock) {
+        debugPrint(
+          '[Realism:Time] OOC skip owns this turn — one-shot clock '
+          'movement suppressed',
+        );
+        return;
+      }
       final text = oneShotText ?? '';
       final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
       if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
@@ -564,24 +584,32 @@ class TimeService {
         final text = stripThinkBlocks(raw).isNotEmpty
             ? stripThinkBlocks(raw)
             : raw;
-        final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
-        if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
-        _applyElapsed(
-          minutes: _extractMinutes(text),
-          newDay: saidNewDay && newDayCorroborated,
-        );
+        if (skipOwnsClock) {
+          debugPrint(
+            '[Realism:Time] OOC skip owns this turn — eval clock '
+            'movement suppressed',
+          );
+        } else {
+          final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
+          if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
+          _applyElapsed(
+            minutes: _extractMinutes(text),
+            newDay: saidNewDay && newDayCorroborated,
+          );
+        }
         final postureMatch = RegExp(
           r'"posture"\s*:\s*"([^"]+)"',
         ).firstMatch(text);
         if (postureMatch != null) {
           setSpatialStance(postureMatch.group(1)!.trim());
         }
-      } else {
+      } else if (!skipOwnsClock) {
         _applyElapsed(minutes: null, newDay: false);
       }
     } catch (e) {
-      // Eval failed — deterministic drift so time never freezes.
-      _applyElapsed(minutes: null, newDay: false);
+      // Eval failed — deterministic drift so time never freezes (unless the
+      // OOC skip already moved this turn's clock).
+      if (!skipOwnsClock) _applyElapsed(minutes: null, newDay: false);
       debugPrint('[Realism:Time] Eval error, drifted to $displayClock: $e');
     }
 

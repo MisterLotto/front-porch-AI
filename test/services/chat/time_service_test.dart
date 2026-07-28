@@ -193,6 +193,31 @@ void main() {
       expect(t.clock, before);
     });
 
+    test(
+      'an OOC skip owns the turn — the eval cannot double-advance',
+      () async {
+        // Field report: chip said "Time skip: 11:50 PM" while the sidebar
+        // showed 1:05 AM next day — the skip stamped the chip, then the same
+        // turn's scene-time eval re-counted the exchange and pushed the clock
+        // past midnight. The skip is now the turn's only clock authority.
+        final t = makeService();
+        seedFixed(t, timeOfDay: 'night'); // Thu 22:30
+        t.detectOocTimeSkip('(ooc: skip ahead an hour)');
+        expect(t.clock, DateTime.utc(2026, 7, 2, 23, 30));
+        await runEval(
+          t,
+          oneShotText: '{"minutes_elapsed": 75, "new_day": false}',
+        );
+        expect(t.clock, DateTime.utc(2026, 7, 2, 23, 30)); // unchanged
+        // The next turn's eval advances normally again.
+        await runEval(
+          t,
+          oneShotText: '{"minutes_elapsed": 10, "new_day": false}',
+        );
+        expect(t.clock, DateTime.utc(2026, 7, 2, 23, 40));
+      },
+    );
+
     test('"the next morning" jumps to 08:00 the following day', () {
       final t = makeService();
       seedFixed(t, timeOfDay: 'night'); // Thu 22:30
