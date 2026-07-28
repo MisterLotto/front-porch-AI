@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-28 — fix(ci): stabilize Linux E2E smoke (no remote Kobold download + retry)
+- **Why:** E2E smoke (linux) failed with exit 79 "No tests were found" after ~5s mid-boot — process death with no Dart stack. Same SHA's macos/windows E2E and unit/goldens were green; prior commits on Rawhide had green Linux E2E (flake). Successful Linux runs were also downloading ~131MB of KoboldCpp during smoke despite the fake openRouter backend.
+- **Fix:** `SetupService.runAutoSetup` skips local binary download when backend is already openRouter/omlx (correct for remote-only users + E2E). Smoke test treats window_manager placement as best-effort. CI Linux E2E retries once after a failed attempt (clears build/linux between tries).
+- **Files:** `lib/services/setup_service.dart`, `integration_test/app_smoke_test.dart`, `.github/workflows/ci.yml`.
+
 ## 2026-07-28 — chore(deps): refresh lock for Flutter 3.44.8; land safe majors
 - **Why:** Flutter was pinned to 3.44.8 but constraints/lock still reflected the pre-bump debt; `pub outdated` showed a long tail of upgrades.
 - **Did:** `flutter pub upgrade` + raised direct majors that resolve: file_picker 11, record 7, grpc 5, flat_buffers 25, shelf_web_socket 3 (+ ~60 total version bumps). API fixes: `FilePicker.platform` → static `FilePicker.*`; shelf_web_socket `ConnectionCallback` now `(channel, subprotocol)`. Floors regenerated (no downgrades).

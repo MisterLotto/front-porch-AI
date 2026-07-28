@@ -172,11 +172,31 @@ jobs:
         if: matrix.device != 'linux'
         run: flutter test integration_test/app_smoke_test.dart -d ${{ matrix.device }}
 
+      # Linux under xvfb has been observed to drop the device mid-boot and
+      # report "No tests were found" (exit 79) with no Dart stack — a true
+      # process death, not an assertion fail. One automatic retry absorbs the
+      # flake without masking a real regression (second failure still reds).
       - name: Run E2E smoke suite (under xvfb)
         if: matrix.device == 'linux'
         run: |
-          xvfb-run -a -s "-screen 0 1600x1000x24" \
-            flutter test integration_test/app_smoke_test.dart -d linux
+          set +e
+          for attempt in 1 2; do
+            echo "::group::E2E smoke attempt $attempt"
+            xvfb-run -a -s "-screen 0 1600x1000x24" \
+              flutter test integration_test/app_smoke_test.dart -d linux
+            status=$?
+            echo "::endgroup::"
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            echo "E2E smoke attempt $attempt failed (exit $status)"
+            if [ "$attempt" -eq 1 ]; then
+              echo "Retrying once..."
+              # Clear any half-built bundle state from a crashed device process.
+              rm -rf build/linux
+            fi
+          done
+          exit "$status"
 
   web-tests:
     name: WebUI tests (vitest)

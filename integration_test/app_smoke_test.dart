@@ -129,12 +129,18 @@ void main() {
     // shrink into the bottom-right corner, keep on-top so nothing occludes
     // it, and immediately give keyboard focus back (synthetic test taps and
     // text entry don't need OS key focus).
-    await windowManager.setAlwaysOnTop(true);
-    // 1200x800, not smaller: some app rows overflow below ~1100px width and
-    // the resulting RenderFlex exception would fail the test as noise.
-    await windowManager.setSize(const Size(1200, 800));
-    await windowManager.setAlignment(Alignment.bottomRight);
-    await windowManager.blur();
+    // Under xvfb (Linux CI) the window_manager plugin can throw or wedge;
+    // the smoke assertions do not depend on these calls, so best-effort only.
+    try {
+      await windowManager.setAlwaysOnTop(true);
+      // 1200x800, not smaller: some app rows overflow below ~1100px width and
+      // the resulting RenderFlex exception would fail the test as noise.
+      await windowManager.setSize(const Size(1200, 800));
+      await windowManager.setAlignment(Alignment.bottomRight);
+      await windowManager.blur();
+    } catch (e) {
+      debugPrint('[e2e] window_manager placement skipped: $e');
+    }
 
     // Let the post-frame wiring (update/web-server gates, ChatService ↔ TTS ↔
     // expression-classifier hookup, auto-backup timer start) run; an unhandled

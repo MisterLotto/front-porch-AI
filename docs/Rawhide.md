@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ⚡ **Remote backends no longer force a KoboldCpp download on first launch** — If you're already set up for OpenRouter / another OpenAI-compatible remote server, the startup overlay no longer pulls a large local KoboldCpp binary you won't use. Local-backend users are unchanged.
+
 - 🖼️ **Adding an avatar actually shows on the character** — If you used Avatar Gallery (Add a file + star it) and chat looked right but Edit Character still said "No avatar", that was a real bug: the star set the face for chat/home, while Edit Character only looked at the old empty portrait slot. Edit Character now shows the same starred face as the home grid, and the first gallery avatar on a character with no portrait also fills the card face so it sticks after reopen. Gallery also offers **Set portrait** when there isn't one yet. If the character still had the solid-color "placeholder" from creating without art, adding a real image now **replaces that placeholder** instead of leaving the color block as the portrait.
 
 - 🗑️ **Avatar Gallery delete no longer shows the wrong face vanishing** — Deleting a portrait or gallery image could make a *different* tile disappear in the dialog (even though the right file was removed once you hit Done). The gallery was keeping a cached image on the wrong tile when files were rewritten in place. Deletes now refresh the correct tiles immediately.
