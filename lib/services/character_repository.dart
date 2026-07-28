@@ -1052,12 +1052,11 @@ class CharacterRepository extends ChangeNotifier {
         displayOrder: Value(displayOrder),
       ),
     );
-    // Issue #171: a card with no on-disk portrait (creator "None for now"
-    // with a lost placeholder, JSON import, broken path) used to keep
-    // imagePath null forever — Edit Character showed "No avatar" even after
-    // Add avatar + ★, because starring never rewrites imagePath. First look
-    // bootstraps a portrait copy so the card has a real face; the look row
-    // stays. Silent write: gallery dialog owns the close-time broadcast.
+    // Issue #171: a card with no on-disk portrait OR only a solid-color
+    // creator placeholder used to keep the empty/fake face forever — Edit
+    // Character showed "No avatar" or the color block even after Add avatar.
+    // First real look bootstraps/overwrites the portrait; the look row stays.
+    // Silent write: gallery dialog owns the close-time broadcast.
     final card = await getCharacterCardById(characterId);
     if (card != null) {
       await bootstrapPortraitIfMissing(

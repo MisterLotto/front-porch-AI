@@ -5,11 +5,26 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/portrait_promotion.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+
+List<int> _solidPng({int r = 100, int g = 120, int b = 140}) {
+  final image = img.Image(width: 400, height: 600);
+  img.fill(image, color: img.ColorRgb8(r, g, b));
+  return img.encodePng(image);
+}
+
+List<int> _variedPng() {
+  final image = img.Image(width: 64, height: 64);
+  img.fill(image, color: img.ColorRgb8(10, 20, 30));
+  // One different pixel so it is not a solid placeholder.
+  image.setPixelRgb(32, 32, 200, 50, 50);
+  return img.encodePng(image);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -55,9 +70,27 @@ void main() {
     test('true when the portrait file exists', () {
       final file = File('${storage.charactersDir.path}/real.png')
         ..createSync(recursive: true)
-        ..writeAsBytesSync([1, 2, 3]);
+        ..writeAsBytesSync(_variedPng());
       final card = CharacterCard(name: 'Real', imagePath: file.path);
       expect(hasUsablePortrait(card, storage), isTrue);
+    });
+  });
+
+  group('isPlaceholderPortrait', () {
+    test('true for solid-color creator placeholder', () async {
+      final file = File('${storage.charactersDir.path}/ph.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(_solidPng());
+      final card = CharacterCard(name: 'Ph', imagePath: file.path);
+      expect(await isPlaceholderPortrait(card, storage), isTrue);
+    });
+
+    test('false for a real (varied) image', () async {
+      final file = File('${storage.charactersDir.path}/photo.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(_variedPng());
+      final card = CharacterCard(name: 'Photo', imagePath: file.path);
+      expect(await isPlaceholderPortrait(card, storage), isFalse);
     });
   });
 
@@ -65,10 +98,11 @@ void main() {
     test('writes a portrait and updates imagePath when none exists', () async {
       final card = CharacterCard(name: 'Boot Me');
       var updates = 0;
+      final real = _variedPng();
       final wrote = await bootstrapPortraitIfMissing(
         card: card,
         storage: storage,
-        bytes: List<int>.filled(64, 7),
+        bytes: real,
         updateCharacter: (c) async {
           updates++;
           expect(c.imagePath, isNotNull);
@@ -80,22 +114,43 @@ void main() {
       expect(hasUsablePortrait(card, storage), isTrue);
     });
 
-    test('is a no-op when a usable portrait already exists', () async {
+    test('overwrites a solid-color placeholder with the real image', () async {
       final existing = File('${storage.charactersDir.path}/keep.png')
         ..createSync(recursive: true)
-        ..writeAsBytesSync([9, 9, 9]);
+        ..writeAsBytesSync(_solidPng(r: 80, g: 90, b: 100));
+      final card = CharacterCard(name: 'Keep', imagePath: existing.path);
+      final real = _variedPng();
+      var updates = 0;
+      final wrote = await bootstrapPortraitIfMissing(
+        card: card,
+        storage: storage,
+        bytes: real,
+        updateCharacter: (_) async => updates++,
+      );
+      expect(wrote, isTrue);
+      expect(updates, 1);
+      expect(card.imagePath, existing.path); // in-place overwrite
+      expect(existing.readAsBytesSync(), real);
+      expect(await isPlaceholderPortrait(card, storage), isFalse);
+    });
+
+    test('is a no-op when a real portrait already exists', () async {
+      final existing = File('${storage.charactersDir.path}/keep.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(_variedPng());
+      final before = existing.readAsBytesSync();
       final card = CharacterCard(name: 'Keep', imagePath: existing.path);
       var updates = 0;
       final wrote = await bootstrapPortraitIfMissing(
         card: card,
         storage: storage,
-        bytes: List<int>.filled(8, 1),
+        bytes: _solidPng(),
         updateCharacter: (_) async => updates++,
       );
       expect(wrote, isFalse);
       expect(updates, 0);
       expect(card.imagePath, existing.path);
-      expect(existing.readAsBytesSync(), [9, 9, 9]);
+      expect(existing.readAsBytesSync(), before);
     });
 
     test('is a no-op for empty bytes', () async {
