@@ -541,6 +541,7 @@ jobs:
             Front_Porch_AI-Linux.AppImage
             Front_Porch_AI-Linux.deb
             Front_Porch_AI-Linux.rpm
+            Front_Porch_AI_Linux.tar.gz
             Front_Porch_AI_Setup.exe
             Front_Porch_AI.pkg
           if-no-files-found: ignore
@@ -603,6 +604,7 @@ jobs:
             Front_Porch_AI-Linux.AppImage
             Front_Porch_AI-Linux.deb
             Front_Porch_AI-Linux.rpm
+            Front_Porch_AI_Linux.tar.gz
             Front_Porch_AI_Setup.exe
             Front_Porch_AI.pkg
           prerelease: ${{ contains(github.ref_name, 'beta') }}
