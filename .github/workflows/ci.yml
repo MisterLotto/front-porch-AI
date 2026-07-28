@@ -121,9 +121,9 @@ jobs:
   # Runner notes: no human mouse and no real KoboldCpp exist here, so the two
   # local-run hazards (hover-wedge, zombie-kill) don't apply. Build time
   # dominates (~6-10 min); the test itself is ~7s.
-  # Windows is experimental (continue-on-error) until it has a green run on
-  # record — flip `experimental: true` to `false` then. Linux would need xvfb
-  # and is deliberately not wired yet.
+  # Windows graduated to blocking after two consecutive green runs on
+  # 2026-07-28 (its very first execution passed). Linux would need xvfb and
+  # is deliberately not wired yet.
   e2e-smoke:
     name: E2E smoke (${{ matrix.device }})
     needs: analyze
@@ -136,7 +136,7 @@ jobs:
             experimental: false
           - os: windows-latest
             device: windows
-            experimental: true
+            experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 30

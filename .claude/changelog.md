@@ -6136,3 +6136,12 @@ kCiTimeoutScale (4 when CI=true, 1 locally), and the turn-1 reply wait is
 split: first wait for chatRequests>=1 with live backend counters in the
 failure message (evals vs generation vs render pinpointing), then the render
 wait. Local run unchanged and green.
+
+## 2026-07-28 (UTC) — CI e2e-smoke: both platforms green; Windows promoted to blocking
+
+**Files:** `.github/workflows/ci.yml`
+
+**What:** Run 2 with the 4x CI timeout scale: macOS 3m13s green, Windows 4m12s
+green (Windows has passed both of its first two executions ever). Windows
+`experimental` flipped to false — the E2E smoke suite now BLOCKS PRs on both
+desktop platforms.
