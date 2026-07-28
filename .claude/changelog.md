@@ -6019,3 +6019,36 @@ paths. Round-trip passes in ~4s wall-clock.
 
 **Verification:** `flutter analyze` — No issues found (project back to 0);
 `flutter test integration_test/app_smoke_test.dart -d macos` green.
+
+## 2026-07-28 (UTC) — E2E suite: realism + journal + sidebar coverage; TimeStrip overflow fix
+
+**Files:** `integration_test/app_smoke_test.dart` (rewritten),
+`integration_test/support/e2e_sandbox.dart` (new),
+`integration_test/support/fake_backend.dart` (new),
+`lib/ui/chat_components/sidebar/character_state/time_strip.dart`
+
+**What:** The smoke test now runs a realism-enabled journey: boot → create card
+(with FrontPorchExtensions(realismEnabled: true) — the realism_default OR only
+applies to cards that CARRY extensions) → 2-message chat → asserts the 4-call
+realism eval pipeline consumed canned eval JSON (bond 0→2, trust +1, emotion
+applied, chip metadata attached) → plants a Journal card via the app's own
+store and renders it by expanding the Journal & Memory accordion → asserts the
+'Journal on · RAG off' sidebar surface → audits backend traffic (unknown
+endpoints fail by name; /api/v0/models is a whitelisted LM Studio probe where
+404 IS the correct answer). The fake backend is connected the way real users
+connect unmanaged local servers (remote/PseudoRemote mode) because
+managed-kobold mode's zombie cleanup pkills ANY koboldcpp it didn't spawn —
+the suite also pre-flight-fails if anything listens on 5001 to protect a real
+backend. Test-window ergonomics: corner-pinned on-top + blur (macOS pauses
+frames for occluded windows; pump would hang), pump watchdog fails loudly if
+frames stop, real-mouse hover assert downgraded (framework noise).
+
+**Bug found by the suite:** TimeStrip's sidebar Row overflowed 28px whenever
+realism is on (period label + date at natural size exceed the 300px sidebar).
+Fixed with Flexible + ellipsis on the period label.
+
+**NOT covered (offline constraints, documented in the test header):**
+RAG retrieval (nomic model is a consent-gated download), TTS/STT/image-gen
+engines (model binaries), physical-state eval payload (parses to no-op).
+
+**Verification:** `flutter analyze` clean; suite green in ~6s app time.
