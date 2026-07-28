@@ -6173,3 +6173,32 @@ a PR gate. Now structurally impossible: waits exist only through the driver.
 Also resolves the 500-line pressure (test 348 + driver 167). ci.yml: Linux
 e2e job added experimental (xvfb + GTK/GStreamer deps), same
 observe-then-graduate path Windows took, so shakedown runs can't block PRs.
+
+## 2026-07-28 (UTC) — "Our Story" eternal spinner fixed (unstable Riverpod family key)
+
+**Files:** `lib/services/chat/milestone_feed.dart`, `lib/services/chat_service.dart`,
+`lib/services/chat/milestone_providers.dart` (+ regenerated .g.dart),
+`lib/ui/dialogs/journal_timeline_tab.dart`, `lib/services/web/facade/chat_tools_facade.dart`,
+`test/services/chat/milestone_feed_test.dart`, `test/services/chat/riverpod_providers_test.dart`,
+`integration_test/support/chat_driver.dart`, `integration_test/app_smoke_test.dart`,
+`docs/Rawhide.md`
+
+**What:** Operator-reported: the Journal dialog's Our Story tab spun forever on
+a live session. Root cause: `ChatService.messages` returns `List.unmodifiable`
+(a NEW instance per call) and it was a `milestoneTimelineProvider` FAMILY KEY —
+list == is identity, so every dialog rebuild (and busy sessions rebuild
+constantly: RAG init, growth, timers) registered as "new args", discarded the
+loading provider, and started a fresh one. The fetch never completed. Fix:
+messages leave the family entirely; MilestoneFeed gains a `getMessages`
+callback (wired to the internal list in chat_service, matching the getDb
+pattern) read at fetch time; `revision` (message count) remains the intended
+refetch key. Web facade + both test files updated (facade behavior unchanged —
+it never used Riverpod, web timeline was never broken; desktop-only bug).
+
+**Regression net:** E2E journey gains Phase 4b — open the Journal dialog from
+the sidebar (ensure-visible retry: the Open button sits below the sidebar
+fold), switch to Our Story, and require NO spinner remains inside the dialog
+(content-agnostic: entries and empty state both count).
+
+**Verification:** milestone_feed_test + riverpod_providers_test green (7 tests);
+full E2E green in ~8s; analyze clean; build_runner regenerated.

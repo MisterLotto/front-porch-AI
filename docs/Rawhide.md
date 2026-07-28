@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📖 **"Our Story" no longer spins forever** — Opening the journal's Our Story timeline during a lively chat could show an endless loading spinner: every background heartbeat (memory warming up, growth checks) quietly restarted the timeline's loading from scratch, so on a busy session it never got to finish. The timeline now loads once and stays loaded, refreshing only when new messages actually arrive.
+
 - 🐧 **Linux: fixed the "database is corrupted" failure** — builds since 2026-07-21 shipped without their bundled SQLite engine, so the app couldn't open its own database and reported it as corrupted. **No data was ever damaged** — it just couldn't be read. Every Linux package is fixed, and the release pipeline now refuses to publish a Linux build that can't reach SQLite, so this is caught in CI rather than on your machine. macOS and Windows also now carry their own SQLite 3.52 instead of relying on the system copy.
 
 - 📦 **macOS: the `.pkg` installer is now the one and only** — The old unsigned `.dmg` is no longer published. It existed purely as an update bridge for installs from the pre-installer era, and everyone has long since moved to the signed, Apple-notarized `.pkg`. If you're somehow still on a very old drag-and-drop install, grab the `.pkg` from the Releases page once and you're back on auto-updates.

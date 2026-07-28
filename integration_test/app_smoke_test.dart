@@ -326,6 +326,9 @@ void main() {
       timeout: const Duration(seconds: 15),
     );
 
+    // ── Phase 4b: full Journal dialog — "Our Story" must resolve ────────
+    await d.openOurStoryAndRequireResolved();
+
     // ── Phase 5: backend traffic audit ──────────────────────────────────
     // Any endpoint the fake doesn't model would have 404'd silently and
     // skewed behavior; surface it by name instead.

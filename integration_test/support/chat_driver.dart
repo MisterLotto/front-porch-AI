@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
+import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
 
 import 'e2e_sandbox.dart';
@@ -163,5 +164,54 @@ class ChatDriver {
       }
     }
     await waitForWidget(panel, timeout: const Duration(seconds: 15));
+  }
+
+  /// Open the full Journal dialog from the sidebar panel and switch to the
+  /// "Our Story" timeline tab, requiring it to RESOLVE — entries, a Chance
+  /// Time entry, or the empty state, but never a stuck spinner. Guards the
+  /// regression where an identity-unstable provider family key (the fresh
+  /// List ChatService.messages returns per call) respawned the timeline
+  /// provider on every rebuild, pinning the tab on an eternal spinner
+  /// whenever the session had background activity.
+  Future<void> openOurStoryAndRequireResolved() async {
+    // The Open button sits at the BOTTOM of the expanded panel — usually
+    // below the sidebar viewport, where a tap silently misses. Same pattern
+    // as the accordion: ensure visible, retry until the dialog is really up.
+    final openBtn = find.descendant(
+      of: find.byType(JournalPanel),
+      matching: find.text('Open'),
+    );
+    final ourStoryTab = find.text('Our Story');
+    for (var a = 0; a < 5 && ourStoryTab.evaluate().isEmpty; a++) {
+      await spinChanceTimeIfAsked();
+      await tester.ensureVisible(openBtn);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(openBtn);
+      for (var i = 0; i < 6 && ourStoryTab.evaluate().isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
+    await waitForWidget(ourStoryTab, timeout: const Duration(seconds: 15));
+    await tester.tap(ourStoryTab);
+    // Content-agnostic resolution signal (entries vs empty state both count):
+    // the dialog is up and NO spinner remains inside it. A stuck spinner was
+    // the bug's exact signature.
+    await waitFor(
+      () {
+        final dialog = find.byType(JournalDialog);
+        if (dialog.evaluate().isEmpty) return false;
+        return find
+            .descendant(
+              of: dialog,
+              matching: find.byType(CircularProgressIndicator),
+            )
+            .evaluate()
+            .isEmpty;
+      },
+      () =>
+          '"Our Story" resolving past its spinner '
+          '(wheels spun so far: $wheelsSpun)',
+      timeout: const Duration(seconds: 30),
+    );
   }
 }
