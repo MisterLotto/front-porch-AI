@@ -3,6 +3,49 @@
 **Status: DRAFT (2026-07-28) — design only, no code written. Awaiting
 maintainer sign-off on the open decisions in §5.**
 
+> **⚠️ KNOWN DEFECTS — do not implement from this revision.** A hostile
+> self-audit (2026-07-28) found two assertions below that are **false**, plus
+> gaps listed here. Pending a single coherent revision once §5 and the
+> flagged judgment calls are ruled on.
+>
+> 1. **"Additive only" is wrong** (principles + §1). Dropping `UNIQUE` on
+>    `worlds.name` forces a full SQLite table rebuild — there is no
+>    `ALTER TABLE DROP CONSTRAINT`. Intended fix: *keep* the constraint and
+>    auto-rename on import collision ("Glorb (2)"), which is what Keep both
+>    means anyway and removes the rebuild entirely.
+> 2. **§2's acceptance gate is unsatisfiable.** "The pinned golden test
+>    passes unmodified" cannot hold once `weatherFor` takes a biome
+>    parameter — the call site must change. Intended fix: extract the
+>    expected sequence to its own constant and require *that* to be
+>    untouched.
+> 3. **§1 changes world-attachment semantics without saying so.** Worlds
+>    attach to the *group definition* today, so every chat of that group
+>    shares them; `chat_worlds` keys on the *chat*. Needs a group-level
+>    default plus session-level override, or explicit acceptance.
+> 4. **`linkedCharacterName`** is listed as a defect in §1 and then never
+>    addressed in the architecture.
+> 5. **Legacy group cards keep the name-collision bug permanently** — cards
+>    already in circulation carry names; phase 0 fixes new cards only.
+> 6. **No rollback mechanism.** The 39→40 migration must force a
+>    `backup_service` snapshot first; Drift migrations are one-way.
+> 7. **Unspecified:** `biomeAt(day)` lookup cost inside the O(days) walk;
+>    a size cap on the snapshot JSON; the preview harness needs N seeds, not
+>    one 500-day sample path.
+> 8. **Foreshadowing can lie for one day after a biome switch**, violating
+>    the engine's stated "foreshadowing never lies" property.
+> 9. **Effort estimates run ~2× optimistic**, worst in phase 0 — the phase
+>    that contains the migration.
+> 10. **Phase 0 is a prerequisite for phase 2, not for phase 1.** Biomes
+>     attached to chats need worlds not at all. Ordering is still sound, but
+>     phase 0 should ship and be validated as its own release justified by
+>     its own bug, not as a prelude.
+>
+> Checked and **dismissed**: session ids are millisecond timestamps rather
+> than UUIDs, and that string is the weather seed — but simulating 200
+> consecutive-millisecond seeds shows day-one weather matching the intended
+> distribution, so there is no seed correlation. Only true same-millisecond
+> *collision* remains (pre-existing; this plan adds two tables keyed on it).
+
 A three-phase arc that turns `worlds` from a lorebook folder into a portable
 *place*, then gives places a climate, then lets users author their own.
 
@@ -27,6 +70,11 @@ weather rides along.
 - **Snapshot, never reference.** Anything a chat's history depends on is
   copied into the chat at attach time, never pointed at. Edits, deletions,
   and re-imports of the source must be incapable of reaching back in time.
+- **Remembered, not simulated.** The app has never modelled world state —
+  no location, no travel, no inventory — and this work does not start. What
+  the weather *does* to the world is carried by the Journal, which already
+  records what mattered and resurfaces it. Nothing here plants cards of its
+  own; it just gives the diary better material to notice.
 - **No `sessions` / `groups` column churn.** Character Card Forge writes
   those tables directly via raw SQL. New state lives in new tables keyed by
   chat id, so the external-writer contract is untouched.
@@ -208,6 +256,16 @@ of seasonality respectively, which no multiplier expresses.
   `_conditionFor`/`_tempFor` index the supplied tables. No other logic
   changes.
 - `weather_segments.dart` gains biome-aware diurnal amplitude.
+- **Run length (small, folded in here).** The walk already produces runs of
+  the same condition via the persistence roll; it just never counts them, so
+  four straight days of rain emit the identical prompt line four times and
+  nobody ever gets cabin fever. Track the current run during the walk —
+  derived, unstored, prefix-stable — and let the prose escalate ("a third
+  straight day of rain"). Rules: count *anchor-condition* days (a rain day
+  with two dry segments still counts), and a biome changeover resets the
+  count. This is also the cheap answer to the recurring "can ash accumulate
+  and block the road" request — see §3's boundary. Not load-bearing: if it
+  threatens the phase, cut it.
 - **New leaf** `lib/services/chat/biome_schedule.dart` (<200 LOC): span
   storage, `biomeAt(day)`, and the cached per-chat schedule.
 - **Hot-path discipline:** the schedule loads **once** at session load
@@ -282,12 +340,48 @@ scenery, from machinery that already exists.
 
 ### The boundary (hold this line)
 
-A skin may change what weather is **called** and **how dangerous it is**. It
-may **not** change what the day script or the walk mechanically does. Ashfall
-that accumulates over days and blocks roads is a genuinely new condition with
-multi-day state — that is a "no", and saying so early is cheaper than saying
-it later. The seven mechanical slots stay seven; the presented vocabulary is
-unlimited.
+**Weather may have duration and intensity. Its consequences are remembered,
+not simulated.**
+
+A skin may change what weather is **called**, **how long it has been going
+on**, and **how dangerous it is**. It may not introduce stored world state.
+
+The recurring request is accumulation: ash piling up until the pass closes,
+drought dropping the river. Accumulation *itself* is fine and cheap — the
+walk already carries state day to day, and §2's run length is exactly that.
+What breaks is the feedback loop, and it breaks either way you resolve it:
+
+- **If depth is deterministic**, the engine owns it and the story cannot
+  touch it. A character spends an afternoon clearing the road and next turn
+  the prompt still says it is buried, because the walk recomputed from the
+  seed and knows nothing happened. That contradicts fiction the user just
+  created — worse than not having the feature.
+- **If the story can change depth**, it is no longer derivable, so it must be
+  stored and evolved per chat. Save/load, swipe, regenerate, group re-entry
+  and the web facade stop agreeing for free and start needing to agree on
+  mutable state. That is the entire property that makes this subsystem
+  reliable, traded for one narrative flourish.
+
+Underneath both: **nothing enforces world facts.** Stance works because it is
+a *behavioural* instruction, which is what models are good at. "The road is
+blocked" is a constraint on future events, and with no location or travel
+model, the user types "let's drive to town" and the model either complies
+(fiction broken) or refuses for no visible reason. It would promise a
+simulation the app cannot back.
+
+Where the consequence actually lives is the Journal — the existing mechanism
+for facts that persist and resurface, and the only path where the character
+who clears the road has actually changed something. Note this is a *stance*,
+not a build: weather does not plant its own cards. It just gives the diary
+better material, and the diary's own salience logic decides. Auto-planting
+weather cards would fill the diary with rainy Tuesdays nobody cares about.
+
+Hard no, for the avoidance of doubt: **user-authored rules.** Letting a
+shared world define its own accumulation and consequence logic stops being a
+data format and becomes a scripting language, and since world text reaches
+the prompt, author-written rules escalate an accepted risk (imported text the
+model reads, as character cards do today) into something closer to imported
+behaviour.
 
 ### Authoring
 
