@@ -1299,8 +1299,15 @@ class ChatService extends ChangeNotifier {
       _pendingRealismMetadata![key] = value;
     },
     onPatchLastMessageRealismState: (tod, dc, clockIso) {
-      if (_messages.isNotEmpty) {
-        final lastMsg = _messages.last;
+      // Patch the newest REAL message — never a narration banner. Dream /
+      // chance-time messages carry only their banner flag; stamping a full
+      // realism snapshot onto one corrupts it (2026-07-28) and makes a
+      // banner the time authority for swipe/regen restores.
+      for (final lastMsg in _messages.reversed) {
+        if (lastMsg.activeMetadata?['is_dream'] == true ||
+            lastMsg.activeMetadata?['is_chance_time_narration'] == true) {
+          continue;
+        }
         lastMsg.activeMetadata ??= {};
         final existingState = lastMsg.activeMetadata!['realism_state'];
         if (existingState is Map<String, dynamic>) {
@@ -1312,6 +1319,7 @@ class ChatService extends ChangeNotifier {
           lastMsg.activeMetadata!['realism_state'] = _captureRealismState();
           lastMsg.activeMetadata!['realism_state']['time_nudged'] = true;
         }
+        break;
       }
     },
   );
@@ -3274,6 +3282,12 @@ class ChatService extends ChangeNotifier {
     // A photo turn's captioning windows run while _isGenerating is false; this
     // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
     if (_photoTurnInFlight) return;
+    // No new user turn while a generation is live (streaming, draining, or
+    // finalizing). A send mid-turn interleaves this method's own message
+    // inserts (dream block) with the active turn's writes on one shared
+    // list — the 2026-07-28 dream-corruption report. Stop first: the Stop
+    // button now halts a turn promptly (see the drain cancel fix).
+    if (_isGenerating) return;
     // One-shot absence acknowledgment: pending survives exactly the first
     // user turn after load (all of that turn's prompt builds see it); the
     // second turn clears it for good.
@@ -3776,8 +3790,14 @@ class ChatService extends ChangeNotifier {
   Future<void> continueGeneration() async {
     if (_messages.isEmpty || _isGenerating || _guestBusy) return;
 
-    // Only continue if the last message is from a bot (non-user, non-system)
-    if (!_messages.last.isUser && _messages.last.sender != 'System') {
+    // Only continue if the last message is from a bot (non-user, non-system).
+    // Narration banners (dreams, Chance Time) are excluded: continue_ streams
+    // straight into _messages.last, which would append a chat reply to the
+    // banner (the dream-corruption class, 2026-07-28).
+    if (!_messages.last.isUser &&
+        _messages.last.sender != 'System' &&
+        _messages.last.activeMetadata?['is_dream'] != true &&
+        _messages.last.activeMetadata?['is_chance_time_narration'] != true) {
       await _generateResponse(GenerationMode.continue_);
     }
   }
@@ -3862,6 +3882,11 @@ class ChatService extends ChangeNotifier {
   }
 
   void deleteMessage(int index) async {
+    // No deletes while a generation is live: removing entries shifts every
+    // position the active turn still relies on (chip attach, lorebook scan,
+    // journal invalidation) — and made a dream banner the last message,
+    // where the aborted turn's writes landed (2026-07-28). Stop first.
+    if (_isGenerating) return;
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
       _messages.removeAt(index);

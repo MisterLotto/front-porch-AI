@@ -68,53 +68,60 @@ class _MessageBubbleState extends State<MessageBubble> {
   CharacterCard? get character => widget.character;
 
   /// The one centered narration banner (Chance Time 🎰, Dreams 🌙 — Living
-  /// Time §1). Warm-porch amber tints, italic center text.
+  /// Time §1). Warm-porch amber tints, italic center text. Long-press
+  /// deletes: banners return before the normal bubble's action row is ever
+  /// built, so without this they were the only messages that could never be
+  /// removed (the stuck-dream report, 2026-07-28).
   Widget _narrationBanner(
     BuildContext context, {
     required String emoji,
     required String text,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.resolve(
-            context,
-            const Color(0xFFFFD166).withValues(alpha: 0.12),
-            const Color(0xFFF59E0B).withValues(alpha: 0.18),
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: () => _showDeleteConfirmation(context, index),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 32),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
             color: AppColors.resolve(
               context,
-              const Color(0xFFFFD166).withValues(alpha: 0.35),
-              const Color(0xFFF59E0B).withValues(alpha: 0.4),
+              const Color(0xFFFFD166).withValues(alpha: 0.12),
+              const Color(0xFFF59E0B).withValues(alpha: 0.18),
             ),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                text,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.resolve(
-                    context,
-                    const Color(0xFFFFD166),
-                    const Color(0xFFB45309),
-                  ),
-                  fontStyle: FontStyle.italic,
-                ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.resolve(
+                context,
+                const Color(0xFFFFD166).withValues(alpha: 0.35),
+                const Color(0xFFF59E0B).withValues(alpha: 0.4),
               ),
             ),
-          ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.resolve(
+                      context,
+                      const Color(0xFFFFD166),
+                      const Color(0xFFB45309),
+                    ),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
