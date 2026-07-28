@@ -58,7 +58,16 @@ dependencies:
   googleapis: ^16.0.0
   googleapis_auth: ^2.0.0
   drift: ^2.22.1
-  sqlite3_flutter_libs: ^0.6.0+eol
+  # MUST stay on 0.5.x while `sqlite3` resolves to 2.x (drift 2.31 caps it at
+  # ^2.6.0). 0.6.0+eol is a TOMBSTONE — it deletes all code and ships no
+  # native library, because from `sqlite3` 3.x onward the binding bundles
+  # SQLite itself. Pairing 0.6.0+eol with sqlite3 2.x produces a build with no
+  # libsqlite3 at all: that shipped as v1.1.0 and broke every Linux install
+  # ("libsqlite3.so is missing" → "database is corrupted"). macOS and Windows
+  # survived only because their fallbacks are /usr/lib/libsqlite3.dylib and
+  # winsqlite3.dll; Linux falls back to the bare `libsqlite3.so` soname, which
+  # only libsqlite3-dev provides. Guarded by the bundle check in release.yml.
+  sqlite3_flutter_libs: ^0.5.41
   path: ^1.9.1
   uuid: ^4.5.3
   record: ^6.2.0
