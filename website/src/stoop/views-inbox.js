@@ -189,8 +189,9 @@
         .catch(function (e) { ui.toast(e.message, 'err'); })
         .finally(function () { profBtn.disabled = false; });
     } }, 'Save profile');
+    var profileRef = u.displayName && /^[\w-]{2,40}$/.test(u.displayName) ? u.displayName : u.id;
     var profileView = u.id
-      ? el('a', { class: 'hub-linklike', href: '#/creator/' + u.id }, 'View your public page →')
+      ? el('a', { class: 'hub-linklike', href: '#/creator/' + profileRef }, 'View your public page →')
       : null;
 
     /* nsfw */

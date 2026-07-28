@@ -33,6 +33,14 @@
      unfurl the card's real name, summary, and art instead of the site logo. */
   var HUB_ORIGIN = location.hostname === 'hub.frontporchai.app' ? location.origin : 'https://hub.frontporchai.app';
 
+  // Prefer the display name in creator URLs (vanity: #/creator/SosukeAizen).
+  // Names are unique server-side (claimed first-come), but only route-safe
+  // ones fit the hash routes — anything else falls back to the immutable id.
+  function creatorRef(c) {
+    var name = c && c.displayName;
+    return name && /^[\w-]{2,40}$/.test(name) ? name : (c && c.id) || '';
+  }
+
   function shareBtn(kind, id) {
     var url = HUB_ORIGIN + '/' + kind + '/' + id;
     var btn = el('button', { class: 'hub-linklike', type: 'button', title: 'Copy a link that unfurls nicely in Discord & friends' }, '🔗 Share');
@@ -316,7 +324,7 @@
               c.modPick ? el('span', { class: 'hub-badge hub-badge-pick' }, '★ Mod’s Pick') : null,
             ]),
             el('h2', { class: 'hub-detail-name' }, c.name),
-            c.creator ? el('a', { class: 'hub-detail-creator', href: '#/creator/' + c.creator.id }, (c.originalCreator ? 'uploaded by ' : 'by ') + c.creator.displayName + ' →') : null,
+            c.creator ? el('a', { class: 'hub-detail-creator', href: '#/creator/' + creatorRef(c.creator) }, (c.originalCreator ? 'uploaded by ' : 'by ') + c.creator.displayName + ' →') : null,
             c.originalCreator ? el('div', { class: 'hub-detail-origcreator' }, 'created by ' + c.originalCreator) : null,
             el('p', { class: 'hub-detail-summary' }, c.summary || ''),
             (c.tags && c.tags.length)
@@ -405,7 +413,7 @@
           followers,
           statLine,
           followBtn,
-          shareBtn('creator', cr.id),
+          shareBtn('creator', creatorRef(cr)),
         ]),
         bioBlock,
         linkList,
