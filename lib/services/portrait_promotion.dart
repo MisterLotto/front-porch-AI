@@ -114,3 +114,37 @@ File portraitWriteTarget({
   card.imagePath = target.path;
   return target;
 }
+
+/// Whether [card] has an on-disk portrait file that can be opened.
+///
+/// Null/empty [CharacterCard.imagePath] or a missing resolved file both count
+/// as "no usable portrait" — the case the Avatar Gallery can bootstrap from a
+/// newly-added look (issue #171: Add avatar + ★ left Edit Character on
+/// "No avatar" because nothing ever wrote `imagePath`).
+bool hasUsablePortrait(CharacterCard card, StorageService storage) {
+  final path = card.imagePath;
+  if (path == null || path.isEmpty) return false;
+  return storage.resolveCharacterImage(path).existsSync();
+}
+
+/// When the card has no usable portrait, write [bytes] as a new portrait and
+/// persist via [updateCharacter]. Gallery looks are left alone (this is a
+/// copy, not a promotion). Returns true when a portrait was written.
+///
+/// Used by [CharacterRepository.addLook] and ★-persist so a character created
+/// without art (or with a broken imagePath) still gets a real card face the
+/// Edit Character page and PNG re-embed path can use.
+Future<bool> bootstrapPortraitIfMissing({
+  required CharacterCard card,
+  required StorageService storage,
+  required List<int> bytes,
+  required Future<void> Function(CharacterCard card) updateCharacter,
+}) async {
+  if (hasUsablePortrait(card, storage)) return false;
+  if (bytes.isEmpty) return false;
+  final target = portraitWriteTarget(card: card, storage: storage);
+  await target.writeAsBytes(bytes);
+  await FileImage(target).evict();
+  await updateCharacter(card);
+  return true;
+}

@@ -81,6 +81,13 @@ class AvatarGalleryLooksSection extends StatelessWidget {
           badgeColor: AppColors.formMasterAccent,
         ),
       );
+    } else {
+      // No portrait yet — explicit Set portrait (crops + writes imagePath).
+      // Add avatar alone used to only create a look; without this tile users
+      // never found the path that fills Edit Character's card face (#171).
+      tiles.add(
+        GalleryAddTile(label: 'Set portrait', onTap: onReplacePortrait),
+      );
     }
 
     // Gallery avatars.
@@ -108,8 +115,10 @@ class AvatarGalleryLooksSection extends StatelessWidget {
         AvatarGallerySectionHeader(
           title: 'Gallery avatars',
           subtitle: _inChat
-              ? 'Tap one to show it in this chat · ★ sets the default'
-              : 'Outfits, scenes, moods · ★ sets the default + card cover',
+              ? 'Tap one to show it in this chat · ★ sets the default face'
+              : portrait == null
+                  ? 'Set a portrait, or Add avatar · ★ is the card cover'
+                  : 'Outfits, scenes, moods · ★ sets the default + card cover',
         ),
         const SizedBox(height: 10),
         GridView.count(

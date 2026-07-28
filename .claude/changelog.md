@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-07-28 — fix(avatar): Edit Character was star-blind; gallery couldn't fill a missing portrait (#171)
+- **Why:** Reporter added a look via Home → Avatar Gallery, starred it, and saw it in chat, but Edit Character still showed the grey "No avatar" placeholder. Root cause: Edit Character only read raw `imagePath`; ★ sets `favoriteAvatarId` and never rewrites `imagePath`. Separately, a card with no usable portrait couldn't persist the star (`updateCharacter` early-returns when `imagePath` is null).
+- **Fix:** Edit Character preview uses `coverImageFileFor` (same ★-aware resolver as home/export). First `addLook` bootstraps a portrait copy when none exists (`bootstrapPortraitIfMissing` in portrait_promotion.dart). ★-persist does the same before the extensions write. Gallery shows **Set portrait** when the portrait tile is missing; creator "None for now" copy names Set portrait / Add avatar + ★. Web `setFavorite` + repo `addLook` share the bootstrap so web/desktop stay aligned.
+- **Files:** `lib/ui/pages/edit_character_page.dart`, `lib/services/portrait_promotion.dart`, `lib/services/character_repository.dart`, `lib/ui/dialogs/avatar_gallery/*`, `lib/ui/avatar_creation/portrait_section.dart`, `lib/services/web/facade/character_authoring_facade.dart`, `test/services/portrait_promotion_test.dart`, `docs/Rawhide.md`.
+- **Verification:** portrait_promotion_test + analyze on touched files.
+
 ## 2026-07-28 — fix(ui): ExpansionTile headers could never show their tap ripple (Flutter 3.44 caught it)
 - **Why:** the Flutter 3.44.8 bump left 5 golden tests failing on a NEW debug assertion — *"ListTile background color or ink splashes may be invisible… wrapped in a DecoratedBox that has a background color"*. Not a pixel diff and not a bump regression: a real, long-standing UI defect that older Flutter simply never warned about.
 - **The defect:** `ExpansionTile` builds an internal `ListTile` for its header, and a `ListTile` paints its background and ink splash onto the **nearest Material ancestor**. Both offenders wrapped one in a `Container(decoration: BoxDecoration(color: …))`, so the coloured DecoratedBox sat between the tile and its Material and swallowed the ripple entirely. Tapping those headers has been visually dead the whole time.

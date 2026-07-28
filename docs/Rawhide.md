@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🖼️ **Adding an avatar actually shows on the character** — If you used Avatar Gallery (Add a file + star it) and chat looked right but Edit Character still said "No avatar", that was a real bug: the star set the face for chat/home, while Edit Character only looked at the old empty portrait slot. Edit Character now shows the same starred face as the home grid, and the first gallery avatar on a character with no portrait also fills the card face so it sticks after reopen. Gallery also offers **Set portrait** when there isn't one yet.
+
 - 📖 **"Our Story" no longer spins forever** — Opening the journal's Our Story timeline during a lively chat could show an endless loading spinner: every background heartbeat (memory warming up, growth checks) quietly restarted the timeline's loading from scratch, so on a busy session it never got to finish. The timeline now loads once and stays loaded, refreshing only when new messages actually arrive.
 
 - 🐧 **Linux: fixed the "database is corrupted" failure** — builds since 2026-07-21 shipped without their bundled SQLite engine, so the app couldn't open its own database and reported it as corrupted. **No data was ever damaged** — it just couldn't be read. Every Linux package is fixed, and the release pipeline now refuses to publish a Linux build that can't reach SQLite, so this is caught in CI rather than on your machine. macOS and Windows also now carry their own SQLite 3.52 instead of relying on the system copy.

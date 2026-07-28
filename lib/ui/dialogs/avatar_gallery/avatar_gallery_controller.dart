@@ -25,6 +25,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/portrait_promotion.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 /// How the Avatar Gallery was opened. Caller-passed (never inferred from global
@@ -170,10 +171,30 @@ class AvatarGalleryController extends ChangeNotifier {
   /// ★ would not survive a reopen — Grok P0). Silent write: broadcasting each
   /// click repainted the whole home grid behind the open dialog; [dispose]
   /// fires the one deferred broadcast instead.
+  ///
+  /// When the card has no usable portrait, `updateCharacter` would early-return
+  /// and drop the ★ (imagePath is required for the PNG re-embed). Bootstrap a
+  /// portrait from the starred image first so the write can land (issue #171).
   Future<void> _persistFavorite(String? id) async {
     favoriteId = id;
     (libraryCard.frontPorchExtensions ??= FrontPorchExtensions())
         .favoriteAvatarId = id;
+    if (id != null && !hasUsablePortrait(libraryCard, storage)) {
+      final img = looks.followedBy(expressions).where((a) => a.id == id).firstOrNull;
+      if (img != null) {
+        final file = fileFor(img);
+        if (await file.exists()) {
+          await bootstrapPortraitIfMissing(
+            card: libraryCard,
+            storage: storage,
+            bytes: await file.readAsBytes(),
+            updateCharacter: (c) => repository.updateCharacter(c, notify: false),
+          );
+          _needsCloseBroadcast = true;
+          return;
+        }
+      }
+    }
     await repository.updateCharacter(libraryCard, notify: false);
     _needsCloseBroadcast = true;
   }
@@ -185,7 +206,13 @@ class AvatarGalleryController extends ChangeNotifier {
   Future<void> addLook(Uint8List bytes) => _run(() async {
     if (dbId == null) return;
     await repository.addLook(dbId!, libraryCard.name, bytes);
+    // addLook may bootstrap a missing portrait onto the in-memory card;
+    // re-sync imagePath so the Portrait tile appears without reopening.
+    final fresh = await repository.getCharacterCardById(dbId!);
+    if (fresh?.imagePath != null) libraryCard.imagePath = fresh!.imagePath;
     await _reload();
+    // Cover / portrait may have changed (bootstrap); home refreshes on close.
+    _needsCloseBroadcast = true;
   });
 
   /// In-chat only: show [faceId] (a look id or [kPortraitFaceId]) in this chat.
@@ -198,6 +225,7 @@ class AvatarGalleryController extends ChangeNotifier {
   /// Replace the canonical portrait (imagePath) with an already-cropped file.
   Future<void> replacePortrait(String croppedPath) => _run(() async {
     await repository.setCharacterImagePath(libraryCard, croppedPath);
+    _needsCloseBroadcast = true;
   });
 
   /// Delete the portrait — the ★ starred look (else the first) is promoted

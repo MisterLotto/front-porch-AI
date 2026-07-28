@@ -318,12 +318,16 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   //  AVATAR
   // ═══════════════════════════════════════════════════════════════
 
+  /// Card face for this page: the ★ starred gallery look when set, else the
+  /// library portrait — same resolution as the home grid / export cover
+  /// (issue #171: used to read raw `imagePath` only, so Add avatar + ★ left
+  /// this page stuck on "No avatar" while chat already showed the look).
+  ///
+  /// Cost: once per Details rebuild via the repo's cover cache (not a chat
+  /// bubble hot path). Prefer this over a raw existsSync on imagePath.
   File? get _avatarFile {
-    final img = widget.character.imagePath;
-    if (img == null || img.isEmpty) return null;
-    if (p.isAbsolute(img)) return File(img);
-    final storage = Provider.of<StorageService>(context, listen: false);
-    return File(p.join(storage.charactersDir.path, img));
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    return repo.coverImageFileFor(widget.character);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -791,42 +795,54 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               // ── Avatar (read-only). Portrait + expression images are managed
               //    in the Avatar Gallery (right-click a character on the home
               //    grid, or the chat sidebar) — no destructive change here.
-              Center(
-                child: Container(
-                  width: 160,
-                  height: 160,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    color: AppColors.cardOf(context),
-                    border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
-                    image: _avatarFile != null && _avatarFile!.existsSync()
-                        ? DecorationImage(
-                            image: FileImage(_avatarFile!),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: (_avatarFile == null || !_avatarFile!.existsSync())
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.person,
-                              size: 56,
-                              color: AppColors.resolve(context, Colors.white.withValues(alpha: 0.15), Colors.black.withValues(alpha: 0.15)),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'No avatar',
-                              style: TextStyle(
-                                color: AppColors.textTertiary(context),
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        )
-                      : null,
-                ),
+              //    Display uses coverImageFileFor (★-aware), not raw imagePath.
+              Builder(
+                builder: (context) {
+                  final cover = _avatarFile;
+                  return Center(
+                    child: Container(
+                      width: 160,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: AppColors.cardOf(context),
+                        border: Border.all(
+                          color: AppColors.borderOf(context).withValues(alpha: 0.45),
+                        ),
+                        image: cover != null
+                            ? DecorationImage(
+                                image: FileImage(cover),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: cover == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 56,
+                                  color: AppColors.resolve(
+                                    context,
+                                    Colors.white.withValues(alpha: 0.15),
+                                    Colors.black.withValues(alpha: 0.15),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'No avatar',
+                                  style: TextStyle(
+                                    color: AppColors.textTertiary(context),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 20),
 

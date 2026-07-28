@@ -1052,6 +1052,21 @@ class CharacterRepository extends ChangeNotifier {
         displayOrder: Value(displayOrder),
       ),
     );
+    // Issue #171: a card with no on-disk portrait (creator "None for now"
+    // with a lost placeholder, JSON import, broken path) used to keep
+    // imagePath null forever — Edit Character showed "No avatar" even after
+    // Add avatar + ★, because starring never rewrites imagePath. First look
+    // bootstraps a portrait copy so the card has a real face; the look row
+    // stays. Silent write: gallery dialog owns the close-time broadcast.
+    final card = await getCharacterCardById(characterId);
+    if (card != null) {
+      await bootstrapPortraitIfMissing(
+        card: card,
+        storage: _storage,
+        bytes: imageBytes,
+        updateCharacter: (c) => updateCharacter(c, notify: false),
+      );
+    }
     return avatarId;
   }
 
