@@ -6158,3 +6158,18 @@ generation served) — and then the chaos assert timed out at "pressure > 0
 mechanism. The assert now accepts either. Also retroactively explains CI
 run 1's macOS failure (wheel blocking turn 1 before the handler existed).
 Windows is 3/3 green.
+
+## 2026-07-28 (UTC) — ChatDriver extraction (wheel immunity everywhere) + Linux CI (experimental)
+
+**Files:** `integration_test/support/chat_driver.dart` (new),
+`integration_test/app_smoke_test.dart`, `.github/workflows/ci.yml`
+
+**What:** All interaction plumbing moved into ChatDriver with two invariants
+baked into EVERY wait: CI timeout scaling and Chance Time immunity (spin →
+land → dismiss). Previously a handful of waits (waitSendable, widget finds,
+the accordion loop) weren't wheel-aware, so an unluckily-timed RNG roll could
+still red a CI run even though the app worked as intended — unacceptable for
+a PR gate. Now structurally impossible: waits exist only through the driver.
+Also resolves the 500-line pressure (test 348 + driver 167). ci.yml: Linux
+e2e job added experimental (xvfb + GTK/GStreamer deps), same
+observe-then-graduate path Windows took, so shakedown runs can't block PRs.

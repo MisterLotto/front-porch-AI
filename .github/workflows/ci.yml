@@ -122,8 +122,10 @@ jobs:
   # local-run hazards (hover-wedge, zombie-kill) don't apply. Build time
   # dominates (~6-10 min); the test itself is ~7s.
   # Windows graduated to blocking after two consecutive green runs on
-  # 2026-07-28 (its very first execution passed). Linux would need xvfb and
-  # is deliberately not wired yet.
+  # 2026-07-28 (its very first execution passed). Linux joins the same way
+  # every platform does: experimental (continue-on-error) until it has green
+  # runs on record, so its shakedown can never red a contributor's PR — then
+  # flip `experimental: true` to `false`.
   e2e-smoke:
     name: E2E smoke (${{ matrix.device }})
     needs: analyze
@@ -137,6 +139,9 @@ jobs:
           - os: windows-latest
             device: windows
             experimental: false
+          - os: ubuntu-latest
+            device: linux
+            experimental: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 30
@@ -151,11 +156,27 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # Linux desktop build deps + a virtual display for the windowed test.
+      # GStreamer is for audioplayers_linux; GTK for the shell itself.
+      - name: Install Linux desktop dependencies
+        if: matrix.device == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev xvfb \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Run E2E smoke suite
+        if: matrix.device != 'linux'
         run: flutter test integration_test/app_smoke_test.dart -d ${{ matrix.device }}
+
+      - name: Run E2E smoke suite (under xvfb)
+        if: matrix.device == 'linux'
+        run: |
+          xvfb-run -a -s "-screen 0 1600x1000x24" \
+            flutter test integration_test/app_smoke_test.dart -d linux
 
   web-tests:
     name: WebUI tests (vitest)

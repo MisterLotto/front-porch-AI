@@ -6,23 +6,24 @@
 // boot to the home layout, create a character, open its chat, hold a
 // two-turn conversation, and assert every chat subsystem did real work:
 // realism evals (bond/trust/emotion/posture from canned responses), the
-// needs simulation (needs-impact deltas as chip metadata), chaos pressure,
+// needs simulation (needs-impact deltas as chip metadata), chaos (pressure
+// OR a live Chance Time wheel, which the driver spins like a user),
 // objective proposal + task generation, and a REAL journal maintenance pass
 // (triggered by the bond-delta salience kick; its <memory> op must render in
 // the sidebar). Generation and every eval are served by an in-process
 // OpenAI-compatible fake backend (support/fake_backend.dart), so the run is
-// deterministic and fully offline.
+// deterministic and fully offline. All interaction plumbing — CI timeout
+// scaling and Chance Time immunity for every wait — lives in
+// support/chat_driver.dart; a CI red here means a real regression.
 //
-// Run it on a Mac with:
-//   flutter test integration_test/app_smoke_test.dart -d macos
+// Run it with:
+//   flutter test integration_test/app_smoke_test.dart -d macos   (or windows)
 //
 // DELIBERATELY NOT COVERED (offline constraints, documented honestly):
 //  - RAG/embeddings: the nomic ONNX model is a consent-gated download; there
 //    is no offline path. The memory UI's pre-consent state still renders.
 //  - TTS/STT/image gen: engines need model binaries that aren't in the repo.
 //    Their services are constructed at boot, which IS covered.
-//  - The physical-state/scene-time eval: answered as a chat reply (its JSON
-//    keys aren't modeled in the fake yet) — parses to a no-op, harmless.
 //
 // ISOLATION (do not weaken):
 // The app under test must NEVER see the developer's real installation.
@@ -57,11 +58,10 @@ import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
-import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
 
+import 'support/chat_driver.dart';
 import 'support/e2e_sandbox.dart';
 import 'support/fake_backend.dart';
 
@@ -194,125 +194,20 @@ void main() {
     await chatService.setActiveCharacter(character);
     // ignore: use_build_context_synchronously — ctx is the root MainLayout element, alive for the whole test.
     Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-    await pumpUntilFound(
-      tester,
-      find.textContaining(_kGreeting, findRichText: true),
-    );
 
-    // The send button mirrors sendMessage's SILENT early-returns
-    // (isGenerating / isGuestBusy / photo turn / entrances in flight) — a tap
-    // during any of them is consumed into the void with no error. Realism
-    // chats keep more of that machinery in flight, so wait out all of it
-    // before every send.
-    Future<void> waitSendable() => pumpUntilTrue(
-      tester,
-      () =>
-          !chatService.isGenerating &&
-          !chatService.isGuestBusy &&
-          !chatService.isPhotoTurnInFlight &&
-          !chatService.entrancesInFlight,
-      describe: () =>
-          'chat sendable (gen=${chatService.isGenerating} '
-          'guest=${chatService.isGuestBusy} '
-          'photo=${chatService.isPhotoTurnInFlight} '
-          'entrances=${chatService.entrancesInFlight})',
-    );
+    final d = ChatDriver(tester, chatService, backend);
+    await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
+    await d.waitForWidget(d.input);
 
-    // Type into the real message input and tap the real send button.
-    final input = find.byWidgetPredicate(
-      (w) =>
-          w is TextField &&
-          (w.decoration?.hintText?.contains('Type a message') ?? false),
-    );
-    await pumpUntilFound(tester, input);
-
-    // Chaos Mode can interrupt any turn with the Chance Time wheel — a modal
-    // overlay that waits for the USER to spin (the roll is an RNG, so it
-    // strikes nondeterministically; one hung run was caught by the operator
-    // literally watching the wheel wait). Handle it the way a user would:
-    // spin, let it land, dismiss the result card. Every post-send wait calls
-    // this so no phase can hang on the wheel, whichever turn it strikes.
-    var wheelsSpun = 0;
-    Future<void> spinChanceTimeIfAsked() async {
-      if (find.byType(ChanceTimeOverlay).evaluate().isEmpty) return;
-      final spin = find.text('SPIN');
-      if (spin.evaluate().isNotEmpty) {
-        wheelsSpun++;
-        debugPrint('[e2e] Chance Time! Spinning the wheel (#$wheelsSpun).');
-        await tester.tap(spin);
-      }
-      final deadline = DateTime.now().add(const Duration(seconds: 20));
-      while (find.byType(ChanceTimeOverlay).evaluate().isNotEmpty &&
-          DateTime.now().isBefore(deadline)) {
-        final dismiss = find.descendant(
-          of: find.byType(ChanceTimeOverlay),
-          matching: find.byType(ElevatedButton),
-        );
-        if (dismiss.evaluate().isNotEmpty) {
-          await tester.tap(dismiss.first);
-        }
-        await tester.pump(const Duration(milliseconds: 300));
-      }
-    }
-
-    // Post-send wait: like pumpUntilTrue, but keeps the Chance Time wheel
-    // moving while it waits.
-    Future<void> waitForTurnState(
-      bool Function() condition,
-      String Function() describe, {
-      Duration timeout = const Duration(seconds: 60),
-    }) async {
-      timeout *= kCiTimeoutScale;
-      final deadline = DateTime.now().add(timeout);
-      while (!condition()) {
-        await spinChanceTimeIfAsked();
-        if (DateTime.now().isAfter(deadline)) {
-          fail('Timed out after $timeout waiting for: ${describe()}');
-        }
-        await tester.pump(const Duration(milliseconds: 250));
-      }
-    }
-
-    // A one-shot tap is not enough: the guards can flip in the gap between
-    // the sendable check and the tap (post-turn async work), and the app
-    // deliberately swallows such sends (text preserved for retry). Retry
-    // until the message provably lands in the chat service.
-    Future<void> sendRobustly(String text) async {
-      bool delivered() =>
-          chatService.messages.any((m) => m.text.contains(text));
-      for (var attempt = 0; attempt < 8; attempt++) {
-        await waitSendable();
-        await tester.enterText(input, text);
-        // The live binding's fake keyboard connection can go stale after the
-        // app's own post-send IME churn — enterText then writes into the
-        // void (observed: works for turn 1, silently dead for turn 2). Real
-        // typing is already covered by the first successful enterText;
-        // self-heal by setting the controller directly when it happens.
-        final controller = tester.widget<TextField>(input).controller;
-        if (controller != null && controller.text != text) {
-          controller.text = text;
-        }
-        await tester.pump();
-        await tester.tap(find.byTooltip('Send message'));
-        for (var i = 0; i < 8 && !delivered(); i++) {
-          await spinChanceTimeIfAsked();
-          await tester.pump(const Duration(milliseconds: 250));
-        }
-        if (delivered()) return;
-      }
-      fail('"$text" was never accepted by sendMessage after 8 attempts');
-    }
-
-    await sendRobustly(_kUserMessage);
+    await d.sendMessage(_kUserMessage);
 
     // The user bubble appears immediately; the reply streams from the fake
-    // backend through the full KoboldService → streamOpenAiChat → ChatService
-    // → bubble-render pipeline.
-    await pumpUntilFound(
-      tester,
+    // backend through the full generateStream → streamOpenAiChat →
+    // ChatService → bubble-render pipeline.
+    await d.waitForWidget(
       find.textContaining(_kUserMessage, findRichText: true),
     );
-    await waitForTurnState(
+    await d.waitFor(
       () => backend.chatRequests >= 1,
       () =>
           'turn 1 generating (chat=${backend.chatRequests}, '
@@ -320,10 +215,8 @@ void main() {
           'journal=${backend.journalPassRequests})',
       timeout: const Duration(seconds: 120),
     );
-    await pumpUntilFound(
-      tester,
+    await d.waitForWidget(
       find.textContaining(_kReplyPieces.join(), findRichText: true),
-      timeout: const Duration(seconds: 60),
     );
     // The outbound prompt must carry the user's message — proves the send
     // path assembled a real request, not just that a bubble rendered.
@@ -335,8 +228,8 @@ void main() {
     // never yields deltas. Send a second message; its pre-gen evals score
     // the first exchange against the fake backend (tool probe refused →
     // text fallback → canned JSON) and the deltas land as chip metadata.
-    await sendRobustly('And how is the weather on the porch?');
-    await waitForTurnState(
+    await d.sendMessage('And how is the weather on the porch?');
+    await d.waitFor(
       () => chatService.messages.any(
         (m) => (m.activeMetadata?['bond_delta'] as int?) == 13,
       ),
@@ -351,7 +244,7 @@ void main() {
     expect(backend.toolProbeRequests, greaterThanOrEqualTo(1));
     // The second turn's generation must actually reach the backend — with
     // every eval modeled, chatRequests counts real conversation turns only.
-    await waitForTurnState(
+    await d.waitFor(
       () => backend.chatRequests >= 2,
       () =>
           'the second turn generating (chatRequests='
@@ -364,12 +257,10 @@ void main() {
     );
 
     // ── Phase 3b: needs simulation ──────────────────────────────────────
-    // The post-gen needs-impact eval (canned deltas) must land as chip
-    // metadata — proves decay/eval/apply and the chips' data source.
     // Pinned signed value, not just non-empty: the canned fun_delta is +6,
     // and after apply-vs-decay the chip delta for 'fun' must stay positive —
     // a broken apply that leaves stale garbage would still be non-empty.
-    await waitForTurnState(
+    await d.waitFor(
       () => chatService.messages.any((m) {
         final deltas = m.activeMetadata?['needs_deltas'];
         if (deltas is! Map) return false;
@@ -384,22 +275,20 @@ void main() {
     // ── Phase 3c: chaos mode ────────────────────────────────────────────
     // Pressure builds per turn while enabled — UNTIL Chance Time fires,
     // which consumes it back to zero. So "pressure moved" and "the wheel
-    // fired (and we spun it)" are mutually exclusive proofs of the same
-    // living mechanism; either satisfies this phase. (First seen on a CI
-    // run where the RNG rolled the wheel before this check: pressure was
-    // legitimately 0 and the old pressure-only assert timed out.)
-    await waitForTurnState(
-      () => chatService.chaosPressure > 0 || wheelsSpun > 0,
+    // fired (and the driver spun it)" are mutually exclusive proofs of the
+    // same living mechanism; either satisfies this phase.
+    await d.waitFor(
+      () => chatService.chaosPressure > 0 || d.wheelsSpun > 0,
       () =>
           'chaos alive: pressure ${chatService.chaosPressure}, '
-          'wheels spun $wheelsSpun',
+          'wheels spun ${d.wheelsSpun}',
     );
 
     // ── Phase 3d: objectives ────────────────────────────────────────────
     // The narrative eval proposed a real objective; the proposal machinery
     // (dedup, autonomous accept, task generation) must surface it and fetch
     // its numbered task list from the backend.
-    await waitForTurnState(
+    await d.waitFor(
       () => chatService.activeObjectives.any(
         (o) => o.objective.contains('porch lemonade'),
       ),
@@ -407,7 +296,7 @@ void main() {
           'the proposed objective in activeObjectives '
           '(have: ${chatService.activeObjectives.map((o) => o.objective).toList()})',
     );
-    await waitForTurnState(
+    await d.waitFor(
       () => backend.objectiveTaskRequests >= 1,
       () =>
           'the objective task-generation request '
@@ -417,55 +306,22 @@ void main() {
     // ── Phase 4: journal maintenance pass + render ──────────────────────
     // The bond_delta=13 salience kick triggers a REAL maintenance pass: an
     // XML exchange against the fake whose <memory> op writes the card and
-    // whose <recap> updates "Where we are". Wait for the exchange, then for
-    // the store to hold the card the pass wrote.
-    await waitForTurnState(
+    // whose <recap> updates "Where we are".
+    await d.waitFor(
       () => backend.journalPassRequests >= 1,
       () =>
           'the journal maintenance pass exchange '
           '(journalPassRequests=${backend.journalPassRequests})',
     );
-    // The Journal & Memory accordion is collapsed by default and builds its
-    // panel lazily — expand it the way a user would; the freshly built panel
-    // loads the pass-written card from the DB (and reloads itself when a
-    // pass finishes). Its subtitle is also the honest RAG surface this
-    // offline suite can verify: the journal is on, and RAG is off (the
-    // embedding model is a consent-gated download).
-    // With needs + chaos content the sidebar outgrows the 800px window and
-    // its list builds lazily — the Journal group may not exist in the tree
-    // until scrolled to. Scroll the sidebar's own scrollable (the ancestor
-    // of its always-first section) until the group is built.
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    await tester.scrollUntilVisible(
-      find.text('Journal & Memory'),
-      100,
-      scrollable: sidebarScrollable,
-    );
-    await pumpUntilFound(
-      tester,
+    // Expand the collapsed Journal & Memory accordion like a user; the
+    // freshly built panel loads the pass-written card from the DB. Its
+    // subtitle is also the honest RAG surface this offline suite can verify:
+    // the journal is on, and RAG is off (consent-gated model download).
+    await d.openJournalAccordion();
+    await d.waitForWidget(
       find.textContaining('Journal on · RAG off', findRichText: true),
     );
-    // The header can sit right at the viewport edge after the scroll, where
-    // a single tap hit-tests as missed (observed as a tap() warning) and the
-    // accordion never expands. Retap gated on PANEL PRESENCE, not card text:
-    // an accordion is a toggle, and retapping after a successful expand
-    // (while the card still paints) would collapse it again.
-    final panel = find.byType(JournalPanel);
-    for (var attempt = 0; attempt < 5 && panel.evaluate().isEmpty; attempt++) {
-      await tester.ensureVisible(find.text('Journal & Memory'));
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('Journal & Memory'));
-      for (var i = 0; i < 6 && panel.evaluate().isEmpty; i++) {
-        await tester.pump(const Duration(milliseconds: 250));
-      }
-    }
-    await pumpUntilFound(
-      tester,
+    await d.waitForWidget(
       find.textContaining('porch swing creaked', findRichText: true),
       timeout: const Duration(seconds: 15),
     );
