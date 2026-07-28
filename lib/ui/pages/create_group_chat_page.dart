@@ -293,9 +293,10 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
     });
   }
 
+  // onReorderItem (unlike the retired onReorder) delivers newIndex already
+  // adjusted for the removal at oldIndex — no manual decrement.
   void _reorderMembers(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final moved = _members.removeAt(oldIndex);
       _members.insert(newIndex, moved);
     });
@@ -1064,7 +1065,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _members.length,
-              onReorder: _reorderMembers,
+              onReorderItem: _reorderMembers,
               itemBuilder: (ctx, i) {
                 final c = _members[i];
                 final id = _stableId(c);

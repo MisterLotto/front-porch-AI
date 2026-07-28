@@ -483,6 +483,10 @@ class FakeCharacterRepository extends ChangeNotifier
   @override
   Future<void> loadCharacters() async {}
 
+  /// Home grid keys cover images with this; static goldens stay at 0.
+  @override
+  int get coverEpoch => 0;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

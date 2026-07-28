@@ -1837,11 +1837,19 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     );
 
     if (collapsed) {
-      return Container(
-        decoration: BoxDecoration(
-          color: AppColors.cardOf(context),
+      // Material, not a decorated Container: ExpansionTile's header is a
+      // ListTile, which paints its background and ink splash onto the nearest
+      // Material ancestor — a coloured DecoratedBox in between swallows the
+      // ripple. Flutter 3.44 asserts on this ("ListTile background color or
+      // ink splashes may be invisible"). Same colour, radius and border; the
+      // header ripple now actually renders.
+      return Material(
+        color: AppColors.cardOf(context),
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.borderOf(context).withValues(alpha: 0.45)),
+          side: BorderSide(
+            color: AppColors.borderOf(context).withValues(alpha: 0.45),
+          ),
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),

@@ -2526,7 +2526,10 @@ class ChatService extends ChangeNotifier {
   /// "Our Story" timeline read-model (Living Time §7) — pure aggregation
   /// over data already persisted; the journal dialog's timeline tab and the
   /// web facade both read through this one instance.
-  late final MilestoneFeed milestoneFeed = MilestoneFeed(getDb: () => _db);
+  late final MilestoneFeed milestoneFeed = MilestoneFeed(
+    getDb: () => _db,
+    getMessages: () => _messages,
+  );
 
   late final _journalInjection = JournalInjection(
     store: _journalStore,

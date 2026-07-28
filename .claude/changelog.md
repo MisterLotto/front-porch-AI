@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-28 — fix(ci): stabilize Linux E2E smoke (no remote Kobold download + retry)
+- **Why:** E2E smoke (linux) failed with exit 79 "No tests were found" after ~5s mid-boot — process death with no Dart stack. Same SHA's macos/windows E2E and unit/goldens were green; prior commits on Rawhide had green Linux E2E (flake). Successful Linux runs were also downloading ~131MB of KoboldCpp during smoke despite the fake openRouter backend.
+- **Fix:** `SetupService.runAutoSetup` skips local binary download when backend is already openRouter/omlx (correct for remote-only users + E2E). Smoke test treats window_manager placement as best-effort. CI Linux E2E retries once after a failed attempt (clears build/linux between tries).
+- **Files:** `lib/services/setup_service.dart`, `integration_test/app_smoke_test.dart`, `.github/workflows/ci.yml`.
+
+## 2026-07-28 — chore(deps): refresh lock for Flutter 3.44.8; land safe majors
+- **Why:** Flutter was pinned to 3.44.8 but constraints/lock still reflected the pre-bump debt; `pub outdated` showed a long tail of upgrades.
+- **Did:** `flutter pub upgrade` + raised direct majors that resolve: file_picker 11, record 7, grpc 5, flat_buffers 25, shelf_web_socket 3 (+ ~60 total version bumps). API fixes: `FilePicker.platform` → static `FilePicker.*`; shelf_web_socket `ConnectionCallback` now `(channel, subprotocol)`. Floors regenerated (no downgrades).
+- **Blocked (documented in test/deps/README.md):** riverpod_generator ≥4.0.6 / riverpod 3.4 (flutter_test test_api); drift_dev ≥2.34.1 (analyzer 13); image 4.9 + syncfusion 34 (xml 7 vs webdav); package_info_plus 10 (win32 6 vs file_picker 11); flutter_markdown → plus migration deferred.
+- **Smoke:** `flutter analyze` clean; full unit suite **2603 pass / 13 skip / 0 fail**.
+- **Files:** `pubspec.yaml`, `pubspec.lock`, `test/deps/*`, picker/stream API call sites, generated plugin cmakes.
+
 ## 2026-07-28 — fix(avatar): no look dupe on placeholder replace; home cover refreshes on Done
 - **Why:** First Add avatar on a placeholder wrote portrait *and* a gallery look (same face twice). Home kept the old placeholder after Done because Image.file cached the same path; only a ★ click changed the cover key.
 - **Fix:** addLook is portrait-only when face is missing/placeholder (400×600 solid); further Add avatar adds real looks. `coverEpoch` + home Image.file keys refresh the grid on Done.
@@ -5950,3 +5962,289 @@ voice selection via the facade.
 **Verification:** 11 new tests (wire-format round-trip via a real protobuf reader in-test,
 end-to-end offline import, traversal, dupes, cleanup); suite 2,524 green; analyze clean;
 goldens regenerated + eyeballed; golden verify green.
+
+## 2026-07-28 (UTC) — Stoop hub: shareable card links (Discord OG embeds) + public creator profiles
+
+**Files:** `website/src/stoop/api.js`, `app.js`, `views-browse.js`, `views-inbox.js`,
+`stoop.css` (companion server work in backporch-server: share.ts OG endpoints,
+guest-accessible /creators/:id, User.bio + profileLinks migration).
+
+**What:** Card links shared to Discord unfurled as the generic FPAI logo — the hub is
+hash-routed, so crawlers never see a per-card URL. New path-based share links
+(`hub.frontporchai.app/card/<id>`, `/creator/<id>`) hit server-side OG pages (per-card
+title/summary/avatar for SFW cards; NSFW cards deliberately embed the logo + a generic
+line per the real-photo/NSFW moderation posture) and meta-refresh humans into the SPA.
+Hub: 🔗 Share buttons on card detail + creator pages (guests included), creator pages
+render bio/external links/lifetime stats, account page gains a bio + 4-link editor
+(links double as public self-attribution for cross-posted catalogs — the ScarletKat
+pattern). app.js boot translates /card/<id> paths into hash routes as a fallback until
+the Caddy /card/* → /share/card/* mapping is live.
+
+**Verification:** website build green (50 + 21 files), node --check on all edited hub
+scripts, backporch-server typecheck green; migration is additive/defaulted.
+
+**Post-review fixes (same day, Grok dual review):** NSFW card names scrubbed from OG
+titles (server 27f79cb); hub follows use the resolved user id (vanity-URL 404 fix);
+stats nullish guard + "some hidden (18+ off)" hint; `links`/`profileLinks` served as
+aliases server-side with a client fallback; Rawhide.md What's-New entry added.
+
+## 2026-07-28 (UTC) — Commit official Dart/Flutter agent skills into the repo
+
+**Files:** `.gitignore`, `.claude/skills/flutter-add-integration-test/SKILL.md`,
+`.claude/skills/dart-collect-coverage/SKILL.md`, `.claude/skills/dart-use-pattern-matching/SKILL.md`
+
+**What:** Google's Flutter/Dart teams now publish official agent skills
+(flutter/skills + dart-lang/skills on GitHub). Vendored three that fit this repo —
+integration-test authoring, coverage collection, pattern-matching idioms — so every
+contributor's agent gets current-SDK guidance (the repo just moved to Flutter 3.44.8 /
+Dart 3.12.2, newer than most models' training data). `.gitignore` narrowed from
+`.claude/skills/` to `.claude/skills/*` + negations so these three are tracked while
+per-machine skills (character-forge) stay private.
+
+**Verification:** `git status` shows only the three SKILL.md files tracked; character-forge
+still ignored.
+
+## 2026-07-28 (UTC) — TtsService dispose/stop teardown race + E2E cold-boot smoke test
+
+**Files:** `lib/services/tts_service.dart`, `integration_test/app_smoke_test.dart` (new),
+`test_driver/integration_test.dart` (new), `pubspec.yaml` + `pubspec.lock`
+(dev deps: integration_test SDK, path_provider_platform_interface)
+
+**What:** New E2E smoke test boots the REAL app (real main(), DB open, service
+init, window) and asserts MainLayout appears with no unhandled exceptions —
+the regression class unit tests can't catch (init order, plugin/native breakage
+after SDK/dep bumps). Isolation is total and non-negotiable: fake
+PathProviderPlatform rooted in a throwaway temp dir + in-memory
+SharedPreferences (from source isPreRelease=false, so a naive run would open
+the operator's REAL ~/Documents/FrontPorchAI and FileConsolidationService
+would move real Application Support folders). Scope deliberately stops at the
+home layout — opening a chat would hit PorchMemoryMailbox's hard-coded real
+$HOME paths (documented in the test header).
+
+First run immediately caught a real bug: TtsService.dispose() fires stop()
+un-awaited; stop() resumes after `await _audioPlayer.stop()` and called
+notifyListeners() on the disposed notifier (debug assert; stripped in
+release). Fixed with a `_disposed` guard. Likely present on dev/main too —
+candidate for backport.
+
+**Verification:** `flutter test integration_test/app_smoke_test.dart -d macos`
+passes (Flutter 3.44.8); full `flutter analyze` — 0 new issues (5 pre-existing
+infos from the 3.44.8 bump remain, all in untouched files); `dart fix --dry-run`
+suggests nothing in touched files.
+
+**Commits:** (see below — fix + harness committed separately)
+
+## 2026-07-28 (UTC) — Smoke test extended to a full chat round-trip + 3.44.8 lint sweep
+
+**Files:** `integration_test/app_smoke_test.dart`, plus lint fixes in
+`lib/ui/widgets/download_queue_panel.dart`, `hf_model_card.dart`,
+`output_sanitizer_rule_editor.dart`, `lib/ui/pages/create_group_chat_page.dart`,
+`lib/services/chat/journal_store.dart`
+
+**What:** (1) Lint sweep restored 0-issue `flutter analyze` after the 3.44.8 bump:
+SizeTransition axisAlignment→alignment (SDK formula, behavior identical),
+ReorderableListView onReorder→onReorderItem (semantics change — framework now
+pre-adjusts newIndex, manual decrements deleted), null-aware spread in
+journal_store. (2) The E2E smoke test now does a full conversation, not just
+boot: an in-process fake KoboldCpp (OpenAI-SSE, ephemeral port) is wired via
+KoboldService.setBaseUrl; the test creates a character through
+CharacterRepository, opens the real ChatPage (same calls as the card-tap
+handler — the home grid doesn't rebuild on background inserts), types in the
+real input, taps the real send button, and asserts the streamed reply bubble.
+New preset 'import_llmerta_porch_memories': false is load-bearing: chat open
+would otherwise run the Mafia mailbox import against hard-coded real $HOME
+paths. Round-trip passes in ~4s wall-clock.
+
+**Verification:** `flutter analyze` — No issues found (project back to 0);
+`flutter test integration_test/app_smoke_test.dart -d macos` green.
+
+## 2026-07-28 (UTC) — E2E suite: realism + journal + sidebar coverage; TimeStrip overflow fix
+
+**Files:** `integration_test/app_smoke_test.dart` (rewritten),
+`integration_test/support/e2e_sandbox.dart` (new),
+`integration_test/support/fake_backend.dart` (new),
+`lib/ui/chat_components/sidebar/character_state/time_strip.dart`
+
+**What:** The smoke test now runs a realism-enabled journey: boot → create card
+(with FrontPorchExtensions(realismEnabled: true) — the realism_default OR only
+applies to cards that CARRY extensions) → 2-message chat → asserts the 4-call
+realism eval pipeline consumed canned eval JSON (bond 0→2, trust +1, emotion
+applied, chip metadata attached) → plants a Journal card via the app's own
+store and renders it by expanding the Journal & Memory accordion → asserts the
+'Journal on · RAG off' sidebar surface → audits backend traffic (unknown
+endpoints fail by name; /api/v0/models is a whitelisted LM Studio probe where
+404 IS the correct answer). The fake backend is connected the way real users
+connect unmanaged local servers (remote/PseudoRemote mode) because
+managed-kobold mode's zombie cleanup pkills ANY koboldcpp it didn't spawn —
+the suite also pre-flight-fails if anything listens on 5001 to protect a real
+backend. Test-window ergonomics: corner-pinned on-top + blur (macOS pauses
+frames for occluded windows; pump would hang), pump watchdog fails loudly if
+frames stop, real-mouse hover assert downgraded (framework noise).
+
+**Bug found by the suite:** TimeStrip's sidebar Row overflowed 28px whenever
+realism is on (period label + date at natural size exceed the 300px sidebar).
+Fixed with Flexible + ellipsis on the period label.
+
+**NOT covered (offline constraints, documented in the test header):**
+RAG retrieval (nomic model is a consent-gated download), TTS/STT/image-gen
+engines (model binaries), physical-state eval payload (parses to no-op).
+
+**Verification:** `flutter analyze` clean; suite green in ~6s app time.
+
+## 2026-07-28 (UTC) — E2E suite hardening from hostile review + two real fixes it forced
+
+**Files:** `integration_test/app_smoke_test.dart`, `integration_test/support/fake_backend.dart`,
+`lib/ui/chat_components/sidebar/character_state/time_strip.dart`
+
+**What (Grok review round 3, findings verified then fixed):**
+(1) TimeStrip: Flexible→Expanded + maxLines:1, competing Spacer removed — the
+review was right that Flexible+Spacer split flex space 50/50 (label truncated
+early beside empty space) and that ellipsis without maxLines can wrap.
+(2) FlutterError.onError filter: addTearDown restore + null-safe fallthrough
+to FlutterError.presentError — can no longer drop errors.
+(3) Eval-vs-chat routing now classifies on the LAST message's content, not the
+whole body: a realism-enabled chat request carries realism-state injection in
+its SYSTEM prompt, and the whole-body key search misrouted turn 2's generation
+into the eval branch (caught live by the new chatRequests>=2 assert — the
+previously "green" run had never actually generated turn 2; its reply text
+assert was satisfied by turn 1's identical reply).
+(4) Scene-time/posture eval modeled (posture/minutes_elapsed/new_day) so
+counters stay honest; tools probe is a real JSON field check; handler catch
+logs; per-completion classification line printed for post-mortems.
+(5) sendRobustly(): delivery-confirmed send with retry + controller self-heal —
+the live binding's fake keyboard connection goes stale after the app's
+post-send IME churn (enterText works for turn 1, silently no-ops for turn 2).
+
+**Verification:** `flutter analyze` clean; suite green (~7s app time) with
+completion log confirming 2 real chat generations + 4 evals + tool probes.
+
+## 2026-07-28 (UTC) — Full-array E2E: needs, chaos, objectives, and the real journal pass
+
+**Files:** `integration_test/app_smoke_test.dart`, `integration_test/support/fake_backend.dart`
+
+**What:** The smoke suite now asserts every chat subsystem does real work in one
+two-turn journey: realism evals (bond 0→13/trust/emotion/posture), the needs
+simulation (canned needs-impact deltas land as chip metadata), chaos pressure
+accumulation (extensions arm chaosModeEnabled), objective proposal (narrative
+eval proposes a real objective → activeObjectives) + autonomous task generation
+(numbered-list exchange), and a REAL journal maintenance pass — bond_delta=13
+trips the >=12 salience kick, the pass runs its XML exchange against the fake
+(tools probe → XML fallback), applies `<memory action=add>` + `<recap>`, and
+the written card must render in the sidebar panel after expanding the accordion
+(scroll-into-view + retry-tap: the sidebar outgrew the window with needs/chaos
+content and lazy list items can't be found unbuilt; an edge-of-viewport tap
+can miss silently). Fake gains journal-XML and task-list branches with their
+own counters, needs `<need>_delta` payloads, and streams via one _streamSse
+helper. Verification: analyze clean; suite green ~7s; log shows both turns'
+full 5-eval suites + 2 journal passes applied ("1 op(s) + recap" ×2).
+
+## 2026-07-28 (UTC) — E2E smoke suite wired into CI (macOS blocking, Windows experimental)
+
+**Files:** `.github/workflows/ci.yml`
+
+**What:** New `e2e-smoke` job (needs: analyze) runs the full-array suite on
+every PR/push to dev/main/Rawhide: macos-latest blocking, windows-latest
+`continue-on-error: true` until its first green run is on record (then flip
+`experimental` to false). Public repo → hosted macOS/Windows runners are free.
+30-min job timeout; build dominates, test is ~7s. Linux deliberately not wired
+(needs xvfb). Verified by pushing Rawhide and watching the run.
+
+## 2026-07-28 (UTC) — E2E: survive (and cover) the Chance Time wheel
+
+**Files:** `integration_test/app_smoke_test.dart`
+
+**What:** Chaos Mode's Chance Time wheel is a modal overlay that waits for the
+USER to spin — and the trigger roll is RNG, so it strikes runs
+nondeterministically. The operator caught a hung run by literally watching the
+window: the suite was waiting for chatRequests=2 while the app waited for a
+spin. All 7 post-send waits + the send retry loop now run through
+spinChanceTimeIfAsked(): tap SPIN, wait out the landing, dismiss the result
+card — user-faithful, and it turns the wheel into covered surface whenever it
+fires. 4 consecutive green runs after the change (no roll observed locally;
+the handler's live proof will come from CI frequency).
+
+## 2026-07-28 (UTC) — E2E: 4x CI timeout scale + instrumented turn-1 wait
+
+**Files:** `integration_test/support/e2e_sandbox.dart`, `integration_test/app_smoke_test.dart`
+
+**What:** First CI run: Windows PASSED first try (suite now proven
+cross-platform); macOS runner timed out waiting for turn 1's reply — 2-core
+runner vs locally-tuned timeouts. All wait helpers now multiply timeouts by
+kCiTimeoutScale (4 when CI=true, 1 locally), and the turn-1 reply wait is
+split: first wait for chatRequests>=1 with live backend counters in the
+failure message (evals vs generation vs render pinpointing), then the render
+wait. Local run unchanged and green.
+
+## 2026-07-28 (UTC) — CI e2e-smoke: both platforms green; Windows promoted to blocking
+
+**Files:** `.github/workflows/ci.yml`
+
+**What:** Run 2 with the 4x CI timeout scale: macOS 3m13s green, Windows 4m12s
+green (Windows has passed both of its first two executions ever). Windows
+`experimental` flipped to false — the E2E smoke suite now BLOCKS PRs on both
+desktop platforms.
+
+## 2026-07-28 (UTC) — E2E chaos assert: pressure OR wheel — CI run 3 caught the coupling
+
+**Files:** `integration_test/app_smoke_test.dart`
+
+**What:** CI run 3 (macOS): the Chance Time wheel fired live for the first
+time — the spin handler worked end to end (spun, dismissed, event-injected
+generation served) — and then the chaos assert timed out at "pressure > 0
+(now 0)": firing Chance Time CONSUMES the pressure back to zero, so
+"pressure moved" and "wheel fired" are mutually exclusive proofs of the same
+mechanism. The assert now accepts either. Also retroactively explains CI
+run 1's macOS failure (wheel blocking turn 1 before the handler existed).
+Windows is 3/3 green.
+
+## 2026-07-28 (UTC) — ChatDriver extraction (wheel immunity everywhere) + Linux CI (experimental)
+
+**Files:** `integration_test/support/chat_driver.dart` (new),
+`integration_test/app_smoke_test.dart`, `.github/workflows/ci.yml`
+
+**What:** All interaction plumbing moved into ChatDriver with two invariants
+baked into EVERY wait: CI timeout scaling and Chance Time immunity (spin →
+land → dismiss). Previously a handful of waits (waitSendable, widget finds,
+the accordion loop) weren't wheel-aware, so an unluckily-timed RNG roll could
+still red a CI run even though the app worked as intended — unacceptable for
+a PR gate. Now structurally impossible: waits exist only through the driver.
+Also resolves the 500-line pressure (test 348 + driver 167). ci.yml: Linux
+e2e job added experimental (xvfb + GTK/GStreamer deps), same
+observe-then-graduate path Windows took, so shakedown runs can't block PRs.
+
+## 2026-07-28 (UTC) — "Our Story" eternal spinner fixed (unstable Riverpod family key)
+
+**Files:** `lib/services/chat/milestone_feed.dart`, `lib/services/chat_service.dart`,
+`lib/services/chat/milestone_providers.dart` (+ regenerated .g.dart),
+`lib/ui/dialogs/journal_timeline_tab.dart`, `lib/services/web/facade/chat_tools_facade.dart`,
+`test/services/chat/milestone_feed_test.dart`, `test/services/chat/riverpod_providers_test.dart`,
+`integration_test/support/chat_driver.dart`, `integration_test/app_smoke_test.dart`,
+`docs/Rawhide.md`
+
+**What:** Operator-reported: the Journal dialog's Our Story tab spun forever on
+a live session. Root cause: `ChatService.messages` returns `List.unmodifiable`
+(a NEW instance per call) and it was a `milestoneTimelineProvider` FAMILY KEY —
+list == is identity, so every dialog rebuild (and busy sessions rebuild
+constantly: RAG init, growth, timers) registered as "new args", discarded the
+loading provider, and started a fresh one. The fetch never completed. Fix:
+messages leave the family entirely; MilestoneFeed gains a `getMessages`
+callback (wired to the internal list in chat_service, matching the getDb
+pattern) read at fetch time; `revision` (message count) remains the intended
+refetch key. Web facade + both test files updated (facade behavior unchanged —
+it never used Riverpod, web timeline was never broken; desktop-only bug).
+
+**Regression net:** E2E journey gains Phase 4b — open the Journal dialog from
+the sidebar (ensure-visible retry: the Open button sits below the sidebar
+fold), switch to Our Story, and require NO spinner remains inside the dialog
+(content-agnostic: entries and empty state both count).
+
+**Verification:** milestone_feed_test + riverpod_providers_test green (7 tests);
+full E2E green in ~8s; analyze clean; build_runner regenerated.
+
+## 2026-07-28 (UTC) — Linux E2E promoted to blocking (2/2 green from first execution)
+
+**Files:** `.github/workflows/ci.yml`
+
+**What:** Linux e2e-smoke passed both of its first two CI executions (xvfb +
+GTK/GStreamer recipe worked untouched). experimental → false. The full-array
+E2E suite now BLOCKS PRs on all three desktop platforms.
