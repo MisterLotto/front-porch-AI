@@ -13,6 +13,7 @@ import 'package:front_porch_ai/services/portrait_promotion.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 List<int> _solidPng({int r = 100, int g = 120, int b = 140}) {
+  // Creator / V2 synthesizer size — isPlaceholderPortrait requires 400×600.
   final image = img.Image(width: 400, height: 600);
   img.fill(image, color: img.ColorRgb8(r, g, b));
   return img.encodePng(image);
@@ -21,7 +22,7 @@ List<int> _solidPng({int r = 100, int g = 120, int b = 140}) {
 List<int> _variedPng() {
   final image = img.Image(width: 64, height: 64);
   img.fill(image, color: img.ColorRgb8(10, 20, 30));
-  // One different pixel so it is not a solid placeholder.
+  // One different pixel so it is not a solid fill (and size ≠ 400×600).
   image.setPixelRgb(32, 32, 200, 50, 50);
   return img.encodePng(image);
 }

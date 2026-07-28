@@ -129,13 +129,13 @@ bool hasUsablePortrait(CharacterCard card, StorageService storage) {
   return storage.resolveCharacterImage(path).existsSync();
 }
 
-/// True when the on-disk portrait is a solid-color fill — the synthetic PNG
-/// [V2CardService] writes when no art was supplied (creator "None for now",
-/// JSON import, group-member placeholders). Real photos have varied pixels;
-/// those placeholders are a single fill color at every sample.
+/// True when the on-disk portrait is a synthetic solid-color card PNG from
+/// [V2CardService] / group import (creator "None for now", JSON import, etc.).
+/// Those are always **400×600** with a single fill color. Real photos are kept
+/// even if they happen to be flat-colored (different size or any pixel variance).
 ///
-/// Returns false when there is no file, the file won't decode, or any sample
-/// differs (a real image is kept).
+/// Returns false when there is no file, the file won't decode, size differs,
+/// or any sample differs.
 Future<bool> isPlaceholderPortrait(
   CharacterCard card,
   StorageService storage,
@@ -144,9 +144,9 @@ Future<bool> isPlaceholderPortrait(
   try {
     final file = storage.resolveCharacterImage(card.imagePath!);
     final decoded = img.decodeImage(await file.readAsBytes());
-    if (decoded == null || decoded.width < 1 || decoded.height < 1) {
-      return false;
-    }
+    if (decoded == null) return false;
+    // V2 / group-import synthesizer always emits this exact size.
+    if (decoded.width != 400 || decoded.height != 600) return false;
     // 5×5 grid of samples — all identical RGB ⇒ solid placeholder.
     int? r0, g0, b0;
     for (final yf in const [0.0, 0.25, 0.5, 0.75, 1.0]) {
@@ -173,13 +173,12 @@ Future<bool> isPlaceholderPortrait(
 }
 
 /// Write [bytes] as the card portrait when there is no usable portrait **or**
-/// the current one is a solid-color placeholder. Gallery looks are left alone
-/// (this overwrites the portrait file in place when possible — not a look
-/// promotion). Returns true when the portrait was written.
+/// the current one is a solid-color placeholder. Overwrites the portrait file
+/// in place when possible. Returns true when the portrait was written.
 ///
-/// Used by [CharacterRepository.addLook] and ★-persist so a character created
-/// without art still gets a real card face, and the creator placeholder is
-/// not retained next to a real gallery image (issue #171 follow-up).
+/// Used by [CharacterRepository.addLook] (portrait-only path — no gallery look
+/// row, so the first real upload does not dupe as portrait + look) and by
+/// ★-persist so a character created without art still gets a real card face.
 Future<bool> bootstrapPortraitIfMissing({
   required CharacterCard card,
   required StorageService storage,

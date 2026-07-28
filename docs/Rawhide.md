@@ -8,6 +8,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🗑️ **Avatar Gallery delete no longer shows the wrong face vanishing** — Deleting a portrait or gallery image could make a *different* tile disappear in the dialog (even though the right file was removed once you hit Done). The gallery was keeping a cached image on the wrong tile when files were rewritten in place. Deletes now refresh the correct tiles immediately.
 
+- 🖼️ **First uploaded face no longer doubles as portrait + gallery look** — Adding an avatar to a character that still had the solid placeholder (or no art) used to paste the same image twice. That first real upload now becomes the portrait only; further Add avatar clicks add true alternates. Home also refreshes the card face when you hit Done (no need to re-tap the star).
+
 - 📖 **"Our Story" no longer spins forever** — Opening the journal's Our Story timeline during a lively chat could show an endless loading spinner: every background heartbeat (memory warming up, growth checks) quietly restarted the timeline's loading from scratch, so on a busy session it never got to finish. The timeline now loads once and stays loaded, refreshing only when new messages actually arrive.
 
 - 🐧 **Linux: fixed the "database is corrupted" failure** — builds since 2026-07-21 shipped without their bundled SQLite engine, so the app couldn't open its own database and reported it as corrupted. **No data was ever damaged** — it just couldn't be read. Every Linux package is fixed, and the release pipeline now refuses to publish a Linux build that can't reach SQLite, so this is caught in CI rather than on your machine. macOS and Windows also now carry their own SQLite 3.52 instead of relying on the system copy.
