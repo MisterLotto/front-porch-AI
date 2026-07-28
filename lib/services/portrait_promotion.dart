@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/painting.dart';
 import 'package:image/image.dart' as img;
@@ -186,6 +187,13 @@ Future<bool> bootstrapPortraitIfMissing({
   required Future<void> Function(CharacterCard card) updateCharacter,
 }) async {
   if (bytes.isEmpty) return false;
+  // Refuse garbage that isn't a decodable image — updateCharacter re-embeds
+  // via saveCardAsPng, and a 4-byte stub used to throw inside the PSD probe.
+  try {
+    if (img.decodeImage(Uint8List.fromList(bytes)) == null) return false;
+  } catch (_) {
+    return false;
+  }
   if (hasUsablePortrait(card, storage)) {
     if (!await isPlaceholderPortrait(card, storage)) return false;
   }

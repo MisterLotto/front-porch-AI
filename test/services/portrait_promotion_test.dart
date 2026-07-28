@@ -164,5 +164,17 @@ void main() {
       expect(wrote, isFalse);
       expect(card.imagePath, isNull);
     });
+
+    test('is a no-op for non-image garbage bytes', () async {
+      final card = CharacterCard(name: 'Garbage');
+      final wrote = await bootstrapPortraitIfMissing(
+        card: card,
+        storage: storage,
+        bytes: const [1, 2, 3, 4],
+        updateCharacter: (_) async => fail('should not update'),
+      );
+      expect(wrote, isFalse);
+      expect(card.imagePath, isNull);
+    });
   });
 }

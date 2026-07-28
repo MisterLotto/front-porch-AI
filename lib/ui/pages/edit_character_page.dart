@@ -325,9 +325,25 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   ///
   /// Cost: once per Details rebuild via the repo's cover cache (not a chat
   /// bubble hot path). Prefer this over a raw existsSync on imagePath.
+  /// Falls back to raw `imagePath` when CharacterRepository is not above this
+  /// widget (widget goldens / rare embeds that only provide StorageService).
   File? get _avatarFile {
-    final repo = Provider.of<CharacterRepository>(context, listen: false);
-    return repo.coverImageFileFor(widget.character);
+    try {
+      final repo = Provider.of<CharacterRepository>(context, listen: false);
+      final cover = repo.coverImageFileFor(widget.character);
+      if (cover != null) return cover;
+    } on ProviderNotFoundException {
+      // Fall through to imagePath.
+    }
+    final img = widget.character.imagePath;
+    if (img == null || img.isEmpty) return null;
+    if (p.isAbsolute(img)) return File(img);
+    try {
+      final storage = Provider.of<StorageService>(context, listen: false);
+      return File(p.join(storage.charactersDir.path, img));
+    } on ProviderNotFoundException {
+      return File(img);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════

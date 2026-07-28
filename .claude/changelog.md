@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-28 — test(avatar): fix CI after portrait/bootstrap work (#171)
+- **Why:** (1) 3 `character_authoring_facade_test` failures — addLook bootstraps a portrait then re-embeds; tests used invalid `[1,2,3,4]` bytes. (2) Widget golden `edit_character` — `_avatarFile` required `CharacterRepository` and the golden only provided StorageService → ProviderNotFoundException + 54% pixel fail.
+- **Fix:** Real PNG fixture in facade test; bootstrap refuses non-decodable bytes; V2CardService falls back to synthetic placeholder on bad source decode; Edit Character `_avatarFile` falls back to imagePath when CharacterRepository is absent.
+- **Files:** `test/services/web/character_authoring_facade_test.dart`, `lib/services/portrait_promotion.dart`, `lib/services/v2_card_service.dart`, `lib/ui/pages/edit_character_page.dart`, `test/services/portrait_promotion_test.dart`.
+
 ## 2026-07-28 — fix(avatar): gallery delete showed the wrong tile vanishing
 - **Why:** Deleting the blank/portrait (promote look in place) or a gallery look could leave Image.file showing a stale frame: same portrait path, new bytes, no widget key → wrong tile appeared gone until Done refreshed home.
 - **Fix:** ValueKeys by avatar id + `mediaGen` imageVersion on tiles; FileImage.evict + mediaGen bump after remove/deletePortrait/replace/addLook.
