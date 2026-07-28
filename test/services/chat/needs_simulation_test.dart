@@ -152,6 +152,19 @@ void main() {
       expect(deltas['fun']['delta'], 7);
     });
 
+    test('computeNeedsDeltasWithReasons: no baseline fabricates no deltas', () {
+      // A missing pre-turn vector used to read every need as before=0,
+      // producing "delta = full current value" chips (67 hunger → delta 67).
+      sim.initializeFresh();
+      expect(sim.computeNeedsDeltasWithReasons(const {}), isEmpty);
+      // A partial baseline only reports the needs it actually covers.
+      final partial = sim.computeNeedsDeltasWithReasons({
+        'fun': sim.vector['fun']! - 3,
+      });
+      expect(partial.keys, ['fun']);
+      expect(partial['fun']['delta'], 3);
+    });
+
     test('tickDecay applies (1:1 path)', () {
       sim.initializeFresh();
       sim.tickDecay();
