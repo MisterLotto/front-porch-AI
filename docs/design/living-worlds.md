@@ -1,8 +1,12 @@
 # Living Worlds — real worlds, weather biomes, and authored climates
 
-**Status: DRAFT rev.2 (2026-07-28) — design only, no code written.**
+**Status: DRAFT rev.2 (2026-07-28) — PARKED, design only, no code written.**
 Rev.2 folds in a hostile self-audit of rev.1 (two false assertions, eight
-gaps) and the maintainer rulings of the same day. Open items in §6.
+gaps) and the maintainer rulings of the same day.
+
+Parked 2026-07-28 to diagnose a v1.1.0 bug. Nothing here has been built, so
+there is no half-finished state to resume from — pick up at §6's three open
+decisions, then phase 0.
 
 A three-phase arc that turns `worlds` from a lorebook folder into a portable
 *place*, then gives places a climate, then lets users author their own.
