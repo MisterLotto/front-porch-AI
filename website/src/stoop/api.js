@@ -213,6 +213,9 @@
     setNsfw: function (enabled) {
       return api('POST', '/auth/nsfw', { enabled: enabled }).then(applyAuthPayload);
     },
+    updateProfile: function (bio, links) {
+      return api('POST', '/me/profile', { bio: bio, links: links }).then(applyAuthPayload);
+    },
     changePassword: function (currentPassword, newPassword) {
       return api('POST', '/auth/change-password', { currentPassword: currentPassword, newPassword: newPassword });
     },

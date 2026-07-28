@@ -27,6 +27,26 @@
     return Api.state.user ? !!Api.state.user.nsfwEnabled : !!Api.state.guestAdult;
   }
 
+  /* ---- share links ----
+     Path-based URLs (no #) so Discord/Slack crawlers hit the server-side OG
+     page (Caddy maps /card/* + /creator/* onto the API's /share/ routes) and
+     unfurl the card's real name, summary, and art instead of the site logo. */
+  var HUB_ORIGIN = location.hostname === 'hub.frontporchai.app' ? location.origin : 'https://hub.frontporchai.app';
+
+  function shareBtn(kind, id) {
+    var url = HUB_ORIGIN + '/' + kind + '/' + id;
+    var btn = el('button', { class: 'hub-linklike', type: 'button', title: 'Copy a link that unfurls nicely in Discord & friends' }, '🔗 Share');
+    btn.addEventListener('click', function () {
+      var done = function () { ui.toast('Link copied — paste it anywhere.'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy this link:', url); });
+      } else {
+        window.prompt('Copy this link:', url);
+      }
+    });
+    return btn;
+  }
+
   /* ================================ browse ================================ */
   function renderBrowse(mount) {
     var page = 0;
@@ -274,12 +294,14 @@
           ]);
 
       // Guests can download but not vote/report — invite them to join instead.
+      // Sharing is for everyone.
       var actionExtras = signedIn
         ? [
             el('span', { class: 'hub-votebox' }, [upBtn, dnBtn]),
+            shareBtn('card', id),
             el('button', { class: 'hub-linklike', type: 'button', onclick: showReport }, '⚑ Report'),
           ]
-        : [el('a', { class: 'hub-signin-nudge', href: '#/signin' }, 'Sign in to vote, follow & report')];
+        : [shareBtn('card', id), el('a', { class: 'hub-signin-nudge', href: '#/signin' }, 'Sign in to vote, follow & report')];
 
       var alts = Array.isArray(card.alternate_greetings) ? card.alternate_greetings.filter(Boolean).join('\n\n———\n\n') : '';
 
@@ -348,13 +370,40 @@
       }
       var followers = el('span', { class: 'hub-dim' }, ui.num(cr.followers) + ' follower' + (cr.followers === 1 ? '' : 's'));
       var cards = cr.cards || [];
+
+      // Lifetime stats over every approved card (server-side, not the visible
+      // slice) so SFW-only viewers see the same numbers.
+      var stats = cr.stats || {};
+      var statLine = el('span', { class: 'hub-dim' },
+        ui.num(stats.cards || cards.length) + ' cards · ' +
+        ui.num(stats.downloads || 0) + ' downloads · ' +
+        ui.num(stats.score || 0) + ' net votes');
+
+      // Bio + external links (creator-controlled; the server only accepts
+      // http(s) URLs). Links double as public self-attribution for creators
+      // cross-posting their own catalogs from chub/Backyard.
+      var bioBlock = (cr.bio || '').trim()
+        ? el('p', { class: 'hub-creator-bio' }, cr.bio.trim())
+        : null;
+      var linkList = (cr.links && cr.links.length)
+        ? el('div', { class: 'hub-creator-links' }, cr.links.map(function (u) {
+            var label = u.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            if (label.length > 42) label = label.slice(0, 40) + '…';
+            return el('a', { href: u, target: '_blank', rel: 'noopener nofollow' }, '🔗 ' + label);
+          }))
+        : null;
+
       mount.replaceChildren(el('div', null, [
         el('a', { class: 'hub-back', href: '#/' }, '← Back to browsing'),
         el('div', { class: 'hub-creator-head' }, [
           el('h2', null, cr.displayName),
           followers,
+          statLine,
           followBtn,
+          shareBtn('creator', cr.id),
         ]),
+        bioBlock,
+        linkList,
         cards.length
           ? el('div', { class: 'hub-grid' }, cards.map(ui.cardTile))
           : ui.emptyState('🪑', 'No public cards yet'),

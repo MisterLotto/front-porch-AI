@@ -5924,3 +5924,23 @@ voice selection via the facade.
 **Verification:** 11 new tests (wire-format round-trip via a real protobuf reader in-test,
 end-to-end offline import, traversal, dupes, cleanup); suite 2,524 green; analyze clean;
 goldens regenerated + eyeballed; golden verify green.
+
+## 2026-07-28 (UTC) — Stoop hub: shareable card links (Discord OG embeds) + public creator profiles
+
+**Files:** `website/src/stoop/api.js`, `app.js`, `views-browse.js`, `views-inbox.js`,
+`stoop.css` (companion server work in backporch-server: share.ts OG endpoints,
+guest-accessible /creators/:id, User.bio + profileLinks migration).
+
+**What:** Card links shared to Discord unfurled as the generic FPAI logo — the hub is
+hash-routed, so crawlers never see a per-card URL. New path-based share links
+(`hub.frontporchai.app/card/<id>`, `/creator/<id>`) hit server-side OG pages (per-card
+title/summary/avatar for SFW cards; NSFW cards deliberately embed the logo + a generic
+line per the real-photo/NSFW moderation posture) and meta-refresh humans into the SPA.
+Hub: 🔗 Share buttons on card detail + creator pages (guests included), creator pages
+render bio/external links/lifetime stats, account page gains a bio + 4-link editor
+(links double as public self-attribution for cross-posted catalogs — the ScarletKat
+pattern). app.js boot translates /card/<id> paths into hash routes as a fallback until
+the Caddy /card/* → /share/card/* mapping is live.
+
+**Verification:** website build green (50 + 21 files), node --check on all edited hub
+scripts, backporch-server typecheck green; migration is additive/defaulted.
