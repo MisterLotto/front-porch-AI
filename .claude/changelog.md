@@ -5944,3 +5944,8 @@ the Caddy /card/* → /share/card/* mapping is live.
 
 **Verification:** website build green (50 + 21 files), node --check on all edited hub
 scripts, backporch-server typecheck green; migration is additive/defaulted.
+
+**Post-review fixes (same day, Grok dual review):** NSFW card names scrubbed from OG
+titles (server 27f79cb); hub follows use the resolved user id (vanity-URL 404 fix);
+stats nullish guard + "some hidden (18+ off)" hint; `links`/`profileLinks` served as
+aliases server-side with a client fallback; Rawhide.md What's-New entry added.
