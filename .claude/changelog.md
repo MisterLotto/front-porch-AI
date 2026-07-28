@@ -5965,3 +5965,33 @@ per-machine skills (character-forge) stay private.
 
 **Verification:** `git status` shows only the three SKILL.md files tracked; character-forge
 still ignored.
+
+## 2026-07-28 (UTC) — TtsService dispose/stop teardown race + E2E cold-boot smoke test
+
+**Files:** `lib/services/tts_service.dart`, `integration_test/app_smoke_test.dart` (new),
+`test_driver/integration_test.dart` (new), `pubspec.yaml` + `pubspec.lock`
+(dev deps: integration_test SDK, path_provider_platform_interface)
+
+**What:** New E2E smoke test boots the REAL app (real main(), DB open, service
+init, window) and asserts MainLayout appears with no unhandled exceptions —
+the regression class unit tests can't catch (init order, plugin/native breakage
+after SDK/dep bumps). Isolation is total and non-negotiable: fake
+PathProviderPlatform rooted in a throwaway temp dir + in-memory
+SharedPreferences (from source isPreRelease=false, so a naive run would open
+the operator's REAL ~/Documents/FrontPorchAI and FileConsolidationService
+would move real Application Support folders). Scope deliberately stops at the
+home layout — opening a chat would hit PorchMemoryMailbox's hard-coded real
+$HOME paths (documented in the test header).
+
+First run immediately caught a real bug: TtsService.dispose() fires stop()
+un-awaited; stop() resumes after `await _audioPlayer.stop()` and called
+notifyListeners() on the disposed notifier (debug assert; stripped in
+release). Fixed with a `_disposed` guard. Likely present on dev/main too —
+candidate for backport.
+
+**Verification:** `flutter test integration_test/app_smoke_test.dart -d macos`
+passes (Flutter 3.44.8); full `flutter analyze` — 0 new issues (5 pre-existing
+infos from the 3.44.8 bump remain, all in untouched files); `dart fix --dry-run`
+suggests nothing in touched files.
+
+**Commits:** (see below — fix + harness committed separately)

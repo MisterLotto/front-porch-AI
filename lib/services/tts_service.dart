@@ -197,8 +197,14 @@ class TtsService extends ChangeNotifier {
     unawaited(refreshAvailableVoices());
   }
 
+  /// Set before teardown begins: dispose() fires stop() un-awaited (dispose
+  /// must stay synchronous), and stop() resumes after an async gap — by then
+  /// the notifier is disposed and notifyListeners() would assert in debug.
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     stop();
     _clearCache();
     _piperNative.shutdown();
@@ -868,6 +874,7 @@ class TtsService extends ChangeNotifier {
     _afplayProcess = null;
 
     await _audioPlayer.stop();
+    if (_disposed) return;
     notifyListeners();
   }
 
