@@ -5949,3 +5949,19 @@ scripts, backporch-server typecheck green; migration is additive/defaulted.
 titles (server 27f79cb); hub follows use the resolved user id (vanity-URL 404 fix);
 stats nullish guard + "some hidden (18+ off)" hint; `links`/`profileLinks` served as
 aliases server-side with a client fallback; Rawhide.md What's-New entry added.
+
+## 2026-07-28 (UTC) — Commit official Dart/Flutter agent skills into the repo
+
+**Files:** `.gitignore`, `.claude/skills/flutter-add-integration-test/SKILL.md`,
+`.claude/skills/dart-collect-coverage/SKILL.md`, `.claude/skills/dart-use-pattern-matching/SKILL.md`
+
+**What:** Google's Flutter/Dart teams now publish official agent skills
+(flutter/skills + dart-lang/skills on GitHub). Vendored three that fit this repo —
+integration-test authoring, coverage collection, pattern-matching idioms — so every
+contributor's agent gets current-SDK guidance (the repo just moved to Flutter 3.44.8 /
+Dart 3.12.2, newer than most models' training data). `.gitignore` narrowed from
+`.claude/skills/` to `.claude/skills/*` + negations so these three are tracked while
+per-machine skills (character-forge) stay private.
+
+**Verification:** `git status` shows only the three SKILL.md files tracked; character-forge
+still ignored.
