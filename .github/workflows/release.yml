@@ -304,9 +304,9 @@ jobs:
         run: |
           # Download the latest VC++ 2015-2022 x64 Redistributable from Microsoft's CDN
           # This is bundled into the installer so end-users get it automatically
-          $DestDir = "${{ github.workspace }}\\${{ matrix.build_path }}\\.."
+          $DestDir = "${{ github.workspace }}\${{ matrix.build_path }}\.."
           Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" `
-            -OutFile "$DestDir\\vc_redist.x64.exe"
+            -OutFile "$DestDir\vc_redist.x64.exe"
           Write-Host "VC++ Redistributable downloaded to $DestDir"
         shell: pwsh
 
@@ -316,9 +316,9 @@ jobs:
           $VERSION = "${env:GITHUB_REF_NAME}" -replace '^[vV]', ''
           # Convert 4-part (0.0.4.1) to 3-part for Inno Setup (0.0.4.1 stays as-is)
           choco install innosetup -y --no-progress
-          $ISCC = "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"
-          & $ISCC /DMyAppVersion="$VERSION" /DMyAppBuildDir="${{ github.workspace }}\\${{ matrix.build_path }}" /DMyAppLicenseFile="${{ github.workspace }}\\LICENSE" /DMyAppIconFile="${{ github.workspace }}\\windows\\runner\\resources\\app_icon.ico" "installers\\windows\\setup.iss"
-          Copy-Item "installers\\windows\\Front_Porch_AI_Setup.exe" -Destination "."
+          $ISCC = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $ISCC /DMyAppVersion="$VERSION" /DMyAppBuildDir="${{ github.workspace }}\${{ matrix.build_path }}" /DMyAppLicenseFile="${{ github.workspace }}\LICENSE" /DMyAppIconFile="${{ github.workspace }}\windows\runner\resources\app_icon.ico" "installers\windows\setup.iss"
+          Copy-Item "installers\windows\Front_Porch_AI_Setup.exe" -Destination "."
         shell: pwsh
 
 
