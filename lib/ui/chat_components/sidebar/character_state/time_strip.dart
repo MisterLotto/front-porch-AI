@@ -51,11 +51,18 @@ class TimeStrip extends StatelessWidget {
           children: [
             Text(timeEmoji(time), style: const TextStyle(fontSize: 13)),
             const SizedBox(width: 5),
-            Text(
-              '${timeLabel(time)} · ${chat.timeService.displayClock}',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary(context),
+            // Flexible + ellipsis: with both period-label and date text at
+            // their natural size the Row overflows the 300px sidebar once
+            // realism is on (long clock strings). The left label gives way;
+            // the tappable date stays whole.
+            Flexible(
+              child: Text(
+                '${timeLabel(time)} · ${chat.timeService.displayClock}',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary(context),
+                ),
               ),
             ),
             const Spacer(),
