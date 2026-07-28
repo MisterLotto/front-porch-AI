@@ -35,90 +35,68 @@ job if no library in the bundle exports the SQLite C API.
 **If a test here fails, do not regenerate the baseline to make it pass.**
 Find out why the resolver moved backwards first.
 
-## Why 8 packages are still below their v1.0.0 versions
+## RESOLVED (2026-07-28): the 8 downgrades are restored
 
-Not neglect — **currently unsatisfiable**. Verified 2026-07-28 on the CI-pinned
-Flutter 3.41.1 (Dart 3.11.0):
+The dependency debt this file used to describe **no longer exists**. It was
+cleared by bumping the CI Flutter pin from 3.41.1 to **3.44.8** (Dart 3.12.2)
+and raising the constraints in the same change. The reasoning is kept because
+it is what stops this recurring.
 
-| | |
-|---|---|
-| Flutter 3.41.1's `flutter_test` | pins `meta` to exactly **1.17.0** |
-| `analyzer` 10.2.0+ | needs `meta ^1.18.0` → **analyzer is capped at 10.0.1** |
-| `drift_dev` 2.32.0 | needs `analyzer ^10.0.0` → would fit |
-| `riverpod_generator` 4.0.3 | needs `analyzer ^9.0.0` |
-| `riverpod_generator` 4.0.4 | needs `analyzer ^12.0.0` |
+Final state: `analyzer` **12.1.0**, `drift` **2.34.3**, `drift_dev` **2.34.0**,
+`sqlite3` **3.5.0** (self-bundling again), `sqlite3_flutter_libs` **0.6.0+eol**
+(the correct marker pin for the 3.x world), `riverpod_generator` **4.0.4**,
+`meta` **1.18.0**. 18 of 206 packages moved; **zero downgrades, zero
+removals**. Riverpod codegen was kept, so nothing was traded against the
+2026-07-21 codegen directive.
 
-**`riverpod_generator` skipped analyzer 10 and 11 entirely.** There is no
-release of it that accepts the only analyzer version drift 2.32 can use. So on
-this toolchain, drift 2.32+ and Riverpod codegen are mutually exclusive — which
-is exactly why the resolver downgraded drift when codegen was introduced. It
-had no other move.
+### Why it was unsolvable before
 
-Still behind: `drift`/`drift_dev` (2.31 vs 2.32), `analyzer` (9 vs 10),
-`_fe_analyzer_shared`, `sqlparser`, `dart_style`, `matcher`, `test_api`.
+Flutter 3.41.1's `flutter_test` pinned `meta` to exactly 1.17.0, capping
+`analyzer` at 10.0.1. `drift_dev` 2.32.0 needs `analyzer ^10.0.0` and would
+have fitted — but **`riverpod_generator` skipped analyzer 10 and 11 entirely**
+(`^9.0.0` at 4.0.3, then straight to `^12.0.0` at 4.0.4). No release accepted
+the one analyzer version drift could use, so drift 2.32+ and Riverpod codegen
+were mutually exclusive. That is exactly why the resolver downgraded drift when
+codegen was introduced: it had no other move.
 
-### Is that dangerous?
+### Four traps, all found by doing rather than reasoning
 
-**No, and both risks were checked rather than assumed:**
+1. **Bumping Flutter alone is a silent no-op.** Pub keeps the existing lock
+   wherever it is still valid, so `pub get` on the new SDK changes nothing.
+   The constraints in `pubspec.yaml` must rise in the same change.
+2. **`riverpod_generator` 4.0.7 does not work even on 3.44.8.** It pulls
+   `riverpod_annotation` 4.0.5 → `riverpod` 3.4.1 → `test`, which needs a
+   `test_api` the SDK's `flutter_test` does not pin. **4.0.4 is the working
+   version** (`analyzer ^12`), which `drift_dev` 2.34.0 accepts.
+3. **`build_runner` can silently write zero outputs**, because its cache still
+   considers reverted files current. Clear `.dart_tool/build` to force a real
+   regeneration.
+4. **The nightly broke afterwards, and no Rawhide-only change could fix it.**
+   Scheduled workflows run the workflow FILE from the default branch while the
+   nightly job checks out `ref: Rawhide`. So **main's `nightly.yml` Flutter pin
+   must track Rawhide's**, not main's. See the comment on that pin.
 
-- **None of the eight ships native code.** Only `sqlite3` could remove a binary
-  from the bundle, and that one is fixed. Verified by inspecting every package
-  for platform build files.
-- **The generated-code mismatch is not real.** `database.g.dart` was generated
-  by drift_dev 2.32 and now runs against 2.31, which looked like a latent
-  hazard. Re-running `build_runner` under 2.31 produced **byte-identical
-  output** (unchanged md5, zero diff), so the two versions emit the same code
-  for this schema.
+### What the bump surfaced — a real bug, not a regression
 
-### How to actually clear it — costed and verified 2026-07-28
+Flutter 3.44 added a debug assertion, *"ListTile background color or ink
+splashes may be invisible"*, which failed 5 goldens. It was **not** a rendering
+artifact: `ExpansionTile` builds an internal `ListTile`, which paints its ink
+onto the nearest Material ancestor, and two widgets wrapped one in a coloured
+`Container` — swallowing the ripple. Those headers had been visually dead for
+as long as they existed. Fixed in `creator_section_card.dart` and
+`edit_character_page.dart` using `Material` + `RoundedRectangleBorder`.
 
-Bump the CI Flutter pin to **3.44.8** (Dart 3.12.2). This was not estimated —
-3.44.8 was installed alongside and the whole thing was run end to end.
+Worth remembering at the next golden review: that fix produced an **8.99% pixel
+diff** which, on inspection, was a **1px vertical shift** (`ShapeBorder` insets
+differently than `BoxDecoration`) lighting up every text edge. A large diff
+number is not automatically layout breakage — look before regenerating, and
+look before rejecting.
 
-**Two traps to know before starting**, both found by doing it rather than
-reasoning about it:
+### Verified end to end
 
-1. **Bumping Flutter alone changes nothing.** Pub keeps the existing lock
-   wherever it is still valid, so `pub get` on the new SDK is a silent no-op.
-   The constraints in `pubspec.yaml` must be raised in the same change.
-2. **`riverpod_generator` 4.0.7 does not work, even on 3.44.8.** It pulls
-   `riverpod_annotation` 4.0.5 → `riverpod` 3.4.1 → `test`, which requires a
-   `test_api` version the SDK's `flutter_test` does not pin. **The working
-   version is 4.0.4** (`analyzer ^12`), which `drift_dev` 2.34.0 accepts
-   (`analyzer >=10 <13`).
-
-Working constraint set on 3.44.8:
-
-```yaml
-drift: ^2.34.0
-drift_dev: ^2.34.0
-sqlite3_flutter_libs: ^0.6.0
-riverpod_generator: '>=4.0.4 <4.0.6'   # 4.0.6+ breaks against flutter_test
-```
-
-Resolves to: `analyzer` 12.1.0, `drift` 2.34.3, `drift_dev` 2.34.0, `meta`
-1.18.0, `sqlite3` **3.5.0** (self-bundling again), `sqlite3_flutter_libs`
-0.6.0+eol, `riverpod_generator` 4.0.4.
-
-**All eight downgrades reverse, and Riverpod codegen is kept** — there is no
-trade-off against the 2026-07-21 codegen directive.
-
-#### Measured cost
-
-| Check | Result on 3.44.8 |
-|---|---|
-| Full suite (non-golden) | **2,591 pass, 0 fail** |
-| `flutter analyze` | **5 issues, all `info`** — 1 lint hint, 4 newly-deprecated Flutter APIs (`onReorder`, `axisAlignment`) that still work |
-| Generated code | **2 files, 4 lines** — `runBuild()` returns `WhenComplete` instead of `void`. Mechanical. |
-| Dependency guard | **passes** — correctly reads the restoration as upgrades |
-| **Goldens** | **60 of 94 fail** ← the entire real cost |
-
-So the work is: raise the constraints, rerun `build_runner`, regenerate and
-**visually review 60 goldens**, update `dependency_floors.json`. Everything
-else is already proven clean.
-
-Do it deliberately and on its own — the golden review is the part that needs
-human eyes, and it should not be buried inside an unrelated change.
-
-**When it happens, update `dependency_floors.json` in the same commit** and say
-why in the message — that is the intended workflow for a legitimate move.
+Goldens **94/94** at CI parity (`--concurrency=1`); non-golden suite **2,591**;
+`flutter analyze` 5 pre-existing `info`s and no new issues; the Linux release
+built a working executable with `lib/libsqlite3.so` present; the nightly
+published from Rawhide; CI green on Rawhide; and the maintainer confirmed **the
+database and the app work on macOS** — the platform that switched from the
+plugin to native assets, and the one no automated test could cover.
