@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-27 — chore(release): retire the unsigned shim DMG everywhere (maintainer decision)
+- **Why:** maintainer: "we've drug that corpse along long enough." The shim existed only as an updater bridge for pre-.pkg .dmg/.app installs. Safety pre-verified in-repo: the 2026-07-08 "pkg downloads but never applies" regression that reverted the first removal was root-caused to the nightly SHA race (fixed) — the changelog explicitly calls the DMG revert a red herring "can be re-attempted later" — and the maintainer previously recorded that all macOS users have moved to the .pkg.
+- **Removed:** shim-DMG build steps + asset-list entries from `nightly.yml`, `beta-release.yml`, `release.yml` (all still parse as YAML); the shim section, `--skip-shim` flag, and summary lines from `scripts/build-macos.sh` (bash -n clean); the whole client-side legacy path from `update_service.dart` — 3 `.dmg` consts, `_getLegacyMacDmgAsset()`, the checkForUpdate fallback probe, and the hdiutil-attach DMG branch of `_replaceMacApp` (pkg-only script now); the `.dmg` mention in `docs/install.md`.
+- **Accepted cost (stated):** binaries so old they predate the .pkg-aware updater will find no recognizable asset and silently stop seeing updates — one manual .pkg download recovers them. Per the maintainer's earlier assessment, that set is effectively empty.
+- **Files:** 3 workflows, `build-macos.sh`, `update_service.dart`, `docs/install.md`, `docs/Rawhide.md`.
+- **Verification:** all 3 workflows parse; bash -n clean; `flutter analyze` zero issues; full suite in the release-promotion pre-flight.
+
+
 ## 2026-07-27 — fix(tts): Speech Rate slider was a no-op for Piper (hardcoded) and masked for Kokoro (replay cache)
 - **Why:** Discord report — the speed slider does nothing for Kokoro and Piper. Two distinct bugs:
 - **Bug 1 (Piper, total no-op):** the whole Piper chain had no speed parameter — `_piperGenerateWav(voice, text, index)` → `SherpaPiperEngine.generate(root, voiceKey, text, outputPath)` → worker `tts.generate(..., speed: 1.0)` HARDCODED. Fixed by threading `speed` end-to-end (engine signature, isolate job payload `job[3]`, all 3 tts_service call sites — the third needed `speed` hoisted into the `_isPiperEngine` branch, it was scoped to the sibling ElevenLabs branch).

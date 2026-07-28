@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📦 **macOS: the `.pkg` installer is now the one and only** — The old unsigned `.dmg` is no longer published. It existed purely as an update bridge for installs from the pre-installer era, and everyone has long since moved to the signed, Apple-notarized `.pkg`. If you're somehow still on a very old drag-and-drop install, grab the `.pkg` from the Releases page once and you're back on auto-updates.
+
 - 🗣️ **The Speech Rate slider now actually works for Piper and Kokoro voices** — Two bugs reported from Discord, both fixed: Piper voices ignored the slider completely (the speed was hardcoded internally), and for all voices, replaying a message you'd already heard kept the old speed because the replay cache didn't know the slider had moved. Now Piper honors the slider, and changing the speed regenerates the audio instead of replaying the old take.
 
 - 🌦️ **Weather now changes through the day — and has real temperatures** — Story weather is no longer one condition per day: fog settles in the morning and burns off, rain fronts roll in after lunch, storms break in the evening — and your character feels the shift mid-conversation ("the rain has eased off since this morning"). Every day also gets a real temperature with a natural daily curve (coolest at night, warmest mid-afternoon), shown on the sidebar weather chip. Switch between °C and °F in Settings → General. Characters never quote the numbers — they experience the weather in words ("coat-and-gloves cold", "shirtsleeve warmth"), so they dress and act for it naturally in any setting. Everything stays deterministic per chat: same day, same weather, forever.
