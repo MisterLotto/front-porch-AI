@@ -181,7 +181,7 @@ abstract class _$MilestoneTimeline
   });
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref =
         this.ref
             as $Ref<AsyncValue<List<MilestoneEntry>>, List<MilestoneEntry>>;
@@ -196,7 +196,7 @@ abstract class _$MilestoneTimeline
               Object?,
               Object?
             >;
-    element.handleCreate(
+    return element.handleCreate(
       ref,
       () => build(
         feed: _$args.feed,
