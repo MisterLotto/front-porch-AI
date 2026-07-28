@@ -6110,3 +6110,17 @@ every PR/push to dev/main/Rawhide: macos-latest blocking, windows-latest
 `experimental` to false). Public repo → hosted macOS/Windows runners are free.
 30-min job timeout; build dominates, test is ~7s. Linux deliberately not wired
 (needs xvfb). Verified by pushing Rawhide and watching the run.
+
+## 2026-07-28 (UTC) — E2E: survive (and cover) the Chance Time wheel
+
+**Files:** `integration_test/app_smoke_test.dart`
+
+**What:** Chaos Mode's Chance Time wheel is a modal overlay that waits for the
+USER to spin — and the trigger roll is RNG, so it strikes runs
+nondeterministically. The operator caught a hung run by literally watching the
+window: the suite was waiting for chatRequests=2 while the app waited for a
+spin. All 7 post-send waits + the send retry loop now run through
+spinChanceTimeIfAsked(): tap SPIN, wait out the landing, dismiss the result
+card — user-faithful, and it turns the wheel into covered surface whenever it
+fires. 4 consecutive green runs after the change (no roll observed locally;
+the handler's live proof will come from CI frequency).

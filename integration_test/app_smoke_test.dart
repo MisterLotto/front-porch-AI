@@ -60,6 +60,7 @@ import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
+import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
 
 import 'support/e2e_sandbox.dart';
 import 'support/fake_backend.dart';
@@ -225,6 +226,52 @@ void main() {
     );
     await pumpUntilFound(tester, input);
 
+    // Chaos Mode can interrupt any turn with the Chance Time wheel — a modal
+    // overlay that waits for the USER to spin (the roll is an RNG, so it
+    // strikes nondeterministically; one hung run was caught by the operator
+    // literally watching the wheel wait). Handle it the way a user would:
+    // spin, let it land, dismiss the result card. Every post-send wait calls
+    // this so no phase can hang on the wheel, whichever turn it strikes.
+    var wheelsSpun = 0;
+    Future<void> spinChanceTimeIfAsked() async {
+      if (find.byType(ChanceTimeOverlay).evaluate().isEmpty) return;
+      final spin = find.text('SPIN');
+      if (spin.evaluate().isNotEmpty) {
+        wheelsSpun++;
+        debugPrint('[e2e] Chance Time! Spinning the wheel (#$wheelsSpun).');
+        await tester.tap(spin);
+      }
+      final deadline = DateTime.now().add(const Duration(seconds: 20));
+      while (find.byType(ChanceTimeOverlay).evaluate().isNotEmpty &&
+          DateTime.now().isBefore(deadline)) {
+        final dismiss = find.descendant(
+          of: find.byType(ChanceTimeOverlay),
+          matching: find.byType(ElevatedButton),
+        );
+        if (dismiss.evaluate().isNotEmpty) {
+          await tester.tap(dismiss.first);
+        }
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+    }
+
+    // Post-send wait: like pumpUntilTrue, but keeps the Chance Time wheel
+    // moving while it waits.
+    Future<void> waitForTurnState(
+      bool Function() condition,
+      String Function() describe, {
+      Duration timeout = const Duration(seconds: 60),
+    }) async {
+      final deadline = DateTime.now().add(timeout);
+      while (!condition()) {
+        await spinChanceTimeIfAsked();
+        if (DateTime.now().isAfter(deadline)) {
+          fail('Timed out after $timeout waiting for: ${describe()}');
+        }
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
+
     // A one-shot tap is not enough: the guards can flip in the gap between
     // the sendable check and the tap (post-turn async work), and the app
     // deliberately swallows such sends (text preserved for retry). Retry
@@ -247,6 +294,7 @@ void main() {
         await tester.pump();
         await tester.tap(find.byTooltip('Send message'));
         for (var i = 0; i < 8 && !delivered(); i++) {
+          await spinChanceTimeIfAsked();
           await tester.pump(const Duration(milliseconds: 250));
         }
         if (delivered()) return;
@@ -279,12 +327,11 @@ void main() {
     // the first exchange against the fake backend (tool probe refused →
     // text fallback → canned JSON) and the deltas land as chip metadata.
     await sendRobustly('And how is the weather on the porch?');
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => chatService.messages.any(
         (m) => (m.activeMetadata?['bond_delta'] as int?) == 13,
       ),
-      describe: () =>
+      () =>
           'bond_delta=13 chip metadata from the canned relationship eval '
           '(realism pre-gen pipeline; 13 also trips the >=12 journal '
           'salience kick). Server saw: '
@@ -295,10 +342,9 @@ void main() {
     expect(backend.toolProbeRequests, greaterThanOrEqualTo(1));
     // The second turn's generation must actually reach the backend — with
     // every eval modeled, chatRequests counts real conversation turns only.
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => backend.chatRequests >= 2,
-      describe: () =>
+      () =>
           'the second turn generating (chatRequests='
           '${backend.chatRequests}, messages=${chatService.messages.length}, '
           'msg2InList=${chatService.messages.any((m) => m.text.contains('weather on the porch'))}, '
@@ -314,15 +360,14 @@ void main() {
     // Pinned signed value, not just non-empty: the canned fun_delta is +6,
     // and after apply-vs-decay the chip delta for 'fun' must stay positive —
     // a broken apply that leaves stale garbage would still be non-empty.
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => chatService.messages.any((m) {
         final deltas = m.activeMetadata?['needs_deltas'];
         if (deltas is! Map) return false;
         final fun = (deltas['fun'] as Map?)?['delta'];
         return fun is num && fun > 0;
       }),
-      describe: () =>
+      () =>
           'a positive fun delta in needs_deltas chip metadata from the '
           'canned needs-impact eval (+6 minus decay)',
     );
@@ -330,10 +375,9 @@ void main() {
     // ── Phase 3c: chaos mode (smoke-level: pressure moved, no event) ────
     // Chaos pressure builds per turn while enabled; two turns must move it.
     // A full Chance Time event needs many turns/an RNG hit — out of scope.
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => chatService.chaosPressure > 0,
-      describe: () =>
+      () =>
           'chaos pressure > 0 (now ${chatService.chaosPressure})',
     );
 
@@ -341,19 +385,17 @@ void main() {
     // The narrative eval proposed a real objective; the proposal machinery
     // (dedup, autonomous accept, task generation) must surface it and fetch
     // its numbered task list from the backend.
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => chatService.activeObjectives.any(
         (o) => o.objective.contains('porch lemonade'),
       ),
-      describe: () =>
+      () =>
           'the proposed objective in activeObjectives '
           '(have: ${chatService.activeObjectives.map((o) => o.objective).toList()})',
     );
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => backend.objectiveTaskRequests >= 1,
-      describe: () =>
+      () =>
           'the objective task-generation request '
           '(objectiveTaskRequests=${backend.objectiveTaskRequests})',
     );
@@ -363,10 +405,9 @@ void main() {
     // XML exchange against the fake whose <memory> op writes the card and
     // whose <recap> updates "Where we are". Wait for the exchange, then for
     // the store to hold the card the pass wrote.
-    await pumpUntilTrue(
-      tester,
+    await waitForTurnState(
       () => backend.journalPassRequests >= 1,
-      describe: () =>
+      () =>
           'the journal maintenance pass exchange '
           '(journalPassRequests=${backend.journalPassRequests})',
     );
