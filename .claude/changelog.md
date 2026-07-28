@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-28 — fix(avatar): no look dupe on placeholder replace; home cover refreshes on Done
+- **Why:** First Add avatar on a placeholder wrote portrait *and* a gallery look (same face twice). Home kept the old placeholder after Done because Image.file cached the same path; only a ★ click changed the cover key.
+- **Fix:** addLook is portrait-only when face is missing/placeholder (400×600 solid); further Add avatar adds real looks. `coverEpoch` + home Image.file keys refresh the grid on Done.
+- **Files:** `character_repository.dart`, `portrait_promotion.dart`, `character_grid_card.dart`, `character_card_grid.dart`, facade tests, `docs/Rawhide.md`.
+
 ## 2026-07-28 — test(avatar): fix CI after portrait/bootstrap work (#171)
 - **Why:** (1) 3 `character_authoring_facade_test` failures — addLook bootstraps a portrait then re-embeds; tests used invalid `[1,2,3,4]` bytes. (2) Widget golden `edit_character` — `_avatarFile` required `CharacterRepository` and the golden only provided StorageService → ProviderNotFoundException + 54% pixel fail.
 - **Fix:** Real PNG fixture in facade test; bootstrap refuses non-decodable bytes; V2CardService falls back to synthetic placeholder on bad source decode; Edit Character `_avatarFile` falls back to imagePath when CharacterRepository is absent.
