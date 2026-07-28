@@ -19,6 +19,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 
 import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/models/character_card.dart';
@@ -80,7 +81,19 @@ class AvatarGalleryController extends ChangeNotifier {
   /// Whether the Expression images section is expanded (hide-rule).
   bool expressionsExpanded = false;
 
+  /// Bumped whenever portrait bytes or gallery membership change so tiles with
+  /// the same file path (in-place portrait overwrite after delete/bootstrap)
+  /// drop their cached [Image.file] frames instead of showing a stale face.
+  int mediaGen = 0;
+
   bool _disposed = false;
+
+  void _bumpMedia() => mediaGen++;
+
+  Future<void> _evictPortraitImage() async {
+    final f = portraitFile();
+    if (f != null) await FileImage(f).evict();
+  }
 
   @override
   void dispose() {
@@ -190,6 +203,8 @@ class AvatarGalleryController extends ChangeNotifier {
             bytes: await file.readAsBytes(),
             updateCharacter: (c) => repository.updateCharacter(c, notify: false),
           );
+          await _evictPortraitImage();
+          _bumpMedia();
           _needsCloseBroadcast = true;
           return;
         }
@@ -210,6 +225,8 @@ class AvatarGalleryController extends ChangeNotifier {
     // re-sync imagePath so the Portrait tile appears without reopening.
     final fresh = await repository.getCharacterCardById(dbId!);
     if (fresh?.imagePath != null) libraryCard.imagePath = fresh!.imagePath;
+    await _evictPortraitImage();
+    _bumpMedia();
     await _reload();
     // Cover / portrait may have changed (bootstrap); home refreshes on close.
     _needsCloseBroadcast = true;
@@ -225,6 +242,8 @@ class AvatarGalleryController extends ChangeNotifier {
   /// Replace the canonical portrait (imagePath) with an already-cropped file.
   Future<void> replacePortrait(String croppedPath) => _run(() async {
     await repository.setCharacterImagePath(libraryCard, croppedPath);
+    await _evictPortraitImage();
+    _bumpMedia();
     _needsCloseBroadcast = true;
   });
 
@@ -241,7 +260,12 @@ class AvatarGalleryController extends ChangeNotifier {
     if (mode == WardrobeMode.inChat && selectedFaceId == promotedId) {
       await chat?.setLookForCharacter(dbId!, null);
     }
+    // Same path, new pixels — evict + bump so the Portrait tile reloads
+    // instead of keeping the deleted face while the promoted look vanishes.
+    await _evictPortraitImage();
+    _bumpMedia();
     await _reload();
+    _needsCloseBroadcast = true;
   });
 
   // ── Expression images ───────────────────────────────────────────────────────
@@ -289,6 +313,8 @@ class AvatarGalleryController extends ChangeNotifier {
   // ── Delete (with all cascades in one place — Grok) ──────────────────────────
   Future<void> remove(AvatarImage img) => _run(() async {
     if (dbId == null) return;
+    // Evict before the file is gone so the ImageCache drops this path.
+    await FileImage(fileFor(img)).evict();
     await repository.removeAvatar(dbId!, img.id);
     // Star pointed at it → back to the portrait (materializes ext + persists).
     if (favoriteId == img.id) await _persistFavorite(null);
@@ -297,6 +323,7 @@ class AvatarGalleryController extends ChangeNotifier {
     if (mode == WardrobeMode.inChat && selectedFaceId == img.id) {
       await chat?.setLookForCharacter(dbId!, null);
     }
+    _bumpMedia();
     await _reload();
     // Prime pointed at a now-deleted expression → first remaining (or reset to
     // 1 when none remain). Always persist so the DB can't keep a dangling prime.
@@ -305,6 +332,7 @@ class AvatarGalleryController extends ChangeNotifier {
       libraryCard.primeAvatarIndex = primeIndex;
       await repository.setPrimeAvatar(dbId!, primeIndex);
     }
+    _needsCloseBroadcast = true;
   });
 
   /// Flush the drafted emotion labels + prime index. Called on Done. Routed

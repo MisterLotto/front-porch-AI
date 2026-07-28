@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-28 — fix(avatar): gallery delete showed the wrong tile vanishing
+- **Why:** Deleting the blank/portrait (promote look in place) or a gallery look could leave Image.file showing a stale frame: same portrait path, new bytes, no widget key → wrong tile appeared gone until Done refreshed home.
+- **Fix:** ValueKeys by avatar id + `mediaGen` imageVersion on tiles; FileImage.evict + mediaGen bump after remove/deletePortrait/replace/addLook.
+- **Files:** `avatar_gallery_controller.dart`, `avatar_tile.dart`, `avatar_gallery_looks_section.dart`, `avatar_gallery_expressions_section.dart`, `docs/Rawhide.md`.
+
 ## 2026-07-28 — fix(avatar): replace solid-color placeholder when a real image is added (#171)
 - **Why:** Creator "None for now" (and similar) leave a solid-color V2 PNG as `imagePath`. Add avatar then only added a gallery look and left the color block as the Portrait tile.
 - **Fix:** `bootstrapPortraitIfMissing` now also overwrites when `isPlaceholderPortrait` (solid-color sample grid). First real look replaces the placeholder in place; real portraits are untouched.

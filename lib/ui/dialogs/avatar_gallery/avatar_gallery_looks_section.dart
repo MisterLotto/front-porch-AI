@@ -62,7 +62,11 @@ class AvatarGalleryLooksSection extends StatelessWidget {
     if (portrait != null) {
       tiles.add(
         AvatarTile(
+          // Stable id + mediaGen: portrait path is reused when a look is
+          // promoted over it; without a versioned key the blank face sticks.
+          key: ValueKey('portrait-${controller.mediaGen}'),
           imageFile: portrait,
+          imageVersion: controller.mediaGen,
           caption: 'Portrait',
           starred: controller.favoriteId == null,
           onStar: () => controller.setFavorite(null),
@@ -94,7 +98,11 @@ class AvatarGalleryLooksSection extends StatelessWidget {
     for (final look in controller.looks) {
       tiles.add(
         AvatarTile(
+          // Key by id (not list index) so deleting one look does not leave
+          // the next tile's Element showing the deleted face.
+          key: ValueKey('look-${look.id}'),
           imageFile: controller.fileFor(look),
+          imageVersion: controller.mediaGen,
           starred: controller.favoriteId == look.id,
           onStar: () => controller.setFavorite(look.id),
           onDelete: () => onDelete(look.id),
