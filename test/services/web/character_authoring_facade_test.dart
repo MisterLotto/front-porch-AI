@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:front_porch_ai/database/database.dart';
@@ -30,7 +31,14 @@ void _setupPathProviderMock() {
       });
 }
 
-final _png = Uint8List.fromList([1, 2, 3, 4]);
+/// Real PNG — addLook bootstraps a missing portrait then re-embeds via
+/// updateCharacter/saveCardAsPng, which must decode the bytes.
+Uint8List get _png {
+  final image = img.Image(width: 8, height: 8);
+  img.fill(image, color: img.ColorRgb8(40, 80, 120));
+  image.setPixelRgb(1, 1, 200, 50, 50); // not a solid placeholder
+  return Uint8List.fromList(img.encodePng(image));
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
