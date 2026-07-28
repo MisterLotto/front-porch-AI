@@ -216,6 +216,30 @@
     ]);
   }
 
+  /* V2 character_book — the section the detail page silently dropped (a card
+     with lore looked loreless on the hub). Disabled entries stay hidden; an
+     entry with no trigger keys is constant/always-active lore. */
+  function lorebookSection(book) {
+    var entries = (book && Array.isArray(book.entries)) ? book.entries : [];
+    entries = entries.filter(function (e) { return e && e.enabled !== false; });
+    if (!entries.length) return null;
+    return el('details', { class: 'hub-sect' }, [
+      el('summary', null, 'Lorebook (' + entries.length + (entries.length === 1 ? ' entry' : ' entries') + ')'),
+      el('div', { class: 'hub-lore' }, entries.map(function (e) {
+        var label = e.name || e.comment || '';
+        var keys = Array.isArray(e.keys) ? e.keys.filter(Boolean) : [];
+        var trigger = keys.length ? 'triggers: ' + keys.join(', ') : 'always active';
+        return el('div', { class: 'hub-lore-entry' }, [
+          el('div', { class: 'hub-lore-head' }, [
+            el('strong', null, label || (keys.length ? keys.join(', ') : 'Entry')),
+            el('span', { class: 'hub-dim hub-small' }, ' · ' + trigger),
+          ]),
+          el('pre', { class: 'hub-sect-text' }, e.content || ''),
+        ]);
+      })),
+    ]);
+  }
+
   function renderCard(mount, id) {
     mount.replaceChildren(ui.spinner());
     Api.cardDetail(id).then(function (c) {
@@ -348,6 +372,7 @@
           textSection('First message', card.first_mes || card.first_message),
           textSection('Alternate greetings', alts),
           textSection('Example dialogue', card.mes_example),
+          lorebookSection(card.character_book),
         ]),
       ]));
     }).catch(function (e) {
