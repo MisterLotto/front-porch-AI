@@ -6145,3 +6145,16 @@ wait. Local run unchanged and green.
 green (Windows has passed both of its first two executions ever). Windows
 `experimental` flipped to false — the E2E smoke suite now BLOCKS PRs on both
 desktop platforms.
+
+## 2026-07-28 (UTC) — E2E chaos assert: pressure OR wheel — CI run 3 caught the coupling
+
+**Files:** `integration_test/app_smoke_test.dart`
+
+**What:** CI run 3 (macOS): the Chance Time wheel fired live for the first
+time — the spin handler worked end to end (spun, dismissed, event-injected
+generation served) — and then the chaos assert timed out at "pressure > 0
+(now 0)": firing Chance Time CONSUMES the pressure back to zero, so
+"pressure moved" and "wheel fired" are mutually exclusive proofs of the same
+mechanism. The assert now accepts either. Also retroactively explains CI
+run 1's macOS failure (wheel blocking turn 1 before the handler existed).
+Windows is 3/3 green.

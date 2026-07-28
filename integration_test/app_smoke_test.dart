@@ -381,13 +381,18 @@ void main() {
           'canned needs-impact eval (+6 minus decay)',
     );
 
-    // ── Phase 3c: chaos mode (smoke-level: pressure moved, no event) ────
-    // Chaos pressure builds per turn while enabled; two turns must move it.
-    // A full Chance Time event needs many turns/an RNG hit — out of scope.
+    // ── Phase 3c: chaos mode ────────────────────────────────────────────
+    // Pressure builds per turn while enabled — UNTIL Chance Time fires,
+    // which consumes it back to zero. So "pressure moved" and "the wheel
+    // fired (and we spun it)" are mutually exclusive proofs of the same
+    // living mechanism; either satisfies this phase. (First seen on a CI
+    // run where the RNG rolled the wheel before this check: pressure was
+    // legitimately 0 and the old pressure-only assert timed out.)
     await waitForTurnState(
-      () => chatService.chaosPressure > 0,
+      () => chatService.chaosPressure > 0 || wheelsSpun > 0,
       () =>
-          'chaos pressure > 0 (now ${chatService.chaosPressure})',
+          'chaos alive: pressure ${chatService.chaosPressure}, '
+          'wheels spun $wheelsSpun',
     );
 
     // ── Phase 3d: objectives ────────────────────────────────────────────
