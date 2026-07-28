@@ -113,6 +113,34 @@ jobs:
           CXXFLAGS: "-Wno-unknown-warning-option"
         run: flutter build linux --release
 
+      # ── Guard: the Linux bundle MUST be able to reach SQLite ──
+      # v1.1.0 shipped with no SQLite in the bundle and bricked every Linux
+      # install ("libsqlite3.so is missing" -> "database is corrupted"). The
+      # build succeeded and tests passed; only real users saw it. Checks
+      # REACHABILITY, not a filename: sqlite3 3.x emits a standalone
+      # lib/libsqlite3.so, sqlite3_flutter_libs 0.5.x compiles sqlite3.c into
+      # the plugin .so. Either is fine; zero exporters is a broken release.
+      # Full rationale in .github/workflows/release.yml and pubspec.yaml.
+      - name: Verify SQLite is bundled (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          BUNDLE=build/linux/x64/release/bundle
+          FOUND=""
+          while IFS= read -r so; do
+            if nm -D --defined-only "$so" 2>/dev/null | grep -qE ' sqlite3_open_v2$'; then
+              echo "  ✓ $(basename "$so") exports sqlite3_open_v2"
+              FOUND="yes"
+            fi
+          done < <(find "$BUNDLE" -name '*.so*' -type f)
+          if [ -z "$FOUND" ]; then
+            echo "::error::No library in the Linux bundle exports the SQLite C API."
+            echo "::error::The app cannot open its database. See pubspec.yaml note."
+            find "$BUNDLE" -name '*.so*' -type f -printf '  %f\n' || true
+            exit 1
+          fi
+          echo "SQLite is reachable from the bundle."
+
       - name: Bundle libfpzip for the native Draw Things client (macOS)
         if: matrix.platform == 'macos'
         shell: bash
