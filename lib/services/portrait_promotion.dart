@@ -19,6 +19,7 @@
 import 'dart:io';
 
 import 'package:flutter/painting.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/models/models.dart';
@@ -127,21 +128,67 @@ bool hasUsablePortrait(CharacterCard card, StorageService storage) {
   return storage.resolveCharacterImage(path).existsSync();
 }
 
-/// When the card has no usable portrait, write [bytes] as a new portrait and
-/// persist via [updateCharacter]. Gallery looks are left alone (this is a
-/// copy, not a promotion). Returns true when a portrait was written.
+/// True when the on-disk portrait is a solid-color fill — the synthetic PNG
+/// [V2CardService] writes when no art was supplied (creator "None for now",
+/// JSON import, group-member placeholders). Real photos have varied pixels;
+/// those placeholders are a single fill color at every sample.
+///
+/// Returns false when there is no file, the file won't decode, or any sample
+/// differs (a real image is kept).
+Future<bool> isPlaceholderPortrait(
+  CharacterCard card,
+  StorageService storage,
+) async {
+  if (!hasUsablePortrait(card, storage)) return false;
+  try {
+    final file = storage.resolveCharacterImage(card.imagePath!);
+    final decoded = img.decodeImage(await file.readAsBytes());
+    if (decoded == null || decoded.width < 1 || decoded.height < 1) {
+      return false;
+    }
+    // 5×5 grid of samples — all identical RGB ⇒ solid placeholder.
+    int? r0, g0, b0;
+    for (final yf in const [0.0, 0.25, 0.5, 0.75, 1.0]) {
+      for (final xf in const [0.0, 0.25, 0.5, 0.75, 1.0]) {
+        final x = (xf * (decoded.width - 1)).round();
+        final y = (yf * (decoded.height - 1)).round();
+        final px = decoded.getPixel(x, y);
+        final r = px.r.toInt();
+        final g = px.g.toInt();
+        final b = px.b.toInt();
+        if (r0 == null) {
+          r0 = r;
+          g0 = g;
+          b0 = b;
+        } else if (r != r0 || g != g0 || b != b0) {
+          return false;
+        }
+      }
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Write [bytes] as the card portrait when there is no usable portrait **or**
+/// the current one is a solid-color placeholder. Gallery looks are left alone
+/// (this overwrites the portrait file in place when possible — not a look
+/// promotion). Returns true when the portrait was written.
 ///
 /// Used by [CharacterRepository.addLook] and ★-persist so a character created
-/// without art (or with a broken imagePath) still gets a real card face the
-/// Edit Character page and PNG re-embed path can use.
+/// without art still gets a real card face, and the creator placeholder is
+/// not retained next to a real gallery image (issue #171 follow-up).
 Future<bool> bootstrapPortraitIfMissing({
   required CharacterCard card,
   required StorageService storage,
   required List<int> bytes,
   required Future<void> Function(CharacterCard card) updateCharacter,
 }) async {
-  if (hasUsablePortrait(card, storage)) return false;
   if (bytes.isEmpty) return false;
+  if (hasUsablePortrait(card, storage)) {
+    if (!await isPlaceholderPortrait(card, storage)) return false;
+  }
   final target = portraitWriteTarget(card: card, storage: storage);
   await target.writeAsBytes(bytes);
   await FileImage(target).evict();

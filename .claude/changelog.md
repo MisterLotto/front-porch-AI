@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-28 — fix(avatar): replace solid-color placeholder when a real image is added (#171)
+- **Why:** Creator "None for now" (and similar) leave a solid-color V2 PNG as `imagePath`. Add avatar then only added a gallery look and left the color block as the Portrait tile.
+- **Fix:** `bootstrapPortraitIfMissing` now also overwrites when `isPlaceholderPortrait` (solid-color sample grid). First real look replaces the placeholder in place; real portraits are untouched.
+- **Files:** `lib/services/portrait_promotion.dart`, `lib/services/character_repository.dart` (comment), `test/services/portrait_promotion_test.dart`, `docs/Rawhide.md`.
+
 ## 2026-07-28 — fix(avatar): Edit Character was star-blind; gallery couldn't fill a missing portrait (#171)
 - **Why:** Reporter added a look via Home → Avatar Gallery, starred it, and saw it in chat, but Edit Character still showed the grey "No avatar" placeholder. Root cause: Edit Character only read raw `imagePath`; ★ sets `favoriteAvatarId` and never rewrites `imagePath`. Separately, a card with no usable portrait couldn't persist the star (`updateCharacter` early-returns when `imagePath` is null).
 - **Fix:** Edit Character preview uses `coverImageFileFor` (same ★-aware resolver as home/export). First `addLook` bootstraps a portrait copy when none exists (`bootstrapPortraitIfMissing` in portrait_promotion.dart). ★-persist does the same before the extensions write. Gallery shows **Set portrait** when the portrait tile is missing; creator "None for now" copy names Set portrait / Add avatar + ★. Web `setFavorite` + repo `addLook` share the bootstrap so web/desktop stay aligned.
