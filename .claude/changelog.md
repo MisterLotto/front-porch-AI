@@ -6052,3 +6052,30 @@ RAG retrieval (nomic model is a consent-gated download), TTS/STT/image-gen
 engines (model binaries), physical-state eval payload (parses to no-op).
 
 **Verification:** `flutter analyze` clean; suite green in ~6s app time.
+
+## 2026-07-28 (UTC) — E2E suite hardening from hostile review + two real fixes it forced
+
+**Files:** `integration_test/app_smoke_test.dart`, `integration_test/support/fake_backend.dart`,
+`lib/ui/chat_components/sidebar/character_state/time_strip.dart`
+
+**What (Grok review round 3, findings verified then fixed):**
+(1) TimeStrip: Flexible→Expanded + maxLines:1, competing Spacer removed — the
+review was right that Flexible+Spacer split flex space 50/50 (label truncated
+early beside empty space) and that ellipsis without maxLines can wrap.
+(2) FlutterError.onError filter: addTearDown restore + null-safe fallthrough
+to FlutterError.presentError — can no longer drop errors.
+(3) Eval-vs-chat routing now classifies on the LAST message's content, not the
+whole body: a realism-enabled chat request carries realism-state injection in
+its SYSTEM prompt, and the whole-body key search misrouted turn 2's generation
+into the eval branch (caught live by the new chatRequests>=2 assert — the
+previously "green" run had never actually generated turn 2; its reply text
+assert was satisfied by turn 1's identical reply).
+(4) Scene-time/posture eval modeled (posture/minutes_elapsed/new_day) so
+counters stay honest; tools probe is a real JSON field check; handler catch
+logs; per-completion classification line printed for post-mortems.
+(5) sendRobustly(): delivery-confirmed send with retry + controller self-heal —
+the live binding's fake keyboard connection goes stale after the app's
+post-send IME churn (enterText works for turn 1, silently no-ops for turn 2).
+
+**Verification:** `flutter analyze` clean; suite green (~7s app time) with
+completion log confirming 2 real chat generations + 4 evals + tool probes.

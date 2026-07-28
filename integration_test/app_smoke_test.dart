@@ -145,6 +145,7 @@ void main() {
     // synthetic test pointer, not app behavior. Downgrade exactly that one
     // error; everything else still fails the test through the prior handler.
     final previousOnError = FlutterError.onError;
+    addTearDown(() => FlutterError.onError = previousOnError);
     FlutterError.onError = (details) {
       if (details.exceptionAsString().contains(
         'unexpectedly has a HitTestResult',
@@ -155,7 +156,9 @@ void main() {
         );
         return;
       }
-      previousOnError?.call(details);
+      // Never null-drop: if the test framework handler is somehow absent,
+      // errors still surface instead of vanishing.
+      (previousOnError ?? FlutterError.presentError)(details);
     };
 
     // ── Phase 2: chat round-trip ────────────────────────────────────────
@@ -214,10 +217,37 @@ void main() {
           (w.decoration?.hintText?.contains('Type a message') ?? false),
     );
     await pumpUntilFound(tester, input);
-    await waitSendable();
-    await tester.enterText(input, _kUserMessage);
-    await tester.pump();
-    await tester.tap(find.byTooltip('Send message'));
+
+    // A one-shot tap is not enough: the guards can flip in the gap between
+    // the sendable check and the tap (post-turn async work), and the app
+    // deliberately swallows such sends (text preserved for retry). Retry
+    // until the message provably lands in the chat service.
+    Future<void> sendRobustly(String text) async {
+      bool delivered() =>
+          chatService.messages.any((m) => m.text.contains(text));
+      for (var attempt = 0; attempt < 8; attempt++) {
+        await waitSendable();
+        await tester.enterText(input, text);
+        // The live binding's fake keyboard connection can go stale after the
+        // app's own post-send IME churn — enterText then writes into the
+        // void (observed: works for turn 1, silently dead for turn 2). Real
+        // typing is already covered by the first successful enterText;
+        // self-heal by setting the controller directly when it happens.
+        final controller = tester.widget<TextField>(input).controller;
+        if (controller != null && controller.text != text) {
+          controller.text = text;
+        }
+        await tester.pump();
+        await tester.tap(find.byTooltip('Send message'));
+        for (var i = 0; i < 8 && !delivered(); i++) {
+          await tester.pump(const Duration(milliseconds: 250));
+        }
+        if (delivered()) return;
+      }
+      fail('"$text" was never accepted by sendMessage after 8 attempts');
+    }
+
+    await sendRobustly(_kUserMessage);
 
     // The user bubble appears immediately; the reply streams from the fake
     // backend through the full KoboldService → streamOpenAiChat → ChatService
@@ -241,10 +271,7 @@ void main() {
     // never yields deltas. Send a second message; its pre-gen evals score
     // the first exchange against the fake backend (tool probe refused →
     // text fallback → canned JSON) and the deltas land as chip metadata.
-    await waitSendable();
-    await tester.enterText(input, 'And how is the weather on the porch?');
-    await tester.pump();
-    await tester.tap(find.byTooltip('Send message'));
+    await sendRobustly('And how is the weather on the porch?');
     await pumpUntilTrue(
       tester,
       () => chatService.messages.any(
@@ -258,6 +285,20 @@ void main() {
     );
     expect(backend.evalRequests, greaterThanOrEqualTo(1));
     expect(backend.toolProbeRequests, greaterThanOrEqualTo(1));
+    // The second turn's generation must actually reach the backend — with
+    // every eval modeled, chatRequests counts real conversation turns only.
+    await pumpUntilTrue(
+      tester,
+      () => backend.chatRequests >= 2,
+      describe: () =>
+          'the second turn generating (chatRequests='
+          '${backend.chatRequests}, messages=${chatService.messages.length}, '
+          'msg2InList=${chatService.messages.any((m) => m.text.contains('weather on the porch'))}, '
+          'sendable: gen=${chatService.isGenerating} '
+          'guest=${chatService.isGuestBusy} '
+          'photo=${chatService.isPhotoTurnInFlight} '
+          'entrances=${chatService.entrancesInFlight})',
+    );
 
     // ── Phase 4: journal card plant + render ────────────────────────────
     // Plant through the SAME store the app's plant/edit editor uses, then

@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // In-process stand-in for an unmanaged OpenAI-compatible local backend (the
-// PseudoRemote path: LM Studio / llama.cpp servers). Serves every endpoint
-// the app touches during a realism-enabled chat turn:
+// PseudoRemote path: LM Studio / llama.cpp servers). Serves the endpoints
+// observed during a realism-enabled chat turn plus the KoboldCpp extras a
+// managed-mode run would use (kept modeled; unused paths cost nothing and
+// unmodeled ones fail the traffic audit by name):
 //
 //   GET  /api/extra/version      health probe
 //   GET  /api/extra/perf         perf poll (idle/queue/speeds)
@@ -111,8 +113,11 @@ class FakeBackendServer {
           unexpectedPaths.add(req.uri.path);
           req.response.statusCode = HttpStatus.notFound;
       }
-    } catch (_) {
-      // A request racing test teardown may find a closed socket; irrelevant.
+    } catch (e) {
+      // Usually a request racing test teardown (closed socket) — but logged,
+      // so a genuine handler bug (bad JSON, write failure) can't hide here.
+      // ignore: avoid_print — test support; print reaches the suite log.
+      print('[FakeBackendServer] handler error on ${req.uri.path}: $e');
     } finally {
       try {
         await req.response.close();
@@ -123,7 +128,15 @@ class FakeBackendServer {
   Future<void> _handleCompletion(HttpRequest req) async {
     final body = await utf8.decodeStream(req);
 
-    if (body.contains('"tools"')) {
+    // Real JSON field check, not a substring test: a quoted "tools" inside
+    // message content must not trip the probe branch.
+    Map<String, dynamic> decoded = const {};
+    try {
+      decoded = jsonDecode(body) as Map<String, dynamic>;
+    } catch (_) {
+      // Malformed body → key routing below still works on the raw text.
+    }
+    if (decoded['tools'] != null) {
       toolProbeRequests++;
       req.response.statusCode = HttpStatus.notFound;
       req.response.write(
@@ -134,23 +147,51 @@ class FakeBackendServer {
       return;
     }
 
-    // Realism eval prompts instruct the model which JSON keys to emit; the
-    // chat prompt never contains these strings (fixture text is controlled).
+    // Classify on the LAST message's content only. Eval prompts end with
+    // instructions naming the JSON keys to emit; a realism-enabled CHAT
+    // request carries realism-state injection text in its SYSTEM prompt
+    // (posture, bond words...) that would false-match a whole-body search —
+    // that exact misroute happened: turn 2's generation was answered with
+    // eval JSON. The last message is the typed user text for chat and the
+    // instruction block for evals.
+    String lastContent = body;
+    final messages = decoded['messages'];
+    if (messages is List && messages.isNotEmpty) {
+      final last = messages.last;
+      if (last is Map && last['content'] is String) {
+        lastContent = last['content'] as String;
+      }
+    }
     final eval = <String, dynamic>{};
-    if (body.contains('relationship_delta')) {
+    if (lastContent.contains('relationship_delta')) {
       eval['relationship_delta'] = 2;
       eval['trust_delta'] = 1;
       eval['bond_reason'] = 'smoke-test warmth';
       eval['trust_reason'] = 'smoke-test honesty';
     }
-    if (body.contains('emotion_intensity')) {
+    if (lastContent.contains('emotion_intensity')) {
       eval['emotion'] = 'happy';
       eval['emotion_intensity'] = 'moderate';
     }
-    if (body.contains('fixation_topic')) {
+    if (lastContent.contains('fixation_topic')) {
       eval['fixation_topic'] = 'none';
       eval['proposed_objective'] = 'none';
     }
+    // Scene-time / physical-state eval. Modeled so it can never misroute
+    // into the chat branch — chatRequests and lastChatBody stay trustworthy.
+    if (lastContent.contains('minutes_elapsed') ||
+        lastContent.contains('"posture"')) {
+      eval['posture'] = 'standing';
+      eval['minutes_elapsed'] = 5;
+      eval['new_day'] = false;
+    }
+
+    // One line per completion so a misclassification is visible in the suite
+    // log without any debugger. ignore: avoid_print — test support.
+    print(
+      '[FakeBackendServer] completion: ${eval.isEmpty ? 'CHAT' : 'EVAL(${eval.keys.join('+')})'} '
+      'last="${lastContent.length > 70 ? lastContent.substring(lastContent.length - 70) : lastContent}"',
+    );
 
     req.response.headers.set('Content-Type', 'text/event-stream');
     final pieces = <String>[];

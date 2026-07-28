@@ -51,13 +51,16 @@ class TimeStrip extends StatelessWidget {
           children: [
             Text(timeEmoji(time), style: const TextStyle(fontSize: 13)),
             const SizedBox(width: 5),
-            // Flexible + ellipsis: with both period-label and date text at
-            // their natural size the Row overflows the 300px sidebar once
-            // realism is on (long clock strings). The left label gives way;
-            // the tappable date stays whole.
-            Flexible(
+            // Expanded + single-line ellipsis: with both period-label and
+            // date text at their natural size the Row overflows the 300px
+            // sidebar once realism is on (long clock strings). The left
+            // label takes all slack and gives way first; the tappable date
+            // stays whole. (No Spacer — a competing flex child would force
+            // the label to truncate while empty space remained.)
+            Expanded(
               child: Text(
                 '${timeLabel(time)} · ${chat.timeService.displayClock}',
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
@@ -65,7 +68,6 @@ class TimeStrip extends StatelessWidget {
                 ),
               ),
             ),
-            const Spacer(),
             if (canNudge)
               GestureDetector(
                 onTap: () => chat.nudgeTimePeriod(-1),
