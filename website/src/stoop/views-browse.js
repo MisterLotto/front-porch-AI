@@ -358,7 +358,9 @@
         followBtn = el('button', { class: 'btn ' + (cr.following ? 'btn-ghost' : 'btn-amber'), type: 'button' },
           cr.following ? '✓ Following' : '+ Follow');
         followBtn.addEventListener('click', function () {
-          var call = cr.following ? Api.unfollow(id) : Api.follow(id);
+          // Always follow by the resolved user id — the route param may be a
+          // vanity display name, which the follow endpoints don't accept.
+          var call = cr.following ? Api.unfollow(cr.id) : Api.follow(cr.id);
           call.then(function (r) {
             cr.following = r.following;
             cr.followers = r.followers;
@@ -374,10 +376,12 @@
       // Lifetime stats over every approved card (server-side, not the visible
       // slice) so SFW-only viewers see the same numbers.
       var stats = cr.stats || {};
+      var totalCards = stats.cards != null ? stats.cards : cards.length;
       var statLine = el('span', { class: 'hub-dim' },
-        ui.num(stats.cards || cards.length) + ' cards · ' +
+        ui.num(totalCards) + ' cards · ' +
         ui.num(stats.downloads || 0) + ' downloads · ' +
-        ui.num(stats.score || 0) + ' net votes');
+        ui.num(stats.score || 0) + ' net votes' +
+        (cards.length < totalCards ? ' · some hidden (18+ off)' : ''));
 
       // Bio + external links (creator-controlled; the server only accepts
       // http(s) URLs). Links double as public self-attribution for creators
@@ -385,8 +389,9 @@
       var bioBlock = (cr.bio || '').trim()
         ? el('p', { class: 'hub-creator-bio' }, cr.bio.trim())
         : null;
-      var linkList = (cr.links && cr.links.length)
-        ? el('div', { class: 'hub-creator-links' }, cr.links.map(function (u) {
+      var creatorLinks = cr.links || cr.profileLinks || [];
+      var linkList = creatorLinks.length
+        ? el('div', { class: 'hub-creator-links' }, creatorLinks.map(function (u) {
             var label = u.replace(/^https?:\/\//, '').replace(/\/$/, '');
             if (label.length > 42) label = label.slice(0, 40) + '…';
             return el('a', { href: u, target: '_blank', rel: 'noopener nofollow' }, '🔗 ' + label);
