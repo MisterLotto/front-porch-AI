@@ -2,9 +2,9 @@
 
 These notes feed the in-app "Update Available" dialog for stable releases on `main`.
 
-## Coming next (tag when you bump)
+## v1.1.2 — Faces That Stick
 
-Post-v1.1.1 fixes promoted from Rawhide (Flutter 3.44.8 + dependency refresh included in the build).
+Portrait and gallery fixes that make avatars behave, plus stability polish from the nightlies (Flutter 3.44.8 under the hood).
 
 - 🖼️ **Avatars actually stick on the character** — Avatar Gallery stars, missing portraits, solid-color placeholders, and first uploads used to fight each other (Edit Character said "No avatar", home kept a blank face, delete made the wrong tile vanish, first upload doubled as portrait + look). The starred face is now the card face everywhere; placeholders get replaced by real art; first upload is portrait-only; gallery delete refreshes the right tile; home updates when you hit Done.
 
