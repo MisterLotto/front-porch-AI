@@ -262,6 +262,7 @@ void main() {
       String Function() describe, {
       Duration timeout = const Duration(seconds: 60),
     }) async {
+      timeout *= kCiTimeoutScale;
       final deadline = DateTime.now().add(timeout);
       while (!condition()) {
         await spinChanceTimeIfAsked();
@@ -310,6 +311,14 @@ void main() {
     await pumpUntilFound(
       tester,
       find.textContaining(_kUserMessage, findRichText: true),
+    );
+    await waitForTurnState(
+      () => backend.chatRequests >= 1,
+      () =>
+          'turn 1 generating (chat=${backend.chatRequests}, '
+          'eval=${backend.evalRequests}, probe=${backend.toolProbeRequests}, '
+          'journal=${backend.journalPassRequests})',
+      timeout: const Duration(seconds: 120),
     );
     await pumpUntilFound(
       tester,

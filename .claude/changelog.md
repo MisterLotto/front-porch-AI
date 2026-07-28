@@ -6124,3 +6124,15 @@ spinChanceTimeIfAsked(): tap SPIN, wait out the landing, dismiss the result
 card — user-faithful, and it turns the wheel into covered surface whenever it
 fires. 4 consecutive green runs after the change (no roll observed locally;
 the handler's live proof will come from CI frequency).
+
+## 2026-07-28 (UTC) — E2E: 4x CI timeout scale + instrumented turn-1 wait
+
+**Files:** `integration_test/support/e2e_sandbox.dart`, `integration_test/app_smoke_test.dart`
+
+**What:** First CI run: Windows PASSED first try (suite now proven
+cross-platform); macOS runner timed out waiting for turn 1's reply — 2-core
+runner vs locally-tuned timeouts. All wait helpers now multiply timeouts by
+kCiTimeoutScale (4 when CI=true, 1 locally), and the turn-1 reply wait is
+split: first wait for chatRequests>=1 with live backend counters in the
+failure message (evals vs generation vs render pinpointing), then the render
+wait. Local run unchanged and green.

@@ -11,6 +11,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
+/// CI runners (2-core VMs) are several times slower than a dev machine, and
+/// every timeout in this suite was tuned locally. All wait helpers multiply
+/// their timeouts by this factor; GitHub Actions always sets CI=true.
+final int kCiTimeoutScale =
+    Platform.environment['CI'] == 'true' ? 4 : 1;
+
 /// Redirects every path_provider lookup into [root] so the app cannot touch
 /// the real installation. Extends (not implements) PathProviderPlatform so
 /// the platform-interface token check accepts it.
@@ -51,6 +57,7 @@ Future<void> pumpUntilFound(
   Finder finder, {
   Duration timeout = const Duration(minutes: 2),
 }) async {
+  timeout *= kCiTimeoutScale;
   final deadline = DateTime.now().add(timeout);
   while (finder.evaluate().isEmpty) {
     if (DateTime.now().isAfter(deadline)) {
@@ -94,6 +101,7 @@ Future<void> pumpUntilTrue(
   // fake-server counters) as of the moment the timeout fired.
   required String Function() describe,
 }) async {
+  timeout *= kCiTimeoutScale;
   final deadline = DateTime.now().add(timeout);
   while (!condition()) {
     if (DateTime.now().isAfter(deadline)) {
