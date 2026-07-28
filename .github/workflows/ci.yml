@@ -121,11 +121,11 @@ jobs:
   # Runner notes: no human mouse and no real KoboldCpp exist here, so the two
   # local-run hazards (hover-wedge, zombie-kill) don't apply. Build time
   # dominates (~6-10 min); the test itself is ~7s.
-  # Windows graduated to blocking after two consecutive green runs on
-  # 2026-07-28 (its very first execution passed). Linux joins the same way
-  # every platform does: experimental (continue-on-error) until it has green
-  # runs on record, so its shakedown can never red a contributor's PR — then
-  # flip `experimental: true` to `false`.
+  # Every platform joins this matrix the same way: experimental
+  # (continue-on-error) until it has two consecutive green runs on record —
+  # so a new platform's shakedown can never red a contributor's PR — then it
+  # graduates to blocking. Windows and Linux both graduated on 2026-07-28,
+  # each having passed from its very first execution.
   e2e-smoke:
     name: E2E smoke (${{ matrix.device }})
     needs: analyze
@@ -141,7 +141,7 @@ jobs:
             experimental: false
           - os: ubuntu-latest
             device: linux
-            experimental: true
+            experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 30

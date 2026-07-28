@@ -6202,3 +6202,11 @@ fold), switch to Our Story, and require NO spinner remains inside the dialog
 
 **Verification:** milestone_feed_test + riverpod_providers_test green (7 tests);
 full E2E green in ~8s; analyze clean; build_runner regenerated.
+
+## 2026-07-28 (UTC) — Linux E2E promoted to blocking (2/2 green from first execution)
+
+**Files:** `.github/workflows/ci.yml`
+
+**What:** Linux e2e-smoke passed both of its first two CI executions (xvfb +
+GTK/GStreamer recipe worked untouched). experimental → false. The full-array
+E2E suite now BLOCKS PRs on all three desktop platforms.
