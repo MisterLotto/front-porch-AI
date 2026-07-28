@@ -57,7 +57,7 @@ on 3.44.8 — see below), `meta` **1.18.0**. Riverpod codegen was kept.
 | `drift_dev` ≥2.34.1 | needs `analyzer` ^13; caps at 2.34.0 with riverpod_generator 4.0.4 |
 | `image` ≥4.9 / `syncfusion_flutter_pdf` ≥34 | need `xml` ^7; `webdav_client` 1.2.2 needs `xml` ^6 |
 | `package_info_plus` ≥10 | needs `win32` ^6; `file_picker` 11 needs `win32` ^5 |
-| `flutter_markdown` | discontinued (replace with `flutter_markdown_plus` is a separate migration) |
+| ~~`flutter_markdown`~~ | **migrated** to `flutter_markdown_plus` (2026-07-28) |
 
 Majors that **did** land: `file_picker` 11, `record` 7, `grpc` 5, `flat_buffers` 25, `shelf_web_socket` 3.
 
