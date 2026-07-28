@@ -5995,3 +5995,27 @@ infos from the 3.44.8 bump remain, all in untouched files); `dart fix --dry-run`
 suggests nothing in touched files.
 
 **Commits:** (see below — fix + harness committed separately)
+
+## 2026-07-28 (UTC) — Smoke test extended to a full chat round-trip + 3.44.8 lint sweep
+
+**Files:** `integration_test/app_smoke_test.dart`, plus lint fixes in
+`lib/ui/widgets/download_queue_panel.dart`, `hf_model_card.dart`,
+`output_sanitizer_rule_editor.dart`, `lib/ui/pages/create_group_chat_page.dart`,
+`lib/services/chat/journal_store.dart`
+
+**What:** (1) Lint sweep restored 0-issue `flutter analyze` after the 3.44.8 bump:
+SizeTransition axisAlignment→alignment (SDK formula, behavior identical),
+ReorderableListView onReorder→onReorderItem (semantics change — framework now
+pre-adjusts newIndex, manual decrements deleted), null-aware spread in
+journal_store. (2) The E2E smoke test now does a full conversation, not just
+boot: an in-process fake KoboldCpp (OpenAI-SSE, ephemeral port) is wired via
+KoboldService.setBaseUrl; the test creates a character through
+CharacterRepository, opens the real ChatPage (same calls as the card-tap
+handler — the home grid doesn't rebuild on background inserts), types in the
+real input, taps the real send button, and asserts the streamed reply bubble.
+New preset 'import_llmerta_porch_memories': false is load-bearing: chat open
+would otherwise run the Mafia mailbox import against hard-coded real $HOME
+paths. Round-trip passes in ~4s wall-clock.
+
+**Verification:** `flutter analyze` — No issues found (project back to 0);
+`flutter test integration_test/app_smoke_test.dart -d macos` green.
