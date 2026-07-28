@@ -1138,19 +1138,28 @@ extension ChatServiceGeneration on ChatService {
       bool _thinkStarted = false;
       bool _thinkEnded = false;
 
-      // Determine message identity
+      // Determine message identity. The stream target is captured ONCE by
+      // reference — every later write (flush, think timestamps, sanitizer,
+      // needs re-stamp, TTS) goes through it instead of _messages.last. The
+      // list can shift under a long turn (dream insert, deletes, another
+      // send: none of those are hard-blocked while a turn winds down), and
+      // positional writes are how an aborted reply overwrote a dream banner
+      // (2026-07-28). A write to a message deleted mid-turn lands on the
+      // detached object — harmless and invisible.
       String originalText = '';
       String targetSender;
       bool isUserTarget;
+      final ChatMessage streamTarget;
 
       if (mode == GenerationMode.continue_) {
-        originalText = _messages.last.text;
-        targetSender = _messages.last.sender;
-        isUserTarget = _messages.last.isUser;
+        streamTarget = _messages.last;
+        originalText = streamTarget.text;
+        targetSender = streamTarget.sender;
+        isUserTarget = streamTarget.isUser;
         // Merge metadata if continuing
         if (_pendingRealismMetadata != null) {
-          _messages.last.activeMetadata ??= {};
-          _messages.last.activeMetadata!.addAll(_pendingRealismMetadata!);
+          streamTarget.activeMetadata ??= {};
+          streamTarget.activeMetadata!.addAll(_pendingRealismMetadata!);
           _pendingRealismMetadata = null;
         }
       } else {
@@ -1172,18 +1181,17 @@ extension ChatServiceGeneration on ChatService {
           'bond_delta=${initialMetadata?['bond_delta']}, '
           'keys=${initialMetadata?.keys.toList()}',
         );
-        _messages.add(
-          ChatMessage(
-            text: "",
-            sender: targetSender,
-            isUser: isUserTarget,
-            characterId: mode == GenerationMode.normal
-                ? _getCharacterIdForCard(speakingCharacter)
-                : null,
-            metadata: initialMetadata,
-            swipeMetadata: initialMetadata != null ? [initialMetadata] : null,
-          ),
+        streamTarget = ChatMessage(
+          text: "",
+          sender: targetSender,
+          isUser: isUserTarget,
+          characterId: mode == GenerationMode.normal
+              ? _getCharacterIdForCard(speakingCharacter)
+              : null,
+          metadata: initialMetadata,
+          swipeMetadata: initialMetadata != null ? [initialMetadata] : null,
         );
+        _messages.add(streamTarget);
         _pendingRealismMetadata = null;
       }
 
@@ -1199,8 +1207,10 @@ extension ChatServiceGeneration on ChatService {
         } else {
           displayText = displayTokens.trimLeft();
         }
-        // CRITICAL: Modify existing message in place to preserve thinkingStartTime and other metadata
-        _messages.last.text = displayText;
+        // CRITICAL: Modify the captured stream target in place (never
+        // _messages.last — the list can shift mid-turn) to preserve
+        // thinkingStartTime and other metadata.
+        streamTarget.text = displayText;
         notifyListeners();
       }
 
@@ -1335,10 +1345,8 @@ extension ChatServiceGeneration on ChatService {
           _thinkStarted = true;
           _thinkStartTime = DateTime.now();
           _generationPhase = GenerationPhase.thinking;
-          if (_messages.isNotEmpty) {
-            _messages.last.thinkingStartTime =
-                _thinkStartTime.millisecondsSinceEpoch;
-          }
+          streamTarget.thinkingStartTime =
+              _thinkStartTime.millisecondsSinceEpoch;
         }
         if (_thinkStarted &&
             !_thinkEnded &&
@@ -1348,8 +1356,8 @@ extension ChatServiceGeneration on ChatService {
           _generationPhase = bufferEnabled
               ? GenerationPhase.buffering
               : GenerationPhase.generating;
-          if (_thinkStartTime != null && _messages.isNotEmpty) {
-            _messages.last.thinkingDurationMs = DateTime.now()
+          if (_thinkStartTime != null) {
+            streamTarget.thinkingDurationMs = DateTime.now()
                 .difference(_thinkStartTime)
                 .inMilliseconds;
             // Keep thinkingStartTime for fallback display logic in UI
@@ -1433,26 +1441,68 @@ extension ChatServiceGeneration on ChatService {
       streamDone = true;
       _isBuffering = false;
 
-      if (!bufferEnabled) {
+      if (_cancelRequested) {
+        // Cancelled mid-stream: do NOT drain the undisplayed backlog. A
+        // think-heavy turn can hold minutes of buffered tokens, and draining
+        // them after Stop is how an aborted reply kept "dumping" (and, via
+        // the positional last-message writes, how one landed inside a dream
+        // banner — 2026-07-28). Keep exactly what's on screen.
+      } else if (!bufferEnabled) {
         // No buffer: everything already displayed
         _displayedTokenCount = _tokenBuffer.length;
         _flushBufferToDisplay();
       } else if (_drainTimer == null) {
         // Buffer never started draining (genTps < targetTps) — start now with all tokens ready
         _startDrainTimer();
-        // Wait for drain to complete
-        while (_displayedTokenCount < _tokenBuffer.length) {
+        // Wait for drain to complete (Stop pressed mid-drain halts it)
+        while (_displayedTokenCount < _tokenBuffer.length &&
+            !_cancelRequested) {
           await Future.delayed(const Duration(milliseconds: 16));
         }
         _drainTimer?.cancel();
         _drainTimer = null;
       } else {
-        // Drain already running — wait for it to finish
-        while (_displayedTokenCount < _tokenBuffer.length) {
+        // Drain already running — wait for it to finish (or Stop to halt it)
+        while (_displayedTokenCount < _tokenBuffer.length &&
+            !_cancelRequested) {
           await Future.delayed(const Duration(milliseconds: 16));
         }
         _drainTimer?.cancel();
         _drainTimer = null;
+      }
+
+      // User cancel (stream-loop break above, or Stop during the drain):
+      // halt the turn HERE — no finalize, no lorebook scan, no post-turn
+      // evals on an aborted reply. Mirrors the catch path's treatAsCancel:
+      // keep the displayed partial so regen/continue work, save, signal done.
+      if (_cancelRequested) {
+        _drainTimer?.cancel();
+        _drainTimer = null;
+        _tokenBuffer.clear();
+        _isGenerating = false;
+        _cancelRequested = false;
+        _generationProgress = 0.0;
+        _isBuffering = false;
+        _generationPhase = GenerationPhase.idle;
+        _prefillStartTime = null;
+        _prefillPromptTokens = 0;
+        _generationStartTime = null;
+        _perfPoller?.cancel();
+        _perfPoller = null;
+        _tokenBroadcast.add('__DONE__');
+        if (_sentenceBuffer.trim().isNotEmpty) {
+          _sentenceBroadcast.add(_sentenceBuffer.trim());
+          _sentenceBuffer = '';
+        }
+        _sentenceBroadcast.add('__DONE__');
+        if (_originalModelName != null && _llmProvider != null) {
+          _llmProvider!.openRouterService.configure(
+            modelName: _originalModelName,
+          );
+        }
+        await _saveChat();
+        notifyListeners();
+        return;
       }
 
       _isGenerating = false;
@@ -1507,7 +1557,7 @@ extension ChatServiceGeneration on ChatService {
         if (g2.resolveOutputSanitizerEnabled(_storageService)) {
           final rules = g2.resolveOutputSanitizerRules(_storageService);
           finalResponse = sanitizeOutput(finalResponse, rules);
-          _messages.last.text = finalResponse;
+          streamTarget.text = finalResponse;
         }
 
         // Snapshot which entries were already triggered before scanning the AI response.
@@ -1519,8 +1569,12 @@ extension ChatServiceGeneration on ChatService {
             if (ref.entry.isTriggered && !ref.entry.constant) ref.entry,
         };
 
-        if (finalResponse.isNotEmpty) {
-          // The streamed message is already _messages.last with this text.
+        if (finalResponse.isNotEmpty &&
+            _messages.isNotEmpty &&
+            identical(_messages.last, streamTarget)) {
+          // scanLatest reads the LAST message — only valid while the streamed
+          // message still holds that position (a mid-turn insert/delete can
+          // shift it; scanning someone else's text would trigger wrong lore).
           _lorebookScanner.scanLatest();
         }
 
@@ -1590,10 +1644,9 @@ extension ChatServiceGeneration on ChatService {
           // per-speaker vector is loaded above and is final here (before the group
           // persist below).
           if (_needsSimEnabled &&
-              _messages.isNotEmpty &&
-              !_messages.last.isUser &&
+              !streamTarget.isUser &&
               _needsSimulation.vector.isNotEmpty) {
-            final rs = _messages.last.activeMetadata?['realism_state'];
+            final rs = streamTarget.activeMetadata?['realism_state'];
             if (rs is Map && rs['needs'] is Map) {
               (rs['needs'] as Map)['vector'] = Map<String, int>.from(
                 _needsSimulation.vector,
@@ -1669,10 +1722,10 @@ extension ChatServiceGeneration on ChatService {
         if (_ttsService != null &&
             _storageService.ttsSettings.ttsEnabled &&
             _storageService.ttsSettings.ttsAutoPlay &&
-            _messages.isNotEmpty &&
-            !_messages.last.isUser) {
-          final lastMsg = _messages.last;
-          final msgId = 'msg_${_messages.length - 1}';
+            !streamTarget.isUser &&
+            _messages.contains(streamTarget)) {
+          final lastMsg = streamTarget;
+          final msgId = 'msg_${_messages.indexOf(streamTarget)}';
           // Resolve per-character voice, falling back to global default
           String? voiceKey;
           if (_activeGroup != null) {
