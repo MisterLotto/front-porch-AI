@@ -111,7 +111,9 @@ final Map<String, Map<String, dynamic>> _oneShotFields = {
   'new_day': {
     'type': 'boolean',
     'description':
-        'True ONLY if the conversation explicitly transitioned to the next day.',
+        'True ONLY if the conversation explicitly transitioned to the next '
+        'day (slept, woke up, scene break). Merely mentioning yesterday or '
+        'tomorrow does NOT count.',
   },
   ..._narrativeFields,
   'reason': _strField(
@@ -226,7 +228,9 @@ final Map<String, Map<String, dynamic>> _sceneTimeFields = {
   'new_day': {
     'type': 'boolean',
     'description':
-        'True ONLY if the conversation explicitly transitioned to the next day.',
+        'True ONLY if the conversation explicitly transitioned to the next '
+        'day (slept, woke up, scene break). Merely mentioning yesterday or '
+        'tomorrow does NOT count.',
   },
   'posture': _strField(
     'Current physical position and location (brief phrase), or "none".',
