@@ -2,6 +2,20 @@
 
 These notes feed the in-app "Update Available" dialog for stable releases on `main`.
 
+## Coming next (tag when you bump)
+
+Post-v1.1.1 fixes promoted from Rawhide (Flutter 3.44.8 + dependency refresh included in the build).
+
+- 🖼️ **Avatars actually stick on the character** — Avatar Gallery stars, missing portraits, solid-color placeholders, and first uploads used to fight each other (Edit Character said "No avatar", home kept a blank face, delete made the wrong tile vanish, first upload doubled as portrait + look). The starred face is now the card face everywhere; placeholders get replaced by real art; first upload is portrait-only; gallery delete refreshes the right tile; home updates when you hit Done.
+
+- 📖 **"Our Story" no longer spins forever** — Opening the milestones timeline mid-chat could load forever because background heartbeats kept restarting it. It loads once and stays put, refreshing only when new messages arrive.
+
+- ⚡ **Remote backends skip the KoboldCpp download** — If you're on OpenRouter or another OpenAI-compatible remote server, first launch no longer pulls a large local binary you will not use. Local Kobold users are unchanged.
+
+- 📚 **Hub cards with lorebooks look complete again** — Stoop/hub downloads that carry a V2 `character_book` now show that lore instead of looking loreless after import.
+
+- 🛑 **Stop, time, and needs behave** — Stop truly ends the turn; an OOC time skip owns the clock (no double-advance); needs chips no longer invent full-value deltas when a baseline was missing; live turns are protected from mid-stream sends/deletes.
+
 ## v1.1.1 — Linux hotfix
 
 - 🐧 **Fixes Linux installs that couldn't open their database** — v1.1.0 shipped without its bundled SQLite engine, so Linux users saw "libsqlite3.so is missing" and were told their database was corrupted. **Your data was never actually damaged** — the app simply couldn't open it. Updating fixes it, and your chats are exactly where you left them. Affects every Linux package (`.deb`, `.rpm`, AppImage, tarball and the AUR build); macOS and Windows were never affected.
