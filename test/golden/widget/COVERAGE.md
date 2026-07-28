@@ -156,7 +156,7 @@ The June-6 "Stage 4" refactor shipped a *functionally dead* creator to stable
   initState; fetchImageModels no-op; FakeStorageService + FakeImageGenService.
 - ✅ `character_avatars_dialog.dart` — 0 avatars; all deps injected as constructor params
   (no Provider tree). FakeCharacterRepository + FakeStorageService.
-- ✅ `edit_character_dialog.dart` — tab 0 (Details); FakeStorageService for
+- ✅ Edit character (EditCharacterPage in the chat's Dialog shell) — tab 0; FakeStorageService for
   _buildColorRow() globalXxxColor fallbacks. settle:false (StyledTextControllers).
 - ✅ `image_crop_dialog.dart` — 64×64 grey PNG bytes generated via image package;
   no Provider tree needed.

@@ -20,6 +20,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
@@ -76,11 +77,15 @@ class ChatFacade {
         final pr = md['image_prompt'];
         if (pr is String && pr.isNotEmpty) imagePrompt = pr;
       }
+      // Living Time §1 dream narration flag — additive; older bundles render
+      // the dream as a plain message (same info, no special chrome).
+      final bool? isDream = md?['is_dream'] == true ? true : null;
       return {
         'index': e.key,
         'sender': m.sender,
         'text': m.displayText,
         'isUser': m.isUser,
+        'isDream': ?isDream,
         'hasThinking': m.hasThinking,
         'thinkingContent': m.thinkingContent,
         'thinkingDurationMs': m.thinkingDurationMs,
@@ -190,6 +195,11 @@ class ChatFacade {
       // expression portrait and only refetch when the mood actually changes.
       // Read-only — no reclassification here, so 1:1/group parity is unaffected.
       'expressionLabel': _chat.currentExpressionLabel,
+      // Living Time §2 welcome-back banner — additive nullable; the shared
+      // ChatService gate mirrors desktop (setting off / under threshold →
+      // null). Coarse words only, computed locally from the chat's own
+      // last-save time.
+      'absencePhrase': _chat.absenceBannerPhrase,
       // Unified participant cast (host + scene guests in 1:1; members in group).
       // The single roster the unified chat UI iterates — no mode branching.
       'cast': _castJson(),
@@ -219,6 +229,8 @@ class ChatFacade {
         'state': _chat.toolCallSupport.name,
         'testing': _chat.isTestingToolSupport,
       },
+      // Per-chat theme overrides (preset + font/color/background/border).
+      'themeOverrides': _chat.sessionThemeOverrides.toJson(),
     };
   }
 
@@ -578,6 +590,15 @@ class ChatFacade {
       ..clear()
       ..addAll(built?.entries ?? const []);
     await _chat.commitChatLorebookEdit();
+    _notify();
+    return true;
+  }
+
+  /// Save per-chat theme overrides from the web UI.
+  Future<bool> setThemeOverrides(Map<String, dynamic> json) async {
+    if (_chat.currentSessionId == null) return false;
+    _chat.sessionThemeOverrides =
+        ChatThemeOverrides.fromJson(json);
     _notify();
     return true;
   }

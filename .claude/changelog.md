@@ -1,5 +1,293 @@
 # Changelog
 
+## 2026-07-27 — chore(release): retire the unsigned shim DMG everywhere (maintainer decision)
+- **Why:** maintainer: "we've drug that corpse along long enough." The shim existed only as an updater bridge for pre-.pkg .dmg/.app installs. Safety pre-verified in-repo: the 2026-07-08 "pkg downloads but never applies" regression that reverted the first removal was root-caused to the nightly SHA race (fixed) — the changelog explicitly calls the DMG revert a red herring "can be re-attempted later" — and the maintainer previously recorded that all macOS users have moved to the .pkg.
+- **Removed:** shim-DMG build steps + asset-list entries from `nightly.yml`, `beta-release.yml`, `release.yml` (all still parse as YAML); the shim section, `--skip-shim` flag, and summary lines from `scripts/build-macos.sh` (bash -n clean); the whole client-side legacy path from `update_service.dart` — 3 `.dmg` consts, `_getLegacyMacDmgAsset()`, the checkForUpdate fallback probe, and the hdiutil-attach DMG branch of `_replaceMacApp` (pkg-only script now); the `.dmg` mention in `docs/install.md`.
+- **Accepted cost (stated):** binaries so old they predate the .pkg-aware updater will find no recognizable asset and silently stop seeing updates — one manual .pkg download recovers them. Per the maintainer's earlier assessment, that set is effectively empty.
+- **Files:** 3 workflows, `build-macos.sh`, `update_service.dart`, `docs/install.md`, `docs/Rawhide.md`.
+- **Verification:** all 3 workflows parse; bash -n clean; `flutter analyze` zero issues; full suite in the release-promotion pre-flight.
+
+
+## 2026-07-27 — fix(tts): Speech Rate slider was a no-op for Piper (hardcoded) and masked for Kokoro (replay cache)
+- **Why:** Discord report — the speed slider does nothing for Kokoro and Piper. Two distinct bugs:
+- **Bug 1 (Piper, total no-op):** the whole Piper chain had no speed parameter — `_piperGenerateWav(voice, text, index)` → `SherpaPiperEngine.generate(root, voiceKey, text, outputPath)` → worker `tts.generate(..., speed: 1.0)` HARDCODED. Fixed by threading `speed` end-to-end (engine signature, isolate job payload `job[3]`, all 3 tts_service call sites — the third needed `speed` hoisted into the `_isPiperEngine` branch, it was scoped to the sibling ElevenLabs branch).
+- **Bug 2 (all engines, masked as no-op):** the replay cache key was (messageId, textHash, voice, engine) — speed missing. The natural repro "play → move slider → play same message" hit the cache and replayed the OLD-speed WAV, so Kokoro (whose generation plumbing was fine) also read as a no-op. Added `_cachedSpeed` to the key + both cache-write sites.
+- **Tests:** `sherpa_piper_test.dart` — existing closed-loop updated for the new required param; new env-gated regression: 1.6x audio must be <85% the byte length of 1.0x (runs where FP_TTS_TEST_ROOT points at real models; skips in CI like the closed loop).
+- **Web parity:** none needed — web TTS plays through the same TtsService; the Speech Rate slider surface remains the desktop TTS dialog (pre-existing).
+- **Files:** `sherpa_piper_engine.dart`, `tts_service.dart`, `sherpa_piper_test.dart`, `docs/Rawhide.md`.
+- **Verification:** analyze clean; TTS suite green (model-gated tests skip without local models); full non-golden suite green (see session).
+
+## 2026-07-27 — fix(tools): empty answers are never capability verdicts — pill no longer falls off after Scene Guest joins
+- **Why:** the tool-calling pill kept flipping to "not supported" after a Scene Guest was created, despite the earlier layer-1 fix. Root cause: that fix classified THROWN transport failures, but a KoboldCpp server-side abort (`/api/extra/abort` — fired by stopGeneration, `_fireToolEval`'s timeout teardown, or LlmEvalEngine's `ensureServerIdle` retry hygiene) completes an in-flight tool call NORMALLY: HTTP 200, zero tokens, no tool_calls. That clean empty answer reached the verdict sites as `resp` null/empty and was branded "model can't speak tools". Guest joins reproduce it reliably: long mint generation + concurrent eval burst + abort/idle traffic on the single-slot backend. (`character_gen_llm.dart` even documented the shape — the fix only moved the MINT off the abort path.)
+- **New rule at all four verdict sites** (`fireStructuredEval`, journal `_runExchange`, growth `_runExchange`, `ToolSupportTester.test`): only real evidence brands — a PROSE answer with no tool call marks XML-only; null/EMPTY answers are inconclusive (fall back to text/XML for that round, probe left untested, re-probe next pass). Cost audit: no double-generation regression — the ToolSupportTester ping (cheap, fires on model/backend switches) remains the oracle that brands genuinely tool-less models; prose-answering models still brand in-pass. `fireStructuredEval`'s flag renamed `transportFailure`→`inconclusive`; tester now re-arms `_lastAutoTestedIdentity` on inconclusive outcomes (empty answer OR transport failure) so auto-retest isn't a once-only no-op.
+- **Behavior deltas (deliberate):** journal/growth null-resp no longer brands (was the pinned old behavior in journal_test "tools rejected once" — rewritten to the new contract + a prose-brands companion); journal/growth prose-with-no-tags still brands (unchanged); tester prose still brands (unchanged).
+- **Tests:** new `pass_support_test.dart` (7 cases: call/empty/null/prose/transport/non-transport/xml-skip); growth +2 (empty→untested, prose→brands); journal rewritten null test + prose companion; tester +3 (empty→untested, null→untested, inconclusive re-arms auto-test).
+- **Also:** Rawhide.md pruned of bullets shipped in nightly 20260727 (gen-settings heal, Mafia nights) + new pill-fix bullet.
+- **Files:** `pass_support.dart`, `journal_maintenance.dart`, `growth_service.dart`, `tool_support_tester.dart`, 4 test files, `docs/Rawhide.md`.
+- **Verification:** verdict suites 84/84; full non-golden suite + analyze on CI's Flutter 3.41.1 (see session).
+
+## 2026-07-27 — feat(weather): intra-day segments + deterministic temperatures + °C/°F toggle (Living Time §3 v3)
+- **Why:** maintainer request — weather that changes through the day (sunny → rain → overcast) and real temperatures so characters dress appropriately, with a °C/°F display toggle.
+- **Engine (new pure leaf `weather_segments.dart`, ~330 LOC):** daily walk UNTOUCHED (pinned goldens still green — segments/temps use independent RNG streams off `WeatherEngine.seedFor`); weighted per-condition day scripts give 4 hour-based segments with timing realism (fog mornings burn off; storms break afternoon/evening; every script contains its anchor; storms only on storm days — all test-pinned); per-day seeded °C within band range + fixed diurnal offsets (afternoon peak, night trough, spread exactly 8°C). `weather_engine.dart`: `_Xorshift`→public `WeatherRng`, new `seedFor`/`tempWord` (impl unchanged).
+- **Prompt (words-only preserved):** `WeatherInjection` rewritten — day-part prose opening with a banded dressing cue ("Outside it is coat-and-gloves cold."), within-day transition sentence when the sky changed since the previous segment (cross-midnight: yesterday's night feeds the morning), v2 tomorrow-foreshadow kept. Digit-free guard test on prose/transitions/injection output.
+- **ChatService:** `currentSegmentWeather`/`previousSegmentWeather` getters (same gate as `currentWeather`, which stays for dreams/AFK/facade day-level reads); needs `getWeather` wiring now serves the segment's condition in the same DailyWeather shape — NeedsSimulation untouched, 1:1/group parity inherited (per-chat shared state, same modifiers both paths). 1 new private method (`_segmentAt`, 3 call sites).
+- **UI:** WeatherChip shows day-part condition + numeric temp in the chosen unit (tooltip: now/today/tomorrow); `weather_fahrenheit` setting (RealismSettings + StorageService passthrough) with a Settings → General sub-toggle under Story Weather; `segmentWeatherProvider` @riverpod family (codegen regenerated).
+- **Web parity:** facade `weather.label`/`emoji` lead with the current day-part + temp in the user's unit (old bundles get it as opaque label text = zero-change upgrade), additive `segment`/`segmentCondition`/`tempC`/`tempF`/`unit`/`dayLabel` fields; ChatTools.tsx types + tooltip updated; bundle rebuilt (tsc + vite green). **Flagged deferral:** the °C/°F toggle SURFACE is desktop-only, matching the Weather toggle it nests under (weather has no web settings surface at all); display honors the choice everywhere.
+- **Goldens:** `time_strip_weather.{dark,light}` regenerated on Flutter 3.41.1 (CI's pinned version, installed locally — all 94 golden tests pass on it, so no artifact-download dance); the weather TimeStrip golden now wraps `ChangeNotifierProvider<StorageService>` (TimeStrip reads the unit preference).
+- **Files:** `weather_segments.dart` (new), `weather_engine.dart`, `weather_injection.dart`, `weather_providers.dart`(+.g), `chat_service.dart`, `realism_settings.dart`, `storage_service.dart`, `general_tab.dart`, `weather_chip.dart`, `time_strip.dart`, `chat_tools_facade.dart`, `ChatTools.tsx`, web bundle, `weather_segments_test.dart` (new, 15 tests), `sidebar_golden_test.dart`, `prompt_injection_test.dart`, docs.
+- **Verification:** full non-golden suite 2,547 green + all 94 goldens green + `flutter analyze` ZERO issues, all on CI's exact Flutter 3.41.1.
+
+## 2026-07-27 — refactor(session-load): Step 2 — shared `_hydrateSessionScalars`; chaos-in-picker bug fixed; refactor CLOSED
+- **Why:** finish the scope of `docs/design/session-load-refactor.md` (Steps 1a/1b shipped in PR #169; bugs #2/#3 fixed earlier today). The two load paths each carried ~90 near-identical lines of session-scalar loading, and `loadSession` (history picker) was missing the chaos-mode load entirely (bug #1) — picked sessions lost Chaos Mode state and pressure.
+- **What:** extracted `_hydrateSessionScalars(Session s)` (metadata, relationship RAW loadScalars, fixation truncation, realism/mood/emotion, time, nsfw, needs seed-then-overlay, enjoys-low-hygiene re-sync, theme overrides, resetBuffers, chaos, transient-flag zeroing, growth-cache refresh); both paths call it once. File 666 → 601 lines.
+- **Fixes by construction:** (1) chaos scalars now load on the picker path — bug #1; (2) `sanitizeFixationIfTooLong` now runs AFTER the relationship load on both paths (loadSession used to sanitize the PREVIOUS session's fixation before loading the new one; _loadLastSession never sanitized at all).
+- **Deliberately caller-specific (documented in the method doc + design doc):** group-realism/scene-guest branches, objectives zeroing (library path only), gen-settings placement (must precede message hydration for the retroactive sanitizer), persona activation (picker only — a library tap must not silently switch the user's persona).
+- **Tests:** new "shared session-scalar hydrate" group in `session_load_regression_test.dart` — history-picked session restores chaos enabled+pressure 42 (fails pre-fix), and both paths hydrate byte-identical scalars (bond/trust/chaos/pressure record compare).
+- **Docs:** design doc marked COMPLETE with as-built prose (stale Step 2 plan referencing deleted era-migration methods rewritten); Rawhide.md user bullet for the chaos fix.
+- **Files:** `chat_service_session_load.dart`, `session_load_regression_test.dart`, `docs/design/session-load-refactor.md`, `docs/Rawhide.md`.
+- **Verification:** full non-golden suite 2,533 green; analyze clean on touched files; 1 new private method (2 total across the whole refactor, exactly as the design doc budgeted).
+
+## 2026-07-27 — fix(realism): delete the ±150→×2 era heuristic that re-doubled live bonds on every library open (A1)
+- **Why:** bug #3 from `session-load-refactor.md` (promoted from the PR #162/#170 review). `_migrateShortTermScore`/`_migrateLongTermScore` doubled any |score| ≤ 150 with no era marker; `_loadLastSession` wrapped DB values with them and `_doSaveChat` persisted the result — every library-open→chat cycle compounded (40→80→160) until the score escaped the ≤150 window. Self-limiting + masked as organic growth, which is why nobody reported it; `loadSession` (history picker) and groups never migrated (parity break).
+- **Fix (maintainer-approved variant A1, no DB heal):** `_loadLastSession` now passes raw values, identical to `loadSession`. Deleted the whole era surface from `relationship_service.dart`: `_migrateShortTermScore`, `_migrateLongTermScore`, public `migrateShortTermScore`/`migrateLongTermScore`, `seedFromV2OrExt` (zero callers), `applyLegacyShortTermMigrationIfNeeded` (provably dead: needs score ≤ 15 AND tier ≥ 3, but `loadScalars` recomputes tier from score → ≤ 15 can never be tier ≥ 3) + its 3 call sites. Class doc now carries a "do not reintroduce score-magnitude era heuristics" warning.
+- **Accepted trade-off (stated, not hidden):** a pre-±300-era session never opened since that era loads at its old half-scale once and regrows. No value-level heal for already-inflated bonds — indistinguishable from earned bond; they settle through decay/play.
+- **Tests:** `session_load_regression_test.dart` new group "bond scores load raw" — two open→save→reopen cycles byte-stable at 40/30 (DB row checked via raw SQL each cycle) + library↔picker parity at 55; `relationship_service_test.dart` migration expectations rewritten to raw (84→42 etc.), dead no-op smoke test deleted.
+- **Files:** `relationship_service.dart`, `chat_service_session_load.dart`, `chat_service_chat_entry.dart` (comment), `session_load_regression_test.dart`, `relationship_service_test.dart`, `docs/design/session-load-refactor.md` (bug #3 → FIXED), `docs/Rawhide.md`.
+- **Verification:** full non-golden suite 2,531 green; analyze clean on touched files; dead-code sweep shows zero remaining references to the deleted symbols.
+
+## 2026-07-27 — merge(sanitizer): PR #170 (`*` quantifier + syntax docs) + doc corrections
+- **Merged:** PR #170 by @S-A-M-F — adds `*` to `_consumeQuantifier` alongside `?`/`+`, plus `docs/output-sanitizer-syntax.md` (237-line user-facing guide) and a `*` test. Second commit was a docs-only revision of `session-load-refactor.md` (records a 3rd pre-existing bug: `_migrateShortTermScore` doubles scores ≤150 on every chat open — documented, NOT fixed).
+- **Pre-merge regression check (the PR #169 lesson):** merged locally onto Rawhide first — 2,524 non-golden tests green, analyze clean. The 60 local golden failures reproduce on base `e8d6ea5` WITHOUT the PR (local image ≠ CI image; CI's golden job was green). Timed the ReDoS question rather than assuming: `\(\d+)*X` and `\(\d+)+X` backtrack identically (13s vs 15s at n=26) and `hasNestedQuantifierInGroup` flags both — `*` adds a spelling, not a hazard, since `+` was already reachable. Only real behaviour change: `*` directly after a mask/group close was previously a LITERAL asterisk (`\d*` was `[0-9]\*`, now `[0-9]*`). `*\a+*`, `\a+*`, `abc*` are unaffected (quantifier is consumed once, right after the mask/group) — so the roleplay action-stripping shapes don't move.
+- **Doc errors found by executing all 11 examples, then fixed:** (1) `(\(\w+)\)` — documented with a 5-line breakdown as a recommended recipe — is REJECTED outright (`\)` outside a group isn't a valid escape); corrected to the bare-`)` form `(\(\w+))`, with a callout. (2) "Wildcards like `\d`, `\w`, `\l` work the same way" inside a capture group is false — group content is raw regex pass-through, so `\a`/`\l`/`\p` silently degrade to the literal letters a/l/p (`\(\a+)` on `banana` → captures `a`); rewritten with the `[a-zA-Z]` alternative. (3) Added the `$$`-before-a-digit caveat (`$$100` + a capture group → `abc00`, not `$100` — pre-existing, newly documented). (4) Added the missing **Stop after match** toggle to the execution-model intro.
+- **New:** `test/utils/output_sanitizer_docs_test.dart` — pins all 16 doc examples (incl. both former errors and the stop-after-match semantics) to real behaviour so the guide can't rot silently.
+- **Files:** `docs/output-sanitizer-syntax.md`, `docs/Rawhide.md`, `test/utils/output_sanitizer_docs_test.dart`, `.claude/changelog.md`.
+- **Verification:** 104/104 across the three sanitizer suites; analyze clean on touched files.
+
+## 2026-07-27 — fix(db): v39 heal — bled per-chat gen overrides caused "repeating old messages" after the PR #169 update
+- **Why:** Discord report (2026-07-27): "the update today made it start regurgitating messages from a few messages before … hard to get it to stop." Root cause traced to PR #169's gen-settings bleed FIX: before the fix, `_saveChat` persisted the in-memory `ChatGenerationSettings` into EVERY session row it saved (the bleed), but the common open path (`_loadLastSession`) never read the column — so the junk sat inert and chats ran on globals. PR #169 made that path load the column, activating stale sampler overrides (repeat penalty, DRY, temperature, stop sequences) users never set for those chats. Those silently shadow global settings — which is also why adjusting Settings → Generation "didn't help."
+- **Fix:** schema v38→v39 data-only heal (no schema shape change): strips every bleed-era key from `sessions.generation_settings`, keeping only `output_sanitizer_enabled`/`output_sanitizer_rules` (those shipped in the same PR as the bleed fix, so stored values can only be intentional). Bled rows are indistinguishable from intentional pre-fix overrides, so all are cleared — release-noted so users re-apply per-chat settings if they used them.
+- **Files:** `lib/database/session_gen_overrides_heal.dart` (new — `healBledSessionGenOverrides` takes drift's `DatabaseConnectionUser`, no import cycle), `lib/database/database.dart` (schemaVersion 39 + `from < 39` block, non-fatal on heal failure), `test/database/session_gen_overrides_heal_test.dart` (new, 5 tests incl. model round-trip), `docs/Rawhide.md`.
+- **Verification:** heal tests 5/5 green; `session_load_regression_test.dart` 5/5 green; `flutter analyze` clean on touched files (5 pre-existing infos in untouched files from newer local SDK). No build_runner needed (no table shape change).
+- **Follow-up (same day):** CI's Tests job caught the pinned assertion `avatar_repository_test.dart` "schema version is 38" — updated to 39. Sole failure in the run; the manually-dispatched Rawhide nightly (which doesn't run tests) had already built and published successfully on aea2c79.
+
+## 2026-07-26 — fix(journal): porch force-ack is table talk + regen-safe
+- **Why:** First force-ack was soft RECENT CANON; models buried Brasshollow in literary mood. Regen window needed to survive until the next *user* turn after a shown inject.
+- **FPA:** `PorchNightInjection` → TABLE TALK / HARD FACTS / REQUIRED OPENING (good game / roles / bus). `PorchNightAckState` keeps text through regen; clear only on next user send after show (`clearAfterAcceptedUserTurn`). `ensureArmedForDiary` before gen.
+- **LLMerta:** richer card prose (box-score frame with roles + winner, day-stamped bus/defend/vote, opposite-sides reveal, partner wording).
+- **Tests:** porch_memory_test updated; fixture game-fake-test-porch-002 on disk for manual retest.
+
+## 2026-07-25 — feat(journal): LLMerta porch memories import + first-reply force-ack
+- **Why:** LLMerta already writes multi-card emotion-stamped bundles after Mafia nights (`llmerta_porch_memories/{gameId}.json`). FPA needed the consumer so characters remember the night in The Journal, and a Chance Time–style SCENE injection so the first reply can't ignore it.
+- **New:** `porch_memory_models.dart`, `porch_memory_mailbox.dart`, `porch_memory_import.dart`, `prompt_injection/porch_night_injection.dart`, fixture + `porch_memory_test.dart`, design `docs/design/llmerta-porch-memories.md`.
+- **Touched:** `JournalStore.addCard` (`extraMetadata` + `findCardById`), `database.getJournalCardById`, `MemorySettings` import toggle + consumed-block prefs, session load hooks, generation plan `porch_night` next to Chance Time, Journal sidebar gear toggle, web `chat_tools_facade` + `ChatTools.tsx` toggle parity, Rawhide.
+- **Rules:** identity = persona UUID + library stableGroupId only; plant per session; dedupe `porchCardId`; `porchAckPending` + in-memory regen window; delete bundle only when every character block consumed; never throw on chat open.
+- **Verification:** `flutter test test/services/chat/porch_memory_test.dart` + analyze on touched files.
+
+## 2026-07-24 — fix(themes): PR #158 review fixes — dialogue/action theming, theme-wins precedence, isolated last-active, web bg/borders
+- **Context:** Code review of PR #158 (dazpants1, "Per-Chat Visual Themes") by Claude + Grok (independent adversarial pass via the grok-cc plugin). Grok agreed with all 8 of my findings and surfaced two real correctness bugs I'd missed. All blocking items now fixed; the three decision-required items were resolved with the maintainer (theme-wins, isolate the reorder, build full web parity).
+- **Fix #1 — dialogue/action colors ignored the active theme** (`styled_chat_message.dart`): the styled-text builder passed the theme to font + user/AI text colors but called `getDialogueColor(character)` / `getActionColor(character)` with NO theme args, so quoted *"dialogue"* and *\*actions\** always resolved to character/global — breaking the shipped claim "dialogue and action colors are part of every theme preset." Now forwards `themePreset, themeOverrides`.
+- **Fix #2 — theme now wins over per-character colors when active** (`ui_settings.dart`): the 7 `get*Color`/`getChatFontFamily` resolvers returned a character's `frontPorchExtensions` color BEFORE the theme, so applying a theme did nothing for any character that had custom colors (picker "did nothing"). Reordered to theme override → theme preset → per-character → global (maintainer decision: an actively-chosen theme should win). No-theme behavior unchanged.
+- **Fix #3 — isolated the last-active-chat reorder** (`database.dart`, `chat_service_session_load.dart`): PR changed `getSessionsForCharacter`/`getSessionsForGroup` from `createdAt`→`updatedAt DESC`, silently changing which session story-export / group / cast pick. Reverted both to `createdAt`; `_loadLastSession` now derives "most recently active" from `updatedAt` in-memory (`reduce` max) so the feature no longer leaks into unrelated callers.
+- **Fix #4 — full web theme parity (backgrounds + borders)** (`static_routes.dart`, `ChatThemeSettings.tsx`, `ChatPage.tsx`, `styles.css`): web previously applied colors + font only. Added: the app web server serves `/backgrounds/<key>.png` from the shared `assets/backgrounds` dir (sibling of the web-app asset dir; immutable-cached); `resolveThemeColors` emits `--chat-bg-image` + per-style `--chat-bubble-border`/`--chat-bubble-shadow`; CSS draws the background under a 0.45 black veil (desktop parity) gated by a `has-theme-bg` class, and bubbles get a CSS border. Decorative painter borders (vine/gear/greekKey/glitch) are approximated in CSS — noted honestly in Rawhide.md.
+- **Fix #5 — unguarded hex parse could crash chat render** (`chat_theme_overrides.dart`): `_parseColor` did `int.parse` with no try/catch (JSON guard only protects structure, not hex validity). Added a `fallback` param + try/catch; the 7 `resolved*Color` sites pass the preset's channel default. New test covers every channel with malformed input.
+- **Fix #7 — force-unwrap crash in theme setter** (`chat_service.dart`): `set sessionThemeOverrides` did `_db.setThemeOverrides(_currentSessionId!, …)`; now guards `_currentSessionId` (in-memory update + notify still happen with no active session).
+- **Fix #6 — warm-porch chrome** (`ui_settings_dialog.dart`): replaced all 32 hardcoded chrome colors (`Color(0xFF1F2937)` dialog bg; `Color(0xFF374151)` containers/dropdowns ×6; `Colors.white`/`white70`/`white38`/`white24`/`white12` text/icons/borders ×20+) with AppColors helpers (`surfaceOf` / `surfaceContainerOf` / `textPrimary|Secondary|Tertiary` / `iconSecondary` / `borderOf`). The selected "None"-theme highlight now uses `porchAmberOf` (warm selection tint), and the two icons that sit on arbitrary user-picked swatch colors use a new `_swatchInk` luminance-contrast helper (used 2×, marked `// theme-keep:`). The dialog now adapts to light/dark instead of being hardcoded dark. **NOTE:** this changes rendered colors → the `ui_settings.*` / `ui_settings_theme.*` goldens in `dialogs_more_golden_test.dart` must be regenerated on the **Linux CI runner** (Mac goldens aren't valid).
+- **Fix — unreadable light-bubble presets** (`chat_theme_preset.dart` + web `ChatThemeSettings.tsx` mirror): maintainer field-tested the running app and found Fantasy + Sakura unreadable — the 3 light-bubble presets (Fantasy, Sakura, Roman Empire) paired a pale bubble with pale dialogue/action text, so highlighted lines washed out (Fix #1 routing dialogue/action through the theme is what made it fully visible; Fantasy's fluorescent yellow also hurt the eyes). Redesigned all 3 for contrast (approved via before/after mockup): **Fantasy** → deep purple `#332054` + soft-gold text (matches its own "rich purples and soft gold" description; kills the yellow), **Sakura** → keeps soft-pink bubble, deep-plum body + deep-rose dialogue + forest-green actions, **Roman Empire** → warm parchment + Roman-red dialogue + bronze actions. The 7 dark-bubble presets (Galactic, Neon Grid, Noir, Enchanted Forest, Ocean Depths, Cyberpunk, Steampunk) already contrast and are untouched. Verified desktop↔web hex parity for all 3. **NOTE:** the theme-picker swatch goldens change → same Linux golden regen as #6.
+- **Docs (`docs/Rawhide.md`):** removed the internal `[update-goldens]` "golden tests pass" line, fixed "unt-themed" typo, corrected the preset list ("Cottagecore" → "Roman Empire"), and rewrote the web bullet to state backgrounds ship on web with borders approximated.
+- **Still deferred (not a blocker):** F7 nit (duplicate theme-load block in session-load). `ui_settings_dialog.dart` remains over the 500-line cap (1121) — pre-existing god file, out of scope for this pass.
+- **Verification:** `dart analyze` clean on all 8 touched Dart files; `flutter test test/services/theme_overrides_test.dart` 15/15 green; web `tsc --noEmit` + `vite build` clean, bundle regenerated (assets/web_app) and confirmed to contain the new CSS/JS. Pending: live web-background visual check + Linux golden regen for the UI-settings dialog (both need infra beyond static checks). Not committed/pushed — left on the `Themes` branch for maintainer review.
+## 2026-07-22 — fix(import): same-name cards no longer clobber (#161) + Keep both/Replace dialog
+- **Bug:** `_persistImportedCharacterCard` fell back to display-name match and soft-deleted peer same-name rows. Bulk import of three same-name variants reported 3 successes but left 1 card; reimport of same-name vanilla cards overwrote library entries.
+- **Fix:** update-in-place **only** on `stableId` match (FP reimport / chat history path) or explicit `forceReplaceTarget` (user chose Replace). Name-only collision always inserts. Soft-delete-by-name removed.
+- **Phase 2 UX:** single-file desktop import (V2 PNG/JSON + single BYAF) peeks name/stableId and shows Keep both / Replace / Cancel via `import_name_collision_dialog.dart`. Bulk stays keep-both.
+- **Web parity:** `POST /api/characters/import?collision=ask|keepBoth|replace&replaceId=` — single-file UI uses ask→409→dialog; multi always keepBoth. `ImportNameCollisionDialog` in LibraryDialogs.
+- **Files:** character_repository.dart, import_name_collision_dialog.dart, home_page.dart, home_page_dialogs.dart, character_facade.dart, character_routes.dart, useLibrary.ts, CharactersPage.tsx, LibraryDialogs.tsx, character_repository_test.dart (+4), docs/Rawhide.md.
+- **Verification:** targeted character_repository tests + analyze (see session).
+
+## 2026-07-22 — feat(realism): Train B — promise & debt ledger (detect / inject / resolve)
+- **Why:** gold-standard RP needs commitments that scar — kept words warm trust, broken ones crater it, open ones color the next reply. Chips stay for per-turn deltas; this is the long-horizon ledger.
+- **Files (new):** `promise_debt_service.dart` (keyword gate, one-line eval protocol, plant open `kind=promise` cards, resolve kept/broken → trust/bond deltas + milestone outcome, max 3 open), `promise_debt_injection.dart` (words-only open commitments fragment), `promise_debt_service_test.dart`.
+- **Files (modified):** `chat_service.dart` (wire service + `_maybeRunPromiseDebtPass`), `chat_service_generation.dart` (normal turns only), `realism_state_injection.dart` (composer fragment), `journal_physics.dart` / `journal_store.dart` (ledger-class: promise+milestone never cool / not hot-injected / cap-safe), `milestone_feed.dart` + desktop/web timeline icons `🤝`, `prompt_injection_test.dart`, docs Rawhide.
+- **Rules:** only user-party outcomes move trust (Realism invariant); char-party moves bond only; broken user trust −22 arms repair window via existing applyTrustDelta; regen never runs the pass.
+- **Verification:** targeted suites + analyze (see session).
+
+## 2026-07-21 — feat(realism): Living Time §7 v1.5 + v1.5.1 — bond / long-term bond / trust tier milestones in Our Story
+- **Why:** timeline v1 only aggregated existing sources; big relationship steps (Warm→Friendly, deep long-bond climate, trust crater) lived only as ephemeral chips. v1.5 records the crossing as a durable diary card the moment the named *tier* changes. Chips stay for per-message deltas; Our Story keeps chapter marks.
+- **Files (new):** `relationship_milestones.dart` (TierCrossing + pure text/emotion + plant for bond / long_term / trust), tests `relationship_milestones_test.dart`.
+- **Files (modified):** `relationship_service.dart` (`onTierCrossing`; `applyScoreDelta`/`applyTrustDelta` + `_evalLongTermGrowth(recordMilestone:)` fire only on named tier change), `chat_service.dart` (wire plant to JournalStore for current speaker + receipt), `chat_service_reprocess.dart` (revert with recordMilestone:false), `journal_physics.dart` (`cardKind`/`isMilestone`; never cool; isHot false for milestones), `journal_store.dart` (cap-trim skips milestones), `milestone_feed.dart` (kind comment), docs Rawhide + living-time. Tests: relationship_service_test (+6), journal_physics_test (+1), relationship_milestones_test (text + plant).
+- **Web:** free — MilestonesPanel already icons `milestone` 🏆 over the same feed.
+- **Verification:** targeted suites + analyze (see session).
+
+## 2026-07-21 — fix(rag): retrieval defaults caused parroting; dead RAG controls wired; macOS quit no longer logged as a crash
+- **RAG parroting (maintainer report: characters repeat themselves / revive events the chat moved past).** Five compounding causes, all fixed:
+  1. The 1:1 "Memories per turn" slider (`memorySettings.ragRetrievalCount`) was NEVER read by generation — 1:1 silently used the group default (8). Now 1:1 uses the real setting (0 = All, same convention); default lowered 5→4 (and the field-initializer 10 vs load-default 5 mismatch removed). Group default 8→4 at all four sites (field, both entry resets, session-state fallback; stored sessions keep their value).
+  2. `minScore` 0.3 was no filter at all for nomic embeddings (unrelated text scores ~0.4–0.6) → new `MemoryService.kRagMinScore = 0.45`, matching the Journal expand bar (`kMinExpandSimilarity`).
+  3. Boundary overlap bug: the in-context filter checked `positionStart >= inContextStart` only, so a 5-message window straddling the trim point injected lines ALSO present in the visible transcript. New pure `MemoryService.isWindowEligible` compares the window END.
+  4. No recency gate: the windows just below the trim point are near-duplicates of the ongoing scene and always won top-N → `kRagMinAgeMessages = 20` (current-session only; cross-session + Data Bank never age-gated; session isolation unchanged).
+  5. Budget scaled with context (10% of 32k = 3,200 tokens, past the code's own documented 2,500 "going back in time" line) → absolute cap `kRagMemoryBudgetCapTokens = 1200` on top of the % for 1:1 AND group (parity).
+- **Group RAG tab had two more dead controls (Grok review find + follow-up):** the group "Memories per turn" slider never called `setGroupRetrievalCount`, and per-character priorities were read/written by NAME while storage + retrieval key by stable character id (every read missed → always showed 1.0; writes went nowhere). Both now live-apply like their sibling controls via new card-keyed `ragPriorityForGroupCharacter`/`setRAGPriorityForGroupCharacter`; the dead id-keyed `get/set/clearCharacterRAGPriority` deleted; Reset now pushes to the service (was display-only), uses 4, and is relabeled "Reset to defaults". **Known limitation (deliberate deferral):** the group's OWN transcript embeds under a single `group_<id>` bucket (`_getCharacterId`), so priorities can only weight per-character-keyed candidates today — Data Bank entries and opt-in cross-character sources. Making them weight the shared conversation memory needs per-speaker re-keying of group embeddings (storage change; separate effort).
+- **macOS "app crash" on every quit (maintainer report: red close button flagged as a crash).** Diagnosed from DiagnosticReports (.ips per close): every quit route ends in `NSApp terminate:` → libc `exit()` → `__cxa_finalize`, where onnxruntime's global teardown (~16 parked worker threads from the in-process engines) aborts via `std::terminate` → "Abort trap: 6". `windowManager.destroy()` IS `NSApp.terminate` (plugin source). Fix: new top-level `exitWithoutNativeFinalizers` (FFI libc `_exit`) ends the process after the awaited cleanup with no finalizers; red-button path uses it instead of destroy(); new macOS `AppLifecycleListener.onExitRequested` routes Cmd+Q/Dock-quit through the SAME `_saveStateAndShutdown()` (guarded, idempotent) so those quits stop crashing too; SIGINT/SIGTERM handlers use it on macOS. Committed-WAL durability + awaited prefs/save-flush make skipping finalizers lossless.
+- **Files:** memory_service.dart, chat_service_generation.dart, chat_service.dart (+dart:math import, group default), chat_service_chat_entry.dart, chat_service_group_entry.dart, chat_service_session_state.dart, chat_service_group_settings.dart, storage/settings/memory_settings.dart, ui/dialogs/group_settings_dialog.dart, main.dart. Tests: memory_service_test (+isWindowEligible group).
+- **Verification:** analyze clean; memory suite green; full `flutter test`; live close-loop test on the maintainer's Mac (crash-report count before/after) — see conversation.
+
+## 2026-07-21 — fix(realism): visiting-character creation no longer brands tool calling "not supported" (Discord report)
+- **Bug:** creating a Scene Guest (cast-detect accept or `/create`) flipped the sidebar's tool-calling pill to "Not supported" and it stuck for the whole run. Root cause chain: `CharacterGenService.generateCharacter` opened with a blind service-wide `abortGeneration()` ("clear stuck state just in case") and every `_callLLM` step forced `ensureServerIdle()` (server-side `/api/extra/abort`) — both kill whatever background pass (journal/growth/realism eval) is mid-request on the shared backend. A tools call cut down that way collapsed to `null` inside `generateWithTools`, and every probe consumer reads null as "model can't speak tools" → `ToolTransportProbe.markXmlOnly` for the backend+model identity, one-shot per run. (The exact hole the old `pass_support.dart` NOTE deferred out of the 1.0 freeze.)
+- **Fix layer 1 — transport errors are not capability verdicts:** `generateWithTools` contract updated (llm_service.dart): null = the backend ANSWERED but the call yielded nothing usable; transport failures THROW. Both doors (`postOpenAiChatWithTools`, `OpenRouterService.generateWithTools`) rethrow instead of swallowing, and throw new `LlmToolTransportException` on 429/5xx (busy KoboldCpp 503, OpenRouter rate limit). `_fireToolEval`'s 6-min deadline now throws instead of `onTimeout: () => null`, and tears down the orphaned call on the local backend (so it can't pin `waitForIdle` forever). New shared classifier `isToolTransportFailure` (TimeoutException / LlmToolTransportException / looksLikeBackendUnreachable / the closed-client StateError race) used at all four verdict sites: `fireStructuredEval`, journal `_runExchange`, growth `_runExchange`, `ToolSupportTester.test` — a transport failure falls back to text/XML for THAT round only; tools are re-probed next pass.
+- **Fix layer 2 — the mint stops killing background work:** `generateCharacter` gained `abortInFlight` (default true = wizard behavior unchanged); the Scene Guest mint passes false, skipping the start-of-run client abort AND switching the per-step Kobold handling from `ensureServerIdle()` (force-abort) to `waitForIdle()` (wait politely). To make that wait real, `KoboldService.generateWithTools` now waits for idle before firing and registers on the SAME `_pendingRequest` slot `generateStream` uses (with `identical` ownership guards in both finallys so a late finally can't null a newer request's registration).
+- **Grok co-review (3 rounds):** caught the `ensureServerIdle` per-step hole (fix layer 2's waitForIdle switch), the timeout/5xx branding gap, the unmatched abort-string case, and the orphaned-call `waitForIdle` pin — all fixed; the pre-existing shared-`_activeClient` last-writer-wins crosstalk is acknowledged and out of scope.
+- **Files:** llm_service.dart, openai_chat_stream.dart, open_router_service.dart, kobold_service.dart, chat_service.dart (`_fireToolEval`), chat/pass_support.dart, chat/journal_maintenance.dart, chat/growth_service.dart, chat/tool_support_tester.dart, character_gen_service.dart, chargen/character_gen_llm.dart, chat/scene_guest_factory.dart. Tests: journal_test (+1), growth_test (+1, harness gains optional probe/fireToolEval), realism_evals_test (+1), llm_unreachable_test (+isToolTransportFailure group), open_router_tools_test (+429/503 door tests on both doors, +a real loopback client-teardown test).
+- **Verification:** `flutter analyze` clean; `dart fix --dry-run` nothing; targeted suites 152 green; full `flutter test` regression (2334) green ×3.
+## 2026-07-22 — fix(web/stoop): Stoop sign-in failed over plain-http LAN access (issue #160) + surface the real error
+- **Bug:** `installId()` called `crypto.randomUUID()`, which is **secure-context-only**. Served over `http://<lan-ip>:8085` (the normal remote-access setup) the browser is in an INSECURE context, so `randomUUID` is `undefined` → TypeError thrown INSIDE `stoop.login`/`signup` **before** the fetch → caught by StoopAuthView → not a `StoopError` → generic "Something went wrong. Please try again." Never reproduced on the dev machine because **localhost IS a secure context**, and the desktop Stoop tab uses the Dart client entirely (different code path) — which is why the reporter's curl to the API returned a healthy 401 while the UI still failed, and why macOS Console was empty (browser-side JS error).
+- **Fix:** `newUuidV4()` — `crypto.randomUUID()` when available, else `crypto.getRandomValues()` (NOT secure-context-gated), else a `Math.random` floor; correct v4 version/variant bits. The id is an anonymous install trace, not a secret.
+- **Also (the diagnostics gap the maintainer flagged on the issue):** `stoopErrorText` no longer collapses non-API failures into a bare string — it appends the real `Error.message` and `console.error`s the raw object, so the next remote user has a breadcrumb to paste.
+- **Audit of sibling secure-context landmines:** `VoiceControls` (getUserMedia) and `RemoteAccessPage`/`StoryWriterPage` (clipboard) are already guarded — no other insecure-context break in the web UI.
+- **Files:** `web_ui/src/stoop/stoopApi.ts`, `web_ui/src/stoop/stoopApi.test.ts` (+2 regression tests: insecure context w/ getRandomValues, and no-crypto Math.random floor — both VERIFIED failing against the old line), rebuilt `assets/web_app`.
+- **Verification:** web `tsc --noEmit` clean; 29/29 vitest green; `flutter analyze` clean.
+
+## 2026-07-21 — feat(journal): two-tier memory — expand-memory (verbatim recall behind cards) + RAG dedupe (Living Time §8)
+- **Origin:** maintainer's "is RAG still needed with the Journal?" audit → verdict: they remember different KINDS (lossy emotional distillation vs lossless verbatim); tighten the seam instead of deleting. North star: "remember our wedding vows?" in a 1000s-message chat → the character recites the exact vows + how they felt.
+- **Files:** `journal_physics.dart` (kMinExpandSimilarity 0.45 — stricter than resurfacing —, kMaxExpandedCards 1, per-message/total char budgets, kExpandMinAgeMessages 30), `journal_injection.dart` (ONE query embedding shared by cold resurfacing + expansion scoring — _retrieveColdCards now takes the precomputed vector; `_expandBestCard`: top-1 injected card above threshold → receipts fetched via new `getMessageAt` callback, trimmed, quoted as «Sender: text» under the block; buildJournalBlock returns (text, expandedPositions) record), `memory_service.dart` (pure `RetrievedMemory.excludingPositions` — current-session-only span filter), `chat_service.dart` (getMessageAt wiring), `chat_service_generation.dart` (destructure + dedupe retrieved memories against expanded positions before packing), `journal_physics_test.dart` (6 call sites adapted to the record), NEW `journal_expand_memory_test.dart` (5 tests: the wedding-vows scenario end-to-end with a deterministic keyword embedder, unrelated-query negative, age gate, no-embedder floor, dedupe incl. cross-session immunity).
+- **Gates/floors:** embeddings required (same floor as cold resurfacing — no-RAG installs never expand, block renders unchanged); one card per turn; age gate keeps transcript-visible lines from being quoted back; regen-invalidation (earlier today) guarantees expansion can never quote a discarded timeline (phantom receipts are deleted with their cards).
+- **Verification:** `flutter analyze` clean; 54 journal-suite tests green incl. the new scenario; full `flutter test` regression run.
+
+## 2026-07-21 — feat(chat): AFK Living Time upgrade — flavor directives + away-pace setting
+- **Why:** AFK snapshots were the least Living-Time-aware surface — the full context already carried weather/journal/ambitions, but the cue only ever asked for meals-and-naps, and time advanced a hardcoded single period regardless of how long an absence should feel.
+- **Files (new):** `lib/services/chat/afk_flavor.dart` (pure: priority ladder — night/evening wind-down → weather shelter/outdoors → fixation intrusion → memory-drift floor — with deterministic secondary rotation by snapshot index so consecutive scenes vary; `timePhrase`/`spanDirective` scale the preamble + montage guidance to the pace; words-only), `test/services/chat/afk_flavor_test.dart` (6 tests: phrase bands, ladder priorities, floor, rotation determinism + variance, no-digits).
+- **Files (modified):** `chat_service_idle_autonomous.dart` (advanceTimePeriods(pace); both cue variants get flavor + span, preamble phrase scales), `chat_service.dart` (afk_flavor import for the part file), `generation_settings.dart` + `storage_service.dart` (`dynamicResponsePacePeriods` 1|3|6, default 1 = legacy behavior, clamped), `afk_panel.dart` ("Story time per scene" dropdown), `settings_facade.dart` (additive read/write), `SettingsPage.tsx` ("Story time per away scene" select; rebuilt assets/web_app).
+- **Design:** pace is user-SET, never model-chosen (deterministic-time pillar; maintainer decision 2026-07-21 — real-time coupling explicitly rejected to keep the §2 "story clock untouched by real gaps" promise). Day crossings at faster paces fire dreams + fresh weather with zero extra wiring. Bounded model-chosen spans noted as a possible future refinement in the discussion, deliberately not built.
+- **Verification:** `flutter analyze` clean; flavor suite green; full `flutter test` regression; web tsc + vite green.
+
+## 2026-07-21 — feat(ui): Living Time §6 — sidebar Ambitions rows (smoke-test feedback: the system was invisible on fresh chats)
+- **Gap:** ambition progress cards are created lazily on the first tick, so a fresh chat showed ZERO ambition UI anywhere (only the Context Viewer's prompt line) — an armed feature that looked absent. Maintainer smoke-test find.
+- **Fix:** `ambitions_row.dart` (presentational: 🧭 + banded stage word + thin amber LinearProgress per ambition; meters are fine in UI — words-only is a prompt rule) mounted in BOTH state surfaces: `character_state_group.dart` (1:1 accordion, above Needs) and `group_member_card.dart` (per-member, parity). Data flows through ONE new read surface `ChatService.ambitionsFor(card)` (merges card-ext definitions + AmbitionService progress cache; also used by the web facade so surfaces can't drift). `AmbitionService.onCacheWarmed` callback → notifyListeners, so the lazy cache landing rebuilds the row with real stages instead of waiting for an unrelated notify. Web: additive `ambitions` array in the tools state + an "Ambitions" section in ChatTools.tsx + CSS (rebuilt assets/web_app). `FakeChatService.ambitionsFor` added (empty default — pre-ambition goldens render unchanged, proving the ambition-less gate).
+- **Verification:** `flutter analyze` clean; full golden widget suite green (93); full `flutter test` regression; web tsc + vite green.
+
+## 2026-07-21 — fix(journal): timeline rewrites (regen/swipe/edit/delete) no longer leave phantom memories
+- **Bug (maintainer smoke test):** the Journal pass consumes messages up to `_summaryLastIndex`; regenerating/swiping/editing/deleting a message BEHIND that cursor rewrote history the diary had already read — cards kept citing events from the discarded timeline ("events that never happened"). `deleteMessage` had a cursor-decrement drift fix but nothing ever invalidated cards; the other three rewrite sites didn't even touch the cursor.
+- **Fix — ONE invalidation entry point:** `ChatService._invalidateJournalFrom(position)` (early-outs when the pass never consumed the region — cards only cite positions below the cursor): rolls the cursor back to the rewrite point, sweeps ALL diary owners' cards citing positions ≥ it via new `JournalStore.invalidateCardsCitingFrom` + `AppDatabase.getJournalCardsForSession` (session-wide query — must cover departed group members), deletes citing cards pinned included (a pin can't keep a phantom true), spares receipt-less cards (manual plants, dreams, ambition progress, milestones), and arms the salience kick so the recap refreshes next pass. Called from all four rewrite sites: `regenerateLastMessage` (covers regenerateMainCharacter by delegation), `swipeMessage` (both existing-swipe branches), `editMessage`, `deleteMessage` (whose old cursor-decrement block is REPLACED — the invalidation supersedes it and also fixes the receipt-drift it papered over).
+- **Known residual (documented, not silent):** the recap TEXT may keep a stale sentence until the next pass rewrites it — full recap rewind is out of scope.
+- **Files:** `chat_service.dart` (+1 private, 4 call sites, old drift block deleted), `chat_service_reprocess.dart`, `journal_store.dart`, `database.dart` (query only, no schema), `test/services/chat/journal_invalidation_test.dart` (5 tests: boundary, pinned phantom, receipt-less immunity, departed-owner sweep, corrupt-JSON floor).
+- **Verification:** `flutter analyze` clean; invalidation + journal suites green (38); full `flutter test` regression run.
+
+## 2026-07-21 — feat(realism): Living Time §6 — Ambitions (long-term goals: the future axis)
+- **Files (new):** `lib/services/chat/ambition_service.dart` (accrual eval at quest completion — strict one-line "NONE"/"2 solid" answer, forgiving parse with null floor; progress cards upserted in `journal_cards` via metadata kind='ambition'+ambition+progress — ZERO schema; waypoints 25/50/75 plant kind='milestone' cards + the journal/growth salience kick; 100 plants a pinned Growth Ring "scar" + achieved card; lazy-warmed sync progress cache for the injection), `lib/services/chat/prompt_injection/ambition_injection.dart` (one words-only line, banded stage words, per-speaker group dispatch like every other leaf), `test/services/chat/ambition_service_test.dart` (10 tests: parse floor, stage bands, in-memory DB round trips for accrual/waypoint/achievement/NONE).
+- **Files (modified):** `character_card.dart` (FrontPorchExtensions.ambitions — additive under realism_engine, V2.5 round-trip + Stoop-safe, const-default never mutated in place), `journal_store.dart` (updateCardMetadata additive merge), `objective_proposal.dart` (onQuestAchieved(Objective) fired at BOTH whole-quest retire sites), `chat_service.dart` (AmbitionService + AmbitionInjection wiring; owner resolved from the objective row's characterId → per-character in groups by construction), `realism_state_injection.dart` (ambition fragment), `dream_service.dart` (ambitions color dreams — aspiration/anxiety), `chat_service_idle_autonomous.dart` (AFK hours may go toward the ambition, both cue paths), `milestone_feed.dart` (ambition/milestone kinds timeline-salient) + 🧭/🏆 icons in `journal_timeline_tab.dart` + `MilestonesPanel.tsx` (rebuilt assets/web_app), `edit_character_page.dart` (Long-term Ambitions field, one per line, both ext write paths), `prompt_injection_test.dart` (composer arg).
+- **Design notes:** identity/progress split resolves session-scoping (definitions on the card, progress per-chat); accrual deliberately NOT a rider on the fragile numbered YES/NO completion-check regex — a dedicated micro-eval at the rare quest-retired moment preserves the no-per-turn-cost intent; character-PROPOSED ambitions deferred (proposal-eval surgery); no web editor field (web authoring exposes no ext fields today — existing parity line; timeline surfaces ambitions on web).
+- **Verification:** `flutter analyze` clean; 41 targeted tests green (ambition + injection + dream + milestone suites); full `flutter test` regression; web tsc + vite green.
+
+## 2026-07-21 — refactor(riverpod): migrate the three Living Time provider surfaces to @riverpod codegen (maintainer review feedback)
+- **Why:** review feedback — the initial Riverpod wiring used hand-rolled provider globals (`Provider.autoDispose.family` over record typedefs, manual `NotifierProvider`); the point of Riverpod here is codegen: less boilerplate, family params as plain named args, AsyncNotifiers, and providers testable in a bare ProviderContainer.
+- **Deps:** + `riverpod_annotation` (main) + `riverpod_generator` (dev). Version lattice note: flutter_riverpod relaxed ^3.3.2 → ^3.0.0 so the solver could land the mutually-pinned trio (resolved: riverpod 3.2.1 / annotation 4.0.2 / generator 4.x). Generated `.g.dart` committed (same policy as Drift).
+- **Files:** `weather_providers.dart` (functional `@riverpod dailyWeather(Ref, {sessionSeed, dayCount, date})` — the WeatherInputs record typedef is GONE), `milestone_providers.dart` (`@riverpod class MilestoneTimeline extends _$MilestoneTimeline` AsyncNotifier — async build is the fetch; v1.5 mutations will be methods on it), `absence_recap_banner.dart` (`@Riverpod(keepAlive: true) class DismissedAbsenceBanners` — keepAlive so a dismissal survives unmount), + 3 generated `.g.dart`, consumers updated (`weather_chip.dart` takes plain values, `time_strip.dart`, `journal_timeline_tab.dart`), `test/services/chat/riverpod_providers_test.dart` (3 bare-container tests: memoization, AsyncNotifier resolve, keepAlive dismissal).
+- **Ops note:** `build_runner --delete-conflicting-outputs` with build-filters deleted `database.g.dart` (outside the filter); recovered byte-identical via `git show HEAD:… >` (no destructive checkout). Future scoped runs: filter drift outputs too, or run without delete-conflicting.
+- **Verification:** `flutter analyze` clean; full `flutter test` regression + new provider tests; goldens unchanged (WeatherChip renders identically).
+
+## 2026-07-21 — feat(story): Living Time §4 — "Turn this chat into a story" (session-scoped distill + faithful mode + one-tap entries)
+- **Files (new):** `lib/services/story/faithful_mode.dart` (the faithful-retelling prompt directives + the ONE `buildChatStoryProject` builder shared by desktop and web — outside the huge pipeline file per the size rule), `lib/ui/dialogs/chat_to_story_dialog.dart` (mode/length/POV chips → saves the pre-configured project → Story dashboard with autoRunStoryArchitect, whose existing auto-run already goes distiller → architect), `test/services/story/faithful_mode_test.dart` (4 tests: config mapping, short/inspired variants, additive JSON round-trip incl. legacy-project safety, directive wording).
+- **Files (modified):** `story_project.dart` (+`chatHistorySessionIds` + `faithfulMode`, additive JSON — old projects deserialize to empty/false), `story_pipeline_service.dart` (session scoping in BOTH history readers — distiller loop and raw fallback, kept in sync; faithful directives appended to architect + scene-weaver prompts when set), `chat_page.dart` ("Turn Into a Story…" menu item, 1:1 only — multi-protagonist group novelization is future work), `chat_tools_facade.dart` + `web_server_host.dart` (optional StoryRepository/UserPersonaService deps + `toStory()`), `chat_tools_routes.dart` (POST /api/chat/tools/to-story), `ChatTools.tsx` (one-tap button under "Our story", defaults faithful novella — form-factor adaptation; full config lives in web story setup) (+ rebuilt assets/web_app).
+- **Key reuse:** no new export machinery — the existing distiller/architect/scene/draft chain and EpubGeneratorService do all the heavy lifting; this feature is scoping + constraints + entry points.
+- **Verification:** `flutter analyze` clean; faithful-mode suite green; full `flutter test` regression; web tsc + vite green.
+
+## 2026-07-21 — feat(chat): Living Time §7 v1 — "Our Story" milestones timeline (read-model + Diary tab + web panel)
+- **Files (new):** `lib/services/chat/milestone_feed.dart` (pure aggregator over 4 already-persisted sources: growth rings, salient journal cards — pinned/strong/dreams —, Chance Time narration messages, achieved objectives; ZERO new writes; ordering = story position via receipts, with position-less entries interleaved through the diary's own wallTime→position index), `lib/services/chat/milestone_providers.dart` (`milestoneFeedProvider` — FutureProvider.family, deliberate over AsyncNotifier: pure read-model, no mutations; inputs record carries the stable feed instance + a revision the host bumps), `lib/ui/dialogs/journal_timeline_tab.dart` (ConsumerWidget, AsyncValue rendering, Day-N grouping, tap-to-jump via the dialog's existing onJumpToMessage contract), `web_ui/src/components/MilestonesPanel.tsx`, `test/services/chat/milestone_feed_test.dart` (4 tests on in-memory DB: salience filter, chance strip+position, rings/objectives incl. active/abandoned exclusion, receipt ordering).
+- **Files (modified):** `chat_service.dart` (public `milestoneFeed` — the ONE instance desktop and web read through), `journal_dialog.dart` (Diary | Our Story TabBar scaffolding only; content lives in the new tab file so the dialog doesn't regrow), `chat_tools_facade.dart` + `chat_tools_routes.dart` (`timeline(owner)` + GET /api/chat/tools/timeline, additive), `ChatTools.tsx` ("Our story" section) + `styles.css` (+ rebuilt assets/web_app).
+- **Deferred (explicit, not silent):** v1.5 threshold-crossing milestone cards via RelationshipService — the delta-application hook needs its own pass; noted in living-time-features.md §7.
+- **Verification:** `flutter analyze` clean; feed suite green first run; full `flutter test` regression; web tsc + vite green.
+
+## 2026-07-21 — feat(chat): Living Time §1 — Dreams (night-crossing narration seeded from the Journal)
+- **Files (new):** `lib/services/chat/dream_service.dart` (pure leaf: session-scoped rollover bookkeeping — one checkRollover call site, re-anchors silently on session switch so loads can never fire stale dreams; prompt builder referencing ONLY provided fragments; skip-on-garbage sanitize floor: fences/quotes/labels stripped, 30–700 char band), `test/services/chat/dream_service_test.dart` (10 tests: rollover semantics incl. the load-safety case, sanitize floor, prompt-content assertions).
+- **Files (modified):** `chat_service.dart` (DreamService wiring via LlmEvalEngine fire + central think-strip; sendMessage glue: owner = last assistant speaker — ONE rule for 1:1/group parity — seeds from the owner's hottest journal cards (cooledHeat sort), fixation, emotion scalar, truncated recap, and the weather prose line; inserts the dream message before the user's morning message and plants a kind='dream' journal card), `journal_store.dart` (additive `kind` metadata rider on addCard — forgiving readers unaffected; milestones will reuse it), `message_bubble.dart` (extracted the ONE `_narrationBanner` — the inline Chance Time banner now renders through it byte-identically, dreams get 🌙 — net deduplication, existing goldens untouched), `realism_settings.dart` + `storage_service.dart` (dreamsEnabled default ON), `general_tab.dart` (Dreams toggle), `chat_facade.dart` (additive `isDream` per message), `chatTypes.ts` + `ChatMessageList.tsx` + `styles.css` (web dream banner, desktop parity; rebuilt assets/web_app).
+- **Gate:** realism && passage-of-time && journal && dreamsEnabled. Failure path: silent skip + pending cleared (local-model floor — a bad dream is worse than no dream). Cost: at most one short eval per story day, off the hot path.
+- **Verification:** `flutter analyze` clean; dream suite + full golden widget suite (136) green; full `flutter test` regression run; web tsc + vite build green.
+
+## 2026-07-21 — feat(chat): Living Time §2 — real-absence awareness ("Previously on…" banner + opt-in one-shot in-character acknowledgment)
+- **Files (new):** `lib/services/chat/absence_tracker.dart` (pure: coarse word buckets — never digits — + the speculation-forbidding ack note; privacy contract documented in-file), `lib/ui/chat_components/overlays/absence_recap_banner.dart` (ConsumerWidget + `DismissedAbsenceBanners` Riverpod Notifier over a session-id set — no family API, version-stable), `test/services/chat/absence_tracker_test.dart` (bucket boundaries, custom thresholds, no-digits invariant, ack-note wording).
+- **Files (modified):** `chat_service.dart` (absence scalars + `absencePhrase` + the ONE shared banner gate `absenceBannerPhrase` used by desktop AND web so they can't drift; one-shot ack consumption at sendMessage entry — pending survives exactly the first turn), `chat_service_session_load.dart` (`_computeAbsenceGap` from freshly loaded rows' updatedAt BEFORE any save can refresh them; called by both load paths), `chat_service_session_manage.dart` (fresh-session resets ×3 via the same helper — no parallel reset code), `time_injection.dart` (optional `getAbsenceNote` appended to the time fragment; null → byte-identical), `realism_settings.dart` + `storage_service.dart` (absenceBannerEnabled default ON, absenceAckEnabled default OFF per maintainer decision, absenceThresholdHours default 24), `general_tab.dart` (two toggles with transparent privacy copy + away-threshold dropdown), `chat_facade.dart` (additive nullable `absencePhrase` in the chat snapshot), `web_ui/src/pages/ChatPage.tsx` + `styles.css` (banner + dismiss + warm-porch styling; rebuilt `assets/web_app`).
+- **Privacy by design (the "this app is tracking me" answer):** the only input is the last message's `updatedAt` — data the local DB has always stored; nothing new is collected, persisted, or transmitted; gaps render exclusively as coarse words ("a few days"); the banner speaks in the app's voice; the opt-in ack prompt explicitly forbids guessing what the user was doing and fires once. Story clock untouched.
+- **Verification:** `flutter analyze` clean; absence + injection + sidebar-golden suites green; full `flutter test` regression run; web tsc + vite build green.
+
+## 2026-07-21 — feat(realism): Living Time §3 — deterministic story weather (engine + injection + needs + sidebar + web), first Riverpod-native feature
+- **Files (new):** `lib/services/chat/weather_engine.dart` (pure: FNV-1a seed + xorshift walk, persistence-biased Markov continuity, seasons from the story clock's real DateTime, display helpers as the single word-source), `lib/services/chat/prompt_injection/weather_injection.dart` (words-only fragment, '' when off), `lib/services/chat/weather_providers.dart` (`dailyWeatherProvider` — memoizing `Provider.autoDispose.family` over a value-typed inputs record; the documented widget-boundary bridge), `lib/ui/chat_components/sidebar/character_state/weather_chip.dart` (ConsumerWidget), `test/services/chat/weather_engine_test.dart` (pinned golden sequence + snow/season invariants + words-only digit check + needs-modifier deltas).
+- **Files (modified):** `chat_service.dart` (+`currentWeather` gate: realism && passageOfTime && toggle && session; wires injection + needs callback — additions only, no growth of logic), `realism_state_injection.dart` (weather fragment after the time line), `needs_simulation.dart` (optional `getWeather` + two `decayModifiers` entries: rough-weather comfort ×1.25 → 3/turn, clear-day fun ×0.5 → 1/turn; both no-op on null; parity by construction — both ticks flow through `decayedValueFor`), `realism_settings.dart` + `storage_service.dart` (weatherEnabled, default ON), `general_tab.dart` (Story Weather subtoggle under Passage of Time), `time_strip.dart` (chip row, absent when off), `chat_tools_facade.dart` (additive nullable `time.weather` payload, hoisted single compute), `web_ui/src/components/ChatTools.tsx` (+ rebuilt `assets/web_app`), `main.dart` (ProviderScope wrap — Riverpod root, no init-order change), `pubspec.yaml`/`.lock` (+flutter_riverpod, maintainer-directed), `prompt_injection_test.dart` (composer gets weather-off leaf).
+- **Design:** nothing stored — same (sessionId, dayCount, date) always recomputes the same weather on every platform (hand-rolled hash/PRNG because String.hashCode isn't cross-VM stable), so save/load, group re-entry, facade, and UI agree for free and there is NO schema change. Golden test pins the sequence: a diff there means existing chats' skies would change (treat as regression, don't re-pin casually).
+- **Parity:** weather is per-chat shared state; 1:1 and group both decay through the ONE `decayedValueFor` pipeline, and the injection composer is shared by both eval paths (one-shot included). Web shows the same chip via the tools state endpoint.
+- **Deferred (explicit, not silent):** per-chat weather override (session generation_settings JSON) — small independent follow-up; noted in living-time-features.md §3.
+- **Verification:** `flutter analyze` clean (full tree); weather + prompt-injection suites green (29 tests incl. re-pinned golden); full `flutter test` run as the regression gate; web `tsc --noEmit` + vite build green; assets/web_app rebuilt.
+
+## 2026-07-21 — fix(web_ui): patch brace-expansion DoS advisory (GHSA-3jxr-9vmj-r5cp) + vite 5→8 toolchain bump landed on both branches
+- **Files:** `web_ui/package-lock.json` (lockfile-only; no package.json change). Related context: dependabot PR #149 (vite 5.4.21→8.1.5, @vitejs/plugin-react 4→6.0.3, vite-plugin-pwa 0.21→1.3.0) was squash-merged to main (`99c5c9c`) and cherry-picked to Rawhide (`c804277`) the same day.
+- **Why:** GitHub flagged 2 high-severity Dependabot alerts on the default branch — both the same brace-expansion advisory (DoS via exponential-time expansion of consecutive non-expanding `{}` groups) at two lockfile paths: top-level `brace-expansion@5.0.6` and the copy nested under `filelist`. Dev-only transitive deps of the vite build tooling; nothing ships in the built `web_app` bundle, so exposure was build-environment-only.
+- **How:** `npm audit fix` → brace-expansion 5.0.6→5.0.7 and nested 2.1.1→2.1.2 (patch releases containing only the regex fix). The local npm-10 run also stripped six harmless `"libc"` metadata fields that CI's npm 11 writes; those hunks were reverse-applied so the commit is *only* the security fix (no lockfile churn).
+- **Verification:** lockfile valid JSON; `npm ci` clean; `npm run build` (tsc + vite 8.1.5 + PWA v1.3.0 service-worker generation) succeeds on both branches' web_ui source; `npm audit` reports 0 vulnerabilities; the GitHub push-time vulnerability banner no longer appears. `website/` lockfile audited separately: 0 vulnerabilities.
+- **Commits:** main `919cc0d`, Rawhide cherry-pick `de7e934`.
+
+## 2026-07-20 — feat(creator): overhauled the AI-creator character interview (voice-first, relational, tighter)
+- **Files:** `lib/services/character_gen_service.dart` (new question constants + relational NSFW + `relationship` threaded into the interview call), `lib/services/chargen/character_gen_steps.dart` (assembly reorder + conditional relationship Q + answer caps + scenario re-enrichment). Design cross-checked with Grok (session creator-interview).
+- **Why:** the in-character interview (model "becomes" the character, answers a fixed set, transcript grounds description/personality/greeting/example-dialogue) is a strong technique but the question set had structural flaws: a redundant "goal triad" (3 of 8 Qs on wants/plans/how — ~40% of the interview + its context budget), voice asked LAST (it grounds greeting + dialogue, so it should be first), no question voicing the character's relationship to {{user}}, and un-capped answers (~1200 tokens each → ~12k-token prompt by the last Q, slow on local models). The scenario was never re-grounded in the interview either.
+- **What changed:** (1) **Rewrote the question set** — voice FIRST, appearance LAST, goal-triad collapsed to one motive + one wound question, added a "when cornered/angered, what do you DO" pressure question. (2) **Conditional relationship question** — only asked when the relationship-to-{{user}} field is set (skipped for strangers/one-shots, where invented shared history hurts); voices who the user is to them, what they want from them, what's unspoken. (3) **Scenario re-enrichment** — the enrichment pass now rewrites the scenario too (keeps the setup, adds the revealed stakes + relationship texture, ends on a dramatic question) instead of leaving the base model's first guess. (4) **Answer caps** — `maxLen` 1200→350 + a "keep it tight, under ~150 words" seed instruction, which alone kills most of the context bloat (Grok's call: cheap caps beat building a summarizer). Also rewrote the NSFW question to be relational (desire toward the user, limits, dynamic) instead of a mechanical "favorite position" list.
+- **Grok reconciliation:** I came in thinking relationship-to-{{user}} was THE #1 gap; Grok red-teamed it to co-equal with the set surgery, insisted it be conditional, and caught the goal-triad redundancy + the un-grounded scenario I'd missed. Deferred (not in this pass): surfacing the interview for user read/edit (L effort), concept-adaptive questions, soft Realism/Needs suggestions, a narrow consistency pass.
+- **Verification:** `flutter analyze` clean (full tree); chargen suite green; no dangling refs to the removed `_interviewQuestions` const.
+- **Commit hash:** (uncommitted — part of the feat/p12-avatar-creator PR to Rawhide).
+
+## 2026-07-20 — feat(creator): smart lorebook generation — Stage 3 (interconnected "living world" lore)
+- **Files:** `lib/services/chargen/lorebook_mechanics.dart` (new `buildSmartLorebook` + `preventRecursion` on the anchor), `lib/services/chargen/character_gen_steps2.dart` (prompt rule 9 "INTERCONNECT" + both write-paths use `buildSmartLorebook`; macro rule renumbered 9→10), `lib/services/chargen/character_gen_parsing.dart` (inline path), `lib/services/character_gen_service.dart` (dropped now-transitive `lorebook.dart` import), `test/services/chargen/lorebook_mechanics_test.dart` (+3 Stage 3 tests). (Rebased `feat/p12-avatar-creator` branch; completes the staged effort.)
+- **What Stage 3 adds — interconnected lore:** `buildSmartLorebook` wraps the generated entries in a `Lorebook` with `recursiveScanning: true`, and the prompt tells the model to NAME related entries inside an entry's content. So when the engine injects a faction whose text names its ritual, recursion pulls the ritual in, whose text names the relic, and so on — the world reads as connected lore instead of isolated facts.
+- **Deliberately the SAFE design (no dead reveals):** I explicitly did NOT use recursion-only reveals (`delayUntilRecursion`), because the engine excludes those from the first scan — a model that mis-authors a chain (parent doesn't literally contain the child's keyword) would leave a permanently unreachable entry. Instead every entry stays directly reachable by its own keys and recursion is a pure BONUS, so a model that fails to interconnect just yields independent entries (graceful degradation, matching the "robust on weak models" bet). The always-on `premise` anchor gets `preventRecursion: true` so its always-injected backdrop isn't rescanned and can't auto-drag in every faction it happens to name.
+- **Engine assumptions verified (Grok, session 87575b79):** (1) no Stage-3 path makes an entry dead/recursion-only (empty keys remains the only "never fires", unchanged); (2) `preventRecursion` stops the anchor's content re-scan but not its injection (buffer = `(isTriggered||constant) && !preventRecursion`); (3) recursion is bounded (sweeps cap at min(maxRecursionSteps,10)); (4) recursion reuses `_scanEntryAgainst` + the same per-scan `failedRolls`, so ambient still rolls 75% once and the group filter applies at inject — no bypass; (5) `recursiveScanning:true` per-book opts THIS book in without touching others or disabling the global-on path. **Findings: none.** Intentional nuance (Grok-flagged, accepted): a user who globally disabled recursion still gets it for AI-generated character books — by design, since the book is written to reference itself.
+- **Verification:** `flutter analyze` clean (full tree); 19 unit tests (incl. 3 new Stage 3) pass; chargen + lorebook-injection suites green (41 tests), no regression.
+- **Commit hash:** (uncommitted — awaiting maintainer review + live test).
+
+## 2026-07-20 — feat(creator): opt-in dynamic {{pick}}/{{roll}} macros in generated lore + first messages
+- **Files (desktop):** `lib/services/chargen/char_macro.dart` (new `fixDynamicMacroBraces` + regex — moved here from lorebook_mechanics, general home), `lib/services/chargen/lorebook_mechanics.dart` (calls it), `lib/services/chargen/character_gen_steps2.dart` (conditional lorebook rule), `lib/services/chargen/character_gen_prompts.dart` (conditional greeting rule), `lib/services/chargen/character_gen_parsing.dart` (greeting normalize), `lib/services/character_gen_service.dart` (`_includeDynamicMacros` field + `includeDynamicMacros` param), `lib/ui/character_creator/creator_state.dart` + `creator_state_engine.dart` (state/pref/threading), `lib/ui/character_creator/steps/guided_output_settings.dart` (toggle + tooltip). **Files (web):** `web_ui/src/components/aichargen/chargenForm.ts`, `OutputSettings.tsx`, `lib/services/web/facade/chargen_facade.dart`, rebuilt `assets/web_app`. Tests: new `test/services/chargen/dynamic_macro_braces_test.dart`.
+- **Why:** the generator produced entirely static cards (only `{{char}}`/`{{user}}`). The runtime resolver already supports ST `{{pick:...}}`/`{{roll:...}}` in lore content (`chat_service_generation.dart:418` `section:'lore'`) and greetings (`chat_service_session_manage.dart:488`) — verified — but nothing emitted them. Adding them makes small details vary per playthrough (a tavern's daily special, a passing sound) — a robust, content-level "living world" complement to Stage 2's entry-level variety.
+- **What:** the lorebook generator (custom/location entries) and the greeting prompt now *optionally* invite the model to add ONE `{{pick:...}}`/`{{roll:...}}` where a rotating detail is natural. A `fixDynamicMacroBraces` normalizer repairs the one syntax mistake weak models make — single braces `{pick:a,b}` → double `{{pick:a,b}}` — via a look-around regex that never triple-braces a correct macro or mangles genuine single braces in prose (9 unit tests). The normalizer runs always (harmless no-op when no macro present).
+- **Gated behind an opt-in toggle (default OFF)** — maintainer request. Threaded `includeDynamicMacros` → `generateCharacter` → a `_includeDynamicMacros` field the two prompt builders read (conditional `macroRule`/`macroLine`; OFF → empty → no macro instruction reaches the model). Rationale: the normalizer fixes *syntax* but not *placement judgment*, and weaker models place macros awkwardly — so opt-in is correct (told in the tooltip).
+- **Toggle in ALL THREE modes (follow-up, maintainer feedback):** the toggle first landed only in Guided's Output-settings; a maintainer noted it must be a config-time choice in every mode. Extracted a shared `DynamicMacrosToggle` widget (`lib/ui/character_creator/widgets/`) and placed it in Guided (`guided_output_settings.dart`), Automated (`lorebook_generation_card.dart`), AND Quick (`quick_config_step.dart`); Quick's `generateCharacter` call now passes the flag too (was hard-coded off). Web parity was already complete — the web creator's `OutputSettings` step renders for all modes (`CreateAiCharacterPage.tsx:123`), so the one web checkbox covers Quick/Guided/Automated. Smart lorebooks (Stages 1–3) already generate in every mode automatically; only the macro *toggle* had been missing from two.
+- **Web parity:** full — same toggle, tooltip, and payload field on the web creator; `assets/web_app` rebuilt.
+- **Verification:** `flutter analyze` clean (full tree); web `tsc --noEmit` + vite build clean; chargen + injection suites green (38 tests) + 9 new brace-normalizer tests; creator golden tests pass (pixel goldens skip on macOS — the new toggle row means the Output-settings step golden needs a CI (Linux) regen). Grok review pending.
+- **Commit hash:** (uncommitted — awaiting maintainer review + live test).
+
+## 2026-07-20 — feat(creator): smart lorebook generation — Stage 2 (contextual firing + variety)
+- **Files:** `lib/services/chargen/lorebook_mechanics.dart` (+ new `secondary` field on `GeneratedLoreEntry`, `kAmbientLoreGroup`/`kAmbientLoreProbability`, assigner extended), `lib/services/chargen/character_gen_steps2.dart` (prompt + parse), `lib/services/chargen/character_gen_parsing.dart` (inline parse), `test/services/chargen/lorebook_mechanics_test.dart` (+4 Stage 2 tests). (Rebased `feat/p12-avatar-creator` branch; builds on Stage 1 below.)
+- **What Stage 2 adds** (all engine-verified honored fields, same architecture — model emits prose + category + one small optional field, app assigns mechanics):
+  - **Contextual firing:** entries can now carry `secondaryKeys` from a new optional `secondary` model field, left at the engine-default `andAny` logic — so a faction/location/figure entry surfaces only when a primary key AND a context word both appear (e.g. a sea-captain entry fires on "captain" AND "ship"/"crew", not every "captain"). Empty secondary → fires on primary keys alone (unchanged); inert on the constant anchor.
+  - **Variety for ambient flavor:** every `custom` entry (rumors, gossip, minor events) joins one shared inclusion `group` (`ambient`) so only ONE surfaces at a time instead of dumping every rumor, and fires at `probability` 75 so it's not on every triggered turn. Core lore (premise/faction/…) stays `group=''`, `probability=100`.
+- **Engine assumptions verified (Grok, session 87575b79):** (1) empty `secondaryKeys` short-circuits `secondaryLogicSatisfied` to true, so primary-only firing is unchanged; (2) ≥2 active same-group members → exactly one surfaces via seeded weighted-random (a lone member is untouched), and the winner is stable within a scene, shifting as the active lore changes (NOT re-randomized per turn — comment corrected to say so); (3) probability rolls per-scan at activation, independent, and re-rolls after sticky depth — ambient is never permanently dead. Confirmed only `custom` is grouped/probability-gated; the anchor and core lore are never touched. **Findings: none** on engine correctness.
+- **Verification:** `flutter analyze` clean (full tree); 16 unit tests pass (12 Stage 1 + 4 Stage 2); chargen + lorebook-injection suites green (29 tests), no regression.
+- **Commit hash:** (uncommitted — awaiting maintainer review + live test).
+
+## 2026-07-20 — feat(creator): smart lorebook generation — Stage 1 (premise anchor + priority tiers)
+- **Files:** new `lib/services/chargen/lorebook_mechanics.dart` + `test/services/chargen/lorebook_mechanics_test.dart`; `lib/services/chargen/character_gen_steps2.dart` (generator prompt + parse), `lib/services/chargen/character_gen_parsing.dart` (inline parse), `lib/services/character_gen_service.dart` (import), `lib/models/lorebook_entry.dart` (stale doc-comment corrected). (Rebased `feat/p12-avatar-creator` branch.)
+- **Why:** the AI creator's lorebooks were "flat and boring" — every entry set only `name`/`key`/`content`/`enabled` and left ~40 SillyTavern World-Info fields at defaults, so entries were all equal-priority, all keyword-gated, and the world went generic the moment no keyword fired. Meanwhile the runtime engine actually honors nearly the whole ST field set (audited: constant, secondary-key logic, order, position, depth, inclusion groups, recursion, timed effects, budget — only `vectorized` + the extra match-sources are inert).
+- **Architecture (the robustness bet):** the local LLM emits only **prose + a category** (a small schema any model gets right); the app **deterministically assigns** the engine mechanics from the category in the new pure `assignLoreMechanics`. No betting a weak model on 40 config fields. Both lorebook write-paths (the dedicated generator + the rare inline one) route through the one shared assigner — no parallel logic.
+- **Stage 1 mechanics:** (a) an always-on **premise anchor** — the model must emit exactly one `category:"premise"` entry, which becomes `constant:true` so the world's tone is always in context even off-keyword; (b) **priority tiers** via `order` (premise 300 > faction 200 > location/figure/history/item 120 > custom 60) so core lore survives a tight token budget and sits closer to the generation point (verified against `lorebook_injector.dart`'s descending fill sort). Everything else stays at engine defaults; secondary-key logic, variety groups, and recursion chains are Stages 2–3.
+- **Hardened per Grok review (session 87575b79, 2 passes):** only the FIRST premise becomes `constant` (extra/over-matched premises stay order-300 but keyword-gated, so multiple always-on blobs can't stack and eat the budget); category synonym matching is WHOLE-WORD not substring (so "underworld"↛premise, "folklore"↛history); blank/unrecognized category → unclassified → neutral order 100 (not demoted to custom/60), which also keeps the inline path's old order for uncategorized base cards.
+- **Verification:** `flutter analyze` clean (full tree); 12 new unit tests pass; chargen + lorebook-injection suites green (31 tests, no regression); two Grok passes (4 findings, all fixed + re-confirmed). Not yet run in the live app (the running build predates this) — end-to-end lorebook check pending a relaunch.
+- **Commit hash:** (uncommitted — awaiting maintainer review + live test).
+
+## 2026-07-18 — feat(creator): avatar veto gate — review/regenerate the base portrait before the expression pack
+- **Files:** `lib/ui/avatar_creation/avatar_creation_controller.dart`, `lib/ui/avatar_creation/avatar_creation_run.dart`, `lib/ui/avatar_creation/avatar_generation_panel.dart`, `lib/ui/avatar_creation/portrait_section.dart`, `test/ui/avatar_creation/avatar_creation_controller_test.dart`. (Rebased `feat/p12-avatar-creator` branch.)
+- **Ask (maintainer):** "When it generates the base avatar before switching to expression packs, it doesn't ask me whether I actually want to use it — I have no say. I want to veto and regen the avatar, change the prompt, then move into the expression pack."
+- **What changed:** the avatar run was one-shot (portrait → pack → done, no stop). Added a **veto gate**: a new `AvatarRunStage.portraitReview` between portrait and pack. When a portrait is generated AND a pack is pending, the run now PAUSES on the generated portrait. The panel shows the portrait + three actions: **Regenerate** (re-runs the portrait with the — now editable at the gate — prompt, staying paused), **Use this → N expressions** (accept → run the pack), and a subtle **Use the portrait, skip expressions** (finish with just the portrait). Prompt-only/upload-only/pack-only runs are unaffected (nothing to review → no pause).
+- **Implementation:** `run()` split so portrait-gen and pack-gen are shared helpers (`_generatePortrait`, `_generatePackAndFinish`) reused by both the initial run and the gate's regenerate/continue — no parallel paths. New public `regeneratePortrait()` / `continueFromReview({withPack})`; new getters `promptEditable` (prompt stays editable only at the gate) and `canRegeneratePortrait`. The pre-gate cancel short-circuit (cancel during save → settle without spending a portrait) was preserved. `running`==true throughout the pause, so the manual wizard's Done stays locked until the user resolves the gate (the skip action is the escape); the generic in-flight Cancel row is suppressed during the pause in favor of the gate's own actions.
+- **Portrait viewer (follow-up, same widget):** the review gate's portrait was a useless 72px thumbnail. Replaced with a large preview (up to 380px, `BoxFit.contain`, fills the panel) + "Click to zoom in" hint, tapping into a full-size zoomable viewer (`InteractiveViewer` maxScale 6, pan, tap-to-close) — the same interaction as the chat-image viewer (`inline_chat_image.dart`), adapted to in-memory bytes (`Image.memory` vs `Image.file`). New `dart:typed_data` import for `Uint8List`.
+- **Review layout (follow-up, maintainer feedback):** (a) the portrait was showing in TWO spots during the pause — the compact `_portraitPreview` in `portrait_section.dart` is now hidden while `stage == portraitReview` (the large preview covers it; it still shows in every other state). (b) The review box was buried at the bottom under the whole expressions config; it's now its own bordered card (`_reviewCard`, "Portrait ready — review it" header) rendered directly ABOVE the expressions section, and the bottom progress card is suppressed during the review pause. Order at the gate: portrait/prompt → review & regenerate → expressions.
+- **Web parity:** N/A by non-applicability — the web UI has NO interactive AI portrait/expression-pack generation (its create pages don't generate images; `AvatarManager` is upload-only). There is no web generation flow to add a gate to.
+- **Verification:** `flutter analyze` clean (full tree); the controller test suite updated to the two-phase (gate) contract + 6 new gate tests (pause, continue→pack, regenerate w/ edited prompt, skip, empty-prompt-continue-not-stuck, no-gate-when-no-pack, no-gate-for-upload-only) — **21/21 pass**. Independent Grok review (session 823f79b3) found no stuck-gate / dispose-race / double-run / dead-code issues; its one real catch (cancel-during-save no longer short-circuited) is fixed above. Not yet run in the live app (maintainer was heading to bed) — desktop end-to-end confirmation pending.
+- **Commit hash:** (uncommitted — awaiting maintainer review + live test).
+
+## 2026-07-18 — fix(creator/oMLX): thinking never actually suppressed on oMLX — leaked into the AI-creator portrait prompt + bloated the interview context; Portrait-source row overflow
+- **Files:** `lib/services/open_router_service.dart` (**the decisive oMLX fix**), `lib/services/chargen/character_gen_llm.dart`, `lib/services/chargen/character_gen_steps2.dart`, `lib/ui/avatar_creation/portrait_section.dart`. (On the rebased `feat/p12-avatar-creator` branch — rebased onto `main`@16c3db00, conflict-free, backup at `backup/p12-avatar-creator-prerebase-20260718`.)
+- **Symptom (reported, oMLX / Qwen3.6-35B-A3B):** the AI Character Creator's "Portrait Prompt" field showed a raw `<think>Here's a thinking process…` block. Deeper tell in the live log: every "Character interview" answer slammed the 1200-token cap (~4600 chars each) and the prompt ballooned 985 → 47,761 chars by Q9 — the model was *thinking* on every step even though the app requested reasoning OFF. Separately, the Portrait "Pick a source" row (Upload / Generate / None) overflowed by ~6.2px on smaller windows.
+- **DECISIVE root cause (oMLX ignores OpenRouter's reasoning object):** oMLX (and other local OpenAI-compatible MLX/vLLM servers) **do not honor** OpenRouter's `reasoning:{enabled:false}` object at all — they only honor Qwen3's native `chat_template_kwargs.enable_thinking`. `OpenRouterService` (the oMLX/OpenRouter transport) **never sent `chat_template_kwargs`** — only the Kobold path (`openai_chat_stream.dart`) did. So NOTHING the app sent could turn Qwen3 thinking off on oMLX. **Verified live against oMLX v0.5.2:** a request with `reasoning:{enabled:false,exclude:true,max_tokens:0}` returned 554–596 reasoning tokens (still thinking); the same request with `chat_template_kwargs:{enable_thinking:false}` returned 0. **Fix:** `OpenRouterService` now also sends `chat_template_kwargs:{enable_thinking: reasoningEnabled && reasoningMaxTokens!=0}` — but **gated to `_isLocalUrl`** so real OpenRouter/Nano-GPT payloads are untouched (they read the `reasoning` object and could reject an unknown chat-template kwarg). `thinkOn` matches the Kobold path exactly. Known limitation (Grok-flagged): `_isLocalUrl` only matches `localhost`/`127.0.0.1`, not `[::1]`/LAN/hostname self-hosts — broaden the gate if that shape appears.
+- **Complementary fix (cloud hybrids):** `CharacterGenService._callLLM` now passes `reasoningMaxTokens: _reasoningEnabled ? null : 0`, so the `reasoning:{…,exclude:true}` object is actually emitted for real OpenRouter/Nano-GPT thinking models (Kimi/DeepSeek) during creator calls — previously the null budget skipped the suppress object entirely. Necessary for cloud, insufficient alone for oMLX (hence the enable_thinking fix above).
+- **Floor (defense in depth):** `_generateImagePrompt` now runs `stripThinkBlocks(output)` before quote-trim — every other CharacterGen consumer already strips `<think>`; this was the lone hole, so a stray reasoning block can never reach `buildPortraitPromptSeed()` even if a backend ignores both suppress signals (e.g. KoboldCpp without `--jinja`).
+- **Overflow:** Portrait-source buttons wrap their icon+label in `FittedBox(BoxFit.scaleDown)` + `Row(mainAxisSize:min)` — scales down imperceptibly when the three equal-width segments get narrow, no text clipping, robust across platform font metrics.
+- **Web parity:** all backend fixes live in shared Dart (`open_router_service`, `CharacterGenService`) that the web chargen facade also uses, so web inherits them. The FittedBox tweak is a Flutter-desktop RenderFlex fix with no web analog.
+- **Verification:** `flutter analyze` clean (full tree); `dart fix --dry-run` nothing to fix; live oMLX protocol test proved `enable_thinking:false` is the only signal that suppresses Qwen3 there; two independent Grok reviews (sessions de87d1d2, ccaf0386) — the second confirmed the `_isLocalUrl` gate is safe for cloud, `thinkOn` matches Kobold for every caller, and no real-OpenRouter risk. Grok's only substantive note is the narrow local-URL gate (above).
+- **Commit hash:** (uncommitted — awaiting maintainer review).
+
 ## 2026-07-15 — feat(dt): pure-Dart Draw Things gRPC client (sidecar-ectomy phase 1, sidecar kept as fallback)
 - **Files:** new `lib/services/grpc/dt_native/` — `dt_proto.dart` (minimal protobuf wire codec for the 4 DT messages), `dt_config_fb.dart` (FlatBuffer GenerationConfiguration builder, exact slot/default parity with the Python generated code incl. its conditional-skip quirks), `dt_tensor.dart` (NNC tensor encode f16 / decode raw+fpzip, float16 converters), `dt_fpzip.dart` (dart:ffi binding to libfpzip, decode-only, lazy-loaded), `draw_things_native_client.dart` (grpc channel: TLS w/ embedded ca_chain.pem + `authority: localhost` = Python's ssl_target_name_override; Echo/models/generate with streamed sampling-signpost progress). Modified `draw_things_grpc_service.dart` (native-first, sidecar fallback per call, `FP_DT_SIDECAR=1` rollback env, fpzip pre-flight so a missing dylib never wastes a full generation, `_filterCheckpoints` consolidated for both paths). New `scripts/build-fpzip-macos.sh` (universal dylib → tools/fpzip/, gitignored) + `test/services/grpc/dt_native_test.dart`. `pubspec.yaml`: +grpc, +flat_buffers, +ffi, +crypto (task-required; lock diff purely additive: grpc/http2/protobuf/flat_buffers).
 - **Why:** the Python/PyInstaller dt_grpc_client sidecar is the app's most ship-fragile component (see the 07-15 protobuf-freeze fix). This replaces it in-process for test/models/generate; the sidecar still ships and every native failure falls back to it, so rollback = env var or revert. Release-workflow bundling of libfpzip (and sidecar deletion) intentionally deferred until the native path soaks — released builds simply keep using the sidecar for generate until then.
@@ -5199,3 +5487,372 @@ process, and the removed Chub/aicharactercards in-app browser (incl. its WPE Web
 Linux notes + a whole troubleshooting section). Rewritten for the in-process world;
 Linux build deps now match CI's proven set. Deployed to the droplet as part of the
 1.0 website refresh.
+## 2026-07-17 — Phase #12 "Portrait & Avatars" creator step (worktree feat/p12-avatar-creator, 4-commit series)
+
+**Commit 92dadafa — feat(studio): CREATE/EDIT model-slot split**
+Files: lib/services/storage/settings/image_gen_settings.dart, lib/services/image_gen_service.dart, lib/services/capability/image_reference_role.dart, lib/services/capability/image_reference_resolver.dart, lib/ui/image_studio/{edit_view,expression_pack_dialog,generation_options_tab,model_slot_dropdown}.dart, test/services/capability/model_slot_split_test.dart, test/ui/image_studio/generation_options_tab_test.dart
+Reason: one shared imageGenModel let an edit model poison base generation (and vice versa). Existing key stays the CREATE slot (back-compat), new image_gen_edit_model key + one-time looksLikeEditModel migration seed. generateImage resolves the slot per intent; Edit tab binds to the edit slot on DT/remote; ONE ModelSlotDropdown serves all pickers + non-blocking create-slot warning; pack edit-mode decision centralized in ImageReferenceResolver.packEditMode (edit slot + ComfyUI readiness); pack dialog's blanket remote block became "remote needs an edit model".
+
+**Commit bcad65d4 — feat(creator): shared AvatarGenerationPanel**
+Files: lib/ui/avatar_creation/* (7 new files, all <500 LOC), lib/ui/image_studio/{vision_gate,backend_catalog}.dart (new shared seams), lib/ui/image_studio/{expression_pack_dialog,generation_options_tab}.dart, lib/services/{expression_pack_service,comfy_ui_service,image_gen_service,portrait_promotion}.dart, lib/services/capability/vision_support_resolver.dart, test/ui/avatar_creation/avatar_creation_controller_test.dart (16 tests)
+Reason: phase #12 locked design (a)–(o). Card-saved-first orchestration; portrait txt2img on create slot; edit-first pack via ExpressionPackSession + packEditMode; explicit "Switching to edit model" stage + ComfyUI /free nudge; capability-gated Vision QC (hidden when known-unsupported, click-time resolve when unknown, flagged slots held back from import); upload count follows the pack toggle; results land via addLook/addAvatar/portraitWriteTarget. Extracted (not duplicated): normalizePackBase → service, resolveVisionFireWithExplainer, peekForActiveLlm, backend_catalog (Studio tab now consumes it too).
+
+**Commit 1961bd82 — feat(creator): manual wizard final step**
+Files: lib/ui/pages/create_character_page.dart (−452 LOC), test/golden/widget/{manual_creator_steps_golden_test,pages_golden_test}.dart, 4 stale golden PNGs deleted
+Reason: wizard now Identity → … → Review & Create → Portrait & Avatars. Review's button saves first, then advances into the shared panel under a "saved" chip. Absorbed+deleted: identity-step avatar picker, the whole Expression Images step (_buildExpressionImagesStep/_pickExpressionImage/_importExpressionZip/emotion picker/_ExpressionImageEntry + hand-rolled ZIP decode). Goldens step_5_review + identity need Linux-runner regen.
+
+**Commit 8f2a5d66 — feat(creator): AI creator embeds the panel, bespoke path deleted**
+Files: lib/ui/character_creator/steps/review_step.dart, lib/ui/character_creator/{creator_state,creator_state_engine}.dart, lib/ui/pages/character_creator_page.dart, widgets/review_avatar_panel.dart DELETED, test/golden/creator/creator_engine_golden_test.dart, test/golden/widget/creator_steps_golden_test.dart
+Reason: review step's left rail = the shared panel via ensureCardSaved (saveCharacter now idempotent: dbId → update in place; first save ALWAYS writes the V2 PNG — fixes AI-created no-avatar cards having no card PNG at all). Deleted generateAvatar + post-generation auto-fire + generatedAvatar/isGeneratingAvatar/imagePromptController/imagePromptExpanded/avatarBytesForReview + the imageService plumbing through generateFromMode. Prompt derivation kept as buildPortraitPromptSeed(). Review widget golden needs Linux regen.
+
+Web UI: deliberately untouched — web creators stay upload-only (maintainer-approved deferral, 2026-07-16).
+Gates: flutter analyze 0 issues; dart fix --dry-run nothing; flutter test 2180 passed (+16 new controller, +14 new slot-split); flutter build macos ✓.
+
+## 2026-07-18 — Grok review fixes for the Portrait & Avatars series
+Files: lib/ui/character_creator/creator_state_engine.dart, lib/ui/avatar_creation/{avatar_creation_controller,avatar_creation_run,avatar_generation_panel}.dart, lib/ui/pages/create_character_page.dart, lib/services/image_gen_service.dart, test/golden/creator/creator_engine_golden_test.dart
+Reason: independent Grok review of the branch (session b9bb7e46). Accepted+fixed: (1) multi-shot AI-creator save minted a fresh stableId every save — extensions rebuild now carries stableId+favoriteAvatarId (+ regression test); (3) first-persist race could addCharacter twice — _ensureCard is single-flight; (4) manual Done mid-run could dispose the panel and drop finishing work — onBusyChanged locks Done while running (+ busy-clear on dispose); (6) stale generateImage edit-intent doc. Dismissed with rationale Grok accepted: (2) cancel-during-portrait keeps the finished image (identical to the pack session's finish-then-stop contract). (5) golden PNG regen = Linux-runner process step, flagged for the merge.
+
+## 2026-07-18 (UTC) — Website refreshed for the 1.0 release (deployed)
+**Files:** `website/build.mjs`, `website/src/index.html`
+**Why:** STABLE_VERSION bumped v0.9.9.1.3 → v1.0.0 (stamps the Stable download card);
+hero gained the "🎉 Version 1.0 is here — stay awhile and listen" announcement linking
+to releases/latest; Stable card bullets refreshed to the 1.0 headliners (Stoop,
+Realism, Journal, voice/expressions/phone); Stoop section eyebrow now says "New in
+1.0". Built (link check green, 15 screenshots regenerated from the retaken 1.0 set)
+and rsync-deployed to the droplet; live verification: announcement + v1.0.0 served,
+zero stale sidecar strings (the de-staled docs from 6aa97646 render clean).
+Playwright desktop+phone screenshots in ~/Desktop/fpai-review/website-1.0-*.png.
+
+## 2026-07-20 (UTC) — Story Calendar design sketch (docs only, no code)
+**Files:** `docs/design/story-calendar.md`
+**Why:** Design proposal for replacing the bare day tracker with a real
+calendar (accurate months/days/years): one additive `storyStartDate` anchor on
+Sessions with everything derived from the existing `dayCount` (the clock,
+nudges, OOC skips, parity contracts all untouched), deterministic date
+stamping of Journal cards via the metadata pouch (memories know *when*), a
+month-grid calendar surface with memory-marked days on desktop + web, and
+retirement of the now-redundant `startDayOfWeek` modulo-7 logic. Blocked on
+maintainer approval for the `sessions` column (Character Card Forge raw-SQL
+writer); open questions listed in the doc. No code changed.
+
+## 2026-07-20 (UTC) — Story Calendar sketch upgraded to a full time-subsystem rewrite
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer green-lit rewriting the whole time-of-day subsystem, so the
+sketch moved from "derive dates from dayCount" to a canonical minute-level
+story clock (`_clock` + `_startDate` DateTimes) with timeOfDay/dayCount/
+weekday all derived. The four hand-rolled period-array walks (nudge, AFK,
+OOC skip, eval rollover) collapse into one pure leaf (`chat/story_clock.dart`),
+the hold/new_day veto eval upgrades to `minutes_elapsed`, and every external
+shape (sessions columns, realism_state snapshots, group blobs, V2 card
+extensions via The Stoop, web facade) is kept as written-derived /
+read-as-seed with one legacy synthesis function. Journal stamping now carries
+a full timestamp ("that night on the pier"). Still docs-only; sessions
+columns remain gated on maintainer approval (Character Card Forge).
+
+## 2026-07-20 (UTC) — Story Calendar sketch: creator/editor seeding + OOC detail
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer required the calendar be authorable from the character
+creators and edit menus. Added §3a: the shared RealismFormSection (manual
+creator, AI creator Realism step, edit page) gains a "Story begins…" block
+(anchored-to-today default vs fixed-date mode, optional exact clock time,
+existing period/day pickers kept as friendly input), CharacterCard exports
+additive story_start_date/story_clock alongside kept day_count/time_of_day,
+group surfaces seed at group level (time is chat-scoped). Also expanded the
+OOC bullet to make explicit that both marker-style and in-narrative skip
+phrasing keep working, now mapped to real durations. Docs only.
+
+## 2026-07-20 (UTC) — Story Calendar sketch: continuous per-turn time replaces the 6-turn gate
+**Files:** `docs/design/story-calendar.md`
+**Why:** Maintainer asked whether AI-driven advancement should change now that
+time is "actual". Yes: the 6-turn eligibility gate + hold_time veto are
+retired in favor of per-turn minutes_elapsed riding the scene-time eval that
+ALREADY fires every turn (posture-only branch / fused one-shot JSON), so the
+upgrade costs zero extra LLM calls. Guardrails: per-turn clamp [0,180], +5min
+deterministic floor on eval failure, 12-turn stall backstop snapping to the
+next period (preserves the never-freezes guarantee). Deletion list grows:
+turnsPerTimePeriod, hold_time, the triple prompt branching. Pacing feel
+deliberately changes from frozen-then-lurch to a creeping clock. Docs only.
+
+## 2026-07-20 (UTC) — The Story Calendar: full time-subsystem rewrite (implemented)
+**Files:** `lib/services/chat/story_clock.dart` (new pure leaf),
+`lib/services/chat/time_service.dart` (rewritten), `lib/database/database.dart`
+(+`database.g.dart`, v38: sessions.story_clock/story_start_date, nullable
+additive, maintainer-approved), `realism_tools.dart` + `realism_prompt_builder.dart`
++ `realism_evals.dart` (scene-time eval: minutes_elapsed replaces hold_time;
+one-shot fused JSON carries the same fields), `character_card.dart`
+(story_start_date/story_start_time ext), session save/load/capture/restore +
+group-fork sites, `time_injection.dart` (clock+date line),
+journal stamping (`journal_store.dart` metadata pouch + stampOf,
+`journal_review.dart` op fields, `journal_maintenance.dart` _dateStamp,
+`journal_injection.dart` relative-time suffix), desktop UI
+(`story_calendar_dialog.dart` new, `time_strip.dart` clock+tappable date,
+diary/panel date lines + plant stamping, `realism_form_section.dart`
+"Story begins" block wired through both creators + edit page +
+`creator_state*.dart`), web parity (`chat_tools_facade.dart` additive time
+fields + calendar payload + setStoryClock/setStartDate,
+`chat_tools_routes.dart` GET calendar + additive time POST forms,
+`web_ui` StoryCalendarModal.tsx + ChatTools + styles.css + rebuilt bundle),
+tests (story_clock_test.dart new, time_service_test.dart rewritten for the
+continuous model, journal/prompt-injection/golden fakes updated, goldens
+regenerated deterministically via a pinned story date, schema version test 38).
+**Why:** design docs/design/story-calendar.md — canonical minute-level clock,
+continuous per-turn advancement (6-turn gate + hold_time veto deleted; zero
+extra LLM calls since the scene-time eval already fired every turn),
+real dates everywhere, journal memories know WHEN, month-grid calendar with
+memory dots on desktop + web. Deleted: resolveStartDayOfWeek,
+ensureStartDayOfWeekAnchored, turnsPerTimePeriod, both modulo-7 weekday
+computations, TimeService's duplicate buildTimeInjection, the triple prompt
+branching. All 2296 tests pass; flutter analyze clean; web tsc/build/vitest
+clean.
+
+## 2026-07-20 (UTC) — Group wizard's story-calendar seed finally reaches the clock
+**Files:** `lib/utils/group_realism_blobs.dart` (top-level time keys on
+defaultMemberJson + new parseGroupTimeSeed with per-member baseline fallback),
+`lib/services/chat/chat_service_session_load.dart` +
+`chat_service_session_manage.dart` (fresh-group paths seed TimeService via the
+same seedFromV2OrExt the 1:1 card path uses), `lib/ui/widgets/story_begins_row.dart`
+(new shared widget, extracted from RealismFormSection's private row — deleted),
+`realism_form_section.dart`, `create_group_chat_page.dart` (global scene time
+gains the row + passes fields to blobs), `group_realism_dynamics_editor.dart`
+(loads via parseGroupTimeSeed so the editor shows what a fresh session actually
+seeds), `group_settings_dialog.dart` (top-level read/write + row),
+`test/utils/group_realism_blobs_test.dart` (parseGroupTimeSeed coverage:
+canonical, baseline fallback, precedence, garbage).
+**Why:** The group creator's scene-time seed was editor-carried state that
+never reached the runtime clock (latent gap flagged in the Story Calendar
+as-built notes; the settings dialog even wrote a second dead copy at the blob
+top level). That top-level spot is now canonical and actually read on fresh
+group sessions — including for pre-fix groups via the baseline fallback — and
+every group authoring surface gains "Story begins…"/"Opens at…" through ONE
+shared widget. Analyze clean; 2300 tests pass.
+
+## 2026-07-20 (UTC) — Eval hang guards: streams and tool calls can no longer spin forever
+**Files:** `lib/services/chat/llm_eval_engine.dart` (kEvalStreamChunkTimeout
+180s between-chunk guard on fireLLMEval, injectable via ctor for tests;
+kEvalToolCallTimeout 6min), `lib/services/chat_service.dart` (_fireToolEval
+whole-call deadline → null on timeout), `test/services/chat/llm_eval_engine_test.dart`
+(3 hang-guard tests: never-emits, stalls-after-first-chunk, slow-but-alive
+untouched; factory gains streamFactory/streamChunkTimeout).
+**Why:** Discord report (Aelivar): with oMLX unloading the model after 15min
+idle, the Journal pass's request could hang forever on a stalled cold reload —
+the retry loop only fired on thrown errors or completed-empty streams, so the
+"Where we are" spinner spun indefinitely. A between-chunk timeout now throws
+into the existing retry/give-up path (silent fail, retry next interval — the
+pass's designed failure mode), and the non-streaming tools call gets a
+whole-call deadline (a timed-out probe just marks the backend XML-only).
+Hardens ALL realism/needs/journal/growth evals, not just the Journal.
+Analyze clean; 2303 tests pass.
+
+## 2026-07-25 (UTC) — Issue #137: unexplained "exit code 2" on launch, and silent CPU-only on AMD APUs
+**Files:** `lib/services/model_file_check.dart` (NEW — GGUF pre-flight),
+`lib/services/kobold_service.dart` (pre-flight before Process.start; exit-2
+translation), `lib/services/hardware_service.dart` (gpuNamesMatch +
+_gpuNameTokens; shared-memory adapter selection rewritten),
+`lib/ui/pages/settings_page.controls.dart`, `lib/ui/pages/settings_page.dart`,
+`lib/ui/dialogs/model_settings_dialog.dart` (both weak existsSync launch gates
+now call the shared pre-flight so the snackbar carries the real reason),
+`test/services/model_file_check_test.dart` (9 tests),
+`test/services/hardware_gpu_name_match_test.dart` (9 tests).
+
+**Why (part 1 — the load failure):** Reporter's KoboldCpp printed "Cannot find
+text model file" and exited 2 for a .gguf that Front Porch could plainly see
+and had already existence-checked. Their whole data dir lives under
+`OneDrive\Documents\FrontPorchAI\`. `File.existsSync()` resolves through
+GetFileAttributesW, which answers for a cloud placeholder; KoboldCpp is frozen
+Python and resolves the same path through `os.stat`, which can fail on a cloud
+reparse point — so our check said yes and theirs said no. Two launch paths
+(LLMProvider.ensureManagedBackendIsRunning, SetupService autostart) did no
+check at all and would launch straight into the same silent exit 2. Fixed by
+actually opening the file and reading its GGUF magic (with a timeout, since a
+dehydrated file blocks while the sync client fetches it) at the one choke point
+every launch path goes through, plus translating a bare exit 2 into the same
+sentence when KoboldCpp rejects a file we could read.
+
+**Why (part 2 — the GPU layers):** Same log showed `--gpulayers 0` and
+"Unable to determine GPU Memory" on a Ryzen APU. Windows shared-memory
+detection compared WMI's `Win32_VideoController.Name` to the registry
+`DriverDesc` with `==`; on AMD those spellings differ ("AMD Radeon(TM) 780M
+Graphics" vs "AMD Radeon(TM) Graphics"), so the match failed on essentially
+every APU, isSharedMemory stayed false, vramMb stayed 0, and KoboldLayerSolver
+turned 0 VRAM into `--gpulayers 0` — a silent CPU-only launch presenting as
+"the app is slow" with no error anywhere. Now matches on normalized token sets
+(subset match, ≥2 shared tokens so a discrete card can't match an iGPU), and
+falls back to the highest-shared-memory adapter ONLY when no VRAM figure was
+found by any earlier method, so an iGPU can never overwrite a dGPU's real VRAM
+on a hybrid laptop.
+
+Analyze clean (3 pre-existing deprecation infos in untouched files, all from
+running a newer local Flutter). 18 new tests pass; whole non-golden suite
+passes. The 60 golden failures reproduce identically on unmodified
+origin/Rawhide with the same SDK — renderer version skew, not this change.
+
+## 2026-07-25 (UTC) — Story weather learns to foreshadow: characters see fronts coming
+
+**Files:** `lib/services/chat/weather_engine.dart`,
+`lib/services/chat/prompt_injection/weather_injection.dart`,
+`lib/services/chat_service.dart`,
+`lib/ui/chat_components/sidebar/character_state/weather_chip.dart`,
+`lib/ui/settings/tabs/general_tab.dart`,
+`lib/services/web/facade/chat_tools_facade.dart`,
+`web_ui/src/components/ChatTools.tsx` (+ rebuilt `assets/web_app` bundle),
+`test/golden/support/fakes.dart`,
+`test/services/chat/weather_engine_test.dart`,
+`test/services/chat/prompt_injection_test.dart`,
+`test/golden/widget/_goldens/sidebar/time_strip_weather.{light,dark}.png`,
+`docs/design/living-time-features.md`, `docs/Rawhide.md`.
+
+**Why:** Weather changed overnight with zero warning, so characters were
+perpetually surprised by every storm ("suddenly it's raining"). The user
+wanted foreshadowing — "a storm may be rolling in soon, did you bring an
+umbrella?".
+
+**How:** The engine's walk is prefix-stable (extending to day N+1 never
+changes days 1..N) and dayCount is derived from the calendar date, so
+tomorrow is exactly `weatherFor(dayCount+1, clock+1d)` — a forecast that
+always comes true, nothing stored. New `WeatherEngine.foreshadow(today,
+tomorrow)` returns ONE words-only sky-sign line, only for notable
+transitions (incoming rain/storm/snow/fog, real clear-ups after wet/grey
+weather, two-band temp swings; minor cloud shuffle is silent). New
+`ChatService.upcomingWeather` getter (same gate as currentWeather) feeds
+the injection leaf, which appends the sign to the existing weather line.
+Desktop chip watches the same Riverpod family at dayCount+1 and shows a
+"→ ⛈️" glyph when tomorrow's condition differs (tooltip always names
+tomorrow); web facade adds an additive nullable `tomorrow` object inside
+`weather` (old bundles ignore it) and ChatTools.tsx mirrors the arrow.
+Golden fixture happened to land cloudy→rain, so time_strip_weather goldens
+were regenerated on the Linux CI image. 1:1/group parity is inherited:
+weather is per-chat shared state, injection sits in the shared state block.
+
+## 2026-07-25 (UTC) — PR #162 (output sanitizer) follow-ups: perf, data-loss fixes, goldens — dual-model review
+
+**Branch:** local `pr-162-review` (PR head bdd216bb + origin/Rawhide merge + 5 commits, NOT pushed).
+**Files:** `lib/utils/output_sanitizer_regex.dart`, `lib/models/output_sanitizer_rule.dart`,
+`lib/models/chat_generation_settings.dart`, `lib/services/storage/settings/generation_settings.dart`,
+`lib/services/chat/chat_service_session_load.dart`, `chat_service_session_manage.dart`,
+`chat_service_generation.dart`, `chat_service_impersonate.dart`, `chat_service_reprocess.dart`,
+`lib/services/chat_service.dart`, `lib/ui/widgets/output_sanitizer_rule_editor.dart`,
+`lib/ui/settings/tabs/generation_tab.dart`, `docs/Rawhide.md`, golden PNGs
+(chat_settings + bubble_user), sanitizer tests.
+
+**Why/what:** Finishing S-A-M-F's sanitizer PR to mergeable. My review's leftovers: compile-once
+rule application on chat open (was ~7.5k RegExp builds per open), legacy id-0 rules healing
+(duplicate ValueKey crash), danger badge stale-on-first-open (now computed in build), goldens
+regenerated on the Linux image (bubble_user 12% shift eyeballed = the intended avatar-outside-
+bubble fix). Grok hostile review (session e754e292) then found what BOTH prior reviews missed:
+gen-settings bleed still alive on 0-session/startNewChat paths (fresh chats could SAVE the prior
+chat's overrides), retroactive sanitize rewriting USER rows (permanent corruption on next save),
+ReDoS heuristic blind to inner nesting \((a+)+), isValidFindPattern accepting rules RegExp later
+rejects, backend-down guard only covering sendMessage. Fixed all + confirm dialog on the
+retroactive toggle. Grok round 2 then caught MY bug: the relocated guard saved mid-mutation
+during regen (popped reply persisted as deleted) — abort is now save-free + regen paths gate
+before popping. Round 3: CLEAN. Suite 2,508 green; docker golden suite green; analyze clean.
+Web-UI parity for the sanitizer/auto-start settings surfaces: DEFERRAL EXPLICITLY APPROVED by the maintainer 2026-07-25 (in-conversation, per the CLAUDE.md rule) — the web settings counterpart ships as a follow-up; web chats already receive sanitized output meanwhile.
+
+## 2026-07-25 (UTC) — God-file split #1: group_settings_dialog 4,251 → 14 files, all under cap
+
+**Files:** `lib/ui/dialogs/group_settings_dialog.dart` (4,251 → ~200-line shell) + new
+`lib/ui/dialogs/group_settings/` (6 public tab widgets, 5 part-file extensions per the
+settings_page rebuildState precedent, 1 shared support file).
+
+**Why:** First strike of the god-file shrink effort (maintainer-directed, order: this then
+the character-editor consolidation). The dialog was the app's #2 largest file but was
+already six self-contained private tab classes — a pure mechanical move.
+
+**Dedups deleted while moving:** _persistMemberVerificationPref (byte-identical in Realism +
+Needs tabs → shared persistGroupMemberPref), _buildSectionHeader (identical in General +
+Lorebook tabs → GroupSectionHeader widget), _charColors/_charAccentColor palette (identical
+in Realism + Needs → kGroupCharColors/groupCharAccentColor). Stale "Placeholder tabs"
+comment removed (Grok nit). dart fix added super.key to the now-public tab constructors.
+
+**Zero-behavior-change evidence:** analyze clean; full suite 2,513 green; docker golden
+suite green against UNCHANGED baselines (pixel-identical); line-multiset audit of old vs
+new reconciled every delta to the three dedups + scaffolding; Grok verified the shell
+contract (tab order/plumbing/save) — its splice-boundary pass was cut short by CLI
+truncation, covered instead by the multiset audit.
+
+## 2026-07-25 (UTC) — God-file kill #2: EditCharacterDialog deleted (character-editor consolidation)
+
+**Files:** `lib/ui/dialogs/edit_character_dialog.dart` (DELETED, 1,836 lines),
+`lib/ui/pages/edit_character_page.dart` (+onSaved hook), `lib/ui/pages/chat_page.dart`
+(Edit Character → EditCharacterPage in a Dialog shell), `lib/services/chat/chat_service_chat_entry.dart`
+(+refreshActiveCharacterCard), golden repoint + regen (edit_character.{light,dark}),
+AGENTS.md/COVERAGE.md doc leftovers, docs/Rawhide.md bullet.
+
+**Why:** The dialog was a ~73%-duplicate fork of the page (measured): its lorebook editor 93%
+identical, needs/verification UI re-implementing existing shared widgets, missing the whole
+Realism form/Ambitions/token counter, instant-persisting colors/needs (Cancel lied), and its
+live-chat refresh read the card by raw path (silent stale-state bug). Its only unique feature
+(Chat Colors) became redundant when the Themes work moved colors to UiSettingsDialog.
+
+**Decisions (maintainer, in-convo):** dialog-overlay shell in chat; honest Save/Cancel;
+one identical full editor. Dark-styled page in light mode accepted (matches library editing;
+page retheme = follow-up).
+
+**Grok round 1 blockers (all real, all fixed):** my onSaved wiring reused setActiveCharacter —
+which cancels in-flight generation, full-reloads on rename, and tears down groups (the const
+menu shows Edit Character in group mode). Fixed with ChatService.refreshActiveCharacterCard:
+dbId/identity-matched reference swap + notify, no cancel/epoch/reload, group-safe. Plus
+mounted-guard, onSaved contract doc, doc leftovers. Round 2: CLEAN for ship; residual
+group-match hardened with identical(); Grok's snackbar finding dismissed with evidence
+(root ScaffoldMessenger survives pops), its history nit dismissed (the dialog's _updateColor
+really did call setActiveCharacter).
+
+**Verification:** analyze clean; suite 2,513 green ×2; goldens: only edit_character.{light,dark}
+changed (eyeballed — full editor in dialog shell, correct in both themes), everything else
+byte-identical; golden verify green on the new baselines.
+
+## 2026-07-25 (UTC) — EditCharacterPage retheme: light mode means light mode (warm porch)
+
+**Files:** `lib/ui/pages/edit_character_page.dart`, `test/golden/widget/_goldens/dialogs_remaining/edit_character.{light,dark}.png`, `docs/Rawhide.md`.
+
+**Why:** The consolidated character editor was the app's last dark-hardcoded page (local navy
+tokens + ~55 raw Colors.white*/hex sites) — light-mode users got a dark editor everywhere it
+opened. Maintainer directive: retheme to AppColors/warm porch.
+
+**How:** The three navy surface tokens mapped to AppColors helpers whose DARK values are the
+identical hexes (backgroundOf/cardOf/surfaceContainerOf) so dark mode is pixel-stable;
+low-alpha white overlays wrapped in AppColors.resolve(dark: original, light: black-mirrored);
+text/icons to textPrimary/Secondary/Tertiary + iconSecondary; off-palette accents warmed
+(sky→porchHoney, emerald→porchTerracotta, amberAccent→porchAmberOf, redAccent→negativeAccentOf,
+orange→porchTerracotta); one const-strip pass for the now-context-dependent sites. Only the
+black drop-shadow stays raw (shadows are black in both themes).
+
+**Verification:** analyze clean; suite 2,513 green; goldens regenerated (light = genuinely
+light warm-porch, dark = visually identical to before — both eyeballed) and verify suite
+green. Shared Realism/Needs form sections were already AppColors-clean (67/16 usages, zero raw).
+Docker note: Desktop evicted the fpai-golden image 3× today; tarball cache now at
+~/.cache/fpai/fpai-golden-3.41.1.tar.gz (docker load ≪ rebuild).
+
+## 2026-07-25 (UTC) — Custom Piper voice import (Discord feature request)
+
+**Files:** NEW `lib/services/tts/piper_voice_import.dart` (pure converters),
+NEW `lib/services/tts/piper_voice_installer.dart` (IO installer),
+NEW `lib/ui/dialogs/piper_import_voice_button.dart`, `lib/services/voice_manager.dart`
+(thin delegate; kept under cap via the installer extraction), `lib/ui/dialogs/voice_browser_dialog.dart`
+(header button + synthetic rows for custom voices so they're visible/deletable),
+`lib/services/tts_service.dart` (stale "custom voices no longer supported" copy fixed),
+goldens voice_browser.{light,dark} (header button; pre-existing right-edge stripe unchanged),
+NEW `test/services/tts/piper_voice_import_test.dart` (11 offline tests), `docs/Rawhide.md`.
+
+**What:** "Add custom voice" in the Voice Model Browser imports RAW Piper voices
+(.onnx + .onnx.json — community or self-trained, no sherpa re-export needed): tokens.txt
+derived from phoneme_id_map; the sherpa-required ONNX metadata (sample_rate/n_speakers/
+language/comment="piper"/voice/model_type/has_espeak) appended as pure-Dart protobuf
+field-14 wire bytes (no python, no sidecars — dual-verified against sherpa's docs +
+offline-tts-vits-model.cc); espeak-ng-data copied from any installed bundle (phontab
+presence check) or fetched once from sherpa's standalone artifact. Bundle materialized in
+SherpaPiperEngine's exact layout so ensureVoice/generate work untouched; deleteVoice cleans
+customs like any voice.
+
+**Hardening (self-review + Grok):** dot-only/leading/trailing-dot keys can't escape the
+bundle dir (a "...onnx" file keyed as ".." → delete would have wiped piper_models); sink
+closed in finally (Windows lock on failed import); official-key squatting blocked
+(catalog + orphan-bundle check) while re-imports still refuse cleanly; custom voices get
+browser rows (visible + deletable); register-last + full cleanup on failure. Grok's
+remaining secondaries all addressed. Maintainer ruling 2026-07-25 (in-conversation): custom
+voice import is DESKTOP/DART-ONLY BY DESIGN — no web upload counterpart owed; web keeps
+voice selection via the facade.
+
+**Verification:** 11 new tests (wire-format round-trip via a real protobuf reader in-test,
+end-to-end offline import, traversal, dupes, cleanup); suite 2,524 green; analyze clean;
+goldens regenerated + eyeballed; golden verify green.

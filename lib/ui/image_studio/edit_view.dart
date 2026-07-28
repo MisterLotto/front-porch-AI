@@ -209,8 +209,10 @@ class _EditViewState extends State<EditView> {
     final backendKey = context.select<StorageService, String>(
       (s) => s.imageGenSettings.imageGenBackend,
     );
+    // Edit tab reads the EDIT slot (phase #12 model-slot split) — the create
+    // slot's model is irrelevant here and used to poison/be poisoned by it.
     final model = context.select<StorageService, String>(
-      (s) => s.imageGenSettings.imageGenModel,
+      (s) => s.imageGenSettings.imageGenEditModel,
     );
     final backend = ImageGenBackend.fromKey(backendKey);
     final cap = ImageReferenceResolver.resolveForBackend(

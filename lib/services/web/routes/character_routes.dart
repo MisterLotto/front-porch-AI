@@ -85,8 +85,17 @@ class WebCharacterRoutes {
   final CharacterLibraryFacade? _library;
 
   /// Import an uploaded character card (raw bytes; `?filename=` gives the type).
+  ///
+  /// Query params (desktop parity for issue #161):
+  /// - `collision=keepBoth` (default) — always insert on name clash
+  /// - `collision=ask` — return 409 + existing list when name clashes without
+  ///   a stableId match (single-file UI prompt)
+  /// - `collision=replace&replaceId=` — update that library card in place
   Future<shelf.Response> _import(shelf.Request request) async {
     final filename = request.url.queryParameters['filename'] ?? 'card.png';
+    final collision =
+        request.url.queryParameters['collision'] ?? 'keepBoth';
+    final replaceId = request.url.queryParameters['replaceId'];
     final List<int> bytes;
     try {
       bytes = await RequestBody.readBytes(
@@ -97,9 +106,21 @@ class WebCharacterRoutes {
       return JsonResponse.error(413, 'File too large');
     }
     if (bytes.isEmpty) return JsonResponse.badRequest('Empty upload');
-    final result = await _facade.importBytes(bytes, filename);
+    final result = await _facade.importBytes(
+      bytes,
+      filename,
+      collision: collision,
+      replaceId: replaceId,
+    );
     if (result == null) {
       return JsonResponse.error(422, 'Could not read that character card');
+    }
+    if (result['status'] == 'name_collision') {
+      return JsonResponse.error(
+        409,
+        'name_collision',
+        extra: result,
+      );
     }
     return JsonResponse.ok(result);
   }

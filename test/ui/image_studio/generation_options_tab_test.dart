@@ -412,6 +412,15 @@ class _TabFakeStorage extends ChangeNotifier implements StorageService {
 class _TabFakeImageGenSettings implements ImageGenSettings {
   @override
   String get imageGenPromptParadigm => 'natural';
+  // ModelSlotDropdown reads both slots during build (create/edit split).
+  @override
+  String get imageGenModel => '';
+  @override
+  String get imageGenEditModel => '';
+  @override
+  Future<void> setImageGenModel(String v) async {}
+  @override
+  Future<void> setImageGenEditModel(String v) async {}
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }

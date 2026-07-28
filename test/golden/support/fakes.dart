@@ -30,7 +30,9 @@ import 'package:front_porch_ai/database/database.dart' show Objective;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
@@ -53,7 +55,8 @@ import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 
 /// A timer-free, IO-free [LLMProvider] double. Exposes the backend-type surface
-/// screens read (e.g. ReviewAvatarPanel checks `activeBackend`) without
+/// screens read (e.g. the shared AvatarGenerationPanel's vision peek checks
+/// `activeBackend`) without
 /// constructing any backend service.
 class FakeLLMProvider extends ChangeNotifier implements LLMProvider {
   FakeLLMProvider({this.activeBackend = BackendType.kobold});
@@ -112,7 +115,6 @@ class FakeChatService extends ChangeNotifier implements ChatService {
     this.isProcessingGreeting = false,
     String timeOfDay = 'evening',
     int dayCount = 3,
-    int startDayOfWeek = 1,
     int shortTermBond = 120,
     int longTermBond = 60,
     int trustLevel = 40,
@@ -126,16 +128,19 @@ class FakeChatService extends ChangeNotifier implements ChatService {
       'comfort': 60,
     },
   }) : _messages = messages {
+    // Goldens must be date-stable: pin the canonical clock to a fixed anchor
+    // (Tue 2026-06-30) instead of the legacy today-anchored synthesis, which
+    // would repaint the TimeStrip's date every real-world day.
     _time = TimeService(
       onNotify: () {},
       onSaveChat: () async {},
       onSetPendingRealismMetadata: (_, _) {},
-      onNudgePatchLastMessageRealismState: (_, _) {},
-    )..loadTimeScalars(
+      onPatchLastMessageRealismState: (_, _, _) {},
+    )..seedFromV2OrExt(
         timeOfDay: timeOfDay,
         dayCount: dayCount,
-        startDayOfWeek: startDayOfWeek,
         passageOfTimeEnabled: true,
+        storyStartDate: '2026-06-30',
       );
     _nsfw = NsfwService(
       getGroupInt: (_, _) => 0,
@@ -327,6 +332,14 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   set sessionGenSettings(ChatGenerationSettings _) {}
 
+  // Chat theme overrides — MessageBubble and ChatSettingsDialog read this
+  // at build time via widget.chatService?.sessionThemeOverrides and
+  // didChangeDependencies respectively. Default (empty) is fine for goldens.
+  @override
+  ChatThemeOverrides get sessionThemeOverrides => ChatThemeOverrides();
+  @override
+  set sessionThemeOverrides(ChatThemeOverrides _) {}
+
   // Message bubble surface.
   @override
   List<ChatMessage> get messages => List.unmodifiable(_messages);
@@ -354,6 +367,40 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   // is what was making the MessageBubble goldens fail on CI.
   @override
   int? get regenerableHostBelowGuestsIndex => null;
+
+  // Living Time weather. Null (off) by default so every pre-weather sidebar
+  // baseline renders byte-identical — TimeStrip omits the chip entirely on
+  // null. The dedicated weather-chip golden sets this non-null (the VALUE only
+  // gates rendering; the chip's pixels come from WeatherEngine recomputing
+  // over currentSessionId/dayCount/clock, which are seeded deterministically).
+  DailyWeather? currentWeatherValue;
+
+  @override
+  DailyWeather? get currentWeather => currentWeatherValue;
+
+  // Same shape as the real getter: gated on currentWeather, recomputed by the
+  // engine over the deterministic seed/day/clock — so facade and chip tests
+  // see the exact forecast the shipped code would produce.
+  @override
+  DailyWeather? get upcomingWeather => currentWeatherValue == null
+      ? null
+      : WeatherEngine.weatherFor(
+          sessionSeed: currentSessionId!,
+          dayCount: _time.dayCount + 1,
+          date: _time.clock.add(const Duration(days: 1)),
+        );
+
+  @override
+  String? get currentSessionId => 'golden-session';
+
+  /// Ambitions shown by the Character State accordion / group member card.
+  /// Empty by default so pre-ambition goldens render unchanged; a fixture
+  /// can seed values to golden the row itself.
+  List<({String text, int progress})> ambitionsValue = const [];
+
+  @override
+  List<({String text, int progress})> ambitionsFor(CharacterCard card) =>
+      ambitionsValue;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

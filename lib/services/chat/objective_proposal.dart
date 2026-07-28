@@ -148,6 +148,11 @@ class ObjectiveProposal {
   /// tests that don't exercise the journal hook.
   final VoidCallback? onObjectiveCompleted;
 
+  /// Fired when a WHOLE quest retires as achieved (final task done, or a
+  /// taskless objective completed) — with the row, so the consumer knows
+  /// whose ambition it may have advanced (Living Time §6). Fire-and-forget.
+  final void Function(Objective obj)? onQuestAchieved;
+
   ObjectiveProposal({
     required this.stripThinkBlocks,
     required this.getLlmService,
@@ -167,6 +172,7 @@ class ObjectiveProposal {
     required this.setIsCheckingCompletion,
     required this.onNotify,
     this.onObjectiveCompleted,
+    this.onQuestAchieved,
   });
 
   /// Generate subtasks for the current objective using the LLM.
@@ -479,6 +485,7 @@ class ObjectiveProposal {
           // instead of waiting for the next check pass.
           if (tasks.where((t) => t['completed'] != true).length <= 1) {
             await deactivateObjective(obj.id);
+            onQuestAchieved?.call(obj);
             debugPrint(
               '[Objective] Final task done — quest retired: ${obj.objective}',
             );
@@ -490,6 +497,7 @@ class ObjectiveProposal {
         } else {
           // It was a taskless objective that got completed!
           await deactivateObjective(obj.id);
+          onQuestAchieved?.call(obj);
           await loadActiveObjectives();
           debugPrint(
             '[Objective] Taskless objective naturally completed: ${obj.objective}',

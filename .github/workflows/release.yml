@@ -401,28 +401,6 @@ jobs:
           
           echo "✓ Build complete: PKG and inner .app are fully notarized and stapled!"
 
-      # Unsigned shim DMG for stable channel (Front_Porch_AI.dmg) — the last bridge.
-      - name: Build unsigned shim DMG (legacy name for stable updater transition)
-        if: matrix.platform == 'macos'
-        run: |
-          cd build/macos/Build/Products/Release
-          APP_NAME=$(ls -d *.app | head -1)
-          # Absolute via GITHUB_WORKSPACE for robustness (review issue 9).
-          SHIM_DMG="${GITHUB_WORKSPACE}/Front_Porch_AI.dmg"
-          echo "==> Building unsigned shim DMG $SHIM_DMG for stable channel (no codesign/notarize)"
-          SHIM_ROOT="/tmp/shim-stable-$$"
-          rm -rf "$SHIM_ROOT"
-          mkdir -p "$SHIM_ROOT"
-          cp -R "$APP_NAME" "$SHIM_ROOT/"
-          if hdiutil create -volname "Front Porch AI" -srcfolder "$SHIM_ROOT" -ov -format UDZO "$SHIM_DMG" 2>&1 | tail -3; then
-            echo "✓ stable shim DMG via hdiutil"
-          else
-            brew install create-dmg || true
-            "${GITHUB_WORKSPACE}/create-dmg.sh" --skip-jenkins "$SHIM_DMG" "$SHIM_ROOT" || true  # absolute for consistency (Issue B)
-          fi
-          rm -rf "$SHIM_ROOT"
-          ls -l "$SHIM_DMG" || true
-
       - name: Get Version
         id: get_version
         run: echo "VERSION=$(echo ${GITHUB_REF_NAME} | sed 's/^[vV]//')" >> $GITHUB_OUTPUT
@@ -565,7 +543,6 @@ jobs:
             Front_Porch_AI-Linux.rpm
             Front_Porch_AI_Setup.exe
             Front_Porch_AI.pkg
-            Front_Porch_AI.dmg
           if-no-files-found: ignore
 
   publish-release:
@@ -623,7 +600,6 @@ jobs:
             Front_Porch_AI-Linux.rpm
             Front_Porch_AI_Setup.exe
             Front_Porch_AI.pkg
-            Front_Porch_AI.dmg
           prerelease: ${{ contains(github.ref_name, 'beta') }}
           body: ${{ steps.release_notes.outputs.body }}
         env:

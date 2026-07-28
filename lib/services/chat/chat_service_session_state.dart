@@ -135,7 +135,7 @@ extension ChatServiceSessionState on ChatService {
           }
           if (map.containsKey('retrievalCount')) {
             _groupRetrievalCount =
-                (map['retrievalCount'] as num?)?.toInt() ?? 8;
+                (map['retrievalCount'] as num?)?.toInt() ?? 4;
           }
           if (map.containsKey('memoryBudgetPercent')) {
             _groupMemoryBudgetPercent =
@@ -342,6 +342,8 @@ extension ChatServiceSessionState on ChatService {
         timeOfDay: drift.Value(_timeService.timeOfDay),
         dayCount: drift.Value(_timeService.dayCount),
         startDayOfWeek: drift.Value(_timeService.startDayOfWeekAnchor),
+        storyClock: drift.Value(_timeService.storyClockIso),
+        storyStartDate: drift.Value(_timeService.storyStartDateIso),
         passageOfTimeEnabled: drift.Value(_timeService.passageOfTimeEnabled),
         nsfwCooldownEnabled: drift.Value(_nsfwService.nsfwCooldownEnabled),
         needsSimEnabled: drift.Value(_needsSimEnabled),
@@ -377,6 +379,12 @@ extension ChatServiceSessionState on ChatService {
         drift.Variable(sessionId),
       ],
       updates: {_db.sessions},
+    );
+
+    // Per-chat theme overrides — saved via raw SQL (no build_runner needed).
+    await _db.setThemeOverrides(
+      sessionId,
+      _sessionThemeOverrides.toJsonString(),
     );
 
     // Replace all messages for this session using the snapshot.

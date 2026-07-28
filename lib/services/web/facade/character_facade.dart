@@ -281,7 +281,7 @@ class CharacterFacade {
   }
 
   /// Create a brand-new character from web wizard fields. Mirrors the desktop
-  /// `create_character_page._saveCharacter`: build the card + Realism seeds, write
+  /// `create_character_page._createAndAdvance`: build the card + Realism seeds, write
   /// a V2 PNG (embedding the extensions so the seeds survive — the DB has no
   /// realism columns) with a synthesized placeholder avatar, then add it via the
   /// same [CharacterRepository.addCharacter] path. Returns {id, name} or null.
@@ -365,11 +365,21 @@ class CharacterFacade {
   /// Import a character card uploaded from the web (V2 PNG or .byaf). Writes the
   /// bytes to a temp file and reuses the desktop import path
   /// ([CharacterRepository.importCharacter]) so parsing/parity is identical.
-  /// Returns the new character's {id, name}, or null on failure.
+  ///
+  /// [collision]:
+  /// - `keepBoth` (default) — insert on name clash (bulk-safe; issue #161)
+  /// - `ask` — if name clashes and no stableId match, return
+  ///   `{status: 'name_collision', name, existing: [...]}` without writing
+  /// - `replace` — update [replaceId] in place (chats kept)
+  ///
+  /// Returns `{id, name}` on success, the collision map for `ask`, or null
+  /// on hard failure.
   Future<Map<String, dynamic>?> importBytes(
     List<int> bytes,
-    String filename,
-  ) async {
+    String filename, {
+    String collision = 'keepBoth',
+    String? replaceId,
+  }) async {
     final repo = _repo;
     if (repo == null) return null;
     final ext = p.extension(filename).isNotEmpty
@@ -383,6 +393,61 @@ class CharacterFacade {
     );
     try {
       await tmp.writeAsBytes(bytes, flush: true);
+
+      // Peek identity for collision policy (same rules as desktop single-import).
+      CharacterCard? peeked;
+      try {
+        final isJson = tmp.path.toLowerCase().endsWith('.json');
+        final v2 = V2CardService();
+        peeked = isJson
+            ? await v2.readCardFromJsonFile(tmp.path)
+            : await v2.readCard(tmp.path);
+      } catch (_) {
+        peeked = null;
+      }
+      final name =
+          peeked?.name ?? p.basenameWithoutExtension(filename);
+      final stableId = peeked?.frontPorchExtensions?.stableId;
+      final stableMatch = repo.findByStableId(stableId);
+
+      if (stableMatch == null) {
+        final existing = repo.charactersWithName(name);
+        if (existing.isNotEmpty) {
+          if (collision == 'ask') {
+            return {
+              'status': 'name_collision',
+              'name': name,
+              'existing': [
+                for (final c in existing)
+                  {
+                    'id': c.dbId,
+                    'name': c.name,
+                  },
+              ],
+            };
+          }
+          if (collision == 'replace') {
+            CharacterCard? target;
+            if (replaceId != null && replaceId.isNotEmpty) {
+              for (final c in existing) {
+                if (c.dbId == replaceId) {
+                  target = c;
+                  break;
+                }
+              }
+            }
+            target ??= existing.first;
+            final card = await repo.importCharacter(
+              tmp,
+              forceReplaceTarget: target,
+            );
+            if (card == null) return null;
+            return {'id': card.dbId, 'name': card.name, 'replaced': true};
+          }
+          // keepBoth: fall through to plain import (insert)
+        }
+      }
+
       final card = await repo.importCharacter(tmp);
       if (card == null) return null;
       return {'id': card.dbId, 'name': card.name};

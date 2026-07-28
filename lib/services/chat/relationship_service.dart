@@ -18,6 +18,8 @@
 
 import 'package:flutter/foundation.dart';
 
+import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
+
 /// Plain (non-ChangeNotifier) domain service owning relationship / affection /
 /// trust / fixation / inter-character feelings state and logic (scores, bond+trust
 /// deltas via apply, tier calculation, fixation lifespan+update, short/long term
@@ -56,18 +58,22 @@ import 'package:flutter/foundation.dart';
 /// short/longTerm*Score/Tier + progress getters + tierName getters + inter-char
 /// public methods) for callers and tests.
 ///
-/// Reset helpers (resetForFreshChat, seedFromV2OrExt, seedFromCardV2OrExt,
-/// loadScalars, applyLegacyMigrationIfNeeded, loadRelationshipScalarsForSpeaker,
-/// saveRelationshipScalarsToGroup) support the documented "keep reset blocks in sync"
-/// sites in parent without adding private helpers to the god file.
+/// Reset helpers (resetForFreshChat, seedFromCardV2OrExt, loadScalars,
+/// loadRelationshipScalarsForSpeaker, saveRelationshipScalarsToGroup) support
+/// the documented "keep reset blocks in sync" sites in parent without adding
+/// private helpers to the god file.
 ///
-/// seedFromCardV2OrExt does *plain clamp only* (no migration) for fresh V2.5 card
-/// ext seeds on new 1:1 chats (card authors use the current ±300 scale). The
-/// original seedFromV2OrExt (which applies legacy ±150->*2 migration) is retained
-/// for direct test coverage of the migration path and any future legacy session
-/// seed compatibility; production legacy session loads use the explicit
-/// migrateShortTermScore / migrateLongTermScore + loadScalars + applyLegacy...
-/// paths in ChatService (see "card-seed bypass" notes in god keep-sync comments).
+/// seedFromCardV2OrExt does *plain clamp only* for fresh V2.5 card ext seeds
+/// on new 1:1 chats (card authors use the current ±300 scale), and loadScalars
+/// takes persisted session values raw. The legacy ±150→×2 era migration
+/// (migrate*Score wrappers, seedFromV2OrExt, applyLegacyShortTermMigration-
+/// IfNeeded) was DELETED 2026-07-27: it inferred "old era" from |score| ≤ 150,
+/// which every current chat passes through on its way up, so each library
+/// open→save cycle re-doubled live bonds (40→80→160) until they crossed 150 —
+/// while groups and the history-picker load path never migrated at all
+/// (parity break). Do not reintroduce an era heuristic keyed on score
+/// magnitude; a real era marker (schema version / column) is the only safe
+/// trigger for any future scale change.
 ///
 /// 0 new private methods added to ChatService as part of this step (thins + delegations only;
 /// deletions of moved code are mandatory part of the task).
@@ -129,6 +135,13 @@ class RelationshipService {
   getGroupCounter;
   final void Function(String charId, String key, int value)? setGroupCounter;
 
+  /// Living Time §7 v1.5 / v1.5.1: fired when short-term bond, long-term bond,
+  /// or trust *tier* changes via a forward apply. Null in tests that don't
+  /// care. ChatService plants a journal milestone card. Never fires on
+  /// load/seed/snapshot restore or when [applyScoreDelta] /
+  /// [applyTrustDelta] run with recordMilestone: false (regen revert).
+  final void Function(TierCrossing crossing)? onTierCrossing;
+
   // Owned simulation state (moved verbatim from ChatService).
   int _affectionScore = 0;
   int _relationshipTier = 0;
@@ -185,6 +198,7 @@ class RelationshipService {
     required this.setGroupSpatialStance,
     required this.getGroupInterCharacterRelationships,
     required this.setGroupInterCharacterRelationships,
+    this.onTierCrossing,
   });
 
   // ── Public surface (for @Deprecated shims in ChatService + direct test/UI callers) ──────
@@ -441,13 +455,6 @@ class RelationshipService {
   double bondPercentForScore(int score) => bondScalePercent(score);
   double trustPercentForLevel(int level) => trustScalePercent(level);
 
-  /// Public migrate helpers for load paths (kept internal impl private; surface
-  /// only for the 2-3 legacy scale sites in ChatService that load persisted old
-  /// ±150 session data). Card V2/Ext fresh seeds use seedFromCardV2OrExt (plain
-  /// clamp, no migration) to avoid doubling author-intended values on new chats.
-  int migrateShortTermScore(int rawScore) => _migrateShortTermScore(rawScore);
-  int migrateLongTermScore(int rawScore) => _migrateLongTermScore(rawScore);
-
   // ── Core logic (verbatim mechanical extraction) ───────────────────────────
 
   int _calculateTier(int score) {
@@ -465,22 +472,6 @@ class RelationshipService {
     return score > 0 ? 10 : -10;
   }
 
-  /// Migration: scale old short-term scores (±150) to new range (±300)
-  int _migrateShortTermScore(int rawScore) {
-    if (rawScore.abs() <= 150) {
-      return (rawScore * 2).clamp(-300, 300);
-    }
-    return rawScore;
-  }
-
-  /// Migration: scale old long-term scores (±150) to new range (±300)
-  int _migrateLongTermScore(int rawScore) {
-    if (rawScore.abs() <= 150) {
-      return (rawScore * 2).clamp(-300, 300);
-    }
-    return rawScore;
-  }
-
   // ── Reset / seed / load helpers (support "keep reset blocks in sync" in parent) ──
 
   void resetForFreshChat() {
@@ -496,18 +487,6 @@ class RelationshipService {
     _fixationLifespan = 0;
     _spatialStance = '';
     _pendingTrustRepair = false;
-  }
-
-  void seedFromV2OrExt({
-    required int shortTermBond,
-    required int longTermBond,
-    required int trustLevel,
-  }) {
-    _affectionScore = _migrateShortTermScore(shortTermBond.clamp(-300, 300));
-    _longTermScore = _migrateLongTermScore(longTermBond.clamp(-300, 300));
-    _trustLevel = trustLevel.clamp(-100, 100);
-    _relationshipTier = _calculateTier(_affectionScore);
-    _longTermTier = _calculateTier(_longTermScore);
   }
 
   /// Card V2/Ext seed path: plain clamp (current ±300 scale authored by V2.5 cards
@@ -552,22 +531,6 @@ class RelationshipService {
 
     _relationshipTier = _calculateTier(_affectionScore);
     _longTermTier = _calculateTier(_longTermScore);
-  }
-
-  void applyLegacyShortTermMigrationIfNeeded() {
-    if (_affectionScore > 0 &&
-        _affectionScore <= 15 &&
-        _relationshipTier >= 3) {
-      _affectionScore = _affectionScore * 10;
-      if (_longTermScore == 0) {
-        _longTermScore = _affectionScore;
-        _longTermTier = _calculateTier(_longTermScore);
-      }
-      _relationshipTier = _calculateTier(_affectionScore);
-      debugPrint(
-        '[Realism] Legacy session migrated to REv2 scales (via RelationshipService).',
-      );
-    }
   }
 
   /// Load per-speaker relationship scalars (affection/trust/fixation/tiers/spatial)
@@ -644,17 +607,24 @@ class RelationshipService {
 
   // ── Deltas, growth, decay, fixation (verbatim) ─────────────────────────────
 
-  void applyScoreDelta(int delta) {
+  /// Apply a short-term bond delta. When the named short-term tier changes
+  /// and [recordMilestone] is true, fires [onTierCrossing] (Living Time
+  /// v1.5). Every 5 applies also runs long-term growth, which may fire a
+  /// separate `long_term` crossing (v1.5.1). Regen/reprocess passes
+  /// [recordMilestone]: false so undoing a rejected reply never invents
+  /// reverse story beats (short- or long-term).
+  void applyScoreDelta(int delta, {bool recordMilestone = true}) {
     _shortTermDeltasSummary += delta;
     _turnsSinceLongTermCheck++;
 
     if (_turnsSinceLongTermCheck >= 5) {
-      _evalLongTermGrowth();
+      _evalLongTermGrowth(recordMilestone: recordMilestone);
     }
 
     if (delta == 0) return;
     final oldScore = _affectionScore;
     final oldTier = _relationshipTier;
+    final oldLabel = bondTierLabel(oldTier);
 
     _affectionScore = (_affectionScore + delta).clamp(-300, 300);
     _relationshipTier = _calculateTier(_affectionScore);
@@ -666,11 +636,29 @@ class RelationshipService {
       );
       onNotify();
     }
+    if (recordMilestone &&
+        oldTier != _relationshipTier &&
+        onTierCrossing != null) {
+      onTierCrossing!(
+        TierCrossing(
+          axis: 'bond',
+          oldTier: oldTier,
+          newTier: _relationshipTier,
+          oldLabel: oldLabel,
+          newLabel: shortTermTierName,
+        ),
+      );
+    }
   }
 
-  void applyTrustDelta(int delta) {
+  /// Apply a trust delta. Tier crossings fire [onTierCrossing] when
+  /// [recordMilestone] is true (default). Severe drops still arm repair.
+  void applyTrustDelta(int delta, {bool recordMilestone = true}) {
     if (delta == 0) return;
+    final oldTier = trustTier;
+    final oldLabel = trustTierLabel(oldTier);
     _trustLevel = (_trustLevel + delta).clamp(-100, 100);
+    final newTier = trustTier;
     debugPrint(
       '[Realism:Relationship] Trust shifted by $delta -> $_trustLevel',
     );
@@ -680,11 +668,23 @@ class RelationshipService {
       _pendingTrustRepair = true;
       debugPrint('[Realism:Trust] Severe drop — repair window armed');
     }
+    if (recordMilestone && oldTier != newTier && onTierCrossing != null) {
+      onTierCrossing!(
+        TierCrossing(
+          axis: 'trust',
+          oldTier: oldTier,
+          newTier: newTier,
+          oldLabel: oldLabel,
+          newLabel: trustTierLabel(newTier),
+        ),
+      );
+    }
   }
 
-  void _evalLongTermGrowth() {
+  void _evalLongTermGrowth({bool recordMilestone = true}) {
     final oldLTScore = _longTermScore;
     final oldLTTier = _longTermTier;
+    final oldLabel = longTermTierLabel(oldLTTier);
 
     // Proportional growth based on average short-term tier over the evaluation window
     // (use current tier as proxy for recent average)
@@ -718,6 +718,21 @@ class RelationshipService {
     } else {
       debugPrint(
         '[Realism] Long-Term Bond check (No change) - Status: $_longTermScore ($longTermTierName)',
+      );
+    }
+    // Living Time v1.5.1: plant only when the *named* long-term tier moves.
+    // Score ticks inside the same tier stay silent (climate, not weather).
+    if (recordMilestone &&
+        oldLTTier != _longTermTier &&
+        onTierCrossing != null) {
+      onTierCrossing!(
+        TierCrossing(
+          axis: 'long_term',
+          oldTier: oldLTTier,
+          newTier: _longTermTier,
+          oldLabel: oldLabel,
+          newLabel: longTermTierName,
+        ),
       );
     }
   }

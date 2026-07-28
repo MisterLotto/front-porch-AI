@@ -25,6 +25,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/database/session_gen_overrides_heal.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
 
 part 'database.g.dart';
@@ -131,7 +132,11 @@ class Sessions extends Table {
       integer().withDefault(const Constant(1))(); // starts at Day 1
   IntColumn get startDayOfWeek => integer().withDefault(
     const Constant(0),
-  )(); // 1=Mon..7=Sun anchor for narrativeWeekday; 0=legacy/unset (compute on first load)
+  )(); // 1=Mon..7=Sun; legacy anchor, now WRITTEN as weekday(storyStartDate) so external readers stay consistent
+  TextColumn get storyClock =>
+      text().nullable()(); // ISO-8601 story datetime — canonical clock (design: story-calendar.md)
+  TextColumn get storyStartDate =>
+      text().nullable()(); // ISO-8601 date of Day 1 — canonical anchor; null = legacy row (synthesized on load)
   BoolColumn get nsfwCooldownEnabled =>
       boolean().withDefault(const Constant(false))(); // sub-toggle
   BoolColumn get passageOfTimeEnabled => boolean().withDefault(
@@ -883,6 +888,8 @@ class AppDatabase extends _$AppDatabase {
         // silent-catch (duplicate-column on rollback/dual-run), so this list is
         // what guarantees the column exists if that first ALTER ever failed.
         'selected_look_avatar_id TEXT',
+        // Per-chat theme overrides (theme preset + font/color/border/background overrides).
+        'theme_overrides TEXT',
       ],
       'group_members': [
         // Per current GroupMembers Dart definition + created_at (to match the repair-path CREATE TABLE).
@@ -1132,7 +1139,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1782,6 +1789,47 @@ class AppDatabase extends _$AppDatabase {
           );
         } catch (_) {}
       }
+      if (from < 38) {
+        // v37→v38: the Story Calendar (docs/design/story-calendar.md).
+        // Canonical minute-level clock + Day 1 anchor, both nullable additive
+        // (maintainer-approved sessions change, 2026-07-20) — legacy rows stay
+        // NULL and synthesize on first load; Character Card Forge's raw SQL
+        // keeps working (timeOfDay/dayCount/startDayOfWeek are still written,
+        // now derived from the clock). Guarded like v37 (rollback re-runs).
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN story_clock TEXT',
+          );
+        } catch (_) {}
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN story_start_date TEXT',
+          );
+        } catch (_) {}
+      }
+      if (from < 39) {
+        // v38→v39: data-only heal, NO schema change. The pre-fix
+        // generation-settings bleed persisted stale per-chat sampler
+        // overrides into session rows the user never configured; once the
+        // load path started reading them (the bleed fix itself), those rows
+        // silently shadowed global sampler settings and made models loop /
+        // repeat old messages. Strips all bleed-era keys, keeps only the
+        // post-bleed output_sanitizer_* keys. Full rationale + key list in
+        // session_gen_overrides_heal.dart.
+        try {
+          final healed = await healBledSessionGenOverrides(this);
+          if (healed > 0) {
+            debugPrint(
+              '[DB] v39: cleared bled generation overrides '
+              'from $healed session(s)',
+            );
+          }
+        } catch (e) {
+          // Non-fatal: stale overrides just stay active for this install.
+          // Never abort the migration chain (and thereby DB open) over it.
+          debugPrint('[DB] v39 gen-overrides heal failed: $e');
+        }
+      }
     },
   );
 
@@ -2336,6 +2384,47 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
 
+  /// Save per-chat theme overrides JSON for a session — raw SQL so no
+  /// build_runner regeneration is needed.
+  Future<void> setThemeOverrides(
+    String sessionId,
+    String? themeOverridesJson,
+  ) async {
+    await customUpdate(
+      'UPDATE sessions SET theme_overrides = ? WHERE id = ?',
+      variables: [Variable(themeOverridesJson), Variable(sessionId)],
+      updates: {sessions},
+    );
+    await bumpSyncVersion();
+  }
+
+  /// Load per-chat theme overrides JSON for a session.
+  Future<String?> getThemeOverrides(String sessionId) async {
+    final rows = await customSelect(
+      'SELECT theme_overrides FROM sessions WHERE id = ?',
+      variables: [Variable(sessionId)],
+    ).get();
+    return rows.isNotEmpty ? rows.first.read<String?>('theme_overrides') : null;
+  }
+
+  /// Get the theme_overrides from the most recent non-deleted session for a
+  /// given character or group. Used by startNewChat to inherit the previous
+  /// chat's theme when starting a fresh session.
+  Future<String?> getLastSessionThemeOverrides({
+    String? characterId,
+    String? groupId,
+  }) async {
+    final column = characterId != null ? 'character_id' : 'group_id';
+    final id = characterId ?? groupId;
+    if (id == null) return null;
+    final rows = await customSelect(
+      'SELECT theme_overrides FROM sessions WHERE $column = ? '
+      'AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1',
+      variables: [Variable(id)],
+    ).get();
+    return rows.isNotEmpty ? rows.first.read<String?>('theme_overrides') : null;
+  }
+
   Future<int> deleteSessionById(String id) async {
     // Hard delete: also delete all messages + journal cards + growth rings in
     // this session. (Journal cards and growth rings are strictly
@@ -2660,6 +2749,15 @@ class AppDatabase extends _$AppDatabase {
 
   /// All cards for one diary owner in one chat — pinned first, then oldest
   /// first (stable reading order for prompt handles and the UI).
+  /// Every diary owner's cards for one session — the timeline-integrity
+  /// invalidation sweep (regen/edit/delete) must cover owners no longer in
+  /// the cast, so it cannot iterate the live participant list.
+  Future<List<JournalMemoryData>> getJournalCardsForSession(
+    String sessionId,
+  ) => (select(
+    journalMemories,
+  )..where((j) => j.sessionId.equals(sessionId))).get();
+
   Future<List<JournalMemoryData>> getJournalCards(
     String sessionId,
     String characterId,
@@ -2682,6 +2780,11 @@ class AppDatabase extends _$AppDatabase {
     }
     await into(journalMemories).insert(card);
   }
+
+  /// Single card by primary key (porch-ack clear, rare paths).
+  Future<JournalMemoryData?> getJournalCardById(String id) =>
+      (select(journalMemories)..where((j) => j.id.equals(id)))
+          .getSingleOrNull();
 
   /// Write-by-id partial update (mirrors [updateMessage] style).
   Future<void> updateJournalCard(String id, JournalMemoriesCompanion card) =>

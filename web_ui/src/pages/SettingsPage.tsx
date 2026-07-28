@@ -41,6 +41,8 @@ interface Gen {
   dynamicTempEnabled: boolean;
   dynamicResponses: boolean;
   dynamicResponseInterval: number;
+  /** Away pace (Living Time, additive): story periods per AFK scene. */
+  dynamicResponsePacePeriods?: number;
 }
 interface Settings {
   backend: string;
@@ -324,6 +326,19 @@ export function SettingsPage() {
           <>
             <SliderField label="Idle timeout (s)" value={s.generation.dynamicResponseInterval} min={30} max={300} step={10}
               onChange={(v) => patchGen({ dynamicResponseInterval: Math.round(v) })} />
+            <label className="field">
+              <span>Story time per away scene</span>
+              <select
+                value={s.generation.dynamicResponsePacePeriods ?? 1}
+                onChange={(e) =>
+                  patchGen({ dynamicResponsePacePeriods: Number(e.target.value) })
+                }
+              >
+                <option value={1}>a few hours</option>
+                <option value={3}>half the day</option>
+                <option value={6}>a full day</option>
+              </select>
+            </label>
           </>
         )}
       </section>

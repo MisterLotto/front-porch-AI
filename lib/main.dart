@@ -21,6 +21,7 @@ import 'dart:async';
 // `Size`. `hide` (not `show`) keeps the `lookupFunction` extension in scope.
 import 'dart:ffi' hide Size;
 import 'dart:io';
+import 'dart:ui' show AppExitResponse;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
@@ -28,6 +29,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' as riverpod;
 
 import 'package:window_manager/window_manager.dart';
 // screen_retriever is a transitive dep of window_manager (used here to validate
@@ -40,6 +42,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart'; // Keep original import for MainLayout
 import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/utils/native_exit.dart';
 import 'package:front_porch_ai/database/database.dart';
 // ignore: unused_import — used in the commented-out auto-cleanup block below
 import 'package:front_porch_ai/database/database_cleanup.dart';
@@ -201,14 +204,17 @@ void main(List<String> args) async {
   // the Flutter engine from doing an unclean teardown that triggers:
   //   "FlutterEngineRemoveView returned kInvalidArguments"
   //   "Segmentation fault (core dumped)"
+  // On macOS the exit must also skip C++ finalizers (see
+  // exitWithoutNativeFinalizers) or the abort-in-destructor crash fires here
+  // too and the signal-quit gets logged as "Abort trap: 6".
   if (!Platform.isWindows) {
     ProcessSignal.sigint.watch().listen((_) {
       debugPrint('Caught SIGINT — exiting immediately.');
-      exit(0);
+      Platform.isMacOS ? exitWithoutNativeFinalizers(0) : exit(0);
     });
     ProcessSignal.sigterm.watch().listen((_) {
       debugPrint('Caught SIGTERM — exiting immediately.');
-      exit(0);
+      Platform.isMacOS ? exitWithoutNativeFinalizers(0) : exit(0);
     });
   }
   // Ignore SIGPIPE at the C level. A write to a socket/pipe whose peer has
@@ -343,7 +349,12 @@ void main(List<String> args) async {
     await windowManager.setPreventClose(true);
   });
   runApp(
-    MultiProvider(
+    // ProviderScope: Riverpod root for new-code state (CLAUDE.md Riverpod
+    // migration; first consumer: Living Time weather). Wraps the existing
+    // Provider tree without touching service init order — legacy providers
+    // below are unchanged.
+    riverpod.ProviderScope(
+      child: MultiProvider(
       providers: [
         Provider<AppDatabase>.value(value: db),
         Provider<bool>.value(value: needsMigration), // migration flag
@@ -743,6 +754,7 @@ void main(List<String> args) async {
         ),
       ],
       child: const MyApp(),
+      ),
     ),
   );
 }
@@ -779,10 +791,18 @@ class _MyAppState extends State<MyApp> with WindowListener {
   double? _normalX;
   double? _normalY;
 
+  /// macOS-only hook for Cmd+Q / Dock-quit — see [_onAppExitRequested].
+  AppLifecycleListener? _appExitListener;
+
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    if (Platform.isMacOS) {
+      _appExitListener = AppLifecycleListener(
+        onExitRequested: _onAppExitRequested,
+      );
+    }
     // Run migration after first frame, then reunification if needed
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Capture initial window bounds after restore so tracking is correct
@@ -901,6 +921,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
 
   @override
   void dispose() {
+    _appExitListener?.dispose();
     windowManager.removeListener(this);
     super.dispose();
   }
@@ -946,7 +967,33 @@ class _MyAppState extends State<MyApp> with WindowListener {
   }
 
   @override
-  void onWindowClose() async {
+  void onWindowClose() {
+    _saveStateAndShutdown();
+  }
+
+  /// Cmd+Q / Dock "Quit" (macOS): AppKit asks the framework for a cancelable
+  /// app exit BEFORE terminating. Without this hook the default answer lets
+  /// [NSApp terminate:] proceed straight into libc exit() and the native-
+  /// finalizer abort — so quitting via Cmd+Q kept producing crash reports
+  /// even with the red-button path fixed. Run the same cleanup instead; it
+  /// ends in exitWithoutNativeFinalizers, so the response is never sent.
+  Future<AppExitResponse> _onAppExitRequested() async {
+    if (_shutdownStarted) {
+      // A close is already in flight and will _exit when done — refuse this
+      // termination so the engine can't race our cleanup with its teardown.
+      return AppExitResponse.cancel;
+    }
+    await _saveStateAndShutdown();
+    return AppExitResponse.exit; // unreachable on macOS
+  }
+
+  /// True once a shutdown path has started — makes close requests
+  /// idempotent (red button + Cmd+Q can both fire in one quit).
+  bool _shutdownStarted = false;
+
+  Future<void> _saveStateAndShutdown() async {
+    if (_shutdownStarted) return;
+    _shutdownStarted = true;
     // Save window state (size, position, maximized) before cleanup.
     // Must happen early while the window is still alive and queryable.
     try {
@@ -1055,7 +1102,18 @@ class _MyAppState extends State<MyApp> with WindowListener {
     if (Platform.isLinux || Platform.isWindows) {
       exit(0);
     } else {
-      await windowManager.destroy();
+      // macOS: end the process WITHOUT running C++ static destructors.
+      // destroy() → [NSApp terminate:] → libc exit() → __cxa_finalize runs
+      // the bundled native libraries' global destructors — and onnxruntime's
+      // (in-process expression/embedding engines; its worker pool holds ~16
+      // parked threads at quit) aborts there via std::terminate. Every
+      // red-button close produced an "Abort trap: 6" crash report in
+      // ~/Library/Logs/DiagnosticReports even though the quit was clean.
+      // Dart's exit(0) would hit the same finalize pass, so end the process
+      // with no finalizers instead. Safe: everything above was awaited
+      // (prefs written, chat saves flushed, KoboldCpp stopped, web server
+      // stopped), and SQLite's committed WAL data is crash-safe by design.
+      exitWithoutNativeFinalizers(0);
     }
   }
 

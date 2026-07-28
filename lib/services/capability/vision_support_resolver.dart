@@ -280,18 +280,40 @@ class VisionSupportResolver {
               (presetMmproj != null && File(presetMmproj).existsSync()),
         );
       case BackendType.openRouter:
-        return resolveRemote(
-          apiUrl: storage.remoteApiUrl,
-          apiKey: storage.remoteApiKey,
-          modelName: storage.remoteModelName,
-        );
       case BackendType.omlx:
+        final (apiUrl, modelName) = _remoteIdentityFor(backend, storage);
         return resolveRemote(
-          apiUrl: 'http://localhost:8000/v1',
+          apiUrl: apiUrl,
           apiKey: storage.remoteApiKey,
-          modelName: storage.remoteModelName,
+          modelName: modelName,
         );
     }
+  }
+
+  /// The apiUrl/model identity [resolveRemote] keys its cache on, for a
+  /// remote-flavored [backend]. oMLX rides OpenRouterService at its fixed
+  /// local URL (see LLMProvider).
+  (String, String) _remoteIdentityFor(BackendType backend, StorageService storage) =>
+      backend == BackendType.omlx
+      ? ('http://localhost:8000/v1', storage.remoteModelName)
+      : (storage.remoteApiUrl, storage.remoteModelName);
+
+  /// What is ALREADY KNOWN about the active LLM's vision, at zero network
+  /// cost: the local-GGUF verdict for Kobold (file parse only — no server is
+  /// asked anything), the cached verdict for remote backends, or null when
+  /// nothing definitive is known yet. Capability-gated UI (the creator's
+  /// Vision QC toggle) uses this to decide hidden/shown on open without
+  /// auto-probing — a probe costs a request and mis-verdicts while models
+  /// load, so it only ever runs from an explicit user click.
+  Future<VisionSupport?> peekForActiveLlm({
+    required BackendType backend,
+    required StorageService storage,
+  }) async {
+    if (backend == BackendType.kobold) {
+      return resolveForActiveLlm(backend: backend, storage: storage);
+    }
+    final (apiUrl, modelName) = _remoteIdentityFor(backend, storage);
+    return _remoteCache['$apiUrl::$modelName'];
   }
 
   /// Fetch a models listing from [uri] and return the RAW entry matching

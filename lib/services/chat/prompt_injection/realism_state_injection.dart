@@ -17,12 +17,15 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 
 /// The words-only state block composer (docs/design/prompt-state-injection.md
 /// §3): the ONE place the model receives the speaker's live internal state.
@@ -66,6 +69,9 @@ class RealismStateInjection {
   final RelationshipInjection relationshipInjection;
   final EmotionInjection emotionInjection;
   final TimeInjection timeInjection;
+  final WeatherInjection weatherInjection;
+  final AmbitionInjection ambitionInjection;
+  final PromiseDebtInjection promiseDebtInjection;
   final BehavioralInjection behavioralInjection;
   final NsfwInjection nsfwInjection;
   final NeedsInjection needsInjection;
@@ -81,6 +87,9 @@ class RealismStateInjection {
     required this.relationshipInjection,
     required this.emotionInjection,
     required this.timeInjection,
+    required this.weatherInjection,
+    required this.ambitionInjection,
+    required this.promiseDebtInjection,
     required this.behavioralInjection,
     required this.nsfwInjection,
     required this.needsInjection,
@@ -112,11 +121,14 @@ class RealismStateInjection {
 
     final fragments = <String>[
       timeInjection.buildTimeInjection(),
+      weatherInjection.buildWeatherInjection(),
       relationshipInjection.buildRelationshipInjection(),
       relationshipInjection.buildTrustBehaviorInjection(),
       emotionInjection.buildEmotionInjection(),
       needsInjection.buildNeedsInjection(),
       nsfwInjection.buildNsfwCooldownInjection(),
+      ambitionInjection.buildAmbitionInjection(),
+      promiseDebtInjection.buildPromiseDebtInjection(),
       behavioralInjection.buildBehavioralMechanicsInjection(),
       relationshipInjection.buildInterCharacterFeelingsInjection(),
     ].where((f) => f.trim().isNotEmpty).map((f) => f.trim()).toList();

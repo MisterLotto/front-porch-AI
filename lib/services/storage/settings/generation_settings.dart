@@ -16,6 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:convert';
+
+import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+
 import 'settings_base.dart';
 
 /// Generation / sampling settings (system prompt, temperature, penalties,
@@ -47,6 +51,11 @@ class GenerationSettings with SettingsBase {
   bool _dynamicResponses = false;
   int _dynamicResponseInterval = 60;
   int _dynamicResponseMaxMessages = 3;
+
+  /// Away pace (Living Time): story periods each AFK snapshot advances.
+  /// 1 = a few hours (legacy default), 3 = half the day, 6 = a full day.
+  /// Deterministic by design — the model never chooses the span.
+  int _dynamicResponsePacePeriods = 1;
   double _xtcThreshold = 0.1;
   // 0 = XTC off. The old default was 0.5, but XTC never actually reached the
   // model back then — now that samplers are delivered, defaulting it ON would
@@ -79,6 +88,15 @@ class GenerationSettings with SettingsBase {
 
   List<String> _stopSequences = List.of(kDefaultStopSequences);
 
+  static const List<OutputSanitizerRule> kDefaultSanitizerRules = [
+    OutputSanitizerRule(id: 0, find: '\u2014', replace: ' - '),
+  ];
+
+  bool _outputSanitizerEnabled = false;
+  bool _sanitiseExistingHistory = false;
+  List<OutputSanitizerRule> _outputSanitizerRules =
+      List.of(kDefaultSanitizerRules);
+
   String get systemPrompt => _systemPrompt;
   double get minP => _minP;
   double get topP => _topP;
@@ -92,11 +110,16 @@ class GenerationSettings with SettingsBase {
   bool get dynamicResponses => _dynamicResponses;
   int get dynamicResponseInterval => _dynamicResponseInterval;
   int get dynamicResponseMaxMessages => _dynamicResponseMaxMessages;
+  int get dynamicResponsePacePeriods => _dynamicResponsePacePeriods;
   double get xtcThreshold => _xtcThreshold;
   double get xtcProbability => _xtcProbability;
   int get maxLength => _maxLength;
   int get minLength => _minLength;
   List<String> get stopSequences => List.unmodifiable(_stopSequences);
+  bool get outputSanitizerEnabled => _outputSanitizerEnabled;
+  bool get sanitiseExistingHistory => _sanitiseExistingHistory;
+  List<OutputSanitizerRule> get outputSanitizerRules =>
+      List.unmodifiable(_outputSanitizerRules);
 
   void load() {
     _systemPrompt = prefs?.getString(k('system_prompt')) ?? _systemPrompt;
@@ -116,6 +139,8 @@ class GenerationSettings with SettingsBase {
         prefs?.getBool(k('dynamic_responses')) ?? _dynamicResponses;
     _dynamicResponseInterval =
         prefs?.getInt(k('dynamic_response_interval')) ?? _dynamicResponseInterval;
+    _dynamicResponsePacePeriods =
+        (prefs?.getInt(k('dynamic_response_pace_periods')) ?? 1).clamp(1, 6);
     _dynamicResponseMaxMessages =
         prefs?.getInt(k('dynamic_response_max_messages')) ??
         _dynamicResponseMaxMessages;
@@ -136,6 +161,22 @@ class GenerationSettings with SettingsBase {
     }
     if (added) {
       prefs?.setStringList(k('stop_sequences'), _stopSequences);
+    }
+
+    _outputSanitizerEnabled =
+        prefs?.getBool(k('output_sanitizer_enabled')) ?? _outputSanitizerEnabled;
+    _sanitiseExistingHistory =
+        prefs?.getBool(k('sanitise_existing_history')) ??
+        _sanitiseExistingHistory;
+    final rulesJson = prefs?.getString(k('output_sanitizer_rules'));
+    if (rulesJson != null) {
+      try {
+        _outputSanitizerRules = OutputSanitizerRule.listFromJson(
+          jsonDecode(rulesJson) as List,
+        );
+      } catch (_) {
+        // Keep default on corrupt data
+      }
     }
   }
 
@@ -217,6 +258,15 @@ class GenerationSettings with SettingsBase {
     notify();
   }
 
+  Future<void> setDynamicResponsePacePeriods(int value) async {
+    _dynamicResponsePacePeriods = value.clamp(1, 6);
+    await prefs?.setInt(
+      k('dynamic_response_pace_periods'),
+      _dynamicResponsePacePeriods,
+    );
+    notify();
+  }
+
   Future<void> setXtcThreshold(double value) async {
     _xtcThreshold = value;
     await prefs?.setDouble(k('xtc_threshold'), value);
@@ -260,5 +310,30 @@ class GenerationSettings with SettingsBase {
       await prefs?.setStringList(k('stop_sequences'), _stopSequences);
       notify();
     }
+  }
+
+  Future<void> setOutputSanitizerEnabled(bool value) async {
+    _outputSanitizerEnabled = value;
+    await prefs?.setBool(k('output_sanitizer_enabled'), value);
+    if (!value) {
+      _sanitiseExistingHistory = false;
+      await prefs?.setBool(k('sanitise_existing_history'), false);
+    }
+    notify();
+  }
+
+  Future<void> setSanitiseExistingHistory(bool value) async {
+    _sanitiseExistingHistory = value;
+    await prefs?.setBool(k('sanitise_existing_history'), value);
+    notify();
+  }
+
+  Future<void> setOutputSanitizerRules(List<OutputSanitizerRule> value) async {
+    _outputSanitizerRules = value;
+    await prefs?.setString(
+      k('output_sanitizer_rules'),
+      jsonEncode(value.map((r) => r.toJson()).toList()),
+    );
+    notify();
   }
 }

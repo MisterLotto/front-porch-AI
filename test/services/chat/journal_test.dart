@@ -382,6 +382,8 @@ void main() {
         getMaxCards: () => 200,
         onNotify: () {},
         onSaveChat: () async {},
+        getCurrentStoryDay: () => 1,
+        getCurrentStoryClockIso: () => '2026-06-30T09:00:00.000Z',
       );
     }
 
@@ -528,6 +530,8 @@ void main() {
         getMaxCards: () => 200,
         onNotify: () {},
         onSaveChat: () async {},
+        getCurrentStoryDay: () => 1,
+        getCurrentStoryClockIso: () => '2026-06-30T09:00:00.000Z',
       );
       await m.runMaintenancePass();
 
@@ -740,7 +744,11 @@ void main() {
       expect(cursors, [2]);
     });
 
-    test('tools rejected once → XML fallback, probe not repeated', () async {
+    test('null tools answer is inconclusive → probed again next pass',
+        () async {
+      // Pre-fix, one null answer branded the backend XML-only for the run —
+      // but null/empty is also the shape a server-side abort produces (the
+      // Scene Guest "pill falls off" bug), so it is never a verdict now.
       var toolAttempts = 0;
       final xmlPrompts = <String>[];
       final m = build(
@@ -750,7 +758,31 @@ void main() {
         prompts: xmlPrompts,
         fireToolEval: (p, t) async {
           toolAttempts++;
-          return null; // backend can't speak tools
+          return null; // answered, nothing usable — inconclusive
+        },
+      );
+      await m.runMaintenancePass();
+      await m.runMaintenancePass(force: true);
+
+      expect(toolAttempts, 2); // re-probed: null is never a capability verdict
+      expect(xmlPrompts, hasLength(2)); // both rounds still landed over XML
+    });
+
+    test('prose with no tags brands XML-only after one probe', () async {
+      var toolAttempts = 0;
+      final xmlPrompts = <String>[];
+      final m = build(
+        responses: ['<recap>one</recap>', '<recap>two</recap>'],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        fireToolEval: (p, t) async {
+          toolAttempts++;
+          // The model ANSWERED and chose words over tools — real evidence.
+          return const LlmToolResponse(
+            calls: [],
+            text: 'I would rather describe the memories in plain prose.',
+          );
         },
       );
       await m.runMaintenancePass();
@@ -758,6 +790,44 @@ void main() {
 
       expect(toolAttempts, 1); // remembered as XML-only after one probe
       expect(xmlPrompts, hasLength(2)); // both passes journaled over XML
+    });
+
+    test('transport failure → XML this round only, probe left untested',
+        () async {
+      var toolAttempts = 0;
+      final xmlPrompts = <String>[];
+      final recaps = <String>[];
+      final m = build(
+        responses: ['<recap>round one</recap>'],
+        messages: [_msg('Sam', 'hi', isUser: true), _msg('Mara', 'hey')],
+        activeChar: mara,
+        prompts: xmlPrompts,
+        onRecap: recaps.add,
+        fireToolEval: (p, t) async {
+          toolAttempts++;
+          if (toolAttempts == 1) {
+            // Connection torn down mid-call (e.g. character creation fired an
+            // app-wide abortGeneration): a network event, not a capability
+            // verdict — must NOT brand the backend XML-only for the run.
+            throw Exception('SocketException: Connection reset by peer');
+          }
+          return const LlmToolResponse(
+            calls: [
+              LlmToolCall(
+                name: 'write_recap',
+                arguments: {'text': 'Back on tools.'},
+              ),
+            ],
+            text: '',
+          );
+        },
+      );
+      await m.runMaintenancePass();
+      await m.runMaintenancePass(force: true);
+
+      expect(toolAttempts, 2); // tools re-tried next pass (no XML branding)
+      expect(xmlPrompts, hasLength(1)); // failed round fell back to XML once
+      expect(recaps, ['round one', 'Back on tools.']);
     });
 
     test('model ignores tools but writes tags — salvaged, no refire',

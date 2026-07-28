@@ -306,6 +306,25 @@ class OpenRouterService extends LLMService {
       payload['reasoning'] = reasoning;
     }
 
+    // Qwen3's NATIVE thinking switch — LOCAL backends only. Local OpenAI-compatible
+    // MLX/vLLM servers (oMLX, LM Studio) IGNORE the OpenRouter `reasoning` object
+    // above and only honor `enable_thinking` in the chat template. Verified live
+    // against oMLX v0.5.2: `reasoning:{enabled:false}` left Qwen3 thinking (554
+    // reasoning tokens), while `enable_thinking:false` suppressed it completely (0).
+    // Gated to `_isLocalUrl` so real OpenRouter/Nano-GPT are untouched — they read
+    // the `reasoning` object and could reject/misforward an unknown chat-template
+    // kwarg. Mirrors the KoboldCpp path (openai_chat_stream.dart). `thinkOn` matches
+    // Kobold's exactly: reasoning wanted, unless a caller hard-suppressed via
+    // reasoningMaxTokens==0 (Continue, evals, call mode). (A remote self-hosted
+    // vLLM/MLX endpoint would also want this, but that's not the localhost case
+    // this fixes; extend the gate if that need appears.)
+    if (_isLocalUrl) {
+      payload['chat_template_kwargs'] = {
+        'enable_thinking':
+            params.reasoningEnabled && params.reasoningMaxTokens != 0,
+      };
+    }
+
     // Add stop sequences if present
     if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
       // Remote providers commonly hard-cap `stop` at 4 (OpenAI spec). The
@@ -327,10 +346,12 @@ class OpenRouterService extends LLMService {
   };
 
   /// OpenAI-style tool calling (non-streaming) — used by the Journal's
-  /// tool transport. Returns null on ANY failure (model/provider without
-  /// tool support, network error, malformed body): the caller treats null
-  /// as "use the text transport instead", so this never surfaces an error
-  /// for what is a best-effort upgrade.
+  /// tool transport. Returns null when the provider ANSWERED but the call
+  /// yielded nothing usable (non-200 status, e.g. a model without tool
+  /// support): the caller treats null as "use the text transport instead".
+  /// Transport failures (host unreachable, client torn down by an app-side
+  /// abortGeneration) THROW so callers never record a capability verdict
+  /// for what was a network event — see the base-class contract.
   @override
   Future<LlmToolResponse?> generateWithTools(
     GenerationParams params,
@@ -346,13 +367,20 @@ class OpenRouterService extends LLMService {
     try {
       // No wall-clock timeout: a tool/eval call (incl. local oMLX via this same
       // client) can legitimately run long on a slow model or reasoning pass. A
-      // dead connection throws (handled → null) and Cancel aborts, so a fixed
-      // cap only killed working calls.
+      // dead connection throws (rethrown below as a transport failure) and
+      // Cancel aborts, so a fixed cap only killed working calls.
       final response = await client.post(
         Uri.parse('$_apiUrl/chat/completions'),
         headers: _chatHeaders,
         body: jsonEncode(payload),
       );
+      if (response.statusCode == 429 || response.statusCode >= 500) {
+        // Rate-limited / provider hiccup: transient, not a capability
+        // verdict — must not brand the model tool-less for the run.
+        throw LlmToolTransportException(
+          'tool call HTTP ${response.statusCode} (server busy/unavailable)',
+        );
+      }
       if (response.statusCode != 200) {
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -362,8 +390,11 @@ class OpenRouterService extends LLMService {
       }
       return parseOpenAiToolResponse(response.body);
     } catch (e) {
-      debugPrint('[RemoteAPI] Tool call failed: $e — falling back');
-      return null;
+      // Rethrow instead of collapsing to null — a killed connection must not
+      // read as "model can't speak tools" (it branded the backend XML-only
+      // for the whole run). Callers filter via looksLikeBackendUnreachable.
+      debugPrint('[RemoteAPI] Tool call transport failure: $e');
+      rethrow;
     } finally {
       if (identical(_activeClient, client)) _activeClient = null;
       client.close();

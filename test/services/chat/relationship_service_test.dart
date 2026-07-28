@@ -19,6 +19,7 @@
 // exercised in unit tests or noted for integration coverage.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 
 /// Test factory to reduce callback boilerplate (modeled exactly on needs_simulation_test / chaos_mode_service_test).
@@ -43,6 +44,7 @@ RelationshipService createTestRelationship({
   int msgCount = 0,
   Set<String> groupMemberIds = const {},
   Map<String, String> otherNames = const {},
+  void Function(TierCrossing)? onTierCrossing,
 }) {
   final n = notifies ?? <String>[];
   final s = saves ?? <String>[];
@@ -102,6 +104,7 @@ RelationshipService createTestRelationship({
     getGroupInterCharacterRelationships: (id) => gInter[id] ?? const {},
     setGroupInterCharacterRelationships: (id, rels) =>
         gInter[id] = Map<String, int>.from(rels),
+    onTierCrossing: onTierCrossing,
   );
   return svc;
 }
@@ -153,6 +156,96 @@ void main() {
       expect(svc.trustLevel, -25);
       expect(svc.pendingTrustRepair, true);
       expect(n, contains('notify'));
+    });
+
+    // Living Time §7 v1.5 — tier crossings only (not every score wiggle).
+    test('applyScoreDelta fires onTierCrossing only when bond tier changes', () {
+      final crossings = <TierCrossing>[];
+      final svc = createTestRelationship(onTierCrossing: crossings.add);
+      // 0 → still tier 0 (score 3)
+      svc.applyScoreDelta(3);
+      expect(crossings, isEmpty);
+      // 3 → 10: tier 0 → 1
+      svc.applyScoreDelta(7);
+      expect(crossings, hasLength(1));
+      expect(crossings.single.axis, 'bond');
+      expect(crossings.single.oldTier, 0);
+      expect(crossings.single.newTier, 1);
+      // same-tier wiggle inside tier 1 (5–14)
+      svc.applyScoreDelta(3);
+      expect(crossings, hasLength(1));
+    });
+
+    test('applyScoreDelta(recordMilestone: false) never plants', () {
+      final crossings = <TierCrossing>[];
+      final svc = createTestRelationship(onTierCrossing: crossings.add);
+      svc.applyScoreDelta(15, recordMilestone: false); // tier 0 → 2
+      expect(svc.relationshipTier, 2);
+      expect(crossings, isEmpty);
+    });
+
+    test('applyTrustDelta fires onTierCrossing on trust tier change', () {
+      final crossings = <TierCrossing>[];
+      final svc = createTestRelationship(onTierCrossing: crossings.add);
+      svc.applyTrustDelta(4); // still tier 0
+      expect(crossings, isEmpty);
+      svc.applyTrustDelta(6); // 10 → tier 1 "Warming"
+      expect(crossings, hasLength(1));
+      expect(crossings.single.axis, 'trust');
+      expect(crossings.single.newTier, 1);
+      expect(crossings.single.newLabel, 'Warming');
+    });
+
+    test('long-term tier crossing plants long_term axis (v1.5.1)', () {
+      final crossings = <TierCrossing>[];
+      final svc = createTestRelationship(onTierCrossing: crossings.add);
+      // Short-term score 50 → tier 4 so each LT window accrues +2.
+      // Long-term score 3 → tier 0; after +2 becomes 5 → tier 1.
+      svc.loadScalars(
+        affectionScore: 50,
+        longTermScore: 3,
+        trustLevel: 0,
+        turnsSinceLongTermCheck: 4, // next apply triggers growth
+      );
+      crossings.clear();
+      svc.applyScoreDelta(1);
+      final lt = crossings.where((c) => c.axis == 'long_term').toList();
+      expect(lt, hasLength(1));
+      expect(lt.single.oldTier, 0);
+      expect(lt.single.newTier, 1);
+      expect(svc.longTermScore, 5); // 3 + 2
+    });
+
+    test('long-term same-tier score tick does not plant', () {
+      final crossings = <TierCrossing>[];
+      final svc = createTestRelationship(onTierCrossing: crossings.add);
+      // LT score 6 → tier 1; +2 → 8 still tier 1 (5–14).
+      svc.loadScalars(
+        affectionScore: 50,
+        longTermScore: 6,
+        trustLevel: 0,
+        turnsSinceLongTermCheck: 4,
+      );
+      crossings.clear();
+      svc.applyScoreDelta(1);
+      expect(svc.longTermScore, 8);
+      expect(svc.longTermTier, 1);
+      expect(crossings.where((c) => c.axis == 'long_term'), isEmpty);
+    });
+
+    test('long-term growth with recordMilestone:false never plants', () {
+      final crossings = <TierCrossing>[];
+      final svc = createTestRelationship(onTierCrossing: crossings.add);
+      svc.loadScalars(
+        affectionScore: 50,
+        longTermScore: 3,
+        trustLevel: 0,
+        turnsSinceLongTermCheck: 4,
+      );
+      crossings.clear();
+      svc.applyScoreDelta(1, recordMilestone: false);
+      expect(svc.longTermScore, 5);
+      expect(crossings, isEmpty);
     });
 
     test(
@@ -333,12 +426,13 @@ void main() {
       'reset/seed/loadScalars roundtrip and group per-char load/save scalars',
       () {
         final svc = createTestRelationship();
-        svc.seedFromV2OrExt(shortTermBond: 42, longTermBond: 17, trustLevel: 9);
-        expect(
-          svc.affectionScore,
-          84,
-        ); // migrate doubles <=150 per verbatim original logic (legacy path)
-        expect(svc.relationshipTier, 5); // 84 <120 ->5
+        svc.seedFromCardV2OrExt(
+          shortTermBond: 42,
+          longTermBond: 17,
+          trustLevel: 9,
+        );
+        expect(svc.affectionScore, 42); // plain clamp — authored ±300 scale
+        expect(svc.relationshipTier, 3); // 42 <50 ->3
         svc.resetForFreshChat();
         expect(svc.affectionScore, 0);
         expect(svc.trustLevel, 0);
@@ -481,20 +575,12 @@ void main() {
         expect(svc.trustLevel, -100);
         svc.resetForFreshChat();
 
-        // Legacy session data path (via public migrate wrappers + loadScalars in _loadLast) still migrates
-        final migratedShort = svc.migrateShortTermScore(42);
-        final migratedLong = svc.migrateLongTermScore(17);
-        expect(migratedShort, 84); // <=150 -> *2
-        expect(migratedLong, 34);
-        svc.loadScalars(
-          affectionScore: migratedShort,
-          longTermScore: migratedLong,
-          trustLevel: 5,
-        );
-        expect(svc.affectionScore, 84);
-        // Direct low-value <=150 still migrates (covers "legacy session data still migrates when appropriate")
-        expect(svc.migrateShortTermScore(55), 110);
-        expect(svc.migrateShortTermScore(200), 200); // >150 no change
+        // Session-load path: loadScalars stores persisted values RAW. The old
+        // ±150→×2 era migration was deleted 2026-07-27 — it re-doubled live
+        // bonds ≤ 150 on every library-open→save cycle (40→80→160).
+        svc.loadScalars(affectionScore: 42, longTermScore: 17, trustLevel: 5);
+        expect(svc.affectionScore, 42); // NOT 84
+        expect(svc.longTermScore, 17); // NOT 34
       },
     );
 
@@ -505,15 +591,6 @@ void main() {
       expect(svc.shortTermProgressBase, 15);
       expect(svc.shortTermProgressPercent > 0, true);
       expect(svc.shortTermTierName, 'Receptive'); // 25 <30 -> tier 2 per calc
-    });
-
-    test('applyLegacy migration *10 when old small positive high tier', () {
-      final svc = createTestRelationship();
-      svc.loadScalars(affectionScore: 12, longTermScore: 0, trustLevel: 0);
-      // load computes tier from current score (12 -> tier 1), so legacy condition (_affection>0 && <=15 && tier>=3) not met here.
-      // applyLegacyShortTermMigrationIfNeeded is a no-op smoke in this harness (real triggering exercised in ChatService V2.5 load/seed paths + dedicated migration tests).
-      svc.applyLegacyShortTermMigrationIfNeeded();
-      expect(svc.affectionScore, 12);
     });
 
     test('public inter update/get clamps and creates', () {

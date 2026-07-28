@@ -74,7 +74,9 @@ class JournalMaintenance {
   final Future<String?> Function(String prompt) fireLLMEval;
 
   /// Tool-calling door (LLMService.generateWithTools): null result means the
-  /// backend can't (or won't) speak tools and this run should use XML.
+  /// backend can't (or won't) speak tools and this run should use XML; a
+  /// THROW is a transport failure (unreachable/aborted/timeout/busy) and
+  /// must not brand the backend — see isToolTransportFailure.
   final Future<LlmToolResponse?> Function(
     String prompt,
     List<Map<String, dynamic>> tools,
@@ -116,6 +118,12 @@ class JournalMaintenance {
   final VoidCallback onNotify;
   final Future<void> Function() onSaveChat;
 
+  /// Current story time (TimeService) — the fallback date stamp for new
+  /// cards whose cited messages carry no realism_state snapshot
+  /// (story-calendar §4; realism-off chats, legacy messages).
+  final int Function() getCurrentStoryDay;
+  final String Function() getCurrentStoryClockIso;
+
   JournalMaintenance({
     required this.store,
     required this.review,
@@ -141,6 +149,8 @@ class JournalMaintenance {
     required this.getMaxCards,
     required this.onNotify,
     required this.onSaveChat,
+    required this.getCurrentStoryDay,
+    required this.getCurrentStoryClockIso,
   });
 
   /// How many trailing messages to re-read when a force pass finds an empty
@@ -306,7 +316,19 @@ class JournalMaintenance {
 
     final backend = getBackendIdentity();
     if (!probe.isXmlOnly(backend)) {
-      final resp = await fireToolEval(prompt(toolsMode: true), kJournalTools);
+      LlmToolResponse? resp;
+      var transportFailure = false;
+      try {
+        resp = await fireToolEval(prompt(toolsMode: true), kJournalTools);
+      } catch (e) {
+        // Transport failure (unreachable backend, the call torn down by an
+        // app-side abortGeneration — e.g. character creation clearing state —
+        // a whole-call timeout, or a busy/5xx server): a network event, never
+        // a capability verdict. Fall back to XML for THIS round only; the
+        // next pass probes tools again.
+        debugPrint('[Journal] Tools attempt failed in transport: $e');
+        transportFailure = isToolTransportFailure(e);
+      }
       if (resp != null) {
         if (resp.calls.isNotEmpty) probe.markSupported(backend);
         var (ops, recap) = parseJournalToolCalls(resp.calls);
@@ -326,13 +348,23 @@ class JournalMaintenance {
           // memories. Mirrors growth's honest-empty handling.
           return (const <JournalOp>[], null);
         }
-        // resp non-null but no calls and no usable text: the model answered
-        // without tools — a capability verdict. (A null resp also lands here:
-        // generateWithTools collapses every failure to null, and the probe is
-        // deliberately one-shot per backend identity.)
+        if (resp.text.trim().isNotEmpty) {
+          // Prose with no tool call and no parseable tags: the model
+          // ANSWERED and chose words over tools — real capability evidence.
+          probe.markXmlOnly(backend);
+          debugPrint('[Journal] Tools unavailable on $backend — using XML');
+        }
+        // Empty resp (no calls, no text): never a verdict — a KoboldCpp
+        // server-side abort completes an in-flight call as a clean empty
+        // 200, indistinguishable from "can't speak tools" (the Scene Guest
+        // "pill falls off" bug). Fall back to XML for THIS round; the next
+        // pass probes tools again.
+      } else if (!transportFailure) {
+        // Null resp: answered but nothing usable — same ambiguity as the
+        // empty 200 above; no verdict. Genuinely tool-less models are
+        // branded by the ToolSupportTester ping instead.
+        debugPrint('[Journal] Tools inconclusive on $backend — XML this round');
       }
-      probe.markXmlOnly(backend);
-      debugPrint('[Journal] Tools unavailable on $backend — using XML');
     }
 
     final raw = await fireLLMEval(prompt(toolsMode: false));
@@ -357,6 +389,7 @@ class JournalMaintenance {
       switch (op.action) {
         case JournalOpAction.add:
           final stamp = _emotionStamp(op.sourcePositions, window, windowStart);
+          final date = _dateStamp(op.sourcePositions, window, windowStart);
           resolved.add(
             JournalProposedOp(
               action: op.action,
@@ -365,6 +398,8 @@ class JournalMaintenance {
               emotionLabel: stamp?.$1,
               emotionIntensity: stamp?.$2,
               sourcePositions: op.sourcePositions,
+              storyDay: date.$1,
+              storyClock: date.$2,
             ),
           );
           break;
@@ -431,5 +466,41 @@ class JournalMaintenance {
       }
     }
     return best;
+  }
+
+  /// Deterministic story-date stamp for a new card (story-calendar §4): the
+  /// LATEST cited message's realism_state time (a memory happened when its
+  /// last cited moment happened), falling back to the last annotated message
+  /// in the window, then to the current story time. Sibling of
+  /// [_emotionStamp] — different selection rule (latest vs strongest), same
+  /// snapshot-while-live contract. Returns (storyDay, storyClockIso).
+  (int?, String?) _dateStamp(
+    List<int> positions,
+    List<ChatMessage> window,
+    int windowStart,
+  ) {
+    (int?, String?)? found;
+
+    void consider(ChatMessage m) {
+      final state = m.activeMetadata?['realism_state'];
+      if (state is! Map) return;
+      final day = (state['dayCount'] as num?)?.toInt();
+      final clock = state['storyClock'] as String?;
+      if (day == null && clock == null) return;
+      found = (day, clock);
+    }
+
+    for (final pos in positions.toList()..sort()) {
+      final idx = pos - windowStart;
+      if (idx >= 0 && idx < window.length) consider(window[idx]);
+    }
+    if (found == null) {
+      for (final m in window.reversed) {
+        consider(m);
+        if (found != null) break;
+      }
+    }
+    return found ??
+        (getCurrentStoryDay(), getCurrentStoryClockIso());
   }
 }

@@ -24,6 +24,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/chat_theme_preset.dart';
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 
 // Stage 7: storage decomposition (directories + domain settings; final cleanup complete - shims excised; corrective COMPAT FLAT ACCESSORS bridge re-inserted at ~113 after incomplete 29bbf59d; see block comments + refactoring-guide.md "old API preserved via shim" for current state; long-term pure-dir + *Settings wiring intended). NOTE: file >500 LOC due to bridge (documented exception; do not grow per rule).
 import 'storage/directories.dart';
@@ -197,15 +199,76 @@ class StorageService extends ChangeNotifier {
   Future<void> setSortMode(String v) => uiSettings.setSortMode(v);
   double get gridScale => uiSettings.gridScale;
   Future<void> setGridScale(double v) => uiSettings.setGridScale(v);
-  Color getUserBubbleColor([CharacterCard? c]) =>
-      uiSettings.getUserBubbleColor(c);
-  Color getAiBubbleColor([CharacterCard? c]) => uiSettings.getAiBubbleColor(c);
-  Color getDialogueColor([CharacterCard? c]) => uiSettings.getDialogueColor(c);
-  Color getUserTextColor([CharacterCard? c]) => uiSettings.getUserTextColor(c);
-  Color getAiTextColor([CharacterCard? c]) => uiSettings.getAiTextColor(c);
-  String getChatFontFamily([CharacterCard? c]) =>
-      uiSettings.getChatFontFamily(c);
-  Color getActionColor([CharacterCard? c]) => uiSettings.getActionColor(c);
+  Color getUserBubbleColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getUserBubbleColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
+  Color getAiBubbleColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getAiBubbleColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
+  Color getDialogueColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getDialogueColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
+  Color getUserTextColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getUserTextColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
+  Color getAiTextColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getAiTextColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
+  String getChatFontFamily([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getChatFontFamily(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
+  Color getActionColor([
+    CharacterCard? c,
+    ChatThemePreset? themePreset,
+    ChatThemeOverrides? themeOverrides,
+  ]) =>
+      uiSettings.getActionColor(
+        c,
+        themePreset: themePreset,
+        themeOverrides: themeOverrides,
+      );
   Future<void> setIsDark(bool v) => uiSettings.setIsDark(v);
 
   // Web server
@@ -471,6 +534,9 @@ class StorageService extends ChangeNotifier {
   bool get autostartBackend => backendSettings.autostartBackend;
   Future<void> setAutostartBackend(bool v) =>
       backendSettings.setAutostartBackend(v);
+  bool get autostartOnChatOpen => backendSettings.autostartOnChatOpen;
+  Future<void> setAutostartOnChatOpen(bool v) =>
+      backendSettings.setAutostartOnChatOpen(v);
   bool get koboldThinkingModel => backendSettings.koboldThinkingModel;
   Future<void> setKoboldThinkingModel(bool v) =>
       backendSettings.setKoboldThinkingModel(v);
@@ -522,6 +588,10 @@ class StorageService extends ChangeNotifier {
       generationSettings.dynamicResponseMaxMessages;
   Future<void> setDynamicResponseMaxMessages(int v) =>
       generationSettings.setDynamicResponseMaxMessages(v);
+  int get dynamicResponsePacePeriods =>
+      generationSettings.dynamicResponsePacePeriods;
+  Future<void> setDynamicResponsePacePeriods(int v) =>
+      generationSettings.setDynamicResponsePacePeriods(v);
   int get maxLength => generationSettings.maxLength;
   Future<void> setMaxLength(int v) => generationSettings.setMaxLength(v);
   int get minLength => generationSettings.minLength;
@@ -572,6 +642,10 @@ class StorageService extends ChangeNotifier {
   bool get journalReviewFirst => memorySettings.journalReviewFirst;
   Future<void> setJournalReviewFirst(bool v) =>
       memorySettings.setJournalReviewFirst(v);
+  bool get importLlmertaPorchMemories =>
+      memorySettings.importLlmertaPorchMemories;
+  Future<void> setImportLlmertaPorchMemories(bool v) =>
+      memorySettings.setImportLlmertaPorchMemories(v);
 
   // Realism / banned (bannedPhrases, defaults lifted to realismSettings)
   bool get realismOneShotEval => realismSettings.realismOneShotEval;
@@ -584,6 +658,24 @@ class StorageService extends ChangeNotifier {
   Future<void> setNsfwCooldownDefault(bool v) =>
       realismSettings.setNsfwCooldownDefault(v);
   bool get passageOfTimeDefault => realismSettings.passageOfTimeDefault;
+  bool get weatherEnabled => realismSettings.weatherEnabled;
+  Future<void> setWeatherEnabled(bool v) =>
+      realismSettings.setWeatherEnabled(v);
+  bool get weatherFahrenheit => realismSettings.weatherFahrenheit;
+  Future<void> setWeatherFahrenheit(bool v) =>
+      realismSettings.setWeatherFahrenheit(v);
+  bool get absenceBannerEnabled => realismSettings.absenceBannerEnabled;
+  Future<void> setAbsenceBannerEnabled(bool v) =>
+      realismSettings.setAbsenceBannerEnabled(v);
+  bool get absenceAckEnabled => realismSettings.absenceAckEnabled;
+  Future<void> setAbsenceAckEnabled(bool v) =>
+      realismSettings.setAbsenceAckEnabled(v);
+  int get absenceThresholdHours => realismSettings.absenceThresholdHours;
+  Future<void> setAbsenceThresholdHours(int v) =>
+      realismSettings.setAbsenceThresholdHours(v);
+  bool get dreamsEnabled => realismSettings.dreamsEnabled;
+  Future<void> setDreamsEnabled(bool v) =>
+      realismSettings.setDreamsEnabled(v);
   Future<void> setPassageOfTimeDefault(bool v) =>
       realismSettings.setPassageOfTimeDefault(v);
   List<String> get bannedPhrases => realismSettings.bannedPhrases;

@@ -463,7 +463,13 @@ class WebServerHost extends ChangeNotifier {
         : null;
 
     final chatToolsFacade = chatService != null
-        ? ChatToolsFacade(chatService, _storage, streamHub)
+        ? ChatToolsFacade(
+            chatService,
+            _storage,
+            streamHub,
+            storyRepo: _storyRepository,
+            personas: _userPersonaService,
+          )
         : null;
 
     final groupFacade = _groupChatRepository != null

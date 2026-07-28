@@ -41,6 +41,13 @@ class FrontPorchExtensions {
   int trustLevel; // -100 to 100
   int dayCount; // starts at 1
   String timeOfDay; // dawn/morning/late_morning/afternoon/evening/night
+
+  // Story Calendar (docs/design/story-calendar.md §3a). Additive next to the
+  // kept day_count/time_of_day so cards round-trip through The Stoop and
+  // stay readable by older apps.
+  String?
+  storyStartDate; // ISO date the story begins on; null = "the day the chat starts"
+  String? storyStartTime; // "HH:MM" exact opening clock; null = period default
   String characterEmotion; // e.g. "curious"
   String emotionIntensity; // mild/moderate/strong
   bool nsfwCooldownEnabled;
@@ -49,6 +56,12 @@ class FrontPorchExtensions {
   bool needsSimEnabled; // per-character default for the needs simulation toggle
   bool
   enjoysLowHygiene; // when true, low hygiene is desirable (inverted behavior for filthy/musky characters)
+
+  /// Long-term ambitions — the character's ends, distinct from short-lived
+  /// objectives (the means) and fixations (emotional obsessions). Identity,
+  /// not story state: they travel with the card; per-chat PROGRESS lives in
+  /// journal cards (Living Time §6). Authored in the character editor.
+  List<String> ambitions;
 
   // Optional director/verifier thread for Realism Engine + Needs (ingests full latent context + deltas JSON;
   // rules + optional reprocess with corrections up to full per-eval clamp limits; per-char in Optional Features).
@@ -134,6 +147,8 @@ class FrontPorchExtensions {
     this.trustLevel = 0,
     this.dayCount = 1,
     this.timeOfDay = 'morning',
+    this.storyStartDate,
+    this.storyStartTime,
     this.characterEmotion = '',
     this.emotionIntensity = 'mild',
     this.nsfwCooldownEnabled = false,
@@ -141,6 +156,9 @@ class FrontPorchExtensions {
     this.chaosModeEnabled = false,
     this.needsSimEnabled = false,
     this.enjoysLowHygiene = false,
+    // Never mutated in place — always replaced wholesale (copyWith/editor),
+    // so the const default is safe.
+    this.ambitions = const [],
 
     // Realism Verification (Director/Verifier) — optional, off by default (zero cost when off)
     this.realismVerificationEnabled = false,
@@ -204,6 +222,8 @@ class FrontPorchExtensions {
         'trust_level': trustLevel,
         'day_count': dayCount,
         'time_of_day': timeOfDay,
+        'story_start_date': ?storyStartDate,
+        'story_start_time': ?storyStartTime,
         'character_emotion': characterEmotion,
         'emotion_intensity': emotionIntensity,
         'nsfw_cooldown_enabled': nsfwCooldownEnabled,
@@ -211,6 +231,7 @@ class FrontPorchExtensions {
         'chaos_mode_enabled': chaosModeEnabled,
         'needs_sim_enabled': needsSimEnabled,
         'enjoys_low_hygiene': enjoysLowHygiene,
+        'ambitions': ambitions,
         'realism_verification_enabled': realismVerificationEnabled,
         'realism_verification_max_reprocesses':
             realismVerificationMaxReprocesses,
@@ -264,6 +285,8 @@ class FrontPorchExtensions {
       trustLevel: realism['trust_level'] as int? ?? 0,
       dayCount: realism['day_count'] as int? ?? 1,
       timeOfDay: realism['time_of_day'] as String? ?? 'morning',
+      storyStartDate: realism['story_start_date'] as String?,
+      storyStartTime: realism['story_start_time'] as String?,
       characterEmotion: realism['character_emotion'] as String? ?? '',
       emotionIntensity: realism['emotion_intensity'] as String? ?? 'mild',
       nsfwCooldownEnabled: realism['nsfw_cooldown_enabled'] as bool? ?? false,
@@ -271,6 +294,10 @@ class FrontPorchExtensions {
       chaosModeEnabled: realism['chaos_mode_enabled'] as bool? ?? false,
       needsSimEnabled: realism['needs_sim_enabled'] as bool? ?? false,
       enjoysLowHygiene: realism['enjoys_low_hygiene'] as bool? ?? false,
+      ambitions: [
+        for (final a in realism['ambitions'] as List? ?? const [])
+          if (a is String && a.trim().isNotEmpty) a.trim(),
+      ],
       realismVerificationEnabled:
           realism['realism_verification_enabled'] as bool? ?? false,
       realismVerificationMaxReprocesses:
@@ -333,6 +360,8 @@ class FrontPorchExtensions {
     int? trustLevel,
     int? dayCount,
     String? timeOfDay,
+    String? storyStartDate,
+    String? storyStartTime,
     String? characterEmotion,
     String? emotionIntensity,
     bool? nsfwCooldownEnabled,
@@ -340,6 +369,7 @@ class FrontPorchExtensions {
     bool? chaosModeEnabled,
     bool? needsSimEnabled,
     bool? enjoysLowHygiene,
+    List<String>? ambitions,
     bool? realismVerificationEnabled,
     int? realismVerificationMaxReprocesses,
     int? realismVerificationStrictness,
@@ -384,6 +414,8 @@ class FrontPorchExtensions {
       trustLevel: trustLevel ?? this.trustLevel,
       dayCount: dayCount ?? this.dayCount,
       timeOfDay: timeOfDay ?? this.timeOfDay,
+      storyStartDate: storyStartDate ?? this.storyStartDate,
+      storyStartTime: storyStartTime ?? this.storyStartTime,
       characterEmotion: characterEmotion ?? this.characterEmotion,
       emotionIntensity: emotionIntensity ?? this.emotionIntensity,
       nsfwCooldownEnabled: nsfwCooldownEnabled ?? this.nsfwCooldownEnabled,
@@ -391,6 +423,7 @@ class FrontPorchExtensions {
       chaosModeEnabled: chaosModeEnabled ?? this.chaosModeEnabled,
       needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
       enjoysLowHygiene: enjoysLowHygiene ?? this.enjoysLowHygiene,
+      ambitions: ambitions ?? this.ambitions,
       realismVerificationEnabled:
           realismVerificationEnabled ?? this.realismVerificationEnabled,
       realismVerificationMaxReprocesses:

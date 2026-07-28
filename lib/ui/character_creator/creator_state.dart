@@ -17,7 +17,6 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -65,6 +64,7 @@ class CreatorState extends ChangeNotifier {
   bool generateLorebook = true;
   Set<String> selectedLoreCategories = {};
   String loreDepth = 'Standard';
+  bool includeDynamicMacros = false;
   Set<String> selectedRelationships = {};
   String customRelationship = '';
   String selectedArchetype = '';
@@ -147,7 +147,6 @@ class CreatorState extends ChangeNotifier {
   final firstMessageController = TextEditingController();
   final exampleDialogueController = TextEditingController();
   final systemPromptController = TextEditingController();
-  final imagePromptController = TextEditingController();
 
   // SharedPreferences keys (all lifted)
   static const _prefName = 'chargen_name';
@@ -166,6 +165,7 @@ class CreatorState extends ChangeNotifier {
   static const _prefQuickScenario = 'chargen_quick_scenario';
   static const _prefLoreCategories = 'chargen_lore_categories';
   static const _prefLoreDepth = 'chargen_lore_depth';
+  static const _prefDynamicMacros = 'chargen_dynamic_macros';
   static const _prefRelationships = 'chargen_relationships';
   static const _prefCustomRelationship = 'chargen_custom_relationship';
   static const _prefNsfwEnabled = 'chargen_nsfw_enabled';
@@ -228,11 +228,8 @@ class CreatorState extends ChangeNotifier {
   bool isGenerating = false;
   double progress = 0.0;
   CharacterCard? generatedCard;
-  Uint8List? generatedAvatar;
   String? imagePrompt;
-  bool isGeneratingAvatar = false;
   Map<int, bool> lorebookEntryEnabled = {};
-  bool imagePromptExpanded = false;
 
   // Quick-mode NSFW flag (synced into [nsfwEnabled] when generation starts).
   bool quickNsfwEnabled = false;
@@ -257,6 +254,10 @@ class CreatorState extends ChangeNotifier {
   int realismTrustLevel = 0;
   int realismDayCount = 1;
   String realismTimeOfDay = 'morning';
+  // Story Calendar authoring (story-calendar.md §3a): null start date =
+  // "the day the chat starts"; null time = period default.
+  String? realismStoryStartDate;
+  String? realismStoryStartTime;
   String realismEmotion = 'neutral';
   String realismEmotionIntensity = 'moderate';
   bool realismNsfwCooldown = false;
@@ -297,9 +298,6 @@ class CreatorState extends ChangeNotifier {
   final gpuLayersController = TextEditingController();
   final contextSizeController = TextEditingController();
   CharacterGenService? activeGenService;
-
-  // Review avatar state
-  Uint8List? avatarBytesForReview;
 
   // Options (lifted statics)
   static const generationDetailOptions = {
@@ -372,6 +370,7 @@ class CreatorState extends ChangeNotifier {
         .where((c) => c.isNotEmpty)
         .toSet();
     loreDepth = prefs.getString(_prefLoreDepth) ?? 'Standard';
+    includeDynamicMacros = prefs.getBool(_prefDynamicMacros) ?? false;
     final savedRelationships = prefs.getString(_prefRelationships) ?? '';
     selectedRelationships = savedRelationships
         .split(',')
@@ -473,6 +472,7 @@ class CreatorState extends ChangeNotifier {
       selectedLoreCategories.join(','),
     );
     await prefs.setString(_prefLoreDepth, loreDepth);
+    await prefs.setBool(_prefDynamicMacros, includeDynamicMacros);
     await prefs.setString(_prefRelationships, selectedRelationships.join(','));
     await prefs.setString(_prefCustomRelationship, customRelationship);
     await prefs.setBool(_prefNsfwEnabled, nsfwEnabled);
@@ -606,7 +606,6 @@ class CreatorState extends ChangeNotifier {
     firstMessageController.clear();
     exampleDialogueController.clear();
     systemPromptController.clear();
-    imagePromptController.clear();
 
     // Chip/toggle selections
     selectedTones = {'Neutral'};
@@ -653,6 +652,7 @@ class CreatorState extends ChangeNotifier {
     altGreetingCount = 2;
     generateLorebook = true;
     loreDepth = 'Standard';
+    includeDynamicMacros = false;
     generationDetail = 'Standard';
 
     // Generation state
@@ -663,11 +663,8 @@ class CreatorState extends ChangeNotifier {
 
     // Generated results
     generatedCard = null;
-    generatedAvatar = null;
     imagePrompt = null;
-    isGeneratingAvatar = false;
     lorebookEntryEnabled = {};
-    imagePromptExpanded = false;
 
     // Persona
     selectedPersonaId = '';
@@ -886,7 +883,6 @@ class CreatorState extends ChangeNotifier {
     firstMessageController.dispose();
     exampleDialogueController.dispose();
     systemPromptController.dispose();
-    imagePromptController.dispose();
     quickScenarioController.dispose();
     guidedVisionController.dispose();
     guidedAppearanceController.dispose();

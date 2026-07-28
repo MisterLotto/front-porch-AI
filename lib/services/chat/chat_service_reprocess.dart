@@ -349,6 +349,9 @@ extension ChatServiceReprocess on ChatService {
   /// delegates to [regenerateLastMessage].
   Future<void> regenerateMainCharacter() async {
     if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    // Backend gate BEFORE any guest-tail splice — same restore problem as
+    // regenerateLastMessage (see _abortIfBackendDown).
+    if (await _abortIfBackendDown()) return;
 
     // Walk back past the trailing guest replies to the host message beneath them.
     int hostIndex = -1;
@@ -388,12 +391,21 @@ extension ChatServiceReprocess on ChatService {
 
   Future<void> regenerateLastMessage() async {
     if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    // Backend gate BEFORE the pop below — aborting after removeLast would
+    // drop the popped reply (the deep guard in _generateResponse cannot
+    // restore it; see _abortIfBackendDown).
+    if (await _abortIfBackendDown()) return;
 
     // Check if the last message is from the character
     if (!_messages.last.isUser && _messages.last.sender != 'System') {
       // Instead of removing the message, we generate a new swipe
       // Temporarily remove the last message so the prompt doesn't include it
       final lastMsg = _messages.removeLast();
+      // Timeline integrity: the regen replaces this position's active
+      // content — journal cards citing it (or anything after) are phantom
+      // (smoke-test bug 2026-07-21). regenerateMainCharacter's guest-pop
+      // path is covered too: it delegates here with an even lower position.
+      _invalidateJournalFrom(_messages.length);
       // Is this a Scene Guest message? If so the whole regen must stay a
       // parity-safe GUEST turn: skip every Realism/Needs revert + re-eval below
       // and regenerate spoken as the guest (guestSpeaker), exactly like the
@@ -548,7 +560,12 @@ extension ChatServiceReprocess on ChatService {
               lastMsg.activeMetadata!['trust_delta'] as int? ?? 0;
 
           if (bondDelta != 0) {
-            _relationshipService.applyScoreDelta(-bondDelta);
+            // recordMilestone: false — undoing a rejected reply must not plant
+            // reverse "Bond cooled…" story beats in Our Story (Living Time v1.5).
+            _relationshipService.applyScoreDelta(
+              -bondDelta,
+              recordMilestone: false,
+            );
           }
           // Session-level mood cadence: 1:1 zeroes it here as an intermediate
           // (the baseline restore below then sets the real value and the 1:1

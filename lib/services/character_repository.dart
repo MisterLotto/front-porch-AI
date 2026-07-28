@@ -436,7 +436,36 @@ class CharacterRepository extends ChangeNotifier {
     return done;
   }
 
-  Future<CharacterCard?> importCharacter(File file) async {
+  /// Library characters whose display name equals [name] (exact match).
+  /// Used by the single-file import collision dialog.
+  List<CharacterCard> charactersWithName(String name) {
+    return _characters.where((c) => c.name == name).toList(growable: false);
+  }
+
+  /// Library character whose PNG-carried stableId matches [stableId], if any.
+  CharacterCard? findByStableId(String? stableId) {
+    if (stableId == null || stableId.isEmpty) return null;
+    for (final c in _characters) {
+      if (c.frontPorchExtensions?.stableId == stableId) return c;
+    }
+    return null;
+  }
+
+  /// Import a character card file (V2 PNG or standalone V2 JSON).
+  ///
+  /// Update-in-place happens only when:
+  /// - the incoming card's [FrontPorchExtensions.stableId] matches a library
+  ///   character (FP reimport / realism edit path — preserves chats), or
+  /// - [forceReplaceTarget] is set (user chose "Replace existing" in the
+  ///   single-file name-collision dialog).
+  ///
+  /// Same display name alone never overwrites or soft-deletes. Bulk import
+  /// and silent callers omit [forceReplaceTarget] so variants land as
+  /// separate library entries (issue #161).
+  Future<CharacterCard?> importCharacter(
+    File file, {
+    CharacterCard? forceReplaceTarget,
+  }) async {
     _isLoading = true;
     notifyListeners();
     try {
@@ -462,6 +491,7 @@ class CharacterRepository extends ChangeNotifier {
         card,
         // JSON has no image to copy; persist synthesizes a placeholder instead.
         sourceFileForCopy: isJson ? null : file,
+        forceReplaceTarget: forceReplaceTarget,
       );
     } catch (e) {
       rethrow;
@@ -471,19 +501,20 @@ class CharacterRepository extends ChangeNotifier {
     }
   }
 
-  /// Internal helper that persists an already-parsed CharacterCard (from file or from
-  /// embedded group card data). Handles collision detection (now by stableId when present,
-  /// falling back to name), update-in-place reuse of dbId+PNG for matching identity (so
-  /// sessions/chat history survive realism/needs edits), or fresh insert.
-  /// Only true non-matched name dups still get soft-deleted.
+  /// Internal helper that persists an already-parsed CharacterCard.
+  ///
+  /// Collision policy (issue #161 + history-preserving reimport):
+  /// - **stableId match** → update in place (reuse dbId + PNG path; chats kept)
+  /// - **[forceReplaceTarget]** → same update path when the user explicitly
+  ///   chose Replace on a same-name card that has no stableId match
+  /// - **name-only collision** → fresh insert (never soft-delete peers)
   ///
   /// Ensures stableId is present before embedding via saveCardAsPng.
-  ///
   /// When [sourceFileForCopy] is provided we use it as visual source for V2 embed.
-  /// Otherwise we expect [card.imagePath] ...
   Future<CharacterCard?> _persistImportedCharacterCard(
     CharacterCard card, {
     File? sourceFileForCopy,
+    CharacterCard? forceReplaceTarget,
   }) async {
     final charDir = _storage.charactersDir;
     if (!await charDir.exists()) {
@@ -494,80 +525,50 @@ class CharacterRepository extends ChangeNotifier {
         .replaceAll(RegExp(r'[^\w\s\-]'), '')
         .replaceAll(' ', '_');
 
-    // Collision handling: prefer stableId match (from PNG realism_engine) for identity
-    // preservation across edits/reimports; fallback to name for legacy cards.
-    // Refactored from always-nuke to update-in-place reuse of dbId for target match.
-    // Only non-target name dups (extra collisions) are soft-deleted + removed.
-    final incomingStable = card.frontPorchExtensions?.stableId;
-    CharacterCard? stableMatch;
-    final cardName = card.name;
-    final nameMatches = _characters.where((c) => c.name == cardName).toList();
-    if (incomingStable != null && incomingStable.isNotEmpty) {
-      for (final c in _characters) {
-        if (c.frontPorchExtensions?.stableId == incomingStable) {
-          stableMatch = c;
-          break;
-        }
-      }
-    }
-    final target =
-        stableMatch ?? (nameMatches.isNotEmpty ? nameMatches.first : null);
-
-    // Soft-delete + remove ONLY non-target name collisions (true dups or old name-only)
-    // Note: stableMatch may have different .name than incoming (name drift); we still reuse
-    // its dbId via target and replace in list by dbId later. nameMatches snapshot + remove by ref is safe here.
-    for (final oldChar in nameMatches) {
-      if (target != null && oldChar.dbId == target.dbId) {
-        continue; // preserve the matched target; we will update it in place
-      }
-      if (oldChar.dbId != null) {
-        try {
-          await _db.softDeleteCharacterById(oldChar.dbId!);
-          debugPrint(
-            '[Import] Soft-deleted old character row for name collision: ${oldChar.name} (id=${oldChar.dbId})',
-          );
-        } catch (e) {
-          debugPrint('[Import] Could not soft-delete old character row: $e');
-        }
-      }
-      if (oldChar.imagePath != null) {
-        try {
-          final oldFile = File(oldChar.imagePath!);
-          if (await oldFile.exists()) {
-            await oldFile.delete();
-            debugPrint(
-              '[Import] Deleted old PNG for ${card.name}: ${p.basename(oldChar.imagePath!)}',
-            );
+    // Identity: stableId only. Name is never enough to overwrite or delete.
+    // forceReplaceTarget is the explicit single-file "Replace existing" path.
+    final stableMatch =
+        findByStableId(card.frontPorchExtensions?.stableId);
+    CharacterCard? target = stableMatch;
+    if (target == null && forceReplaceTarget != null) {
+      // Resolve against the live list by dbId so we don't hold a stale ref.
+      final rid = forceReplaceTarget.dbId;
+      if (rid != null) {
+        for (final c in _characters) {
+          if (c.dbId == rid) {
+            target = c;
+            break;
           }
-        } catch (e) {
-          debugPrint('[Import] Could not delete old PNG: $e');
         }
       }
-      _characters.remove(oldChar);
+      target ??= forceReplaceTarget;
     }
 
-    // Ensure stableId is generated/carried before any save/embed (for new or update paths).
-    // (Harmless if later write fails; in-memory card gets identity, which is fine and matches plan.)
+    // Ensure stableId before embed. On force-replace of a no-id incoming card,
+    // carry the library character's stableId so future FP reimports still match.
     card.frontPorchExtensions ??= FrontPorchExtensions();
+    final incomingStable = card.frontPorchExtensions!.stableId;
+    if ((incomingStable == null || incomingStable.isEmpty) &&
+        target != null) {
+      final keep = target.frontPorchExtensions?.stableId;
+      if (keep != null && keep.isNotEmpty) {
+        card.frontPorchExtensions!.stableId = keep;
+      }
+    }
     card.frontPorchExtensions!.ensureStableId();
 
     String destPath;
-    // For stable target match, prefer reusing the existing target's imagePath (overwrite in place)
-    // to avoid unnecessary filename churn on reimport of edited cards (e.g. realism settings).
-    // Fallback to fresh timestamped name for new entries or non-matches (historical).
+    // Reuse the target's PNG path on update-in-place to avoid filename churn.
+    // Fresh timestamped name for new library entries.
     if (target != null && target.imagePath != null) {
       destPath = target.imagePath!;
     } else if (sourceFileForCopy != null) {
       destPath =
           '${charDir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.png';
-      // Do NOT raw copy here; use v2 saveCardAsPng below to embed stable + FP data
-      // (pixels preserved by resolve logic inside saveCardAsPng using source).
     } else if (card.imagePath != null) {
-      // Already have a file (e.g. from group card member extraction)
       destPath =
           '${charDir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.png';
     } else {
-      // No image at all — create a tiny placeholder (will be overwritten by savePng)
       destPath =
           '${charDir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.png';
     }
@@ -588,8 +589,7 @@ class CharacterRepository extends ChangeNotifier {
         : null;
 
     if (target != null) {
-      // Update-in-place for stable or name match: reuse dbId (prevents data loss)
-      // Delete old PNG only if its basename differs from the (new) dest we wrote.
+      // Update-in-place: reuse dbId so sessions/chat history survive.
       if (target.imagePath != null) {
         final oldBase = _toBasename(target.imagePath!);
         final newBase = _toBasename(destPath);
@@ -599,11 +599,8 @@ class CharacterRepository extends ChangeNotifier {
             if (await oldFile.exists()) {
               await oldFile.delete();
               debugPrint(
-                '[Import] Deleted previous PNG for matched identity ' +
-                    card.name +
-                    ' (old=' +
-                    oldBase +
-                    ')',
+                '[Import] Deleted previous PNG for matched identity '
+                '${card.name} (old=$oldBase)',
               );
             }
           } catch (e) {
@@ -615,12 +612,9 @@ class CharacterRepository extends ChangeNotifier {
       }
       card.dbId = target.dbId;
 
-      // Reuse updateCharacter for the DB update (exact companion + updatedAt) + list replace.
-      // (png already embedded above via saveCardAsPng for stable; update will re-embed same, harmless).
-      // This eliminates the inlined companion duplication. Minor: double notify/_isLoading possible in import context but semantics/observables unchanged.
+      // updateCharacter does DB companion + list replace (re-embeds PNG; harmless).
       await updateCharacter(card);
     } else {
-      // No match: fresh insert path (original behavior)
       final dbId = await _db.insertCharacterReturningId(
         CharactersCompanion(
           name: Value(card.name),
@@ -646,13 +640,7 @@ class CharacterRepository extends ChangeNotifier {
       _characters.add(card);
     }
 
-    // (Until Phase 4 of the lorebook overhaul, an imported card's book was
-    // ALSO copied into an auto-created "X's world lore" World — two sources
-    // of truth kept in sync by string matching. New imports keep lore on the
-    // card only; existing auto-created worlds remain as ordinary worlds.)
-
-    // Note: list management (add or replace) happens inside the target/!target branches above
-    // so that we reuse dbId for matches without duplication.
+    // Imported lore stays on the card only (no auto-linked World).
     return card;
   }
 

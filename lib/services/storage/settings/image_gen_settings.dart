@@ -18,6 +18,8 @@
 
 import 'dart:convert';
 
+import 'package:front_porch_ai/services/capability/image_reference_role.dart';
+
 import '../../image/edit_profile.dart';
 import 'settings_base.dart';
 
@@ -35,6 +37,15 @@ class ImageGenSettings with SettingsBase {
   String _localImageGenUrl = 'http://127.0.0.1:7860';
   String _comfyUiUrl = 'http://127.0.0.1:8188';
   String _imageGenModel = '';
+
+  // The EDIT-task model slot (phase #12 model-slot split). One shared
+  // `imageGenModel` used to serve both Studio tabs, so an edit model left
+  // selected after an Edit session silently poisoned base-image generation
+  // (edit models can't txt2img — maintainer catch, 2026-07-16). The existing
+  // key stays the CREATE slot for back-compat; edit paths (Edit tab, edit-
+  // first expression packs on DT/remote) read this one. ComfyUI's edit setup
+  // lives in its own comfyEdit* keys and is deliberately not duplicated here.
+  String _imageGenEditModel = '';
   String _imageGenSize = '1024x1024';
   String _imageGenNegativePrompt = 'blurry, low quality, watermark, text';
   String _imageGenStyle = 'photorealistic';
@@ -92,6 +103,7 @@ class ImageGenSettings with SettingsBase {
   String get localImageGenUrl => _localImageGenUrl;
   String get comfyUiUrl => _comfyUiUrl;
   String get imageGenModel => _imageGenModel;
+  String get imageGenEditModel => _imageGenEditModel;
   String get imageGenSize => _imageGenSize;
   String get imageGenNegativePrompt => _imageGenNegativePrompt;
   String get imageGenStyle => _imageGenStyle;
@@ -140,6 +152,16 @@ class ImageGenSettings with SettingsBase {
     _comfyUiUrl =
         prefs?.getString(k('comfy_ui_url')) ?? 'http://127.0.0.1:8188';
     _imageGenModel = prefs?.getString(k('image_gen_model')) ?? '';
+    _imageGenEditModel = prefs?.getString(k('image_gen_edit_model')) ?? '';
+    // One-time migration seed: before the slot split the single model served
+    // both tabs, so a user whose current model IS an edit model configured it
+    // for the Edit tab — carry it into the edit slot so their setup survives.
+    // (The create slot keeps the value too; the non-blocking warning nudges
+    // them to pick a real create model.)
+    if (_imageGenEditModel.isEmpty && looksLikeEditModel(_imageGenModel)) {
+      _imageGenEditModel = _imageGenModel;
+      prefs?.setString(k('image_gen_edit_model'), _imageGenEditModel);
+    }
     _imageGenSize = prefs?.getString(k('image_gen_size')) ?? '1024x1024';
     _imageGenNegativePrompt =
         prefs?.getString(k('image_gen_negative_prompt')) ??
@@ -232,6 +254,12 @@ class ImageGenSettings with SettingsBase {
   Future<void> setImageGenModel(String value) async {
     _imageGenModel = value;
     await prefs?.setString(k('image_gen_model'), value);
+    notify();
+  }
+
+  Future<void> setImageGenEditModel(String value) async {
+    _imageGenEditModel = value;
+    await prefs?.setString(k('image_gen_edit_model'), value);
     notify();
   }
 

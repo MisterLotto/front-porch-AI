@@ -18,6 +18,19 @@
 
 part of '../chat_service.dart';
 
+/// Absolute ceiling on the RAG memories block, applied on top of the
+/// percentage budget (1:1's 10% / the group's configurable %). The block is
+/// verbatim old transcript injected AFTER the history; past ~2,500 tokens
+/// models start replaying it as if it were the current scene, so the cap
+/// keeps large-context setups (10% of 32k = 3,200) under that line too.
+const int kRagMemoryBudgetCapTokens = 1200;
+
+/// User-facing notice for "managed backend stopped + auto-start off". Const
+/// so [_abortIfBackendDown]'s dedupe can compare against the last message.
+const _kBackendDownNotice =
+    'Backend is not running. Start it in Settings → Backend, '
+    "or enable 'Auto-start on chat open'.";
+
 /// The core response generation orchestrator (`_generateResponse`): speaker
 /// selection, the single per-speaker realism eval trigger (group path), system
 /// prompt + context assembly, streaming, and post-generation needs/realism
@@ -26,10 +39,43 @@ part of '../chat_service.dart';
 /// rather than carved up (which would be a behavioural risk) until a careful,
 /// separately-verified decomposition is warranted.
 extension ChatServiceGeneration on ChatService {
+  /// True when generation must not proceed: the managed local backend is not
+  /// running and auto-start on chat open is off. Appends ONE system notice
+  /// naming the toggle (deduped against the last message so group
+  /// auto-advance and idle retries can't stack copies), so every entry point
+  /// — send, regenerate, continue, swipe, group advance, impersonate — fails
+  /// the same friendly way instead of a connection error or silent cancel.
+  ///
+  /// Deliberately does NOT _saveChat: the notice is transient status, and
+  /// persisting here from inside _generateResponse would write the transcript
+  /// mid-mutation for callers that pop a message before generating (regen
+  /// popped the last AI reply, abort saved the hole — permanent data loss).
+  /// Callers that pop MUST also run this check BEFORE their pop (regen paths
+  /// do); this deep guard is the backstop for the non-mutating entries.
+  Future<bool> _abortIfBackendDown() async {
+    if (_llmProvider?.hasManagedProcess != true ||
+        _storageService.autostartOnChatOpen ||
+        _llmProvider?.hasAnyManagedProcessRunning == true) {
+      return false;
+    }
+    if (_messages.isEmpty || _messages.last.text != _kBackendDownNotice) {
+      _messages.add(
+        ChatMessage(
+          text: _kBackendDownNotice,
+          sender: 'System',
+          isUser: false,
+        ),
+      );
+      notifyListeners();
+    }
+    return true;
+  }
+
   Future<void> _generateResponse(
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
   }) async {
+    if (await _abortIfBackendDown()) return;
     final epoch = ++_generationEpoch;
     _isGenerating = true;
     _generationProgress = 0.0;
@@ -359,10 +405,14 @@ extension ChatServiceGeneration on ChatService {
       // journal). Built HERE, before the fixed-content token count below, so
       // history budgeting accounts for it (async, unlike the sync builders).
       String journalBlock = '';
+      // Two-tier memory (living-time-features.md §8): positions the journal
+      // expanded verbatim this turn — RAG retrieval below excludes them so
+      // the exact lines never ride the prompt twice.
+      var expandedJournalPositions = const <int>{};
       if (_storageService.memorySettings.journalEnabled &&
           guestSpeaker == null &&
           _currentSessionId != null) {
-        journalBlock = await _journalInjection.buildJournalBlock(
+        final journal = await _journalInjection.buildJournalBlock(
           characterId: _getCharacterIdFromCard(speakingCharacter),
           characterName: speakingCharacter.name,
           userName: userName,
@@ -373,7 +423,10 @@ extension ChatServiceGeneration on ChatService {
               .take(3)
               .map((m) => '${m.sender}: ${m.displayText}')
               .join('\n'),
+          messageCount: _messages.length,
         );
+        journalBlock = journal.text;
+        expandedJournalPositions = journal.expandedPositions;
       }
 
       // ── Continue mode: remove the last message from history ──
@@ -486,6 +539,27 @@ extension ChatServiceGeneration on ChatService {
 
         // Chance Time injection — independent of realism mode
         final chanceTimeBlock = _getChanceTimeInjection();
+
+        // LLMerta Mafia-night force-ack (Chance Time register). Re-arms from
+        // diary if needed; stays armed through regen of this AI message until
+        // the *next* user send clears it.
+        final porchDiaryId = _getCharacterIdFromCard(speakingCharacter);
+        final porchSessionId = _currentSessionId;
+        if (porchSessionId != null) {
+          await _porchMemoryImport.ensureArmedForDiary(
+            sessionId: porchSessionId,
+            diaryCharacterId: porchDiaryId,
+          );
+        }
+        final porchNightRaw =
+            _porchMemoryImport.takeInjectionForDiary(porchDiaryId);
+        final porchNightBlock = porchNightRaw.isEmpty
+            ? ''
+            : _macroResolver.resolve(
+                porchNightRaw,
+                macroCtx,
+                section: 'realism',
+              );
 
         // Objective injection — always injected regardless of realism mode
         // Must sit in a fixed prompt section so it is NEVER trimmed by the budget system.
@@ -642,6 +716,9 @@ extension ChatServiceGeneration on ChatService {
         );
         plan.add(id: 'suffix', text: suffix);
         plan.add(id: 'chance_time', text: chanceTimeBlock);
+        // High-recency with Chance Time so the first post-import reply
+        // cannot bury the Mafia night (docs/design/llmerta-porch-memories.md §7b).
+        plan.add(id: 'porch_night', text: porchNightBlock);
 
         final fixedTokens = await _countTokens(plan.fixedCountText);
         final contextBudget = _sessionGenSettings.resolveContextSize(
@@ -729,30 +806,56 @@ extension ChatServiceGeneration on ChatService {
           // reach. Applies identically to 1:1 and group (same retrieve() path).
           final selfSourceId = sourceIds.isNotEmpty ? sourceIds.first : '';
 
-          final memories = await _memoryService!.retrieve(
+          // Retrieval limit: groups use the per-session group setting; 1:1
+          // uses the user's "Memories per turn" slider (memory panel + web).
+          // The slider was previously DEAD here — 1:1 silently rode the group
+          // default (8) and turning it down did nothing. 0 = "All" on both.
+          final retrievalLimit = _activeGroup != null
+              ? groupRetrievalCount
+              : _storageService.memorySettings.ragRetrievalCount;
+
+          final rawMemories = await _memoryService!.retrieve(
             queryText: queryMessages,
             sourceCharacterIds: sourceIds,
             currentSessionId: _currentSessionId ?? '',
             inContextStart:
                 droppedMessages, // only search messages that are out of context
-            limit: groupRetrievalCount == 0 ? 9999 : groupRetrievalCount,
+            limit: retrievalLimit == 0 ? 9999 : retrievalLimit,
             characterPriorities: currentGroupRAGPriorities,
             sessionScopedCharacterIds: selfSourceId.isEmpty
                 ? const {}
                 : {selfSourceId},
           );
+          // Two-tier memory dedupe: the journal expanded these exact lines
+          // above — never pay for them twice.
+          final memories = RetrievedMemory.excludingPositions(
+            rawMemories,
+            expandedJournalPositions,
+            currentSessionId: _currentSessionId ?? '',
+          );
+          if (memories.length < rawMemories.length) {
+            debugPrint(
+              '[RAG:Chat] Deduped ${rawMemories.length - memories.length} '
+              'retrieval(s) already expanded by the journal',
+            );
+          }
 
           if (memories.isNotEmpty) {
             // Cap memory injection to the group's (or global) memory budget % of context.
             // The summary carries the weight of context compression; RAG only
             // supplements with specific details the summary missed. Too much
             // RAG (2500+ tokens) overwhelms the model and causes it to
-            // reference stale events as if they're current ("going back in time").
+            // reference stale events as if they're current ("going back in
+            // time") — so the percentage is ALSO capped absolutely: 10% of a
+            // 32k context is 3,200 tokens, past the documented failure line.
             final contextSize = _storageService.backendSettings.contextSize;
             final budgetFraction = _activeGroup != null
                 ? (groupMemoryBudgetPercent / 100.0)
                 : 0.10;
-            final memoryBudget = (contextSize * budgetFraction).round();
+            final memoryBudget = math.min(
+              (contextSize * budgetFraction).round(),
+              kRagMemoryBudgetCapTokens,
+            );
             final includedMemories = <String>[];
             int usedTokens = 0;
             for (final m in memories) {
@@ -1394,6 +1497,18 @@ extension ChatServiceGeneration on ChatService {
           finalResponse = _stripThinkBlocks(finalResponse);
         }
 
+        // ── Output Sanitizer ──────────────────────────────────────────────
+        // NOTE: This runs BEFORE _lorebookScanner.scanLatest() below, so
+        // lorebook keyword triggers operate on the sanitized text. If a rule
+        // replaces text that a lorebook keyword was matching, the trigger
+        // would stop matching. This is intentional — sanitized output is the
+        // "final" text that enters history and is scanned for lore.
+        if (g2.resolveOutputSanitizerEnabled(_storageService)) {
+          final rules = g2.resolveOutputSanitizerRules(_storageService);
+          finalResponse = sanitizeOutput(finalResponse, rules);
+          _messages.last.text = finalResponse;
+        }
+
         // Snapshot which entries were already triggered before scanning the AI response.
         // We will only decrement those — newly AI-triggered entries must keep their
         // full depth budget so they are visible on the next user turn.
@@ -1528,6 +1643,13 @@ extension ChatServiceGeneration on ChatService {
           // growth rides this shared pass; there is no per-guest trigger).
           // Cursor-based like the journal, so it is naturally regen-safe.
           _maybeRunGrowthPass();
+
+          // Promise/debt ledger (Train B) — fire-and-forget on new turns only.
+          // Keyword gate + open-list gate live inside the service so most
+          // turns cost nothing. Regen/continue never invent commitments.
+          if (mode == GenerationMode.normal) {
+            _maybeRunPromiseDebtPass();
+          }
 
           // Embed messages for RAG memory (fire-and-forget)
           _maybeEmbedMessages();

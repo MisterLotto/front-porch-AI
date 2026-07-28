@@ -230,6 +230,17 @@ class ImageGenService extends ChangeNotifier {
 
   ImageGenService(this._storage);
 
+  /// Best-effort ComfyUI VRAM nudge before a create→edit model swap (the
+  /// creator pack's "Switching to edit model" stage). No-op on every other
+  /// backend — DT/remote load-unload per request on their own.
+  Future<void> nudgeComfyFree() async {
+    final backend = ImageGenBackend.fromKey(
+      _storage.imageGenSettings.imageGenBackend,
+    );
+    if (backend != ImageGenBackend.comfyUi) return;
+    await _ensureComfyUi.freeMemory();
+  }
+
   /// Build the images directory path.
   Directory get _imagesDir =>
       Directory(path.join(_storage.rootPath ?? '', 'KoboldManager', 'images'));
@@ -255,10 +266,10 @@ class ImageGenService extends ChangeNotifier {
     // Remote APIs ignore them (no seed/denoise support on those endpoints).
     int? seed,
     double? denoise,
-    // Which Studio surface asked. Create (default) keeps every existing path
-    // byte-identical; Edit routes an edit-capable model to edit-conditioning.
-    // No caller passes Edit until the Create/Edit tabs land (Phase 3), so this
-    // is dormant and non-breaking today.
+    // Which surface asked. Create (default) keeps every existing path
+    // byte-identical; Edit routes an edit-capable model to edit-conditioning
+    // and resolves the EDIT model slot. Passed by the Studio's Edit tab and
+    // by edit-first expression packs (Studio dialog + the creator panel).
     StudioIntent intent = StudioIntent.create,
     // Edit-only: how strongly the instruction changes the reference (higher =
     // more change). Overrides the edit profile's default strength when set, so
@@ -311,7 +322,18 @@ class ImageGenService extends ChangeNotifier {
       // Resolve what the reference image MEANS for this backend + model (the
       // single seam). Create keeps today's behavior; Edit routes an edit model
       // to editConditioning, and refuses honestly when the backend can't edit.
-      final refModelName = model ?? _storage.imageGenSettings.imageGenModel;
+      //
+      // Model-slot split (phase #12): EDIT intent resolves against the edit
+      // slot, create against the create slot. One shared slot used to let an
+      // edit model left selected after an Edit session silently poison base
+      // generation (edit models can't txt2img). An explicit [model] wins
+      // (batch flows pass their own). ComfyUI's edit path ignores this — its
+      // models come from the comfyEdit* workflow slots.
+      final refModelName =
+          model ??
+          (intent == StudioIntent.edit
+              ? _storage.imageGenSettings.imageGenEditModel
+              : _storage.imageGenSettings.imageGenModel);
       final refCapability = ImageReferenceResolver.resolveForBackend(
         backend: backend,
         modelName: refModelName,
@@ -343,8 +365,8 @@ class ImageGenService extends ChangeNotifier {
           _statusMessage = 'Connecting to Draw Things...';
           notifyListeners();
 
-          final modelCheckpoint =
-              model ?? _storage.imageGenSettings.imageGenModel;
+          // Slot-resolved above (edit intent → edit slot).
+          final modelCheckpoint = refModelName;
           // Relaxed .ckpt check: gRPC file list returns the actual filenames Draw Things knows about
           // (may be .ckpt, .safetensors, or bare names). Empty is allowed (uses current in DT).
           if (modelCheckpoint.isNotEmpty &&
@@ -479,8 +501,7 @@ class ImageGenService extends ChangeNotifier {
             return null;
           }
           final imageSize = size ?? _storage.imageGenSettings.imageGenSize;
-          final modelCheckpoint =
-              model ?? _storage.imageGenSettings.imageGenModel;
+          final modelCheckpoint = refModelName;
           imageBytes = await _generateViaA1111(
             baseUrl: localUrl,
             prompt: prompt,
@@ -558,7 +579,7 @@ class ImageGenService extends ChangeNotifier {
             imageBytes = await comfy.generateImage(
               prompt: prompt,
               negativePrompt: negativePrompt,
-              model: model ?? _storage.imageGenSettings.imageGenModel,
+              model: refModelName,
               width: width,
               height: height,
               steps: _storage.imageGenSettings.imageGenSteps,
@@ -597,7 +618,7 @@ class ImageGenService extends ChangeNotifier {
           return null;
         }
 
-        final imageModel = model ?? _storage.imageGenSettings.imageGenModel;
+        final imageModel = refModelName;
         if (imageModel.isEmpty) {
           _statusMessage = 'No image model selected.';
           _isGenerating = false;

@@ -21,6 +21,39 @@ part of '../chat_service.dart';
 
 /// Chat-entry point — setActiveCharacter (open/seed a 1:1 chat). Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceChatEntry on ChatService {
+  /// Light in-place refresh after the active/focused character's card was
+  /// edited: swap the reference (matched by dbId, so RENAMES stay light) and
+  /// repaint — WITHOUT the full chat-entry dance. Never cancels an in-flight
+  /// generation, never reloads the session, and is group-safe: editing a
+  /// focused group member updates that member's reference instead of tearing
+  /// the group down. (The deleted EditCharacterDialog called
+  /// setActiveCharacter for this, which cancels generation, full-reloads on
+  /// rename, and leaves the group — the exact failure modes this exists to
+  /// avoid.)
+  void refreshActiveCharacterCard(CharacterCard card) {
+    if (_activeGroup != null) {
+      // identical() first: group member cards are library-decoupled copies
+      // whose dbId is often null — the editor mutates the same instance, so
+      // identity is the reliable key; dbId covers reloaded-copy callers.
+      final i = _groupCharacters.indexWhere(
+        (c) =>
+            identical(c, card) || (c.dbId != null && c.dbId == card.dbId),
+      );
+      if (i != -1) {
+        _groupCharacters[i] = card;
+        if (_activeCharacter?.dbId == card.dbId) {
+          _activeCharacter = card;
+        }
+      }
+    } else if (_activeCharacter != null &&
+        (_activeCharacter!.dbId == null ||
+            _activeCharacter!.dbId == card.dbId)) {
+      _activeCharacter = card;
+    }
+    refreshEnjoysLowHygieneFromActiveCharacter();
+    notifyListeners();
+  }
+
   Future<void> setActiveCharacter(CharacterCard? character) async {
     // Cancel any in-flight generation before switching context
     await _cancelAndWaitForGeneration();
@@ -51,7 +84,7 @@ extension ChatServiceChatEntry on ChatService {
     _groupAuthorNoteStrengths = {};
     _groupCharacterSystemPrompts = {};
     _groupRagEnabled = true;
-    _groupRetrievalCount = 8;
+    _groupRetrievalCount = 4;
     _groupMemoryBudgetPercent = 10.0;
     _groupCharacterRAGPriorities = {};
 
@@ -72,7 +105,10 @@ extension ChatServiceChatEntry on ChatService {
 
     // Auto-start the local Kobold backend (native or a .kcpps preset) when
     // entering a chat so the user never has to manually start it just to talk.
-    _llmProvider?.ensureManagedBackendIsRunning();
+    // Gated by autostartOnChatOpen — when off, the user must start manually.
+    if (_storageService.autostartOnChatOpen) {
+      _llmProvider?.ensureManagedBackendIsRunning();
+    }
 
     // If extensions are missing (e.g., app was restarted after DB load that
     // didn't carry over PNG extensions), reload the PNG to get V2.5 card data.
@@ -184,15 +220,13 @@ extension ChatServiceChatEntry on ChatService {
           _realismEnabled =
               ext.realismEnabled ||
               _storageService.realismSettings.realismDefault;
-          // Card-seed bypass (rec 1 from PR #47): use seedFromCardV2OrExt (plain .clamp only,
-          // no _migrate*) because V2.5 cards + creator UI author shortTermBond/longTermBond on the
-          // *current* ±300 scale (see models/character_card.dart:31-32 + FrontPorchExtensions).
-          // Legacy *2 migration must stay *only* on _loadLastSession loadScalars + migrate* wrappers
-          // + applyLegacyShortTermMigrationIfNeeded paths (and the public migrate surface).
-          // This was the root cause of bond-doubling (e.g. authored 55 -> 110) on every fresh 1:1
-          // card import / 0-session setActive / startNew. 1:1 only; group per-speaker paths were
-          // never affected (used loadRelationshipScalarsForSpeaker etc). See relationship_service.dart
-          // seedFromCardV2OrExt + god keep-sync comments (full list) + cross-ref setActiveCharacter:1572.
+          // Card-seed path (rec 1 from PR #47): seedFromCardV2OrExt is plain .clamp only,
+          // because V2.5 cards + creator UI author shortTermBond/longTermBond on the *current*
+          // ±300 scale (see models/character_card.dart:31-32 + FrontPorchExtensions). The old
+          // legacy ±150→×2 era migration doubled authored values here (55 → 110) and — worse —
+          // re-doubled live session bonds ≤ 150 on every _loadLastSession→save cycle; the whole
+          // migration surface was deleted 2026-07-27 (see era-heuristic warning atop
+          // relationship_service.dart). Session loads now pass raw values everywhere.
           _relationshipService.seedFromCardV2OrExt(
             shortTermBond: ext.shortTermBond,
             longTermBond: ext.longTermBond,
@@ -203,6 +237,8 @@ extension ChatServiceChatEntry on ChatService {
           _timeService.seedFromV2OrExt(
             dayCount: ext.dayCount.clamp(1, 9999),
             timeOfDay: ext.timeOfDay,
+            storyStartDate: ext.storyStartDate,
+            storyStartTime: ext.storyStartTime,
             passageOfTimeEnabled:
                 ext.passageOfTimeEnabled &&
                 _storageService.realismSettings.passageOfTimeDefault,

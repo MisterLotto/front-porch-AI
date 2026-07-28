@@ -17,8 +17,10 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
+import 'package:front_porch_ai/services/image/comfy_edit_presets.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart'
     show ImageGenBackend;
+import 'package:front_porch_ai/services/storage/settings/image_gen_settings.dart';
 
 /// Adapter that maps the active [ImageGenBackend] to the pure backend bits
 /// [resolveCapability] needs — the ONE place the service enum meets the pure
@@ -82,5 +84,33 @@ class ImageReferenceResolver {
           useRemoteAllowlist: true,
         );
     }
+  }
+
+  /// The expression-pack "edit-first" decision, shared VERBATIM by the
+  /// Studio's pack dialog and the creator's Portrait & Avatars panel so the
+  /// two hosts can never diverge: drive each emotion through the EDIT path
+  /// (identity pinned by the base portrait) when the active backend + the
+  /// EDIT-slot model can instruction-edit; otherwise fall back to img2img.
+  ///
+  /// ComfyUI advertises edit unconditionally (it's workflow-gated, not
+  /// model-gated), so `supportsEdit` alone would route every slot to the edit
+  /// path and fail on unfilled model slots when no edit workflow is set up —
+  /// and the img2img fallback would be unreachable. Gate on the SAME
+  /// readiness the Edit tab enforces; when it isn't ready, img2img (which the
+  /// plain checkpoint can always do) takes over.
+  static bool packEditMode(ImageGenSettings settings) {
+    final backend = ImageGenBackend.fromKey(settings.imageGenBackend);
+    var editMode = resolveForBackend(
+      backend: backend,
+      modelName: settings.imageGenEditModel,
+    ).supportsEdit;
+    if (editMode && backend == ImageGenBackend.comfyUi) {
+      editMode = comfyEditReady(
+        workflowId: settings.comfyEditWorkflowId,
+        uploadedWorkflowJson: settings.comfyEditUploadedWorkflow,
+        modelChoices: settings.comfyEditModelChoices,
+      );
+    }
+    return editMode;
   }
 }

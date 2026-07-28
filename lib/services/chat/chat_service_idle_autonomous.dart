@@ -90,12 +90,17 @@ extension ChatServiceIdleAutonomous on ChatService {
       );
     }
 
-    // Advance narrative time for the elapsed period.
+    // Advance narrative time by the user-set away pace (Living Time: 1 =
+    // a few hours, 3 = half the day, 6 = a full day). Deterministic — the
+    // model never chooses the span. Day crossings fire dreams and fresh
+    // weather exactly as in-play advancement does.
     // Needs are NOT decayed automatically during AFK — the evaluator is the
     // sole source of need changes, so the character isn't stuck firefighting
     // survival needs and has room for varied activities.
     if (_realismEnabled) {
-      _timeService.advanceTimePeriods(1);
+      _timeService.advanceTimePeriods(
+        _storageService.generationSettings.dynamicResponsePacePeriods,
+      );
     }
 
     _pendingIdleCue = _buildAutonomousCue();
@@ -117,6 +122,29 @@ extension ChatServiceIdleAutonomous on ChatService {
 
   String _buildAutonomousCue() {
     final charName = _activeCharacter?.name ?? '{{char}}';
+    // Ambitions give off-screen time direction (Living Time §6): a character
+    // with a long-term end sometimes spends AFK moments working toward it
+    // instead of only meals-and-naps. Optional flavor, never a demand.
+    final ambitions =
+        _activeCharacter?.frontPorchExtensions?.ambitions ?? const [];
+    final ambitionStr = ambitions.isEmpty
+        ? ''
+        : '\n\nIf it fits naturally, part of this time may go toward '
+              '$charName\'s long-term ambition: ${ambitions.first}.';
+    // Living Time flavor (afk_flavor.dart): 1–2 deterministic directives so
+    // the snapshot USES the hour, the weather, the fixation, and the diary
+    // already present in the prompt — plus montage guidance when the away
+    // pace spans more than a couple of hours.
+    final pace = _storageService.generationSettings.dynamicResponsePacePeriods;
+    final flavorLines = AfkFlavor.directives(
+      timeOfDay: _timeService.timeOfDay,
+      weather: currentWeather,
+      fixation: _relationshipService.activeFixation,
+      snapshotIndex: _consecutiveAutoResponses,
+    );
+    final span = AfkFlavor.spanDirective(pace);
+    final flavorStr =
+        '\n\n${[...flavorLines, if (span.isNotEmpty) span].join('\n')}';
     // Only announce elapsed time when the clock actually moved this cycle. Time
     // advances iff Realism is on (the guard in _onIdleTimerFired) AND passage of
     // time is enabled (the guard inside TimeService.advanceTimePeriods). If we
@@ -130,13 +158,14 @@ extension ChatServiceIdleAutonomous on ChatService {
 
     if (!_needsSimEnabled || _needsSimulation.vector.isEmpty) {
       final preamble = timeAdvancing
-          ? '*A few hours have passed. It is now $timeStr.\n\n'
+          ? '*${AfkFlavor.timePhrase(pace)} It is now $timeStr.\n\n'
           : '*A while has passed.\n\n';
       return '$preamble'
           'Describe a quiet snapshot from part of $charName\'s day '
           '— something they have been doing, a moment of rest, '
           'a personal routine. Reference what they have been up to '
-          'naturally, so the scene feels like part of a lived-in day.\n\n'
+          'naturally, so the scene feels like part of a lived-in day.'
+          '$flavorStr$ambitionStr\n\n'
           'Write ONLY narrative action and internal thought — '
           'NO dialogue, do NOT address or refer to the user, '
           'do NOT have $charName notice the user. '
@@ -166,7 +195,7 @@ extension ChatServiceIdleAutonomous on ChatService {
     }
 
     final preamble = timeAdvancing
-        ? '*A few hours have passed. It is now $timeStr.\n\n'
+        ? '*${AfkFlavor.timePhrase(pace)} It is now $timeStr.\n\n'
         : '*A while has passed.\n\n';
     return '$preamble'
         'While you were away, $charName has been going about their day '
@@ -175,7 +204,8 @@ extension ChatServiceIdleAutonomous on ChatService {
         'Describe a quiet snapshot from $charName\'s day, touching on '
         'some of what they have been up to (a meal, bathroom, rest, bath, '
         'or similar daily routines) so the scene feels like part of a '
-        'lived-in day.\n\n'
+        'lived-in day.'
+        '$flavorStr$ambitionStr\n\n'
         'IMPORTANT: Write ONLY narrative action and internal thought — '
         'NO dialogue, do NOT address or refer to the user, '
         'do NOT have $charName notice the user. '

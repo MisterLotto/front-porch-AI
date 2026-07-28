@@ -22,7 +22,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/llm_service.dart'
-    show LlmToolResponse, looksLikeBackendUnreachable;
+    show LlmToolResponse, isToolTransportFailure;
 
 /// Shared support for the two background maintenance passes (the Journal and
 /// Growth Rings) — extracted from JournalMaintenance so the growth pass
@@ -131,10 +131,14 @@ class ToolTransportProbe extends ChangeNotifier {
 /// Flow: unless [probe] already marked the backend text-only, fire the
 /// tools-mode prompt; a matching call is converted by [callToText] into the
 /// canonical text the downstream parser expects; a tool-less reply with text
-/// is salvaged through the same parser; anything else marks the backend
-/// text-only for the run and falls back to the streaming text path — UNLESS
-/// [isCancelled] fires, because a user-aborted request is a cancellation,
-/// never a capability verdict.
+/// is salvaged through the same parser. Verdict rule: only real evidence
+/// brands the backend — thrown non-transport rejections mark it text-only,
+/// while transport failures, cancellations ([isCancelled]), and EMPTY
+/// answers (null resp, or no call + no text — the shape a server-side abort
+/// produces as a clean 200) are inconclusive: fall back to text for the
+/// round and leave the probe untested to retry next pass. Capability
+/// branding of genuinely tool-less models is the ToolSupportTester ping's
+/// job.
 Future<String?> fireStructuredEval({
   required ToolTransportProbe probe,
   required String backendIdentity,
@@ -156,7 +160,7 @@ Future<String?> fireStructuredEval({
   void Function(String)? onChunk,
 }) async {
   if (!probe.isXmlOnly(backendIdentity)) {
-    var backendUnreachable = false;
+    var inconclusive = false;
     try {
       final resp = await fireToolEval(buildPrompt(toolsMode: true), tools);
       if (isCancelled?.call() ?? false) return null;
@@ -174,19 +178,32 @@ Future<String?> fireStructuredEval({
           return resp.text;
         }
       }
+      // Null resp, or a resp with no usable call AND no text: an EMPTY
+      // answer is never a capability verdict. A KoboldCpp server-side abort
+      // (/api/extra/abort — fired by stopGeneration, the eval-timeout
+      // teardown, or LlmEvalEngine's ensureServerIdle retry hygiene)
+      // completes the in-flight call NORMALLY: HTTP 200, zero tokens, no
+      // tool_calls — indistinguishable here from "model can't speak tools",
+      // and exactly how the tool-calling pill kept falling to
+      // "not supported" after a Scene Guest join (the guest flow stacks a
+      // long mint generation + a burst of concurrent evals + abort/idle
+      // traffic on the single-slot backend). Models that genuinely can't
+      // speak tools answer with PROSE (salvaged above) and are branded by
+      // the ToolSupportTester ping; an empty answer just falls back to text
+      // for THIS round and leaves the probe untested to retry next pass.
+      inconclusive = true;
     } catch (e) {
       debugPrint('[Eval:Tools] $debugLabel attempt failed: $e');
       if (isCancelled?.call() ?? false) return null;
-      // A dead/unreachable backend is a connectivity problem, not a verdict
-      // on the MODEL's tool support — don't brand it unsupported for the run.
-      // NOTE: transient failures (timeout/5xx) can't be distinguished here yet
-      // because generateWithTools collapses ALL failures to null instead of
-      // throwing — so a transient hiccup on the first probe still brands the
-      // backend XML-only for the session. Fixing that needs generateWithTools
-      // to surface transient errors; deferred out of the 1.0 stability freeze.
-      backendUnreachable = looksLikeBackendUnreachable(e);
+      // A transport failure (unreachable backend, client torn down by an
+      // app-side abortGeneration — the "visiting character creation resets
+      // tool calling to not-supported" bug — a whole-call timeout, or a
+      // busy/5xx server) is a network event, not a verdict on the MODEL's
+      // tool support. generateWithTools rethrows those, so they land here
+      // and are filtered instead of branding the backend XML-only.
+      inconclusive = isToolTransportFailure(e);
     }
-    if (!backendUnreachable) {
+    if (!inconclusive) {
       probe.markXmlOnly(backendIdentity);
       debugPrint(
         '[Eval:Tools] Tools unavailable on $backendIdentity — using text '

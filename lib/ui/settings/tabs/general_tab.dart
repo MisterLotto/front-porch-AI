@@ -183,6 +183,104 @@ class GeneralTab extends StatelessWidget {
                 chatService.setPassageOfTimeEnabled(val);
               },
             ),
+            subToggle(
+              icon: Icons.wb_cloudy_outlined,
+              label: 'Story Weather',
+              blurb:
+                  'Deterministic weather rolls through the story\'s days — '
+                  'felt in the character\'s mood, comfort, and the scene. '
+                  'Characters can see fronts coming ("looks like rain '
+                  'tomorrow"). Needs Passage of Time.',
+              value: storageService.weatherEnabled,
+              onChanged: (val) => storageService.setWeatherEnabled(val),
+            ),
+            if (storageService.weatherEnabled)
+              subToggle(
+                icon: Icons.thermostat_outlined,
+                label: 'Temperatures in °F',
+                blurb:
+                    'Show story-weather temperatures in Fahrenheit instead '
+                    'of Celsius. Display only — characters always experience '
+                    'the weather in words ("coat-and-gloves cold"), never '
+                    'numbers.',
+                value: storageService.weatherFahrenheit,
+                onChanged: (val) => storageService.setWeatherFahrenheit(val),
+              ),
+            subToggle(
+              icon: Icons.nightlight_outlined,
+              label: 'Dreams',
+              blurb:
+                  'When a story night passes, the character dreams — a short, '
+                  'hazy scene woven from their Journal memories, mood, and '
+                  'the weather. Needs the Journal and Passage of Time.',
+              value: storageService.dreamsEnabled,
+              onChanged: (val) => storageService.setDreamsEnabled(val),
+            ),
+            subToggle(
+              icon: Icons.history,
+              label: 'Welcome-back recap',
+              blurb:
+                  'After you\'ve been away a while, opening a chat shows a '
+                  'small "where we left off" banner. Uses the time of your '
+                  'last message — already saved with your chat. Nothing new '
+                  'is collected and nothing leaves your device.',
+              value: storageService.absenceBannerEnabled,
+              onChanged: (val) => storageService.setAbsenceBannerEnabled(val),
+            ),
+            subToggle(
+              icon: Icons.waving_hand_outlined,
+              label: 'Character notices your absence',
+              blurb:
+                  'Off by default. When on, the character briefly acknowledges '
+                  'a long gap ("it\'s been a few days") — once, in coarse '
+                  'words, never guessing what you were doing. Same local-only '
+                  'timestamp as the recap banner; nothing leaves your device.',
+              value: storageService.absenceAckEnabled,
+              onChanged: (val) => storageService.setAbsenceAckEnabled(val),
+            ),
+            if (storageService.absenceBannerEnabled ||
+                storageService.absenceAckEnabled)
+              Padding(
+                padding: const EdgeInsets.only(left: 24, top: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      'Away for at least',
+                      style: TextStyle(
+                        color: AppColors.textSecondary(context),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    DropdownButton<int>(
+                      // Clamp to a known item so a manual pref edit can't
+                      // assert the dropdown.
+                      value:
+                          const [12, 24, 72, 168].contains(
+                            storageService.absenceThresholdHours,
+                          )
+                          ? storageService.absenceThresholdHours
+                          : 24,
+                      dropdownColor: AppColors.cardOf(context),
+                      style: TextStyle(
+                        color: AppColors.textPrimary(context),
+                        fontSize: 12,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 12, child: Text('12 hours')),
+                        DropdownMenuItem(value: 24, child: Text('a day')),
+                        DropdownMenuItem(value: 72, child: Text('3 days')),
+                        DropdownMenuItem(value: 168, child: Text('a week')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          storageService.setAbsenceThresholdHours(v);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
           ],
         ],
       ),

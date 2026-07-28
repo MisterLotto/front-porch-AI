@@ -91,6 +91,59 @@ void main() {
       expect(tester.current, ToolCallSupport.unsupported);
     });
 
+    test('an EMPTY ping answer leaves the verdict untested (abort shape)',
+        () async {
+      // A KoboldCpp server-side abort completes an in-flight call as a clean
+      // HTTP 200 with zero tokens — inconclusive, never a capability verdict
+      // (the Scene Guest "pill falls off" bug).
+      final probe = ToolTransportProbe();
+      final tester = makeTester(
+        probe,
+        answer: () async => const LlmToolResponse(calls: [], text: ''),
+      );
+      await tester.test();
+      expect(tester.current, ToolCallSupport.untested);
+    });
+
+    test('a null ping answer leaves the verdict untested', () async {
+      final probe = ToolTransportProbe();
+      final tester = makeTester(probe, answer: () async => null);
+      await tester.test();
+      expect(tester.current, ToolCallSupport.untested);
+    });
+
+    test('an inconclusive auto-test re-arms for the next backend notify',
+        () async {
+      final probe = ToolTransportProbe();
+      var pings = 0;
+      var reply = const LlmToolResponse(calls: [], text: '');
+      final tester = ToolSupportTester(
+        probe: probe,
+        fireToolEval: (_, _) async {
+          pings++;
+          return reply;
+        },
+        getBackendIdentity: () => 'Kobold|m1',
+        isBackendReady: () => true,
+        isBusy: () => false,
+        onNotify: () {},
+      );
+      tester.onBackendMaybeChanged();
+      await Future<void>.delayed(Duration.zero);
+      expect(pings, 1);
+      expect(tester.current, ToolCallSupport.untested);
+      // Same identity notifies again — pre-fix this was a no-op forever, so
+      // one aborted ping left the pill "not tested" for the whole session.
+      reply = const LlmToolResponse(
+        calls: [LlmToolCall(name: 'report_ping', arguments: {'ok': true})],
+        text: '',
+      );
+      tester.onBackendMaybeChanged();
+      await Future<void>.delayed(Duration.zero);
+      expect(pings, 2);
+      expect(tester.current, ToolCallSupport.supported);
+    });
+
     test('an unreachable backend leaves the verdict untested', () async {
       final probe = ToolTransportProbe();
       final tester = makeTester(

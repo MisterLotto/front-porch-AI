@@ -51,7 +51,7 @@ extension ChatServiceGroupEntry on ChatService {
     _groupAuthorNoteStrengths = {};
     _groupCharacterSystemPrompts = {};
     _groupRagEnabled = true;
-    _groupRetrievalCount = 8;
+    _groupRetrievalCount = 4;
     _groupMemoryBudgetPercent = 10.0;
     _groupCharacterRAGPriorities = {};
 
@@ -92,8 +92,11 @@ extension ChatServiceGroupEntry on ChatService {
     _nsfwService.resetForFreshChat();
     _lorebookScanner.resetLorebookTriggerState();
 
-    // Auto-start local backend when entering a group chat
-    _llmProvider?.ensureManagedBackendIsRunning();
+    // Auto-start local backend when entering a group chat.
+    // Gated by autostartOnChatOpen — when off, the user must start manually.
+    if (_storageService.autostartOnChatOpen) {
+      _llmProvider?.ensureManagedBackendIsRunning();
+    }
 
     debugPrint(
       '[ChatService] 🟡 setActiveGroup: clearing messages '

@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -41,6 +42,7 @@ import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
+import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
@@ -54,6 +56,7 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
 import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
@@ -68,6 +71,7 @@ import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
 import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
+import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
 import 'package:front_porch_ai/services/chat/expression_classifier.dart'; // leaf for ExpressionService (post-extraction)
 import 'package:front_porch_ai/services/chat/time_service.dart';
 import 'package:front_porch_ai/services/chat/nsfw_service.dart';
@@ -80,6 +84,17 @@ import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injec
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
+import 'package:front_porch_ai/services/chat/absence_tracker.dart';
+import 'package:front_porch_ai/services/chat/afk_flavor.dart';
+import 'package:front_porch_ai/services/chat/ambition_service.dart';
+import 'package:front_porch_ai/services/chat/dream_service.dart';
+import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
+import 'package:front_porch_ai/services/chat/milestone_feed.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/chat/weather_segments.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
@@ -94,6 +109,8 @@ import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
+import 'package:front_porch_ai/services/chat/porch_memory_import.dart';
+import 'package:front_porch_ai/services/chat/porch_memory_models.dart';
 import 'package:front_porch_ai/services/chat/growth_ops.dart';
 import 'package:front_porch_ai/services/chat/growth_physics.dart';
 import 'package:front_porch_ai/services/chat/growth_review.dart';
@@ -1023,6 +1040,14 @@ class ChatService extends ChangeNotifier {
   int _generationEpoch = 0;
   String? _currentSessionId;
   double _generationProgress = 0.0;
+
+  // ── Real-absence awareness (Living Time §2) ──
+  // Computed in-memory at session load from the last saved message's
+  // updatedAt; nothing is stored or transmitted (privacy-by-design contract
+  // in absence_tracker.dart). Story clock untouched.
+  Duration _absenceGap = Duration.zero;
+  bool _absenceAckPending = false;
+  bool _absenceAckConsumed = false;
   int _tokensGenerated = 0;
   int _maxTokens = 0;
   DateTime? _generationStartTime;
@@ -1160,7 +1185,7 @@ class ChatService extends ChangeNotifier {
 
   // RAG settings for the active group (stored in the hidden checkpoint, no DB schema change)
   bool _groupRagEnabled = true;
-  int _groupRetrievalCount = 8;
+  int _groupRetrievalCount = 4;
   double _groupMemoryBudgetPercent = 10.0;
   Map<String, double> _groupCharacterRAGPriorities = {};
 
@@ -1273,7 +1298,7 @@ class ChatService extends ChangeNotifier {
       _pendingRealismMetadata ??= {};
       _pendingRealismMetadata![key] = value;
     },
-    onNudgePatchLastMessageRealismState: (tod, dc) {
+    onPatchLastMessageRealismState: (tod, dc, clockIso) {
       if (_messages.isNotEmpty) {
         final lastMsg = _messages.last;
         lastMsg.activeMetadata ??= {};
@@ -1281,6 +1306,7 @@ class ChatService extends ChangeNotifier {
         if (existingState is Map<String, dynamic>) {
           existingState['timeOfDay'] = tod;
           existingState['dayCount'] = dc;
+          existingState['storyClock'] = clockIso;
           existingState['time_nudged'] = true;
         } else {
           lastMsg.activeMetadata!['realism_state'] = _captureRealismState();
@@ -1524,6 +1550,22 @@ class ChatService extends ChangeNotifier {
     getEnjoysLowHygiene: () => enjoysLowHygiene,
     getNeedsSimEnabled: () => _needsSimEnabled,
     getCustomDecayRates: () => _activeDecayRates(),
+    // Needs modifiers sample the CURRENT DAY-PART (v3): an afternoon storm
+    // speeds comfort decay even on a day whose headline is "cloudy", and a
+    // clear evening earns the fun bonus after a rainy morning. Same
+    // DailyWeather view the modifiers always took — condition swapped for
+    // the segment's, band/season stay the day's — so NeedsSimulation is
+    // untouched and 1:1/group parity is inherited (weather is per-chat
+    // shared; both paths tick through these same modifiers).
+    getWeather: () {
+      final seg = currentSegmentWeather;
+      if (seg == null) return null;
+      return DailyWeather(
+        condition: seg.condition,
+        temp: seg.day.temp,
+        season: seg.day.season,
+      );
+    },
   );
 
   late final _relationshipService = RelationshipService(
@@ -1607,6 +1649,29 @@ class ChatService extends ChangeNotifier {
     getGroupCounter: (charId, key, {int defaultValue = 0}) =>
         (_groupRealism[charId]?[key] as num?)?.toInt() ?? defaultValue,
     setGroupCounter: (charId, key, v) => _setGroupRealismValue(charId, key, v),
+    // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
+    // Fire-and-forget; plant never throws into the eval path. Diary owner is
+    // the current speaker (1:1 host or group speaker whose scalars just moved).
+    onTierCrossing: (crossing) {
+      final sessionId = _currentSessionId;
+      if (sessionId == null) return;
+      final charId = _getCurrentSpeakerIdForRealism();
+      if (charId.isEmpty) return;
+      unawaited(
+        RelationshipMilestones.plant(
+          store: _journalStore,
+          sessionId: sessionId,
+          characterId: charId,
+          crossing: crossing,
+          sourcePositions: _messages.isEmpty
+              ? const <int>[]
+              : <int>[_messages.length - 1],
+          storyDay: _timeService.dayCount,
+          storyClock: _timeService.storyClockIso,
+          maxCards: _storageService.memorySettings.journalMaxCards,
+        ),
+      );
+    },
   );
 
   // ── Expression label selection / manual / avatar resolve / reclass / ONNX (extracted) ────
@@ -1705,7 +1770,203 @@ class ChatService extends ChangeNotifier {
     getRealismEnabled: () => _realismEnabled,
   );
 
-  late final _timeInjection = TimeInjection(timeService: _timeService);
+  late final _timeInjection = TimeInjection(
+    timeService: _timeService,
+    // One-shot, opt-in (default OFF), coarse-worded, speculation-forbidding —
+    // living-time-features.md §2 "Privacy by design".
+    getAbsenceNote: () {
+      if (!_storageService.absenceAckEnabled || !_absenceAckPending) {
+        return null;
+      }
+      final phrase = absencePhrase;
+      return phrase == null ? null : AbsenceTracker.ackNote(phrase);
+    },
+  );
+
+  /// Coarse absence bucket ("a few days"), or null under the threshold /
+  /// fresh chat. Words only — never digits (see AbsenceTracker).
+  String? get absencePhrase => AbsenceTracker.bucketPhrase(
+    _absenceGap,
+    thresholdHours: _storageService.absenceThresholdHours,
+  );
+
+  /// [absencePhrase] gated by the welcome-back-banner setting — the ONE gate
+  /// both the desktop banner and the web facade read, so they can't drift.
+  String? get absenceBannerPhrase =>
+      _storageService.absenceBannerEnabled ? absencePhrase : null;
+
+  /// Today's story weather, or null when off (living-time-features.md §3).
+  /// Pure recompute from existing state — nothing stored, so save/load and
+  /// group re-entry agree for free. Gate: realism + passage-of-time + the
+  /// global toggle. Consumed by the injection leaf, the needs decay
+  /// modifiers, the sidebar TimeStrip, and the web facade — one source.
+  DailyWeather? get currentWeather {
+    if (!_realismEnabled ||
+        !_timeService.passageOfTimeEnabled ||
+        !_storageService.weatherEnabled) {
+      return null;
+    }
+    final seed = _currentSessionId;
+    if (seed == null) return null;
+    return WeatherEngine.weatherFor(
+      sessionSeed: seed,
+      dayCount: _timeService.dayCount,
+      date: _timeService.clock,
+    );
+  }
+
+  /// Tomorrow's story weather under the same gate as [currentWeather].
+  /// Because the engine is a prefix-stable deterministic walk, this forecast
+  /// is exactly what day dayCount+1 will be when the story clock reaches it
+  /// (dayCount is derived from the calendar date, so +1 day ⇔ +1 dayCount) —
+  /// foreshadowed fronts always arrive. Recompute is O(dayCount) integer
+  /// math, called once per turn by the injection and once per facade read.
+  DailyWeather? get upcomingWeather {
+    if (currentWeather == null) return null;
+    return WeatherEngine.weatherFor(
+      sessionSeed: _currentSessionId!,
+      dayCount: _timeService.dayCount + 1,
+      date: _timeService.clock.add(const Duration(days: 1)),
+    );
+  }
+
+  /// The current DAY-PART's weather (Living Time §3 v3): the day script's
+  /// condition for the story-clock hour plus the deterministic °C. Same gate
+  /// and recompute contract as [currentWeather] — nothing stored. Consumed
+  /// by the injection, the needs decay view below, the sidebar chip, and the
+  /// web facade.
+  SegmentWeather? get currentSegmentWeather {
+    if (currentWeather == null) return null;
+    return WeatherSegments.segmentWeatherFor(
+      sessionSeed: _currentSessionId!,
+      dayCount: _timeService.dayCount,
+      date: _timeService.clock,
+      hour: _timeService.clock.hour,
+    );
+  }
+
+  /// The segment BEFORE the current one — same day for afternoon/evening/
+  /// night, yesterday's night for a morning (cross-day continuity, so
+  /// "the rain has eased off" can span the night). Null on day 1 mornings
+  /// (nothing came before) and whenever weather is off.
+  SegmentWeather? get previousSegmentWeather {
+    final now = currentSegmentWeather;
+    if (now == null) return null;
+    final day = _timeService.dayCount;
+    return switch (now.segment) {
+      DaySegment.morning => day <= 1
+          ? null
+          : WeatherSegments.segmentWeatherFor(
+              sessionSeed: _currentSessionId!,
+              dayCount: day - 1,
+              date: _timeService.clock.subtract(const Duration(days: 1)),
+              hour: 23,
+            ),
+      DaySegment.afternoon => _segmentAt(7),
+      DaySegment.evening => _segmentAt(14),
+      DaySegment.night => _segmentAt(18),
+    };
+  }
+
+  SegmentWeather _segmentAt(int hour) => WeatherSegments.segmentWeatherFor(
+    sessionSeed: _currentSessionId!,
+    dayCount: _timeService.dayCount,
+    date: _timeService.clock,
+    hour: hour,
+  );
+
+  late final _weatherInjection = WeatherInjection(
+    getWeather: () => currentSegmentWeather,
+    getPreviousSegment: () => previousSegmentWeather,
+    getUpcoming: () => upcomingWeather,
+  );
+
+  // ── Ambitions (Living Time §6) ──
+  late final _ambitionService = AmbitionService(
+    journalStore: _journalStore,
+    growthStore: _growthStore,
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    onWaypoint: () {
+      _journalMaintenance.eventKickPending = true;
+      _growthService.eventKickPending = true;
+    },
+    onCacheWarmed: () {
+      if (!_disposed) notifyListeners();
+    },
+  );
+
+  /// Sidebar/web read surface (Living Time §6): [card]'s ambitions with
+  /// live progress — triggers the lazy cache warm, so first render may show
+  /// "just beginning" and correct itself one notify later. The ONE merge of
+  /// card-authored definitions + per-chat progress; desktop and web both
+  /// read through it so they can't drift.
+  List<({String text, int progress})> ambitionsFor(CharacterCard card) {
+    final sessionId = _currentSessionId;
+    final list = card.frontPorchExtensions?.ambitions ?? const [];
+    if (sessionId == null || list.isEmpty) return const [];
+    final cid = _getCharacterIdFromCard(card);
+    _ambitionService.ensureCacheWarm(sessionId, cid);
+    final progress =
+        _ambitionService.cachedProgress(sessionId, cid) ?? const {};
+    return [for (final a in list) (text: a, progress: progress[a] ?? 0)];
+  }
+
+  late final _ambitionInjection = AmbitionInjection(
+    ambitionService: _ambitionService,
+    getSessionId: () => _currentSessionId,
+    getActiveCharacter: () => _activeCharacter,
+    getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+    getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+    getGroupCharacters: () => _groupCharacters,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
+  );
+
+  // ── Promise & debt ledger (Train B) ──
+  late final _promiseDebtService = PromiseDebtService(
+    journalStore: _journalStore,
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    applyTrustDelta: (d) => _relationshipService.applyTrustDelta(d),
+    applyBondDelta: (d) => _relationshipService.applyScoreDelta(d),
+    onSalienceKick: () {
+      _journalMaintenance.eventKickPending = true;
+      _growthService.eventKickPending = true;
+    },
+    onCacheWarmed: () {
+      if (!_disposed) notifyListeners();
+    },
+  );
+
+  late final _promiseDebtInjection = PromiseDebtInjection(
+    promiseDebtService: _promiseDebtService,
+    getSessionId: () => _currentSessionId,
+    getActiveCharacter: () => _activeCharacter,
+    getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+    getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+    getGroupCharacters: () => _groupCharacters,
+    getCharacterIdFromCard: _getCharacterIdFromCard,
+    getUserName: () => _userPersonaService.persona.name,
+  );
+
+  // ── Dreams (Living Time §1) ──
+  late final _dreamService = DreamService(
+    fireEval: (prompt) async {
+      final raw = await _llmEvalEngine.fireLLMEval(prompt);
+      return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
+    },
+    isEnabled: () =>
+        _realismEnabled &&
+        _timeService.passageOfTimeEnabled &&
+        _storageService.journalEnabled &&
+        _storageService.dreamsEnabled,
+  );
 
   late final _nsfwInjection = NsfwInjection(
     nsfwService: _nsfwService,
@@ -1742,6 +2003,9 @@ class ChatService extends ChangeNotifier {
     relationshipInjection: _relationshipInjection,
     emotionInjection: _emotionInjection,
     timeInjection: _timeInjection,
+    weatherInjection: _weatherInjection,
+    ambitionInjection: _ambitionInjection,
+    promiseDebtInjection: _promiseDebtInjection,
     behavioralInjection: _behavioralInjection,
     nsfwInjection: _nsfwInjection,
     needsInjection: _needsInjection,
@@ -2031,6 +2295,35 @@ class ChatService extends ChangeNotifier {
       _journalMaintenance.eventKickPending = true;
       _growthService.eventKickPending = true;
     },
+    // Ambitions (Living Time §6): a whole quest finishing is the ONE moment
+    // ambition progress can move. Fire-and-forget; owner resolved from the
+    // objective row's characterId (per-character in groups by construction).
+    onQuestAchieved: (obj) {
+      final sessionId = _currentSessionId;
+      if (sessionId == null) return;
+      final card =
+          _groupCharacters
+              .where((c) => _getCharacterIdFromCard(c) == obj.characterId)
+              .firstOrNull ??
+          (_activeCharacter != null &&
+                  _getCharacterIdFromCard(_activeCharacter!) ==
+                      obj.characterId
+              ? _activeCharacter
+              : null);
+      final ambitions = card?.frontPorchExtensions?.ambitions ?? const [];
+      if (card == null || ambitions.isEmpty) return;
+      unawaited(
+        _ambitionService.onQuestAchieved(
+          sessionId: sessionId,
+          characterId: obj.characterId,
+          characterName: card.name,
+          objectiveText: obj.objective,
+          ambitions: ambitions,
+          storyDay: _timeService.dayCount,
+          storyClock: _timeService.storyClockIso,
+        ),
+      );
+    },
   );
 
   // ── The Journal (docs/design/journal-memory.md) ──
@@ -2047,6 +2340,27 @@ class ChatService extends ChangeNotifier {
     // Availability-guarded single-text embedder; null when RAG is off or the
     // sidecar is down, which just disables cold-card recall (no-RAG floor).
     embedText: (text) async => await _memoryService?.embedText(text),
+  );
+
+  /// LLMerta → Journal porch-memory import + one-shot force-ack arming.
+  /// Design: docs/design/llmerta-porch-memories.md.
+  late final _porchMemoryImport = PorchMemoryImportService(
+    journalStore: _journalStore,
+    getFpaRootPath: () => _storageService.rootPath,
+    isImportEnabled: () =>
+        _storageService.memorySettings.importLlmertaPorchMemories,
+    getMaxCards: () => _storageService.memorySettings.journalMaxCards,
+    libraryStableGroupIds: () {
+      final repo = _characterRepository;
+      if (repo == null) return <String>{};
+      return {
+        for (final c in repo.characters) _getCharacterIdFromCard(c),
+      };
+    },
+    getConsumedBlockKeys: () =>
+        _storageService.memorySettings.porchConsumedBlockKeys,
+    setConsumedBlockKeys: (keys) =>
+        _storageService.memorySettings.setPorchConsumedBlockKeys(keys),
   );
 
   // Review-first parking + the ONE proposal applier (both modes go through
@@ -2074,10 +2388,11 @@ class ChatService extends ChangeNotifier {
   Future<LlmToolResponse?> _fireToolEval(
     String prompt,
     List<Map<String, dynamic>> tools,
-  ) {
+  ) async {
     final service =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
-    return service.generateWithTools(
+    try {
+      return await service.generateWithTools(
       GenerationParams(
         prompt: prompt,
         maxLength: 4000,
@@ -2097,7 +2412,23 @@ class ChatService extends ChangeNotifier {
         stopSequences: const [],
       ),
       tools,
-    );
+        // Whole-call deadline: a backend that accepts the request and never
+        // answers (cold model reload after an idle unload, dead server queue,
+        // or the call queued behind a long generation like character
+        // creation) must not park a journal/realism pass forever. The timeout
+        // THROWS — isToolTransportFailure classifies it so verdict sites fall
+        // back to text for the round without branding the backend XML-only.
+      ).timeout(kEvalToolCallTimeout);
+    } on TimeoutException {
+      // The deadline abandoned an in-flight call. On the single-slot local
+      // backend that orphan holds the shared idle slot (_pendingRequest), so
+      // waitForIdle callers — text evals, the Scene Guest mint — would hang
+      // behind it indefinitely; tear it down. (If the server is hung on the
+      // orphan, the server-side abort also frees anything queued behind it.)
+      // Remote backends don't serialize on the slot — nothing to release.
+      if (service is KoboldService) service.abortGeneration();
+      rethrow;
+    }
   }
 
   /// Backend+model identity key for the tools probe. Remote model name AND
@@ -2172,6 +2503,8 @@ class ChatService extends ChangeNotifier {
     getMaxCards: () => _storageService.memorySettings.journalMaxCards,
     onNotify: notifyListeners,
     onSaveChat: _saveChat,
+    getCurrentStoryDay: () => _timeService.dayCount,
+    getCurrentStoryClockIso: () => _timeService.storyClockIso,
   );
 
   /// Public door for the Journal UI (phase 3): the sidebar panel and the
@@ -2182,13 +2515,24 @@ class ChatService extends ChangeNotifier {
   /// override it via `implements` (see isGrowthPassRunning precedent).
   JournalStore get journalStore => _journalStore;
 
+  /// "Our Story" timeline read-model (Living Time §7) — pure aggregation
+  /// over data already persisted; the journal dialog's timeline tab and the
+  /// web facade both read through this one instance.
+  late final MilestoneFeed milestoneFeed = MilestoneFeed(getDb: () => _db);
+
   late final _journalInjection = JournalInjection(
     store: _journalStore,
     getSessionId: () => _currentSessionId,
+    // Two-tier memory: receipts → live verbatim lines (positions are the
+    // stable indices cards already store).
+    getMessageAt: (p) =>
+        p >= 0 && p < _messages.length ? _messages[p] : null,
     // Same scalar EmotionInjection reads — in group non-obs the pre-gen
     // load-into-scalars dance has set it to the upcoming speaker's emotion
     // by assembly time, so mood-congruent recall is per-speaker (parity).
     getCurrentEmotion: () => _realismEnabled ? _characterEmotion : '',
+    getCurrentStoryDay: () => _timeService.dayCount,
+    getStoryStartDate: () => _timeService.startDate,
   );
 
   // ── Growth Rings (docs/design/growth-rings.md) ──
@@ -2316,6 +2660,9 @@ class ChatService extends ChangeNotifier {
 
   // ── Per-session generation overrides ──
   ChatGenerationSettings _sessionGenSettings = ChatGenerationSettings();
+
+  // ── Per-chat theme ──
+  ChatThemeOverrides _sessionThemeOverrides = ChatThemeOverrides();
 
   // ── Chat Branching ──
   String? _parentSessionId;
@@ -2577,6 +2924,20 @@ class ChatService extends ChangeNotifier {
   set sessionGenSettings(ChatGenerationSettings value) {
     _sessionGenSettings = value;
     _saveChat();
+    notifyListeners();
+  }
+
+  /// Per-chat theme overrides (preset + customized colors/font/background/border).
+  ChatThemeOverrides get sessionThemeOverrides => _sessionThemeOverrides;
+  set sessionThemeOverrides(ChatThemeOverrides value) {
+    _sessionThemeOverrides = value;
+    // Persist only when a chat is actually open. The web facade already guards
+    // this, but a bare `_currentSessionId!` would crash any other caller that
+    // sets the theme with no active session (session close mid-save, tests).
+    final sid = _currentSessionId;
+    if (sid != null) {
+      _db.setThemeOverrides(sid, value.toJsonString());
+    }
     notifyListeners();
   }
 
@@ -2911,6 +3272,16 @@ class ChatService extends ChangeNotifier {
     // A photo turn's captioning windows run while _isGenerating is false; this
     // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
     if (_photoTurnInFlight) return;
+    // One-shot absence acknowledgment: pending survives exactly the first
+    // user turn after load (all of that turn's prompt builds see it); the
+    // second turn clears it for good.
+    if (_absenceAckPending) {
+      if (_absenceAckConsumed) {
+        _absenceAckPending = false;
+      } else {
+        _absenceAckConsumed = true;
+      }
+    }
     // Start-of-turn clear: cancelRealismEval only sets this while an eval is
     // live, and each turn's consumers clear it — but this guarantees a stray
     // set flag can never bleed into THIS turn and abort a reply the user did
@@ -2971,6 +3342,96 @@ class ChatService extends ChangeNotifier {
     await _saveChat();
     notifyListeners();
 
+    // ── Dreams (Living Time §1) — a night passed since the last turn, so the
+    // dream surfaces before this morning's exchange. Owner = the character
+    // who ended the previous day (last assistant speaker): ONE rule for 1:1
+    // and group, so parity holds by construction. Any failure skips silently
+    // (the local-model floor: a bad dream is worse than no dream).
+    _dreamService.checkRollover(
+      sessionId: _currentSessionId,
+      dayCount: _timeService.dayCount,
+    );
+    if (_dreamService.pending && _currentSessionId != null) {
+      _dreamService.clear();
+      try {
+        String? lastCharId;
+        var lastSpeakerFound = false;
+        for (final m in _messages.reversed) {
+          if (!m.isUser &&
+              m.sender != 'System' &&
+              m.activeMetadata?['is_dream'] != true) {
+            lastCharId = m.characterId;
+            lastSpeakerFound = true;
+            break;
+          }
+        }
+        final ownerCard = !lastSpeakerFound
+            ? null
+            : lastCharId == null
+            ? _activeCharacter
+            : (_groupCharacters
+                      .where((c) => _getCharacterIdFromCard(c) == lastCharId)
+                      .firstOrNull ??
+                  _activeCharacter);
+        if (ownerCard != null) {
+          final ownerId = _getCharacterIdFromCard(ownerCard);
+          final cards = await _journalStore.cardsFor(
+            _currentSessionId!,
+            ownerId,
+          );
+          final sorted = [...cards]
+            ..sort(
+              (a, b) => JournalPhysics.cooledHeat(
+                b,
+              ).compareTo(JournalPhysics.cooledHeat(a)),
+            );
+          final dream = await _dreamService.generateDream(
+            characterName: ownerCard.name,
+            memoryFragments: [for (final c in sorted.take(5)) c.content],
+            fixation: _relationshipService.activeFixation,
+            emotion: _characterEmotion,
+            recap: _summary.length > 300
+                ? _summary.substring(0, 300)
+                : _summary,
+            weatherLine: switch (currentWeather) {
+              null => null,
+              final w => WeatherEngine.prose(w),
+            },
+            ambitions: ownerCard.frontPorchExtensions?.ambitions ?? const [],
+          );
+          if (dream != null) {
+            _messages.insert(
+              _messages.length - 1,
+              ChatMessage(
+                text: dream,
+                sender: ownerCard.name,
+                isUser: false,
+                characterId: lastCharId,
+                metadata: {'is_dream': true},
+              ),
+            );
+            notifyListeners();
+            await _journalStore.addCard(
+              sessionId: _currentSessionId!,
+              characterId: ownerId,
+              content: dream,
+              category: 'moment',
+              kind: 'dream',
+              emotionLabel: _characterEmotion.isEmpty
+                  ? null
+                  : _characterEmotion,
+              storyDay: _timeService.dayCount,
+              storyClock: _timeService.storyClockIso,
+              maxCards: _storageService.memorySettings.journalMaxCards,
+            );
+            await _saveChat();
+          }
+        }
+      } catch (e) {
+        debugPrint('[Dreams] skipped: $e');
+      }
+    }
+
     // ── Blind-model photo fallback: caption BEFORE generating ───────────────
     // Vision-capable models return true immediately (their pixels ride along
     // and their caption runs post-turn); blind models run the offline
@@ -3007,6 +3468,9 @@ class ChatService extends ChangeNotifier {
     // This preserves manual-spin events that haven't been used yet.
     // Delegated to service (core state moved).
     _chaosModeService.clearDeliveredPendingIfAny();
+    // Clear Mafia force-ack only after a prior turn *showed* it and the user
+    // is now continuing (regen of that AI reply still re-injects until here).
+    unawaited(_porchMemoryImport.clearAfterAcceptedUserTurn());
 
     // ── OOC Time-Skip Detection ───────────────────────────────────────────
     if (_realismActiveThisMode) {
@@ -3111,6 +3575,13 @@ class ChatService extends ChangeNotifier {
     }
 
     await _generateResponse(GenerationMode.normal);
+    // Backend-down abort: no response was generated, so none of the
+    // post-turn work below may run — no idle-timer arming, no chip attach,
+    // no guest chime-ins against the notice text (pre-move parity: the old
+    // in-sendMessage guard returned before all of this).
+    if (_messages.isNotEmpty && _messages.last.text == _kBackendDownNotice) {
+      return;
+    }
     // First exchange complete — arm idle timer
     _hasCompletedExchange = true;
     if (_storageService.generationSettings.dynamicResponses) {
@@ -3268,6 +3739,9 @@ class ChatService extends ChangeNotifier {
       if (newIndex >= 0) {
         msg.swipeIndex = newIndex;
         if (!isGuestMsg) _syncRealismStateForSwipe(msg, oldIndex, newIndex);
+        // Timeline integrity: the active variant at this position changed —
+        // cards journaled from the other swipe are now phantom.
+        _invalidateJournalFrom(messageIndex);
         await _saveChat();
         notifyListeners();
       }
@@ -3279,6 +3753,8 @@ class ChatService extends ChangeNotifier {
       // Navigate to existing swipe
       msg.swipeIndex = newIndex;
       if (!isGuestMsg) _syncRealismStateForSwipe(msg, oldIndex, newIndex);
+      // Timeline integrity — same as the left-swipe branch above.
+      _invalidateJournalFrom(messageIndex);
       await _saveChat();
       notifyListeners();
     } else if (messageIndex == _messages.length - 1 && !_isGenerating) {
@@ -3388,17 +3864,13 @@ class ChatService extends ChangeNotifier {
       final deleted = _messages[index];
       _messages.removeAt(index);
 
-      // Keep the journal/memory cursor aligned. _summaryLastIndex is the
-      // EXCLUSIVE start of the un-journaled window (== count of journaled
-      // messages), so only a delete strictly BELOW it (index < cursor, i.e. a
-      // journaled message) shifts the boundary down by one; deleting the
-      // message AT the cursor removes an un-journaled one and leaves the
-      // boundary where it is. Without this, receipts drift by one per deletion.
+      // Timeline integrity: the delete rewrites history from [index] on
+      // (later positions shift down), so cards citing that region and the
+      // pass cursor both roll back — replaces the old cursor-decrement drift
+      // fix, which kept phantom cards alive (smoke-test bug 2026-07-21).
       // (Growth uses a DB-backed per-session cursor; it re-reads its stored
       // index on the next pass.)
-      if (_summaryLastIndex > index) {
-        _summaryLastIndex = (_summaryLastIndex - 1).clamp(0, _messages.length);
-      }
+      _invalidateJournalFrom(index);
 
       // Time-travel rollback for realism when deleting a character message.
       // Restore from the new last message if it has a snapshot, regardless
@@ -3469,9 +3941,41 @@ class ChatService extends ChangeNotifier {
       // while preserving all realism metadata, swipes, swipeMetadata, durations, etc.
       // This prevents chips (needs_deltas, bond/trust deltas, emotion, etc.) from disappearing on edit.
       msg.text = newText;
+      // Timeline integrity: an edit at a journaled position rewrites what
+      // the diary already read (smoke-test bug 2026-07-21).
+      _invalidateJournalFrom(index);
       await _saveChat();
       notifyListeners();
     }
+  }
+
+  /// Timeline-integrity invalidation (Journal): content at [position] was
+  /// rewritten — regen, swipe navigation, edit, or delete. Cards citing
+  /// positions ≥ [position] describe events that no longer happened, so they
+  /// are removed (all diary owners), the pass cursor rolls back so the next
+  /// pass re-reads the rewritten window, and a salience kick refreshes the
+  /// recap soon. Cheap no-op when the pass never consumed the region: cards
+  /// only ever cite positions below the cursor. The recap TEXT may still
+  /// carry a stale sentence until the next pass rewrites it — a full recap
+  /// rewind is deliberately out of scope (documented, not silent).
+  void _invalidateJournalFrom(int position) {
+    final sessionId = _currentSessionId;
+    if (sessionId == null || position >= _summaryLastIndex) return;
+    _summaryLastIndex = position;
+    unawaited(
+      _journalStore.invalidateCardsCitingFrom(sessionId, position).then((
+        removed,
+      ) {
+        if (removed > 0 && !_disposed) {
+          _journalMaintenance.eventKickPending = true;
+          debugPrint(
+            '[Journal] Timeline rewrite at $position — removed $removed '
+            'card(s) citing the discarded region',
+          );
+          notifyListeners();
+        }
+      }),
+    );
   }
 
   // ── The Journal recap ("Where we are") ──────────────────────────────
@@ -3500,6 +4004,49 @@ class ChatService extends ChangeNotifier {
   Future<void> forceSummaryUpdate() async {
     if (_isSummaryGenerating) return;
     await _journalMaintenance.runMaintenancePass(force: true);
+  }
+
+  /// Train B — promise/debt ledger pass (fire-and-forget). Runs after a
+  /// normal generation when realism + journal are on. Detects new
+  /// commitments or kept/broken resolutions for the current speaker's diary.
+  void _maybeRunPromiseDebtPass() {
+    if (!_realismEnabled) return;
+    if (!_storageService.memorySettings.journalEnabled) return;
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return;
+    final charId = _getCurrentSpeakerIdForRealism();
+    if (charId.isEmpty) return;
+
+    String characterName = _activeCharacter?.name ?? 'the character';
+    if (_activeGroup != null && !_observerMode) {
+      final card = _groupCharacters
+          .where((c) => _getCharacterIdFromCard(c) == charId)
+          .firstOrNull;
+      if (card != null) characterName = card.name;
+    }
+
+    final recent = _messages.length < 2
+        ? (_messages.isEmpty ? '' : _messages.last.displayText)
+        : _messages.reversed
+              .take(4)
+              .toList()
+              .reversed
+              .map((m) => '${m.sender}: ${m.displayText}')
+              .join('\n');
+    if (recent.trim().isEmpty) return;
+
+    unawaited(
+      _promiseDebtService.evaluateTurn(
+        sessionId: sessionId,
+        characterId: charId,
+        characterName: characterName,
+        userName: _userPersonaService.persona.name,
+        recentExchange: recent,
+        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
+        storyDay: _timeService.dayCount,
+        storyClock: _timeService.storyClockIso,
+      ),
+    );
   }
 
   /// Check if a Journal maintenance pass is due and trigger it non-blockingly.

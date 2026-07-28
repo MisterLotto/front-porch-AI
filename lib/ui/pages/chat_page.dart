@@ -29,13 +29,15 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
+import 'package:front_porch_ai/ui/chat_components/overlays/absence_recap_banner.dart';
+import 'package:front_porch_ai/ui/dialogs/chat_to_story_dialog.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/edit_character_dialog.dart';
+import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/model_settings_dialog.dart';
@@ -554,13 +556,57 @@ class _ChatPageState extends State<ChatPage> {
                   Expanded(
                     child: Column(
                       children: [
+                        // "Previously on…" welcome-back banner (Living Time
+                        // §2). App-voice, dismissible, gated: enabled +
+                        // over-threshold gap + a real session.
+                        Builder(
+                          builder: (context) {
+                            // Subscribe so a settings toggle updates live;
+                            // the gate itself lives once on ChatService.
+                            Provider.of<StorageService>(context);
+                            final phrase = chatService.absenceBannerPhrase;
+                            final sid = chatService.currentSessionId;
+                            if (phrase == null || sid == null) {
+                              return const SizedBox.shrink();
+                            }
+                            return AbsenceRecapBanner(
+                              sessionId: sid,
+                              phrase: phrase,
+                              recap: chatService.summary,
+                            );
+                          },
+                        ),
                         Expanded(
                           child: Builder(
                             builder: (context) {
                               final storageService =
                                   Provider.of<StorageService>(context);
-                              final bgKey = storageService.chatBackground;
+                              final chatService = Provider.of<ChatService>(
+                                context,
+                                listen: false,
+                              );
+                              final themeOverrides =
+                                  chatService.sessionThemeOverrides;
+                              final themePreset = ChatThemePreset.byId(
+                                themeOverrides.themeId,
+                              );
+                              final bgKey = themePreset != null
+                                  ? themeOverrides.resolvedBackgroundKey(
+                                      themePreset,
+                                    )
+                                  : storageService.chatBackground;
                               const bgAssets = {
+                                'noir': 'assets/backgrounds/noir.png',
+                                'fantasy': 'assets/backgrounds/fantasy.png',
+                                'grid': 'assets/backgrounds/grid.png',
+                                'roman_market':
+                                    'assets/backgrounds/roman_market.png',
+                                'enchanted_wood':
+                                    'assets/backgrounds/enchanted_wood.png',
+                                'ocean_depth':
+                                    'assets/backgrounds/ocean_depth.png',
+                                'steampunk_bg':
+                                    'assets/backgrounds/steampunk_bg.png',
                                 'cyberpunk_bedroom':
                                     'assets/backgrounds/cyberpunk_bedroom.png',
                                 'coffee_shop':
@@ -1094,9 +1140,7 @@ class _ChatPageState extends State<ChatPage> {
                                   : null,
                               child: cover == null
                                   ? Text(
-                                      card.name.isNotEmpty
-                                          ? card.name[0]
-                                          : '?',
+                                      card.name.isNotEmpty ? card.name[0] : '?',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
@@ -2235,6 +2279,11 @@ class _ChatPageState extends State<ChatPage> {
                           builder: (_) =>
                               ContextViewerDialog(chatService: chatService),
                         );
+                      } else if (value == 'to_story') {
+                        ChatToStoryDialog.show(
+                          context,
+                          chatService: chatService,
+                        );
                       } else if (value == 'fork_group') {
                         _showConvertToGroupPicker(chatService);
                       } else if (value == 'kobold_log') {
@@ -2299,6 +2348,20 @@ class _ChatPageState extends State<ChatPage> {
                           ],
                         ),
                       ),
+                      // Living Time §4: chat → novella. 1:1 only for now
+                      // (multi-protagonist novelization is a future effort).
+                      if (chatService.activeCharacter != null &&
+                          chatService.activeGroup == null)
+                        const PopupMenuItem(
+                          value: 'to_story',
+                          child: Row(
+                            children: [
+                              Icon(Icons.auto_stories_outlined, size: 20),
+                              SizedBox(width: 12),
+                              Text('Turn Into a Story…'),
+                            ],
+                          ),
+                        ),
                       // (The old Character Evolution dialog was replaced by the
                       // Growth panel in the sidebar — Journal & Memory group —
                       // which hosts the toggle, timeline, and all actions.)
@@ -3024,14 +3087,43 @@ class _ChatPageState extends State<ChatPage> {
                 onSelected: (value) async {
                   switch (value) {
                     case 'edit_character':
-                      final result = await showDialog(
-                        context: context,
-                        builder: (context) =>
-                            EditCharacterDialog(character: character),
+                      // The ONE character editor (EditCharacterPage) in a
+                      // dialog shell — full feature set (realism, ambitions,
+                      // token count) with honest Save/Cancel; nothing
+                      // persists until Save. Replaces the deleted
+                      // EditCharacterDialog (a ~73%-duplicate fork that
+                      // saved colors/needs instantly and lacked the realism
+                      // form). Chat colors live in UI Settings now.
+                      final chatService = Provider.of<ChatService>(
+                        context,
+                        listen: false,
                       );
-                      if (result == true) {
-                        setState(() {});
-                      }
+                      await showDialog(
+                        context: context,
+                        builder: (dialogCtx) => Dialog(
+                          insetPadding: const EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 24,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: SizedBox(
+                            width: 780,
+                            height:
+                                MediaQuery.of(dialogCtx).size.height - 96,
+                            child: EditCharacterPage(
+                              character: character,
+                              // Light refresh only — never the full
+                              // setActiveCharacter dance, which cancels
+                              // in-flight generation, full-reloads on
+                              // rename, and leaves group mode.
+                              onSaved: (saved) async => chatService
+                                  .refreshActiveCharacterCard(saved),
+                            ),
+                          ),
+                        ),
+                      );
+                      if (!mounted) return;
+                      setState(() {});
                       break;
                     case 'expressions':
                       final storage = Provider.of<StorageService>(

@@ -20,7 +20,33 @@ part of '../chat_service.dart';
 
 /// Session load + listing — _loadLastSession, getSessionsForId, getSessions, loadSession. Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceSessionLoad on ChatService {
+  /// Real-absence gap (Living Time §2) from the freshly loaded DB rows —
+  /// computed BEFORE any save this session can refresh their updatedAt, so
+  /// the anchor is genuinely "when this chat last had activity". Shared by
+  /// both load paths (keep them in sync). Fresh/empty chats stay at zero.
+  void _computeAbsenceGap(List<Message> dbMessages) {
+    _absenceGap = Duration.zero;
+    _absenceAckPending = false;
+    _absenceAckConsumed = false;
+    DateTime? last;
+    for (final m in dbMessages) {
+      if (last == null || m.updatedAt.isAfter(last)) last = m.updatedAt;
+    }
+    if (last == null) return;
+    final gap = DateTime.now().difference(last);
+    if (gap.isNegative) return;
+    _absenceGap = gap;
+    _absenceAckPending = absencePhrase != null;
+  }
+
   Future<void> _loadLastSession() async {
+    // NOTE: This method contains multiple await boundaries (DB queries).
+    // If the user rapidly switches characters/groups, Dart's cooperative
+    // scheduler may interleave a second setActiveCharacter call during one
+    // of these awaits. The sanitizer below runs synchronously on already-
+    // fetched local variables (swipes), so it does not introduce a new race
+    // window — but it also cannot prevent pre-existing interleaving where
+    // the later load overwrites _messages.
     if (_activeCharacter == null && _activeGroup == null) return;
 
     // Get sessions from DB
@@ -47,6 +73,26 @@ extension ChatServiceSessionLoad on ChatService {
       // See "keep reset blocks in sync" (setActiveGroup, startNewChat 1:1+group (now explicit in both), load* , setActive* all must hit this; now includes needs/chaos/... + leaves (see CLAUDE.md for full; incomplete zeroing now complete) + " ; now complete in all group/0-session/new-chat hygiene)" ; incomplete zeroing now complete).
       // (cross-ref setActiveCharacter:1572)
       _timeService.resetForFreshChat();
+      // Fresh GROUP session: apply the group's authored scene-time seed on
+      // top of the reset (story-calendar "As built" gap fix — the wizard's
+      // time seed used to be editor-carried only and never reached the
+      // clock). Keep in sync with the startNewChat group branch.
+      if (_activeGroup != null) {
+        final timeSeed = parseGroupTimeSeed(
+          _activeGroup!.defaultMemberRealismState,
+          _activeGroup!.baselineRealismState,
+        );
+        if (timeSeed != null) {
+          _timeService.seedFromV2OrExt(
+            dayCount: timeSeed.dayCount,
+            timeOfDay: timeSeed.timeOfDay,
+            storyStartDate: timeSeed.storyStartDate,
+            storyStartTime: timeSeed.storyStartTime,
+            passageOfTimeEnabled:
+                _storageService.realismSettings.passageOfTimeDefault,
+          );
+        }
+      }
       _nsfwService.resetForFreshChat();
       _lorebookScanner.resetLorebookTriggerState();
       _activeObjectives = [];
@@ -62,107 +108,21 @@ extension ChatServiceSessionLoad on ChatService {
       _growthStore.invalidate(); // no session — nothing to inject
       _selectedLooks
           .clear(); // 0-session: no per-chat look selection (keep reset blocks in sync)
+      _sessionGenSettings =
+          ChatGenerationSettings(); // 0-session: no per-chat gen overrides — without this, character B's first chat ran (and could SAVE) character A's temp/stops/sanitizer (keep reset blocks in sync)
       return;
     }
 
-    // Sessions are already sorted descending by createdAt
-    final lastSession = sessions.first;
+    // Auto-load the most recently ACTIVE session (loadSession bumps updatedAt
+    // when a chat is opened). The shared session queries deliberately order by
+    // createdAt (story-export, group/cast and the history list rely on that), so
+    // "last active" is derived here from updatedAt instead of the list order —
+    // keeping this feature isolated from those other callers.
+    final lastSession = sessions.reduce(
+      (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
+    );
     _currentSessionId = lastSession.id;
-    _authorNote = lastSession.authorNote;
-    _authorNoteStrength = lastSession.authorNoteDepth;
-    _summary = lastSession.summary ?? '';
-    _summaryLastIndex = lastSession.summaryLastIndex ?? 0;
-    _sessionName = lastSession.name;
-    _sessionDescription = lastSession.description;
-    _selectedLooks = decodeSelectedLooks(lastSession.selectedLookAvatarId);
-    _parentSessionId = lastSession.parentSession;
-    _forkIndex = lastSession.forkIndex;
-    // Relationship scalars + migration/tier calc now via service (keeps load parity).
-    // Migration: scale old scores (±150) to new range (±300). (Card-seed bypass: fresh V2.5
-    // ext seeds use seedFromCardV2OrExt plain clamp in setActiveCharacter/startNew 1:1 paths;
-    // this migrate path is *only* for legacy persisted sessions. See card-seed notes at the two
-    // ext-seed sites + relationship_service + full keep-sync lists + setActiveCharacter:1572.)
-    _relationshipService.loadScalars(
-      affectionScore: _relationshipService.migrateShortTermScore(
-        lastSession.affectionScore,
-      ),
-      longTermScore: _relationshipService.migrateLongTermScore(
-        lastSession.longTermScore,
-      ),
-      trustLevel: lastSession.trustLevel,
-      activeFixation: lastSession.activeFixation,
-      fixationLifespan: lastSession.fixationLifespan,
-      spatialStance: lastSession.spatialStance,
-      trustRepairPending: lastSession.trustRepairPending,
-      turnsSinceLongTermCheck: lastSession.turnsSinceLongTermCheck,
-      shortTermDeltasSummary: lastSession.shortTermDeltasSummary,
-    );
-    // Apply legacy migration (if needed) after load. (Card-seed bypass note: this *10 + migrate
-    // path is exclusively for legacy persisted sessions from pre-±300 era; fresh card seeds use
-    // the plain seedFromCardV2OrExt at the two 1:1 ext sites above. Expanded per "related load/reset
-    // sites" requirement + keep-sync full list + setActiveCharacter:1572 + both startNew.)
-    _relationshipService.applyLegacyShortTermMigrationIfNeeded();
-    _realismEnabled = lastSession.realismEnabled;
-    _moodDecayCounter = lastSession.moodDecayCounter;
-    _characterEmotion = lastSession.characterEmotion;
-    _emotionIntensity = lastSession.emotionIntensity;
-    // Time load via extracted service (resolve + scalars; keeps load blocks in sync).
-    _timeService.loadTimeScalars(
-      timeOfDay: lastSession.timeOfDay,
-      dayCount: lastSession.dayCount,
-      startDayOfWeek: lastSession.startDayOfWeek,
-      passageOfTimeEnabled:
-          lastSession.passageOfTimeEnabled &&
-          _storageService.realismSettings.passageOfTimeDefault,
-    );
-    _nsfwService.loadNsfwScalars(
-      nsfwCooldownEnabled: lastSession.nsfwCooldownEnabled,
-      arousalLevel: lastSession.arousalLevel,
-      cooldownTurnsRemaining: lastSession.cooldownTurnsRemaining,
-      cooldownTurnsTotal: lastSession.cooldownTurnsTotal,
-    );
-    _needsSimEnabled = lastSession.needsSimEnabled;
-    if (_needsSimEnabled) {
-      // Seed defaults first, then overlay the saved vector ONLY when it has
-      // values. A blank saved vector (e.g. needs was toggled on mid-chat before
-      // it seeded) must NOT clobber the defaults, or the sidebar shows no scores.
-      _needsSimulation.initializeFresh();
-      final nv = lastSession.needsVector;
-      final saved = (nv is String && nv.isNotEmpty)
-          ? (jsonDecode(nv) as Map).cast<String, int>()
-          : <String, int>{};
-      if (saved.isNotEmpty) {
-        _needsSimulation.restoreFromSnapshot({'vector': saved});
-      }
-    } else {
-      _needsSimulation.clearVector();
-    }
-
-    // Re-sync from the character's current setting so that toggling
-    // "Enjoys low hygiene" on the character affects existing chats on next load.
-    _enjoysLowHygiene =
-        _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
-
-    _needsSimulation.resetBuffers();
-    // trust/fixation/spatial/pending/affection/tiers already loaded via _relationshipService.loadScalars above.
-    debugPrint(
-      '[ChatService] _loadLastSession: Loaded session with arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
-    );
-    _chaosModeService.loadScalars(
-      modeEnabled: lastSession.chaosModeEnabled,
-      pressure: lastSession.chaosPressure,
-    );
-
-    // Realism Engine 2.0 Compatibility Migration (delegated to service). (Card-seed bypass:
-    // this legacy path for old persisted data; fresh 1:1 card ext seeds use seedFromCardV2OrExt
-    // (plain) at setActive/startNew 1:1 sites. See expanded keep-sync + setActiveCharacter:1572.)
-    _relationshipService.applyLegacyShortTermMigrationIfNeeded();
-    if (_relationshipService.affectionScore != lastSession.affectionScore ||
-        _relationshipService.relationshipTier != lastSession.relationshipTier) {
-      debugPrint(
-        '[Realism] Legacy session migrated to REv2 scales (loadLast).',
-      );
-    }
+    await _hydrateSessionScalars(lastSession);
 
     // v30: Load live per-character group realism/needs (bond/trust/emotion/fixation/arousal/relationships/needs)
     // from the session column (or fall back to group defaults). Must happen for group entry paths
@@ -175,83 +135,33 @@ extension ChatServiceSessionLoad on ChatService {
       _loadSceneGuestsFromSession(lastSession);
     }
 
-    // Cache growth rings (and any not-yet-distilled legacy evolved blobs) for
-    // this session so the injection layer can read them synchronously —
-    // scoped to the session, not the character (1:1 + group both).
-    await _refreshGrowthCache();
-
     // Load messages
     // Zero secondary objective flags in loaded path of _loadLast (before callers do _loadActiveObjectives / _loadObjectivesForCurrentSpeaker); incomplete zeroing hygiene.
+    // (loadSession deliberately does NOT zero these — objectives there are
+    // handled by its own callers; keep this trio out of the shared hydrate.)
     _activeObjectives = [];
     _messagesSinceLastCheck = 0;
     _isCheckingCompletion = false;
-    _summaryPaused =
-        false; // explicit secondary zero for _summaryPaused (symmetric; _loadLast empty/loaded hygiene)
-    _isSummaryGenerating =
-        false; // secondary flag zero for the journal recap state (stateless/prompt-only; incomplete zeroing ... now complete)
-    _isGrowthPassRunning =
-        false; // growth-pass flag zero in _loadLast loaded path (transient guard; keep reset blocks in sync)
+
+    // Load per-chat generation settings override for this session.
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      lastSession.generationSettings,
+    );
+
     try {
       final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
+      _computeAbsenceGap(dbMessages);
       debugPrint(
         '[ChatService] 🟢 _loadLastSession: loading ${dbMessages.length} '
         'messages for session $_currentSessionId',
       );
       _messages.clear();
-      for (final m in dbMessages) {
-        List<String> swipes;
-        try {
-          swipes = List<String>.from(jsonDecode(m.swipes));
-        } catch (_) {
-          swipes = [''];
-        }
-        List<int> swipeDurations;
-        try {
-          swipeDurations = List<int>.from(
-            (jsonDecode(m.swipeDurations) as List).map(
-              (e) => (e as num).toInt(),
-            ),
-          );
-        } catch (_) {
-          swipeDurations = [0];
-        }
-
-        final safeSwipeIndex =
-            (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-            ? m.swipeIndex
-            : 0;
-
-        _messages.add(
-          ChatMessage(
-            text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
-            sender: m.sender,
-            isUser: m.isUser,
-            characterId: m.characterId,
-            swipes: swipes,
-            swipeIndex: safeSwipeIndex,
-            swipeDurations: swipeDurations,
-            metadata: m.metadata != null
-                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
-                : null,
-            swipeMetadata: m.swipeMetadata != null
-                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
-                      .map(
-                        (e) => e != null
-                            ? Map<String, dynamic>.from(e as Map)
-                            : null,
-                      )
-                      .toList()
-                : null,
-          ),
-        );
-      }
-
-      if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLatest();
-      }
+      _hydrateMessagesFromRows(dbMessages);
     } catch (e) {
       print('Error loading chat session: $e');
     }
+    // LLMerta porch memories on last-session open (same as loadSession).
+    unawaited(_maybeImportPorchMemories());
   }
 
   /// Get sessions for a given character/group ID without setting it as active.
@@ -319,6 +229,214 @@ extension ChatServiceSessionLoad on ChatService {
     return getSessionsForId(charId);
   }
 
+  /// Decode DB [Message] rows into [_messages], applying retroactive output
+  /// sanitisation when the per-chat or global setting requests it.
+  /// Caller must clear `_messages` and set `_sessionGenSettings` beforehand.
+  void _hydrateMessagesFromRows(List<Message> dbMessages) {
+    // Output sanitizer: apply configured replacements to loaded swipes
+    // so legacy messages (saved before this feature) are also normalised.
+    // Gated by sanitiseExistingHistory — when off, even chats with
+    // per-chat sanitizer enabled keep their raw saved text on load.
+    // Resolved (per-chat override + rules, falling back to global) and
+    // compiled ONCE out here: this loop runs per message and sanitize runs
+    // per swipe, so compiling per swipe was thousands of RegExp
+    // constructions on the UI isolate per chat open (hot-path rule).
+    final compiledRules =
+        _sessionGenSettings.resolveOutputSanitizerEnabled(_storageService) &&
+            _storageService.generationSettings.sanitiseExistingHistory
+        ? compileSanitizerRules(
+            _sessionGenSettings.resolveOutputSanitizerRules(_storageService),
+          )
+        : const <CompiledSanitizerRule>[];
+    for (final m in dbMessages) {
+      List<String> swipes;
+      try {
+        swipes = List<String>.from(jsonDecode(m.swipes));
+      } catch (_) {
+        swipes = [''];
+      }
+
+      // Model output ONLY — the feature's contract. Without the isUser
+      // gate, a broad rule + retroactive-on rewrote the USER's own words in
+      // memory, and the next _saveChat persisted the corruption. (Impersonate
+      // drafts are sanitized at creation time, before they become user rows.)
+      // System rows (backend notices, app status) are skipped too — rules
+      // rewriting those could break the backend-notice dedupe comparison.
+      if (!m.isUser &&
+          m.sender != 'System' &&
+          compiledRules.isNotEmpty &&
+          swipes.isNotEmpty) {
+        swipes = swipes
+            .map((s) => sanitizeOutputCompiled(s, compiledRules))
+            .toList();
+      }
+
+      List<int> swipeDurations;
+      try {
+        swipeDurations = List<int>.from(
+          (jsonDecode(m.swipeDurations) as List).map(
+            (e) => (e as num).toInt(),
+          ),
+        );
+      } catch (_) {
+        swipeDurations = [0];
+      }
+
+      final safeSwipeIndex =
+          (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
+              ? m.swipeIndex
+              : 0;
+
+      _messages.add(
+        ChatMessage(
+          text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
+          sender: m.sender,
+          isUser: m.isUser,
+          characterId: m.characterId,
+          swipes: swipes,
+          swipeIndex: safeSwipeIndex,
+          swipeDurations: swipeDurations,
+          metadata: m.metadata != null
+              ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
+              : null,
+          swipeMetadata: m.swipeMetadata != null
+              ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
+                    .map(
+                      (e) => e != null
+                          ? Map<String, dynamic>.from(e as Map)
+                          : null,
+                    )
+                    .toList()
+              : null,
+        ),
+      );
+    }
+
+    if (_messages.isNotEmpty) {
+      _lorebookScanner.scanLatest();
+    }
+  }
+
+  /// Hydrates every session-scoped scalar the two load paths share, from one
+  /// [Session] row: metadata (author note, summary, name/description, look
+  /// selection, fork lineage), relationship scalars (RAW persisted values —
+  /// the legacy ±150→×2 era wrappers were deleted 2026-07-27; see the
+  /// era-heuristic warning atop relationship_service.dart), realism/mood/
+  /// emotion, time, NSFW, needs (seed-then-overlay so a blank saved vector
+  /// can't clobber defaults), the "enjoys low hygiene" re-sync, per-chat
+  /// theme overrides, chaos mode, transient-flag zeroing, and the
+  /// session-scoped growth-ring cache.
+  ///
+  /// Extracted per docs/design/session-load-refactor.md Step 2. Two fixes by
+  /// construction: chaos-mode scalars now load on the history-picker path too
+  /// (they only loaded on library open, so picked sessions lost Chaos Mode
+  /// state), and fixation truncation now runs AFTER the relationship load on
+  /// both paths (loadSession used to sanitize the PREVIOUS session's fixation
+  /// before loading this one's).
+  ///
+  /// Callers keep what genuinely differs: group-realism/scene-guest branch,
+  /// objectives zeroing (library path only), per-chat gen settings placement
+  /// (must precede message hydration for the retroactive sanitizer), and the
+  /// persona activation (picker path only, by design — restoring a specific
+  /// chat restores its persona; a library tap must not silently switch the
+  /// user's persona).
+  Future<void> _hydrateSessionScalars(Session s) async {
+    _authorNote = s.authorNote;
+    _authorNoteStrength = s.authorNoteDepth;
+    _summary = s.summary ?? '';
+    _summaryLastIndex = s.summaryLastIndex ?? 0;
+    _sessionName = s.name;
+    _sessionDescription = s.description;
+    _selectedLooks = decodeSelectedLooks(s.selectedLookAvatarId);
+    _parentSessionId = s.parentSession;
+    _forkIndex = s.forkIndex;
+    _relationshipService.loadScalars(
+      affectionScore: s.affectionScore,
+      longTermScore: s.longTermScore,
+      trustLevel: s.trustLevel,
+      activeFixation: s.activeFixation,
+      fixationLifespan: s.fixationLifespan,
+      spatialStance: s.spatialStance,
+      trustRepairPending: s.trustRepairPending,
+      turnsSinceLongTermCheck: s.turnsSinceLongTermCheck,
+      shortTermDeltasSummary: s.shortTermDeltasSummary,
+    );
+    // The fixation coming out of the LLM can sometimes be a full paragraph
+    // instead of a short topic — truncate to keep the UI and prompts sane.
+    _relationshipService.sanitizeFixationIfTooLong();
+    _realismEnabled = s.realismEnabled;
+    _moodDecayCounter = s.moodDecayCounter;
+    _characterEmotion = s.characterEmotion;
+    _emotionIntensity = s.emotionIntensity;
+    _timeService.loadTimeScalars(
+      timeOfDay: s.timeOfDay,
+      dayCount: s.dayCount,
+      startDayOfWeek: s.startDayOfWeek,
+      storyClock: s.storyClock,
+      storyStartDate: s.storyStartDate,
+      passageOfTimeEnabled:
+          s.passageOfTimeEnabled &&
+          _storageService.realismSettings.passageOfTimeDefault,
+    );
+    _nsfwService.loadNsfwScalars(
+      nsfwCooldownEnabled: s.nsfwCooldownEnabled,
+      arousalLevel: s.arousalLevel,
+      cooldownTurnsRemaining: s.cooldownTurnsRemaining,
+      cooldownTurnsTotal: s.cooldownTurnsTotal,
+    );
+    _needsSimEnabled = s.needsSimEnabled;
+    if (_needsSimEnabled) {
+      // Seed defaults first, then overlay the saved vector ONLY when it has
+      // values. A blank saved vector (e.g. needs was toggled on mid-chat before
+      // it seeded) must NOT clobber the defaults, or the sidebar shows no scores.
+      _needsSimulation.initializeFresh();
+      final nv = s.needsVector;
+      final saved = (nv is String && nv.isNotEmpty)
+          ? (jsonDecode(nv) as Map).cast<String, int>()
+          : <String, int>{};
+      if (saved.isNotEmpty) {
+        _needsSimulation.restoreFromSnapshot({'vector': saved});
+      }
+    } else {
+      _needsSimulation.clearVector();
+    }
+
+    // Re-sync from the character's current setting so that toggling
+    // "Enjoys low hygiene" on the character affects existing chats on next load.
+    _enjoysLowHygiene =
+        _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
+
+    // Load per-chat theme overrides.
+    try {
+      final themeJson = await _db.getThemeOverrides(s.id);
+      _sessionThemeOverrides = ChatThemeOverrides.fromJsonString(themeJson);
+    } catch (_) {
+      _sessionThemeOverrides = ChatThemeOverrides();
+    }
+
+    _needsSimulation.resetBuffers();
+    // Chaos scalars — the shared load is what fixed session-load-refactor.md
+    // bug #1 (loadSession never loaded these, so history-picked chats lost
+    // Chaos Mode state and pressure reset to defaults).
+    _chaosModeService.loadScalars(
+      modeEnabled: s.chaosModeEnabled,
+      pressure: s.chaosPressure,
+    );
+    debugPrint(
+      '[ChatService] session scalars hydrated: arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
+    );
+
+    // Transient-flag zeroing shared by both loaded paths (keep reset blocks in sync).
+    _summaryPaused = false;
+    _isSummaryGenerating = false;
+    _isGrowthPassRunning = false;
+
+    // Cache growth rings (and any not-yet-distilled legacy evolved blobs) for
+    // this session so the injection layer can read them synchronously —
+    // scoped to the session, not the character (1:1 + group both).
+    await _refreshGrowthCache();
+  }
+
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
@@ -333,73 +451,31 @@ extension ChatServiceSessionLoad on ChatService {
       await _userPersonaService.setActivePersona(session.userPersonaId!);
     }
 
+    // Load per-chat generation settings override for this session (must
+    // happen before the message loop so retroactive sanitization can
+    // consult per-chat override + rules).
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      session.generationSettings,
+    );
+
     try {
       final dbMessages = await _db.getMessagesForSession(sessionId);
+      _computeAbsenceGap(dbMessages);
       debugPrint(
         '[ChatService] 🟢 loadSession: loading ${dbMessages.length} '
         'messages for session $sessionId',
       );
       _messages.clear();
-      for (final m in dbMessages) {
-        List<String> swipes;
-        try {
-          swipes = List<String>.from(jsonDecode(m.swipes));
-        } catch (_) {
-          swipes = [''];
-        }
-        List<int> swipeDurations;
-        try {
-          swipeDurations = List<int>.from(
-            (jsonDecode(m.swipeDurations) as List).map(
-              (e) => (e as num).toInt(),
-            ),
-          );
-        } catch (_) {
-          swipeDurations = [0];
-        }
+      _hydrateMessagesFromRows(dbMessages);
 
-        final safeSwipeIndex =
-            (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-            ? m.swipeIndex
-            : 0;
-
-        _messages.add(
-          ChatMessage(
-            text: swipes.isNotEmpty ? swipes[safeSwipeIndex] : '',
-            sender: m.sender,
-            isUser: m.isUser,
-            characterId: m.characterId,
-            swipes: swipes,
-            swipeIndex: safeSwipeIndex,
-            swipeDurations: swipeDurations,
-            metadata: m.metadata != null
-                ? Map<String, dynamic>.from(jsonDecode(m.metadata!))
-                : null,
-            swipeMetadata: m.swipeMetadata != null
-                ? (jsonDecode(m.swipeMetadata!) as List<dynamic>)
-                      .map(
-                        (e) => e != null
-                            ? Map<String, dynamic>.from(e as Map)
-                            : null,
-                      )
-                      .toList()
-                : null,
-          ),
-        );
-      }
-
-      // Post-load sanitization: force valid swipe indices and clamp absurdly long fixation text.
-      // This protects against any legacy corrupted rows or previous buggy saves, even if the
-      // individual message constructors already clamp.
+      // Post-load sanitization: force valid swipe indices. This protects
+      // against any legacy corrupted rows or previous buggy saves, even if
+      // the individual message constructors already clamp.
       for (final msg in _messages) {
         if (msg.swipeIndex < 0 || msg.swipeIndex >= msg.swipes.length) {
           msg.swipeIndex = 0;
         }
       }
-
-      // The fixation coming out of the LLM can sometimes be a full paragraph instead of a short topic.
-      // Truncate it to keep the UI and prompts sane.
-      _relationshipService.sanitizeFixationIfTooLong();
 
       // ── Hydrate hidden group state checkpoint (DB-free: realism + per-char notes) ──
       // The sentinel is stored as the last message for durability but must be
@@ -407,6 +483,12 @@ extension ChatServiceSessionLoad on ChatService {
       // (v30: _hydrateGroupRealismCheckpointIfPresent removed — state now loads from DB column)
 
       _currentSessionId = sessionId;
+      // Touch updatedAt so this session becomes the "last active" for the
+      // character/group — _loadLastSession sorts by updatedAt DESC.
+      _db.patchSession(SessionsCompanion(
+        id: drift.Value(sessionId),
+        updatedAt: drift.Value(DateTime.now()),
+      ));
       // Scene Guests are per-session. Without this, switching to a different
       // session via the history picker leaves the PREVIOUS session's guests
       // (and their evolution/detection state) in place — they keep chiming in
@@ -429,109 +511,91 @@ extension ChatServiceSessionLoad on ChatService {
         // each member's bond/trust/emotion/fixation/arousal/needs.
         _loadGroupRealismStateFromSession(session);
       }
-      _authorNote = session.authorNote;
-      _authorNoteStrength = session.authorNoteDepth;
-      _summary = session.summary ?? '';
-      _summaryLastIndex = session.summaryLastIndex ?? 0;
-      _summaryPaused =
-          false; // explicit secondary zero for _summaryPaused on loadSession loaded path (incomplete zeroing ... now complete; see keep-sync + journal_maintenance)
-      _isSummaryGenerating =
-          false; // secondary zero for flag on loadSession loaded (symmetric)
-      _isGrowthPassRunning =
-          false; // growth-pass flag zero on loadSession loaded (transient guard; keep reset blocks in sync)
-      await _refreshGrowthCache(); // ring cache scoped to the newly loaded session
-      _sessionName = session.name;
-      _sessionDescription = session.description;
-      _selectedLooks = decodeSelectedLooks(session.selectedLookAvatarId);
-      _parentSessionId = session.parentSession;
-      _forkIndex = session.forkIndex;
-      // Relationship load + tier calc + legacy migration via service.
-      _relationshipService.loadScalars(
-        affectionScore: session.affectionScore,
-        longTermScore: session.longTermScore,
-        trustLevel: session.trustLevel,
-        activeFixation: session.activeFixation,
-        fixationLifespan: session.fixationLifespan,
-        spatialStance: session.spatialStance,
-        trustRepairPending: session.trustRepairPending,
-        turnsSinceLongTermCheck: session.turnsSinceLongTermCheck,
-        shortTermDeltasSummary: session.shortTermDeltasSummary,
-      );
-      _relationshipService.applyLegacyShortTermMigrationIfNeeded();
-      // (Card-seed bypass: legacy *10 migration only; see the two ext-seed sites + prior load sites
-      // for full "card seeds authored on current ±300" + keep-sync lists + relationship leaf.)
+      await _hydrateSessionScalars(session);
 
-      // counters already via loadScalars on service.
-      _realismEnabled = session.realismEnabled;
-      _moodDecayCounter = session.moodDecayCounter;
-      _characterEmotion = session.characterEmotion;
-      _emotionIntensity = session.emotionIntensity;
-      // Time load via extracted service (resolve + scalars; keeps group load blocks in sync).
-      _timeService.loadTimeScalars(
-        timeOfDay: session.timeOfDay,
-        dayCount: session.dayCount,
-        startDayOfWeek: session.startDayOfWeek,
-        passageOfTimeEnabled:
-            session.passageOfTimeEnabled &&
-            _storageService.realismSettings.passageOfTimeDefault,
-      );
-      _nsfwService.loadNsfwScalars(
-        nsfwCooldownEnabled: session.nsfwCooldownEnabled,
-        arousalLevel: session.arousalLevel,
-        cooldownTurnsRemaining: session.cooldownTurnsRemaining,
-        cooldownTurnsTotal: session.cooldownTurnsTotal,
-      );
-      _needsSimEnabled = session.needsSimEnabled;
-      if (_needsSimEnabled) {
-        // Seed defaults first, then overlay the saved vector ONLY when it has
-        // values — a blank saved vector must not clobber the defaults (else the
-        // sidebar shows no scores). Keeps load in sync with _loadLastSession.
-        _needsSimulation.initializeFresh();
-        final nv = session.needsVector;
-        final saved = (nv is String && nv.isNotEmpty)
-            ? (jsonDecode(nv) as Map).cast<String, int>()
-            : <String, int>{};
-        if (saved.isNotEmpty) {
-          _needsSimulation.restoreFromSnapshot({'vector': saved});
-        }
-      } else {
-        _needsSimulation.clearVector();
-      }
-
-      // Re-sync from the character's current setting so toggling
-      // "Enjoys low hygiene" affects existing chats on load.
-      _enjoysLowHygiene =
-          _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
-
-      _needsSimulation.resetBuffers();
-      // trust/fixation etc already via _relationshipService.loadScalars above.
-
-      // (Growth rings + legacy blobs were cached by the _refreshGrowthCache
-      // call above — session-scoped, both 1:1 and group.)
-
-      // Per-session generation parameter overrides (v22) — loaded via raw SQL
-      // so this works even before build_runner regenerates database.g.dart.
-      try {
-        final genRows = await _db
-            .customSelect(
-              'SELECT generation_settings FROM sessions WHERE id = ?',
-              variables: [drift.Variable(sessionId)],
-            )
-            .get();
-        final genJson = genRows.isNotEmpty
-            ? genRows.first.read<String?>('generation_settings')
-            : null;
-        _sessionGenSettings = ChatGenerationSettings.fromJsonString(genJson);
-      } catch (_) {
-        _sessionGenSettings = ChatGenerationSettings();
-      }
-
-      if (_messages.isNotEmpty) {
-        _lorebookScanner.scanLatest();
-      }
+      // (Lorebook scanLatest already ran inside _hydrateMessagesFromRows —
+      // the second scan here was pure duplicate work.)
       notifyListeners();
+      // LLMerta porch memories: plant matching Mafia nights + arm force-ack.
+      // Fire-and-forget so open path never blocks on disk/DB.
+      unawaited(_maybeImportPorchMemories());
     } catch (e) {
-      print('Error loading session $sessionId: $e');
+      debugPrint('[ChatService] Error loading session $sessionId: $e');
+    }
+  }
+
+  /// Diary targets for LLMerta porch import: library stableGroupId (match) +
+  /// journal characterId (plant key). 1:1 uses the same id for both; group
+  /// members match on originStableId and plant under the live card id.
+  Future<List<PorchDiaryTarget>> _buildPorchDiaryTargets() async {
+    if (_activeGroup == null && _activeCharacter != null) {
+      final id = _getCharacterIdFromCard(_activeCharacter!);
+      return [
+        PorchDiaryTarget(libraryStableGroupId: id, diaryCharacterId: id),
+      ];
+    }
+    if (_activeGroup == null) return const [];
+
+    final repo = _groupChatRepository;
+    if (repo == null) {
+      // Fall back to live roster stable ids (origin may equal library for
+      // many members whose avatar stem matches the library basename).
+      return [
+        for (final c in _groupCharacters)
+          PorchDiaryTarget(
+            libraryStableGroupId: _getCharacterIdFromCard(c),
+            diaryCharacterId: _getCharacterIdFromCard(c),
+          ),
+      ];
+    }
+
+    final rows = await repo.getMembersForGroup(_activeGroup!.id);
+    final library = _characterRepository?.characters ?? const <CharacterCard>[];
+    final targets = <PorchDiaryTarget>[];
+    for (final m in rows) {
+      if (m.avatarFilename == null) continue;
+      final resolvedPath = path.join(
+        _storageService.groupsDir.path,
+        _activeGroup!.id,
+        'avatars',
+        m.avatarFilename!,
+      );
+      final diaryId = path.basenameWithoutExtension(resolvedPath);
+      final origin = m.originStableId;
+      final matchId = (origin != null && origin.isNotEmpty)
+          ? origin
+          : (MemberOriginResolver.resolve(
+                  stampedOriginStableId: null,
+                  memberName: m.name,
+                  libraryCharacters: library,
+                )?.stableGroupId ??
+                diaryId);
+      targets.add(
+        PorchDiaryTarget(
+          libraryStableGroupId: matchId,
+          diaryCharacterId: diaryId,
+        ),
+      );
+    }
+    return targets;
+  }
+
+  /// Scan mailbox and plant into this session; never throws into open path.
+  Future<void> _maybeImportPorchMemories() async {
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return;
+    final personaId = _userPersonaService.persona.id;
+    if (personaId.isEmpty) return;
+    try {
+      final targets = await _buildPorchDiaryTargets();
+      if (targets.isEmpty) return;
+      await _porchMemoryImport.tryImportForSession(
+        sessionId: sessionId,
+        userPersonaId: personaId,
+        targets: targets,
+      );
+    } catch (e) {
+      debugPrint('[PorchMemories] session hook failed: $e');
     }
   }
 }
