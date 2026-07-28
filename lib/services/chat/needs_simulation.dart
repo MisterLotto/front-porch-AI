@@ -395,14 +395,20 @@ class NeedsSimulation {
   Map<String, dynamic> computeNeedsDeltasWithReasons(Map<String, int> pre) {
     final out = <String, dynamic>{};
     for (final k in needKeys) {
-      final before = pre[k] ?? 0;
+      // No baseline → no delta. A missing pre-turn value used to read as 0,
+      // fabricating "delta = the full current value" chips (a 67 hunger
+      // showed delta 67) whenever capture ran without a pre-turn vector —
+      // e.g. a time-chevron patch outside any turn (2026-07-28 snapshot).
+      final before = pre[k];
+      if (before == null) continue;
       final after = _vector[k] ?? before;
       final delta = after - before;
       String reason = 'Stable';
       if (delta > 0) reason = 'Scene action';
       if (delta < 0) reason = 'Natural decay';
-      if (_lastSceneReason != null && _lastSceneReason!.isNotEmpty)
+      if (_lastSceneReason != null && _lastSceneReason!.isNotEmpty) {
         reason = _lastSceneReason!;
+      }
       if (delta != 0) {
         out[k] = {'delta': delta, 'reason': reason};
       }
