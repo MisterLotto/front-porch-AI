@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-28 — chore(deps): refresh lock for Flutter 3.44.8; land safe majors
+- **Why:** Flutter was pinned to 3.44.8 but constraints/lock still reflected the pre-bump debt; `pub outdated` showed a long tail of upgrades.
+- **Did:** `flutter pub upgrade` + raised direct majors that resolve: file_picker 11, record 7, grpc 5, flat_buffers 25, shelf_web_socket 3 (+ ~60 total version bumps). API fixes: `FilePicker.platform` → static `FilePicker.*`; shelf_web_socket `ConnectionCallback` now `(channel, subprotocol)`. Floors regenerated (no downgrades).
+- **Blocked (documented in test/deps/README.md):** riverpod_generator ≥4.0.6 / riverpod 3.4 (flutter_test test_api); drift_dev ≥2.34.1 (analyzer 13); image 4.9 + syncfusion 34 (xml 7 vs webdav); package_info_plus 10 (win32 6 vs file_picker 11); flutter_markdown → plus migration deferred.
+- **Smoke:** `flutter analyze` clean; full unit suite **2603 pass / 13 skip / 0 fail**.
+- **Files:** `pubspec.yaml`, `pubspec.lock`, `test/deps/*`, picker/stream API call sites, generated plugin cmakes.
+
 ## 2026-07-28 — fix(avatar): no look dupe on placeholder replace; home cover refreshes on Done
 - **Why:** First Add avatar on a placeholder wrote portrait *and* a gallery look (same face twice). Home kept the old placeholder after Done because Image.file cached the same path; only a ★ click changed the cover key.
 - **Fix:** addLook is portrait-only when face is missing/placeholder (400×600 solid); further Add avatar adds real looks. `coverEpoch` + home Image.file keys refresh the grid on Done.

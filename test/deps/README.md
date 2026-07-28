@@ -42,12 +42,24 @@ cleared by bumping the CI Flutter pin from 3.41.1 to **3.44.8** (Dart 3.12.2)
 and raising the constraints in the same change. The reasoning is kept because
 it is what stops this recurring.
 
-Final state: `analyzer` **12.1.0**, `drift` **2.34.3**, `drift_dev` **2.34.0**,
-`sqlite3` **3.5.0** (self-bundling again), `sqlite3_flutter_libs` **0.6.0+eol**
-(the correct marker pin for the 3.x world), `riverpod_generator` **4.0.4**,
-`meta` **1.18.0**. 18 of 206 packages moved; **zero downgrades, zero
-removals**. Riverpod codegen was kept, so nothing was traded against the
-2026-07-21 codegen directive.
+Final state after the Flutter **3.44.8** pin + 2026-07-28 dep refresh:
+`analyzer` **12.1.0**, `drift` **2.34.x**, `drift_dev` **2.34.0** (capped —
+2.34.1+ needs analyzer ^13, which fights `riverpod_generator` 4.0.4),
+`sqlite3` **3.x** (self-bundling), `sqlite3_flutter_libs` **0.6.0+eol**,
+`riverpod_generator` **4.0.4** (4.0.6+ still incompatible with flutter_test
+on 3.44.8 — see below), `meta` **1.18.0**. Riverpod codegen was kept.
+
+### Still blocked on Flutter 3.44.8 (do not force)
+
+| Package | Blocker |
+|---------|---------|
+| `riverpod_generator` ≥4.0.6 / `riverpod` 3.4 | `flutter_test` pins `test_api` 0.7.11; riverpod 3.4 → `test` fights that + our `web_socket_channel` ^3 |
+| `drift_dev` ≥2.34.1 | needs `analyzer` ^13; caps at 2.34.0 with riverpod_generator 4.0.4 |
+| `image` ≥4.9 / `syncfusion_flutter_pdf` ≥34 | need `xml` ^7; `webdav_client` 1.2.2 needs `xml` ^6 |
+| `package_info_plus` ≥10 | needs `win32` ^6; `file_picker` 11 needs `win32` ^5 |
+| `flutter_markdown` | discontinued (replace with `flutter_markdown_plus` is a separate migration) |
+
+Majors that **did** land: `file_picker` 11, `record` 7, `grpc` 5, `flat_buffers` 25, `shelf_web_socket` 3.
 
 ### Why it was unsolvable before
 

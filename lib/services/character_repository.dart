@@ -777,9 +777,14 @@ class CharacterRepository extends ChangeNotifier {
         }
       }
 
-      // Update the list entry
+      // Update the list entry. Prefer dbId (stable) so a first-time
+      // imagePath assignment still replaces the list row that was loaded
+      // with a null path — path-only match used to leave a stale null-path
+      // entry and made addLook think the card still had no portrait.
       final index = _characters.indexWhere(
-        (c) => c.imagePath == card.imagePath,
+        (c) =>
+            (card.dbId != null && c.dbId == card.dbId) ||
+            (card.imagePath != null && c.imagePath == card.imagePath),
       );
       if (index != -1) {
         _characters[index] = card;
