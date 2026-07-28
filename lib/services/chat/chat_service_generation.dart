@@ -60,11 +60,7 @@ extension ChatServiceGeneration on ChatService {
     }
     if (_messages.isEmpty || _messages.last.text != _kBackendDownNotice) {
       _messages.add(
-        ChatMessage(
-          text: _kBackendDownNotice,
-          sender: 'System',
-          isUser: false,
-        ),
+        ChatMessage(text: _kBackendDownNotice, sender: 'System', isUser: false),
       );
       notifyListeners();
     }
@@ -534,7 +530,11 @@ extension ChatServiceGeneration on ChatService {
           final rawRealism = _getRealismStateInjection();
           realismBlock = rawRealism.isEmpty
               ? ''
-              : _macroResolver.resolve(rawRealism, macroCtx, section: 'realism');
+              : _macroResolver.resolve(
+                  rawRealism,
+                  macroCtx,
+                  section: 'realism',
+                );
         }
 
         // Chance Time injection — independent of realism mode
@@ -551,8 +551,9 @@ extension ChatServiceGeneration on ChatService {
             diaryCharacterId: porchDiaryId,
           );
         }
-        final porchNightRaw =
-            _porchMemoryImport.takeInjectionForDiary(porchDiaryId);
+        final porchNightRaw = _porchMemoryImport.takeInjectionForDiary(
+          porchDiaryId,
+        );
         final porchNightBlock = porchNightRaw.isEmpty
             ? ''
             : _macroResolver.resolve(

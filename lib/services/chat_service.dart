@@ -1854,14 +1854,15 @@ class ChatService extends ChangeNotifier {
     if (now == null) return null;
     final day = _timeService.dayCount;
     return switch (now.segment) {
-      DaySegment.morning => day <= 1
-          ? null
-          : WeatherSegments.segmentWeatherFor(
-              sessionSeed: _currentSessionId!,
-              dayCount: day - 1,
-              date: _timeService.clock.subtract(const Duration(days: 1)),
-              hour: 23,
-            ),
+      DaySegment.morning =>
+        day <= 1
+            ? null
+            : WeatherSegments.segmentWeatherFor(
+                sessionSeed: _currentSessionId!,
+                dayCount: day - 1,
+                date: _timeService.clock.subtract(const Duration(days: 1)),
+                hour: 23,
+              ),
       DaySegment.afternoon => _segmentAt(7),
       DaySegment.evening => _segmentAt(14),
       DaySegment.night => _segmentAt(18),
@@ -2306,8 +2307,7 @@ class ChatService extends ChangeNotifier {
               .where((c) => _getCharacterIdFromCard(c) == obj.characterId)
               .firstOrNull ??
           (_activeCharacter != null &&
-                  _getCharacterIdFromCard(_activeCharacter!) ==
-                      obj.characterId
+                  _getCharacterIdFromCard(_activeCharacter!) == obj.characterId
               ? _activeCharacter
               : null);
       final ambitions = card?.frontPorchExtensions?.ambitions ?? const [];
@@ -2353,9 +2353,7 @@ class ChatService extends ChangeNotifier {
     libraryStableGroupIds: () {
       final repo = _characterRepository;
       if (repo == null) return <String>{};
-      return {
-        for (final c in repo.characters) _getCharacterIdFromCard(c),
-      };
+      return {for (final c in repo.characters) _getCharacterIdFromCard(c)};
     },
     getConsumedBlockKeys: () =>
         _storageService.memorySettings.porchConsumedBlockKeys,
@@ -2392,33 +2390,35 @@ class ChatService extends ChangeNotifier {
     final service =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
     try {
-      return await service.generateWithTools(
-      GenerationParams(
-        prompt: prompt,
-        maxLength: 4000,
-        temperature: 0.1,
-        repeatPenalty: 1.15,
-        topP: 0.5,
-        xtcProbability: 0.0,
-        reasoningEnabled: false,
-        // Explicit thinking-off: Nano-GPT/OpenRouter only receive the
-        // disable signal when the reasoning block is present, and it is
-        // only emitted when a reasoning field is set. Without this a
-        // ":thinking" model (e.g. Kimi K2.6) keeps reasoning during the
-        // journal tool call, which returns tool calls only intermittently
-        // (the "had to regen twice" symptom). 0 → {enabled:false,
-        // max_tokens:0, exclude:true}, the strongest disable signal.
-        reasoningMaxTokens: 0,
-        stopSequences: const [],
-      ),
-      tools,
-        // Whole-call deadline: a backend that accepts the request and never
-        // answers (cold model reload after an idle unload, dead server queue,
-        // or the call queued behind a long generation like character
-        // creation) must not park a journal/realism pass forever. The timeout
-        // THROWS — isToolTransportFailure classifies it so verdict sites fall
-        // back to text for the round without branding the backend XML-only.
-      ).timeout(kEvalToolCallTimeout);
+      return await service
+          .generateWithTools(
+            GenerationParams(
+              prompt: prompt,
+              maxLength: 4000,
+              temperature: 0.1,
+              repeatPenalty: 1.15,
+              topP: 0.5,
+              xtcProbability: 0.0,
+              reasoningEnabled: false,
+              // Explicit thinking-off: Nano-GPT/OpenRouter only receive the
+              // disable signal when the reasoning block is present, and it is
+              // only emitted when a reasoning field is set. Without this a
+              // ":thinking" model (e.g. Kimi K2.6) keeps reasoning during the
+              // journal tool call, which returns tool calls only intermittently
+              // (the "had to regen twice" symptom). 0 → {enabled:false,
+              // max_tokens:0, exclude:true}, the strongest disable signal.
+              reasoningMaxTokens: 0,
+              stopSequences: const [],
+            ),
+            tools,
+            // Whole-call deadline: a backend that accepts the request and never
+            // answers (cold model reload after an idle unload, dead server queue,
+            // or the call queued behind a long generation like character
+            // creation) must not park a journal/realism pass forever. The timeout
+            // THROWS — isToolTransportFailure classifies it so verdict sites fall
+            // back to text for the round without branding the backend XML-only.
+          )
+          .timeout(kEvalToolCallTimeout);
     } on TimeoutException {
       // The deadline abandoned an in-flight call. On the single-slot local
       // backend that orphan holds the shared idle slot (_pendingRequest), so
@@ -2525,8 +2525,7 @@ class ChatService extends ChangeNotifier {
     getSessionId: () => _currentSessionId,
     // Two-tier memory: receipts → live verbatim lines (positions are the
     // stable indices cards already store).
-    getMessageAt: (p) =>
-        p >= 0 && p < _messages.length ? _messages[p] : null,
+    getMessageAt: (p) => p >= 0 && p < _messages.length ? _messages[p] : null,
     // Same scalar EmotionInjection reads — in group non-obs the pre-gen
     // load-into-scalars dance has set it to the upcoming speaker's emotion
     // by assembly time, so mood-congruent recall is per-speaker (parity).

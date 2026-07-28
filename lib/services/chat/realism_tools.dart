@@ -70,9 +70,7 @@ final Map<String, Map<String, dynamic>> _relationshipFields = {
   'bond_reason': _strField(
     'One brief in-character thought explaining the shift, or "none".',
   ),
-  'trust_delta': _intField(
-    'Trust shift from the user\'s behavior this turn.',
-  ),
+  'trust_delta': _intField('Trust shift from the user\'s behavior this turn.'),
   'trust_reason': _strField(
     'One brief in-character thought about why, or "none".',
   ),

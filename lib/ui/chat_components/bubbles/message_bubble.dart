@@ -1010,9 +1010,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                     .firstOrNull;
                 if (persona?.avatarPath != null) {
                   return CircleAvatar(
-                    backgroundImage: FileImage(
-                      File(persona!.avatarPath!),
-                    ),
+                    backgroundImage: FileImage(File(persona!.avatarPath!)),
                     radius: 16,
                   );
                 }

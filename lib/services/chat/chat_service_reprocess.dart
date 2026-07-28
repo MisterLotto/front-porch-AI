@@ -357,7 +357,8 @@ extension ChatServiceReprocess on ChatService {
     int hostIndex = -1;
     for (int i = _messages.length - 1; i >= 0; i--) {
       final m = _messages[i];
-      if (m.isUser || m.sender == 'System') return; // user/System tail — nothing to regen
+      if (m.isUser || m.sender == 'System')
+        return; // user/System tail — nothing to regen
       if (!_isGuestAuthoredMessage(m)) {
         hostIndex = i;
         break;
