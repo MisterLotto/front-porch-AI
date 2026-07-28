@@ -70,6 +70,11 @@ class TtsService extends ChangeNotifier {
   int? _cachedTextHash; // hash of sanitized text to detect edits
   String? _cachedVoice;
   String? _cachedEngine;
+  // Speed is part of the replay identity: without it, "play → move the
+  // Speech Rate slider → play again" replayed the OLD-speed WAV, which made
+  // the slider read as a no-op for Kokoro (whose generation plumbing was
+  // actually fine) and masked Piper's real hardcoded-speed bug.
+  double? _cachedSpeed;
 
   bool get isSpeaking => _isSpeaking;
   bool get isGenerating => _isGenerating;
@@ -251,6 +256,7 @@ class TtsService extends ChangeNotifier {
         textHash == _cachedTextHash &&
         voice == _cachedVoice &&
         _storageService.ttsEngine == _cachedEngine &&
+        speed == _cachedSpeed &&
         _cachedWav != null &&
         _cachedWav!.existsSync()) {
       print('TTS: cache hit for message $messageId');
@@ -370,7 +376,7 @@ class TtsService extends ChangeNotifier {
           for (int i = 0; i < total; i++) {
             if (!_isSpeaking) break;
 
-            final wav = await _piperGenerateWav(voice, chunks[i].text, i);
+            final wav = await _piperGenerateWav(voice, chunks[i].text, i, speed);
             if (wav != null) {
               generatedWavs.add(wav);
             }
@@ -414,6 +420,7 @@ class TtsService extends ChangeNotifier {
             _cachedTextHash = sanitized.hashCode;
             _cachedVoice = voice;
             _cachedEngine = _storageService.ttsEngine;
+            _cachedSpeed = speed;
 
             await _playWavFile(finalAudio);
           }
@@ -529,6 +536,7 @@ class TtsService extends ChangeNotifier {
         _cachedTextHash = sanitized.hashCode;
         _cachedVoice = voice;
         _cachedEngine = _storageService.ttsEngine;
+        _cachedSpeed = speed;
         await _playWavFile(audioFile);
         // Don't delete — it's cached now
       }
@@ -664,7 +672,7 @@ class TtsService extends ChangeNotifier {
           final future = () async {
             File? wavFile;
             if (_isPiperEngine) {
-              wavFile = await _piperGenerateWav(voice, sanitized, idx);
+              wavFile = await _piperGenerateWav(voice, sanitized, idx, speed);
             } else {
               kDebugPrint(
                 '[TtsService] Streaming: generating audio for chunk (len=${sanitized.length})',
@@ -796,8 +804,9 @@ class TtsService extends ChangeNotifier {
         final wav = await engine.generateAudio(sanitized, voice, speed);
         if (wav != null) wavFiles.add(wav);
       } else if (_isPiperEngine) {
+        final speed = _storageService.ttsSpeechRate;
         for (int i = 0; i < sentences.length; i++) {
-          final wav = await _piperGenerateWav(voice, sentences[i], i);
+          final wav = await _piperGenerateWav(voice, sentences[i], i, speed);
           if (wav == null) break;
           wavFiles.add(wav);
         }
@@ -898,12 +907,18 @@ class TtsService extends ChangeNotifier {
 
   /// Generates one chunk of [text] with the in-process sherpa engine.
   /// Callers run [_ensurePiperVoice] first (once per utterance).
-  Future<File?> _piperGenerateWav(String voice, String text, int index) async {
+  Future<File?> _piperGenerateWav(
+    String voice,
+    String text,
+    int index,
+    double speed,
+  ) async {
     try {
       final wav = await _piperNative.generate(
         root: _storageService.rootPath!,
         voiceKey: voice,
         text: text,
+        speed: speed,
         outputPath: p.join(
           Directory.systemTemp.path,
           'piper_tts_${DateTime.now().millisecondsSinceEpoch}_$index.wav',
