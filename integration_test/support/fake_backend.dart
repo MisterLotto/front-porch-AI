@@ -41,6 +41,12 @@ class FakeBackendServer {
   /// Realism/eval completions served (classified by requested JSON keys).
   int evalRequests = 0;
 
+  /// Journal maintenance passes served (XML transport exchanges).
+  int journalPassRequests = 0;
+
+  /// Objective task-generation requests served (numbered-list format).
+  int objectiveTaskRequests = 0;
+
   /// Tool-transport probes refused (forces the text eval fallback).
   int toolProbeRequests = 0;
 
@@ -162,12 +168,47 @@ class FakeBackendServer {
         lastContent = last['content'] as String;
       }
     }
+    // Journal maintenance pass — its prompt teaches the <memory> tag. Checked
+    // before the JSON evals because the pass prompt can mention other terms.
+    if (lastContent.contains('<memory')) {
+      journalPassRequests++;
+      await _streamSse(req, [
+        '<memory action=add category=moment msgs="1 2">'
+            'The porch swing creaked as they talked.</memory>\n'
+            '<recap>Two friends warming up on the porch.</recap>',
+      ]);
+      return;
+    }
+    // Objective task generation — plain numbered-list format, not JSON.
+    if (lastContent.contains('numbered list of exactly')) {
+      objectiveTaskRequests++;
+      await _streamSse(req, [
+        '1. Pour two glasses of lemonade.\n'
+            '2. Pat the seat of the porch swing.\n'
+            '3. Tell the story of the creaky board.\n'
+            '4. Ask about their favorite weather.\n'
+            '5. Watch the sunset together.',
+      ]);
+      return;
+    }
+
     final eval = <String, dynamic>{};
     if (lastContent.contains('relationship_delta')) {
-      eval['relationship_delta'] = 2;
+      // 13 on purpose: |bond delta| >= 12 is the salience threshold that
+      // kicks an immediate journal maintenance pass (clamp allows ±15).
+      eval['relationship_delta'] = 13;
       eval['trust_delta'] = 1;
       eval['bond_reason'] = 'smoke-test warmth';
       eval['trust_reason'] = 'smoke-test honesty';
+    }
+    if (lastContent.contains('hunger_delta')) {
+      eval['hunger_delta'] = -4;
+      eval['energy_delta'] = -2;
+      eval['hygiene_delta'] = 0;
+      eval['fun_delta'] = 6;
+      eval['social_delta'] = 5;
+      eval['bladder_delta'] = -3;
+      eval['comfort_delta'] = 2;
     }
     if (lastContent.contains('emotion_intensity')) {
       eval['emotion'] = 'happy';
@@ -175,7 +216,9 @@ class FakeBackendServer {
     }
     if (lastContent.contains('fixation_topic')) {
       eval['fixation_topic'] = 'none';
-      eval['proposed_objective'] = 'none';
+      // A real objective, so the proposal machinery (dedup, autonomous
+      // task-gen) actually runs instead of short-circuiting on 'none'.
+      eval['proposed_objective'] = 'Share porch lemonade before sunset';
     }
     // Scene-time / physical-state eval. Modeled so it can never misroute
     // into the chat branch — chatRequests and lastChatBody stay trustworthy.
@@ -193,18 +236,20 @@ class FakeBackendServer {
       'last="${lastContent.length > 70 ? lastContent.substring(lastContent.length - 70) : lastContent}"',
     );
 
-    req.response.headers.set('Content-Type', 'text/event-stream');
-    final pieces = <String>[];
     if (eval.isNotEmpty) {
       evalRequests++;
       // The whole eval JSON rides one content delta — the parser regex/JSON
       // extraction works on the assembled text either way.
-      pieces.add(jsonEncode(eval));
+      await _streamSse(req, [jsonEncode(eval)]);
     } else {
       chatRequests++;
       lastChatBody = body;
-      pieces.addAll(replyPieces);
+      await _streamSse(req, replyPieces);
     }
+  }
+
+  Future<void> _streamSse(HttpRequest req, List<String> pieces) async {
+    req.response.headers.set('Content-Type', 'text/event-stream');
     for (final piece in pieces) {
       req.response.write(
         'data: ${jsonEncode({

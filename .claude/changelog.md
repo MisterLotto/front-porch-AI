@@ -6079,3 +6079,23 @@ post-send IME churn (enterText works for turn 1, silently no-ops for turn 2).
 
 **Verification:** `flutter analyze` clean; suite green (~7s app time) with
 completion log confirming 2 real chat generations + 4 evals + tool probes.
+
+## 2026-07-28 (UTC) — Full-array E2E: needs, chaos, objectives, and the real journal pass
+
+**Files:** `integration_test/app_smoke_test.dart`, `integration_test/support/fake_backend.dart`
+
+**What:** The smoke suite now asserts every chat subsystem does real work in one
+two-turn journey: realism evals (bond 0→13/trust/emotion/posture), the needs
+simulation (canned needs-impact deltas land as chip metadata), chaos pressure
+accumulation (extensions arm chaosModeEnabled), objective proposal (narrative
+eval proposes a real objective → activeObjectives) + autonomous task generation
+(numbered-list exchange), and a REAL journal maintenance pass — bond_delta=13
+trips the >=12 salience kick, the pass runs its XML exchange against the fake
+(tools probe → XML fallback), applies `<memory action=add>` + `<recap>`, and
+the written card must render in the sidebar panel after expanding the accordion
+(scroll-into-view + retry-tap: the sidebar outgrew the window with needs/chaos
+content and lazy list items can't be found unbuilt; an edge-of-viewport tap
+can miss silently). Fake gains journal-XML and task-list branches with their
+own counters, needs `<need>_delta` payloads, and streams via one _streamSse
+helper. Verification: analyze clean; suite green ~7s; log shows both turns'
+full 5-eval suites + 2 journal passes applied ("1 op(s) + recap" ×2).

@@ -3,12 +3,15 @@
 //
 // E2E smoke test. Runs the REAL app — real main(), real service init order,
 // real database open, real window — through a realism-enabled chat journey:
-// boot to the home layout, create a character, open its chat, send a message,
-// assert the streamed reply renders, assert the realism engine evaluated the
-// turn (bond/trust/emotion applied from canned eval responses), plant and
-// render a Journal card, and exercise the chat sidebar. Generation and every
-// eval are served by an in-process OpenAI-compatible fake backend
-// (support/fake_backend.dart), so the run is deterministic and fully offline.
+// boot to the home layout, create a character, open its chat, hold a
+// two-turn conversation, and assert every chat subsystem did real work:
+// realism evals (bond/trust/emotion/posture from canned responses), the
+// needs simulation (needs-impact deltas as chip metadata), chaos pressure,
+// objective proposal + task generation, and a REAL journal maintenance pass
+// (triggered by the bond-delta salience kick; its <memory> op must render in
+// the sidebar). Generation and every eval are served by an in-process
+// OpenAI-compatible fake backend (support/fake_backend.dart), so the run is
+// deterministic and fully offline.
 //
 // Run it on a Mac with:
 //   flutter test integration_test/app_smoke_test.dart -d macos
@@ -54,9 +57,9 @@ import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
 
 import 'support/e2e_sandbox.dart';
 import 'support/fake_backend.dart';
@@ -67,7 +70,6 @@ const _kReplyPieces = [
   'The porch light is on ',
   'and the fake backend is answering.',
 ];
-const _kJournalCard = 'Planted by the smoke test: the porch swing creaked.';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -170,8 +172,13 @@ void main() {
       firstMessage: _kGreeting,
       // Realism seeding only runs for cards that CARRY extensions (the
       // realism_default OR lives inside that branch) — a bare card keeps
-      // realism off no matter what the global default says.
-      frontPorchExtensions: FrontPorchExtensions(realismEnabled: true),
+      // realism off no matter what the global default says. Needs and Chaos
+      // ride the same extensions block.
+      frontPorchExtensions: FrontPorchExtensions(
+        realismEnabled: true,
+        needsSimEnabled: true,
+        chaosModeEnabled: true,
+      ),
     );
     await Provider.of<CharacterRepository>(
       ctx,
@@ -275,11 +282,12 @@ void main() {
     await pumpUntilTrue(
       tester,
       () => chatService.messages.any(
-        (m) => (m.activeMetadata?['bond_delta'] as int?) == 2,
+        (m) => (m.activeMetadata?['bond_delta'] as int?) == 13,
       ),
       describe: () =>
-          'bond_delta=2 chip metadata from the canned relationship eval '
-          '(realism pre-gen pipeline). Server saw: '
+          'bond_delta=13 chip metadata from the canned relationship eval '
+          '(realism pre-gen pipeline; 13 also trips the >=12 journal '
+          'salience kick). Server saw: '
           '${backend.chatRequests} chat, ${backend.evalRequests} eval, '
           '${backend.toolProbeRequests} tool-probe requests.',
     );
@@ -300,30 +308,111 @@ void main() {
           'entrances=${chatService.entrancesInFlight})',
     );
 
-    // ── Phase 4: journal card plant + render ────────────────────────────
-    // Plant through the SAME store the app's plant/edit editor uses, then
-    // reopen the sidebar so the journal panel reloads from the DB.
-    await chatService.journalStore.addCard(
-      sessionId: chatService.currentSessionId!,
-      characterId: character.stableGroupId,
-      content: _kJournalCard,
-      category: 'moment',
-      maxCards: 20,
+    // ── Phase 3b: needs simulation ──────────────────────────────────────
+    // The post-gen needs-impact eval (canned deltas) must land as chip
+    // metadata — proves decay/eval/apply and the chips' data source.
+    // Pinned signed value, not just non-empty: the canned fun_delta is +6,
+    // and after apply-vs-decay the chip delta for 'fun' must stay positive —
+    // a broken apply that leaves stale garbage would still be non-empty.
+    await pumpUntilTrue(
+      tester,
+      () => chatService.messages.any((m) {
+        final deltas = m.activeMetadata?['needs_deltas'];
+        if (deltas is! Map) return false;
+        final fun = (deltas['fun'] as Map?)?['delta'];
+        return fun is num && fun > 0;
+      }),
+      describe: () =>
+          'a positive fun delta in needs_deltas chip metadata from the '
+          'canned needs-impact eval (+6 minus decay)',
+    );
+
+    // ── Phase 3c: chaos mode (smoke-level: pressure moved, no event) ────
+    // Chaos pressure builds per turn while enabled; two turns must move it.
+    // A full Chance Time event needs many turns/an RNG hit — out of scope.
+    await pumpUntilTrue(
+      tester,
+      () => chatService.chaosPressure > 0,
+      describe: () =>
+          'chaos pressure > 0 (now ${chatService.chaosPressure})',
+    );
+
+    // ── Phase 3d: objectives ────────────────────────────────────────────
+    // The narrative eval proposed a real objective; the proposal machinery
+    // (dedup, autonomous accept, task generation) must surface it and fetch
+    // its numbered task list from the backend.
+    await pumpUntilTrue(
+      tester,
+      () => chatService.activeObjectives.any(
+        (o) => o.objective.contains('porch lemonade'),
+      ),
+      describe: () =>
+          'the proposed objective in activeObjectives '
+          '(have: ${chatService.activeObjectives.map((o) => o.objective).toList()})',
+    );
+    await pumpUntilTrue(
+      tester,
+      () => backend.objectiveTaskRequests >= 1,
+      describe: () =>
+          'the objective task-generation request '
+          '(objectiveTaskRequests=${backend.objectiveTaskRequests})',
+    );
+
+    // ── Phase 4: journal maintenance pass + render ──────────────────────
+    // The bond_delta=13 salience kick triggers a REAL maintenance pass: an
+    // XML exchange against the fake whose <memory> op writes the card and
+    // whose <recap> updates "Where we are". Wait for the exchange, then for
+    // the store to hold the card the pass wrote.
+    await pumpUntilTrue(
+      tester,
+      () => backend.journalPassRequests >= 1,
+      describe: () =>
+          'the journal maintenance pass exchange '
+          '(journalPassRequests=${backend.journalPassRequests})',
     );
     // The Journal & Memory accordion is collapsed by default and builds its
-    // panel lazily — expand it the way a user would, AFTER planting, so the
-    // freshly built panel loads the card from the DB. Its subtitle is also
-    // the honest RAG surface this offline suite can verify: the journal is
-    // on, and RAG is off (the embedding model is a consent-gated download).
+    // panel lazily — expand it the way a user would; the freshly built panel
+    // loads the pass-written card from the DB (and reloads itself when a
+    // pass finishes). Its subtitle is also the honest RAG surface this
+    // offline suite can verify: the journal is on, and RAG is off (the
+    // embedding model is a consent-gated download).
+    // With needs + chaos content the sidebar outgrows the 800px window and
+    // its list builds lazily — the Journal group may not exist in the tree
+    // until scrolled to. Scroll the sidebar's own scrollable (the ancestor
+    // of its always-first section) until the group is built.
+    final sidebarScrollable = find
+        .ancestor(
+          of: find.text("Author's Note"),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.text('Journal & Memory'),
+      100,
+      scrollable: sidebarScrollable,
+    );
     await pumpUntilFound(
       tester,
       find.textContaining('Journal on · RAG off', findRichText: true),
     );
-    await tester.tap(find.text('Journal & Memory'));
+    // The header can sit right at the viewport edge after the scroll, where
+    // a single tap hit-tests as missed (observed as a tap() warning) and the
+    // accordion never expands. Retap gated on PANEL PRESENCE, not card text:
+    // an accordion is a toggle, and retapping after a successful expand
+    // (while the card still paints) would collapse it again.
+    final panel = find.byType(JournalPanel);
+    for (var attempt = 0; attempt < 5 && panel.evaluate().isEmpty; attempt++) {
+      await tester.ensureVisible(find.text('Journal & Memory'));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.text('Journal & Memory'));
+      for (var i = 0; i < 6 && panel.evaluate().isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
     await pumpUntilFound(
       tester,
       find.textContaining('porch swing creaked', findRichText: true),
-      timeout: const Duration(seconds: 30),
+      timeout: const Duration(seconds: 15),
     );
 
     // ── Phase 5: backend traffic audit ──────────────────────────────────
