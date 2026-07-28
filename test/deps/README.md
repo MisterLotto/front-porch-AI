@@ -70,17 +70,55 @@ Still behind: `drift`/`drift_dev` (2.31 vs 2.32), `analyzer` (9 vs 10),
   output** (unchanged md5, zero diff), so the two versions emit the same code
   for this schema.
 
-### How to actually clear it
+### How to actually clear it — costed and verified 2026-07-28
 
-Bump the CI Flutter pin to a release carrying **Dart ≥ 3.12**. Everything
-aligns there in one move: `riverpod_generator` 4.0.7 and `drift_dev` 2.34.5
-both target `analyzer ^13`, and drift 2.34 requires `sqlite3 ^3.0.0` — which
-returns SQLite to the self-bundling 3.x world and lets
-`sqlite3_flutter_libs` go back to the `0.6.0+eol` marker pin.
+Bump the CI Flutter pin to **3.44.8** (Dart 3.12.2). This was not estimated —
+3.44.8 was installed alongside and the whole thing was run end to end.
 
-That is a toolchain change, not a dependency bump: it regenerates all 94
-goldens and re-baselines the release toolchain. Worth doing deliberately, on
-its own, not folded into unrelated work.
+**Two traps to know before starting**, both found by doing it rather than
+reasoning about it:
+
+1. **Bumping Flutter alone changes nothing.** Pub keeps the existing lock
+   wherever it is still valid, so `pub get` on the new SDK is a silent no-op.
+   The constraints in `pubspec.yaml` must be raised in the same change.
+2. **`riverpod_generator` 4.0.7 does not work, even on 3.44.8.** It pulls
+   `riverpod_annotation` 4.0.5 → `riverpod` 3.4.1 → `test`, which requires a
+   `test_api` version the SDK's `flutter_test` does not pin. **The working
+   version is 4.0.4** (`analyzer ^12`), which `drift_dev` 2.34.0 accepts
+   (`analyzer >=10 <13`).
+
+Working constraint set on 3.44.8:
+
+```yaml
+drift: ^2.34.0
+drift_dev: ^2.34.0
+sqlite3_flutter_libs: ^0.6.0
+riverpod_generator: '>=4.0.4 <4.0.6'   # 4.0.6+ breaks against flutter_test
+```
+
+Resolves to: `analyzer` 12.1.0, `drift` 2.34.3, `drift_dev` 2.34.0, `meta`
+1.18.0, `sqlite3` **3.5.0** (self-bundling again), `sqlite3_flutter_libs`
+0.6.0+eol, `riverpod_generator` 4.0.4.
+
+**All eight downgrades reverse, and Riverpod codegen is kept** — there is no
+trade-off against the 2026-07-21 codegen directive.
+
+#### Measured cost
+
+| Check | Result on 3.44.8 |
+|---|---|
+| Full suite (non-golden) | **2,591 pass, 0 fail** |
+| `flutter analyze` | **5 issues, all `info`** — 1 lint hint, 4 newly-deprecated Flutter APIs (`onReorder`, `axisAlignment`) that still work |
+| Generated code | **2 files, 4 lines** — `runBuild()` returns `WhenComplete` instead of `void`. Mechanical. |
+| Dependency guard | **passes** — correctly reads the restoration as upgrades |
+| **Goldens** | **60 of 94 fail** ← the entire real cost |
+
+So the work is: raise the constraints, rerun `build_runner`, regenerate and
+**visually review 60 goldens**, update `dependency_floors.json`. Everything
+else is already proven clean.
+
+Do it deliberately and on its own — the golden review is the part that needs
+human eyes, and it should not be buried inside an unrelated change.
 
 **When it happens, update `dependency_floors.json` in the same commit** and say
 why in the message — that is the intended workflow for a legitimate move.
