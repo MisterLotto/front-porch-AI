@@ -3493,9 +3493,21 @@ class ChatService extends ChangeNotifier {
       _timeService.detectOocTimeSkip(text);
     }
 
+    // ── Direct-address turn routing (both cast surfaces) ─────────────────
+    // 1:1: "@Evelyn …" anywhere (or a vocative — "Evelyn - can you clarify…")
+    // routes this turn to the GUEST via the parity-safe guest path; the host
+    // turn and its prep below (chaos tick/wheel, decay, pre-gen eval) are
+    // skipped — guests carry ZERO Realism/Needs, the host simply didn't take
+    // a turn. Fixes the "responds twice per message" Discord report
+    // (2026-07-28). Group: "@Member" forces that member as this turn's
+    // speaker (inside the call; returns null — the turn proceeds normally).
+    // Decision logic lives in the scene-guest leaf.
+    final addressedGuest = _directAddressRoutedGuest(userMsg.promptText);
+
     // ── Chaos Mode: check + pause for wheel if triggered ─────────────────
     // Guard + tick delegated (pendingInjection check via service getter).
-    if (_chaosModeService.chaosModeEnabled &&
+    if (addressedGuest == null &&
+        _chaosModeService.chaosModeEnabled &&
         _chaosModeService.pendingChaosInjection == null) {
       if (checkAndTickChaosPressure()) {
         // Create a completer so sendMessage pauses here until the wheel resolves
@@ -3528,7 +3540,7 @@ class ChatService extends ChangeNotifier {
     // can use the same delta-revert mechanism the classic realism fields
     // (bond/trust/arousal) use.
     Map<String, int>? preTurnVector;
-    if (_realismActiveThisMode) {
+    if (_realismActiveThisMode && addressedGuest == null) {
       if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {
         preTurnVector = Map<String, int>.from(_needsSimulation.vector);
         _pendingRealismMetadata ??= {};
@@ -3590,7 +3602,11 @@ class ChatService extends ChangeNotifier {
       return;
     }
 
-    await _generateResponse(GenerationMode.normal);
+    if (addressedGuest != null) {
+      await generateGuestTurn(addressedGuest);
+    } else {
+      await _generateResponse(GenerationMode.normal);
+    }
     // Backend-down abort: no response was generated, so none of the
     // post-turn work below may run — no idle-timer arming, no chip attach,
     // no guest chime-ins against the notice text (pre-move parity: the old
@@ -3622,8 +3638,12 @@ class ChatService extends ChangeNotifier {
     // above). Let the director decide which guest(s) speak next. Shared with
     // regenerateMainCharacter() so the re-chime gate is identical after a regen.
     // promptText (not raw text) so a photo-only turn feeds the director a
-    // "[shared a photo]" marker instead of an empty user message.
-    await _maybeRunSceneGuestChimeIns(userText: userMsg.promptText);
+    // "[shared a photo]" marker instead of an empty user message. A routed
+    // direct-address speaker is excluded — they already answered this turn.
+    await _maybeRunSceneGuestChimeIns(
+      userText: userMsg.promptText,
+      exclude: addressedGuest,
+    );
 
     // ── Auto-caption the attached photo for future-turn history ─────────────
     // Vision path only (blind models were captioned pre-gen). Runs LAST so the
@@ -3644,7 +3664,10 @@ class ChatService extends ChangeNotifier {
   /// present. Each gate eval + guest turn is a slow LLM call, so it bails if the
   /// user switches chats / the scene changes (so guests never speak into the
   /// wrong conversation).
-  Future<void> _maybeRunSceneGuestChimeIns({required String userText}) async {
+  Future<void> _maybeRunSceneGuestChimeIns({
+    required String userText,
+    CharacterCard? exclude,
+  }) async {
     if (_activeGroup != null ||
         _sceneGuestCards.isEmpty ||
         _isGenerating ||
@@ -3659,6 +3682,7 @@ class ChatService extends ChangeNotifier {
       userText: userText,
       primaryResponse: primaryResponse,
       isContextValid: () => !_sceneChanged(token) && _activeGroup == null,
+      exclude: exclude,
     );
   }
 

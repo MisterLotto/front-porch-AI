@@ -594,6 +594,7 @@ export function ChatPage() {
           isGenerating={state.isGenerating}
           canMic={canMic}
           onDraftChange={setDraft}
+          cast={cast}
         />
       </div>
 

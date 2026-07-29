@@ -364,13 +364,24 @@ extension ChatServiceGeneration on ChatService {
           // Host turn with guests present: hard ban on ventriloquising them, or
           // the host writes the guests' lines too (the "generated both at once"
           // bug). Acknowledging/reacting is allowed; speaking for them is not.
+          // The handoff sentence targets the cast-detection case: a promoted
+          // guest was detected FROM the host's own narration, so the transcript
+          // above is full of the host voicing them — without an explicit "that
+          // has ended" the many-shot momentum beats the ban (Discord
+          // double-response report, 2026-07-28). The defer clause covers an
+          // addressed guest the sendMessage vocative router didn't catch.
           final names = _sceneGuestCards.map((g) => g.name).join(', ');
           authorNoteBlock +=
-              '[Also present in the scene: $names. Each of them speaks ONLY on '
-              'their own turn. Do NOT write any dialogue, actions, or inner '
-              'thoughts for them — not a single line. Stay entirely as '
-              '$hostName; you may have $hostName notice or react to them, but '
-              'never put words or actions on them.]\n';
+              '[Also present in the scene: $names — each is a separate '
+              'character played by another actor, replying in their own '
+              'separate messages. Do NOT write any dialogue, actions, or inner '
+              'thoughts for them — not a single line. If earlier messages '
+              'above included lines spoken by these characters, that has '
+              'ended: from now on they speak only for themselves. Stay '
+              'entirely as $hostName; you may have $hostName notice or react '
+              'to them, but never put words or actions on them. If $userName '
+              'just addressed one of them, reply only with $hostName\'s own '
+              'brief reaction and leave the answer to that character.]\n';
         }
         // One-shot guest departure (armed by /exit) — narrated by the primary
         // on this turn only, then cleared so it never persists.
