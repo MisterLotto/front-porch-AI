@@ -302,8 +302,9 @@ void main() {
     });
 
     test('anchors are ignored while the day is classic-banded', () {
-      // Mars summer is cold (classic) and has NO anchor — °C must come from
-      // the cold band's own range, not any anchor.
+      // Mars summer HAS an anchor (-55, required since cryogenic is
+      // jitter-reachable) — but on a classic cold day the °C must come from
+      // the cold band's own range; the anchor only applies on extreme days.
       final w = WeatherSegments.segmentWeatherFor(
         sessionSeed: 'mars-session',
         dayCount: 200,

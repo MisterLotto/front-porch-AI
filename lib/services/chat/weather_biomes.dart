@@ -202,10 +202,11 @@ class Biome {
       baseTemp: baseTemp.isEmpty ? Map.from(temperate.baseTemp) : baseTemp,
       bandRange: range,
       displayAnchorsC: anchors,
-      diurnalAmplitude:
-          (json['diurnalAmplitude'] as num?)?.toDouble() ??
-          (json['diurnal_amplitude'] as num?)?.toDouble() ??
-          1.0,
+      diurnalAmplitude: switch (
+          json['diurnalAmplitude'] ?? json['diurnal_amplitude']) {
+        final num v => v.toDouble(),
+        _ => 1.0, // string/garbage degrades, never throws (tryParse-nulls)
+      },
       conditionSkin: skins,
     );
   }
