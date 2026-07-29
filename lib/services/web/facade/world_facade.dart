@@ -383,7 +383,12 @@ class WorldFacade {
     if (chat == null || chat.currentSessionId == null) {
       return {'ok': false, 'error': 'No active chat'};
     }
-    final biome = Biome.builtInById(biomeId) ?? Biome.temperate;
+    // Unknown ids error out rather than silently becoming temperate — a
+    // typo'd climate must not look like a successful switch.
+    final biome = Biome.builtInById(biomeId);
+    if (biome == null) {
+      return {'ok': false, 'error': 'Unknown climate: $biomeId'};
+    }
     await chat.setChatClimate(biome);
     return {'ok': true, ...chatPlaces()};
   }

@@ -8,15 +8,15 @@
 
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart' as model;
-import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 
@@ -103,6 +103,72 @@ void main() {
       await repo.renameWorld(world, 'Keep');
       final rows = await db.getAllWorlds();
       expect(rows.single.name, 'Keep');
+    });
+  });
+
+  group('WorldRepository purge safety (character-linked clones)', () {
+    late AppDatabase db;
+    late StorageService storage;
+
+    setUp(() async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      storage = StorageService();
+      await storage.initialized;
+      db = AppDatabase.forTesting();
+      await db.insertWorld(
+        WorldsCompanion.insert(
+          id: 'clone-1',
+          name: "Aerin's Lorebook",
+          description: const Value('Auto-imported from character card'),
+          linkedCharacterName: const Value('Aerin'),
+        ),
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    test('failed recovery export keeps the world; a later launch retries and '
+        'completes the purge', () async {
+      // Block the recovery path: a regular FILE where the directory should be
+      // makes the dir create AND every export write fail on all platforms —
+      // portable stand-in for disk-full/permission failures.
+      final blocker = File(
+        p.join(storage.worldsDir.path, 'recovered_character_lore_clones'),
+      );
+      await blocker.parent.create(recursive: true);
+      await blocker.writeAsString('not a directory');
+
+      final repo = WorldRepository(storage, db);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await repo.loadWorlds(); // runs the one-shot purge attempt
+
+      // Export failed → the world SURVIVES and the one-shot pref must not
+      // lock, so a later launch retries instead of stranding the clone.
+      expect(
+        (await db.getAllWorlds()).map((w) => w.name),
+        contains("Aerin's Lorebook"),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('purged_character_linked_worlds_v1'), isNot(true));
+
+      // Unblock → the retry exports the .fpworld, then deletes the clone and
+      // locks the one-shot.
+      await blocker.delete();
+      await repo.loadWorlds();
+      expect(
+        (await db.getAllWorlds()).where((w) => w.name == "Aerin's Lorebook"),
+        isEmpty,
+      );
+      expect(prefs.getBool('purged_character_linked_worlds_v1'), isTrue);
+      final recovered = Directory(blocker.path)
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.fpworld'));
+      expect(recovered, hasLength(1),
+          reason: 'the deleted clone must exist as a recovery .fpworld');
     });
   });
 }

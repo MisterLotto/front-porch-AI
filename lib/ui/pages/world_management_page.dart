@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/world.dart';
@@ -639,10 +640,13 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                                 final bytes =
                                                     await pickImageBytes();
                                                 if (bytes == null) return;
-                                                final encoded =
-                                                    encodeWorldCoverDataUrl(
-                                                      bytes,
-                                                    );
+                                                // Decode+resize+JPEG of a
+                                                // multi-MB photo — off the UI
+                                                // thread or the app freezes.
+                                                final encoded = await compute(
+                                                  encodeWorldCoverDataUrl,
+                                                  bytes,
+                                                );
                                                 if (encoded == null) {
                                                   if (context.mounted) {
                                                     ScaffoldMessenger.of(

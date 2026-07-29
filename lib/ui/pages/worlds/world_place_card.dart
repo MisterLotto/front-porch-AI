@@ -71,6 +71,9 @@ class WorldPlaceCard extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
+                        // Deliberately raw white/black: text sits ON the cover
+                        // photo, so contrast must be theme-independent (not an
+                        // AppColors chrome accent).
                         color: Colors.white,
                         shadows: const [
                           Shadow(blurRadius: 8, color: Colors.black54),

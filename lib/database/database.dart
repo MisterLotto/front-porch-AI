@@ -3063,20 +3063,33 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// Upsert semantics per (chat, day): switching climate twice on the same
+  /// story day REPLACES the earlier span instead of stacking a duplicate row
+  /// whose winner would depend on incidental row order (spans are read back
+  /// ordered by effective_from_day only). Transactional so a failure between
+  /// delete and insert can't silently drop the day's span.
   Future<void> insertBiomeSpan({
     required String chatId,
     required int effectiveFromDay,
     required String biomeJson,
   }) async {
-    await into(chatBiomeSpans).insert(
-      ChatBiomeSpansCompanion.insert(
-        id: _uuid.v4(),
-        chatId: chatId,
-        effectiveFromDay: effectiveFromDay,
-        biomeJson: biomeJson,
-      ),
-    );
-    await bumpSyncVersion();
+    await transaction(() async {
+      await (delete(chatBiomeSpans)..where(
+            (t) =>
+                t.chatId.equals(chatId) &
+                t.effectiveFromDay.equals(effectiveFromDay),
+          ))
+          .go();
+      await into(chatBiomeSpans).insert(
+        ChatBiomeSpansCompanion.insert(
+          id: _uuid.v4(),
+          chatId: chatId,
+          effectiveFromDay: effectiveFromDay,
+          biomeJson: biomeJson,
+        ),
+      );
+      await bumpSyncVersion();
+    });
   }
 
   Future<List<ChatBiomeSpan>> getBiomeSpansForChat(String chatId) async {

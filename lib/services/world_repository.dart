@@ -172,8 +172,19 @@ class WorldRepository extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (prefs.getBool(_purgePrefKey) == true) return;
-      final n = await purgeCharacterLinkedWorlds();
-      await prefs.setBool(_purgePrefKey, true);
+      final result = await purgeCharacterLinkedWorlds();
+      // Only mark the one-shot done when every clone was exported+deleted —
+      // a skipped world (failed recovery export) must be retried next launch,
+      // not stranded forever behind the pref.
+      if (result.skipped == 0) {
+        await prefs.setBool(_purgePrefKey, true);
+      } else {
+        debugPrint(
+          '[Worlds] purge left ${result.skipped} world(s) in place '
+          '(recovery export failed) — retrying next launch',
+        );
+      }
+      final n = result.deleted;
       if (n > 0) {
         final recovery = p.join(
           _storageService.worldsDir.path,
@@ -196,14 +207,13 @@ class WorldRepository extends ChangeNotifier {
   /// **Safety:** each doomed world is exported as `.fpworld` into
   /// `worlds/recovered_character_lore_clones/` *before* the hard delete, so
   /// users who edited "Aerin's Lorebook" in the Worlds tab (edits that never
-  /// flowed back to the card) can re-import those packages. Returns how many
-  /// worlds were deleted.
-  Future<int> purgeCharacterLinkedWorlds() async {
+  /// flowed back to the card) can re-import those packages. A world whose
+  /// export FAILS is not deleted — it stays in place and the caller retries
+  /// on a later launch. Returns how many worlds were deleted and how many
+  /// were skipped that way.
+  Future<({int deleted, int skipped})> purgeCharacterLinkedWorlds() async {
     final doomed = _worlds.where(isCharacterLinkedWorld).toList();
-    if (doomed.isEmpty) return 0;
-
-    final ids = {for (final w in doomed) w.id};
-    final names = {for (final w in doomed) w.name};
+    if (doomed.isEmpty) return (deleted: 0, skipped: 0);
 
     // Lossless edge case: export before hard delete (Claude review 2026-07-28).
     final recoveryDir = Directory(
@@ -218,8 +228,11 @@ class WorldRepository extends ChangeNotifier {
       debugPrint('[Worlds] could not create recovery dir: $e');
     }
 
-    var exported = 0;
+    final exportedWorlds = <model.World>[];
+    var skipped = 0;
     for (final w in doomed) {
+      // The export may be the user's only copy of world-only lore edits, so
+      // a failed export means this world is NOT touched this launch.
       try {
         final safe = _safeFileStem(w.name);
         final idShort =
@@ -229,21 +242,32 @@ class WorldRepository extends ChangeNotifier {
           '${safe}_$idShort.fpworld',
         );
         await exportFpWorld(w, out);
-        exported++;
       } catch (e) {
         debugPrint(
-          '[Worlds] recovery export failed for "${w.name}" (${w.id}): $e',
+          '[Worlds] recovery export failed for "${w.name}" (${w.id}) — '
+          'keeping the world: $e',
         );
+        skipped++;
+        continue;
       }
-      await _db.deleteChatWorldLinksForWorld(w.id);
-      await _db.deleteWorldById(w.id);
+      exportedWorlds.add(w);
     }
-    debugPrint(
-      '[Worlds] recovery exports: $exported/${doomed.length} '
-      '→ ${recoveryDir.path}',
-    );
-    _worlds.removeWhere((w) => ids.contains(w.id));
+    if (exportedWorlds.isEmpty) {
+      debugPrint(
+        '[Worlds] purge: 0/${doomed.length} clones exportable '
+        '($skipped kept) → ${recoveryDir.path}',
+      );
+      return (deleted: 0, skipped: skipped);
+    }
+    final ids = {for (final w in exportedWorlds) w.id};
+    final names = {for (final w in exportedWorlds) w.name};
 
+    // Strip refs BEFORE deleting rows (Grok review): if the strip throws,
+    // nothing has been deleted yet, so the next launch re-dooms the same
+    // worlds and retries the whole purge. Strip-after-delete had a pref-lock
+    // hole — a partial run deleted worlds, the next launch saw no doomed
+    // rows, reported clean, and locked the one-shot pref with dangling
+    // character/group refs never stripped.
     await _db.stripWorldRefsFromCharactersAndGroups(ids: ids, names: names);
 
     // Keep in-memory character/group lists in sync without a full app restart.
@@ -282,8 +306,22 @@ class WorldRepository extends ChangeNotifier {
       }
     }
 
+    // Delete only now that refs are gone. A failed delete leaves an
+    // unreferenced clone row that the next launch re-dooms and retries.
+    var deleted = 0;
+    for (final w in exportedWorlds) {
+      await _db.deleteChatWorldLinksForWorld(w.id);
+      await _db.deleteWorldById(w.id);
+      deleted++;
+    }
+    _worlds.removeWhere((w) => ids.contains(w.id));
+    debugPrint(
+      '[Worlds] purged $deleted/${doomed.length} clones '
+      '($skipped kept on failed export) → ${recoveryDir.path}',
+    );
+
     notifyListeners();
-    return doomed.length;
+    return (deleted: deleted, skipped: skipped);
   }
 
   /// Filesystem-safe stem for recovery exports (no path separators).
