@@ -24,14 +24,18 @@ import 'package:front_porch_ai/services/chat/biome_preview.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/weather_segments.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_editor_chrome.dart';
 import 'package:front_porch_ai/ui/pages/worlds/climate_editor_widgets.dart';
 import 'package:front_porch_ai/ui/pages/worlds/climate_preview_panel.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_skin_row.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// The custom climate editor (living-worlds.md §3, mockup-approved
-/// 2026-07-29). Desktop-only authoring by ruling; the produced biome JSON is
-/// consumed everywhere. Returns the encoded biome JSON string on save, or
-/// null on cancel.
+/// The custom climate editor (living-worlds.md §3), laid out 1:1 against the
+/// maintainer-approved mockup artifact: amber-gradient header with the
+/// start-from select, a 4-across season-card grid, mono numerals, the rename
+/// list with stance pills, and the darker inset preview column. Desktop-only
+/// authoring by ruling; the produced biome JSON is consumed everywhere.
+/// Returns the encoded biome JSON string on save, or null on cancel.
 ///
 /// Temperature anchors are entered in the user's display unit (the global
 /// Settings → General °C/°F toggle) and stored canonically in °C, so a
@@ -98,8 +102,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   double _diurnal = 1.0;
   BiomePreview? _preview;
 
-  int _toDisplay(int c) =>
-      widget.fahrenheit ? WeatherSegments.tempF(c) : c;
+  int _toDisplay(int c) => widget.fahrenheit ? WeatherSegments.tempF(c) : c;
   int _fromDisplay(int v) =>
       widget.fahrenheit ? ((v - 32) * 5 / 9).round() : v;
   String get _unit => widget.fahrenheit ? '°F' : '°C';
@@ -110,6 +113,8 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
     final existing = Biome.tryParse(widget.existingBiomeJson);
     _templateId = existing != null ? 'custom' : Biome.desert.id;
     _seedFrom(existing ?? Biome.desert);
+    // The mockup opens with the preview already computed.
+    _preview = previewBiome(_buildDraft());
   }
 
   void _seedFrom(Biome b) {
@@ -123,7 +128,8 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       final weights = b.weights[season] ??
           List<int>.filled(kWeatherConditions.length, 0);
       for (var i = 0; i < kWeatherConditions.length; i++) {
-        _weightCtls[season]![i].text = '${i < weights.length ? weights[i] : 0}';
+        _weightCtls[season]![i].text =
+            '${i < weights.length ? weights[i] : 0}';
       }
     }
     _diurnal = b.diurnalAmplitude;
@@ -138,7 +144,6 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       _skinEmojiCtls[c]!.text = draft.emoji;
       _skinFlavourCtls[c]!.text = draft.flavour;
     }
-    _preview = null;
   }
 
   @override
@@ -177,11 +182,11 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   /// anything extreme widens to base±1 around the chosen bands.
   (int, int) _derivedRange() {
     final ranks = [for (final s in kSeasons) _seasonBand[s]!.rank];
-    final anyExtreme = ranks.any((r) =>
-        r < kClassicBandRange.$1 || r > kClassicBandRange.$2);
+    final anyExtreme = ranks
+        .any((r) => r < kClassicBandRange.$1 || r > kClassicBandRange.$2);
     if (!anyExtreme) return kClassicBandRange;
-    var lo = ranks.reduce((a, b) => a < b ? a : b) - 1;
-    var hi = ranks.reduce((a, b) => a > b ? a : b) + 1;
+    final lo = ranks.reduce((a, b) => a < b ? a : b) - 1;
+    final hi = ranks.reduce((a, b) => a > b ? a : b) + 1;
     return (
       lo.clamp(kFullBandRange.$1, kFullBandRange.$2),
       hi.clamp(kFullBandRange.$1, kFullBandRange.$2),
@@ -203,9 +208,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
               (int.tryParse(ctl.text.trim()) ?? 0).clamp(0, 999),
           ],
       },
-      baseTemp: {
-        for (final s in kSeasons) s: _seasonBand[s]!.index,
-      },
+      baseTemp: {for (final s in kSeasons) s: _seasonBand[s]!.index},
       bandRange: range,
       displayAnchorsC: {
         for (final s in kSeasons)
@@ -233,8 +236,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   }
 
   List<String> _blockingErrors() {
-    final draft = _buildDraft();
-    final errors = draft.validate();
+    final errors = _buildDraft().validate();
     for (final e in _skins.entries) {
       if (e.value.active && e.value.stance == null) {
         errors.add(
@@ -254,89 +256,57 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
     final errors = _blockingErrors();
     return Dialog(
       backgroundColor: AppColors.cardOf(context),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: AppColors.borderOf(context)),
+      ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 720),
+        constraints: const BoxConstraints(maxWidth: 1120, maxHeight: 760),
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Custom Climate — ${widget.worldName}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  DropdownButton<String>(
-                    value: _templateId,
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      if (_templateId == 'custom')
-                        const DropdownMenuItem(
-                          value: 'custom',
-                          child: Text('Current custom'),
-                        ),
-                      for (final b in Biome.builtIns)
-                        DropdownMenuItem(
-                          value: b.id,
-                          child: Text('Start from: ${b.displayName}'),
-                        ),
-                    ],
-                    onChanged: (id) {
-                      if (id == null || id == 'custom') return;
-                      setState(() {
-                        _templateId = id;
-                        _seedFrom(Biome.builtInById(id)!);
-                      });
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
+            // ── Header with the mockup's amber wash ──
+            ClimateEditorHeader(
+              worldName: widget.worldName,
+              templateId: _templateId,
+              onTemplate: (id) {
+                if (id == 'custom') return;
+                setState(() {
+                  _templateId = id;
+                  _seedFrom(Biome.builtInById(id)!);
+                  _preview = previewBiome(_buildDraft());
+                });
+              },
+              onClose: () => Navigator.pop(context),
             ),
-            const Divider(height: 1),
+            Divider(height: 1, color: AppColors.borderOf(context)),
             Expanded(
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(flex: 5, child: _leftColumn(context)),
-                  const VerticalDivider(width: 1),
-                  Expanded(flex: 4, child: _rightColumn(context)),
+                  VerticalDivider(
+                    width: 1,
+                    color: AppColors.borderOf(context),
+                  ),
+                  // The mockup's darker inset preview column.
+                  Expanded(
+                    flex: 4,
+                    child: ColoredBox(
+                      color: Colors.black.withValues(alpha: 0.14),
+                      child: _rightColumn(context),
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.formMasterAccent,
-                      foregroundColor: AppColors.onChaosAccent,
-                    ),
-                    onPressed: errors.isEmpty
-                        ? () => Navigator.pop(
-                              context,
-                              jsonEncode(_buildDraft().toJson()),
-                            )
-                        : null,
-                    child: const Text('Save climate'),
-                  ),
-                ],
+            Divider(height: 1, color: AppColors.borderOf(context)),
+            // ── Footer pills ──
+            ClimateEditorFooter(
+              canSave: errors.isEmpty,
+              onCancel: () => Navigator.pop(context),
+              onSave: () => Navigator.pop(
+                context,
+                jsonEncode(_buildDraft().toJson()),
               ),
             ),
           ],
@@ -347,60 +317,58 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
 
   Widget _leftColumn(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       children: [
         ClimateSectionHeader(
           'Temperature by season',
-          hint: 'Extreme steps unlock the display $_unit — you type what '
-              'the weather chip shows. Characters feel words, not numbers.',
+          hint:
+              'Extreme steps unlock the display $_unit — you type what the '
+              'weather chip shows. Characters feel words, not numbers.',
         ),
-        for (final season in kSeasons)
-          SeasonBandRow(
-            season: season,
-            band: _seasonBand[season]!,
-            anchorController: _anchorCtls[season]!,
-            needsAnchor: _needsAnchor(season),
-            unit: _unit,
-            onBand: (b) => setState(() => _seasonBand[season] = b),
-            onAnchorChanged: () => setState(() {}),
-          ),
-        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (i, season) in kSeasons.indexed) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(
+                child: SeasonCard(
+                  season: season,
+                  band: _seasonBand[season]!,
+                  anchorController: _anchorCtls[season]!,
+                  needsAnchor: _needsAnchor(season),
+                  unit: _unit,
+                  onBand: (b) => setState(() => _seasonBand[season] = b),
+                  onAnchorChanged: () => setState(() {}),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 20),
         ClimateSectionHeader(
           'Weather odds',
           hint: 'Per season — higher numbers are more common.',
         ),
         WeightsGrid(controllers: _weightCtls),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         ClimateSectionHeader('Day–night swing'),
-        Row(
-          children: [
-            Expanded(
-              child: Slider(
-                value: _diurnal.clamp(0.2, 4.0),
-                min: 0.2,
-                max: 4.0,
-                divisions: 19,
-                activeColor: AppColors.formMasterAccent,
-                onChanged: (v) => setState(() => _diurnal = v),
-              ),
-            ),
-            SizedBox(
-              width: 88,
-              child: Text(
-                '${_diurnal.toStringAsFixed(1)}× Earth',
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.porchAmberOf(context),
-                ),
-              ),
-            ),
-          ],
+        SwingSlider(
+          value: _diurnal,
+          onChanged: (v) => setState(() => _diurnal = v),
         ),
-        const SizedBox(height: 16),
+        Text(
+          'How hard the temperature drops after sundown. Deserts and thin '
+          'atmospheres swing hard.',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textTertiary(context),
+          ),
+        ),
+        const SizedBox(height: 20),
         ClimateSectionHeader(
           'Rename the weather',
-          hint: 'Every rename needs a danger level, so a lazy "acid rain" '
+          hint:
+              'Every rename needs a danger level, so a lazy "acid rain" '
               'still behaves. Leave blank to keep the normal weather.',
         ),
         for (final c in kWeatherConditions)
@@ -415,16 +383,25 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
             onFlavour: (v) => setState(() => _skins[c]!.flavour = v),
             onStance: (st) => setState(() => _skins[c]!.stance = st),
           ),
+        const SizedBox(height: 6),
+        Text(
+          'Standing facts about the place — air, gravity, what\'s '
+          'underfoot — don\'t belong to the climate. They live in the '
+          'world\'s Place traits, right below the climate picker.',
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.4,
+            color: AppColors.textTertiary(context),
+          ),
+        ),
       ],
     );
   }
 
-
-
   Widget _rightColumn(BuildContext context) {
     final errors = _blockingErrors();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       children: [
         Row(
           children: [
@@ -433,36 +410,62 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
                 'Runs the real weather engine over your numbers.',
                 style: TextStyle(
                   fontSize: 11,
+                  height: 1.35,
                   color: AppColors.textTertiary(context),
                 ),
               ),
             ),
             OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.porchAmberOf(context),
+                side: BorderSide(
+                  color: AppColors.porchAmberOf(context).withValues(
+                    alpha: 0.6,
+                  ),
+                ),
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               onPressed: _refreshPreview,
               child: const Text('Refresh preview'),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         if (_preview != null)
-          ClimatePreviewPanel(preview: _preview!)
-        else
-          Text(
-            'Tap Refresh preview to simulate this climate.',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary(context),
-            ),
+          ClimatePreviewPanel(
+            preview: _preview!,
+            biome: _buildDraft(),
+            fahrenheit: widget.fahrenheit,
           ),
-        if (_preview == null && errors.isNotEmpty) ...[
+        if (errors.isNotEmpty) ...[
           const SizedBox(height: 12),
           for (final e in errors)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+            Container(
+              margin: const EdgeInsets.only(bottom: 7),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 11,
+                vertical: 8,
+              ),
+              decoration: BoxDecoration(
+                color: kClimateDanger.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Text(
                 '⛔ $e',
-                style:
-                    const TextStyle(fontSize: 11.5, color: AppColors.logError),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  height: 1.45,
+                  // theme-keep: mockup danger text tint
+                  color: Color(0xFFF2B3A5),
+                ),
               ),
             ),
         ],

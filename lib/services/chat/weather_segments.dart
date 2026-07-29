@@ -269,6 +269,13 @@ class WeatherSegments {
 
   // ── Display helpers (UI + web facade; numbers never enter prompts) ──
 
+  /// A band's representative °C (its range midpoint) — the climate editor's
+  /// preview shows this for seasons without an authored anchor.
+  static int typicalBaseC(TempBand t) {
+    final (lo, hi) = _bandRangeC[t]!;
+    return ((lo + hi) / 2).round();
+  }
+
   static int tempF(int c) => (c * 9 / 5 + 32).round();
 
   static String formatTemp(int c, {required bool fahrenheit}) =>

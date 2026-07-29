@@ -15,12 +15,26 @@
 //
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+//
+// Shared pieces of the custom climate editor, styled 1:1 against the
+// maintainer-approved mockup artifact (climate-editor-sketch): warm-porch
+// card surfaces, mono numerals, amber accents, and the season-card grid.
 
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+
+/// Artifact palette notes: the amber/ink/surface/text roles map to
+/// AppColors; the two semantic status hues below are the mockup's danger
+/// and warn tones, used for stance pills, error rows, and notice tints.
+const Color kClimateDanger = Color(0xFFE0644C); // theme-keep: mockup danger
+const Color kClimateWarn = Color(0xFFE3B341); // theme-keep: mockup warn
+
+/// Mono stack for every numeral (weights, anchors, temps, swing) — the
+/// artifact sets numbers in SF Mono/Menlo.
+const List<String> kMonoFallback = ['Menlo', 'Consolas', 'monospace'];
 
 /// Thermal-ordered band choices for the per-season dropdowns.
 const List<TempBand> kBandChoices = [
@@ -35,14 +49,14 @@ const List<TempBand> kBandChoices = [
 ];
 
 String bandLabel(TempBand b) => switch (b) {
-  TempBand.cryogenic => 'Cryogenic — kills the unprotected',
+  TempBand.cryogenic => 'Cryogenic ❄',
   TempBand.cold => 'Cold',
   TempBand.cool => 'Cool',
   TempBand.mild => 'Mild',
   TempBand.warm => 'Warm',
   TempBand.hot => 'Hot',
-  TempBand.furnace => 'Furnace — beyond survival',
-  TempBand.inferno => 'Inferno — incinerating',
+  TempBand.furnace => 'Furnace 🔥',
+  TempBand.inferno => 'Inferno 🔥',
 };
 
 /// Draft skin row state: stance stays null until the author picks one, which
@@ -64,7 +78,18 @@ String stanceLabel(WeatherStance s) => switch (s) {
   WeatherStance.deadly => 'Deadly',
 };
 
-/// Section header in the dialog's warm-porch register.
+/// Stance → pill border/text color (mockup: ordinary grey, harsh warn,
+/// dangerous/deadly danger).
+Color stanceColor(BuildContext context, WeatherStance? s) => switch (s) {
+  null => AppColors.textTertiary(context),
+  WeatherStance.pleasant ||
+  WeatherStance.ordinary =>
+    AppColors.textSecondary(context),
+  WeatherStance.harsh => kClimateWarn,
+  WeatherStance.dangerous || WeatherStance.deadly => kClimateDanger,
+};
+
+/// Section header in the artifact's register: small caps amber + hint.
 class ClimateSectionHeader extends StatelessWidget {
   const ClimateSectionHeader(this.title, {super.key, this.hint});
   final String title;
@@ -79,7 +104,7 @@ class ClimateSectionHeader extends StatelessWidget {
           title.toUpperCase(),
           style: TextStyle(
             fontSize: 11,
-            letterSpacing: 1.1,
+            letterSpacing: 1.2,
             fontWeight: FontWeight.w700,
             color: AppColors.porchAmberOf(context),
           ),
@@ -90,94 +115,22 @@ class ClimateSectionHeader extends StatelessWidget {
             hint!,
             style: TextStyle(
               fontSize: 11,
+              height: 1.4,
               color: AppColors.textTertiary(context),
             ),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
       ],
     );
   }
 }
 
-/// The 4-season × 7-condition weights grid. Small numeric fields; higher =
-/// more common. Controllers are owned by the dialog (survive rebuilds).
-class WeightsGrid extends StatelessWidget {
-  const WeightsGrid({super.key, required this.controllers});
-
-  /// season → 7 controllers in [kWeatherConditions] order.
-  final Map<String, List<TextEditingController>> controllers;
-
-  @override
-  Widget build(BuildContext context) {
-    final tertiary = AppColors.textTertiary(context);
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Table(
-        defaultColumnWidth: const FixedColumnWidth(64),
-        columnWidths: const {0: FixedColumnWidth(70)},
-        children: [
-          TableRow(
-            children: [
-              const SizedBox.shrink(),
-              for (final c in kWeatherConditions)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    c[0].toUpperCase() + c.substring(1),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10.5, color: tertiary),
-                  ),
-                ),
-            ],
-          ),
-          for (final season in kSeasons)
-            TableRow(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    season[0].toUpperCase() + season.substring(1),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary(context),
-                    ),
-                  ),
-                ),
-                for (final ctl in controllers[season]!)
-                  Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: TextField(
-                      controller: ctl,
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 7),
-                        filled: true,
-                        fillColor: AppColors.surfaceContainerOf(context),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide:
-                              BorderSide(color: AppColors.borderOf(context)),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One season's temperature row: thermal band dropdown + the unit-aware
-/// anchor field that unlocks when an extreme is reachable.
-class SeasonBandRow extends StatelessWidget {
-  const SeasonBandRow({
+/// One season CARD from the artifact's 4-across grid: surface panel with
+/// the season name, the band dropdown, and the anchor row (mono amber input
+/// + "°C shown" caption) — or the dimmed "auto" input when classic.
+class SeasonCard extends StatelessWidget {
+  const SeasonCard({
     super.key,
     required this.season,
     required this.band,
@@ -198,72 +151,120 @@ class SeasonBandRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+    final amber = AppColors.porchAmberOf(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerOf(context),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.borderOf(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 68,
-            child: Text(
-              season[0].toUpperCase() + season.substring(1),
-              style: TextStyle(
-                fontSize: 12.5,
-                color: AppColors.textSecondary(context),
+          Text(
+            season[0].toUpperCase() + season.substring(1),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: AppColors.resolve(
+                context,
+                Colors.black26,
+                Colors.white54,
+              ),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.borderOf(context)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<TempBand>(
+                value: band,
+                isExpanded: true,
+                isDense: true,
+                dropdownColor: AppColors.surfaceContainerOf(context),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textPrimary(context),
+                ),
+                items: [
+                  for (final b in kBandChoices)
+                    DropdownMenuItem(value: b, child: Text(bandLabel(b))),
+                ],
+                onChanged: (b) {
+                  if (b != null) onBand(b);
+                },
               ),
             ),
           ),
-          Expanded(
-            child: DropdownButton<TempBand>(
-              value: band,
-              isExpanded: true,
-              underline: const SizedBox.shrink(),
-              items: [
-                for (final b in kBandChoices)
-                  DropdownMenuItem(
-                    value: b,
-                    child: Text(
-                      bandLabel(b),
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                  ),
-              ],
-              onChanged: (b) {
-                if (b != null) onBand(b);
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 96,
-            child: needsAnchor
-                ? TextField(
-                    controller: anchorController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(signed: true),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.porchAmberOf(context),
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      suffixText: '$unit shown',
-                      suffixStyle: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textTertiary(context),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                width: 62,
+                child: needsAnchor
+                    ? TextField(
+                        controller: anchorController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                        ),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: amber,
+                          fontFamily: kMonoFallback.first,
+                          fontFamilyFallback: kMonoFallback,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide: BorderSide(color: amber),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            borderSide: BorderSide(color: amber, width: 1.4),
+                          ),
+                        ),
+                        onChanged: (_) => onAnchorChanged(),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: AppColors.borderOf(context),
+                          ),
+                        ),
+                        child: Text(
+                          'auto',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textTertiary(context),
+                            fontFamily: kMonoFallback.first,
+                            fontFamilyFallback: kMonoFallback,
+                          ),
+                        ),
                       ),
-                      border: const OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => onAnchorChanged(),
-                  )
-                : Text(
-                    'auto $unit',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textTertiary(context),
-                    ),
-                  ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                needsAnchor ? '$unit shown' : unit,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textTertiary(context),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -271,131 +272,152 @@ class SeasonBandRow extends StatelessWidget {
   }
 }
 
-/// One condition's rename row: label + emoji + mandatory stance, and (when
-/// the rename is active) a flavour line capped to the runtime's 140 chars.
-class SkinEditRow extends StatelessWidget {
-  const SkinEditRow({
-    super.key,
-    required this.condition,
-    required this.draft,
-    required this.labelController,
-    required this.emojiController,
-    required this.flavourController,
-    required this.onLabel,
-    required this.onEmoji,
-    required this.onFlavour,
-    required this.onStance,
-  });
+/// The 4-season × 7-condition weights grid, artifact-styled: mono numerals,
+/// dimmed zeros, and an amber-edged cell on each season's dominant weight.
+class WeightsGrid extends StatelessWidget {
+  const WeightsGrid({super.key, required this.controllers});
 
-  final String condition;
-  final SkinDraft draft;
-  final TextEditingController labelController;
-  final TextEditingController emojiController;
-  final TextEditingController flavourController;
-  final ValueChanged<String> onLabel;
-  final ValueChanged<String> onEmoji;
-  final ValueChanged<String> onFlavour;
-  final ValueChanged<WeatherStance?> onStance;
-
-  InputDecoration _dec(BuildContext context, String hint) => InputDecoration(
-        isDense: true,
-        hintText: hint,
-        counterText: '',
-        hintStyle: TextStyle(
-          fontSize: 11.5,
-          color: AppColors.textTertiary(context),
-        ),
-        border: const OutlineInputBorder(),
-      );
+  /// season → 7 controllers in [kWeatherConditions] order.
+  final Map<String, List<TextEditingController>> controllers;
 
   @override
   Widget build(BuildContext context) {
-    final missingStance = draft.active && draft.stance == null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
+    final tertiary = AppColors.textTertiary(context);
+    final amberEdge = AppColors.porchAmberOf(context).withValues(alpha: 0.55);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        defaultColumnWidth: const FixedColumnWidth(62),
+        columnWidths: const {0: FixedColumnWidth(66)},
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
-          Row(
+          TableRow(
             children: [
-              SizedBox(
-                width: 68,
-                child: Text(
-                  '${WeatherEngine.emoji(WeatherCondition.values[kWeatherConditions.indexOf(condition)])} '
-                  '$condition',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: AppColors.textTertiary(context),
+              const SizedBox.shrink(),
+              for (final c in kWeatherConditions)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Text(
+                    c[0].toUpperCase() + c.substring(1),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 10.5, color: tertiary),
                   ),
                 ),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: labelController,
-                  style: const TextStyle(fontSize: 12.5),
-                  decoration: _dec(context, 'rename (e.g. Dust Squall)'),
-                  onChanged: onLabel,
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 44,
-                child: TextField(
-                  controller: emojiController,
-                  enabled: draft.active,
-                  maxLength: 4,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: _dec(context, '🌪️'),
-                  onChanged: onEmoji,
-                ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<WeatherStance?>(
-                value: draft.stance,
-                hint: Text(
-                  missingStance ? 'Pick one!' : 'Danger',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: missingStance
-                        ? AppColors.logError
-                        : AppColors.textTertiary(context),
-                  ),
-                ),
-                underline: const SizedBox.shrink(),
-                items: [
-                  for (final s in WeatherStance.values)
-                    DropdownMenuItem(
-                      value: s,
-                      child: Text(
-                        stanceLabel(s),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                ],
-                onChanged: draft.active ? onStance : null,
-              ),
             ],
           ),
-          if (draft.active)
-            Padding(
-              padding: const EdgeInsets.only(left: 68, top: 4),
-              child: TextField(
-                controller: flavourController,
-                maxLength: 140,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontStyle: FontStyle.italic,
+          for (final season in kSeasons)
+            TableRow(
+              children: [
+                Text(
+                  season[0].toUpperCase() + season.substring(1),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
-                decoration: _dec(
-                  context,
-                  'one flavour line (optional) — '
-                  '"rust-red columns wander the plain"',
-                ),
-                onChanged: onFlavour,
-              ),
+                for (final ctl in controllers[season]!)
+                  Padding(
+                    padding: const EdgeInsets.all(2.5),
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: ctl,
+                      builder: (context, value, _) {
+                        final n = int.tryParse(value.text.trim()) ?? 0;
+                        final rowMax = controllers[season]!
+                            .map((c) => int.tryParse(c.text.trim()) ?? 0)
+                            .fold(0, (a, b) => a > b ? a : b);
+                        final isMax = n > 0 && n == rowMax;
+                        return TextField(
+                          controller: ctl,
+                          textAlign: TextAlign.center,
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: n == 0
+                                ? tertiary
+                                : AppColors.textPrimary(context),
+                            fontFamily: kMonoFallback.first,
+                            fontFamilyFallback: kMonoFallback,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 7),
+                            filled: true,
+                            fillColor: AppColors.surfaceContainerOf(context),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(
+                                color: isMax
+                                    ? amberEdge
+                                    : AppColors.borderOf(context),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(
+                                color: AppColors.porchAmberOf(context),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
             ),
         ],
       ),
+    );
+  }
+}
+
+/// The day–night swing slider with the artifact's amber fill, glowing knob,
+/// and mono "N.N× Earth" readout.
+class SwingSlider extends StatelessWidget {
+  const SwingSlider({super.key, required this.value, required this.onChanged});
+
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final amber = AppColors.porchAmberOf(context);
+    return Row(
+      children: [
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              activeTrackColor: amber,
+              inactiveTrackColor: AppColors.surfaceContainerOf(context),
+              thumbColor: amber,
+              overlayColor: amber.withValues(alpha: 0.25),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            ),
+            child: Slider(
+              value: value.clamp(0.2, 4.0),
+              min: 0.2,
+              max: 4.0,
+              divisions: 19,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 86,
+          child: Text(
+            '${value.toStringAsFixed(1)}× Earth',
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 13,
+              color: amber,
+              fontFamily: kMonoFallback.first,
+              fontFamilyFallback: kMonoFallback,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

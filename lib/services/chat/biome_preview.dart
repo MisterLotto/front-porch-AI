@@ -10,6 +10,7 @@
 
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/chat/weather_segments.dart';
 
 /// One season's simulated outcome distribution.
 class SeasonDistribution {
@@ -21,10 +22,15 @@ class SeasonDistribution {
   /// band name → share of days (0..1).
   final Map<String, double> bandShare;
 
+  /// Representative display °C for the season — the authored anchor when
+  /// present, else the dominant band's range midpoint. UI number only.
+  final int typicalTempC;
+
   const SeasonDistribution({
     required this.season,
     required this.conditionShare,
     required this.bandShare,
+    required this.typicalTempC,
   });
 }
 
@@ -39,8 +45,9 @@ class BiomePreview {
   /// fires", "liquid conditions at cryogenic became snow").
   final List<String> warnings;
 
-  /// A deterministic 7-day sample strip (winter) for the editor's week row.
-  final List<DailyWeather> sampleWeek;
+  /// A deterministic 7-day sample strip (winter, midday) for the editor's
+  /// week row — segment weather so each day carries its display °C.
+  final List<SegmentWeather> sampleWeek;
 
   const BiomePreview({
     required this.seasons,
@@ -94,6 +101,23 @@ BiomePreview previewBiome(
       }
     }
 
+    // Representative display temp: authored anchor first, else the
+    // midpoint of the season's DOMINANT sampled band.
+    String dominantBand = TempBand.mild.name;
+    var best = -1;
+    for (final e in bandCounts.entries) {
+      if (e.value > best) {
+        best = e.value;
+        dominantBand = e.key;
+      }
+    }
+    final domBand = TempBand.values.firstWhere(
+      (b) => b.name == dominantBand,
+      orElse: () => TempBand.mild,
+    );
+    final typicalTempC = biome.displayAnchorsC[season] ??
+        WeatherSegments.typicalBaseC(domBand);
+
     seasons.add(SeasonDistribution(
       season: season,
       conditionShare: {
@@ -102,6 +126,7 @@ BiomePreview previewBiome(
       bandShare: {
         for (final e in bandCounts.entries) e.key: e.value / total,
       },
+      typicalTempC: typicalTempC,
     ));
 
     // Demotion visibility, SHARE-based so intentional rain+snow mixes don't
@@ -152,10 +177,11 @@ BiomePreview previewBiome(
 
   final sampleWeek = [
     for (var d = 1; d <= 7; d++)
-      WeatherEngine.weatherFor(
+      WeatherSegments.segmentWeatherFor(
         sessionSeed: 'preview-week',
         dayCount: d,
         date: DateTime(2026, 1, 15),
+        hour: 13, // midday — the number the chip would lead with
         biome: biome,
       ),
   ];
