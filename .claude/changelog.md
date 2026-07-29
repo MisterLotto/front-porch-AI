@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-28 — docs(worlds): Living Worlds status complete through b3f775ce
+- **Why:** Reviewers need an accurate done map after medium batch + Claude review fixes.
+- **Did:** Phase 0 COMPLETE; Phase 1 COMPLETE (optional run-length/goldens open); commit table `229b6e9b` / `b3f775ce`; Claude finding disposition; test-strategy gates refreshed.
+- **Files:** docs/design/living-worlds.md
+
 ## 2026-07-28 — fix(worlds): Claude review of Living Worlds high batch
 - **#1 purge safety:** export each character-linked clone as `.fpworld` to `worlds/recovered_character_lore_clones/` before hard delete (user-edited lore on the world row is no longer silently destroyed).
 - **#2 web bundle:** `npm run build` → refreshed `assets/web_app` (Edit Message, Places climate, covers now in the shipped PWA).

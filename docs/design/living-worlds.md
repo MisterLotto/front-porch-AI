@@ -1,13 +1,16 @@
 # Living Worlds — real worlds, weather biomes, and authored climates
 
-**Status: PHASE 0 DONE · PHASE 1 MOSTLY DONE (medium batch) · PHASE 2/3 NOT STARTED**
-(Last status audit: 2026-07-28 — medium tier landed. Branch: `Rawhide`.)
-**Before push:** re-run weather / world_management widget goldens if they fail;
-engine temperate path is intended bit-identical (regen only if a golden fails).
+**Status: PHASE 0 COMPLETE · PHASE 1 COMPLETE (minus optional polish) · PHASE 2/3 NOT STARTED**
 
-Rev.2 design retained below. Use **§ Implementation status** as the source of
-truth for what landed vs what is still open; do not re-derive from the
-narrative sections alone.
+| | |
+|---|---|
+| **Branch** | `Rawhide` |
+| **Tip commit (local)** | `b3f775ce` — *mid-chat climate, place covers, Places web parity, purge safety* |
+| **Prior land** | `229b6e9b` — *places + climates foundation; fullscreen message edit* |
+| **Last status audit** | 2026-07-28 (post medium batch + Claude review fixes) |
+
+Rev.2 design narrative is retained below. **§ Implementation status** is the
+source of truth for what shipped — do not re-derive from the prose alone.
 
 **Open decisions locked for this land:**
 1. Phase 2 editor parity — defer (desktop authoring, use everywhere).
@@ -27,61 +30,71 @@ Legend: **DONE** · **PARTIAL** · **NOT STARTED** · **OUT OF SCOPE (this land)
 Reviewers: read this table first, then sample the cited paths. Do not treat
 design prose under §1–§3 as “implemented” unless it is marked DONE here.
 
-### Phase 0 — Worlds become real places → **DONE**
+### Shipped commits (Rawhide)
+
+| Commit | What landed |
+|---|---|
+| `229b6e9b` | Phase 0 foundation + phase 1 engine tables: schema v40, UUID worlds, `chat_worlds`, `chat_biome_spans`, built-in biomes, weather engine biome param, world description injection, desktop climate picker, clone purge, `.fpworld`, fullscreen Edit Message |
+| `b3f775ce` | Medium batch + review fixes: span wiring, mid-chat climate UI, covers, WorldPlaceCard, WeatherChip↔story parity, foreshadow suppress, diurnal amplitude, purge recovery exports, web bundle rebuild, migration honesty, cleanup `group_world_refs` |
+
+### Phase 0 — Worlds become real places → **COMPLETE**
 
 | Item | Status | Where / notes |
 |---|---|---|
-| Schema v40 additive columns on `worlds` (`cover_image`, `format_version`, `source_id`, `linked_character_id`, `biome_id`, `biome_json`, `inject_description`) | **DONE** | `lib/database/database.dart` v39→v40 |
-| `chat_worlds` join table + index | **DONE** | same |
-| Forced pre-migration backup attempt | **DONE** | v40 block (non-fatal if backup path fails) |
-| Name→UUID backfill for `groups.world_ids` + seed `chat_worlds` for existing group sessions | **DONE** | v40 backfill; unresolved refs logged/dropped |
+| Schema v40 additive columns on `worlds` | **DONE** | `cover_image`, `format_version`, `source_id`, `linked_character_id`, `biome_id`, `biome_json`, `inject_description` |
+| `chat_worlds` join table + index | **DONE** | v40 |
+| Forced pre-migration backup attempt | **DONE** | non-fatal if backup path fails; originals of name-list `world_ids` live only here after rewrite |
+| Name→UUID backfill for `groups.world_ids` + seed `chat_worlds` | **DONE** | live column rewritten in place (not re-runnable); unresolved refs logged/dropped |
 | `linkedCharacterName` → `linked_character_id` backfill | **DONE** | v40 |
-| Migrated worlds `inject_description = 0` | **DONE** | v40 one-shot UPDATE |
+| Migrated worlds `inject_description = 0` | **DONE** | single one-shot UPDATE with 39→40 |
 | UUID identity; rename does not cascade | **DONE** | `WorldRepository.renameWorld` |
-| Chat-level attach (1:1 + group session); group `world_ids` = template only | **DONE** | `setChatWorldIds` / `chatWorldIds`; `applyGroupTemplateToChat` |
+| Chat-level attach (1:1 + group session); group list = template | **DONE** | `setChatWorldIds` / `chatWorldIds`; `applyGroupTemplateToChat` |
 | Resolution by id (name fallback for legacy) | **DONE** | `resolveWorld`, `world_ref_resolver.dart` |
-| World description injection (budget-capped, gated) | **DONE** | `prompt_injection/world_injection.dart` + `ChatService` wire |
-| `.fpworld` encode/decode + ST bare-lorebook import | **DONE** | `fp_world_package.dart`; import Keep-both rename |
-| Purge character-linked auto-import clones | **DONE** | Exports `.fpworld` to `worlds/recovered_character_lore_clones/` before hard delete (user-edited clone safety) |
-| “From character” lore import (replace clone UX) | **DONE** | edit character / group lore / web |
-| Place-only pickers (exclude character-linked leftovers) | **DONE** | `placeWorlds`; edit char/group/lorebook tab |
-| Desktop Worlds authoring (climate picker + feel copy) | **DONE** | `world_management_page.dart` |
-| Story Tools → **Places** panel (stay under Story Tools — no new sidebar leaf) | **DONE** | `chat_places_panel.dart` + `story_tools_group.dart` |
-| Web Worlds page + chat Places section + facade/routes | **DONE** | `WorldsPage.tsx`, `ChatPlacesSection.tsx`, `world_facade` / `world_routes` |
-| Cover image **column + model + .fpworld field** | **DONE** | schema / `World.coverImage` / envelope `cover` |
-| Cover image **picker UI + grid thumbnails** | **DONE** | desktop dialog + `WorldPlaceCard`; web Worlds edit + `WorldCard`; `world_cover.dart` size-cap |
-| Group card export dual `worldIds` (uuid) + `worldNames` (legacy) | **DONE** | `GroupCard.worldNames` + exporter resolves via `WorldRepository` |
-| Cleanup counter rename + UUID/name resolution | **DONE** | `group_world_refs`; resolves names→ids when fixing |
-| Migration fixture test (broken name refs, etc.) | **PARTIAL** | unit tests for resolver/package; no full fixture-DB migration test found |
-| `.fpworld` round-trip + collision rename tests | **DONE** | `test/models/fp_world_package_test.dart`, world repo tests |
+| World description injection (budget-capped, gated) | **DONE** | `prompt_injection/world_injection.dart` |
+| `.fpworld` encode/decode + ST bare-lorebook import | **DONE** | Keep-both rename on collision |
+| Purge character-linked auto-import clones | **DONE** | Hard delete **after** `.fpworld` export to `worlds/recovered_character_lore_clones/` (review fix) |
+| “From character” lore import | **DONE** | edit character / group lore / web |
+| Place-only pickers | **DONE** | `placeWorlds` |
+| Desktop Worlds authoring (climate + feel + cover) | **DONE** | `world_management_page.dart` + `WorldPlaceCard` |
+| Story Tools → **Places** (no new sidebar leaf) | **DONE** | `chat_places_panel.dart` |
+| Web Worlds + chat Places + facade/routes | **DONE** | sources + **rebuilt** `assets/web_app` in `b3f775ce` |
+| Cover image column / model / `.fpworld` / picker / thumbs | **DONE** | `world_cover.dart`, desktop + web |
+| Group card dual `worldIds` + `worldNames` | **DONE** | exporter + `GroupCard` |
+| Cleanup `group_world_refs` (name→UUID fix) | **DONE** | `database_cleanup.dart` + dialog key |
+| Migration fixture-DB integration test | **PARTIAL** | resolver/package unit tests; no full fixture-DB migration suite |
+| `.fpworld` round-trip + collision rename tests | **DONE** | package / repo tests |
 
-### Phase 1 — Built-in weather biomes → **MOSTLY DONE** (run-length deferred)
+### Phase 1 — Built-in weather biomes → **COMPLETE** (optional items open)
+
+Built-in climates, mid-chat switch, and prompt/UI parity are shipped. Remaining
+phase-1 items are polish / test depth, not product blockers.
 
 | Item | Status | Where / notes |
 |---|---|---|
-| `chat_biome_spans` table + insert/list | **DONE** | schema + `AppDatabase.insertBiomeSpan` / `getBiomeSpansForChat` |
-| Built-in biomes (~7) + JSON round-trip + `validate()` + feel copy | **DONE** | `weather_biomes.dart` |
-| `WeatherEngine.weatherFor(..., biome: / biomeAtDay:)` — null ≡ temperate | **DONE** | per-day climate for mid-chat spans; fixed path when `biomeAtDay` null |
+| `chat_biome_spans` table + insert/list | **DONE** | schema + DB helpers |
+| Built-in biomes (~7) + JSON + `validate()` + feel copy | **DONE** | `weather_biomes.dart` |
+| `WeatherEngine.weatherFor(..., biome: / biomeAtDay:)` | **DONE** | null / fixed biome ≡ temperate historical tables |
 | World default climate drives chat weather | **DONE** | schedule `worldDefault` from first attached place |
-| Desktop/world editor climate picker with feel card | **DONE** | world management + web Worlds |
-| `WorldRepository.setChatBiome` / span rows / schedule | **DONE** | + `biome_schedule.dart` |
-| **Wire spans into weather walk** | **DONE** | `ChatService` hydrates schedule; all weather getters use `biomeAtDay` |
-| Mid-chat climate picker UI (Places — no new leaf) | **DONE** | desktop `ChatPlacesPanel`; web `ChatPlacesSection` + `POST /api/chat/climate` |
-| Foreshadow suppression on first day of a new span | **DONE** | `WeatherInjection.suppressForeshadow` |
-| Run-length prose (“third straight day of rain”) | **NOT STARTED** | optional; deferred |
-| Biome-scaled `diurnalAmplitude` in `weather_segments` | **DONE** | temperate 1.0 keeps °C goldens |
-| WeatherChip uses ChatService (not temperate-only providers) | **DONE** | `weather_chip.dart` |
+| `BiomeSchedule` leaf + ChatService hydrate | **DONE** | `biome_schedule.dart`; reload on session / attach / climate set |
+| Wire spans into live weather walk | **DONE** | all ChatService weather getters use `biomeAtDay` |
+| Mid-chat climate picker (Places, not a new leaf) | **DONE** | desktop + web `POST /api/chat/climate` |
+| Foreshadow suppress on first day of a new span | **DONE** | `WeatherInjection.suppressForeshadow` |
+| Biome-scaled `diurnalAmplitude` | **DONE** | temperate 1.0 keeps prior °C |
+| WeatherChip matches prompt climate | **DONE** | reads ChatService (not temperate-only providers) |
 | Changeover property + foreshadow suppress tests | **DONE** | `test/services/chat/biome_schedule_test.dart` |
-| Per-built-in golden sequences | **PARTIAL** | temperate goldens held; full per-biome pin optional |
-| Web per-chat climate override | **DONE** | `/api/chat/climate` |
+| Cover encode tests | **DONE** | `test/utils/world_cover_test.dart` |
+| Run-length prose (“third straight day of rain”) | **NOT STARTED** | optional; deferred |
+| Per-built-in golden sequences (all biomes) | **PARTIAL** | temperate/null goldens held; full per-biome pin optional |
+| Distribution envelopes across many seeds | **PARTIAL** | light / identity coverage; full envelopes optional |
+| Widget goldens regen after UI polish | **OPS** | regen `world_management` / `time_strip` if CI fails |
 
 ### Phase 2 — Authored climates (skins + stance) → **NOT STARTED**
 
 | Item | Status | Notes |
 |---|---|---|
-| Stance-aware `dressCue` / conditionSkin behaviour | **NOT STARTED** | `ConditionSkin` + `conditionSkin` fields exist on model for forward schema; built-ins do not drive dressCue yet |
+| Stance-aware `dressCue` / conditionSkin behaviour | **NOT STARTED** | model fields exist for forward schema only |
 | Custom biome editor + preview harness | **NOT STARTED** | |
-| `biomes` table + snapshot-on-attach | **NOT STARTED** | spans already store full JSON when used |
+| `biomes` table + snapshot-on-attach | **NOT STARTED** | chat spans already store full JSON when used |
 
 ### Phase 3 — Stoop / sharing → **OUT OF SCOPE**
 
@@ -91,17 +104,27 @@ Sketch only. `.fpworld` envelope is intentionally Stoop-ready.
 
 - Places stay under **Story Tools** (no sidebar leaf creep).
 - Objectives are their own accordion leaf, **collapsed by default**.
-- Character-linked worlds purged; lore copy is **From character**, not Worlds clones.
+- Character-linked worlds purged with **recovery exports**; lore copy is **From character**.
 - Multi-lorebook DB split deferred; envelope has `lorebooks[]`.
+- Web PWA bundle (`assets/web_app`) must ship with source changes (rebuilt in `b3f775ce`).
 
-### Medium batch (landed 2026-07-28)
+### Still open (not blocking phase 0/1)
 
-1. ~~Wire spans into ChatService~~ **DONE**
-2. ~~Mid-chat climate UI (Places + web)~~ **DONE**
-3. ~~Cover pick + thumbnails~~ **DONE**
-4. ~~Desktop Worlds card polish (warm-porch)~~ **DONE** (`WorldPlaceCard`)
-5. ~~`diurnalAmplitude` + foreshadow suppress~~ **DONE** (run-length still deferred)
-6. **Regen goldens before push** if widget/engine goldens fail — temperate walk should stay bit-identical.
+1. Optional: run-length weather prose.
+2. Optional: per-biome golden sequences + distribution envelopes.
+3. Optional: full fixture-DB migration integration test.
+4. Hygiene: further split `world_management_page.dart` (still large after card extract).
+5. Phase 2 / 3 entirely.
+6. Ops: run weather + widget goldens before remote push if not already green.
+
+### Claude review of `229b6e9b` — disposition (addressed in `b3f775ce`)
+
+| Finding | Disposition |
+|---|---|
+| #1 Purge can destroy user-edited world-only lore | **Fixed** — `.fpworld` export before hard delete |
+| #2 Stale `assets/web_app` | **Fixed** — `npm run build` committed |
+| #3 Weather chip vs story climate | **Fixed** — chip uses ChatService |
+| #4 Migration “preserved / re-runnable” claim | **Fixed** — comments + design risk text match rewrite-in-place + backup-only originals; chat_worlds skip existing pairs; single inject UPDATE |
 
 ---
 
@@ -152,7 +175,8 @@ information that actually changes decisions.
 
 ## 1. Phase 0 — Worlds become real places
 
-**Implementation: DONE** (cover-image *UI* and dual group-card name export still open — see status table).
+**Implementation: COMPLETE** (as of `b3f775ce`). Remaining gap is test depth
+only (full fixture-DB migration suite — optional).
 
 **Risk: HIGH.** Contains the only schema migration and the only step in the
 arc that can lose user data.
@@ -271,8 +295,9 @@ import, export, description editor. No deferral requested.
 
 ## 2. Phase 1 — Weather biomes, built-in
 
-**Implementation: MOSTLY DONE** — engine + spans wired + mid-chat UI +
-diurnal amplitude + foreshadow suppress. Run-length prose still open.
+**Implementation: COMPLETE** for product surface (as of `b3f775ce`) — engine,
+spans on the live path, mid-chat UI desktop+web, diurnal amplitude, foreshadow
+suppress, WeatherChip parity. Optional: run-length prose + deeper goldens.
 
 **Risk: MEDIUM.** No migration of existing data; two new tables; the danger
 is silently perturbing already-written weather history.
@@ -562,14 +587,16 @@ sidebar leaf for Places; Objectives leaf separate and collapsed by default.
 
 ## 7. Test strategy
 
-Status of each gate (audit 2026-07-28):
+Status of each gate (audit 2026-07-28, tip `b3f775ce`):
 
 - The pinned expected sequence constant is **untouched** — phase 1's
-  acceptance gate. → **HOLDING** for temperate/null path; re-check after any
-  engine change. **Regen goldens before push** if span/diurnal/run-length land.
-- New pinned goldens per built-in biome (fixture seed, fixture dates). → **NOT DONE**
+  acceptance gate. → **HOLDING** for temperate/null path. Ops: re-run engine +
+  widget goldens before remote push if not already green.
+- New pinned goldens per built-in biome (fixture seed, fixture dates). → **PARTIAL**
+  (temperate/null identity; full per-biome pin optional)
 - Changeover property test: for any span boundary *k*, days `1..k-1`
-  recompute byte-identically to the pre-switch run. → **NOT DONE** (spans unused)
+  recompute byte-identically to the pre-switch run. → **DONE**
+  (`biome_schedule_test.dart`)
 - Migration test over a fixture DB with realistic broken data: name refs →
   uuid refs, group templates → `chat_worlds`, broken refs dropped and
   counted, `linkedCharacterName` → id. → **PARTIAL** (resolver unit tests only)
@@ -580,5 +607,7 @@ Status of each gate (audit 2026-07-28):
   (weight validation exists; stance/dressCue is phase 2)
 - Distribution envelopes per biome across many seeds (desert never snows;
   tropical never reaches the cold band; rainforest storm share under its
-  ceiling). → **NOT DONE** / light coverage only
-- Foreshadow suppression on the first day of a new span. → **NOT DONE**
+  ceiling). → **PARTIAL** / light coverage
+- Foreshadow suppression on the first day of a new span. → **DONE**
+  (injection + `biome_schedule_test.dart`)
+- Cover encode/decode size-cap. → **DONE** (`world_cover_test.dart`)
