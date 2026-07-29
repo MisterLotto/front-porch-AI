@@ -199,10 +199,13 @@ class SeasonCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+          // Mockup: `[64px mono input] °C shown`. The caption is Flexible so
+          // the row can never overflow the card, and sized so the full
+          // "°F shown" fits at the dialog's spec width.
           Row(
             children: [
               SizedBox(
-                width: 62,
+                width: 56,
                 child: needsAnchor
                     ? TextField(
                         controller: anchorController,
@@ -256,12 +259,17 @@ class SeasonCard extends StatelessWidget {
                         ),
                       ),
               ),
-              const SizedBox(width: 6),
-              Text(
-                needsAnchor ? '$unit shown' : unit,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textTertiary(context),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  needsAnchor ? '$unit shown' : unit,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary(context),
+                  ),
                 ),
               ),
             ],

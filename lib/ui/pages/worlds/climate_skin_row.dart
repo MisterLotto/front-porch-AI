@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/ui/pages/worlds/climate_editor_widgets.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_emoji_picker.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// One rename row from the artifact's "Rename the weather" list: a surface
@@ -34,7 +35,6 @@ class SkinEditRow extends StatelessWidget {
     required this.condition,
     required this.draft,
     required this.labelController,
-    required this.emojiController,
     required this.flavourController,
     required this.onLabel,
     required this.onEmoji,
@@ -45,7 +45,6 @@ class SkinEditRow extends StatelessWidget {
   final String condition;
   final SkinDraft draft;
   final TextEditingController labelController;
-  final TextEditingController emojiController;
   final TextEditingController flavourController;
   final ValueChanged<String> onLabel;
   final ValueChanged<String> onEmoji;
@@ -105,16 +104,42 @@ class SkinEditRow extends StatelessWidget {
                   ),
                 ),
               ),
-              SizedBox(
-                width: 40,
-                child: TextField(
-                  controller: emojiController,
-                  enabled: draft.active,
-                  maxLength: 4,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
-                  decoration: _dec(context, '🌪️'),
-                  onChanged: onEmoji,
+              // The mockup's emoji cell, as a picker: tap to choose from the
+              // curated weird-weather set (or type any emoji inside it).
+              Tooltip(
+                message: draft.active
+                    ? 'Pick an emoji'
+                    : 'Type a rename first',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(7),
+                  onTap: draft.active
+                      ? () async {
+                          final picked = await showClimateEmojiPicker(
+                            context,
+                            current: draft.emoji,
+                          );
+                          if (!context.mounted) return;
+                          if (picked != null) onEmoji(picked);
+                        }
+                      : null,
+                  child: Container(
+                    width: 40,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: AppColors.borderOf(context)),
+                    ),
+                    child: Opacity(
+                      opacity: draft.active && draft.emoji.isNotEmpty
+                          ? 1.0
+                          : 0.35,
+                      child: Text(
+                        draft.emoji.isNotEmpty ? draft.emoji : '🌪️',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

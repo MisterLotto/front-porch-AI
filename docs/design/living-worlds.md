@@ -470,7 +470,8 @@ rebuilt 1:1 to the approved mockup after a maintainer fidelity rejection
 (`biome_preview.dart`), 'world:<id>'-branded selection on every surface.
 ④ shipped as the shared `weather_skins.dart` helpers (chip + prompt + web
 facade): renames + stance behavior + dangerous+ dressCue replacement +
-deadline foreshadow. Emoji/flavour authoring included. Place traits
+deadline foreshadow. Emoji/flavour authoring included (curated emoji
+picker + free typing, 2026-07-29). Place traits
 (atmosphere/gravity) shipped on worlds v41.
 ① per-biome pins (**done**) → ② engine bands
 behind the pins (**done 2026-07-29**: TempBand appended cryogenic/furnace/

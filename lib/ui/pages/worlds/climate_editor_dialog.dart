@@ -93,9 +93,6 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   final Map<String, TextEditingController> _skinLabelCtls = {
     for (final c in kWeatherConditions) c: TextEditingController(),
   };
-  final Map<String, TextEditingController> _skinEmojiCtls = {
-    for (final c in kWeatherConditions) c: TextEditingController(),
-  };
   final Map<String, TextEditingController> _skinFlavourCtls = {
     for (final c in kWeatherConditions) c: TextEditingController(),
   };
@@ -141,7 +138,6 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       draft.stance = skin?.stance;
       draft.flavour = skin?.flavour ?? '';
       _skinLabelCtls[c]!.text = draft.label;
-      _skinEmojiCtls[c]!.text = draft.emoji;
       _skinFlavourCtls[c]!.text = draft.flavour;
     }
   }
@@ -157,9 +153,6 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       }
     }
     for (final c in _skinLabelCtls.values) {
-      c.dispose();
-    }
-    for (final c in _skinEmojiCtls.values) {
       c.dispose();
     }
     for (final c in _skinFlavourCtls.values) {
@@ -245,7 +238,16 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
         );
       }
     }
-    return errors;
+    // validate() speaks canonical °C; when the user's display unit is °F the
+    // anchor they must type is °F, so the shown message says so too. Only
+    // the known anchor message is rewritten — future validate() copy that
+    // genuinely means storage-°C must pass through untouched.
+    return widget.fahrenheit
+        ? [
+            for (final e in errors)
+              e.replaceAll('set a display °C', 'set a display °F'),
+          ]
+        : errors;
   }
 
   void _refreshPreview() =>
@@ -323,7 +325,9 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
           'Temperature by season',
           hint:
               'Extreme steps unlock the display $_unit — you type what the '
-              'weather chip shows. Characters feel words, not numbers.',
+              'weather chip shows. Characters feel words, not numbers. '
+              'Units follow Settings → General (°C/°F, default °C); storage '
+              'stays °C so shared worlds are unit-agnostic.',
         ),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,7 +380,6 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
             condition: c,
             draft: _skins[c]!,
             labelController: _skinLabelCtls[c]!,
-            emojiController: _skinEmojiCtls[c]!,
             flavourController: _skinFlavourCtls[c]!,
             onLabel: (v) => setState(() => _skins[c]!.label = v),
             onEmoji: (v) => setState(() => _skins[c]!.emoji = v),

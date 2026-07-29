@@ -6375,3 +6375,36 @@ Stoop "New!" tag). Rebuilt + rsynced to the droplet; verified live via
 headless browser (correct text, zero console errors); screenshot in
 ~/Desktop/fpai-review/website-v112-live.png. Commit a4f4161c (Rawhide,
 local only — not pushed).
+
+## 2026-07-29 (UTC) — Climate editor: °F confusion, clipped captions, emoji picker
+
+**Files:** `lib/ui/pages/worlds/climate_editor_widgets.dart`,
+`lib/ui/pages/worlds/climate_editor_dialog.dart`,
+`lib/ui/pages/worlds/climate_skin_row.dart`,
+`lib/ui/pages/worlds/climate_emoji_picker.dart` (new),
+`test/ui/dialogs/climate_editor_layout_test.dart` (new), `docs/Rawhide.md`,
+`docs/design/living-worlds.md`
+
+**What:** Maintainer field report on the rebuilt editor. (1) It looked like
+°F was the default — actually this machine's Settings → General °F toggle
+was ON (`flutter.weather_fahrenheit = 1` in the dev build's prefs; the code
+default is °C) and the dialog had dropped the mockup's "Units follow
+Settings → General (default °C)" sentence, so nothing on screen explained
+where the unit came from. Sentence restored, and the blocking warnings now
+speak the active display unit ("set a display °F") instead of hardcoded °C.
+(2) The "°F shown" caption overflowed the season cards by 11px — anchor
+field 62→56px, caption 11px inside a Flexible so the row can never overflow.
+(3) The mock's emoji cell had shipped as a cramped disabled TextField — now
+a tappable cell opening a warm-porch picker (36 curated weird-weather emojis
+— acid ☣️, blood 🩸, volcano 🌋 … — plus free typing and Clear); the
+dialog's per-condition emoji controllers were deleted (draft.emoji is the
+single source of truth). New layout regression test pins zero overflow at
+spec size in BOTH units using the harness's real Roboto metrics, including a
+full-visibility assertion on the caption (a faded caption fails, not just a
+thrown overflow) and the °F wording of warnings. Renders verified against
+the mockup via a throwaway capture probe (deleted before commit; PNGs kept
+in ~/Desktop/fpai-review/climate-editor-fix/).
+Grok review (topic 'review'): no blockers; three follow-ups applied in the
+same commit — `context.mounted` guard after the picker await, the °C→°F
+rewrite narrowed to the exact anchor message, and the picker split into
+`climate_emoji_picker.dart` (skin row 261 lines, picker 189).
