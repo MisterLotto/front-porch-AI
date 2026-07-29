@@ -26,6 +26,8 @@ interface WorldDetail {
   injectDescription?: boolean;
   coverImage?: string | null;
   entries: LoreEntry[];
+  atmosphere?: string;
+  gravity?: string;
 }
 
 type EditState = {
@@ -37,6 +39,8 @@ type EditState = {
   injectDescription: boolean;
   coverImage: string | null;
   entries: LoreEntry[];
+  atmosphere: string;
+  gravity: string;
 } | null;
 
 function download(url: string) {
@@ -95,6 +99,8 @@ export function WorldsPage() {
         injectDescription: d.injectDescription ?? true,
         coverImage: d.coverImage ?? null,
         entries: d.entries,
+        atmosphere: d.atmosphere ?? 'breathable',
+        gravity: d.gravity ?? 'earth',
       });
     } catch {
       setError('Could not load place');
@@ -113,6 +119,8 @@ export function WorldsPage() {
         injectDescription: edit.injectDescription,
         coverImage: edit.coverImage,
         entries: edit.entries,
+        atmosphere: edit.atmosphere,
+        gravity: edit.gravity,
       }),
     );
   };
@@ -159,6 +167,8 @@ export function WorldsPage() {
                 injectDescription: true,
                 coverImage: null,
                 entries: [],
+                atmosphere: 'breathable',
+                gravity: 'earth',
               })
             }
           >
@@ -302,6 +312,34 @@ export function WorldsPage() {
               {selectedClimate.feel && <p className="muted">{selectedClimate.feel}</p>}
             </div>
           )}
+
+          {/* Place traits — standing facts; defaults are silent (zero tokens). */}
+          <div className="place-traits-row">
+            <label>
+              Atmosphere
+              <select
+                value={edit.atmosphere}
+                onChange={(e) => setEdit({ ...edit, atmosphere: e.target.value })}
+              >
+                <option value="breathable">Breathable (normal)</option>
+                <option value="thin">Thin — masks for exertion</option>
+                <option value="unbreathable">Unbreathable — sealed suits</option>
+                <option value="hostile">Hostile — damages skin and gear</option>
+              </select>
+            </label>
+            <label>
+              Gravity
+              <select
+                value={edit.gravity}
+                onChange={(e) => setEdit({ ...edit, gravity: e.target.value })}
+              >
+                <option value="earth">Earth (normal)</option>
+                <option value="low">Low — bounding strides</option>
+                <option value="high">High — heavy limbs</option>
+                <option value="micro">Micro — everything floats</option>
+              </select>
+            </label>
+          </div>
 
           <label className="tool-toggle">
             <span>Inject description into story</span>

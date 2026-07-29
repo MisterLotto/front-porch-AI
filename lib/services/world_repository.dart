@@ -128,7 +128,19 @@ class WorldRepository extends ChangeNotifier {
       biomeId: row.biomeId,
       biomeJson: row.biomeJson,
       injectDescription: row.injectDescription,
+      placeTraits: _tryDecodeMap(row.placeTraits),
     );
+  }
+
+  /// Defensive JSON-map decode for the place_traits column (null/garbage →
+  /// null → all-default traits).
+  static Map<String, dynamic>? _tryDecodeMap(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return null;
   }
 
   WorldsCompanion _toCompanion(model.World world) {
@@ -145,6 +157,9 @@ class WorldRepository extends ChangeNotifier {
       biomeId: Value(world.biomeId),
       biomeJson: Value(world.biomeJson),
       injectDescription: Value(world.injectDescription),
+      placeTraits: Value(
+        world.placeTraits.isEmpty ? null : jsonEncode(world.placeTraits),
+      ),
     );
   }
 

@@ -103,6 +103,9 @@ class WorldFacade {
       'linkedCharacterName': w.linkedCharacterName,
       'linkedCharacterId': w.linkedCharacterId,
       'entries': lorebookEntriesToJson(w.lorebook),
+      // Place traits (additive; older web bundles simply ignore these).
+      'atmosphere': w.atmosphere.name,
+      'gravity': w.gravity.name,
     };
   }
 
@@ -140,6 +143,12 @@ class WorldFacade {
       final raw = f['coverImage']?.toString();
       world.coverImage =
           (raw == null || raw.isEmpty) ? null : raw;
+    }
+    if (f.containsKey('atmosphere')) {
+      world.atmosphere = worldAtmosphereFromName(f['atmosphere']?.toString());
+    }
+    if (f.containsKey('gravity')) {
+      world.gravity = worldGravityFromName(f['gravity']?.toString());
     }
     if (f['entries'] != null) {
       world.lorebook =

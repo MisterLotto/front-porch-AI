@@ -368,6 +368,10 @@ class Worlds extends Table {
   /// Description injection opt-in; false for rows migrated from library labels.
   BoolColumn get injectDescription =>
       boolean().withDefault(const Constant(true))();
+
+  /// v41 — place traits JSON (atmosphere/gravity enums + future trait keys;
+  /// one flexible column so new traits never need another migration).
+  TextColumn get placeTraits => text().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -1181,7 +1185,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1878,6 +1882,17 @@ class AppDatabase extends _$AppDatabase {
         // backup via schema-repair path if columns missing; forced backup
         // attempted here too for the data backfill.
         await _migrateLivingWorldsV40();
+      }
+      if (from < 41) {
+        // v40→v41: place traits (living-worlds.md §3 Rev.3). One nullable
+        // JSON column; null ⇒ all-default traits (breathable, earth
+        // gravity). No data migration, no CCF-written table touched.
+        try {
+          await customStatement('ALTER TABLE worlds ADD COLUMN place_traits TEXT');
+          debugPrint('[DB] v41: added worlds.place_traits');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
       }
     },
   );

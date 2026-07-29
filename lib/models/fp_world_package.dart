@@ -32,6 +32,8 @@ Map<String, dynamic> encodeFpWorld({
     'lorebook': loreJson,
     'lorebooks': [loreJson],
     'biome': biome,
+    // Additive: older apps ignore unknown envelope keys (mixed-fleet rule).
+    if (world.placeTraits.isNotEmpty) 'place_traits': world.placeTraits,
     'meta': {
       if (author != null && author.isNotEmpty) 'author': author,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
@@ -138,6 +140,9 @@ FpWorldPackage decodeFpWorld(Map<String, dynamic> json) {
       coverImage: cover,
       sourceId: meta['sourceId']?.toString() ?? id,
       formatVersion: formatVersion,
+      placeTraits: json['place_traits'] is Map
+          ? Map<String, dynamic>.from(json['place_traits'] as Map)
+          : null,
     ),
   );
 }

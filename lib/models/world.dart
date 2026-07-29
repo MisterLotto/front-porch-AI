@@ -21,6 +21,22 @@ import 'dart:convert';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:uuid/uuid.dart';
 
+/// Standing facts about a place (living-worlds.md §3 Rev.3 place traits).
+/// Stance-recipe enums: the default is SILENT (injects nothing, costs no
+/// tokens), each non-default value maps to ONE code-owned prompt line in
+/// world_injection. No numeric fields on purpose — numbers would promise a
+/// simulation the app deliberately does not run.
+enum WorldAtmosphere { breathable, thin, unbreathable, hostile }
+
+enum WorldGravity { earth, low, high, micro }
+
+WorldAtmosphere worldAtmosphereFromName(String? name) =>
+    WorldAtmosphere.values.asNameMap()[name?.toLowerCase()] ??
+    WorldAtmosphere.breathable;
+
+WorldGravity worldGravityFromName(String? name) =>
+    WorldGravity.values.asNameMap()[name?.toLowerCase()] ?? WorldGravity.earth;
+
 /// A portable *place*: lore (and later climate) that attaches to chats, not
 /// to characters. Stable [id] is the only durable reference; [name] is
 /// display-only (UNIQUE in DB, auto-renamed on import collision).
@@ -61,6 +77,23 @@ class World {
   /// library-label worlds default off).
   bool injectDescription;
 
+  /// Raw place-traits map (one future-proof field: unknown keys survive a
+  /// round-trip so older apps never strip newer traits — mixed-fleet rule).
+  /// Read through the typed getters; write through the setters.
+  Map<String, dynamic> placeTraits;
+
+  WorldAtmosphere get atmosphere =>
+      worldAtmosphereFromName(placeTraits['atmosphere']?.toString());
+  set atmosphere(WorldAtmosphere v) => v == WorldAtmosphere.breathable
+      ? placeTraits.remove('atmosphere')
+      : placeTraits['atmosphere'] = v.name;
+
+  WorldGravity get gravity =>
+      worldGravityFromName(placeTraits['gravity']?.toString());
+  set gravity(WorldGravity v) => v == WorldGravity.earth
+      ? placeTraits.remove('gravity')
+      : placeTraits['gravity'] = v.name;
+
   World({
     String? id,
     required this.name,
@@ -75,7 +108,9 @@ class World {
     this.linkedCharacterId,
     this.avatarPath,
     this.injectDescription = true,
-  }) : id = id ?? const Uuid().v4();
+    Map<String, dynamic>? placeTraits,
+  })  : id = id ?? const Uuid().v4(),
+        placeTraits = placeTraits ?? {};
 
   Map<String, dynamic> toJson() {
     return {
@@ -93,6 +128,7 @@ class World {
       if (linkedCharacterId != null) 'linked_character_id': linkedCharacterId,
       if (avatarPath != null) 'avatar_path': avatarPath,
       'inject_description': injectDescription,
+      if (placeTraits.isNotEmpty) 'place_traits': placeTraits,
     };
   }
 
@@ -132,6 +168,11 @@ class World {
       injectDescription: json['inject_description'] as bool? ??
           json['injectDescription'] as bool? ??
           true,
+      placeTraits: json['place_traits'] is Map
+          ? Map<String, dynamic>.from(json['place_traits'] as Map)
+          : json['placeTraits'] is Map
+              ? Map<String, dynamic>.from(json['placeTraits'] as Map)
+              : null,
     );
   }
 }

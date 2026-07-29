@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/pages/worlds/place_traits_editor.dart';
 import 'package:front_porch_ai/ui/pages/worlds/world_place_card.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_io.dart';
 import 'package:front_porch_ai/utils/world_cover.dart';
@@ -467,6 +468,9 @@ class _WorldManagementPageState extends State<WorldManagementPage>
     String? selectedBiomeId = world?.biomeId ?? Biome.temperate.id;
     var injectDescription = world?.injectDescription ?? true;
     String? coverImage = world?.coverImage;
+    // Place traits (standing facts; defaults are silent).
+    var atmosphere = world?.atmosphere ?? WorldAtmosphere.breathable;
+    var gravity = world?.gravity ?? WorldGravity.earth;
 
     // Create a copy of the lorebook entries for editing
     // Full clones — the old 6-field copy stripped imported ST metadata
@@ -980,6 +984,15 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 16),
+                              PlaceTraitsEditor(
+                                atmosphere: atmosphere,
+                                gravity: gravity,
+                                onAtmosphere: (v) =>
+                                    setDialogState(() => atmosphere = v),
+                                onGravity: (v) =>
+                                    setDialogState(() => gravity = v),
+                              ),
                             ],
                           ),
                         ),
@@ -1346,6 +1359,8 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                           newWorld.biomeId = selectedBiomeId;
                           newWorld.injectDescription = injectDescription;
                           newWorld.coverImage = coverImage;
+                          newWorld.atmosphere = atmosphere;
+                          newWorld.gravity = gravity;
 
                           // Update lorebook entries
                           newWorld.lorebook.entries.clear();

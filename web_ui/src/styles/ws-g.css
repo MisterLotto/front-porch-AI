@@ -203,3 +203,13 @@
   border: 1px solid var(--world-accent-line, var(--border));
   border-radius: var(--radius-badge);
 }
+
+/* Living Worlds place traits (world editor) — two selects side by side. */
+.place-traits-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .place-traits-row { grid-template-columns: 1fr; }
+}
