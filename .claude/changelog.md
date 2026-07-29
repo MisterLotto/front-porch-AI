@@ -6451,3 +6451,7 @@ caller, so a .fpworld was unselectable on web too. Added an
 "Import lore", rebuilt assets/web_app, strengthened the facade test to
 also assert biomeId=custom survives, and corrected the Rawhide bullet.
 Files add: `web_ui/src/pages/WorldsPage.tsx`, `assets/web_app/*` (rebuild).
+Golden follow-up: the Worlds page goldens (dark+light) pixel-failed on CI
+because the toolbar gained the Import Place button — regenerated on the CI
+runner via update-goldens.yml (run 30478708564), both PNGs visually
+reviewed (only change: second amber toolbar icon), committed.
