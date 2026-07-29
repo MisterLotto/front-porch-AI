@@ -4,7 +4,7 @@
 // Living Worlds authoring: places with climate, description, lore, and
 // .fpworld export/import — web parity with desktop world_management_page.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { ImportLorebookWizard } from '../components/ImportLorebookWizard';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
@@ -140,6 +140,30 @@ export function WorldsPage() {
     reader.readAsDataURL(file);
   };
 
+  // Full-package import (.fpworld): climate + place traits + lore, via the
+  // same repository core desktop uses. The lorebook wizard stays lore-only.
+  const fpworldFileRef = useRef<HTMLInputElement>(null);
+  const importFpWorld = async (file: File) => {
+    setBusy(true);
+    try {
+      const body = JSON.parse(await file.text()) as Record<string, unknown>;
+      const r = await api.post<{ worlds: WorldSummary[] }>(
+        '/api/worlds/import',
+        body,
+      );
+      setWorlds(r.worlds);
+      setToast(`Imported "${file.name.replace(/\.(fpworld|json)$/i, '')}"`);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e.message
+          : 'Import failed — not a valid .fpworld / lorebook JSON.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const selectedClimate =
     climates.find((c) => c.id === edit?.biomeId) ?? climates[0];
   const totalEntries = worlds.reduce((s, w) => s + w.entryCount, 0);
@@ -152,8 +176,26 @@ export function WorldsPage() {
       <div className="page-head">
         <h2>Places</h2>
         <div className="row-actions">
+          <input
+            ref={fpworldFileRef}
+            type="file"
+            accept=".fpworld,.json,application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importFpWorld(f);
+              e.target.value = '';
+            }}
+          />
+          <button
+            className="ghost"
+            disabled={busy}
+            onClick={() => fpworldFileRef.current?.click()}
+          >
+            ⬆ Import .fpworld
+          </button>
           <button className="ghost" disabled={busy} onClick={() => setShowImport(true)}>
-            ⬆ Import
+            ⬆ Import lore
           </button>
           <button
             className="primary"

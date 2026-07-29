@@ -17,7 +17,6 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/fp_world_package.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/lorebook_codec.dart';
 import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/models/world.dart' as model;
 import 'package:front_porch_ai/services/character_repository.dart';
@@ -408,11 +407,21 @@ class WorldRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Import .fpworld or bare lorebook. Always creates a new row (Keep both on
-  /// name collision). Preserves package id as [sourceId]; assigns a new local id.
+  /// Import .fpworld or bare lorebook from a file. See [importWorldJson].
   Future<model.World> importWorld(File file) async {
-    final content = await file.readAsString();
-    final package = decodeFpWorldString(content);
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map) {
+      throw const FormatException('World file must be a JSON object');
+    }
+    return importWorldJson(Map<String, dynamic>.from(decoded));
+  }
+
+  /// The ONE full-package import path (desktop file picker AND the web
+  /// facade): keeps climate, place traits, and lore. Always creates a new
+  /// row (Keep both on name collision); preserves the package id as
+  /// [model.World.sourceId] and assigns a fresh local id.
+  Future<model.World> importWorldJson(Map<String, dynamic> json) async {
+    final package = decodeFpWorld(json);
     final world = package.world;
 
     // Fresh local identity; remember provenance.
@@ -432,17 +441,6 @@ class WorldRepository extends ChangeNotifier {
         world.biomeId = biome.id;
         world.biomeJson = biome.toJsonString();
       }
-    }
-
-    // Validate we got something useful for bare lore imports.
-    if (world.lorebook.entries.isEmpty &&
-        detectLorebookFormat(
-              jsonDecode(content) is Map
-                  ? Map<String, dynamic>.from(jsonDecode(content) as Map)
-                  : <String, dynamic>{},
-            ) ==
-            LorebookFormat.fpaiOrSt) {
-      // Still save empty worlds from intentional empty packages.
     }
 
     await saveWorld(world);

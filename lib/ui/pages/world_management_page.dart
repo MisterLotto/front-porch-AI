@@ -29,10 +29,10 @@ import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/pages/worlds/place_traits_editor.dart';
+import 'package:front_porch_ai/ui/pages/worlds/world_io.dart';
 import 'package:front_porch_ai/ui/pages/worlds/world_place_card.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_io.dart';
 import 'package:front_porch_ai/utils/world_cover.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class WorldManagementPage extends StatefulWidget {
   const WorldManagementPage({super.key});
@@ -122,7 +122,7 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                     return WorldPlaceCard(
                       world: w,
                       onEdit: () => _showWorldDialog(context, repo, w),
-                      onExport: () => _exportWorld(context, repo, w),
+                      onExport: () => exportFpWorldFlow(context, repo, w),
                       onDelete: () => _confirmDelete(context, repo, w),
                     );
                   }, childCount: repo.placeWorlds.length),
@@ -262,6 +262,14 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                         builder: (_) => const ImportLorebookPage(),
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.travel_explore,
+                      color: AppColors.formMasterAccent,
+                    ),
+                    tooltip: 'Import Place (.fpworld)',
+                    onPressed: () => importFpWorldFlow(context, repo),
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
@@ -416,45 +424,6 @@ class _WorldManagementPageState extends State<WorldManagementPage>
         ),
       ],
     );
-  }
-
-  Future<void> _exportWorld(
-    BuildContext context,
-    WorldRepository repo,
-    World world,
-  ) async {
-    // Portable place package: lore + biome (Living Worlds .fpworld).
-    String? outputFile = await PickerPrefs.saveFile(
-      category: PickerPrefs.catExport,
-      dialogTitle: 'Export World (.fpworld)',
-      fileName: '${world.name}.fpworld',
-      type: FileType.custom,
-      allowedExtensions: ['fpworld', 'json'],
-    );
-
-    if (outputFile != null) {
-      if (!outputFile.endsWith('.fpworld') && !outputFile.endsWith('.json')) {
-        outputFile += '.fpworld';
-      }
-      try {
-        await repo.exportFpWorld(world, outputFile);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Exported place package to $outputFile',
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-        }
-      }
-    }
   }
 
   void _showWorldDialog(

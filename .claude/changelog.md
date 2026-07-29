@@ -6408,3 +6408,46 @@ Grok review (topic 'review'): no blockers; three follow-ups applied in the
 same commit — `context.mounted` guard after the picker await, the °C→°F
 rewrite narrowed to the exact anchor message, and the picker split into
 `climate_emoji_picker.dart` (skin row 261 lines, picker 189).
+
+## 2026-07-29 (UTC) — Desktop couldn't import .fpworld at all; Import Place button added
+
+**Files:** `lib/ui/pages/worlds/world_io.dart` (new),
+`lib/ui/pages/world_management_page.dart`,
+`test/services/world_repository_test.dart`, `docs/Rawhide.md`
+
+**What:** Maintainer field report: "no option to export or import .fpworlds".
+Export existed (world card ⋮ menu → Export), but import was genuinely
+impossible on desktop: the lorebook import page's file picker only allowed
+.json (a .fpworld could not even be selected), and its "World" destination
+built a bare lorebook-world — `WorldRepository.importWorld` (the full-package
+path that keeps climate + place traits + lore) had zero desktop callers; only
+the web API used it. Fix: new `world_io.dart` holds both flows —
+`importFpWorldFlow` (picker accepting .fpworld/.json → repo.importWorld →
+snackbar) and `exportFpWorldFlow` (moved out of the >500-line page, whose
+`_exportWorld` was deleted, so the page shrank). Worlds toolbar gained an
+"Import Place (.fpworld)" button beside Import Lorebook. New repo test pins
+the import contract: custom climate (extreme bands + skins) survives as
+biomeJson, place traits survive, fresh local id with package id kept as
+sourceId provenance, and re-importing the same file keeps both with a
+uniquified name.
+
+Grok review caught a second, pre-existing bug behind my wrong claim that
+"web already had both directions": the web facade's importWorld hand-rolled
+its own package logic and DROPPED place_traits (hostile air imported as
+breathable) and skipped name-uniquifying. Consolidated per the
+no-parallel-implementations rule: `WorldRepository.importWorldJson` is now
+the ONE full-package import core; desktop `importWorld(File)` is a thin
+wrapper and the web facade calls the same core (its ~35-line duplicate
+deleted, along with a dead lorebook-format validation block whose body was
+only a comment, and the lorebook_codec import that block held alive). New
+facade test pins traits + custom climate surviving web import; repo test
+temp dir now cleaned via addTearDown (Grok nit).
+Second Grok verify pass then flagged the web UI layer: the Places page's
+Import button only opened the lorebook wizard (accept=".json", posts to
+/api/lorebook/import) — the ready /api/worlds/import route had no UI
+caller, so a .fpworld was unselectable on web too. Added an
+"Import .fpworld" button (hidden file input → JSON.parse → POST
+/api/worlds/import → toast + list refresh), relabeled the wizard button
+"Import lore", rebuilt assets/web_app, strengthened the facade test to
+also assert biomeId=custom survives, and corrected the Rawhide bullet.
+Files add: `web_ui/src/pages/WorldsPage.tsx`, `assets/web_app/*` (rebuild).

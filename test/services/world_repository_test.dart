@@ -15,8 +15,10 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/models/fp_world_package.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart' as model;
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 
@@ -169,6 +171,94 @@ void main() {
           .where((f) => f.path.endsWith('.fpworld'));
       expect(recovered, hasLength(1),
           reason: 'the deleted clone must exist as a recovery .fpworld');
+    });
+  });
+
+  group('WorldRepository.importWorld (.fpworld full package)', () {
+    late AppDatabase db;
+    late WorldRepository repo;
+
+    setUp(() async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.initialized;
+      db = AppDatabase.forTesting();
+      repo = WorldRepository(storage, db);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    test('keeps custom climate, place traits, and lore; mints fresh id', () async {
+      final world = model.World(
+        name: 'The Cindermaw',
+        description: 'Black glass and live lava.',
+        lorebook: Lorebook(
+          entries: [
+            LorebookEntry(keys: ['White Peak'], content: 'The frozen mountain.'),
+          ],
+        ),
+      )..atmosphere = model.WorldAtmosphere.hostile;
+      final packageId = world.id;
+      final biome = Biome(
+        id: 'custom',
+        displayName: 'Cindermaw climate',
+        description: 'Furnace seasons.',
+        weights: {
+          for (final s in kSeasons) s: [50, 20, 12, 8, 4, 6, 0],
+        },
+        baseTemp: {'winter': 4, 'spring': 6, 'summer': 7, 'autumn': 6},
+        bandRange: (3, 6),
+        displayAnchorsC: {
+          'winter': 62,
+          'spring': 240,
+          'summer': 540,
+          'autumn': 205,
+        },
+        diurnalAmplitude: 2.6,
+        conditionSkin: {
+          'storm': ConditionSkin(
+            label: 'Pyroclastic Surge',
+            emoji: '🌋',
+            stance: WeatherStance.deadly,
+          ),
+        },
+      );
+      expect(biome.validate(), isEmpty,
+          reason: 'the test climate itself must be engine-valid');
+
+      final tmpDir = Directory.systemTemp.createTempSync('fpai_import_test_');
+      addTearDown(() => tmpDir.deleteSync(recursive: true));
+      final file = File(p.join(tmpDir.path, 'cindermaw.fpworld'));
+      await file.writeAsString(
+        encodeFpWorldString(world: world, biome: biome.toJson()),
+      );
+
+      final imported = await repo.importWorld(file);
+
+      expect(imported.id, isNot(packageId),
+          reason: 'import must mint a fresh local id');
+      expect(imported.sourceId, packageId,
+          reason: 'package id must be preserved as provenance');
+      expect(imported.name, 'The Cindermaw');
+      expect(imported.atmosphere, model.WorldAtmosphere.hostile);
+      expect(imported.lorebook.entries, hasLength(1));
+
+      final climate = Biome.tryParse(imported.biomeJson);
+      expect(climate, isNotNull,
+          reason: 'custom climate must survive as biomeJson');
+      expect(climate!.bandRange, (3, 6));
+      expect(climate.displayAnchorsC['summer'], 540);
+      expect(climate.conditionSkin['storm']?.label, 'Pyroclastic Surge');
+      expect(climate.conditionSkin['storm']?.stance, WeatherStance.deadly);
+
+      // Importing the same file again keeps both (name uniquified).
+      final again = await repo.importWorld(file);
+      expect(again.id, isNot(imported.id));
+      expect(again.name, isNot(imported.name));
     });
   });
 }

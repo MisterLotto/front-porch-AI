@@ -165,9 +165,12 @@ class WorldFacade {
     return true;
   }
 
-  /// Import .fpworld or bare lorebook JSON as a place.
+  /// Import .fpworld or bare lorebook JSON as a place. Routes through
+  /// WorldRepository.importWorldJson — the same path desktop file import
+  /// uses — so climate, place traits, lore, provenance, and name
+  /// uniquifying behave identically on both surfaces.
   Future<bool> importWorld(Map<String, dynamic> json) async {
-    // .fpworld envelope or lorebook shape.
+    // Reject payloads that are neither a package envelope nor a lorebook.
     final isEnvelope = json.containsKey('formatVersion') ||
         (json.containsKey('id') &&
             json.containsKey('name') &&
@@ -179,31 +182,7 @@ class WorldFacade {
       return false;
     }
     try {
-      final package = decodeFpWorld(json);
-      final world = package.world;
-      if (world.name.trim().isEmpty) return false;
-      // Fresh local identity on import.
-      world.sourceId ??= world.id.isNotEmpty ? world.id : null;
-      world.id = ''; // saveWorld assigns a new UUID when empty... actually needs uuid
-      // Match desktop importWorld: new id via save after clearing.
-      final imported = World(
-        name: world.name,
-        description: world.description,
-        lorebook: world.lorebook,
-        injectDescription: world.injectDescription,
-        coverImage: world.coverImage,
-        sourceId: world.sourceId,
-      );
-      if (package.biome != null) {
-        final biome = Biome.fromJson(package.biome!);
-        imported.biomeId = biome.id;
-        if (Biome.builtInById(biome.id) == null) {
-          imported.biomeJson = biome.toJsonString();
-        }
-      } else if (world.biomeId != null) {
-        imported.biomeId = world.biomeId;
-      }
-      await _worlds.saveWorld(imported);
+      await _worlds.importWorldJson(json);
       return true;
     } catch (_) {
       return false;
