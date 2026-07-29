@@ -417,12 +417,55 @@ configuration surface, non-negotiable.
 
 ## 3. Phase 2 — Authored climates: skins and stance
 
-**Implementation: NOT STARTED** (model fields for `conditionSkin` / stance
-exist for forward compatibility only).
+**Implementation: STARTING (maintainer-approved 2026-07-29).** The §5 demand
+gate was consciously overridden by the maintainer ("I want to build stage 2 —
+custom biomes so the Mars world can come alive"); phases 0/1 landed green.
+Model fields for `conditionSkin` / stance existed for forward compatibility.
 
 **Risk: MEDIUM-LOW technically, HIGH on scope.** No migration; the danger is
 that this is the fun part and gets built regardless of whether phase 1
 landed. See §5.
+
+### Rev.3 addendum — extreme temperature bands (ruled 2026-07-29)
+
+The Rev.2 model could not express a Mars (−60 °C) or a volcanic world
+(600 °C): `TempBand` is Earth-ranged on both ends, and both the display
+number and the dress cue derive from it. Maintainer ruled for the **real**
+extension over display-only fakery:
+
+- **`TempBand` grows on both ends** (working names: `cryogenic` below
+  `freezing`; `furnace`, `inferno` above `hot`). Extreme bands are
+  first-class engine values: conditions, dress cues, and prose know them.
+- **Determinism guard (non-negotiable):** classic biomes must keep their
+  classic band RANGE. The daily jitter clamp is per-biome (each biome
+  declares its reachable band span), never the global enum bounds — extending
+  the enum must not let an existing chat's hot day wobble into `furnace`.
+  Fenced by the per-biome pinned sequences
+  (`weather_biome_pins_test.dart`, added 2026-07-29 for exactly this) plus
+  the original temperate pin; a clamp mistake fails CI, not user chats.
+- **Authored display anchors:** an extreme band has no honest single °C, so
+  a custom biome carries an authored per-season anchor °C used ONLY for the
+  UI number (chip shows −63 °C on Mars, 600 °C on the volcano). Prompts stay
+  words-only per the injection contract; behaviour comes from the band's
+  code-owned survival prose + stance. Built-ins carry no anchors (their
+  bands map to °C exactly as today — bit-identical).
+- **Extreme bands imply stance floors.** `furnace`/`cryogenic`+ carry a
+  minimum `dangerous` stance; validation refuses a *pleasant* inferno. The
+  dress cue at extreme bands is survival text, not clothing.
+- **Water-condition sanity:** the preview harness flags un-skinned water
+  conditions at extreme bands ("rain at 600 °C — rename it or drop it"),
+  warning-level, not hard-rejected (authors may intend steam-rain on purpose
+  once skinned).
+- **Mixed-fleet import tolerance:** an older app importing a `.fpworld`
+  whose biome uses band values it doesn't know must degrade politely —
+  parse defensively, clamp unknown bands to the nearest classic band, and
+  surface a "made with a newer version" note. Same discipline as the Stoop
+  API contract.
+
+**Build order (locked):** ① per-biome pins (done) → ② engine bands behind
+the pins → ③ `biomes` table + editor + preview-as-validation → ④ skins +
+stance-aware dressCue. Editor is desktop-only (ruling §6.1); consuming
+custom biomes works everywhere, web parity for *use* surfaces mandatory.
 
 ### Why skins need stance — the failure this prevents
 
@@ -559,6 +602,9 @@ built regardless of whether phase 1 landed. Gates:
   default? If the overwhelming majority of chats stay temperate, the demand
   signal for *authoring* climates is absent, and phase 2 should not be built
   on the strength of it being interesting to build.
+  → **Overridden by maintainer 2026-07-29** (phase 2 greenlit ahead of the
+  signal — the Mars/volcanic authoring itch is the maintainer's own; noted
+  here so the gate's absence is a decision, not an oversight).
 - **Phase 2 → 3 gate:** are users making biomes that others would want? If
   local custom biomes see little use, sharing infrastructure has nothing to
   carry.
