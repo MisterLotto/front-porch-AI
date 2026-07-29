@@ -16,6 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+library;
+
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
+
 /// Deterministic story weather (docs/design/living-time-features.md §3).
 ///
 /// Pure math over state the app already has — NOTHING is stored. The same
@@ -28,10 +32,11 @@
 /// Day-to-day continuity is a persistence-biased walk from day 1: each day
 /// either keeps yesterday's condition (45%) or resamples from the season's
 /// weight table, so fronts roll through over a few days instead of strobing.
+/// Optional [Biome] parameter (Living Worlds) swaps the season tables;
+/// null biome is temperate ≡ historical defaults.
 /// The walk is O(dayCount) of integer math — microseconds even for
 /// thousand-day chats — so callers just call [weatherFor]; no caching layer
 /// is needed (the Riverpod UI provider memoizes by inputs anyway).
-library;
 
 enum WeatherCondition { clear, cloudy, overcast, fog, rain, storm, snow }
 
@@ -117,9 +122,12 @@ class WeatherEngine {
     required String sessionSeed,
     required int dayCount,
     required DateTime date,
+    /// Living Worlds biome. Null ⇒ temperate (byte-identical to pre-biome).
+    Biome? biome,
   }) {
     final days = dayCount < 1 ? 1 : dayCount;
     final base = _fnv1a(sessionSeed);
+    final climate = biome ?? Biome.temperate;
 
     WeatherCondition cond = WeatherCondition.clear;
     TempBand temp = TempBand.mild;
@@ -129,9 +137,9 @@ class WeatherEngine {
       season = seasonOf(dayDate);
       final rng = WeatherRng(base ^ (d * 0x9E3779B9));
       final stay = d > 1 && rng.nextPermille() < _stayPermille;
-      temp = _tempFor(season, rng);
+      temp = _tempFor(season, rng, climate);
       if (!stay) {
-        cond = _conditionFor(season, temp, rng);
+        cond = _conditionFor(season, temp, rng, climate);
       } else if (cond == WeatherCondition.snow && temp != TempBand.cold) {
         cond = WeatherCondition.rain; // thaw: persisted snow melts to rain
       }
@@ -139,13 +147,14 @@ class WeatherEngine {
     return DailyWeather(condition: cond, temp: temp, season: season);
   }
 
-  static TempBand _tempFor(String season, WeatherRng rng) {
+  static TempBand _tempFor(String season, WeatherRng rng, Biome biome) {
+    final baseMap = biome.baseTemp.isNotEmpty ? biome.baseTemp : _seasonBaseTemp;
     final jitter = rng.nextPermille() < 250
         ? -1
         : rng.nextPermille() < 250
         ? 1
         : 0;
-    final idx = ((_seasonBaseTemp[season] ?? 2) + jitter).clamp(
+    final idx = ((baseMap[season] ?? 2) + jitter).clamp(
       0,
       TempBand.values.length - 1,
     );
@@ -156,9 +165,15 @@ class WeatherEngine {
     String season,
     TempBand temp,
     WeatherRng rng,
+    Biome biome,
   ) {
-    final weights = _seasonWeights[season] ?? _seasonWeights['spring']!;
+    final weightMap =
+        biome.weights.isNotEmpty ? biome.weights : _seasonWeights;
+    final weights = weightMap[season] ?? weightMap['spring'] ?? _seasonWeights['spring']!;
     final total = weights.fold(0, (a, b) => a + b);
+    if (total <= 0) {
+      return WeatherCondition.clear; // defensive: zero-sum weights
+    }
     var roll = rng.next() % total;
     for (int i = 0; i < weights.length; i++) {
       roll -= weights[i];

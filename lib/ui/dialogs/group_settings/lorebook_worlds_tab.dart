@@ -12,6 +12,8 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/ui/dialogs/import_character_lore_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
@@ -71,7 +73,8 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
   void _loadWorlds() {
     try {
       final repo = Provider.of<WorldRepository>(context, listen: false);
-      _allWorlds = List<World>.from(repo.worlds);
+      // Places only — character lore clones are purged / not shown.
+      _allWorlds = List<World>.from(repo.placeWorlds);
     } catch (_) {
       _allWorlds = [];
     }
@@ -166,6 +169,26 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
       _groupLoreEntries.removeAt(index);
     });
     _syncToGroup();
+  }
+
+  Future<void> _importGroupLoreFromCharacter() async {
+    final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+    final entries = await showImportCharacterLoreDialog(
+      context: context,
+      characters: charRepo.characters,
+    );
+    if (entries == null || entries.isEmpty) return;
+    setState(() {
+      _groupLoreEntries.addAll(entries);
+    });
+    _syncToGroup();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${entries.length} entries from character.'),
+        ),
+      );
+    }
   }
 
   void _toggleWorld(String worldId) {
@@ -270,6 +293,12 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                       onPressed: _importGroupLorebookJson,
                       icon: const Icon(Icons.upload, size: 16),
                       label: const Text('Import JSON'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: _importGroupLoreFromCharacter,
+                      icon: const Icon(Icons.person_search, size: 16),
+                      label: const Text('From character'),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(

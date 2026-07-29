@@ -548,6 +548,24 @@ extension ChatServiceGeneration on ChatService {
                 );
         }
 
+        // Living Worlds — place prose from attached worlds (budget-capped).
+        final attachedWorlds = [
+          for (final id in _chatWorldIds)
+            if (_worldRepository.resolveWorld(id) != null)
+              _worldRepository.resolveWorld(id)!,
+        ];
+        // Fallback: group template worlds when chat_worlds not yet seeded.
+        if (attachedWorlds.isEmpty && _activeGroup != null) {
+          for (final ref in _activeGroup!.worldIds) {
+            final w = _worldRepository.resolveWorld(ref);
+            if (w != null) attachedWorlds.add(w);
+          }
+        }
+        final rawWorld = buildWorldInjection(attachedWorlds);
+        final worldBlock = rawWorld.isEmpty
+            ? ''
+            : _macroResolver.resolve(rawWorld, macroCtx, section: 'world');
+
         // Chance Time injection — independent of realism mode
         final chanceTimeBlock = _getChanceTimeInjection();
 
@@ -715,6 +733,7 @@ extension ChatServiceGeneration on ChatService {
           rendered: false, // spliced into the history lines, paid for here
         );
         plan.add(id: 'objectives', label: 'Objectives', text: objectiveBlock);
+        plan.add(id: 'world', label: 'World / Place', text: worldBlock);
         plan.add(id: 'realism', label: 'Realism Mode', text: realismBlock);
         plan.add(
           id: 'catastrophe',

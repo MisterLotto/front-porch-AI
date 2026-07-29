@@ -20,7 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
@@ -352,12 +352,17 @@ class _WorldManagementPageState extends State<WorldManagementPage>
             ),
             _buildStatItem(
               context: context,
-              icon: Icons.link,
+              icon: Icons.thermostat,
               value: repo.worlds
-                  .where((w) => w.linkedCharacterName != null)
+                  .where(
+                    (w) =>
+                        w.biomeId != null &&
+                        w.biomeId!.isNotEmpty &&
+                        w.biomeId != 'temperate',
+                  )
                   .length
                   .toString(),
-              label: 'Linked Worlds',
+              label: 'Custom climates',
               color: const Color(0xFFF59E0B),
             ),
           ],
@@ -622,22 +627,29 @@ class _WorldManagementPageState extends State<WorldManagementPage>
     WorldRepository repo,
     World world,
   ) async {
+    // Portable place package: lore + biome (Living Worlds .fpworld).
     String? outputFile = await PickerPrefs.saveFile(
       category: PickerPrefs.catExport,
-      dialogTitle: 'Export World JSON',
-      fileName: '${world.name}.json',
+      dialogTitle: 'Export World (.fpworld)',
+      fileName: '${world.name}.fpworld',
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['fpworld', 'json'],
     );
 
     if (outputFile != null) {
-      if (!outputFile.endsWith('.json')) outputFile += '.json';
+      if (!outputFile.endsWith('.fpworld') && !outputFile.endsWith('.json')) {
+        outputFile += '.fpworld';
+      }
       try {
-        await repo.exportWorld(world, outputFile);
+        await repo.exportFpWorld(world, outputFile);
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Exported to $outputFile')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Exported place package to $outputFile',
+              ),
+            ),
+          );
         }
       } catch (e) {
         if (context.mounted) {
@@ -658,6 +670,9 @@ class _WorldManagementPageState extends State<WorldManagementPage>
     final descController = TextEditingController(
       text: world?.description ?? '',
     );
+    // Climate default for chats that attach this place (Living Worlds).
+    String? selectedBiomeId = world?.biomeId ?? Biome.temperate.id;
+    var injectDescription = world?.injectDescription ?? true;
 
     // Create a copy of the lorebook entries for editing
     // Full clones — the old 6-field copy stripped imported ST metadata
@@ -836,11 +851,12 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                 ),
                                 maxLines: 3,
                                 decoration: InputDecoration(
-                                  labelText: 'Description',
+                                  labelText: 'Description (place prose)',
                                   labelStyle: TextStyle(
                                     color: AppColors.textSecondary(ctx),
                                   ),
-                                  hintText: 'Brief description of this world',
+                                  hintText:
+                                      'What it feels like to be here — reaches the story when enabled',
                                   hintStyle: TextStyle(
                                     color: AppColors.textTertiary(ctx),
                                   ),
@@ -867,6 +883,210 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                   ),
                                   contentPadding: const EdgeInsets.all(16),
                                 ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Climate picker — not jargon "biome"; show what
+                              // the weather will *feel* like in story.
+                              Text(
+                                'Climate',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(ctx),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'How the weather behaves in this place — seasons, '
+                                'rain, heat, storms. Characters react to it in chat '
+                                'when weather is on.',
+                                style: TextStyle(
+                                  color: AppColors.textTertiary(ctx),
+                                  fontSize: 11,
+                                  height: 1.35,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              DropdownButtonFormField<String>(
+                                // ignore: deprecated_member_use
+                                value: selectedBiomeId ?? Biome.temperate.id,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: AppColors.surfaceContainerOf(ctx),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                dropdownColor: AppColors.surfaceOf(ctx),
+                                selectedItemBuilder: (context) => [
+                                  for (final b in Biome.builtIns)
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        b.displayName,
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary(ctx),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                                items: [
+                                  for (final b in Biome.builtIns)
+                                    DropdownMenuItem(
+                                      value: b.id,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 6,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              b.displayName,
+                                              style: TextStyle(
+                                                color:
+                                                    AppColors.textPrimary(ctx),
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              b.description,
+                                              style: TextStyle(
+                                                color: AppColors.textSecondary(
+                                                  ctx,
+                                                ),
+                                                fontSize: 11,
+                                                height: 1.3,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) => setDialogState(
+                                  () => selectedBiomeId = v,
+                                ),
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final biome = Biome.builtInById(
+                                        selectedBiomeId,
+                                      ) ??
+                                      Biome.temperate;
+                                  return Container(
+                                    margin: const EdgeInsets.only(top: 10),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.formMasterAccent
+                                          .withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: AppColors.formMasterAccent
+                                            .withValues(alpha: 0.22),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.thermostat,
+                                              size: 16,
+                                              color: AppColors.formMasterAccent,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'What it feels like',
+                                              style: TextStyle(
+                                                color:
+                                                    AppColors.formMasterAccent,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          biome.description,
+                                          style: TextStyle(
+                                            color: AppColors.textPrimary(ctx),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                        if (biome.feel.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            biome.feel,
+                                            style: TextStyle(
+                                              color: AppColors.textSecondary(
+                                                ctx,
+                                              ),
+                                              fontSize: 12,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              // Row+Switch (not SwitchListTile): ListTile ink
+                              // paints on the nearest Material, and this
+                              // section sits inside a DecoratedBox fill.
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Inject description into story',
+                                          style: TextStyle(
+                                            color: AppColors.textPrimary(ctx),
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Place prose reaches the model each turn',
+                                          style: TextStyle(
+                                            color: AppColors.textTertiary(ctx),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: injectDescription,
+                                    activeThumbColor:
+                                        AppColors.formMasterAccent,
+                                    onChanged: (v) => setDialogState(
+                                      () => injectDescription = v,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -1214,19 +1434,11 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                 lorebook: Lorebook(entries: []),
                               );
                           final newName = nameController.text.trim();
-                          // Renames must go through renameWorld so the row is
-                          // updated in place (no duplicate) and every
-                          // character/group attachment follows the new name.
+                          // Renames update the display name only — attachments
+                          // use stable world UUIDs (Living Worlds phase 0).
                           if (world != null && newName != world.name) {
                             try {
-                              await repo.renameWorld(
-                                world,
-                                newName,
-                                groupRepo: Provider.of<GroupChatRepository>(
-                                  context,
-                                  listen: false,
-                                ),
-                              );
+                              await repo.renameWorld(world, newName);
                             } on StateError catch (e) {
                               if (ctx.mounted) {
                                 ScaffoldMessenger.of(ctx).showSnackBar(
@@ -1239,6 +1451,8 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                             newWorld.name = newName;
                           }
                           newWorld.description = descController.text.trim();
+                          newWorld.biomeId = selectedBiomeId;
+                          newWorld.injectDescription = injectDescription;
 
                           // Update lorebook entries
                           newWorld.lorebook.entries.clear();

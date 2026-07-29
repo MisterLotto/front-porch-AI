@@ -1,12 +1,15 @@
 # Living Worlds — real worlds, weather biomes, and authored climates
 
-**Status: DRAFT rev.2 (2026-07-28) — PARKED, design only, no code written.**
-Rev.2 folds in a hostile self-audit of rev.1 (two false assertions, eight
-gaps) and the maintainer rulings of the same day.
+**Status: IN PROGRESS (2026-07-29) — Phase 0 + Phase 1 foundation landing on Rawhide.**
+Rev.2 design retained. Implementation started: schema v40, `.fpworld` export,
+UUID identity, chat_worlds, built-in biomes + weather engine param, world
+description injection, desktop world editor climate picker.
 
-Parked 2026-07-28 to diagnose a v1.1.0 bug. Nothing here has been built, so
-there is no half-finished state to resume from — pick up at §6's three open
-decisions, then phase 0.
+**Open decisions locked for this land:**
+1. Phase 2 editor parity — defer (desktop authoring, use everywhere).
+2. Migrated worlds: `inject_description = 0` by default.
+3. Multi-lorebook: `.fpworld` carries `lorebooks[]` (merged on import for now);
+   single DB blob remains until a later cut.
 
 A three-phase arc that turns `worlds` from a lorebook folder into a portable
 *place*, then gives places a climate, then lets users author their own.

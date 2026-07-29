@@ -16,6 +16,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+library;
+
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
+
 /// Intra-day weather + deterministic temperatures (Living Time §3 v3), on
 /// top of the daily walk in weather_engine.dart.
 ///
@@ -34,9 +39,6 @@
 /// per-day seeded °C within the band's range plus a fixed diurnal offset
 /// (coolest at night, peak mid-afternoon). Numbers are for the UI ONLY —
 /// the generation prompt stays words-only per prompt-state-injection.md.
-library;
-
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
 
 enum DaySegment { morning, afternoon, evening, night }
 
@@ -179,11 +181,13 @@ class WeatherSegments {
     required String sessionSeed,
     required int dayCount,
     required DateTime date,
+    Biome? biome,
   }) {
     final day = WeatherEngine.weatherFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
+      biome: biome,
     );
     final scripts = _scripts[day.condition]!;
     final rng = WeatherRng(
@@ -206,17 +210,20 @@ class WeatherSegments {
     required int dayCount,
     required DateTime date,
     required int hour,
+    Biome? biome,
   }) {
     final day = WeatherEngine.weatherFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
+      biome: biome,
     );
     final segment = segmentForHour(hour);
     final conditions = segmentConditionsFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
+      biome: biome,
     );
     final (lo, hi) = _bandRangeC[day.temp]!;
     final tempRng = WeatherRng(

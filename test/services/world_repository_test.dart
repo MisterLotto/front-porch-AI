@@ -71,26 +71,20 @@ void main() {
       expect(world.name, 'New Vale');
     });
 
-    test('character attachments follow the rename', () async {
-      final storage = StorageService();
-      await storage.initialized;
-      final charRepo = CharacterRepository(db, storage);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      repo.setCharacterRepository(charRepo);
-
+    test('rename keeps stable id (attachments use id, not name)', () async {
       final world = model.World(
         name: 'Old Vale',
         lorebook: Lorebook(entries: []),
       );
       await repo.saveWorld(world);
-
-      final card = CharacterCard(name: 'Aria', worldNames: ['Old Vale']);
-      await charRepo.addCharacter(card);
+      final id = world.id;
 
       await repo.renameWorld(world, 'New Vale');
 
-      final updated = charRepo.characters.firstWhere((c) => c.name == 'Aria');
-      expect(updated.worldNames, ['New Vale']);
+      final rows = await db.getAllWorlds();
+      expect(rows.single.id, id);
+      expect(rows.single.name, 'New Vale');
+      expect(repo.worldById(id)?.name, 'New Vale');
     });
 
     test('collision with an existing world name throws', () async {

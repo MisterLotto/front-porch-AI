@@ -52,9 +52,11 @@ import 'package:front_porch_ai/services/chat/member_origin_resolver.dart';
 import 'package:front_porch_ai/services/group_turn_manager.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/needs_impact.dart';
+import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
-import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
+import 'package:front_porch_ai/database/database.dart' hide AvatarImage, World;
 import 'package:front_porch_ai/utils/emotion_labels.dart';
 import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
 import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
@@ -85,6 +87,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/world_injection.dart';
 import 'package:front_porch_ai/services/chat/absence_tracker.dart';
 import 'package:front_porch_ai/services/chat/afk_flavor.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
@@ -1476,6 +1479,35 @@ class ChatService extends ChangeNotifier {
   /// loops in generation/impersonate/sidebar/pre-AI-snapshot/scanner).
   /// [inheritOverride] forces member books in for scanning/reset; injection
   /// and sidebar pass null to honor the group's inherit flag.
+  /// Living Worlds: UUIDs of worlds attached to the current session.
+  /// Loaded on session open; group template seeds new chats.
+  List<String> _chatWorldIds = const [];
+
+  Future<void> _reloadChatWorldIds() async {
+    final sid = _currentSessionId;
+    if (sid == null) {
+      _chatWorldIds = const [];
+      return;
+    }
+    try {
+      _chatWorldIds = await _worldRepository.getChatWorldIds(sid);
+    } catch (e) {
+      debugPrint('[ChatService] chat world load failed: $e');
+      _chatWorldIds = const [];
+    }
+  }
+
+  /// Public attach surface for chat tools / UI.
+  List<String> get chatWorldIds => List.unmodifiable(_chatWorldIds);
+
+  Future<void> setChatWorldIds(List<String> worldIds) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    await _worldRepository.setChatWorlds(sid, worldIds);
+    _chatWorldIds = List.unmodifiable(worldIds);
+    notifyListeners();
+  }
+
   List<LoreEntryRef> _collectLoreRefs({bool? inheritOverride}) {
     return collectLoreEntryRefs(
       characters: _activeGroup != null
@@ -1485,9 +1517,9 @@ class ChatService extends ChangeNotifier {
                 : const <CharacterCard>[]),
       chatLorebook: _loreTimedEffects.chatLorebook,
       groupLorebook: _activeGroupLorebook,
+      chatWorldIds: _chatWorldIds,
       groupWorldNames: _activeGroup?.worldIds ?? const [],
-      resolveWorld: (name) =>
-          _worldRepository.worlds.where((w) => w.name == name).firstOrNull,
+      resolveWorld: _worldRepository.resolveWorld,
       inherit:
           inheritOverride ?? (_activeGroup?.inheritCharacterLorebooks ?? true),
     );
@@ -1803,6 +1835,30 @@ class ChatService extends ChangeNotifier {
   String? get absenceBannerPhrase =>
       _storageService.absenceBannerEnabled ? absencePhrase : null;
 
+  /// Climate from the first attached world that carries one (Living Worlds).
+  /// Null ⇒ temperate (byte-identical to pre-biome weather).
+  Biome? get _activeWorldBiome {
+    World? pick(String ref) => _worldRepository.resolveWorld(ref);
+    for (final id in _chatWorldIds) {
+      final w = pick(id);
+      if (w == null) continue;
+      if (w.biomeId != null || w.biomeJson != null) {
+        return Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
+      }
+    }
+    final group = _activeGroup;
+    if (group != null) {
+      for (final ref in group.worldIds) {
+        final w = pick(ref);
+        if (w == null) continue;
+        if (w.biomeId != null || w.biomeJson != null) {
+          return Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
+        }
+      }
+    }
+    return null;
+  }
+
   /// Today's story weather, or null when off (living-time-features.md §3).
   /// Pure recompute from existing state — nothing stored, so save/load and
   /// group re-entry agree for free. Gate: realism + passage-of-time + the
@@ -1820,6 +1876,7 @@ class ChatService extends ChangeNotifier {
       sessionSeed: seed,
       dayCount: _timeService.dayCount,
       date: _timeService.clock,
+      biome: _activeWorldBiome,
     );
   }
 
@@ -1835,6 +1892,7 @@ class ChatService extends ChangeNotifier {
       sessionSeed: _currentSessionId!,
       dayCount: _timeService.dayCount + 1,
       date: _timeService.clock.add(const Duration(days: 1)),
+      biome: _activeWorldBiome,
     );
   }
 
@@ -1850,6 +1908,7 @@ class ChatService extends ChangeNotifier {
       dayCount: _timeService.dayCount,
       date: _timeService.clock,
       hour: _timeService.clock.hour,
+      biome: _activeWorldBiome,
     );
   }
 
@@ -1870,6 +1929,7 @@ class ChatService extends ChangeNotifier {
                 dayCount: day - 1,
                 date: _timeService.clock.subtract(const Duration(days: 1)),
                 hour: 23,
+                biome: _activeWorldBiome,
               ),
       DaySegment.afternoon => _segmentAt(7),
       DaySegment.evening => _segmentAt(14),
@@ -1882,6 +1942,7 @@ class ChatService extends ChangeNotifier {
     dayCount: _timeService.dayCount,
     date: _timeService.clock,
     hour: hour,
+    biome: _activeWorldBiome,
   );
 
   late final _weatherInjection = WeatherInjection(

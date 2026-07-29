@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:front_porch_ai/ui/dialogs/import_character_lore_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:path/path.dart' as p;
@@ -588,6 +589,26 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     );
     if (result != null) {
       setState(() => _loreEntries[index] = result);
+    }
+  }
+
+  Future<void> _importLoreFromCharacter() async {
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final entries = await showImportCharacterLoreDialog(
+      context: context,
+      characters: repo.characters,
+      excludeCharacterName: widget.character.name,
+    );
+    if (entries == null || entries.isEmpty) return;
+    setState(() {
+      _loreEntries.addAll(entries);
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${entries.length} entries from character.'),
+        ),
+      );
     }
   }
 
@@ -1212,7 +1233,20 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   ElevatedButton.icon(
                     onPressed: _importLorebookJson,
                     icon: const Icon(Icons.cloud_upload, size: 18),
-                    label: const Text('Import'),
+                    label: const Text('Import file'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surfaceContainerOf(context),
+                      foregroundColor: AppColors.textPrimary(context),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _importLoreFromCharacter,
+                    icon: const Icon(Icons.person_search, size: 18),
+                    label: const Text('From character'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.surfaceContainerOf(context),
                       foregroundColor: AppColors.textPrimary(context),
@@ -1456,7 +1490,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Linked Worlds',
+                    'Linked Places',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -1465,7 +1499,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Attach worlds to include their lorebooks in this character\'s conversations.',
+                    'Attach places (Worlds) so their lore and climate apply in this character\'s chats. '
+                    'To copy another character\'s lore into this card, use Lorebook → From character.',
                     style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
                   ),
                   const SizedBox(height: 20),

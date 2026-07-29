@@ -1680,7 +1680,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
 
   Widget _buildLoreStep() {
     final worldRepo = Provider.of<WorldRepository>(context);
-    final allWorlds = worldRepo.worlds;
+    final allWorlds = worldRepo.placeWorlds;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
@@ -1879,7 +1879,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
             children: [
               ..._worldIds.map((wid) {
                 final w = allWorlds.firstWhere(
-                  (ww) => ww.name == wid,
+                  (ww) => ww.id == wid || ww.name == wid,
                   orElse: () => World(
                     name: wid,
                     lorebook: Lorebook(entries: const []),
@@ -1887,7 +1887,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                 );
                 return Chip(
                   label: Text(w.name),
-                  onDeleted: () => _toggleWorld(wid),
+                  onDeleted: () => _toggleWorld(w.id.isNotEmpty ? w.id : wid),
                 );
               }),
               OutlinedButton.icon(
@@ -1906,7 +1906,7 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                           .toList(),
                     ),
                   );
-                  if (chosen != null) _toggleWorld(chosen.name);
+                  if (chosen != null) _toggleWorld(chosen.id);
                 },
                 icon: const Icon(Icons.public),
                 label: const Text('Link World'),

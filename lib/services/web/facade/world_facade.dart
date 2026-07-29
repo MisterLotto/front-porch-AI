@@ -29,8 +29,8 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
 
-/// Thin adapter for world (shared lorebook) CRUD over [WorldRepository] — the
-/// same `saveWorld`/`deleteWorld` the desktop uses. Worlds are keyed by name.
+/// Thin adapter for world (portable place) CRUD over [WorldRepository].
+/// Worlds have stable UUID identity; name is display-only.
 ///
 /// The optional [_characters] repository lets [list] resolve a linked world's
 /// character to its database id so the web UI can reuse the existing
@@ -57,52 +57,71 @@ class WorldFacade {
     }
     return _worlds.worlds.map((w) {
       final linkedName = w.linkedCharacterName;
+      final linkedId = w.linkedCharacterId ??
+          (linkedName != null ? idByName[linkedName] : null);
       return {
+        'id': w.id,
         'name': w.name,
         'description': w.description,
         'entryCount': w.lorebook.entries.length,
+        'biomeId': w.biomeId,
+        'injectDescription': w.injectDescription,
         'linkedCharacterName': linkedName,
-        'linkedCharacterId': linkedName != null ? idByName[linkedName] : null,
+        'linkedCharacterId': linkedId,
       };
     }).toList();
   }
 
-  Map<String, dynamic>? detail(String name) {
-    for (final w in _worlds.worlds) {
-      if (w.name == name) {
-        return {
-          'name': w.name,
-          'description': w.description,
-          'linkedCharacterName': w.linkedCharacterName,
-          'entries': lorebookEntriesToJson(w.lorebook),
-        };
-      }
-    }
-    return null;
+  Map<String, dynamic>? detail(String nameOrId) {
+    final w = _worlds.resolveWorld(nameOrId);
+    if (w == null) return null;
+    return {
+      'id': w.id,
+      'name': w.name,
+      'description': w.description,
+      'biomeId': w.biomeId,
+      'injectDescription': w.injectDescription,
+      'linkedCharacterName': w.linkedCharacterName,
+      'linkedCharacterId': w.linkedCharacterId,
+      'entries': lorebookEntriesToJson(w.lorebook),
+    };
   }
 
-  /// Create or update a world. `originalName` (when it differs from `name`)
-  /// signals a rename — the old record is deleted first since worlds are keyed
-  /// by name. Returns false on a blank name.
+  /// Create or update a world by id when provided; rename is name-only.
   Future<bool> save(Map<String, dynamic> f) async {
     final name = f['name']?.toString().trim() ?? '';
     if (name.isEmpty) return false;
-    final original = f['originalName']?.toString();
-    if (original != null && original.isNotEmpty && original != name) {
-      for (final w in _worlds.worlds) {
-        if (w.name == original) {
-          await _worlds.deleteWorld(w);
-          break;
-        }
-      }
+    final id = f['id']?.toString();
+    World? existing;
+    if (id != null && id.isNotEmpty) {
+      existing = _worlds.worldById(id);
     }
-    await _worlds.saveWorld(
-      World(
-        name: name,
-        description: f['description']?.toString() ?? '',
-        lorebook: buildLorebookFromJson(f['entries']) ?? Lorebook(entries: []),
-      ),
-    );
+    existing ??= _worlds.worldByName(f['originalName']?.toString() ?? name);
+
+    final world = existing ??
+        World(
+          name: name,
+          lorebook: Lorebook(entries: []),
+        );
+    if (existing != null && name != existing.name) {
+      try {
+        await _worlds.renameWorld(existing, name);
+      } on StateError {
+        return false;
+      }
+    } else {
+      world.name = name;
+    }
+    world.description = f['description']?.toString() ?? '';
+    world.biomeId = f['biomeId']?.toString() ?? world.biomeId;
+    if (f.containsKey('injectDescription')) {
+      world.injectDescription = f['injectDescription'] == true;
+    }
+    if (f['entries'] != null) {
+      world.lorebook =
+          buildLorebookFromJson(f['entries']) ?? Lorebook(entries: []);
+    }
+    await _worlds.saveWorld(world);
     return true;
   }
 

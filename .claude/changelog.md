@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-29 — feat(worlds): purge character-linked world clones; import lore from character
+- **Why:** Worlds tab was cluttered with auto-cloned "X's Lorebook" rows; Living Worlds makes worlds *places*, not character lore mirrors.
+- **Did:** Detect+purge character-linked worlds once (pref `purged_character_linked_worlds_v1`); strip refs from characters.world_names / groups.world_ids / chat_worlds; saveWorld clears linkedCharacter fields; Edit Character + group lore "From character" dialog; web CharacterEdit "From character…"; placeWorlds filter on group attach.
+- **Safe:** Character card lorebooks untouched; only world rows that were linked clones deleted.
+- **Files:** character_linked_world.dart, world_repository, database strip refs, main.dart wiring, import_character_lore_dialog, edit_character_page, lorebook_worlds_tab, CharacterEditPage, tests, Rawhide.
+
+## 2026-07-29 — feat(worlds): Living Worlds phase 0+1 foundation (portable places + biomes)
+- **Why:** Worlds were name-keyed lore folders; no climate, no safe export of a whole *place*, group rename cascade, no chat-level attach path.
+- **Did:** schema v40 (world columns, chat_worlds, chat_biome_spans, name→UUID group backfill); World model + id; .fpworld encode/decode; WorldRepository by id + exportFpWorld + chat attach; lorebook_collection chatWorldIds; weather Biome tables + engine biome param (temperate ≡ legacy); world description injection; desktop editor climate + inject toggle; .fpworld export; group create stores world UUIDs.
+- **Files:** database.dart(+g), world.dart, fp_world_package.dart, world_ref_resolver.dart, weather_biomes.dart, world_repository.dart, lorebook_collection.dart, weather_engine.dart, world_injection.dart, chat_service*, world_management_page, create_group_chat_page, world_facade, tests, docs/design/living-worlds.md, docs/Rawhide.md.
+
 ## 2026-07-28 — feat(cast): @Name addressing — the mentioned character answers (guests AND groups)
 - **Why:** Maintainer follow-up to the double-response fix: the "@Evelyn" form should be a first-class mechanic. The vocative router required punctuation shapes; groups had NO way to address a member by text at all (round-robin/random/manual pick only).
 - **Fix:** New static `SceneGuestDirector.atMentionedCard` (+ `_atMentionHit`): matches `@Name`/`@FirstName` anywhere in the line — `@` must not follow a word char/dot/hyphen/plus (so "me@evelyn.com" never matches while ",@Evelyn" / "[@Evelyn]" do), name ends at a hyphen-rejecting word boundary (so "@Mara-Lynn" isn't guest "Mara"), earliest @ in text order wins, and on the same @ the LONGER name wins ("@Mara Vance" can't be stolen by another card's "Mara" nickname). **1:1:** `directlyAddressedGuest` checks @-mentions first, no punctuation needed; `@Host` anywhere keeps the whole turn with the host — absolute veto, it also beats a guest vocative later in the line; vocative patterns unchanged as fallback. **Group:** `_directAddressRoutedGuest` (scene-guest leaf) now resolves `@Member` against `_groupCharacters` and forces them via the SAME public `setNextCharacter` path the group UI's manual pick uses (objectives switch + per-speaker realism dance follow the pick — parity by reuse, zero new realism surface); the turn proceeds normally. Group @ is deliberately NOT gated on autoChimeEnabled (that's a 1:1 chime preference). `_nameVariants` became static.
@@ -7,6 +18,11 @@
 - **Web parity:** automatic for the engine — shared ChatService, no new engine UI surface.
 - **Autocomplete popup (maintainer follow-up, same day):** typing `@` opens the cast list above the composer, "just like the popup if you type /" — same panel visuals as each surface's slash helper, filter-as-you-type (full name or any name token prefix), tap fills `@Name `. Desktop: new `MentionAutocomplete` widget (`lib/ui/chat_components/widgets/mention_autocomplete.dart`, exported from the chat_components barrel) wired under the slash helper in chat_page's input column; pure static helpers (`activeMentionQuery`, `nameMatches`) unit-tested; hidden in group observer mode; candidates = host + guests (1:1, only when guests present) or group members; warm-porch accent (`porchAmberOf`). Web: `ChatComposer` gains a `cast` prop (from ChatPage's existing `state.cast`), caret-tracked `@`-token detection mirroring the engine's boundary rule (emails never trigger), popup reuses the existing `.slash-cheatsheet` styles verbatim, Escape dismisses like the slash sheet; `npm run build` regenerated `assets/web_app` (tsc clean).
 - **Files:** `lib/services/chat/scene_guest_director.dart`, `lib/services/chat/chat_service_scene_guest.dart`, `lib/services/chat_service.dart` (seam comment only), `lib/ui/chat_components/widgets/mention_autocomplete.dart` (new), `lib/ui/chat_components/chat_components.dart`, `lib/ui/pages/chat_page.dart` (+9 lines), `web_ui/src/components/ChatComposer.tsx`, `web_ui/src/pages/ChatPage.tsx`, `test/services/chat/scene_guest_director_test.dart`, `test/ui/chat_components/mention_autocomplete_test.dart` (new; 37/37 director + 10/10 popup helpers, 743 chat-leaf suite green, analyze clean, dart fix clean).
+
+## 2026-07-28 — feat(chat): fullscreen Edit Message editor with RP highlight + think split
+- **Why:** The chat Edit Message UI was an old cramped AlertDialog: plain text, no syntax highlighting, raw `<think>` tags, non-expandable small box.
+- **Fix:** New `showMessageEditDialog` fullscreen editor (StyledTextController prose preset for dialogue/action/macros), collapsible Thinking section (split/join via pure helpers in `think_tags.dart` so tags never appear in either field), dirty discard confirm, char count, Esc / ⌘↵ shortcuts. Web/mobile parity via `MessageEditModal` + `messageEdit.ts` (same split/join, RP backdrop coloring). Bubble now opens the dialog instead of the AlertDialog.
+- **Files:** `lib/ui/dialogs/message_edit_dialog.dart`, `lib/utils/think_tags.dart`, `lib/ui/chat_components/bubbles/message_bubble.dart`, `web_ui/src/components/MessageEditModal.tsx`, `messageEdit.ts`, `ChatMessageList.tsx`, `ChatPage.tsx`, `styles.css`, tests, `docs/Rawhide.md`.
 
 ## 2026-07-28 — fix(scene-guests): promoted guest answered twice per message (Discord report by adv997)
 - **Why:** After cast detection promoted a narrated side character (e.g. "Evelyn") to a Scene Guest, the host card kept writing the guest's dialogue inline (the transcript is full of the host voicing them — that's WHY they were detected — so the existing "do NOT write dialogue for them" ban lost to many-shot momentum), and the chime-in director then ALSO ran the guest's own turn (name-mention heuristic) → the same character answered twice per user message.
@@ -6263,3 +6279,19 @@ full E2E green in ~8s; analyze clean; build_runner regenerated.
 **What:** Linux e2e-smoke passed both of its first two CI executions (xvfb +
 GTK/GStreamer recipe worked untouched). experimental → false. The full-array
 E2E suite now BLOCKS PRs on all three desktop platforms.
+
+## 2026-07-29 (UTC) — frontporchai.app was advertising v1.0.0; version now self-updating
+
+**Files:** `website/build.mjs`, `website/src/index.html`, `website/src/main.js`
+
+**What:** The live site showed "Latest release · v1.0.0" + a "Version 1.0 is
+here" hero banner while the real latest stable was v1.1.2 — the version was a
+hardcoded build.mjs constant nobody bumped across v1.1.0/v1.1.1/v1.1.2.
+build.mjs now fetches the latest release (tag + name) from the GitHub API at
+build time (hardcoded value demoted to offline fallback with a warning), and
+main.js refreshes the banner/version client-side on load so the page stays
+correct even between deploys. Scrubbed dated launch copy ("New in 1.0",
+Stoop "New!" tag). Rebuilt + rsynced to the droplet; verified live via
+headless browser (correct text, zero console errors); screenshot in
+~/Desktop/fpai-review/website-v112-live.png. Commit a4f4161c (Rawhide,
+local only — not pushed).
