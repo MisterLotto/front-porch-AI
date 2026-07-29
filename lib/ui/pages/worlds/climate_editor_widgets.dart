@@ -18,7 +18,6 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/biome_preview.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -272,196 +271,129 @@ class SeasonBandRow extends StatelessWidget {
   }
 }
 
-/// One condition's rename row: label field + mandatory stance dropdown.
+/// One condition's rename row: label + emoji + mandatory stance, and (when
+/// the rename is active) a flavour line capped to the runtime's 140 chars.
 class SkinEditRow extends StatelessWidget {
   const SkinEditRow({
     super.key,
     required this.condition,
     required this.draft,
     required this.labelController,
+    required this.emojiController,
+    required this.flavourController,
     required this.onLabel,
+    required this.onEmoji,
+    required this.onFlavour,
     required this.onStance,
   });
 
   final String condition;
   final SkinDraft draft;
   final TextEditingController labelController;
+  final TextEditingController emojiController;
+  final TextEditingController flavourController;
   final ValueChanged<String> onLabel;
+  final ValueChanged<String> onEmoji;
+  final ValueChanged<String> onFlavour;
   final ValueChanged<WeatherStance?> onStance;
+
+  InputDecoration _dec(BuildContext context, String hint) => InputDecoration(
+        isDense: true,
+        hintText: hint,
+        counterText: '',
+        hintStyle: TextStyle(
+          fontSize: 11.5,
+          color: AppColors.textTertiary(context),
+        ),
+        border: const OutlineInputBorder(),
+      );
 
   @override
   Widget build(BuildContext context) {
     final missingStance = draft.active && draft.stance == null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      child: Column(
         children: [
-          SizedBox(
-            width: 68,
-            child: Text(
-              '${WeatherEngine.emoji(WeatherCondition.values[kWeatherConditions.indexOf(condition)])} '
-              '$condition',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: AppColors.textTertiary(context),
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: labelController,
-              style: const TextStyle(fontSize: 12.5),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'rename (e.g. Dust Squall)',
-                hintStyle: TextStyle(
-                  fontSize: 11.5,
-                  color: AppColors.textTertiary(context),
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              onChanged: onLabel,
-            ),
-          ),
-          const SizedBox(width: 8),
-          DropdownButton<WeatherStance?>(
-            value: draft.stance,
-            hint: Text(
-              missingStance ? 'Pick one!' : 'Danger',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: missingStance
-                    ? AppColors.logError
-                    : AppColors.textTertiary(context),
-              ),
-            ),
-            underline: const SizedBox.shrink(),
-            items: [
-              for (final s in WeatherStance.values)
-                DropdownMenuItem(
-                  value: s,
-                  child: Text(
-                    stanceLabel(s),
-                    style: const TextStyle(fontSize: 12),
+          Row(
+            children: [
+              SizedBox(
+                width: 68,
+                child: Text(
+                  '${WeatherEngine.emoji(WeatherCondition.values[kWeatherConditions.indexOf(condition)])} '
+                  '$condition',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textTertiary(context),
                   ),
                 ),
-            ],
-            onChanged: draft.active ? onStance : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The preview panel: per-season condition bars + warnings + a sample week.
-class ClimatePreviewPanel extends StatelessWidget {
-  const ClimatePreviewPanel({
-    super.key,
-    required this.preview,
-  });
-
-  final BiomePreview preview;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClimateSectionHeader(
-          'Preview',
-          hint: '${40 * 50} simulated days per season',
-        ),
-        for (final s in preview.seasons) _seasonRow(context, s),
-        const SizedBox(height: 10),
-        ClimateSectionHeader('A sample week (winter)'),
-        Row(
-          children: [
-            for (final d in preview.sampleWeek)
+              ),
               Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      WeatherEngine.emoji(d.condition),
-                      style: const TextStyle(fontSize: 15),
-                    ),
-                    Text(
-                      WeatherEngine.tempWord(d.temp),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 8.5,
-                        color: AppColors.textTertiary(context),
-                      ),
-                    ),
-                  ],
+                child: TextField(
+                  controller: labelController,
+                  style: const TextStyle(fontSize: 12.5),
+                  decoration: _dec(context, 'rename (e.g. Dust Squall)'),
+                  onChanged: onLabel,
                 ),
               ),
-          ],
-        ),
-        if (preview.errors.isNotEmpty || preview.warnings.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          ClimateSectionHeader('What the preview noticed'),
-          for (final e in preview.errors)
-            _notice(context, e, isError: true),
-          for (final w in preview.warnings)
-            _notice(context, w, isError: false),
-        ],
-      ],
-    );
-  }
-
-  Widget _seasonRow(BuildContext context, SeasonDistribution s) {
-    final entries = s.conditionShare.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final summary = entries
-        .take(3)
-        .map((e) => '${(e.value * 100).round()}% ${e.key}')
-        .join(' · ');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              s.season,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary(context),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 44,
+                child: TextField(
+                  controller: emojiController,
+                  enabled: draft.active,
+                  maxLength: 4,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: _dec(context, '🌪️'),
+                  onChanged: onEmoji,
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<WeatherStance?>(
+                value: draft.stance,
+                hint: Text(
+                  missingStance ? 'Pick one!' : 'Danger',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: missingStance
+                        ? AppColors.logError
+                        : AppColors.textTertiary(context),
+                  ),
+                ),
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (final s in WeatherStance.values)
+                    DropdownMenuItem(
+                      value: s,
+                      child: Text(
+                        stanceLabel(s),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                ],
+                onChanged: draft.active ? onStance : null,
+              ),
+            ],
+          ),
+          if (draft.active)
+            Padding(
+              padding: const EdgeInsets.only(left: 68, top: 4),
+              child: TextField(
+                controller: flavourController,
+                maxLength: 140,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontStyle: FontStyle.italic,
+                ),
+                decoration: _dec(
+                  context,
+                  'one flavour line (optional) — '
+                  '"rust-red columns wander the plain"',
+                ),
+                onChanged: onFlavour,
               ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              summary,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: AppColors.textPrimary(context),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _notice(BuildContext context, String text, {required bool isError}) {
-    final color = isError ? AppColors.logError : null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(isError ? '⛔ ' : '⚠️ ', style: const TextStyle(fontSize: 12)),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: color ?? AppColors.textSecondary(context),
-              ),
-            ),
-          ),
         ],
       ),
     );

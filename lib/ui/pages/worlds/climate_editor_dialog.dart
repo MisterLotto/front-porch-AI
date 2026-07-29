@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/weather_segments.dart';
 import 'package:front_porch_ai/ui/pages/worlds/climate_editor_widgets.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_preview_panel.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The custom climate editor (living-worlds.md §3, mockup-approved
@@ -88,6 +89,12 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   final Map<String, TextEditingController> _skinLabelCtls = {
     for (final c in kWeatherConditions) c: TextEditingController(),
   };
+  final Map<String, TextEditingController> _skinEmojiCtls = {
+    for (final c in kWeatherConditions) c: TextEditingController(),
+  };
+  final Map<String, TextEditingController> _skinFlavourCtls = {
+    for (final c in kWeatherConditions) c: TextEditingController(),
+  };
   double _diurnal = 1.0;
   BiomePreview? _preview;
 
@@ -128,6 +135,8 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       draft.stance = skin?.stance;
       draft.flavour = skin?.flavour ?? '';
       _skinLabelCtls[c]!.text = draft.label;
+      _skinEmojiCtls[c]!.text = draft.emoji;
+      _skinFlavourCtls[c]!.text = draft.flavour;
     }
     _preview = null;
   }
@@ -143,6 +152,12 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       }
     }
     for (final c in _skinLabelCtls.values) {
+      c.dispose();
+    }
+    for (final c in _skinEmojiCtls.values) {
+      c.dispose();
+    }
+    for (final c in _skinFlavourCtls.values) {
       c.dispose();
     }
     super.dispose();
@@ -393,7 +408,11 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
             condition: c,
             draft: _skins[c]!,
             labelController: _skinLabelCtls[c]!,
+            emojiController: _skinEmojiCtls[c]!,
+            flavourController: _skinFlavourCtls[c]!,
             onLabel: (v) => setState(() => _skins[c]!.label = v),
+            onEmoji: (v) => setState(() => _skins[c]!.emoji = v),
+            onFlavour: (v) => setState(() => _skins[c]!.flavour = v),
             onStance: (st) => setState(() => _skins[c]!.stance = st),
           ),
       ],
