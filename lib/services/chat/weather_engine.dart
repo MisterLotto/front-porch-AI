@@ -40,7 +40,34 @@ import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 
 enum WeatherCondition { clear, cloudy, overcast, fog, rain, storm, snow }
 
-enum TempBand { cold, cool, mild, warm, hot }
+/// DECLARATION order is storage order, not thermal order: biome JSON persists
+/// `baseTemp` as raw indices, and 0..4 (cold..hot) were in users' databases
+/// before the extremes existed — so the Phase 2 bands APPEND (indices 5..7)
+/// and all ordering arithmetic goes through [TempBandThermal.rank] instead of
+/// `.index`. Never reorder this enum.
+enum TempBand { cold, cool, mild, warm, hot, cryogenic, furnace, inferno }
+
+/// Thermal ordering for the bands (coldest → hottest):
+/// cryogenic < cold < cool < mild < warm < hot < furnace < inferno.
+/// The classic span is rank 0..4; extremes are reachable only by biomes that
+/// widen [Biome.bandRange] (living-worlds.md §3 Rev.3 determinism guard).
+extension TempBandThermal on TempBand {
+  /// Delegates to the storage layer's [kTempBandRankByIndex] — one source of
+  /// truth shared with Biome.validate (biomes can't import this file back).
+  int get rank => kTempBandRankByIndex[index];
+
+  /// True for the bands outside the classic cold..hot span.
+  bool get isExtreme =>
+      rank < kClassicBandRange.$1 || rank > kClassicBandRange.$2;
+
+  /// Inverse of [rank], derived from the same table so a future band can
+  /// never leave the two out of sync (out-of-range input clamps to the
+  /// nearest extreme).
+  static TempBand fromRank(int rank) {
+    final r = rank.clamp(kFullBandRange.$1, kFullBandRange.$2);
+    return TempBand.values[kTempBandRankByIndex.indexOf(r)];
+  }
+}
 
 /// One story day's weather. Value type (== by fields) so Riverpod family
 /// consumers rebuild only on real change.
@@ -152,8 +179,19 @@ class WeatherEngine {
       temp = _tempFor(season, rng, climate);
       if (!stay) {
         cond = _conditionFor(season, temp, rng, climate);
-      } else if (cond == WeatherCondition.snow && temp != TempBand.cold) {
-        cond = WeatherCondition.rain; // thaw: persisted snow melts to rain
+      } else if (cond == WeatherCondition.snow &&
+          temp.rank > TempBand.cold.rank) {
+        // Thaw: persisted snow melts to rain when WARMER than cold. Rank
+        // comparison (not != cold) so cryogenic keeps its snow — CO₂ frost
+        // does not melt. Identical to the old check for classic bands.
+        cond = WeatherCondition.rain;
+      } else if (cond == WeatherCondition.rain &&
+          temp.rank < TempBand.cold.rank) {
+        // Symmetric promotion: liquid rain cannot fall below cold — a
+        // persisted rain front at cryogenic freezes out as snow. (Storm is
+        // deliberately left alone: it is generic violent weather that skins
+        // rename — a Martian dust storm must not become a blizzard.)
+        cond = WeatherCondition.snow;
       }
     }
     return DailyWeather(condition: cond, temp: temp, season: season);
@@ -166,11 +204,35 @@ class WeatherEngine {
         : rng.nextPermille() < 250
         ? 1
         : 0;
-    final idx = ((baseMap[season] ?? 2) + jitter).clamp(
-      0,
-      TempBand.values.length - 1,
-    );
-    return TempBand.values[idx];
+    final raw = baseMap[season] ?? 2;
+    // Domain-invalid spans (backwards, out of (-1..6)) REJECT to classic —
+    // the same semantics fromJson applies to garbage JSON — so a programmatic
+    // Biome that skipped validate() can neither crash the walk nor pin
+    // itself into a permanent extreme.
+    var (lo, hi) = biome.bandRange;
+    if (lo > hi || lo < kFullBandRange.$1 || hi > kFullBandRange.$2) {
+      (lo, hi) = kClassicBandRange;
+    }
+    if ((lo, hi) == kClassicBandRange) {
+      // BYTE-IDENTITY PATH — every pre-extremes biome (and any JSON without
+      // an explicitly widened range) reproduces the ORIGINAL formula on the
+      // RAW stored int, including out-of-spec values old imports accepted
+      // unvalidated: negative bases floor AFTER jitter (always cold), >4
+      // saturates to hot. Adversarial review proved a rank decode here
+      // rewrites such chats' history (stored 5 = cryogenic's index flipped
+      // permanent-hot chats to permanent-cold). Do not "clean this up".
+      final idx = (raw + jitter).clamp(
+        kClassicBandRange.$1,
+        kClassicBandRange.$2,
+      );
+      return TempBand.values[idx];
+    }
+    // WIDENED-RANGE PATH (explicitly authored extremes, no legacy data):
+    // decode the declaration index to its thermal rank, jitter, clamp to the
+    // authored span.
+    final baseIdx = raw.clamp(0, TempBand.values.length - 1);
+    final rank = (TempBand.values[baseIdx].rank + jitter).clamp(lo, hi);
+    return TempBandThermal.fromRank(rank);
   }
 
   static WeatherCondition _conditionFor(
@@ -191,8 +253,11 @@ class WeatherEngine {
       roll -= weights[i];
       if (roll < 0) {
         final cond = WeatherCondition.values[i];
-        if (cond == WeatherCondition.snow && temp != TempBand.cold) {
-          return WeatherCondition.rain;
+        if (cond == WeatherCondition.snow && temp.rank > TempBand.cold.rank) {
+          return WeatherCondition.rain; // demote only when warmer than cold
+        }
+        if (cond == WeatherCondition.rain && temp.rank < TempBand.cold.rank) {
+          return WeatherCondition.snow; // no liquid rain below cold
         }
         return cond;
       }
@@ -265,6 +330,25 @@ class WeatherEngine {
   /// Only meaningful transitions speak: incoming precipitation/fog, a real
   /// clear-up after grey or wet weather, or a two-band temperature swing.
   static String foreshadow(DailyWeather today, DailyWeather tomorrow) {
+    // Crossing into (or out of) a lethal band outranks every other sign —
+    // "a storm is coming" is trivia next to "tomorrow kills the unprotected".
+    // Unreachable for classic biomes (isExtreme is never true there), so
+    // legacy foreshadow text is untouched.
+    if (tomorrow.temp.isExtreme && tomorrow.temp != today.temp) {
+      // Any move INTO a lethal band — or BETWEEN them (an authored
+      // cryogenic-winter/furnace-summer world flips across a season edge) —
+      // gets the survival warning for tomorrow's side.
+      return tomorrow.temp.rank < TempBand.cold.rank
+          ? 'The cold coming tomorrow is the killing kind — whatever needs '
+                'doing outside happens today.'
+          : 'Tomorrow\'s heat will be beyond anything survivable in the '
+                'open — plan for cover before it arrives.';
+    }
+    if (today.temp.isExtreme && !tomorrow.temp.isExtreme) {
+      return today.temp.rank < TempBand.cold.rank
+          ? 'The deep cold should finally break by tomorrow.'
+          : 'The lethal heat should finally ease by tomorrow.';
+    }
     const wet = {
       WeatherCondition.rain,
       WeatherCondition.storm,
@@ -307,7 +391,7 @@ class WeatherEngine {
           }
       }
     }
-    final swing = tomorrow.temp.index - today.temp.index;
+    final swing = tomorrow.temp.rank - today.temp.rank;
     if (swing <= -2) {
       return 'A cold snap is moving in — tomorrow will feel much colder.';
     }
@@ -330,6 +414,8 @@ class WeatherEngine {
 
   static String _tempWord(TempBand t) {
     switch (t) {
+      case TempBand.cryogenic:
+        return 'lethally cold';
       case TempBand.cold:
         return 'cold';
       case TempBand.cool:
@@ -340,6 +426,10 @@ class WeatherEngine {
         return 'warm';
       case TempBand.hot:
         return 'hot';
+      case TempBand.furnace:
+        return 'furnace-hot';
+      case TempBand.inferno:
+        return 'incinerating';
     }
   }
 

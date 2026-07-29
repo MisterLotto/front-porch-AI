@@ -462,10 +462,36 @@ extension over display-only fakery:
   surface a "made with a newer version" note. Same discipline as the Stoop
   API contract.
 
-**Build order (locked):** ① per-biome pins (done) → ② engine bands behind
-the pins → ③ `biomes` table + editor + preview-as-validation → ④ skins +
-stance-aware dressCue. Editor is desktop-only (ruling §6.1); consuming
-custom biomes works everywhere, web parity for *use* surfaces mandatory.
+**Build order (locked):** ① per-biome pins (**done**) → ② engine bands
+behind the pins (**done 2026-07-29**: TempBand appended cryogenic/furnace/
+inferno with `kTempBandRankByIndex` thermal ranks; per-biome `bandRange`
+clamp defaulting to the classic (0,4) span; `displayAnchorsC` authored °C
+with ±3 wobble, single-draw parity; cryogenic keeps snow — thaw demotes only
+when warmer-than-cold; survival dressCue prose; afk/needs "extreme" checks
+rank-based; `weather_extreme_bands_test.dart`, pins green) → ③ `biomes`
+table + editor + preview-as-validation → ④ skins + stance-aware dressCue.
+Editor is desktop-only (ruling §6.1); consuming custom biomes works
+everywhere, web parity for *use* surfaces mandatory.
+
+### Rev.3 addendum — place traits + units (ruled 2026-07-29, mockup-approved)
+
+- **Atmosphere and gravity live on the WORLD, not the climate** (a
+  terraformed Mars reuses the Mars climate with breathable air). Stored in
+  ONE additive `place_traits` JSON column on `worlds` (no per-trait column
+  churn, ever; unknown trait keys ignored by older apps — mixed-fleet rule);
+  rides the `.fpworld` envelope.
+- **Stance-recipe enums, no numbers:** Atmosphere = breathable (default,
+  silent) · thin · unbreathable · hostile. Gravity = earth (default,
+  silent) · low · high · micro. Each non-default value injects ONE
+  code-owned line with the place-description block; author prose remains the
+  flavour channel. No pressure/O₂/g numeric fields — numbers would promise a
+  simulation the app deliberately does not run.
+- **Units:** °C is canonical everywhere on disk and in `.fpworld` (share-
+  safe); the existing Settings → General °C/°F toggle (default °C) drives
+  every display AND the editor's anchor input fields (°F users type °F,
+  stored converted; ≤1° rounding wobble on non-exact conversions).
+- **Editor UX approved via mockup 2026-07-29** (climate dialog + world
+  place-traits card, mandatory-stance error state, preview-as-validation).
 
 ### Why skins need stance — the failure this prevents
 

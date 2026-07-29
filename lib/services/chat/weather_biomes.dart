@@ -20,6 +20,22 @@ const List<String> kWeatherConditions = [
 
 const List<String> kSeasons = ['winter', 'spring', 'summer', 'autumn'];
 
+/// Thermal rank per TempBand DECLARATION index (0..7). Lives here — the
+/// storage layer — as the single source of truth; the engine's
+/// `TempBandThermal.rank` delegates to this list. Indices 0..4 are the
+/// classic cold..hot (rank == index); 5..7 are the appended extremes
+/// cryogenic (−1), furnace (5), inferno (6). See the TempBand doc for why
+/// declaration order is storage order.
+const List<int> kTempBandRankByIndex = [0, 1, 2, 3, 4, -1, 5, 6];
+
+/// The classic reachable span (cold..hot, ranks) — the pre-extremes engine's
+/// clamp, and the byte-identity contract for every biome that doesn't
+/// explicitly widen. Shared so the span isn't a scattered literal.
+const (int, int) kClassicBandRange = (0, 4);
+
+/// The widest legal span (cryogenic..inferno, ranks).
+const (int, int) kFullBandRange = (-1, 6);
+
 /// Stance for condition skins (phase 2 fully authors these; built-ins carry
 /// ordinary/harsh so dressCue can stay one code path).
 enum WeatherStance {
@@ -60,8 +76,21 @@ class Biome {
   /// season → 7 weights (same order as [kWeatherConditions]).
   final Map<String, List<int>> weights;
 
-  /// season → TempBand index 0..4 (cold..hot).
+  /// season → TempBand DECLARATION index (0..4 classic, 5..7 extremes —
+  /// storage order, see the TempBand doc; thermal ordering is rank-based).
   final Map<String, int> baseTemp;
+
+  /// Reachable thermal-rank span for the daily jitter clamp
+  /// (living-worlds.md §3 Rev.3). Defaults to the CLASSIC span (0,4) —
+  /// byte-identical to the pre-extremes engine — so every built-in and every
+  /// biome JSON written before extremes existed is automatically safe.
+  /// Custom biomes widen it explicitly (full span is (-1,6)).
+  final (int, int) bandRange;
+
+  /// season → authored display °C for extreme bands (UI number only — the
+  /// chip shows this; prompts stay words-only). Ignored while the day's band
+  /// is classic; empty for every built-in.
+  final Map<String, int> displayAnchorsC;
 
   /// Scales day–night swing (1.0 = temperate default).
   final double diurnalAmplitude;
@@ -76,6 +105,8 @@ class Biome {
     this.feel = '',
     required this.weights,
     required this.baseTemp,
+    this.bandRange = kClassicBandRange,
+    this.displayAnchorsC = const {},
     this.diurnalAmplitude = 1.0,
     this.conditionSkin = const {},
   });
@@ -87,6 +118,11 @@ class Biome {
         if (feel.isNotEmpty) 'feel': feel,
         'weights': weights,
         'baseTemp': baseTemp,
+        // Default (classic) span is omitted so pre-extremes app versions read
+        // this JSON unchanged (mixed-fleet tolerance, living-worlds.md §3).
+        if (bandRange != kClassicBandRange)
+          'bandRange': [bandRange.$1, bandRange.$2],
+        if (displayAnchorsC.isNotEmpty) 'displayAnchorsC': displayAnchorsC,
         'diurnalAmplitude': diurnalAmplitude,
         if (conditionSkin.isNotEmpty)
           'conditionSkin': {
@@ -95,12 +131,15 @@ class Biome {
       };
 
   factory Biome.fromJson(Map<String, dynamic> json) {
+    // Type-checked (not hard-cast) throughout: one string element in a
+    // hand-edited file must degrade that entry, not throw inside fromJson
+    // and null the entire biome via tryParse.
     final weightsRaw = json['weights'];
     final weights = <String, List<int>>{};
     if (weightsRaw is Map) {
       for (final e in weightsRaw.entries) {
         final list = e.value;
-        if (list is List) {
+        if (list is List && list.every((v) => v is num)) {
           weights[e.key.toString()] = [
             for (final v in list) (v as num).toInt(),
           ];
@@ -111,6 +150,7 @@ class Biome {
     final baseTemp = <String, int>{};
     if (baseRaw is Map) {
       for (final e in baseRaw.entries) {
+        if (e.value is! num) continue;
         baseTemp[e.key.toString()] = (e.value as num).toInt();
       }
     }
@@ -125,6 +165,32 @@ class Biome {
         }
       }
     }
+    // Extremes (defensive: garbage → classic span, so a hand-edited file can
+    // never widen the clamp by accident). REJECT out-of-domain values rather
+    // than clamping them into validity — [10, 20] must not become a
+    // permanent-inferno (6,6) span — and use type checks, not hard casts, so
+    // a string element can't throw and silently discard the whole biome.
+    var range = kClassicBandRange;
+    final rangeRaw = json['bandRange'] ?? json['band_range'];
+    if (rangeRaw is List && rangeRaw.length == 2) {
+      final lo = rangeRaw[0] is num ? (rangeRaw[0] as num).toInt() : null;
+      final hi = rangeRaw[1] is num ? (rangeRaw[1] as num).toInt() : null;
+      if (lo != null &&
+          hi != null &&
+          lo <= hi &&
+          lo >= kFullBandRange.$1 &&
+          hi <= kFullBandRange.$2) {
+        range = (lo, hi);
+      }
+    }
+    final anchors = <String, int>{};
+    final anchorsRaw = json['displayAnchorsC'] ?? json['display_anchors_c'];
+    if (anchorsRaw is Map) {
+      for (final e in anchorsRaw.entries) {
+        if (e.value is! num) continue;
+        anchors[e.key.toString()] = (e.value as num).toInt().clamp(-273, 2000);
+      }
+    }
     return Biome(
       id: json['id']?.toString() ?? 'custom',
       displayName: json['displayName']?.toString() ??
@@ -134,6 +200,8 @@ class Biome {
       feel: json['feel']?.toString() ?? '',
       weights: weights.isEmpty ? Map.from(temperate.weights) : weights,
       baseTemp: baseTemp.isEmpty ? Map.from(temperate.baseTemp) : baseTemp,
+      bandRange: range,
+      displayAnchorsC: anchors,
       diurnalAmplitude:
           (json['diurnalAmplitude'] as num?)?.toDouble() ??
           (json['diurnal_amplitude'] as num?)?.toDouble() ??
@@ -172,19 +240,39 @@ class Biome {
         errors.add('$season: need ≥2 non-zero conditions');
       }
       final t = baseTemp[season];
-      if (t == null || t < 0 || t > 4) {
-        errors.add('$season: baseTemp must be 0..4');
+      if (t == null || t < 0 || t >= kTempBandRankByIndex.length) {
+        errors.add(
+          '$season: baseTemp must be 0..${kTempBandRankByIndex.length - 1}',
+        );
+      } else {
+        final rank = kTempBandRankByIndex[t];
+        if (rank < bandRange.$1 || rank > bandRange.$2) {
+          errors.add(
+            '$season: base temperature is outside this climate\'s band range',
+          );
+        }
+        // An anchor is required for every season that can REACH an extreme —
+        // the daily jitter is ±1 rank, so a hot base with a widened range
+        // jitters into furnace and would otherwise show the generic fallback
+        // °C with zero author input.
+        final reachLo = (rank - 1).clamp(bandRange.$1, bandRange.$2);
+        final reachHi = (rank + 1).clamp(bandRange.$1, bandRange.$2);
+        final extremeReachable =
+            reachLo < kClassicBandRange.$1 || reachHi > kClassicBandRange.$2;
+        if (extremeReachable && !displayAnchorsC.containsKey(season)) {
+          errors.add(
+            '$season: extreme temperatures are reachable — set a display °C '
+            '(what should the weather chip show?)',
+          );
+        }
       }
     }
-    for (final e in conditionSkin.entries) {
-      if (e.value.label.trim().isNotEmpty &&
-          e.value.stance == WeatherStance.ordinary &&
-          e.value.label.toLowerCase() != e.key) {
-        // Rename without explicit harsh+ stance is a soft warning only when
-        // stance omitted at parse — we always have a stance. Hard rule for
-        // renames is enforced at the editor (phase 2).
-      }
+    if (bandRange.$1 < kFullBandRange.$1 ||
+        bandRange.$2 > kFullBandRange.$2 ||
+        bandRange.$1 > bandRange.$2) {
+      errors.add('bandRange must be within (-1..6), low ≤ high');
     }
+    // (Condition-skin rename-needs-stance is enforced at the editor — phase 2.)
     return errors;
   }
 
