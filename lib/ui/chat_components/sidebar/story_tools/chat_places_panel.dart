@@ -35,8 +35,23 @@ class ChatPlacesPanel extends StatelessWidget {
             if (worlds.resolveWorld(id) != null) worlds.resolveWorld(id)!,
         ];
         final activeClimate = chat.activeChatBiome;
+        // Attached places that author their own climate become picker
+        // options (value 'world:<id>' — same scheme as the web facade).
+        final customOptions = <(String, World, Biome)>[
+          for (final w in attached)
+            if (w.biomeJson != null && Biome.tryParse(w.biomeJson) != null)
+              ('world:${w.id}', w, Biome.tryParse(w.biomeJson)!),
+        ];
+        // Active value matches by ID alone: built-ins by their id, customs
+        // by the 'world:<id>' brand stamped at set-time. The sentinel only
+        // covers a snapshot whose source world has since been detached.
+        final optionValues = {for (final (v, _, _) in customOptions) v};
         final climateDropdownId =
-            Biome.builtInById(activeClimate.id)?.id ?? Biome.temperate.id;
+            Biome.builtInById(activeClimate.id) != null
+                ? activeClimate.id
+                : optionValues.contains(activeClimate.id)
+                    ? activeClimate.id
+                    : 'custom-active';
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,14 +135,41 @@ class ChatPlacesPanel extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                for (final (value, w, _) in customOptions)
+                  DropdownMenuItem(
+                    value: value,
+                    child: Text(
+                      '${w.name} (custom)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (climateDropdownId == 'custom-active')
+                  DropdownMenuItem(
+                    value: 'custom-active',
+                    enabled: false,
+                    child: Text(
+                      'Custom: ${activeClimate.displayName}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
               ],
               onChanged: chat.isGenerating
                   ? null
                   : (id) async {
-                      if (id == null) return;
-                      final b = Biome.builtInById(id);
+                      if (id == null || id == 'custom-active') return;
+                      Biome? b = Biome.builtInById(id);
+                      if (b == null && id.startsWith('world:')) {
+                        for (final (value, _, biome) in customOptions) {
+                          if (value == id) {
+                            // Brand with the option id so the active climate
+                            // matches this option exactly after the switch.
+                            b = biome.withId(id);
+                            break;
+                          }
+                        }
+                      }
                       if (b == null) return;
-                      if (b.id == climateDropdownId) return;
+                      if (id == climateDropdownId) return;
                       await chat.setChatClimate(b);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(

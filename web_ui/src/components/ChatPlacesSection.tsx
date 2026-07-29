@@ -34,12 +34,17 @@ type PlacesResponse = {
   climateDisplayName?: string;
   climateFeel?: string;
   dayCount?: number;
+  /** Built-ins + this chat's attached custom climates ('world:<id>'). */
+  climateOptions?: { id: string; displayName: string }[];
 };
 
 export function ChatPlacesSection({ reloadKey }: { reloadKey?: number }) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [library, setLibrary] = useState<LibraryWorld[]>([]);
   const [climates, setClimates] = useState<Climate[]>([]);
+  const [serverOptions, setServerOptions] = useState<
+    { id: string; displayName: string }[] | null
+  >(null);
   const [climateId, setClimateId] = useState('temperate');
   const [climateFeel, setClimateFeel] = useState('');
   const [dayCount, setDayCount] = useState(1);
@@ -51,6 +56,7 @@ export function ChatPlacesSection({ reloadKey }: { reloadKey?: number }) {
     if (r.climateId) setClimateId(r.climateId);
     if (r.climateFeel !== undefined) setClimateFeel(r.climateFeel ?? '');
     if (r.dayCount != null) setDayCount(r.dayCount);
+    if (r.climateOptions) setServerOptions(r.climateOptions);
   };
 
   const load = useCallback(() => {
@@ -101,10 +107,19 @@ export function ChatPlacesSection({ reloadKey }: { reloadKey?: number }) {
 
   const attached = new Set(places.map((p) => p.id));
   const available = library.filter((w) => !attached.has(w.id));
-  const climateOptions =
-    climates.length > 0
-      ? climates
-      : [{ id: 'temperate', displayName: 'Temperate', feel: '' }];
+  // Prefer the per-chat option list (built-ins + attached custom climates);
+  // fall back to the global built-ins for older servers.
+  const baseOptions =
+    serverOptions && serverOptions.length > 0
+      ? serverOptions
+      : climates.length > 0
+        ? climates
+        : [{ id: 'temperate', displayName: 'Temperate' }];
+  // The active climate must always be a real option — a custom snapshot
+  // whose source place was detached still needs a labelled entry.
+  const climateOptions = baseOptions.some((c) => c.id === climateId)
+    ? baseOptions
+    : [...baseOptions, { id: climateId, displayName: 'Custom (this chat)' }];
 
   return (
     <div className="chat-places">

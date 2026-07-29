@@ -1883,11 +1883,18 @@ class ChatService extends ChangeNotifier {
   /// Temperate when nothing is attached — byte-identical to pre-biome weather.
   Biome get _worldDefaultBiome {
     World? pick(String ref) => _worldRepository.resolveWorld(ref);
+    // A custom climate is branded 'world:<id>' so every climate picker can
+    // match the active climate to its option by id alone.
+    Biome resolveFor(World w) {
+      final b = Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
+      return w.biomeJson != null ? b.withId('world:${w.id}') : b;
+    }
+
     for (final id in _chatWorldIds) {
       final w = pick(id);
       if (w == null) continue;
       if (w.biomeId != null || w.biomeJson != null) {
-        return Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
+        return resolveFor(w);
       }
     }
     final group = _activeGroup;
@@ -1896,7 +1903,7 @@ class ChatService extends ChangeNotifier {
         final w = pick(ref);
         if (w == null) continue;
         if (w.biomeId != null || w.biomeJson != null) {
-          return Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
+          return resolveFor(w);
         }
       }
     }
@@ -1999,6 +2006,9 @@ class ChatService extends ChangeNotifier {
     getUpcoming: () => upcomingWeather,
     suppressForeshadow: () =>
         _biomeSchedule.isSpanStart(_timeService.dayCount),
+    // Condition skins (phase 2 step ④): renamed weather speaks by its new
+    // name with stance-driven behavior on every prompt surface.
+    getBiome: () => activeChatBiome,
   );
 
   // ── Ambitions (Living Time §6) ──

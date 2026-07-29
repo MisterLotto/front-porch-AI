@@ -18,8 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
-import 'package:front_porch_ai/services/chat/weather_segments.dart';
+import 'package:front_porch_ai/services/chat/weather_skins.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -50,25 +49,29 @@ class WeatherChip extends StatelessWidget {
     final climateNote = climate.id != 'temperate'
         ? '\nClimate: ${climate.displayName}'
         : '';
+    // Condition skins (phase 2 step ④): a renamed condition shows its new
+    // name + emoji everywhere the chip speaks — same helpers the prompt and
+    // web facade use, so surfaces can't drift.
     return Tooltip(
       message:
           'Now (${now.segment.name}): '
-          '${WeatherSegments.label(now, fahrenheit: fahrenheit)}\n'
-          'Today: ${WeatherEngine.label(now.day)} · ${now.day.season}\n'
-          'Tomorrow: ${WeatherEngine.emoji(tomorrow.condition)} '
-          '${WeatherEngine.label(tomorrow)}'
+          '${skinnedChipLabel(now, climate, fahrenheit: fahrenheit)}\n'
+          'Today: ${skinnedConditionLabel(climate, now.day.condition)} · '
+          '${now.day.season}\n'
+          'Tomorrow: ${skinnedEmoji(climate, tomorrow.condition)} '
+          '${skinnedConditionLabel(climate, tomorrow.condition)}'
           '$climateNote\n'
           'Story weather — deterministic for this chat, day, and hour.',
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            WeatherEngine.emoji(now.condition),
+            skinnedEmoji(climate, now.condition),
             style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(width: 3),
           Text(
-            WeatherSegments.label(now, fahrenheit: fahrenheit),
+            skinnedChipLabel(now, climate, fahrenheit: fahrenheit),
             style: TextStyle(
               fontSize: 10,
               color: AppColors.textTertiary(context),
@@ -85,7 +88,7 @@ class WeatherChip extends StatelessWidget {
             ),
             const SizedBox(width: 2),
             Text(
-              WeatherEngine.emoji(tomorrow.condition),
+              skinnedEmoji(climate, tomorrow.condition),
               style: const TextStyle(fontSize: 11),
             ),
           ],

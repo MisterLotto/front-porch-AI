@@ -22,7 +22,9 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
+import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_editor_dialog.dart';
 import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -465,7 +467,11 @@ class _WorldManagementPageState extends State<WorldManagementPage>
       text: world?.description ?? '',
     );
     // Climate default for chats that attach this place (Living Worlds).
-    String? selectedBiomeId = world?.biomeId ?? Biome.temperate.id;
+    // 'custom' sentinel = this world authors its own climate (biomeJson).
+    String? customBiomeJson = world?.biomeJson;
+    String? selectedBiomeId = customBiomeJson != null
+        ? 'custom'
+        : (world?.biomeId ?? Biome.temperate.id);
     var injectDescription = world?.injectDescription ?? true;
     String? coverImage = world?.coverImage;
     // Place traits (standing facts; defaults are silent).
@@ -832,6 +838,16 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                         ),
                                       ),
                                     ),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Custom climate',
+                                      style: TextStyle(
+                                        color: AppColors.porchAmberOf(ctx),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                                 items: [
                                   for (final b in Biome.builtIns)
@@ -870,17 +886,80 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                         ),
                                       ),
                                     ),
+                                  DropdownMenuItem(
+                                    value: 'custom',
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 6,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'Custom climate…',
+                                            style: TextStyle(
+                                              color:
+                                                  AppColors.porchAmberOf(ctx),
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Author this place\'s own weather '
+                                            '— Mars cold, volcano heat, '
+                                            'renamed rain.',
+                                            style: TextStyle(
+                                              color: AppColors.textSecondary(
+                                                ctx,
+                                              ),
+                                              fontSize: 11,
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ],
-                                onChanged: (v) => setDialogState(
-                                  () => selectedBiomeId = v,
-                                ),
+                                onChanged: (v) async {
+                                  if (v != 'custom') {
+                                    setDialogState(() => selectedBiomeId = v);
+                                    return;
+                                  }
+                                  final fahrenheit = Provider.of<
+                                          StorageService>(ctx, listen: false)
+                                      .weatherFahrenheit;
+                                  final result =
+                                      await showClimateEditorDialog(
+                                    ctx,
+                                    worldName: nameController.text.trim(),
+                                    existingBiomeJson: customBiomeJson,
+                                    fahrenheit: fahrenheit,
+                                  );
+                                  if (result != null) {
+                                    setDialogState(() {
+                                      customBiomeJson = result;
+                                      selectedBiomeId = 'custom';
+                                    });
+                                  } else if (customBiomeJson == null) {
+                                    // Cancelled with no prior custom — keep
+                                    // the previous built-in selection.
+                                    setDialogState(() {});
+                                  }
+                                },
                               ),
                               Builder(
                                 builder: (context) {
-                                  final biome = Biome.builtInById(
-                                        selectedBiomeId,
-                                      ) ??
-                                      Biome.temperate;
+                                  final biome = selectedBiomeId == 'custom'
+                                      ? (Biome.tryParse(customBiomeJson) ??
+                                          Biome.temperate)
+                                      : (Biome.builtInById(
+                                            selectedBiomeId,
+                                          ) ??
+                                          Biome.temperate);
                                   return Container(
                                     margin: const EdgeInsets.only(top: 10),
                                     padding: const EdgeInsets.all(12),
@@ -936,6 +1015,45 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                                               ),
                                               fontSize: 12,
                                               height: 1.4,
+                                            ),
+                                          ),
+                                        ],
+                                        if (selectedBiomeId == 'custom') ...[
+                                          const SizedBox(height: 8),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: OutlinedButton.icon(
+                                              icon: const Icon(
+                                                Icons.tune,
+                                                size: 15,
+                                              ),
+                                              label: const Text(
+                                                'Edit custom climate',
+                                              ),
+                                              onPressed: () async {
+                                                final fahrenheit =
+                                                    Provider.of<
+                                                            StorageService>(
+                                                  ctx,
+                                                  listen: false,
+                                                ).weatherFahrenheit;
+                                                final result =
+                                                    await showClimateEditorDialog(
+                                                  ctx,
+                                                  worldName: nameController
+                                                      .text
+                                                      .trim(),
+                                                  existingBiomeJson:
+                                                      customBiomeJson,
+                                                  fahrenheit: fahrenheit,
+                                                );
+                                                if (result != null) {
+                                                  setDialogState(
+                                                    () => customBiomeJson =
+                                                        result,
+                                                  );
+                                                }
+                                              },
                                             ),
                                           ),
                                         ],
@@ -1356,7 +1474,15 @@ class _WorldManagementPageState extends State<WorldManagementPage>
                             newWorld.name = newName;
                           }
                           newWorld.description = descController.text.trim();
-                          newWorld.biomeId = selectedBiomeId;
+                          // 'custom' ⇒ biomeJson carries the climate and
+                          // biomeId clears; a built-in clears any stale
+                          // custom JSON (Biome.resolve prefers JSON).
+                          newWorld.biomeId = selectedBiomeId == 'custom'
+                              ? null
+                              : selectedBiomeId;
+                          newWorld.biomeJson = selectedBiomeId == 'custom'
+                              ? customBiomeJson
+                              : null;
                           newWorld.injectDescription = injectDescription;
                           newWorld.coverImage = coverImage;
                           newWorld.atmosphere = atmosphere;

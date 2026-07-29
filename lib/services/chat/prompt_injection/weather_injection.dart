@@ -16,8 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/weather_segments.dart';
+import 'package:front_porch_ai/services/chat/weather_skins.dart';
 
 /// Weather fragment for the words-only state block
 /// (docs/design/living-time-features.md §3, intra-day since v3). Renders the
@@ -38,24 +40,34 @@ class WeatherInjection {
   /// biome span — yesterday's prediction was under the old climate).
   final bool Function()? suppressForeshadow;
 
+  /// Active climate for condition skins (phase 2 step ④) — null keeps every
+  /// stock sentence byte-identical (and no built-in carries renames).
+  final Biome Function()? getBiome;
+
   WeatherInjection({
     required this.getWeather,
     required this.getPreviousSegment,
     required this.getUpcoming,
     this.suppressForeshadow,
+    this.getBiome,
   });
 
   String buildWeatherInjection() {
     final w = getWeather();
     if (w == null) return '';
-    final parts = <String>[WeatherSegments.prose(w)];
+    final biome = getBiome?.call();
+    final parts = <String>[
+      biome != null ? skinnedProse(w, biome) : WeatherSegments.prose(w),
+    ];
     // Within-day change: '' when the sky is unchanged, one sentence when a
     // front moved through since the previous day-part (yesterday's night,
     // for a morning) — characters experience the shift instead of a silent
     // state swap.
     final prev = getPreviousSegment();
     if (prev != null) {
-      final shift = WeatherSegments.transition(prev, w);
+      final shift = biome != null
+          ? skinnedTransition(prev, w, biome)
+          : WeatherSegments.transition(prev, w);
       if (shift.isNotEmpty) parts.add(shift);
     }
     // Foreshadow tomorrow only on notable transitions (incoming rain/storm/
@@ -67,7 +79,9 @@ class WeatherInjection {
     }
     final next = getUpcoming();
     if (next != null) {
-      final sign = WeatherEngine.foreshadow(w.day, next);
+      final sign = biome != null
+          ? skinnedForeshadow(w.day, next, biome)
+          : WeatherEngine.foreshadow(w.day, next);
       if (sign.isNotEmpty) parts.add(sign);
     }
     return parts.join(' ');

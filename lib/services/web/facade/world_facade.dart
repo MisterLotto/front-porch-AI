@@ -355,7 +355,10 @@ class WorldFacade {
       places.add({
         'id': w.id,
         'name': w.name,
-        'biomeId': w.biomeId ?? 'temperate',
+        // 'custom' is truthful for a place authoring its own climate —
+        // reporting 'temperate' misled anything trusting this field.
+        'biomeId': w.biomeJson != null ? 'custom' : (w.biomeId ?? 'temperate'),
+        'hasCustomClimate': w.biomeJson != null,
         'description': w.description,
       });
     }
@@ -367,6 +370,20 @@ class WorldFacade {
       'climateDisplayName': climate.displayName,
       'climateFeel': climate.feel,
       'dayCount': chat.timeService.dayCount,
+      // Selectable climates for THIS chat: built-ins + any attached place
+      // authoring its own ('world:<id>' scheme, shared with the desktop
+      // panel). Additive — older bundles ignore it.
+      'climateOptions': [
+        for (final b in Biome.builtIns)
+          {'id': b.id, 'displayName': b.displayName},
+        for (final id in ids)
+          if (_worlds.resolveWorld(id) case final w?)
+            if (w.biomeJson != null && Biome.tryParse(w.biomeJson) != null)
+              {
+                'id': 'world:${w.id}',
+                'displayName': '${w.name} (custom)',
+              },
+      ],
     };
   }
 
@@ -394,7 +411,16 @@ class WorldFacade {
     }
     // Unknown ids error out rather than silently becoming temperate — a
     // typo'd climate must not look like a successful switch.
-    final biome = Biome.builtInById(biomeId);
+    Biome? biome = Biome.builtInById(biomeId);
+    if (biome == null && biomeId.startsWith('world:')) {
+      // An attached place's custom climate ('world:<id>', same scheme as
+      // the desktop Places panel). Branded with the option id so the
+      // active climate matches its picker option exactly on every surface.
+      final w = _worlds.resolveWorld(biomeId.substring(6));
+      if (w != null && chat.chatWorldIds.contains(w.id)) {
+        biome = Biome.tryParse(w.biomeJson)?.withId('world:${w.id}');
+      }
+    }
     if (biome == null) {
       return {'ok': false, 'error': 'Unknown climate: $biomeId'};
     }

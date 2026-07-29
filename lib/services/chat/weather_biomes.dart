@@ -213,6 +213,23 @@ class Biome {
 
   String toJsonString() => jsonEncode(toJson());
 
+  /// Same climate, different [id]. Used to brand a world's custom snapshot
+  /// as `world:<worldId>` at set-time so climate pickers on every surface
+  /// can match the ACTIVE climate to an option by id alone (no name
+  /// heuristics).
+  Biome withId(String newId) => Biome(
+        id: newId,
+        displayName: displayName,
+        description: description,
+        feel: feel,
+        weights: weights,
+        baseTemp: baseTemp,
+        bandRange: bandRange,
+        displayAnchorsC: displayAnchorsC,
+        diurnalAmplitude: diurnalAmplitude,
+        conditionSkin: conditionSkin,
+      );
+
   static Biome? tryParse(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     try {
