@@ -1505,7 +1505,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   ),
                   const SizedBox(height: 20),
 
-                  if (repo.worlds.isEmpty)
+                  if (repo.placeWorlds.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(40),
                       decoration: BoxDecoration(
@@ -1523,7 +1523,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No worlds found',
+                              'No places found',
                               style: TextStyle(
                                 color: AppColors.textTertiary(context),
                                 fontSize: 15,
@@ -1531,7 +1531,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Create worlds in the Worlds section.',
+                              'Create places in the Worlds section.',
                               style: TextStyle(
                                 color: AppColors.textTertiary(context),
                                 fontSize: 12,
@@ -1542,8 +1542,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       ),
                     )
                   else
-                    ...repo.worlds.map((world) {
-                      final isLinked = _selectedWorldNames.contains(world.name);
+                    ...repo.placeWorlds.map((world) {
+                      final isLinked = _selectedWorldNames.contains(world.id) ||
+                          _selectedWorldNames.contains(world.name);
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
@@ -1598,8 +1599,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             onChanged: (val) {
                               setState(() {
                                 if (val) {
-                                  _selectedWorldNames.add(world.name);
+                                  _selectedWorldNames.remove(world.name);
+                                  if (!_selectedWorldNames.contains(world.id)) {
+                                    _selectedWorldNames.add(world.id);
+                                  }
                                 } else {
+                                  _selectedWorldNames.remove(world.id);
                                   _selectedWorldNames.remove(world.name);
                                 }
                               });

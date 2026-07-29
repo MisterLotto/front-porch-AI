@@ -191,12 +191,15 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
     }
   }
 
-  void _toggleWorld(String worldId) {
+  void _toggleWorld(World w) {
     setState(() {
-      if (_worldIds.contains(worldId)) {
-        _worldIds.remove(worldId);
+      final byId = _worldIds.contains(w.id);
+      final byName = _worldIds.contains(w.name);
+      if (byId || byName) {
+        _worldIds.remove(w.id);
+        _worldIds.remove(w.name);
       } else {
-        _worldIds.add(worldId);
+        _worldIds.add(w.id);
       }
     });
     _syncToGroup();
@@ -234,15 +237,16 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                 ),
                 const SizedBox(height: 16),
 
-                // Worlds
+                // Places (Living Worlds)
                 GroupSectionHeader(
-                  'World Lorebooks',
+                  'Places',
                   Icons.public,
-                  Colors.lightBlueAccent,
+                  AppColors.formMasterAccent,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Attach worlds to pull their lorebooks into every message in this group.',
+                  'Attach places for climate + place lore on this group '
+                  '(template for new chats; this session also has Places under Story Tools).',
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.textTertiary(context),
@@ -251,7 +255,7 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                 const SizedBox(height: 8),
                 if (_allWorlds.isEmpty)
                   const Text(
-                    'No worlds available. Create worlds in the Worlds tab to attach them here.',
+                    'No places available. Create places in the Worlds tab to attach them here.',
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   )
                 else
@@ -259,12 +263,18 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _allWorlds.map((w) {
-                      final selected = _worldIds.contains(w.name);
+                      final selected = _worldIds.contains(w.id) ||
+                          _worldIds.contains(w.name);
+                      final label = w.biomeId != null &&
+                              w.biomeId!.isNotEmpty &&
+                              w.biomeId != 'temperate'
+                          ? '${w.name} · ${w.biomeId}'
+                          : w.name;
                       return FilterChip(
-                        label: Text(w.name),
+                        label: Text(label),
                         selected: selected,
-                        onSelected: (_) => _toggleWorld(w.name),
-                        selectedColor: Colors.lightBlueAccent.withValues(
+                        onSelected: (_) => _toggleWorld(w),
+                        selectedColor: AppColors.formMasterAccent.withValues(
                           alpha: 0.3,
                         ),
                       );

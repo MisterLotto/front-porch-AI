@@ -118,21 +118,33 @@ class WeatherEngine {
   /// is [sessionSeed] (the session id), where [date] is the story-clock date
   /// of that day (used for seasons — day d in the walk is dated
   /// `date - (dayCount - d)` days).
+  ///
+  /// Living Worlds: [biome] applies to every day (null ⇒ temperate ≡ historical
+  /// tables). [biomeAtDay] (when set) selects the climate for each walk day so
+  /// mid-chat switches keep days before the changeover byte-identical — RNG is
+  /// keyed by day index, not a running stream. Prefer one or the other;
+  /// [biomeAtDay] wins when both are provided.
   static DailyWeather weatherFor({
     required String sessionSeed,
     required int dayCount,
     required DateTime date,
     /// Living Worlds biome. Null ⇒ temperate (byte-identical to pre-biome).
     Biome? biome,
+    /// Per-day climate (mid-chat spans). When null, [biome] is used for all days.
+    Biome Function(int day)? biomeAtDay,
   }) {
     final days = dayCount < 1 ? 1 : dayCount;
     final base = _fnv1a(sessionSeed);
-    final climate = biome ?? Biome.temperate;
+    // Fixed climate path keeps a single reference so temperate/null stays
+    // bit-identical to the pre-span engine (acceptance gate).
+    final Biome? fixed =
+        biomeAtDay == null ? (biome ?? Biome.temperate) : null;
 
     WeatherCondition cond = WeatherCondition.clear;
     TempBand temp = TempBand.mild;
     String season = 'spring';
     for (int d = 1; d <= days; d++) {
+      final climate = fixed ?? biomeAtDay!(d);
       final dayDate = date.subtract(Duration(days: days - d));
       season = seasonOf(dayDate);
       final rng = WeatherRng(base ^ (d * 0x9E3779B9));

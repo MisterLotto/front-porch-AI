@@ -10,6 +10,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import 'package:front_porch_ai/database/database.dart';
@@ -20,6 +21,7 @@ import 'package:front_porch_ai/models/lorebook_codec.dart';
 import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/models/world.dart' as model;
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/chat/biome_schedule.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -173,9 +175,14 @@ class WorldRepository extends ChangeNotifier {
       final n = await purgeCharacterLinkedWorlds();
       await prefs.setBool(_purgePrefKey, true);
       if (n > 0) {
+        final recovery = p.join(
+          _storageService.worldsDir.path,
+          'recovered_character_lore_clones',
+        );
         debugPrint(
           '[Worlds] Purged $n character-linked lore clones '
-          '(lore remains on character cards)',
+          '(character card lore untouched; any edits that lived only on the '
+          'world were saved as .fpworld under $recovery)',
         );
       }
     } catch (e) {
@@ -185,7 +192,12 @@ class WorldRepository extends ChangeNotifier {
 
   /// Delete every legacy character-world clone and strip references from
   /// characters / groups / chat_worlds. Character card lorebooks are untouched.
-  /// Returns how many worlds were deleted.
+  ///
+  /// **Safety:** each doomed world is exported as `.fpworld` into
+  /// `worlds/recovered_character_lore_clones/` *before* the hard delete, so
+  /// users who edited "Aerin's Lorebook" in the Worlds tab (edits that never
+  /// flowed back to the card) can re-import those packages. Returns how many
+  /// worlds were deleted.
   Future<int> purgeCharacterLinkedWorlds() async {
     final doomed = _worlds.where(isCharacterLinkedWorld).toList();
     if (doomed.isEmpty) return 0;
@@ -193,10 +205,43 @@ class WorldRepository extends ChangeNotifier {
     final ids = {for (final w in doomed) w.id};
     final names = {for (final w in doomed) w.name};
 
+    // Lossless edge case: export before hard delete (Claude review 2026-07-28).
+    final recoveryDir = Directory(
+      p.join(
+        _storageService.worldsDir.path,
+        'recovered_character_lore_clones',
+      ),
+    );
+    try {
+      await recoveryDir.create(recursive: true);
+    } catch (e) {
+      debugPrint('[Worlds] could not create recovery dir: $e');
+    }
+
+    var exported = 0;
     for (final w in doomed) {
+      try {
+        final safe = _safeFileStem(w.name);
+        final idShort =
+            w.id.length >= 8 ? w.id.substring(0, 8) : w.id;
+        final out = p.join(
+          recoveryDir.path,
+          '${safe}_$idShort.fpworld',
+        );
+        await exportFpWorld(w, out);
+        exported++;
+      } catch (e) {
+        debugPrint(
+          '[Worlds] recovery export failed for "${w.name}" (${w.id}): $e',
+        );
+      }
       await _db.deleteChatWorldLinksForWorld(w.id);
       await _db.deleteWorldById(w.id);
     }
+    debugPrint(
+      '[Worlds] recovery exports: $exported/${doomed.length} '
+      '→ ${recoveryDir.path}',
+    );
     _worlds.removeWhere((w) => ids.contains(w.id));
 
     await _db.stripWorldRefsFromCharactersAndGroups(ids: ids, names: names);
@@ -239,6 +284,16 @@ class WorldRepository extends ChangeNotifier {
 
     notifyListeners();
     return doomed.length;
+  }
+
+  /// Filesystem-safe stem for recovery exports (no path separators).
+  static String _safeFileStem(String name) {
+    final cleaned = name
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), ' ');
+    if (cleaned.isEmpty) return 'world';
+    return cleaned.length > 80 ? cleaned.substring(0, 80) : cleaned;
   }
 
   /// Rename display name only — attachments use UUID and need no cascade.
@@ -427,25 +482,26 @@ class WorldRepository extends ChangeNotifier {
     );
   }
 
+  /// Raw span rows for [BiomeSchedule] hydrate (ordered by day ASC).
+  Future<List<({int effectiveFromDay, String biomeJson})>> getChatBiomeSpanRows(
+    String chatId,
+  ) async {
+    final spans = await _db.getBiomeSpansForChat(chatId);
+    return [
+      for (final s in spans)
+        (effectiveFromDay: s.effectiveFromDay, biomeJson: s.biomeJson),
+    ];
+  }
+
   Future<Biome> biomeAt({
     required String chatId,
     required int day,
     Biome? worldDefault,
   }) async {
-    final spans = await _db.getBiomeSpansForChat(chatId);
-    ChatBiomeSpan? active;
-    for (final s in spans) {
-      if (s.effectiveFromDay <= day) {
-        active = s;
-      } else {
-        break;
-      }
-    }
-    if (active != null) {
-      return Biome.tryParse(active.biomeJson) ??
-          worldDefault ??
-          Biome.temperate;
-    }
-    return worldDefault ?? Biome.temperate;
+    final rows = await getChatBiomeSpanRows(chatId);
+    return BiomeSchedule.fromJsonSpans(
+      rows: rows,
+      worldDefault: worldDefault,
+    ).biomeAt(day);
   }
 }

@@ -1883,7 +1883,17 @@ class AppDatabase extends _$AppDatabase {
   );
 
   /// Living Worlds schema + name→UUID backfill (phase 0) and biome span
-  /// table (phase 1). Safe to re-run pieces via IF NOT EXISTS / try ALTER.
+  /// table (phase 1).
+  ///
+  /// **Re-run policy:** schema pieces (ALTER + CREATE IF NOT EXISTS) are
+  /// tolerant of a second pass. **Data mutations are single-run** — they fire
+  /// only when [schemaVersion] advances past 39→40. Do not call this as a
+  /// generic repair: (1) `inject_description = 0` would clobber user toggles
+  /// on a second pass; (2) `groups.world_ids` is rewritten in place (original
+  /// name lists live only in the pre-migration backup — not preserved in the
+  /// live DB for re-run inspection); (3) chat_worlds inserts use
+  /// INSERT OR IGNORE so links are mostly idempotent, but the group rewrite
+  /// is not reversible without the backup.
   Future<void> _migrateLivingWorldsV40() async {
     try {
       await _createPreRepairBackup();
@@ -1891,7 +1901,7 @@ class AppDatabase extends _$AppDatabase {
       debugPrint('[DB] v40: pre-migration backup skipped: $e');
     }
 
-    // worlds columns
+    // worlds columns (re-runnable)
     for (final def in [
       'cover_image TEXT',
       'format_version INTEGER NOT NULL DEFAULT 1',
@@ -1938,14 +1948,8 @@ class AppDatabase extends _$AppDatabase {
     );
 
     // Migrated library worlds: descriptions were labels → don't inject.
+    // Single UPDATE (one-shot with schema 39→40 only — not re-run safe).
     try {
-      await customStatement(
-        'UPDATE worlds SET inject_description = 0 '
-        'WHERE inject_description IS NULL OR inject_description = 1',
-      );
-      // Only mark pre-existing rows: those with NULL format_version before
-      // default applied — actually all rows get default 1. Use updated_at
-      // heuristic: set inject_description = 0 for all current rows once.
       await customStatement(
         'UPDATE worlds SET inject_description = 0, format_version = 1',
       );
@@ -1981,6 +1985,8 @@ class AppDatabase extends _$AppDatabase {
     }
 
     // Name→UUID for groups.world_ids + seed chat_worlds for existing sessions.
+    // Rewrites groups.world_ids in place — pre-migration name lists survive
+    // only in the forced backup file, not as a re-runnable live snapshot.
     try {
       final worldRows = await customSelect(
         'SELECT id, name FROM worlds WHERE deleted_at IS NULL',
@@ -2044,7 +2050,9 @@ class AppDatabase extends _$AppDatabase {
           groupsRewritten++;
         }
 
-        // Sessions for this group → chat_worlds.
+        // Sessions for this group → chat_worlds. Skip when the pair already
+        // exists (PK is only link id, so INSERT OR IGNORE alone would
+        // duplicate on a second pass).
         final sessions = await customSelect(
           'SELECT id FROM sessions WHERE group_id = ? AND deleted_at IS NULL',
           variables: [Variable(gId)],
@@ -2054,14 +2062,22 @@ class AppDatabase extends _$AppDatabase {
           if (sid == null) continue;
           var order = 0;
           for (final wid in ids) {
-            final linkId = _uuid.v4();
             try {
+              final exists = await customSelect(
+                'SELECT 1 AS o FROM chat_worlds '
+                'WHERE chat_id = ? AND world_id = ? LIMIT 1',
+                variables: [Variable(sid), Variable(wid)],
+              ).get();
+              if (exists.isNotEmpty) {
+                order++;
+                continue;
+              }
               await customStatement(
-                'INSERT OR IGNORE INTO chat_worlds '
+                'INSERT INTO chat_worlds '
                 '(id, chat_id, world_id, sort_order, created_at) '
                 'VALUES (?, ?, ?, ?, ?)',
                 [
-                  linkId,
+                  _uuid.v4(),
                   sid,
                   wid,
                   order++,
@@ -2077,7 +2093,8 @@ class AppDatabase extends _$AppDatabase {
       }
       debugPrint(
         '[DB] v40 Living Worlds: groups rewritten=$groupsRewritten, '
-        'chat_world links=$chatLinks, unresolved refs=$unresolvedTotal',
+        'chat_world links=$chatLinks, unresolved refs=$unresolvedTotal '
+        '(original name lists only in pre-migration backup)',
       );
     } catch (e, st) {
       debugPrint('[DB] v40: world ref backfill failed: $e\n$st');

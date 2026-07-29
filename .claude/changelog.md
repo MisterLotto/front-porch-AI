@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-07-28 — fix(worlds): Claude review of Living Worlds high batch
+- **#1 purge safety:** export each character-linked clone as `.fpworld` to `worlds/recovered_character_lore_clones/` before hard delete (user-edited lore on the world row is no longer silently destroyed).
+- **#2 web bundle:** `npm run build` → refreshed `assets/web_app` (Edit Message, Places climate, covers now in the shipped PWA).
+- **#3 weather chip:** already fixed in medium batch (reads ChatService / active biome) — verified still true.
+- **#4 migration honesty:** comments + design doc: data mutations single-run; `groups.world_ids` rewritten in place (backup only for originals); chat_worlds skip existing pairs; collapsed double inject UPDATE.
+- **Cleanup:** `group_world_refs` key; resolve name→UUID when counting/fixing.
+- **Files:** world_repository, database.dart, database_cleanup(+dialog), assets/web_app/*, living-worlds.md.
+
+## 2026-07-28 — feat(worlds): medium batch — mid-chat climate, covers, card polish
+- **Climate spans:** `biome_schedule.dart`; ChatService hydrates spans; weather walk uses `biomeAtDay`; foreshadow suppress on span day-0; diurnalAmplitude in segments (temperate 1.0 keeps °C).
+- **UI:** Places panel climate dropdown (Story Tools); web `/api/chat/climate` + ChatPlacesSection; WeatherChip reads ChatService (correct biome).
+- **Covers:** `world_cover.dart` size-capped JPEG data URLs; desktop edit pick + WorldPlaceCard thumbs; web Worlds edit + WorldCard.
+- **Polish:** warm-porch Worlds chrome; group card dual `world_ids`/`world_names` export.
+- **Tests added:** biome_schedule_test, world_cover_test. **Before push:** regen widget goldens if world_management/time_strip fail.
+- **Deferred:** run-length prose, custom biomes (phase 2), cleanup rename.
+
+## 2026-07-28 — docs(worlds): Living Worlds implementation status for review
+- **Why:** Another agent needs a trustworthy done/partial/not-started map; design prose alone overstates phase 1.
+- **Did:** `docs/design/living-worlds.md` — Phase 0 DONE, Phase 1 PARTIAL (spans table + engine + world default; spans not wired / no mid-chat UI), Phase 2/3 not started; checklist with file pointers; test-strategy gates marked; medium batch + golden regen callout.
+- **Files:** docs/design/living-worlds.md
+
+## 2026-07-29 — feat(worlds): chat place attach + web Places parity + place-only pickers
+- **Desktop:** ChatPlacesPanel in Story Tools (1:1 + group) mutates chatWorldIds; group/character/edit pickers use placeWorlds + UUIDs.
+- **Web:** WorldsPage climates/inject/fpworld export; /api/worlds/climates; /api/chat/places GET/POST; ChatPlacesSection in insight; WorldCard climate chip.
+- **Files:** chat_places_panel, story_tools_group, edit_group/character, lorebook_worlds_tab, world_facade/routes, chat_facade, WorldsPage, ChatInsight, ChatPlacesSection, WorldCard, styles, Rawhide.
+
 ## 2026-07-29 — feat(worlds): purge character-linked world clones; import lore from character
 - **Why:** Worlds tab was cluttered with auto-cloned "X's Lorebook" rows; Living Worlds makes worlds *places*, not character lore mirrors.
 - **Did:** Detect+purge character-linked worlds once (pref `purged_character_linked_worlds_v1`); strip refs from characters.world_names / groups.world_ids / chat_worlds; saveWorld clears linkedCharacter fields; Edit Character + group lore "From character" dialog; web CharacterEdit "From character…"; placeWorlds filter on group attach.

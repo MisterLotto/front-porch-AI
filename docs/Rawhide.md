@@ -4,7 +4,17 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🛟 **Character-lore “clone” cleanup is recoverable** — When old Worlds copies of a character’s lorebook are removed, any edits that lived only on that world copy are first saved as `.fpworld` files under your data folder (`worlds/recovered_character_lore_clones/`). Your character card lore was always safe; now those extra world-only edits are too.
+
+- 🌡️ **Switch a chat’s climate mid-story** — Story Tools → Places → **Climate for this chat**. Change from temperate to desert (or any built-in) starting *today’s* story day; earlier days keep the weather they already had. Tomorrow’s “storm coming” foreshadow is quiet for one day after a switch so it doesn’t lie. Same control on the web chat panel.
+
+- 🖼️ **Place cover images** — Add optional art when you create or edit a place. It shows on the Worlds grid (desktop + web) and packs into `.fpworld` so “Mars” can ship with a face.
+
+- 🎨 **Worlds grid cleaned up** — Warmer porch styling, cover band on each place card, climate chips — less indigo chrome, more “front porch.”
+
 - 🌍 **Worlds are places now — character lore clones are gone** — The Worlds tab used to fill up with “Aerin’s Lorebook” style copies of every character’s lore. Those clutter clones are removed on first launch (your **character cards keep their lore** — nothing story-critical is lost). Worlds are for real places again: climate, place description, `.fpworld` export. Need someone else’s lore on this card? Edit Character → **Lorebook → From character** (also on group lore and the web editor).
+
+- 📍 **Attach places to any chat** — Story Tools → **Places** pins climate + place lore to the open 1:1 or group session. Group “Linked Places” is still the template for *new* chats. The web chat panel and Places page match (climate with “what it feels like,” inject toggle, `.fpworld` download).
 
 - 🌍 **Worlds become real places you can export** — Each world has a stable id, optional **climate** (temperate, desert, rainforest, continental, tropical, mediterranean, highland), place description that can reach the story, and a full **`.fpworld` export** packing lore + climate — ship “Mars” as one file. Group chats attach by id; new group chats inherit the group’s places.
 

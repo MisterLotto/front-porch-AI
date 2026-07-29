@@ -1,18 +1,109 @@
 # Living Worlds — real worlds, weather biomes, and authored climates
 
-**Status: IN PROGRESS (2026-07-29) — Phase 0 + Phase 1 foundation landing on Rawhide.**
-Rev.2 design retained. Implementation started: schema v40, `.fpworld` export,
-UUID identity, chat_worlds, built-in biomes + weather engine param, world
-description injection, desktop world editor climate picker.
+**Status: PHASE 0 DONE · PHASE 1 MOSTLY DONE (medium batch) · PHASE 2/3 NOT STARTED**
+(Last status audit: 2026-07-28 — medium tier landed. Branch: `Rawhide`.)
+**Before push:** re-run weather / world_management widget goldens if they fail;
+engine temperate path is intended bit-identical (regen only if a golden fails).
+
+Rev.2 design retained below. Use **§ Implementation status** as the source of
+truth for what landed vs what is still open; do not re-derive from the
+narrative sections alone.
 
 **Open decisions locked for this land:**
 1. Phase 2 editor parity — defer (desktop authoring, use everywhere).
-2. Migrated worlds: `inject_description = 0` by default.
+2. Migrated worlds: `inject_description = 0` by default. ✅ shipped in v40.
 3. Multi-lorebook: `.fpworld` carries `lorebooks[]` (merged on import for now);
-   single DB blob remains until a later cut.
+   single DB blob remains until a later cut. ✅ envelope ready; DB still one blob.
 
 A three-phase arc that turns `worlds` from a lorebook folder into a portable
 *place*, then gives places a climate, then lets users author their own.
+
+---
+
+## Implementation status (review snapshot)
+
+Legend: **DONE** · **PARTIAL** · **NOT STARTED** · **OUT OF SCOPE (this land)**
+
+Reviewers: read this table first, then sample the cited paths. Do not treat
+design prose under §1–§3 as “implemented” unless it is marked DONE here.
+
+### Phase 0 — Worlds become real places → **DONE**
+
+| Item | Status | Where / notes |
+|---|---|---|
+| Schema v40 additive columns on `worlds` (`cover_image`, `format_version`, `source_id`, `linked_character_id`, `biome_id`, `biome_json`, `inject_description`) | **DONE** | `lib/database/database.dart` v39→v40 |
+| `chat_worlds` join table + index | **DONE** | same |
+| Forced pre-migration backup attempt | **DONE** | v40 block (non-fatal if backup path fails) |
+| Name→UUID backfill for `groups.world_ids` + seed `chat_worlds` for existing group sessions | **DONE** | v40 backfill; unresolved refs logged/dropped |
+| `linkedCharacterName` → `linked_character_id` backfill | **DONE** | v40 |
+| Migrated worlds `inject_description = 0` | **DONE** | v40 one-shot UPDATE |
+| UUID identity; rename does not cascade | **DONE** | `WorldRepository.renameWorld` |
+| Chat-level attach (1:1 + group session); group `world_ids` = template only | **DONE** | `setChatWorldIds` / `chatWorldIds`; `applyGroupTemplateToChat` |
+| Resolution by id (name fallback for legacy) | **DONE** | `resolveWorld`, `world_ref_resolver.dart` |
+| World description injection (budget-capped, gated) | **DONE** | `prompt_injection/world_injection.dart` + `ChatService` wire |
+| `.fpworld` encode/decode + ST bare-lorebook import | **DONE** | `fp_world_package.dart`; import Keep-both rename |
+| Purge character-linked auto-import clones | **DONE** | Exports `.fpworld` to `worlds/recovered_character_lore_clones/` before hard delete (user-edited clone safety) |
+| “From character” lore import (replace clone UX) | **DONE** | edit character / group lore / web |
+| Place-only pickers (exclude character-linked leftovers) | **DONE** | `placeWorlds`; edit char/group/lorebook tab |
+| Desktop Worlds authoring (climate picker + feel copy) | **DONE** | `world_management_page.dart` |
+| Story Tools → **Places** panel (stay under Story Tools — no new sidebar leaf) | **DONE** | `chat_places_panel.dart` + `story_tools_group.dart` |
+| Web Worlds page + chat Places section + facade/routes | **DONE** | `WorldsPage.tsx`, `ChatPlacesSection.tsx`, `world_facade` / `world_routes` |
+| Cover image **column + model + .fpworld field** | **DONE** | schema / `World.coverImage` / envelope `cover` |
+| Cover image **picker UI + grid thumbnails** | **DONE** | desktop dialog + `WorldPlaceCard`; web Worlds edit + `WorldCard`; `world_cover.dart` size-cap |
+| Group card export dual `worldIds` (uuid) + `worldNames` (legacy) | **DONE** | `GroupCard.worldNames` + exporter resolves via `WorldRepository` |
+| Cleanup counter rename + UUID/name resolution | **DONE** | `group_world_refs`; resolves names→ids when fixing |
+| Migration fixture test (broken name refs, etc.) | **PARTIAL** | unit tests for resolver/package; no full fixture-DB migration test found |
+| `.fpworld` round-trip + collision rename tests | **DONE** | `test/models/fp_world_package_test.dart`, world repo tests |
+
+### Phase 1 — Built-in weather biomes → **MOSTLY DONE** (run-length deferred)
+
+| Item | Status | Where / notes |
+|---|---|---|
+| `chat_biome_spans` table + insert/list | **DONE** | schema + `AppDatabase.insertBiomeSpan` / `getBiomeSpansForChat` |
+| Built-in biomes (~7) + JSON round-trip + `validate()` + feel copy | **DONE** | `weather_biomes.dart` |
+| `WeatherEngine.weatherFor(..., biome: / biomeAtDay:)` — null ≡ temperate | **DONE** | per-day climate for mid-chat spans; fixed path when `biomeAtDay` null |
+| World default climate drives chat weather | **DONE** | schedule `worldDefault` from first attached place |
+| Desktop/world editor climate picker with feel card | **DONE** | world management + web Worlds |
+| `WorldRepository.setChatBiome` / span rows / schedule | **DONE** | + `biome_schedule.dart` |
+| **Wire spans into weather walk** | **DONE** | `ChatService` hydrates schedule; all weather getters use `biomeAtDay` |
+| Mid-chat climate picker UI (Places — no new leaf) | **DONE** | desktop `ChatPlacesPanel`; web `ChatPlacesSection` + `POST /api/chat/climate` |
+| Foreshadow suppression on first day of a new span | **DONE** | `WeatherInjection.suppressForeshadow` |
+| Run-length prose (“third straight day of rain”) | **NOT STARTED** | optional; deferred |
+| Biome-scaled `diurnalAmplitude` in `weather_segments` | **DONE** | temperate 1.0 keeps °C goldens |
+| WeatherChip uses ChatService (not temperate-only providers) | **DONE** | `weather_chip.dart` |
+| Changeover property + foreshadow suppress tests | **DONE** | `test/services/chat/biome_schedule_test.dart` |
+| Per-built-in golden sequences | **PARTIAL** | temperate goldens held; full per-biome pin optional |
+| Web per-chat climate override | **DONE** | `/api/chat/climate` |
+
+### Phase 2 — Authored climates (skins + stance) → **NOT STARTED**
+
+| Item | Status | Notes |
+|---|---|---|
+| Stance-aware `dressCue` / conditionSkin behaviour | **NOT STARTED** | `ConditionSkin` + `conditionSkin` fields exist on model for forward schema; built-ins do not drive dressCue yet |
+| Custom biome editor + preview harness | **NOT STARTED** | |
+| `biomes` table + snapshot-on-attach | **NOT STARTED** | spans already store full JSON when used |
+
+### Phase 3 — Stoop / sharing → **OUT OF SCOPE**
+
+Sketch only. `.fpworld` envelope is intentionally Stoop-ready.
+
+### Product decisions already applied (not re-open without maintainer)
+
+- Places stay under **Story Tools** (no sidebar leaf creep).
+- Objectives are their own accordion leaf, **collapsed by default**.
+- Character-linked worlds purged; lore copy is **From character**, not Worlds clones.
+- Multi-lorebook DB split deferred; envelope has `lorebooks[]`.
+
+### Medium batch (landed 2026-07-28)
+
+1. ~~Wire spans into ChatService~~ **DONE**
+2. ~~Mid-chat climate UI (Places + web)~~ **DONE**
+3. ~~Cover pick + thumbnails~~ **DONE**
+4. ~~Desktop Worlds card polish (warm-porch)~~ **DONE** (`WorldPlaceCard`)
+5. ~~`diurnalAmplitude` + foreshadow suppress~~ **DONE** (run-length still deferred)
+6. **Regen goldens before push** if widget/engine goldens fail — temperate walk should stay bit-identical.
+
+---
 
 **Phase 0 is the prelude, by maintainer ruling.** It could technically be
 decoupled — biomes attached to chats need worlds not at all — but worlds
@@ -60,6 +151,8 @@ information that actually changes decisions.
 ---
 
 ## 1. Phase 0 — Worlds become real places
+
+**Implementation: DONE** (cover-image *UI* and dual group-card name export still open — see status table).
 
 **Risk: HIGH.** Contains the only schema migration and the only step in the
 arc that can lose user data.
@@ -158,9 +251,11 @@ import, export, description editor. No deferral requested.
 ### Risks
 
 - **The backfill is the dangerous step.** Mitigation: forced pre-migration
-  backup; pure-function resolver with unit tests over a fixture DB; dry-run
-  counts logged before write; `groups.world_ids` preserved, so a bad
-  backfill is inspectable and re-runnable.
+  backup (the only place original name-list `world_ids` survive — the live
+  column is rewritten in place to UUIDs and is **not** a re-runnable
+  snapshot); pure-function resolver with unit tests; unresolved refs logged
+  and dropped. Data mutations are single-run with schema 39→40 (not a
+  repair tool).
 - **Legacy group cards keep the collision bug permanently.** Cards already
   in circulation carry names, and no migration reaches them. Importing an
   old card can still bind to the wrong local world. Phase 0 fixes cards
@@ -175,6 +270,9 @@ import, export, description editor. No deferral requested.
 ---
 
 ## 2. Phase 1 — Weather biomes, built-in
+
+**Implementation: MOSTLY DONE** — engine + spans wired + mid-chat UI +
+diurnal amplitude + foreshadow suppress. Run-length prose still open.
 
 **Risk: MEDIUM.** No migration of existing data; two new tables; the danger
 is silently perturbing already-written weather history.
@@ -294,6 +392,9 @@ configuration surface, non-negotiable.
 
 ## 3. Phase 2 — Authored climates: skins and stance
 
+**Implementation: NOT STARTED** (model fields for `conditionSkin` / stance
+exist for forward compatibility only).
+
 **Risk: MEDIUM-LOW technically, HIGH on scope.** No migration; the danger is
 that this is the fun part and gets built regardless of whether phase 1
 landed. See §5.
@@ -412,6 +513,8 @@ than lorebook prose.
 
 ## 4. Phase 3 — Sharing (sketch only, not scoped)
 
+**Implementation: OUT OF SCOPE.**
+
 Worlds are portable after phase 0, so Stoop distribution is a backend
 project rather than an extension of this work: a third content type, its own
 moderation surface for names and descriptions, and the never-break-old-
@@ -439,32 +542,43 @@ built regardless of whether phase 1 landed. Gates:
 
 1. **Phase 2 editor parity** — desktop-only authoring with use/download
    everywhere (Piper precedent), or a full web editor?
+   → **Ruled: defer** (desktop authoring, consume everywhere).
 2. **World description injection default** — on or off for worlds migrated
    from existing rows? (Recommendation: off; those descriptions were written
    as library labels, not prose.)
+   → **Ruled: off** — shipped in v40 (`inject_description = 0` for migrated rows).
 3. **Multiple lorebooks per world** — today it is one JSON blob. Real worlds
    may want several. It changes the `.fpworld` envelope, so it is cheaper to
    decide before v1 ships than after.
+   → **Ruled for v1:** envelope has `lorebooks[]` (merge on import); single DB
+   blob until a later cut.
 
 **Ruled (2026-07-28):** phase 0 stays the prelude; effort estimates removed
 in favour of risk markers; world attachment uses the chat-level +
 group-template model (§1).
 
+**Also applied in product (2026-07):** Places stay under Story Tools; no new
+sidebar leaf for Places; Objectives leaf separate and collapsed by default.
+
 ## 7. Test strategy
 
+Status of each gate (audit 2026-07-28):
+
 - The pinned expected sequence constant is **untouched** — phase 1's
-  acceptance gate.
-- New pinned goldens per built-in biome (fixture seed, fixture dates).
+  acceptance gate. → **HOLDING** for temperate/null path; re-check after any
+  engine change. **Regen goldens before push** if span/diurnal/run-length land.
+- New pinned goldens per built-in biome (fixture seed, fixture dates). → **NOT DONE**
 - Changeover property test: for any span boundary *k*, days `1..k-1`
-  recompute byte-identically to the pre-switch run.
+  recompute byte-identically to the pre-switch run. → **NOT DONE** (spans unused)
 - Migration test over a fixture DB with realistic broken data: name refs →
   uuid refs, group templates → `chat_worlds`, broken refs dropped and
-  counted, `linkedCharacterName` → id.
+  counted, `linkedCharacterName` → id. → **PARTIAL** (resolver unit tests only)
 - Round-trip test: world → `.fpworld` → import → structurally identical,
-  including a name collision auto-renaming to "Glorb (2)".
+  including a name collision auto-renaming to "Glorb (2)". → **DONE** (package/repo tests)
 - Validation tests: zero-sum weights rejected; rename-without-stance
-  rejected; `dressCue` at `dangerous` overrides temperature phrasing.
+  rejected; `dressCue` at `dangerous` overrides temperature phrasing. → **PARTIAL**
+  (weight validation exists; stance/dressCue is phase 2)
 - Distribution envelopes per biome across many seeds (desert never snows;
   tropical never reaches the cold band; rainforest storm share under its
-  ceiling).
-- Foreshadow suppression on the first day of a new span.
+  ceiling). → **NOT DONE** / light coverage only
+- Foreshadow suppression on the first day of a new span. → **NOT DONE**

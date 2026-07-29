@@ -793,6 +793,38 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
   display: flex; justify-content: space-between; align-items: center;
   gap: 12px; padding-top: 2px;
 }
+
+/* Living Worlds — climate feel + chat places */
+.climate-feel-card {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+.climate-feel-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+.climate-feel-card p { margin: 0 0 6px; }
+.climate-feel-card p:last-child { margin-bottom: 0; }
+.chat-places { margin: 10px 0 14px; }
+.chat-places-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;
+}
+.chat-place-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 0.8rem;
+}
 @media (max-width: 640px) {
   .msg-edit-modal {
     width: 100vw; height: 100dvh; max-height: 100dvh;

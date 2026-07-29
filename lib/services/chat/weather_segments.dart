@@ -182,12 +182,14 @@ class WeatherSegments {
     required int dayCount,
     required DateTime date,
     Biome? biome,
+    Biome Function(int day)? biomeAtDay,
   }) {
     final day = WeatherEngine.weatherFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
       biome: biome,
+      biomeAtDay: biomeAtDay,
     );
     final scripts = _scripts[day.condition]!;
     final rng = WeatherRng(
@@ -211,12 +213,14 @@ class WeatherSegments {
     required DateTime date,
     required int hour,
     Biome? biome,
+    Biome Function(int day)? biomeAtDay,
   }) {
     final day = WeatherEngine.weatherFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
       biome: biome,
+      biomeAtDay: biomeAtDay,
     );
     final segment = segmentForHour(hour);
     final conditions = segmentConditionsFor(
@@ -224,17 +228,25 @@ class WeatherSegments {
       dayCount: dayCount,
       date: date,
       biome: biome,
+      biomeAtDay: biomeAtDay,
     );
     final (lo, hi) = _bandRangeC[day.temp]!;
     final tempRng = WeatherRng(
       WeatherEngine.seedFor(sessionSeed) ^ (dayCount * _kTempMix),
     );
     final baseC = lo + (tempRng.next() % (hi - lo + 1));
+    // Living Worlds: desert swings hard day/night; temperate amp is 1.0 so
+    // pre-biome °C goldens stay bit-identical. Use the climate active today.
+    final climateForDay = biomeAtDay != null
+        ? biomeAtDay(dayCount < 1 ? 1 : dayCount)
+        : (biome ?? Biome.temperate);
+    final amp = climateForDay.diurnalAmplitude;
+    final offset = (_diurnalOffsetC[segment]! * amp).round();
     return SegmentWeather(
       day: day,
       segment: segment,
       condition: conditions[segment.index],
-      tempC: baseC + _diurnalOffsetC[segment]!,
+      tempC: baseC + offset,
     );
   }
 

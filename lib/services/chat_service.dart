@@ -53,6 +53,7 @@ import 'package:front_porch_ai/services/group_turn_manager.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/needs_impact.dart';
 import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/services/chat/biome_schedule.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
@@ -1483,10 +1484,14 @@ class ChatService extends ChangeNotifier {
   /// Loaded on session open; group template seeds new chats.
   List<String> _chatWorldIds = const [];
 
+  /// Hydrated mid-chat climate spans + world default (Living Worlds phase 1).
+  BiomeSchedule _biomeSchedule = const BiomeSchedule();
+
   Future<void> _reloadChatWorldIds() async {
     final sid = _currentSessionId;
     if (sid == null) {
       _chatWorldIds = const [];
+      _biomeSchedule = const BiomeSchedule();
       return;
     }
     try {
@@ -1494,6 +1499,25 @@ class ChatService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[ChatService] chat world load failed: $e');
       _chatWorldIds = const [];
+    }
+    await _reloadBiomeSchedule();
+  }
+
+  Future<void> _reloadBiomeSchedule() async {
+    final sid = _currentSessionId;
+    if (sid == null) {
+      _biomeSchedule = const BiomeSchedule();
+      return;
+    }
+    try {
+      final rows = await _worldRepository.getChatBiomeSpanRows(sid);
+      _biomeSchedule = BiomeSchedule.fromJsonSpans(
+        rows: rows,
+        worldDefault: _worldDefaultBiome,
+      );
+    } catch (e) {
+      debugPrint('[ChatService] biome schedule load failed: $e');
+      _biomeSchedule = BiomeSchedule(worldDefault: _worldDefaultBiome);
     }
   }
 
@@ -1505,6 +1529,25 @@ class ChatService extends ChangeNotifier {
     if (sid == null) return;
     await _worldRepository.setChatWorlds(sid, worldIds);
     _chatWorldIds = List.unmodifiable(worldIds);
+    await _reloadBiomeSchedule();
+    notifyListeners();
+  }
+
+  /// Climate active on the current story day (span override or world default).
+  Biome get activeChatBiome =>
+      _biomeSchedule.biomeAt(_timeService.dayCount);
+
+  /// Insert a mid-chat climate changeover from [dayCount] onward.
+  Future<void> setChatClimate(Biome biome) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    final day = _timeService.dayCount < 1 ? 1 : _timeService.dayCount;
+    await _worldRepository.setChatBiome(
+      chatId: sid,
+      dayCount: day,
+      biome: biome,
+    );
+    await _reloadBiomeSchedule();
     notifyListeners();
   }
 
@@ -1836,8 +1879,9 @@ class ChatService extends ChangeNotifier {
       _storageService.absenceBannerEnabled ? absencePhrase : null;
 
   /// Climate from the first attached world that carries one (Living Worlds).
-  /// Null ⇒ temperate (byte-identical to pre-biome weather).
-  Biome? get _activeWorldBiome {
+  /// Used as the schedule default when no mid-chat span covers a day.
+  /// Temperate when nothing is attached — byte-identical to pre-biome weather.
+  Biome get _worldDefaultBiome {
     World? pick(String ref) => _worldRepository.resolveWorld(ref);
     for (final id in _chatWorldIds) {
       final w = pick(id);
@@ -1856,8 +1900,10 @@ class ChatService extends ChangeNotifier {
         }
       }
     }
-    return null;
+    return Biome.temperate;
   }
+
+  Biome _biomeAtDay(int day) => _biomeSchedule.biomeAt(day);
 
   /// Today's story weather, or null when off (living-time-features.md §3).
   /// Pure recompute from existing state — nothing stored, so save/load and
@@ -1876,7 +1922,7 @@ class ChatService extends ChangeNotifier {
       sessionSeed: seed,
       dayCount: _timeService.dayCount,
       date: _timeService.clock,
-      biome: _activeWorldBiome,
+      biomeAtDay: _biomeAtDay,
     );
   }
 
@@ -1884,15 +1930,17 @@ class ChatService extends ChangeNotifier {
   /// Because the engine is a prefix-stable deterministic walk, this forecast
   /// is exactly what day dayCount+1 will be when the story clock reaches it
   /// (dayCount is derived from the calendar date, so +1 day ⇔ +1 dayCount) —
-  /// foreshadowed fronts always arrive. Recompute is O(dayCount) integer
-  /// math, called once per turn by the injection and once per facade read.
+  /// foreshadowed fronts always arrive (except the first day of a mid-chat
+  /// climate switch — see [WeatherInjection.suppressForeshadow]).
+  /// Recompute is O(dayCount) integer math, called once per turn by the
+  /// injection and once per facade read.
   DailyWeather? get upcomingWeather {
     if (currentWeather == null) return null;
     return WeatherEngine.weatherFor(
       sessionSeed: _currentSessionId!,
       dayCount: _timeService.dayCount + 1,
       date: _timeService.clock.add(const Duration(days: 1)),
-      biome: _activeWorldBiome,
+      biomeAtDay: _biomeAtDay,
     );
   }
 
@@ -1908,7 +1956,7 @@ class ChatService extends ChangeNotifier {
       dayCount: _timeService.dayCount,
       date: _timeService.clock,
       hour: _timeService.clock.hour,
-      biome: _activeWorldBiome,
+      biomeAtDay: _biomeAtDay,
     );
   }
 
@@ -1929,7 +1977,7 @@ class ChatService extends ChangeNotifier {
                 dayCount: day - 1,
                 date: _timeService.clock.subtract(const Duration(days: 1)),
                 hour: 23,
-                biome: _activeWorldBiome,
+                biomeAtDay: _biomeAtDay,
               ),
       DaySegment.afternoon => _segmentAt(7),
       DaySegment.evening => _segmentAt(14),
@@ -1942,13 +1990,15 @@ class ChatService extends ChangeNotifier {
     dayCount: _timeService.dayCount,
     date: _timeService.clock,
     hour: hour,
-    biome: _activeWorldBiome,
+    biomeAtDay: _biomeAtDay,
   );
 
   late final _weatherInjection = WeatherInjection(
     getWeather: () => currentSegmentWeather,
     getPreviousSegment: () => previousSegmentWeather,
     getUpcoming: () => upcomingWeather,
+    suppressForeshadow: () =>
+        _biomeSchedule.isSpanStart(_timeService.dayCount),
   );
 
   // ── Ambitions (Living Time §6) ──
