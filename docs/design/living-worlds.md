@@ -462,7 +462,17 @@ extension over display-only fakery:
   surface a "made with a newer version" note. Same discipline as the Stoop
   API contract.
 
-**Build order (locked):** ① per-biome pins (**done**) → ② engine bands
+**Build order (locked): ALL FOUR STEPS DONE 2026-07-29.**
+③ shipped as per-world custom climates (worlds.biomeJson; the separate
+`biomes` library table deferred — sharing rides `.fpworld`): editor dialog
+rebuilt 1:1 to the approved mockup after a maintainer fidelity rejection
+(see changelog "climate editor rebuilt"), preview-as-validation harness
+(`biome_preview.dart`), 'world:<id>'-branded selection on every surface.
+④ shipped as the shared `weather_skins.dart` helpers (chip + prompt + web
+facade): renames + stance behavior + dangerous+ dressCue replacement +
+deadline foreshadow. Emoji/flavour authoring included. Place traits
+(atmosphere/gravity) shipped on worlds v41.
+① per-biome pins (**done**) → ② engine bands
 behind the pins (**done 2026-07-29**: TempBand appended cryogenic/furnace/
 inferno with `kTempBandRankByIndex` thermal ranks; per-biome `bandRange`
 clamp defaulting to the classic (0,4) span; `displayAnchorsC` authored °C
