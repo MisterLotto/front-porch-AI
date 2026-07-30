@@ -55,6 +55,14 @@ class StoopUploadPage extends StatefulWidget {
   /// preserves it by default (clearing the field on update removes the credit).
   final String? initialOriginalCreator;
 
+  /// The post's current DISPLAY name + summary, so update mode preserves them
+  /// instead of re-seeding from the local card. The display name is the
+  /// listing title ("Misty Meadows, Misguided Meteorologist") and may differ
+  /// from the card's in-chat name ("Misty", what {{char}} maps to) — without
+  /// these, publishing an update would silently revert a custom title.
+  final String? initialName;
+  final String? initialSummary;
+
   const StoopUploadPage({
     super.key,
     this.updateCharacter,
@@ -62,6 +70,8 @@ class StoopUploadPage extends StatefulWidget {
     this.updateStoopId,
     this.initialNsfw = false,
     this.initialOriginalCreator,
+    this.initialName,
+    this.initialSummary,
   });
 
   bool get isUpdate =>
@@ -156,6 +166,14 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       _applyGroupSelection(ug);
       _nsfw = widget.initialNsfw;
       _currentStep = 1;
+    }
+    // Update mode: the post's stored display name/summary win over the
+    // card-derived seeds the appliers just set (custom titles must survive).
+    if (widget.initialName?.trim().isNotEmpty ?? false) {
+      _name.text = widget.initialName!.trim();
+    }
+    if (widget.initialSummary?.trim().isNotEmpty ?? false) {
+      _summary.text = widget.initialSummary!.trim();
     }
     _originalCreator.text = widget.initialOriginalCreator ?? '';
   }
@@ -772,12 +790,25 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       key: const ValueKey('details'),
       padding: const EdgeInsets.all(24),
       children: [
-        _label('Name'),
+        _label('Display name on The Stoop'),
         TextField(
           controller: _name,
           onChanged: (_) => setState(() {}),
           style: TextStyle(color: stoopCream(context)),
-          decoration: _input('Character name'),
+          decoration: _input('Name shown on The Stoop').copyWith(
+            // The listing title is free-form; a character's in-chat name
+            // (what {{char}} maps to) travels inside the card and never
+            // changes, so titles like "Misty Meadows, Misguided
+            // Meteorologist" are safe.
+            helperText: _selected != null
+                ? 'Just the listing title — add flair if you like. In chat '
+                      'they’ll still be “${_selected!.name}” ({{char}} is '
+                      'unchanged).'
+                : 'Just the listing title shown on The Stoop — add flair if '
+                      'you like.',
+            helperMaxLines: 3,
+            helperStyle: TextStyle(color: stoopMute(context), fontSize: 12),
+          ),
         ),
         const SizedBox(height: 18),
         _label('Short summary'),

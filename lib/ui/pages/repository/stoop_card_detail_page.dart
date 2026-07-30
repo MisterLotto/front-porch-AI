@@ -318,8 +318,16 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     );
   }
 
+  // The name {{char}} actually maps to in chat — the CARD's own name, which
+  // may differ from the post's display title ("Misty" vs "Misty Meadows,
+  // Misguided Meteorologist"). Previews must read like the chat will.
+  String _chatName(StoopCardDetail d) {
+    final n = (d.card['name'] ?? '').toString().trim();
+    return n.isNotEmpty ? n : d.name;
+  }
+
   String _s(StoopCardDetail d, String key) =>
-      stoopResolveMacros((d.card[key] ?? '').toString(), d.name);
+      stoopResolveMacros((d.card[key] ?? '').toString(), _chatName(d));
 
   List<String> _greetings(StoopCardDetail d) {
     final first = _s(d, 'first_mes');
@@ -382,7 +390,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                 ...stoopStandardSections(
                   context,
                   d.card,
-                  d.name,
+                  _chatName(d),
                   firstMessage: _firstMessage(d),
                 ),
             ]),

@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🏷️ **Stoop listings can have fancy titles now** — When you share a character, the "Display name on The Stoop" is its own field: name the listing "Misty Meadows, Misguided Meteorologist" while in chat she stays plain "Misty" (nothing inside the card changes). Custom titles also survive when you publish an update — they no longer quietly reset to the character's name.
+
 - 🏮 **The Stoop got its glow-up** — The in-app community hub now looks like the real thing at hub.frontporchai.app: a warm "porch at dusk" makeover with amber lamplight buttons, cream serif headings, cinematic Mod's Picks hero, richer card tiles (art up top, name/creator/summary/stats below, with a gentle lift when you hover), a proper ▲/▼ vote box, teal tag pills, moderation status pills, and a cozy pulsing-lamp loading light. Light-theme users get a matching warm-daylight version. Same Stoop, much nicer porch — on desktop and the web UI alike.
 
 - 🏞️ **Worlds are coming to The Stoop** — Soon you'll be able to share the places you build — and download other people's — right from The Stoop: portable `.fpworld` places with their cover art, lore, custom climate, and traits, downloaded straight into your Worlds with one tap. Shared places will go through the same moderator review as characters. The app is ready today (you'll spot the new "Worlds — coming soon" tags on The Stoop's browse filter and share screen, on desktop and web); the community hub itself lights up in an upcoming update.

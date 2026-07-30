@@ -6580,3 +6580,28 @@ Account rename updates it live; ellipsized at 160px so long names can't
 stretch the bar; falls back to "Mine" if the user is somehow null). Web
 parity: the web UI's equivalent personal surface is its Account tab — it now
 shows "@Name" the same way (ellipsized at 140px, falls back to "Account").
+
+## 2026-07-30 (UTC) — Stoop display names: listing title ≠ in-chat name
+
+Files: lib/ui/pages/repository/stoop_upload_page.dart,
+lib/ui/pages/repository/stoop_home_view.dart,
+lib/ui/pages/repository/stoop_card_detail_page.dart,
+docs/design/stoop-display-name.md (new), docs/Rawhide.md
+
+Maintainer wants "Misty Meadows, Misguided Meteorologist" as the Stoop
+listing while {{char}}/chat stays "Misty". Key insight: the post's `name`
+was ALWAYS a separate field from the card's embedded name — zero server
+work needed. Three client gaps fixed: (1) wizard field renamed "Display
+name on The Stoop" with helper text showing the real in-chat name; (2)
+update mode now receives initialName/initialSummary from the stored post
+(both were silently re-seeded from the local card, so a custom title
+would've reverted on every version publish — same clobber class as the
+existing initialNsfw/initialOriginalCreator fix); (3) the detail panel
+resolves {{char}} previews against the EMBEDDED card's name (post-name
+fallback) so previews read like chat will. V3 nickname explicitly not
+supported (maintainer decision). Web UI needs nothing (Share tab is the
+approved coming-soon deferral; its detail renders macros raw). New
+docs/design/stoop-display-name.md is the handoff spec for the agent doing
+the hub-website side (submit-form helper + update-form seed + preview
+macro fix; optional tagline/chatName additive fields spec'd but not
+requested).
