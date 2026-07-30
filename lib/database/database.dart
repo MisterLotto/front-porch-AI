@@ -2756,9 +2756,17 @@ class AppDatabase extends _$AppDatabase {
     final column = characterId != null ? 'character_id' : 'group_id';
     final id = characterId ?? groupId;
     if (id == null) return null;
+    // Only sessions that actually CARRY a theme: created_at is stored at
+    // second resolution, so two sessions made back-to-back tie on the sort
+    // and "DESC LIMIT 1" picked an arbitrary one — if that was a fresh
+    // themeless session, the inherited theme silently came back null (seen
+    // as a CI-order flake in theme_overrides_test). Filtering to themed
+    // sessions matches the intent ("the last theme the user actually used")
+    // and rowid breaks any remaining same-second tie by insertion order.
     final rows = await customSelect(
       'SELECT theme_overrides FROM sessions WHERE $column = ? '
-      'AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1',
+      'AND deleted_at IS NULL AND theme_overrides IS NOT NULL '
+      'ORDER BY created_at DESC, rowid DESC LIMIT 1',
       variables: [Variable(id)],
     ).get();
     return rows.isNotEmpty ? rows.first.read<String?>('theme_overrides') : null;

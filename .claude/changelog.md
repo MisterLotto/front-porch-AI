@@ -6821,3 +6821,19 @@ group realism toggle via shape-with-side for its border); gradient/tinted
 boxes that can't be tileColor got a transparent Material inside the box
 (upload NSFW switch, standards-card footer slot, BYAF checkbox).
 
+
+## 2026-07-30 (UTC) — Fix CI flake: theme inheritance picked an arbitrary session on same-second ties
+
+Files: lib/database/database.dart
+
+theme_overrides_test ("retrieves last theme from previous sessions")
+started failing on Rawhide CI after the perf pushes shifted suite timing.
+Latent bug, not a perf regression: sessions.created_at is second-resolution,
+so two sessions created back-to-back tie on ORDER BY created_at DESC and
+LIMIT 1 returned an arbitrary row — if that was the fresh themeless
+session, the inherited theme came back null. Also a real (rare) prod bug:
+starting two chats within a second could drop theme inheritance.
+getLastSessionThemeOverrides now filters to sessions that actually carry
+overrides (the query's intent — "the last theme the user used") with a
+rowid tie-break. Verified 5 consecutive runs of the test + full suite
+(2828 pass, 0 fail) before push.
