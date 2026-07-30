@@ -261,6 +261,20 @@ class CharacterCardGrid extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Multi-select is one gesture — moving lives beside
+                  // deleting (users kept finding only the delete toolbar and
+                  // never the separate organize mode, which remains for the
+                  // folder-first workflow).
+                  ElevatedButton.icon(
+                    onPressed: () => onMoveToFolder(selectedCharacterIds),
+                    icon: const Icon(Icons.drive_file_move, size: 18),
+                    label: const Text('Move to Folder'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.porchAmberOf(context),
+                      foregroundColor: AppColors.onChaosAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () => onDeleteSelected(selectedCharacterIds),
                     icon: const Icon(Icons.delete_forever, size: 18),

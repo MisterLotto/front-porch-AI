@@ -6883,3 +6883,22 @@ assigned it anywhere. ONE shared rule added — FolderService.inheritFolder
 from the desktop context-menu flow AND the web facade's duplicate endpoint
 (which had the identical bug). New unit test covers inherit + no-op paths.
 Full suite green before push (2830 pass).
+
+## 2026-07-30 (UTC) — Multi-select toolbar gains Move to Folder
+
+Files: lib/ui/widgets/character_card_grid.dart, docs/Rawhide.md
+
+Maintainer ask: ride the mass-deletion multi-select to move several
+characters to a folder. Everything already existed — the folder-picker
+dialog (_showMoveToFolderDialog), the bulk handler
+(_moveSelectedToFolder), and the onMoveToFolder grid callback — but it was
+only reachable from the separate "organize" mode's toolbar, which users
+never found. The main multi-select toolbar now shows Move to Folder (amber)
+beside Delete Selected, wired to the same existing callback/dialog; the
+organize mode keeps working unchanged. Web already had multi-select move
+(bulkMove + folder dialog) — parity confirmed, no web change needed.
+
+NOT yet done (queued next): the group-chat creation wizard's character
+picker is a flat list that ignores the folder hierarchy — needs a
+folder-aware picker on desktop AND the web wizard; too large to bundle
+safely into this commit. Full suite green before push (2832 pass).

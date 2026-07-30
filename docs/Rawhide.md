@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ✅ **Multi-select can move characters to folders** — The same multi-select you use for mass deletion now has a "Move to Folder" button right beside Delete: pick several characters, choose a folder, done. (The web library already had this; desktop caught up.)
+
 - 🧠 **"Where we are" recaps stopped going missing** — Some models (thinking-mode remote models especially) would happily write journal memories but skip the final recap, so the sidebar's "Where we are" stayed blank — and looked like it vanished every time you reopened the app. The Journal now insists on the recap every pass (verified live against GLM-5.2) and keeps each pass to the handful of memories that actually mattered, instead of letting a chatty model flood dozens of near-duplicate entries into the diary.
 - 📁 **Duplicates stay in their folder** — Right-click → Duplicate on a character inside a folder used to drop the copy onto the Home Screen's top level. The duplicate now lands in the same folder as the original, wherever that is — on desktop and the web library alike.
 
