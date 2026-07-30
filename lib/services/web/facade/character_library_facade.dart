@@ -167,6 +167,9 @@ class CharacterLibraryFacade {
     if (card == null) return null;
     final dup = await _repo.duplicateCharacter(card);
     if (dup == null) return null;
+    // Same folder-inheritance rule as the desktop context menu: the copy
+    // lands beside its source, not on the top level.
+    await _folders.inheritFolder(card.imagePath, dup.imagePath);
     return {'id': dup.dbId, 'name': dup.name};
   }
 

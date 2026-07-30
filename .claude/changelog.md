@@ -6867,3 +6867,19 @@ transports.
 Grok follow-ups applied same-commit: warning gated on ops.isNotEmpty
 (quiet passes no longer log a false truncation alarm); capture rule
 reworded to defer to the cap on dense windows instead of contradicting it.
+
+## 2026-07-30 (UTC) — Duplicate character lands in the source's folder
+
+Files: lib/services/folder_service.dart,
+lib/ui/pages/home/home_page_dialogs.dart,
+lib/services/web/facade/character_library_facade.dart,
+test/services/folder_service_inherit_test.dart (new), docs/Rawhide.md
+
+Maintainer report: duplicating a foldered character dropped the copy on
+the Home Screen top level. Root cause: folder membership is keyed by image
+filename, the duplicate gets a fresh file, and neither duplicate call site
+assigned it anywhere. ONE shared rule added — FolderService.inheritFolder
+(source path → copy path; no-op when unfoldered or imageless) — called
+from the desktop context-menu flow AND the web facade's duplicate endpoint
+(which had the identical bug). New unit test covers inherit + no-op paths.
+Full suite green before push (2830 pass).

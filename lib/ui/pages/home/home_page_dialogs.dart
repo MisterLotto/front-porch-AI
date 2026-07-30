@@ -189,10 +189,15 @@ extension _HomePageDialogs on _HomePageState {
     CharacterCard character,
   ) async {
     try {
-      await Provider.of<CharacterRepository>(
+      final folders = Provider.of<FolderService>(context, listen: false);
+      final copy = await Provider.of<CharacterRepository>(
         context,
         listen: false,
       ).duplicateCharacter(character);
+      // The duplicate belongs wherever the original lives — folder
+      // membership is filename-keyed, so without this the copy landed on
+      // the home screen's top level regardless of the source's folder.
+      await folders.inheritFolder(character.imagePath, copy?.imagePath);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Character duplicated successfully.')),

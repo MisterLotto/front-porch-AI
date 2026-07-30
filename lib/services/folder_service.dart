@@ -211,6 +211,19 @@ class FolderService extends ChangeNotifier {
     await _load();
   }
 
+  /// Put a freshly-made copy in the same folder its source lives in.
+  /// Membership is keyed by image filename, so a duplicate starts life
+  /// unfoldered and (before this) dropped onto the home screen's top level
+  /// no matter where its source was. No-op when the source is unfoldered or
+  /// either side has no image. Shared by the desktop context menu AND the
+  /// web facade's duplicate endpoint — the one folder-inheritance rule.
+  Future<void> inheritFolder(String? sourcePath, String? copyPath) async {
+    if (sourcePath == null || copyPath == null) return;
+    final folder = getFolderForCharacter(sourcePath);
+    if (folder == null) return;
+    await addToFolder(folder.id, copyPath);
+  }
+
   /// Get the folder a character belongs to (if any)
   CharacterFolder? getFolderForCharacter(String characterPath) {
     final filename = _normalize(characterPath);
