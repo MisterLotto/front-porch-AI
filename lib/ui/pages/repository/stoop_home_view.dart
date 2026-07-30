@@ -23,6 +23,7 @@ import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_upload_page.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -246,49 +247,50 @@ class _StoopHomeViewState extends State<StoopHomeView> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Row(
-                children: [
-                  Text(
-                    'Your characters',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary(context),
+    return ColoredBox(
+      color: stoopBg0(context),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                child: Row(
+                  children: [
+                    Text('Your cards', style: stoopDisplay(context, size: 21)),
+                    const Spacer(),
+                    StoopAmberButton(
+                      label: 'Share to The Stoop',
+                      icon: Icons.upload_outlined,
+                      onPressed: _startUpload,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: _startUpload,
-                    icon: const Icon(Icons.upload_outlined, size: 18),
-                    label: const Text('Share a character'),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Expanded(child: _body()),
-          ],
+              Expanded(child: _body()),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const StoopLamp();
     if (_error != null) {
-      return _hint(Icons.cloud_off_outlined, _error!, retry: true);
+      return _hint('🌙', _error!, retry: true);
     }
     if (_mine.isEmpty && _downloads.isEmpty) {
       return _hint(
-        Icons.ios_share_outlined,
-        'You haven’t shared any characters yet.\nTap “Share a character” to '
-        'submit one for review.',
+        '🏮',
+        'Nothing shared yet.\nTap “Share to The Stoop” to submit a card for '
+        'review.',
       );
     }
     return RefreshIndicator(
@@ -300,8 +302,8 @@ class _StoopHomeViewState extends State<StoopHomeView> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
-                'You haven’t shared any characters yet.',
-                style: TextStyle(color: AppColors.textTertiary(context)),
+                'You haven’t shared anything yet.',
+                style: TextStyle(color: stoopMute(context)),
               ),
             )
           else
@@ -312,20 +314,11 @@ class _StoopHomeViewState extends State<StoopHomeView> {
               ),
           if (_downloads.isNotEmpty) ...[
             const SizedBox(height: 22),
-            Text(
-              'Downloads',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary(context),
-              ),
-            ),
+            Text('Downloads', style: stoopDisplay(context, size: 17)),
             const SizedBox(height: 2),
             Text(
               'Cards you’ve saved — grab them again on any device.',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 12,
-              ),
+              style: TextStyle(color: stoopMute(context), fontSize: 12),
             ),
             const SizedBox(height: 12),
             _downloadsGrid(),
@@ -340,8 +333,8 @@ class _StoopHomeViewState extends State<StoopHomeView> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 150,
-        childAspectRatio: 0.66,
+        maxCrossAxisExtent: 190,
+        childAspectRatio: 0.64,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -357,9 +350,9 @@ class _StoopHomeViewState extends State<StoopHomeView> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.cardOf(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderOf(context)),
+        gradient: stoopCardGradient(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: stoopBorder(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,14 +360,7 @@ class _StoopHomeViewState extends State<StoopHomeView> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  c.name,
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
+                child: Text(c.name, style: stoopDisplay(context, size: 16)),
               ),
               _statusChip(c),
             ],
@@ -385,7 +371,7 @@ class _StoopHomeViewState extends State<StoopHomeView> {
               c.summary,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: AppColors.textSecondary(context)),
+              style: TextStyle(color: stoopCream2(context)),
             ),
           ],
           const SizedBox(height: 6),
@@ -395,10 +381,7 @@ class _StoopHomeViewState extends State<StoopHomeView> {
                 child: Text(
                   'v${c.version} · ${c.downloadCount} downloads'
                   '${c.nsfw ? ' · NSFW' : ''}',
-                  style: TextStyle(
-                    color: AppColors.textTertiary(context),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: stoopMute(context), fontSize: 12),
                 ),
               ),
               // Update publishes a new version of THIS post in place — for solo
@@ -414,8 +397,8 @@ class _StoopHomeViewState extends State<StoopHomeView> {
                   icon: const Icon(Icons.autorenew_rounded, size: 15),
                   label: const Text('Update'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary(context),
-                    side: BorderSide(color: AppColors.borderOf(context)),
+                    foregroundColor: stoopCream2(context),
+                    side: BorderSide(color: stoopBorderHi(context)),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 4,
@@ -432,21 +415,16 @@ class _StoopHomeViewState extends State<StoopHomeView> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.resolve(
-                  context,
-                  Colors.redAccent,
-                  Colors.red.shade700,
-                ).withValues(alpha: 0.12),
+                color: AppColors.stoopEmber.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppColors.stoopEmber.withValues(alpha: 0.4),
+                ),
               ),
               child: Text(
                 'Moderator: ${c.rejectionNote}',
                 style: TextStyle(
-                  color: AppColors.resolve(
-                    context,
-                    Colors.redAccent,
-                    Colors.red.shade700,
-                  ),
+                  color: stoopEmberText(context),
                   fontSize: 12,
                 ),
               ),
@@ -457,57 +435,68 @@ class _StoopHomeViewState extends State<StoopHomeView> {
     );
   }
 
+  // Hub .hub-status pills: PENDING amber, APPROVED teal, REJECTED ember.
   Widget _statusChip(StoopCharacter c) {
     late Color color;
+    late Color hairline;
     late String label;
     if (c.isApproved) {
-      color = AppColors.resolve(context, Colors.greenAccent, Colors.green);
-      label = 'Approved';
+      color = stoopTealText(context);
+      hairline = AppColors.stoopTeal.withValues(alpha: 0.35);
+      label = 'APPROVED';
     } else if (c.isRejected) {
-      color = AppColors.resolve(context, Colors.redAccent, Colors.red.shade700);
-      label = c.status == 'TAKEN_DOWN' ? 'Taken down' : 'Rejected';
+      color = stoopEmberText(context);
+      hairline = AppColors.stoopEmber.withValues(alpha: 0.4);
+      label = c.status == 'TAKEN_DOWN' ? 'TAKEN DOWN' : 'REJECTED';
     } else {
-      color = AppColors.resolve(
-        context,
-        Colors.amberAccent,
-        Colors.amber.shade800,
-      );
-      label = 'Pending review';
+      color = stoopAmberText(context);
+      hairline = AppColors.stoopAmber.withValues(alpha: 0.35);
+      label = 'PENDING';
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(20),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: hairline),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
         ),
       ),
     );
   }
 
-  Widget _hint(IconData icon, String text, {bool retry = false}) {
+  Widget _hint(String glyph, String text, {bool retry = false}) {
     return ListView(
       // ListView so RefreshIndicator/scroll works for the empty + error states.
       padding: const EdgeInsets.all(40),
       children: [
         const SizedBox(height: 60),
-        Icon(icon, size: 48, color: AppColors.iconSecondary(context)),
+        Text(glyph, textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 34)),
         const SizedBox(height: 14),
         Text(
           text,
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textTertiary(context)),
+          style: TextStyle(color: stoopMute(context), height: 1.5),
         ),
         if (retry) ...[
           const SizedBox(height: 16),
           Center(
-            child: OutlinedButton(onPressed: _load, child: const Text('Retry')),
+            child: OutlinedButton(
+              onPressed: _load,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: stoopCream2(context),
+                side: BorderSide(color: stoopBorderHi(context)),
+              ),
+              child: const Text('Retry'),
+            ),
           ),
         ],
       ],

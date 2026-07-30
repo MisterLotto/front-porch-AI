@@ -92,14 +92,14 @@ Widget stoopWorldCoverPreview(
     width: size,
     height: size,
     decoration: BoxDecoration(
-      color: AppColors.porchAmberOf(context).withValues(alpha: 0.12),
+      color: stoopAmberSoft(context),
       borderRadius: BorderRadius.circular(12),
     ),
     child: Icon(
       Icons.landscape_rounded,
       // The tile passes an unbounded size to fill its slot; keep the glyph sane.
       size: size.isFinite ? size * 0.45 : 44,
-      color: AppColors.porchAmberOf(context),
+      color: stoopAmberText(context),
     ),
   );
 }
@@ -157,7 +157,7 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
           child: Text(
             'Places',
             style: TextStyle(
-              color: AppColors.textSecondary(context),
+              color: stoopCream2(context),
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -180,14 +180,16 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
   }
 
   Widget _comingSoonBanner(BuildContext context) {
-    final amber = AppColors.porchAmberOf(context);
+    final amber = stoopAmberText(context);
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
+        gradient: stoopCardGradient(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: amber.withValues(alpha: 0.45)),
+        border: Border.all(
+          color: AppColors.stoopAmber.withValues(alpha: 0.45),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,7 +205,7 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
                     Text(
                       'Places',
                       style: TextStyle(
-                        color: AppColors.textPrimary(context),
+                        color: stoopCream(context),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -214,13 +216,13 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: amber,
+                        gradient: stoopAmberGradient,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Text(
                         'COMING SOON',
                         style: TextStyle(
-                          color: AppColors.onChaosAccent,
+                          color: AppColors.stoopAmberInk,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.5,
@@ -236,7 +238,7 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
                   'cover art. Shared places go through the same moderator '
                   'review as characters before anyone sees them.',
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
+                    color: stoopMute(context),
                     fontSize: 12,
                     height: 1.4,
                   ),
@@ -251,15 +253,15 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
 
   Widget _worldTile(World world) {
     final selected = widget.selectedWorldId == world.id;
-    final accent = stoopAccent(context);
+    final accent = AppColors.stoopAmberDeep;
     return GestureDetector(
       onTap: () => widget.onSelect(world),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.cardOf(context),
+          gradient: stoopCardGradient(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? accent : AppColors.borderOf(context),
+            color: selected ? accent : stoopBorder(context),
             width: selected ? 2 : 1,
           ),
         ),
@@ -287,7 +289,7 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: AppColors.textPrimary(context),
+                  color: stoopCream(context),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),

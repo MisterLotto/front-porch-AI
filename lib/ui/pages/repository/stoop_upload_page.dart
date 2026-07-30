@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/group_card_exporter.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_standards.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_tag_selector.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_world_share.dart';
@@ -426,11 +427,16 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
+      backgroundColor: stoopBg0(context),
       appBar: AppBar(
-        backgroundColor: AppColors.surfaceOf(context),
-        foregroundColor: AppColors.textPrimary(context),
-        title: Text(widget.isUpdate ? 'Update character' : 'Share to The Stoop'),
+        backgroundColor: stoopBg0(context),
+        foregroundColor: stoopCream(context),
+        elevation: 0,
+        shape: Border(bottom: BorderSide(color: stoopBorder(context))),
+        title: Text(
+          widget.isUpdate ? 'Update character' : 'Share to The Stoop',
+          style: stoopDisplay(context, size: 19),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Padding(
@@ -459,7 +465,6 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   Widget _stepDot(int step, String label) {
     final isActive = _currentStep >= step;
     final isCurrent = _currentStep == step;
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -468,22 +473,29 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           height: 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isActive ? accent : AppColors.surfaceContainerOf(context),
+            gradient: isActive ? stoopAmberGradient : null,
+            color: isActive ? null : stoopBg1(context),
             border: isCurrent
-                ? Border.all(color: AppColors.textPrimary(context), width: 2)
-                : null,
+                ? Border.all(color: stoopCream(context), width: 2)
+                : isActive
+                ? null
+                : Border.all(color: stoopBorderHi(context)),
           ),
           child: Center(
             child: isActive && !isCurrent
-                ? Icon(Icons.check, size: 14, color: AppColors.background)
+                ? const Icon(
+                    Icons.check,
+                    size: 14,
+                    color: AppColors.stoopAmberInk,
+                  )
                 : Text(
                     '${step + 1}',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: isActive
-                          ? AppColors.background
-                          : AppColors.textSecondary(context),
+                          ? AppColors.stoopAmberInk
+                          : stoopMute(context),
                     ),
                   ),
           ),
@@ -493,9 +505,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           label,
           style: TextStyle(
             fontSize: 10,
-            color: isCurrent
-                ? AppColors.textPrimary(context)
-                : AppColors.textTertiary(context),
+            color: isCurrent ? stoopAmberText(context) : stoopFaint(context),
           ),
         ),
       ],
@@ -506,7 +516,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     width: 24,
     height: 2,
     margin: const EdgeInsets.only(bottom: 14),
-    color: AppColors.borderOf(context).withValues(alpha: 0.35),
+    color: stoopBorder(context),
   );
 
   Widget _stepBody() {
@@ -574,7 +584,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
               child: Text(
                 'No characters or groups match “$_pickQuery”.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textTertiary(context)),
+                style: TextStyle(color: stoopMute(context)),
               ),
             ),
           ),
@@ -619,46 +629,35 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     return TextField(
       controller: _pickSearch,
       onChanged: (v) => setState(() => _pickQuery = v.trim().toLowerCase()),
-      style: TextStyle(color: AppColors.textPrimary(context)),
-      decoration: InputDecoration(
-        hintText: 'Search your characters and groups',
-        hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-        prefixIcon: Icon(Icons.search, color: AppColors.iconSecondary(context)),
+      style: TextStyle(color: stoopCream(context)),
+      decoration: stoopInput(
+        context,
+        'Search your characters and groups',
+        prefixIcon: Icon(Icons.search, color: stoopMute(context)),
         suffixIcon: _pickQuery.isEmpty
             ? null
             : IconButton(
-                icon: Icon(Icons.close, color: AppColors.iconSecondary(context)),
+                icon: Icon(Icons.close, color: stoopMute(context)),
                 onPressed: () {
                   _pickSearch.clear();
                   setState(() => _pickQuery = '');
                 },
               ),
-        filled: true,
-        fillColor: AppColors.surfaceContainerOf(context),
-        contentPadding: const EdgeInsets.symmetric(vertical: 4),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.borderOf(context)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.borderOf(context)),
-        ),
       ),
     );
   }
 
   Widget _groupPickTile(GroupChat group) {
     final selected = _selectedGroup?.id == group.id;
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
+    final accent = AppColors.stoopAmberDeep;
     return GestureDetector(
       onTap: () => _selectGroup(group),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.cardOf(context),
+          gradient: stoopCardGradient(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? accent : AppColors.borderOf(context),
+            color: selected ? accent : stoopBorder(context),
             width: selected ? 2 : 1,
           ),
         ),
@@ -667,12 +666,9 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
+              // Groups are teal on The Stoop (hub badge color) — no purple.
               child: ColoredBox(
-                color: AppColors.resolve(
-                  context,
-                  Colors.purple.shade900.withValues(alpha: 0.35),
-                  Colors.purple.shade50,
-                ),
+                color: stoopTealSoft(context),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: _groupMontage(group),
@@ -686,7 +682,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: AppColors.textPrimary(context),
+                  color: stoopCream(context),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -711,7 +707,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             child: Icon(
               Icons.groups_rounded,
               size: 44,
-              color: Colors.purpleAccent,
+              color: AppColors.stoopTeal,
             ),
           );
         }
@@ -732,15 +728,15 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
 
   Widget _pickTile(CharacterCard card) {
     final selected = _selected?.dbId == card.dbId && _selected != null;
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
+    final accent = AppColors.stoopAmberDeep;
     return GestureDetector(
       onTap: () => _select(card),
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.cardOf(context),
+          gradient: stoopCardGradient(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? accent : AppColors.borderOf(context),
+            color: selected ? accent : stoopBorder(context),
             width: selected ? 2 : 1,
           ),
         ),
@@ -758,7 +754,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: AppColors.textPrimary(context),
+                  color: stoopCream(context),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -780,7 +776,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         TextField(
           controller: _name,
           onChanged: (_) => setState(() {}),
-          style: TextStyle(color: AppColors.textPrimary(context)),
+          style: TextStyle(color: stoopCream(context)),
           decoration: _input('Character name'),
         ),
         const SizedBox(height: 18),
@@ -790,7 +786,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           maxLines: 3,
           maxLength: 280,
           onChanged: (_) => setState(() {}),
-          style: TextStyle(color: AppColors.textPrimary(context)),
+          style: TextStyle(color: stoopCream(context)),
           decoration: _input('A one-line hook shown on the card'),
         ),
         const SizedBox(height: 18),
@@ -799,7 +795,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           controller: _originalCreator,
           maxLength: 120,
           onChanged: (_) => setState(() {}),
-          style: TextStyle(color: AppColors.textPrimary(context)),
+          style: TextStyle(color: stoopCream(context)),
           decoration: _input('Leave blank if this is your own work').copyWith(
             counterText: '',
             helperText:
@@ -807,10 +803,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                 'card will show “created by …”. The AUP requires this for '
                 'reposts; they don’t need a Stoop account.',
             helperMaxLines: 3,
-            helperStyle: TextStyle(
-              color: AppColors.textTertiary(context),
-              fontSize: 12,
-            ),
+            helperStyle: TextStyle(color: stoopMute(context), fontSize: 12),
           ),
         ),
         const SizedBox(height: 8),
@@ -860,22 +853,21 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       children: [
         Container(
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerOf(context),
+            gradient: stoopCardGradient(context),
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: stoopBorder(context)),
           ),
           child: SwitchListTile(
             value: _nsfw,
             onChanged: (v) => setState(() => _nsfw = v),
+            activeThumbColor: AppColors.stoopEmber,
             title: Text(
               'This content is NSFW (18+)',
-              style: TextStyle(color: AppColors.textPrimary(context)),
+              style: TextStyle(color: stoopCream(context)),
             ),
             subtitle: Text(
               'Mark adult content so it’s hidden from people who haven’t opted in.',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 12,
-              ),
+              style: TextStyle(color: stoopMute(context), fontSize: 12),
             ),
           ),
         ),
@@ -886,17 +878,19 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             onChanged: (v) => setState(() => _standardsAck = v ?? false),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
+            activeColor: AppColors.stoopAmber,
+            checkColor: AppColors.stoopAmberInk,
             title: Text(
               'This card meets the Stoop content standards',
               style: TextStyle(
-                color: AppColors.textPrimary(context),
+                color: stoopCream(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
             subtitle: Text(
               'I confirm this card meets every standard above — and complies '
               'with The Stoop Acceptable Use Policy.',
-              style: TextStyle(color: AppColors.textSecondary(context)),
+              style: TextStyle(color: stoopCream2(context)),
             ),
           ),
         ),
@@ -919,11 +913,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             height: 96,
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppColors.resolve(
-                context,
-                Colors.purple.shade900.withValues(alpha: 0.35),
-                Colors.purple.shade50,
-              ),
+              color: stoopTealSoft(context),
               borderRadius: BorderRadius.circular(12),
             ),
             child: _groupMontage(_selectedGroup!),
@@ -952,23 +942,19 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                 children: [
                   Text(
                     _name.text.trim(),
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: stoopDisplay(context, size: 21),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _summary.text.trim(),
-                    style: TextStyle(color: AppColors.textSecondary(context)),
+                    style: TextStyle(color: stoopCream2(context)),
                   ),
                   if (_originalCreator.text.trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       'created by ${_originalCreator.text.trim()}',
                       style: TextStyle(
-                        color: AppColors.textTertiary(context),
+                        color: stoopFaint(context),
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
                       ),
@@ -976,32 +962,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                   ],
                   if (_nsfw) ...[
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.resolve(
-                          context,
-                          Colors.pinkAccent,
-                          Colors.pink,
-                        ).withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'NSFW',
-                        style: TextStyle(
-                          color: AppColors.resolve(
-                            context,
-                            Colors.pinkAccent,
-                            Colors.pink,
-                          ),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    const StoopBadge(StoopBadgeKind.nsfw),
                   ],
                 ],
               ),
@@ -1017,7 +978,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
               for (final t in _tags)
                 Text(
                   '#$t',
-                  style: TextStyle(color: AppColors.textTertiary(context)),
+                  style: TextStyle(color: stoopTealText(context)),
                 ),
             ],
           ),
@@ -1026,19 +987,13 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           'Your submission will be reviewed by a moderator before it appears '
           'on The Stoop. You’ll get a message in the app when it’s approved or '
           'if changes are needed.',
-          style: TextStyle(color: AppColors.textTertiary(context), height: 1.5),
+          style: TextStyle(color: stoopMute(context), height: 1.5),
         ),
         if (_error != null) ...[
           const SizedBox(height: 16),
           Text(
             _error!,
-            style: TextStyle(
-              color: AppColors.resolve(
-                context,
-                Colors.redAccent,
-                Colors.red.shade700,
-              ),
-            ),
+            style: TextStyle(color: stoopEmberText(context)),
           ),
         ],
       ],
@@ -1051,8 +1006,8 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         decoration: BoxDecoration(
-          color: AppColors.surfaceOf(context),
-          border: Border(top: BorderSide(color: AppColors.borderOf(context))),
+          color: stoopBg0(context),
+          border: Border(top: BorderSide(color: stoopBorder(context))),
         ),
         child: Row(
           children: [
@@ -1060,24 +1015,20 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             if (_currentStep > (widget.isUpdate ? 1 : 0))
               TextButton(
                 onPressed: _busy ? null : () => setState(() => _currentStep--),
+                style: TextButton.styleFrom(
+                  foregroundColor: stoopCream2(context),
+                ),
                 child: const Text('Back'),
               ),
             const Spacer(),
-            FilledButton(
+            StoopAmberButton(
+              label: isLast ? 'Submit for review' : 'Next',
+              busy: _busy,
               onPressed: (_canAdvance && !_busy) ? _next : null,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 14,
-                ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 28,
+                vertical: 13,
               ),
-              child: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(isLast ? 'Submit for review' : 'Next'),
             ),
           ],
         ),
@@ -1090,27 +1041,14 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     child: Text(
       text,
       style: TextStyle(
-        color: AppColors.textSecondary(context),
+        color: stoopCream2(context),
         fontSize: 13,
         fontWeight: FontWeight.w500,
       ),
     ),
   );
 
-  InputDecoration _input(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-    filled: true,
-    fillColor: AppColors.surfaceContainerOf(context),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppColors.borderOf(context)),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppColors.borderOf(context)),
-    ),
-  );
+  InputDecoration _input(String hint) => stoopInput(context, hint);
 
   Widget _centeredHint(IconData icon, String title, String body) {
     return Center(
@@ -1120,12 +1058,12 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: AppColors.iconSecondary(context)),
+            Icon(icon, size: 48, color: stoopMute(context)),
             const SizedBox(height: 14),
             Text(
               title,
               style: TextStyle(
-                color: AppColors.textPrimary(context),
+                color: stoopCream(context),
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -1134,7 +1072,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             Text(
               body,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textTertiary(context)),
+              style: TextStyle(color: stoopMute(context)),
             ),
           ],
         ),

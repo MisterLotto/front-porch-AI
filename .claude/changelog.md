@@ -6519,3 +6519,51 @@ picks, following, creator profiles, /me/downloads), because shipped clients
 render unknown-type cards as solo characters and fail at download. Rollout
 order documented: backend accepts WORLD + opt-in visibility first, then
 flip kStoopWorldsLive / STOOP_WORLDS_LIVE.
+
+
+## 2026-07-30 (UTC) — Stoop redesign: "porch at dusk" hub parity (desktop + web polish)
+
+Files: lib/ui/theme/app_colors.dart (stoop palette block),
+lib/ui/pages/repository/*.dart (all 20 files restyled; stoop_glass.dart
+rewritten as the design core), lib/ui/pages/repository_page.dart,
+web_ui/src/styles.css (stoop component polish), assets/web_app/* (rebuild),
+docs/Rawhide.md
+
+Maintainer: the in-app Stoop looked low-quality next to hub.frontporchai.app.
+Extracted the hub's real design system from its live site.css/stoop.css
+(porch-at-dusk: bg #0e0c09→#201a13, amber #f5a623/#ffc44d, teal #4cb8a4,
+cream #f3ecdd, Fraunces serif display, radius 14/9, amber glows, "no purple,
+ever") and rebuilt the desktop Stoop on it. Maintainer decision: adapt to
+light mode (dark = exact hub parity; light = warm-daylight derivation) —
+palette pairs live in AppColors (stoop* constants), context helpers +
+building blocks in stoop_glass.dart (StoopBadge, StoopAmberButton, StoopLamp,
+stoopInput, stoopPanel, stoopEmpty, stoopDisplay via google_fonts Fraunces —
+same pattern chat fonts already use).
+
+Structural matches (not just recolors): card tiles rebuilt to hub anatomy
+(square art + badges over it, body with serif name/@creator/2-line summary/
+stats foot, hover lift + amber glow; compact pick-row variant); browse got
+the eyebrow section heads, Mod's Picks hero (blurred zoomed fill + dusk
+scrim + sharp 3:4 portrait + View card CTA), pick rows, chip type filters
+(amber-lit active) replacing the SegmentedButton; detail panel got the
+joined ▲/▼ votebox (amber/ember gradients when lit), lamplight download CTA,
+teal tag pills, hub-sect collapsibles with amber markers; Mine rows got hub
+status pills (PENDING amber / APPROVED teal / REJECTED ember); inbox bubbles
+match .hub-msg (me = amber-soft right, mod = card left); auth panel matches
+.hub-auth-panel; 🏮 lantern art placeholder; StoopLamp loader everywhere.
+Deliberately NOT copied: the hub's web navigation/flows — the desktop keeps
+its slide-in detail panel, 4-step wizard, and tab shell (form-factor
+adaptation). Purple is gone from the Stoop (group accents are teal now).
+
+Deleted: StoopGlass (frosted-glass panel), StoopPill, stoopAccent,
+stoopAccent2, stoopGradient — the entire old glass/teal-purple language;
+audit confirms zero references remain and every new helper has call sites.
+
+Web UI: the web stoop keeps its native warm-porch shell (already the same
+family) and adopts the hub component language where the desktop did — tile
+hover lift + amber border/glow, uppercase badge pills (PICK on amber ink,
+WORLD amber to match desktop), amber eyebrow carousel heads, amber-lit
+active vote, tinted uppercase status pills. tsc + vitest green; bundle
+rebuilt.
+
+flutter analyze clean; dart fix nothing; stoop test suites green.

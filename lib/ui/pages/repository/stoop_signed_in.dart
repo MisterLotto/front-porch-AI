@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/pages/repository/stoop_browse_view.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_home_view.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -21,22 +22,25 @@ class StoopSignedIn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
+    // Hub tab bar (.hub-tab): quiet labels, the active one amber with an
+    // amber underline.
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
           Container(
             decoration: BoxDecoration(
-              color: AppColors.surfaceOf(context),
+              color: stoopBg0(context),
               border: Border(
-                bottom: BorderSide(color: AppColors.borderOf(context)),
+                bottom: BorderSide(color: stoopBorder(context)),
               ),
             ),
             child: TabBar(
-              labelColor: AppColors.textPrimary(context),
-              unselectedLabelColor: AppColors.textTertiary(context),
-              indicatorColor: accent,
+              labelColor: stoopAmberText(context),
+              unselectedLabelColor: stoopMute(context),
+              indicatorColor: AppColors.stoopAmber,
+              dividerColor: Colors.transparent,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
               tabs: const [
                 Tab(text: 'Browse'),
                 Tab(text: 'Mine'),

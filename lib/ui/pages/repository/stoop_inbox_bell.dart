@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_inbox_page.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The Stoop app-bar notification bell. Owns the live message socket for the
 /// whole Stoop session, so a new moderator message instantly bumps the badge and
@@ -86,7 +87,12 @@ class _StoopInboxBellState extends State<StoopInboxBell> {
               valueListenable: socket.unread,
               builder: (_, count, child) => Badge(
                 isLabelVisible: count > 0,
-                label: Text('$count'),
+                backgroundColor: AppColors.stoopAmber,
+                textColor: AppColors.stoopAmberInk,
+                label: Text(
+                  '$count',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 child: child,
               ),
               child: const Icon(Icons.notifications_none_rounded),

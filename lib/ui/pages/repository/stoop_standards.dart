@@ -10,7 +10,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 
 /// One Stoop content standard — the single source of truth for the rules shown
 /// in the upload flow (and echoed in the AUP). Cards that clearly fail these
@@ -71,30 +71,20 @@ class StoopStandardsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderOf(context)),
-      ),
+      padding: const EdgeInsets.all(16),
+      decoration: stoopPanel(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Stoop content standards',
-            style: TextStyle(
-              color: AppColors.textPrimary(context),
-              fontWeight: FontWeight.w700,
-            ),
+            style: stoopDisplay(context, size: 16.5),
           ),
           const SizedBox(height: 4),
           Text(
             'Keep the porch worth visiting. Cards that clearly miss these — or '
             'use nude/pornographic avatars — are removed.',
-            style: TextStyle(
-              color: AppColors.textTertiary(context),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: stoopMute(context), fontSize: 12),
           ),
           const SizedBox(height: 12),
           for (final s in kStoopStandards)
@@ -103,7 +93,7 @@ class StoopStandardsCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(s.icon, size: 18, color: AppColors.iconSecondary(context)),
+                  Icon(s.icon, size: 18, color: stoopAmberText(context)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -112,7 +102,7 @@ class StoopStandardsCard extends StatelessWidget {
                         Text(
                           s.title,
                           style: TextStyle(
-                            color: AppColors.textPrimary(context),
+                            color: stoopCream(context),
                             fontWeight: FontWeight.w600,
                             fontSize: 13,
                           ),
@@ -120,7 +110,7 @@ class StoopStandardsCard extends StatelessWidget {
                         Text(
                           s.body,
                           style: TextStyle(
-                            color: AppColors.textSecondary(context),
+                            color: stoopCream2(context),
                             fontSize: 12,
                             height: 1.3,
                           ),
@@ -132,7 +122,7 @@ class StoopStandardsCard extends StatelessWidget {
               ),
             ),
           if (footer != null) ...[
-            Divider(height: 22, color: AppColors.borderOf(context)),
+            Divider(height: 22, color: stoopBorder(context)),
             footer!,
           ],
         ],

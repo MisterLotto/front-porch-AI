@@ -22,8 +22,10 @@ import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// The community browse experience: Mod's Picks, a Following row, and the main
-/// grid with smart search (`@creator`, `#tag`, or a name) and sort/type filters.
+/// The community browse experience, in the hub's porch-at-dusk dress:
+/// Mod's Picks (hero + pick row), a Following row, a Groups row, and the main
+/// grid with smart search (`@creator`, `#tag`, or a name), a sort menu, and
+/// chip type filters.
 class StoopBrowseView extends StatefulWidget {
   const StoopBrowseView({super.key});
 
@@ -197,66 +199,97 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _searchBar(),
-        Expanded(child: _content()),
-      ],
+    return ColoredBox(
+      color: stoopBg0(context),
+      child: Column(
+        children: [
+          _searchBar(),
+          Expanded(child: _content()),
+        ],
+      ),
     );
   }
 
   Widget _content() {
     if (_type == 'world' && !kStoopWorldsLive) {
-      // Keep the header (sort/type toggle) so the panel isn't a dead end.
+      // Keep the header (sort/type filters) so the panel isn't a dead end.
       return CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _browseHeader()),
           SliverFillRemaining(
             hasScrollBody: false,
-            child: _centered(
-              Icons.landscape_rounded,
-              'Worlds are coming soon to The Stoop.\n\n'
-              'Soon you’ll be able to share and download portable places '
-              '(.fpworld) — cover art, lore, climate, and traits included — '
-              'moderated just like characters.',
+            child: stoopEmpty(
+              context,
+              glyph: '🏞️',
+              title: 'Worlds are coming soon to The Stoop',
+              body:
+                  'Soon you’ll be able to share and download portable places '
+                  '(.fpworld) — cover art, lore, climate, and traits included '
+                  '— moderated just like characters.',
             ),
           ),
         ],
       );
     }
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) return const StoopLamp(caption: 'Lighting the porch…');
     if (_error != null) {
-      return _centered(Icons.cloud_off_outlined, _error!, retry: true);
+      return stoopEmpty(
+        context,
+        glyph: '🌙',
+        title: 'Couldn’t load The Stoop',
+        body: 'Check your connection and try again.',
+        action: OutlinedButton(
+          onPressed: _loadAll,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: stoopCream2(context),
+            side: BorderSide(color: stoopBorderHi(context)),
+          ),
+          child: const Text('Retry'),
+        ),
+      );
     }
-    final featured = _query.isEmpty
-        ? (_picks.isNotEmpty
-              ? _picks.first
-              : (_grid.isNotEmpty ? _grid.first : null))
-        : null;
+    final featured = _query.isEmpty && _picks.isNotEmpty ? _picks.first : null;
     return RefreshIndicator(
+      color: AppColors.stoopAmber,
       onRefresh: _loadAll,
       child: CustomScrollView(
         controller: _scroll,
         slivers: [
-          if (featured != null) _heroSliver(featured),
-          if (_picks.isNotEmpty) _carousel('⭐ Mod’s Picks', _picks),
-          if (_following.isNotEmpty)
-            _carousel('From creators you follow', _following),
-          if (_groups.isNotEmpty) _carousel('👥 Groups', _groups),
+          if (featured != null) ...[
+            SliverToBoxAdapter(
+              child: _sectionHead('⭐', 'MOD’S PICKS', topPad: 6),
+            ),
+            _heroSliver(featured),
+            if (_picks.length > 1) _pickRow(_picks.skip(1).toList()),
+          ],
+          if (_following.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: _sectionHead('🪑', 'FROM CREATORS YOU FOLLOW'),
+            ),
+            _pickRow(_following),
+          ],
+          if (_groups.isNotEmpty) ...[
+            SliverToBoxAdapter(child: _sectionHead('👥', 'GROUPS')),
+            _pickRow(_groups),
+          ],
           SliverToBoxAdapter(child: _browseHeader()),
           if (_grid.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
-              child: _centered(Icons.search_off, 'No characters match.'),
+              child: stoopEmpty(
+                context,
+                glyph: '🏮',
+                title: 'Nothing on the porch',
+                body: _query.isEmpty
+                    ? 'No cards here yet — check back soon.'
+                    : 'No cards match “$_query”.',
+              ),
             )
           else
             _gridSliver(),
           if (_loadingMore)
             const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Center(child: CircularProgressIndicator()),
-              ),
+              child: Padding(padding: EdgeInsets.all(20), child: StoopLamp()),
             ),
         ],
       ),
@@ -270,58 +303,62 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
         controller: _search,
         textInputAction: TextInputAction.search,
         onSubmitted: _applySearch,
-        style: TextStyle(color: AppColors.textPrimary(context)),
-        decoration: InputDecoration(
-          hintText: 'Search name, @creator, or #tag',
-          hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-          prefixIcon: Icon(
-            Icons.search,
-            color: AppColors.iconSecondary(context),
-          ),
+        style: TextStyle(color: stoopCream(context)),
+        decoration: stoopInput(
+          context,
+          'Search name, @creator, or #tag',
+          prefixIcon: Icon(Icons.search, color: stoopMute(context)),
           suffixIcon: _query.isEmpty
               ? null
               : IconButton(
-                  icon: Icon(
-                    Icons.close,
-                    color: AppColors.iconSecondary(context),
-                  ),
+                  icon: Icon(Icons.close, color: stoopMute(context)),
                   onPressed: () {
                     _search.clear();
                     _applySearch('');
                   },
                 ),
-          filled: true,
-          fillColor: AppColors.surfaceContainerOf(context),
-          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.borderOf(context)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.borderOf(context)),
-          ),
         ),
+      ),
+    );
+  }
+
+  // The hub's uppercase amber eyebrow (.hub-pick-eyebrow) heading a section.
+  Widget _sectionHead(String glyph, String label, {double topPad = 18}) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPad, 16, 10),
+      child: Row(
+        children: [
+          Text(glyph, style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              color: stoopAmberText(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _browseHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
+        runSpacing: 8,
         children: [
           Text(
             _query.isEmpty ? 'Browse all' : 'Results',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary(context),
-            ),
+            style: stoopDisplay(context, size: 19),
           ),
-          const Spacer(),
+          const SizedBox(width: 2),
+          _typeChips(),
           _sortMenu(),
-          const SizedBox(width: 8),
-          _typeToggle(),
         ],
       ),
     );
@@ -331,105 +368,170 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
     const labels = {'newest': 'Newest', 'top': 'Top', 'downloads': 'Downloads'};
     return PopupMenuButton<String>(
       initialValue: _sort,
+      color: stoopCard2(context),
       onSelected: (v) {
         setState(() => _sort = v);
         _loadAll();
       },
       itemBuilder: (_) => labels.entries
-          .map((e) => PopupMenuItem(value: e.key, child: Text(e.value)))
-          .toList(),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            labels[_sort]!,
-            style: TextStyle(
-              color: AppColors.textSecondary(context),
-              fontSize: 13,
+          .map(
+            (e) => PopupMenuItem(
+              value: e.key,
+              child: Text(
+                e.value,
+                style: TextStyle(color: stoopCream2(context)),
+              ),
             ),
-          ),
-          Icon(Icons.arrow_drop_down, color: AppColors.iconSecondary(context)),
-        ],
+          )
+          .toList(),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(13, 7, 8, 7),
+        decoration: BoxDecoration(
+          color: stoopBg1(context),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: stoopBorderHi(context)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              labels[_sort]!,
+              style: TextStyle(color: stoopCream2(context), fontSize: 13),
+            ),
+            Icon(Icons.arrow_drop_down, color: stoopMute(context), size: 20),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _typeToggle() {
-    return SegmentedButton<String>(
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 12)),
-      ),
-      segments: const [
-        ButtonSegment(value: 'all', label: Text('All')),
-        ButtonSegment(value: 'solo', label: Text('Singles')),
-        ButtonSegment(value: 'group', label: Text('Groups')),
-        ButtonSegment(value: 'world', label: Text('Worlds')),
+  // Hub filter chips (.hub-chip): quiet pills; the active one lights up on the
+  // amber gradient with dark ink.
+  Widget _typeChips() {
+    const types = [
+      ('all', 'All'),
+      ('solo', 'Singles'),
+      ('group', 'Groups'),
+      ('world', 'Worlds'),
+    ];
+    return Wrap(
+      spacing: 6,
+      children: [
+        for (final (value, label) in types)
+          _chip(label, _type == value, () {
+            setState(() => _type = value);
+            _loadAll();
+          }),
       ],
-      selected: {_type},
-      showSelectedIcon: false,
-      onSelectionChanged: (s) {
-        setState(() => _type = s.first);
-        _loadAll();
-      },
     );
   }
 
-  // The spotlight: the top pick. A blurred fill of its art backs a SHARP
-  // portrait shown at its true aspect — so portrait card art never gets
-  // stretched across the wide banner.
+  Widget _chip(String label, bool on, VoidCallback onTap) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          gradient: on ? stoopAmberGradient : null,
+          color: on ? null : stoopBg1(context),
+          borderRadius: BorderRadius.circular(999),
+          border: on ? null : Border.all(color: stoopBorderHi(context)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: on ? AppColors.stoopAmberInk : stoopCream2(context),
+            fontSize: 13,
+            fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // The Mod's-Pick hero (.hub-pickhero): a blurred, zoomed fill of the card
+  // art behind a dusk scrim, with the SHARP portrait at true 3:4 on the left
+  // so faces never stretch, and name/summary/CTA beside it.
   SliverToBoxAdapter _heroSliver(StoopCard card) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
         child: GestureDetector(
           onTap: () => _openCard(card),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: stoopAccent(context).withValues(alpha: 0.3),
-                  blurRadius: 32,
-                  spreadRadius: -8,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: Container(
+              height: 230,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.stoopAmber.withValues(alpha: 0.3),
                 ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: SizedBox(
-                height: 200,
-                width: double.infinity,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Blurred, darkened fill of the same art.
-                    StoopAvatar(assetId: card.primaryAssetId),
-                    BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.45),
+                boxShadow: [
+                  const BoxShadow(
+                    color: Color(0x59000000),
+                    blurRadius: 30,
+                    offset: Offset(0, 10),
+                  ),
+                  BoxShadow(
+                    color: AppColors.stoopAmber.withValues(alpha: 0.06),
+                    blurRadius: 44,
+                  ),
+                ],
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Blur the image itself (not a backdrop) and oversize it so
+                  // the blur's transparent edge never shows.
+                  ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                    child: Transform.scale(
+                      scale: 1.18,
+                      child: StoopAvatar(assetId: card.primaryAssetId),
+                    ),
+                  ),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [Color(0x590A0805), Color(0xB80A0805)],
                       ),
                     ),
-                    // Sharp portrait (left) + details (right).
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: AspectRatio(
-                              aspectRatio: 3 / 4,
-                              child: StoopAvatar(assetId: card.primaryAssetId),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Container(
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: AppColors.stoopBorderHi,
                             ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x66000000),
+                                blurRadius: 24,
+                                offset: Offset(0, 8),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 18),
-                          Expanded(child: _heroDetails(card)),
-                        ],
-                      ),
+                          child: AspectRatio(
+                            aspectRatio: 3 / 4,
+                            child: StoopAvatar(assetId: card.primaryAssetId),
+                          ),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(child: _heroDetails(card)),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -438,112 +540,100 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
     );
   }
 
+  // Hero text column. The hero sits on a dark scrim in BOTH themes, so this
+  // deliberately uses the dusk constants rather than theme-resolved tokens.
   Widget _heroDetails(StoopCard card) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            gradient: stoopGradient(context),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Text(
-            '✦ FEATURED',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            const StoopBadge(StoopBadgeKind.featured),
+            if (card.isGroup) const StoopBadge(StoopBadgeKind.group),
+            if (card.isWorld) const StoopBadge(StoopBadgeKind.world),
+            if (card.nsfw) const StoopBadge(StoopBadgeKind.nsfw),
+          ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 9),
         Text(
           card.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 26,
-            fontWeight: FontWeight.bold,
+          style: stoopDisplay(
+            context,
+            size: 26,
+            color: AppColors.stoopCream,
           ),
         ),
+        if (card.creator != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            '@${card.creator!.displayName}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.stoopCream2,
+              fontSize: 12.5,
+            ),
+          ),
+        ],
         if (card.summary.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             stoopResolveMacros(card.summary, card.name),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+            style: const TextStyle(
+              color: AppColors.stoopCream2,
+              height: 1.45,
+            ),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
           children: [
-            Icon(
-              Icons.arrow_upward_rounded,
-              size: 14,
-              color: stoopAccent(context),
-            ),
-            const SizedBox(width: 2),
-            Text(
-              '${card.score}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+            StoopAmberButton(
+              label: 'View card',
+              onPressed: () => _openCard(card),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
             ),
             const SizedBox(width: 14),
-            if (card.creator != null)
-              Flexible(
-                child: Text(
-                  '@${card.creator!.displayName}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-                ),
+            Text(
+              '▲ ${card.score}   ⬇ ${card.downloadCount}',
+              style: const TextStyle(
+                color: AppColors.stoopCream2,
+                fontSize: 12.5,
               ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  SliverToBoxAdapter _carousel(String title, List<StoopCard> cards) {
+  // A horizontally-scrolling row of compact tiles (.hub-pickrow).
+  SliverToBoxAdapter _pickRow(List<StoopCard> cards) {
     return SliverToBoxAdapter(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary(context),
-              ),
+      child: SizedBox(
+        height: 210,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+          itemCount: cards.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (_, i) => SizedBox(
+            width: 156,
+            child: StoopCardTile(
+              card: cards[i],
+              compact: true,
+              onTap: () => _openCard(cards[i]),
             ),
           ),
-          SizedBox(
-            height: 200,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: cards.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 12),
-              itemBuilder: (_, i) => SizedBox(
-                width: 140,
-                child: StoopCardTile(
-                  card: cards[i],
-                  onTap: () => _openCard(cards[i]),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -553,39 +643,15 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 168,
-          childAspectRatio: 0.66,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          maxCrossAxisExtent: 230,
+          childAspectRatio: 0.64,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
         ),
         delegate: SliverChildBuilderDelegate(
           (_, i) =>
               StoopCardTile(card: _grid[i], onTap: () => _openCard(_grid[i])),
           childCount: _grid.length,
-        ),
-      ),
-    );
-  }
-
-  Widget _centered(IconData icon, String text, {bool retry = false}) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 44, color: AppColors.iconSecondary(context)),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textTertiary(context)),
-            ),
-            if (retry) ...[
-              const SizedBox(height: 14),
-              OutlinedButton(onPressed: _loadAll, child: const Text('Retry')),
-            ],
-          ],
         ),
       ),
     );

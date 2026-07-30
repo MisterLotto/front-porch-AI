@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_twofa_sheet.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -20,7 +21,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 Future<void> showStoopAccountSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.cardOf(context),
+    backgroundColor: stoopCard2(context),
     showDragHandle: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
@@ -60,21 +61,21 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
     final newName = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.cardOf(ctx),
+        backgroundColor: stoopCard2(ctx),
         title: Text(
           'Display name',
-          style: TextStyle(color: AppColors.textPrimary(ctx)),
+          style: TextStyle(color: stoopCream(ctx)),
         ),
         content: TextField(
           controller: controller,
           autofocus: true,
           maxLength: 40,
-          style: TextStyle(color: AppColors.textPrimary(ctx)),
+          style: TextStyle(color: stoopCream(ctx)),
           decoration: InputDecoration(
             hintText: 'How others see you on The Stoop',
-            hintStyle: TextStyle(color: AppColors.textTertiary(ctx)),
+            hintStyle: TextStyle(color: stoopMute(ctx)),
             helperText: 'This is your public name on cards and profiles.',
-            helperStyle: TextStyle(color: AppColors.textTertiary(ctx)),
+            helperStyle: TextStyle(color: stoopMute(ctx)),
           ),
         ),
         actions: [
@@ -109,15 +110,15 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.cardOf(ctx),
+        backgroundColor: stoopCard2(ctx),
         title: Text(
           'Delete your account?',
-          style: TextStyle(color: AppColors.textPrimary(ctx)),
+          style: TextStyle(color: stoopCream(ctx)),
         ),
         content: Text(
           'This permanently erases your Stoop account, every character you’ve '
           'uploaded, your votes, and your messages. This cannot be undone.',
-          style: TextStyle(color: AppColors.textSecondary(ctx)),
+          style: TextStyle(color: stoopCream2(ctx)),
         ),
         actions: [
           TextButton(
@@ -126,11 +127,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.resolve(
-                ctx,
-                Colors.red.shade600,
-                Colors.red.shade700,
-              ),
+              backgroundColor: AppColors.stoopEmber,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete forever'),
@@ -161,11 +158,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
   Widget build(BuildContext context) {
     final user = context.watch<AuthState>().user;
     if (user == null) return const SizedBox.shrink();
-    final danger = AppColors.resolve(
-      context,
-      Colors.redAccent,
-      Colors.red.shade700,
-    );
+    final danger = stoopEmberText(context);
 
     return SafeArea(
       child: Padding(
@@ -178,13 +171,13 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
               children: [
                 CircleAvatar(
                   radius: 22,
-                  backgroundColor: AppColors.surfaceContainerOf(context),
+                  backgroundColor: stoopBg1(context),
                   child: Text(
                     user.displayName.isNotEmpty
                         ? user.displayName.characters.first.toUpperCase()
                         : '?',
                     style: TextStyle(
-                      color: AppColors.textPrimary(context),
+                      color: stoopCream(context),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -197,7 +190,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                       Text(
                         user.displayName,
                         style: TextStyle(
-                          color: AppColors.textPrimary(context),
+                          color: stoopCream(context),
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -205,7 +198,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                       Text(
                         user.email,
                         style: TextStyle(
-                          color: AppColors.textSecondary(context),
+                          color: stoopCream2(context),
                           fontSize: 13,
                         ),
                       ),
@@ -217,7 +210,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                   icon: Icon(
                     Icons.edit_outlined,
                     size: 20,
-                    color: AppColors.iconSecondary(context),
+                    color: stoopMute(context),
                   ),
                   onPressed: () => _editDisplayName(user.displayName),
                 ),
@@ -226,7 +219,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
             const SizedBox(height: 18),
             Container(
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerOf(context),
+                color: stoopBg1(context),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: SwitchListTile(
@@ -236,16 +229,16 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                   user.nsfwEnabled
                       ? Icons.visibility_outlined
                       : Icons.visibility_off_outlined,
-                  color: AppColors.iconSecondary(context),
+                  color: stoopMute(context),
                 ),
                 title: Text(
                   'Show NSFW content',
-                  style: TextStyle(color: AppColors.textPrimary(context)),
+                  style: TextStyle(color: stoopCream(context)),
                 ),
                 subtitle: Text(
                   'Off by default. When on, adult cards appear in The Stoop.',
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
+                    color: stoopMute(context),
                     fontSize: 12,
                   ),
                 ),
@@ -254,7 +247,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
             const SizedBox(height: 10),
             Container(
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerOf(context),
+                color: stoopBg1(context),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: SwitchListTile(
@@ -263,17 +256,17 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                     context.read<AuthState>().setAnalyticsEnabled(v),
                 secondary: Icon(
                   Icons.insights_outlined,
-                  color: AppColors.iconSecondary(context),
+                  color: stoopMute(context),
                 ),
                 title: Text(
                   'Share anonymous analytics',
-                  style: TextStyle(color: AppColors.textPrimary(context)),
+                  style: TextStyle(color: stoopCream(context)),
                 ),
                 subtitle: Text(
                   'Coarse device info (platform, app version, GPU tier) to guide '
                   'development. Never your chats or characters. On by default.',
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
+                    color: stoopMute(context),
                     fontSize: 12,
                   ),
                 ),
@@ -289,19 +282,19 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                     ? Icons.lock_rounded
                     : Icons.lock_outline_rounded,
                 color: user.twoFactorEnabled
-                    ? AppColors.resolve(context, Colors.tealAccent, Colors.teal)
-                    : AppColors.iconSecondary(context),
+                    ? stoopTealText(context)
+                    : stoopMute(context),
               ),
               title: Text(
                 'Two-factor authentication',
-                style: TextStyle(color: AppColors.textPrimary(context)),
+                style: TextStyle(color: stoopCream(context)),
               ),
               subtitle: Text(
                 user.twoFactorEnabled
                     ? 'On — a code is required at sign-in.'
                     : 'Off — add an authenticator app to protect your account.',
                 style: TextStyle(
-                  color: AppColors.textTertiary(context),
+                  color: stoopMute(context),
                   fontSize: 12,
                 ),
               ),
@@ -309,8 +302,8 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                 user.twoFactorEnabled ? 'On' : 'Off',
                 style: TextStyle(
                   color: user.twoFactorEnabled
-                      ? AppColors.resolve(context, Colors.tealAccent, Colors.teal)
-                      : AppColors.textTertiary(context),
+                      ? stoopTealText(context)
+                      : stoopMute(context),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -323,11 +316,11 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
               ),
               leading: Icon(
                 Icons.logout,
-                color: AppColors.iconSecondary(context),
+                color: stoopMute(context),
               ),
               title: Text(
                 'Log out',
-                style: TextStyle(color: AppColors.textPrimary(context)),
+                style: TextStyle(color: stoopCream(context)),
               ),
               onTap: () async {
                 final navigator = Navigator.of(context);
@@ -344,7 +337,7 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
               subtitle: Text(
                 'Permanently erase your account and uploads',
                 style: TextStyle(
-                  color: AppColors.textTertiary(context),
+                  color: stoopMute(context),
                   fontSize: 12,
                 ),
               ),

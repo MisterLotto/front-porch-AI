@@ -17,6 +17,7 @@ import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// A creator's public profile: follower count, a Follow button, and a grid of
@@ -120,21 +121,21 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
   Widget build(BuildContext context) {
     final p = _profile;
     return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
+      backgroundColor: stoopBg0(context),
       appBar: AppBar(
-        backgroundColor: AppColors.surfaceOf(context),
-        foregroundColor: AppColors.textPrimary(context),
-        title: Text(p?.displayName ?? 'Creator'),
+        backgroundColor: stoopBg0(context),
+        foregroundColor: stoopCream(context),
+        elevation: 0,
+        shape: Border(bottom: BorderSide(color: stoopBorder(context))),
+        title: Text(
+          p?.displayName ?? 'Creator',
+          style: stoopDisplay(context, size: 19),
+        ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const StoopLamp()
           : _error != null || p == null
-          ? Center(
-              child: Text(
-                _error ?? 'Not found',
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            )
+          ? stoopEmpty(context, glyph: '🌙', title: _error ?? 'Not found')
           : _content(p),
     );
   }
@@ -146,11 +147,10 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
         if (p.cards.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
-            child: Center(
-              child: Text(
-                'No published characters yet.',
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
+            child: stoopEmpty(
+              context,
+              glyph: '🏮',
+              title: 'No published cards yet',
             ),
           )
         else
@@ -158,10 +158,10 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 168,
-                childAspectRatio: 0.66,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+                maxCrossAxisExtent: 230,
+                childAspectRatio: 0.64,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
               ),
               delegate: SliverChildBuilderDelegate(
                 (_, i) => StoopCardTile(
@@ -177,23 +177,27 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
   }
 
   Widget _header(StoopCreator p) {
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: AppColors.surfaceContainerOf(context),
+          // Amber-ringed monogram (the hub renders creators without avatars).
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: stoopBg1(context),
+              border: Border.all(
+                color: AppColors.stoopAmber.withValues(alpha: 0.45),
+              ),
+            ),
+            alignment: Alignment.center,
             child: Text(
               p.displayName.isNotEmpty
                   ? p.displayName.characters.first.toUpperCase()
                   : '?',
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
-              ),
+              style: stoopDisplay(context, size: 24),
             ),
           ),
           const SizedBox(width: 16),
@@ -201,18 +205,12 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  p.displayName,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary(context),
-                  ),
-                ),
+                Text(p.displayName, style: stoopDisplay(context, size: 21)),
                 const SizedBox(height: 2),
                 Text(
                   '$_followers ${_followers == 1 ? 'follower' : 'followers'} · '
-                  '${p.cards.length} ${p.cards.length == 1 ? 'character' : 'characters'}',
-                  style: TextStyle(color: AppColors.textTertiary(context)),
+                  '${p.cards.length} ${p.cards.length == 1 ? 'card' : 'cards'}',
+                  style: TextStyle(color: stoopMute(context)),
                 ),
               ],
             ),
@@ -222,14 +220,20 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
             _following
                 ? OutlinedButton(
                     onPressed: _followBusy ? null : _toggleFollow,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: stoopTealText(context),
+                      side: BorderSide(
+                        color: AppColors.stoopTeal.withValues(alpha: 0.45),
+                      ),
+                    ),
                     child: const Text('Following'),
                   )
-                : FilledButton(
+                : StoopAmberButton(
+                    label: 'Follow',
                     onPressed: _followBusy ? null : _toggleFollow,
-                    style: FilledButton.styleFrom(backgroundColor: accent),
-                    child: Text(
-                      'Follow',
-                      style: TextStyle(color: AppColors.background),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 10,
                     ),
                   ),
           ],
