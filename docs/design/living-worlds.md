@@ -676,6 +676,45 @@ rather than retrofitted, and the app side now exists:
   (worlds are new-upload-only for v1; the Mine-tab Update button is hidden
   for WORLD posts).
 
+### Backend work checklist (everything left; the app is done and gated)
+
+Work items for the private backend/hub repo, in rollout order. The envelope
+shape to render is `encodeFpWorld` in `lib/models/fp_world_package.dart`:
+top-level `name`, `description`, `cover` (data URL), `lorebook{entries[]}`,
+`biome{displayName, description, feel, …}`, `place_traits{atmosphere?,
+gravity?}`, `meta{author?, createdAt, appVersion?, sourceId?}`.
+
+1. **Accept `WORLD`** as a card type on `POST /characters` (validation +
+   enum + storage). The versions endpoint (`POST /characters/:id/versions`)
+   may reject `WORLD` for now — worlds are new-upload-only v1 and no client
+   calls it.
+2. **Opt-in visibility** on EVERY card-list endpoint (browse, picks,
+   following, creator profiles, `/me/downloads`): never include WORLD items
+   unless the request opts in (`type=world`, plus a new mixed-view param no
+   shipped client has ever sent — see the visibility rule above). This is
+   the hard safety requirement; ship it in the same deploy as #1.
+3. **`tokenCount`** — the server computes it from the card payload; make
+   that computation handle the .fpworld envelope (count description + lore
+   entry contents; don't crash on the non-V2 shape, and null is acceptable).
+4. **Mod review UI** — render the envelope for reviewers instead of V2
+   fields: cover image (already the avatar asset), name, description,
+   climate `displayName`/`feel`, traits, and each lore entry's keys +
+   content. Reject/approve/messaging flows are unchanged.
+5. **Hub website** — WORLD badge on tiles, a Worlds browse filter (sending
+   `type=world`), detail view rendering the envelope sections (about /
+   climate / traits / lore), and a download that hands the card JSON as a
+   `<name>.fpworld` file (the hub has no importer; the app imports it via
+   Worlds → Import Place). Hub submit form for worlds is out of scope v1
+   (uploads come from the app).
+6. **Reports/NSFW/votes/search** — no changes; they key off the shared card
+   row and post name/tags.
+7. **Flip the flags** — after #1+#2 are live: set `kStoopWorldsLive`
+   (`lib/services/backporch/stoop_card.dart`) and `STOOP_WORLDS_LIVE`
+   (`web_ui/src/stoop/stoopTypes.ts`) to `true` in the same app commit, and
+   have the client's mixed-view browse calls send the new opt-in param
+   chosen in #2 (one small client patch — the param couldn't be wired ahead
+   of time because its name is the backend's call).
+
 ## 5. How we would know this worked
 
 Rev.1 had no success criteria, which meant phase 2 — the fun part — would be

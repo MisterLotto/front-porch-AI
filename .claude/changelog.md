@@ -6617,3 +6617,16 @@ LISTING display name, not the chat name — for solo characters it names the
 actual card name twice ("{{char}} still maps to 'Misty', so replies keep
 calling them 'Misty'"); groups/worlds get the generic version. HelperText
 deleted (superseded, not duplicated).
+
+## 2026-07-30 (UTC) — living-worlds §4 gains the executable backend checklist
+
+Files: docs/design/living-worlds.md
+
+Maintainer asked whether the doc lists the remaining backend work — it had
+the contract/constraints but not a task list, and two server items lived
+only in conversation (mod-review rendering of the envelope, tokenCount
+handling for world payloads). Added a 7-item "Backend work checklist" in
+rollout order: accept WORLD, opt-in visibility (same deploy), tokenCount,
+mod review UI, hub website (badge/filter/detail/.fpworld download; no hub
+submit v1), no-op confirmations, and the flag flip (including the one
+follow-up client patch to send the backend-chosen mixed-view opt-in param).
