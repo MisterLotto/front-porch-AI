@@ -6605,3 +6605,15 @@ docs/design/stoop-display-name.md is the handoff spec for the agent doing
 the hub-website side (submit-form helper + update-form seed + preview
 macro fix; optional tagline/chatName additive fields spec'd but not
 requested).
+
+## 2026-07-30 (UTC) — Display-name notice made unmissable in the share wizard
+
+Files: lib/ui/pages/repository/stoop_upload_page.dart
+
+Maintainer follow-up on display names: the small grey helperText under the
+name field was too easy to miss. Replaced with an amber-soft info callout
+box directly under the field, stating explicitly that the box is the
+LISTING display name, not the chat name — for solo characters it names the
+actual card name twice ("{{char}} still maps to 'Misty', so replies keep
+calling them 'Misty'"); groups/worlds get the generic version. HelperText
+deleted (superseded, not duplicated).

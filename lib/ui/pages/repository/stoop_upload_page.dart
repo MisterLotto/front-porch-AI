@@ -795,19 +795,49 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           controller: _name,
           onChanged: (_) => setState(() {}),
           style: TextStyle(color: stoopCream(context)),
-          decoration: _input('Name shown on The Stoop').copyWith(
-            // The listing title is free-form; a character's in-chat name
-            // (what {{char}} maps to) travels inside the card and never
-            // changes, so titles like "Misty Meadows, Misguided
-            // Meteorologist" are safe.
-            helperText: _selected != null
-                ? 'Just the listing title — add flair if you like. In chat '
-                      'they’ll still be “${_selected!.name}” ({{char}} is '
-                      'unchanged).'
-                : 'Just the listing title shown on The Stoop — add flair if '
-                      'you like.',
-            helperMaxLines: 3,
-            helperStyle: TextStyle(color: stoopMute(context), fontSize: 12),
+          decoration: _input('Name shown on The Stoop'),
+        ),
+        const SizedBox(height: 8),
+        // Unmissable: this box is the LISTING title, not the chat name.
+        // {{char}} keeps mapping to the card's own name, which never changes
+        // here — so "Misty Meadows, Misguided Meteorologist" is safe.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: stoopAmberSoft(context),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.stoopAmber.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: stoopAmberText(context),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _selected != null
+                      ? 'This is the display name for the listing only — not '
+                            'the chat name. In chat, {{char}} still maps to '
+                            '“${_selected!.name}”, so replies keep calling '
+                            'them “${_selected!.name}” no matter what you '
+                            'title the post.'
+                      : 'This is the display name for the listing only — in '
+                            'chat, everyone keeps their own name no matter '
+                            'what you title the post.',
+                  style: TextStyle(
+                    color: stoopCream2(context),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 18),
