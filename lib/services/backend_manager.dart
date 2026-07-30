@@ -89,12 +89,28 @@ class BackendManager extends ChangeNotifier {
 
   BackendManager(this._storageService) {
     _init();
-    _storageService.addListener(_init); // React to path changes
+    _storageService.addListener(_onStorageChanged); // React to path changes
+  }
+
+  // StorageService notifies on EVERY settings mutation (any slider, any
+  // toggle) — but _init spawns processes (uname / nvidia-smi) and re-reads
+  // the binary version from disk, so re-running it per notify made flipping
+  // an unrelated switch spawn a process. Only the inputs _init actually
+  // reads matter: the data root (bin dir) and the ROCm opt-in.
+  String? _lastInitRoot;
+  bool? _lastInitUseRocm;
+  void _onStorageChanged() {
+    final root = _storageService.rootPath;
+    final useRocm = _storageService.backendSettings.useRocm == true;
+    if (root == _lastInitRoot && useRocm == _lastInitUseRocm) return;
+    _lastInitRoot = root;
+    _lastInitUseRocm = useRocm;
+    _init();
   }
 
   @override // IMPORTANT
   void dispose() {
-    _storageService.removeListener(_init);
+    _storageService.removeListener(_onStorageChanged);
     super.dispose();
   }
 

@@ -81,8 +81,20 @@ class ModelManager extends ChangeNotifier {
 
   ModelManager(this._storageService, this._downloadManager) {
     _init();
-    _storageService.addListener(_init);
+    _storageService.addListener(_onStorageChanged);
     _downloadManager.addListener(_onDownloadChanged);
+  }
+
+  // StorageService notifies on EVERY settings mutation, but a full recursive
+  // model-directory rescan (synchronous listSync on the UI isolate) only
+  // matters when the models directory itself moved — re-scanning per notify
+  // made flipping any unrelated settings toggle walk the whole models dir.
+  String? _lastScannedRoot;
+  void _onStorageChanged() {
+    final root = _storageService.rootPath;
+    if (root == _lastScannedRoot) return;
+    _lastScannedRoot = root;
+    _init();
   }
 
   /// Notifies listeners when download state changes.
@@ -152,7 +164,7 @@ class ModelManager extends ChangeNotifier {
 
   @override
   void dispose() {
-    _storageService.removeListener(_init);
+    _storageService.removeListener(_onStorageChanged);
     _downloadManager.removeListener(_onDownloadChanged);
     super.dispose();
   }

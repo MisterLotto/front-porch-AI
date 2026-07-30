@@ -186,21 +186,30 @@ extension ChatServiceSessionLoad on ChatService {
       }
     }
 
+    // Aggregate stats in two queries instead of hydrating every message row
+    // of every session — this runs on the tap-to-open-chat path, where the
+    // old loop was the dead time before the route push even started.
+    final stats = await _db.getSessionListStats(
+      [for (final s in dbSessions) s.id],
+    );
+
     List<Map<String, dynamic>> sessions = [];
     for (final s in dbSessions) {
       final timestamp = int.tryParse(s.id) ?? 0;
       final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
 
-      // Get message count and preview
-      final msgs = await _db.getMessagesForSession(s.id);
+      final stat = stats[s.id];
       String preview = 'New Conversation';
       if (s.name != null && s.name!.isNotEmpty) {
         preview = s.name!;
-      } else if (msgs.length > 1) {
+      } else if (stat?.previewSwipes != null) {
         // Use second message text as preview
         try {
-          final swipes = List<String>.from(jsonDecode(msgs[1].swipes));
-          preview = swipes.isNotEmpty ? swipes[msgs[1].swipeIndex] : '';
+          final swipes = List<String>.from(jsonDecode(stat!.previewSwipes!));
+          preview =
+              (stat.previewIndex >= 0 && stat.previewIndex < swipes.length)
+              ? swipes[stat.previewIndex]
+              : (swipes.isNotEmpty ? swipes.first : '');
           if (preview.length > 50) preview = '${preview.substring(0, 50)}...';
         } catch (_) {}
       }
@@ -209,8 +218,8 @@ extension ChatServiceSessionLoad on ChatService {
         'id': s.id,
         'date': date,
         'preview': preview,
-        'message_count': msgs.length,
-        'user_message_count': msgs.where((m) => m.isUser).length,
+        'message_count': stat?.count ?? 0,
+        'user_message_count': stat?.userCount ?? 0,
         if (s.name != null) 'session_name': s.name,
         if (s.description != null) 'session_description': s.description,
         if (s.parentSession != null) 'parent_session': s.parentSession,

@@ -1125,10 +1125,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
   @override
   Widget build(BuildContext context) {
     // StorageService is the single source of truth for isDark (persisted + notifies on load/toggle).
-    // Using Consumer2 ensures the entire MaterialApp tree (and thus ThemeData) rebuilds when the user
-    // toggles or when the async prefs load completes. AppState is kept only for selectedIndex.
-    return Consumer2<StorageService, AppState>(
-      builder: (context, storage, appState, child) {
+    // The Consumer ensures the entire MaterialApp tree (and thus ThemeData) rebuilds when the user
+    // toggles or when the async prefs load completes. AppState was in the tuple historically but
+    // never read here — subscribing meant every sidebar NAV TAP re-ran ColorScheme.fromSeed and
+    // re-derived the whole app theme. MainLayout watches AppState itself for navigation.
+    return Consumer<StorageService>(
+      builder: (context, storage, child) {
         final isDark = storage.uiSettings.isDark;
         return MaterialApp(
           title: 'Front Porch AI',

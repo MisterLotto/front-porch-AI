@@ -2612,6 +2612,62 @@ class AppDatabase extends _$AppDatabase {
     return map;
   }
 
+  /// Lightweight per-session stats for the session picker: message count,
+  /// user-message count, and the SECOND message's swipes/index (the preview
+  /// line — the first message is the greeting). Two aggregate queries total,
+  /// so listing sessions never hydrates whole transcripts — the old
+  /// per-session getMessagesForSession loop made tapping a character
+  /// O(sessions × messages) of row decoding before the chat could even open.
+  Future<
+    Map<
+      String,
+      ({int count, int userCount, String? previewSwipes, int previewIndex})
+    >
+  >
+  getSessionListStats(List<String> sessionIds) async {
+    if (sessionIds.isEmpty) return {};
+    final placeholders = List.filled(sessionIds.length, '?').join(',');
+    final vars = [for (final id in sessionIds) Variable.withString(id)];
+    final counts = await customSelect(
+      'SELECT session_id, COUNT(*) AS cnt, '
+      'SUM(CASE WHEN is_user = 1 THEN 1 ELSE 0 END) AS user_cnt '
+      'FROM messages WHERE session_id IN ($placeholders) '
+      'AND deleted_at IS NULL GROUP BY session_id',
+      variables: vars,
+    ).get();
+    final previews = await customSelect(
+      'SELECT session_id, swipes, swipe_index FROM ('
+      'SELECT session_id, swipes, swipe_index, '
+      'ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY position ASC) AS rn '
+      'FROM messages WHERE session_id IN ($placeholders) '
+      'AND deleted_at IS NULL) WHERE rn = 2',
+      variables: [for (final id in sessionIds) Variable.withString(id)],
+    ).get();
+    final previewBySession = <String, ({String swipes, int index})>{};
+    for (final row in previews) {
+      previewBySession[row.read<String>('session_id')] = (
+        swipes: row.read<String>('swipes'),
+        index: row.read<int>('swipe_index'),
+      );
+    }
+    final map =
+        <
+          String,
+          ({int count, int userCount, String? previewSwipes, int previewIndex})
+        >{};
+    for (final row in counts) {
+      final id = row.read<String>('session_id');
+      final preview = previewBySession[id];
+      map[id] = (
+        count: row.read<int>('cnt'),
+        userCount: row.read<int?>('user_cnt') ?? 0,
+        previewSwipes: preview?.swipes,
+        previewIndex: preview?.index ?? 0,
+      );
+    }
+    return map;
+  }
+
   Future<List<Session>> getSessionsForCharacter(String characterId) =>
       (select(sessions)
             ..where(

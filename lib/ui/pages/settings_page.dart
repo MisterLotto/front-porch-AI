@@ -89,6 +89,26 @@ class _SettingsPageState extends State<SettingsPage> {
   // the fetch/check spinners now live in the extracted backend sections).
   List<RemoteModelInfo> _availableModels = [];
 
+  // Session-scoped stale-while-revalidate cache for the remote model list:
+  // Settings used to fire an HTTP fetch on EVERY open, and the page opened
+  // with an empty dropdown until it returned. Seed from the last successful
+  // fetch instantly; the background refresh still runs and replaces it.
+  static List<RemoteModelInfo>? _modelsCache;
+  static String? _modelsCacheKey;
+
+  // Memoized model file size for the VRAM gauge (settings_page.hardware.dart):
+  // the gauge is rebuilt PER FRAME while dragging the context slider, and it
+  // used to existsSync + lengthSync a multi-GB GGUF on every one of those
+  // frames. Resolved once per selected path instead.
+  int _modelSizeMbCache = 0;
+  String? _modelSizeMbForPath;
+
+  // Memoized KV-cost future for the same gauge (a fresh Future per rebuild
+  // made the FutureBuilder flip between exact and heuristic estimates every
+  // frame mid-drag).
+  Future<int?>? _kvBytesFuture;
+  String? _kvBytesFuturePath;
+
   // Local Preset state
   List<File> _localPresets = [];
 
@@ -175,6 +195,12 @@ class _SettingsPageState extends State<SettingsPage> {
     if (storage.remoteApiUrl.isEmpty) return; // No API URL configured
     if (storage.remoteApiKey.isEmpty && !isLocal) return; // no API configured
 
+    // Instant dropdown from the last successful fetch for this URL; the
+    // network refresh below still replaces it when it lands.
+    if (_modelsCache != null && _modelsCacheKey == storage.remoteApiUrl) {
+      setState(() => _availableModels = _modelsCache!);
+    }
+
     final openRouter = Provider.of<OpenRouterService>(context, listen: false);
     // Explicit-target fetch — configure() here silently re-routed the ACTIVE
     // backend (opening Settings while on oMLX pointed all chat traffic at the
@@ -185,6 +211,8 @@ class _SettingsPageState extends State<SettingsPage> {
         apiKey: storage.remoteApiKey,
       );
       if (mounted && models.isNotEmpty) {
+        _modelsCache = models;
+        _modelsCacheKey = storage.remoteApiUrl;
         setState(() => _availableModels = models);
       }
     } catch (_) {
@@ -256,8 +284,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() => _dragCallBuffer = v),
                   availableModels: _availableModels,
                 ),
-                _backendTab(),
-                _buildAdvancedTab(context),
+                // Builder defers these two until their tab actually mounts:
+                // both are method calls that subscribe to services and build
+                // their full trees, so evaluating them inline meant every
+                // settings notify re-ran ALL five tabs' construction even
+                // with a different tab visible.
+                Builder(builder: (context) => _backendTab()),
+                Builder(builder: (context) => _buildAdvancedTab(context)),
               ],
             ),
           ),

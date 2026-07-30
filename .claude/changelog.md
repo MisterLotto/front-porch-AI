@@ -6677,3 +6677,40 @@ cross-fade thrashing all generation. Fixes, all behavior-preserving:
 flutter analyze clean; 1087 tests green (chat + realism + models) + 144 UI
 tests. Realism/Needs behavior untouched — throttling affects only WHEN the
 UI repaints, never what state is computed.
+
+## 2026-07-30 (UTC) — Perf Phase 2: navigation dead time (chat open, Settings, theme reseed)
+
+Files: lib/database/database.dart,
+lib/services/chat/chat_service_session_load.dart, lib/main.dart,
+lib/services/backend_manager.dart, lib/services/model_manager.dart,
+lib/ui/pages/settings_page.dart, lib/ui/pages/settings_page.hardware.dart,
+docs/Rawhide.md
+
+Phase 2 of the responsiveness work (audit-driven):
+
+1. Tap-to-chat dead time: getSessionsForId hydrated EVERY message row of
+   EVERY session to compute 50-char previews + counts, all before the route
+   push began. New AppDatabase.getSessionListStats: two aggregate queries
+   (COUNT/SUM grouped by session + a ROW_NUMBER() window for the second
+   message's swipes) replace the O(sessions × messages) loop. Query-only —
+   no schema change, mirrors the existing getMessageCountsPerCharacter
+   customSelect style; bundled SQLite 3.52 has window functions.
+2. Settings: remote-model dropdown seeds instantly from a
+   stale-while-revalidate session cache (HTTP refresh still replaces it);
+   VRAM gauge memoizes the GGUF file size per path (was existsSync +
+   lengthSync on a multi-GB file PER FRAME during context-slider drags —
+   grandfathered io-lint violation, now carries io-ok) and memoizes the
+   KV-cost future (was a fresh Future per rebuild, flickering
+   exact↔heuristic estimates); the Backend + Advanced tabs are wrapped in
+   Builder so their service subscriptions + full trees only construct when
+   the tab actually mounts.
+3. MaterialApp Consumer2<StorageService, AppState> → Consumer<Storage>:
+   appState was never read in the builder, so every sidebar nav tap re-ran
+   ColorScheme.fromSeed + GoogleFonts.interTextTheme for the whole app.
+4. BackendManager/ModelManager listened to ALL StorageService notifies and
+   re-ran _init (process spawns / sync recursive model-dir walk) on every
+   settings mutation. Both now guard on the inputs _init actually reads
+   (rootPath + useRocm; rootPath respectively).
+
+flutter analyze clean; 170 UI + session/database tests green; dart fix
+clean.

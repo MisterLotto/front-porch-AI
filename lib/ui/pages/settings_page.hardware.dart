@@ -141,13 +141,21 @@ extension _SettingsHardware on _SettingsPageState {
     StorageService storageService,
     HardwareService hardwareService,
   ) {
-    return FutureBuilder<int?>(
-      future: _selectedModelPath != null
+    // Memoize the KV-cost future per model path — a fresh Future per rebuild
+    // (this gauge rebuilds per frame during a context-slider drag) made the
+    // snapshot flip null→data every frame, flickering between the exact and
+    // heuristic estimates.
+    if (_kvBytesFuturePath != _selectedModelPath) {
+      _kvBytesFuturePath = _selectedModelPath;
+      _kvBytesFuture = _selectedModelPath != null
           ? Provider.of<ModelManager>(
               context,
               listen: false,
             ).getKvCacheBytesPerToken(_selectedModelPath!)
-          : Future.value(null),
+          : Future.value(null);
+    }
+    return FutureBuilder<int?>(
+      future: _kvBytesFuture,
       builder: (context, snapshot) {
         final totalVram = hardwareService.hardwareInfo!.vramMb.toDouble();
         if (totalVram <= 0) return const SizedBox.shrink();
@@ -333,14 +341,22 @@ extension _SettingsHardware on _SettingsPageState {
   }
 
   /// Estimate the selected model's file size in MB for the VRAM gauge.
+  /// Memoized per path: this is called from the gauge's build, which reruns
+  /// PER FRAME while the context slider drags — stat-ing a multi-GB GGUF on
+  /// every frame was a documented io-lint-class violation (grandfathered).
   int _getSelectedModelSizeMb() {
-    if (_selectedModelPath == null) return 0;
+    final path = _selectedModelPath;
+    if (path == null) return 0;
+    if (_modelSizeMbForPath == path) return _modelSizeMbCache;
+    var sizeMb = 0;
     try {
-      final file = File(_selectedModelPath!);
+      final file = File(path);
       if (file.existsSync()) {
-        return (file.lengthSync() / (1024 * 1024)).round();
+        sizeMb = (file.lengthSync() / (1024 * 1024)).round(); // io-ok: memoized per path — runs once per model selection, not per frame
       }
     } catch (_) {}
-    return 0;
+    _modelSizeMbForPath = path;
+    _modelSizeMbCache = sizeMb;
+    return sizeMb;
   }
 }
