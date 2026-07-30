@@ -95,11 +95,11 @@ function StoopShell() {
 function ShareComingSoon() {
   return (
     <section className="card stoop-coming-soon">
-      <h3>Share a character — coming soon</h3>
+      <h3>Sharing — coming soon</h3>
       <p className="muted">
-        Uploading characters and groups to The Stoop from the web UI is on its way.
-        Until then, you can share cards from the desktop app — everything you
-        publish there shows up here too.
+        Uploading characters, groups, and worlds (.fpworld places) to The Stoop
+        from the web UI is on its way. Until then, you can share from the
+        desktop app — everything you publish there shows up here too.
       </p>
     </section>
   );

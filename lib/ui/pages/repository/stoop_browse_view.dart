@@ -83,6 +83,20 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
   Future<void> _loadAll() async {
     final token = _token;
     if (token == null) return;
+    // Worlds are announced but not queryable until the backend accepts the
+    // WORLD type — show the coming-soon panel without hitting the server.
+    if (_type == 'world' && !kStoopWorldsLive) {
+      setState(() {
+        _grid.clear();
+        _picks = const [];
+        _following = const [];
+        _groups = const [];
+        _hasMore = false;
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -192,6 +206,24 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
   }
 
   Widget _content() {
+    if (_type == 'world' && !kStoopWorldsLive) {
+      // Keep the header (sort/type toggle) so the panel isn't a dead end.
+      return CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _browseHeader()),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _centered(
+              Icons.landscape_rounded,
+              'Worlds are coming soon to The Stoop.\n\n'
+              'Soon you’ll be able to share and download portable places '
+              '(.fpworld) — cover art, lore, climate, and traits included — '
+              'moderated just like characters.',
+            ),
+          ),
+        ],
+      );
+    }
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return _centered(Icons.cloud_off_outlined, _error!, retry: true);
@@ -332,6 +364,7 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
         ButtonSegment(value: 'all', label: Text('All')),
         ButtonSegment(value: 'solo', label: Text('Singles')),
         ButtonSegment(value: 'group', label: Text('Groups')),
+        ButtonSegment(value: 'world', label: Text('Worlds')),
       ],
       selected: {_type},
       showSelectedIcon: false,

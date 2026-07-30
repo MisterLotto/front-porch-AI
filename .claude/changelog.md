@@ -6455,3 +6455,52 @@ Golden follow-up: the Worlds page goldens (dark+light) pixel-failed on CI
 because the toolbar gained the Import Place button — regenerated on the CI
 runner via update-goldens.yml (run 30478708564), both PNGs visually
 reviewed (only change: second amber toolbar icon), committed.
+
+## 2026-07-30 (UTC) — Worlds on The Stoop: Dart client fully wired, tagged "coming soon"
+
+Files: lib/services/backporch/stoop_card.dart,
+lib/services/world_repository.dart,
+lib/ui/pages/repository/stoop_world_share.dart (new),
+lib/ui/pages/repository/stoop_upload_page.dart,
+lib/ui/pages/repository/stoop_card_detail_page.dart,
+lib/ui/pages/repository/stoop_card_sections.dart,
+lib/ui/pages/repository/stoop_card_tile.dart,
+lib/ui/pages/repository/stoop_browse_view.dart,
+lib/ui/pages/repository/stoop_home_view.dart,
+lib/services/web/facade/stoop_facade.dart,
+lib/services/web/web_server_host.dart,
+web_ui/src/stoop/stoopTypes.ts, web_ui/src/stoop/stoopApi.ts,
+web_ui/src/pages/stoop/StoopBrowsePage.tsx,
+web_ui/src/pages/stoop/StoopCardPage.tsx,
+web_ui/src/pages/stoop/StoopSection.tsx,
+web_ui/src/components/stoop/StoopCardTile.tsx, web_ui/src/styles.css,
+test/services/backporch/stoop_card_world_test.dart (new),
+test/services/web/stoop_routes_test.dart,
+docs/design/living-worlds.md, docs/Rawhide.md
+
+Maintainer asked for The Stoop to support uploading + downloading
+(auto-importing) .fpworld places, app-side only, tagged "coming soon" until
+the backend ships. Design: worlds ride the EXISTING card endpoints as a third
+type 'WORLD' whose card payload is the .fpworld envelope — zero new
+endpoints, additive-only server change, and (per explicit maintainer
+requirement) the same moderation pipeline as characters by construction
+(POST /characters → PENDING → mod review). The place cover image is required
+and uploads as the card avatar so every Stoop surface displays it via the
+normal primaryAssetId pipeline; the same cover also travels inside the
+envelope, so downloads restore it.
+
+Gates: kStoopWorldsLive (Dart) + STOOP_WORLDS_LIVE (web), both false. While
+off: browse "Worlds" filter (new desktop segment + web select option) shows
+a coming-soon panel without querying the server; the upload wizard's Places
+section shows a coming-soon banner; web Share tab copy mentions worlds. When
+flipped: wizard lists shareable places (cover required) → publishStoopWorld;
+downloads auto-import via WorldRepository.importWorldJson on BOTH the desktop
+detail page and the web facade; WORLD pills/badges on tiles; world-specific
+detail sections (stoopWorldSections: about/climate/traits/lore).
+
+Consolidations: exportFpWorld's biome-resolve+encode became
+WorldRepository.fpWorldJson (ONE envelope builder for file export AND Stoop
+upload). Mine-tab Update button hidden for WORLD posts (worlds are
+new-upload-only v1; routing them to the character update path would
+dead-end). New tests: WORLD card parsing; end-to-end web route test proving
+a WORLD download lands as a local place with provenance + lore intact.

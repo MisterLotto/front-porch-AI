@@ -1689,6 +1689,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .stoop-badge.nsfw { border-color: var(--danger); color: var(--danger); }
 .stoop-badge.pick { border-color: var(--gold, #eab308); color: var(--gold, #eab308); }
 .stoop-badge.group { border-color: var(--accent); color: var(--accent); }
+.stoop-badge.world { border-color: var(--ok); color: var(--ok); }
 
 .stoop-detail-head { display: flex; gap: 16px; align-items: flex-start; }
 .stoop-detail-art { width: 140px; flex: none; }

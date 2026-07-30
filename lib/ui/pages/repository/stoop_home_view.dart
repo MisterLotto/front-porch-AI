@@ -403,8 +403,11 @@ class _StoopHomeViewState extends State<StoopHomeView> {
               ),
               // Update publishes a new version of THIS post in place — for solo
               // characters and (now that groups carry a portable stable id) group
-              // cards alike, each through its own editor + publish flow.
-              OutlinedButton.icon(
+              // cards alike, each through its own editor + publish flow. World
+              // posts are new-upload-only for now (re-share from the wizard);
+              // routing them to the character path would just dead-end.
+              if (c.type != 'WORLD')
+                OutlinedButton.icon(
                   onPressed: () => c.type == 'GROUP'
                       ? _startGroupUpdate(c)
                       : _startUpdate(c),

@@ -18,7 +18,6 @@
 
 import 'dart:convert';
 
-import 'package:front_porch_ai/models/fp_world_package.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/lorebook_analysis.dart';
 import 'package:front_porch_ai/models/lorebook_codec.dart';
@@ -298,8 +297,8 @@ class WorldFacade {
   Map<String, dynamic>? exportWorld(String nameOrId) {
     final w = _worlds.resolveWorld(nameOrId);
     if (w == null) return null;
-    final biome = Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
-    return encodeFpWorld(world: w, biome: biome.toJson());
+    // Shared envelope core — same builder file export and Stoop upload use.
+    return _worlds.fpWorldJson(w);
   }
 
   /// Legacy ST world-info export (lore only).

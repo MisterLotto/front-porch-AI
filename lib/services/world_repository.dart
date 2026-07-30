@@ -447,17 +447,23 @@ class WorldRepository extends ChangeNotifier {
     return world;
   }
 
-  /// Export as .fpworld (full place package). Prefer this over ST-only.
-  Future<void> exportFpWorld(model.World world, String outputPath) async {
-    Map<String, dynamic>? biomeMap;
+  /// The ONE .fpworld envelope builder (file export AND Stoop upload): embeds
+  /// the resolved biome so importers get climate without built-ins, plus place
+  /// traits, lore, and the cover image already carried by [model.World].
+  Map<String, dynamic> fpWorldJson(model.World world) {
     final biome = Biome.resolve(
       biomeId: world.biomeId,
       biomeJson: world.biomeJson,
     );
-    // Always embed resolved biome so importers get climate without built-ins.
-    biomeMap = biome.toJson();
+    return encodeFpWorld(world: world, biome: biome.toJson());
+  }
+
+  /// Export as .fpworld (full place package). Prefer this over ST-only.
+  Future<void> exportFpWorld(model.World world, String outputPath) async {
     final file = File(outputPath);
-    await file.writeAsString(encodeFpWorldString(world: world, biome: biomeMap));
+    await file.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(fpWorldJson(world)),
+    );
   }
 
   /// Legacy ST world-info export (lore only).

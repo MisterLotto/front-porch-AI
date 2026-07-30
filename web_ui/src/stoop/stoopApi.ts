@@ -266,7 +266,7 @@ export const stoop = {
       { value },
     ),
   /** Download + import into the desktop library (runs server-side). */
-  download: (id: string, type: 'SOLO' | 'GROUP') =>
+  download: (id: string, type: 'SOLO' | 'GROUP' | 'WORLD') =>
     call<{ ok: boolean; name: string; type: string }>(
       'POST',
       `/api/stoop/cards/${encodeURIComponent(id)}/download`,

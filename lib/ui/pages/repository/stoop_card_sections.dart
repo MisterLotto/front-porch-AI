@@ -118,6 +118,45 @@ List<Widget> stoopStandardSections(
   ];
 }
 
+/// The collapsible field set for a WORLD card — the .fpworld envelope's
+/// description, climate, place traits, and lore. Reuses the same section
+/// chrome as characters so places read native on the detail panel.
+List<Widget> stoopWorldSections(
+  BuildContext context,
+  Map<String, dynamic> card,
+) {
+  final name = (card['name'] ?? '').toString();
+  final biome = card['biome'];
+  final climate = biome is Map
+      ? [
+          (biome['displayName'] ?? '').toString(),
+          (biome['feel'] ?? biome['description'] ?? '').toString(),
+        ].where((x) => x.isNotEmpty).join(' — ')
+      : '';
+  final traits = card['place_traits'];
+  final traitLines = traits is Map
+      ? [
+          for (final e in traits.entries)
+            '${e.key.toString().replaceAll('_', ' ')}: ${e.value}',
+        ]
+      : const <String>[];
+  final lore = card['lorebook'];
+  final entries = (lore is Map ? lore['entries'] : null) as List?;
+  final valid = entries?.whereType<Map>().toList() ?? const [];
+  return [
+    stoopTextSection(
+      context,
+      'About this place',
+      (card['description'] ?? '').toString(),
+      initiallyExpanded: true,
+    ),
+    stoopTextSection(context, 'Climate', climate),
+    stoopTextSection(context, 'Traits', traitLines.join('\n')),
+    if (valid.isNotEmpty)
+      stoopLorebookEntries(context, 'Lore (${valid.length})', valid, name),
+  ];
+}
+
 // Static first-message section (first_mes + alternates joined) for contexts
 // without an interactive greeting carousel (e.g. a group member).
 Widget _defaultFirstMessage(

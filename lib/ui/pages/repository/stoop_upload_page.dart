@@ -13,20 +13,26 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/database/database.dart';
+// The Drift schema also declares a `World` row class — hide it so `World`
+// below always means the model (the same shape .fpworld export uses).
+import 'package:front_porch_ai/database/database.dart' hide World;
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
+import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/group_card_exporter.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_standards.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_tag_selector.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_world_share.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
+import 'package:front_porch_ai/utils/world_cover.dart';
 
 /// Wizard to share one of the user's local characters to The Stoop. Mirrors the
 /// app's create-wizard chrome (step dots + AnimatedSwitcher + nav buttons).
@@ -75,6 +81,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   int _currentStep = 0;
   CharacterCard? _selected;
   GroupChat? _selectedGroup; // set instead of _selected when sharing a group
+  World? _selectedWorld; // set when sharing a place (.fpworld) — see below
   final _name = TextEditingController();
   final _summary = TextEditingController();
   final _originalCreator = TextEditingController();
@@ -127,6 +134,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   void _applyGroupSelection(GroupChat group) {
     _selectedGroup = group;
     _selected = null;
+    _selectedWorld = null;
     _name.text = group.name;
     _setSummaryFrom(group.scenario); // groups have no description; seed scenario
     _tagPool = [];
@@ -160,6 +168,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   void _applySelection(CharacterCard card) {
     _selected = card;
     _selectedGroup = null;
+    _selectedWorld = null;
     _name.text = card.name;
     _setSummaryFrom(card.description);
     // De-duplicate (preserving order) into the candidate pool, then
@@ -191,7 +200,25 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     }
   }
 
+  // Pre-fills the wizard from a chosen place. Mirrors the character/group
+  // appliers above (each type builds a different payload chain, so unifying
+  // the three would just braid unrelated field wiring together).
+  void _applyWorldSelection(World world) {
+    _selectedWorld = world;
+    _selected = null;
+    _selectedGroup = null;
+    _name.text = world.name;
+    _setSummaryFrom(world.description);
+    _tagPool = [];
+    _tags = [];
+  }
+
   Future<void> _publish() async {
+    final world = _selectedWorld;
+    if (world != null) {
+      await _publishWorld(world);
+      return;
+    }
     final group = _selectedGroup;
     if (group != null) {
       await _publishGroup(group);
@@ -335,10 +362,49 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     }
   }
 
+  // Publish a place as a WORLD card (same moderation queue as characters).
+  // The payload/cover work lives in publishStoopWorld (stoop_world_share.dart);
+  // this is just the wizard's busy/error scaffolding, mirroring _publishGroup.
+  Future<void> _publishWorld(World world) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final auth = context.read<AuthState>();
+    try {
+      final validation = await publishStoopWorld(
+        api: BackporchApi(),
+        repo: context.read<WorldRepository>(),
+        accessToken: auth.accessToken!,
+        world: world,
+        name: _name.text.trim(),
+        summary: _summary.text.trim(),
+        nsfw: _nsfw,
+        tags: _tags,
+        originalCreator: _originalCreator.text.trim(),
+      );
+      if (validation != null) {
+        if (mounted) setState(() => _error = validation);
+        return;
+      }
+      if (mounted) Navigator.pop(context, true);
+    } on BackporchApiException catch (e) {
+      if (mounted) setState(() => _error = _mapError(e.code));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Couldn’t share that place. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   bool get _canAdvance {
     switch (_currentStep) {
       case 0:
-        return _selected != null || _selectedGroup != null;
+        return _selected != null ||
+            _selectedGroup != null ||
+            _selectedWorld != null;
       case 1:
         return _name.text.trim().isNotEmpty && _summary.text.trim().isNotEmpty;
       case 2:
@@ -364,7 +430,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       appBar: AppBar(
         backgroundColor: AppColors.surfaceOf(context),
         foregroundColor: AppColors.textPrimary(context),
-        title: Text(widget.isUpdate ? 'Update character' : 'Share a character'),
+        title: Text(widget.isUpdate ? 'Update character' : 'Share to The Stoop'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Padding(
@@ -465,7 +531,12 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         .where((c) => c.imagePath != null && c.imagePath!.isNotEmpty)
         .toList();
     final allGroups = context.read<GroupChatRepository>().groups;
-    if (allCards.isEmpty && allGroups.isEmpty) {
+    // Places join the empty-check only once world sharing is live; while
+    // coming-soon the banner alone shouldn't suppress the "nothing" hint.
+    final hasWorlds =
+        kStoopWorldsLive &&
+        context.read<WorldRepository>().placeWorlds.isNotEmpty;
+    if (allCards.isEmpty && allGroups.isEmpty && !hasWorlds) {
       return _centeredHint(
         Icons.person_off_outlined,
         'Nothing to share yet',
@@ -530,6 +601,15 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             itemBuilder: (context, i) => _pickTile(cards[i]),
           ),
         ],
+        // Places: a coming-soon banner until the Stoop backend accepts WORLD
+        // cards, then the user's shareable places (kStoopWorldsLive).
+        if ((cards.isNotEmpty || groups.isNotEmpty) && kStoopWorldsLive)
+          const SizedBox(height: 16),
+        StoopWorldsPickSection(
+          query: _pickQuery,
+          selectedWorldId: _selectedWorld?.id,
+          onSelect: (w) => setState(() => _applyWorldSelection(w)),
+        ),
       ],
     );
   }
@@ -787,7 +867,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             value: _nsfw,
             onChanged: (v) => setState(() => _nsfw = v),
             title: Text(
-              'This character is NSFW (18+)',
+              'This content is NSFW (18+)',
               style: TextStyle(color: AppColors.textPrimary(context)),
             ),
             subtitle: Text(
@@ -826,8 +906,14 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
 
   // Step 3 — review + publish.
   Widget _reviewStep() {
+    final world = _selectedWorld;
     final isGroup = _selectedGroup != null;
-    final preview = isGroup
+    final preview = world != null
+        ? stoopWorldCoverPreview(
+            context,
+            coverBytes: decodeWorldCoverBytes(world.coverImage),
+          )
+        : isGroup
         ? Container(
             width: 96,
             height: 96,
@@ -937,9 +1023,9 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           ),
         const SizedBox(height: 20),
         Text(
-          'Your character will be reviewed by a moderator before it appears on '
-          'The Stoop. You’ll get a message in the app when it’s approved or if '
-          'changes are needed.',
+          'Your submission will be reviewed by a moderator before it appears '
+          'on The Stoop. You’ll get a message in the app when it’s approved or '
+          'if changes are needed.',
           style: TextStyle(color: AppColors.textTertiary(context), height: 1.5),
         ),
         if (_error != null) ...[

@@ -74,7 +74,9 @@ export function StoopCardPage() {
       setNote(
         detail.type === 'GROUP'
           ? `“${r.name}” was added to your groups.`
-          : `“${r.name}” was added to your library.`,
+          : detail.type === 'WORLD'
+            ? `“${r.name}” was added to your places.`
+            : `“${r.name}” was added to your library.`,
       );
     } catch (e) {
       setError(stoopErrorText(e));

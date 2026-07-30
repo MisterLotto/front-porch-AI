@@ -96,9 +96,10 @@ phase-1 items are polish / test depth, not product blockers.
 | Custom biome editor + preview harness | **NOT STARTED** | |
 | `biomes` table + snapshot-on-attach | **NOT STARTED** | chat spans already store full JSON when used |
 
-### Phase 3 — Stoop / sharing → **OUT OF SCOPE**
+### Phase 3 — Stoop / sharing → **CLIENT READY (2026-07-30), backend pending**
 
-Sketch only. `.fpworld` envelope is intentionally Stoop-ready.
+App-side wiring shipped behind `kStoopWorldsLive` (see §4). Backend work
+(accepting the `WORLD` type) remains out of scope for this doc.
 
 ### Product decisions already applied (not re-open without maintainer)
 
@@ -616,15 +617,39 @@ than lorebook prose.
 
 ---
 
-## 4. Phase 3 — Sharing (sketch only, not scoped)
+## 4. Phase 3 — Sharing (client shipped 2026-07-30; backend pending)
 
-**Implementation: OUT OF SCOPE.**
+**Implementation: Dart client fully wired, gated "coming soon".**
 
 Worlds are portable after phase 0, so Stoop distribution is a backend
 project rather than an extension of this work: a third content type, its own
 moderation surface for names and descriptions, and the never-break-old-
-clients API discipline. Explicitly **out of scope**; noted so the `.fpworld`
-envelope is designed Stoop-ready rather than retrofitted.
+clients API discipline. The `.fpworld` envelope was designed Stoop-ready
+rather than retrofitted, and the app side now exists:
+
+- **Contract (additive-only):** worlds ride the existing card endpoints as
+  `type: 'WORLD'`; the `card` payload is the .fpworld envelope; the place's
+  **cover image is required** and uploads as the card avatar (multipart), so
+  every Stoop surface (tiles, hero, detail) displays it via the normal
+  `primaryAssetId` asset pipeline, and moderators review the image like any
+  character avatar. No new endpoints; one new enum value server-side.
+- **Moderation:** because uploads go through `POST /characters`, world posts
+  land in the SAME `PENDING → mod review → APPROVED` queue as characters and
+  are never visible to users before approval. Mine-tab statuses, rejection
+  notes, and mod messaging all work unchanged.
+- **Client surfaces:** upload wizard Places section + `publishStoopWorld`
+  (`stoop_world_share.dart`), browse "Worlds" filter (desktop segment + web
+  select), WORLD tile pills/badges, detail-page world sections
+  (`stoopWorldSections`), and download auto-import via
+  `WorldRepository.importWorldJson` on BOTH the desktop detail page and the
+  web facade (`StoopFacade.downloadAndImport`).
+- **Gate:** `kStoopWorldsLive` (Dart, `stoop_card.dart`) and
+  `STOOP_WORLDS_LIVE` (web, `stoopTypes.ts`) are `false` → every surface
+  shows "coming soon" and never queries the backend with the new type. Flip
+  both together when the backend accepts `WORLD`.
+- **Not yet supported (deliberate):** in-place "Update" of a world post
+  (worlds are new-upload-only for v1; the Mine-tab Update button is hidden
+  for WORLD posts).
 
 ## 5. How we would know this worked
 

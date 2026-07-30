@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/group_card_importer.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
+import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_avatar.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_sections.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_group_sections.dart';
@@ -189,6 +190,8 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
             context.read<AppDatabase>(),
           )
         : null;
+    // World cards import as places; provider read before the await, like above.
+    final worldRepo = d.isWorld ? context.read<WorldRepository>() : null;
     Directory? tmp;
     try {
       final payload = await _api.download(_token, widget.cardId);
@@ -199,6 +202,15 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
       }
       final cardJson = payload['card'] as Map<String, dynamic>?;
       if (cardJson == null) throw Exception('no card data');
+      if (worldRepo != null) {
+        // WORLD card: the payload IS the .fpworld envelope — import it whole
+        // (lore + climate + traits + cover) as a new place.
+        final imported = await worldRepo.importWorldJson(cardJson);
+        messenger.showSnackBar(
+          SnackBar(content: Text('“${imported.name}” added to your places.')),
+        );
+        return;
+      }
       if (groupImporter != null) {
         final result = await groupImporter.importCard(
           GroupCard.fromJson(cardJson),
@@ -235,7 +247,13 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
       );
     } catch (_) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Couldn’t download that character.')),
+        SnackBar(
+          content: Text(
+            d.isWorld
+                ? 'Couldn’t download that place.'
+                : 'Couldn’t download that character.',
+          ),
+        ),
       );
     } finally {
       await tmp?.delete(recursive: true).catchError((_) => tmp!);
@@ -347,6 +365,8 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
               ],
               if (d.type == 'GROUP')
                 ..._groupSections(d)
+              else if (d.isWorld)
+                ...stoopWorldSections(context, d.card)
               else
                 ...stoopStandardSections(
                   context,

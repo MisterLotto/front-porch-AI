@@ -488,6 +488,7 @@ class WebServerHost extends ChangeNotifier {
       db,
       characters: _characterRepository,
       groups: _groupChatRepository,
+      worlds: _worldRepository,
     );
 
     final worldFacade = _worldRepository != null

@@ -192,6 +192,20 @@ class _StoopCardTileState extends State<StoopCardTile> {
                           ),
                         ),
                       ],
+                      if (card.isWorld) ...[
+                        const SizedBox(height: 4),
+                        StoopPill(
+                          tint: stoopAccent(context),
+                          child: const Text(
+                            'WORLD',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
