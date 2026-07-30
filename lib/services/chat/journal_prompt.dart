@@ -23,6 +23,13 @@ import 'package:front_porch_ai/database/database.dart';
 /// the growth pass and the prompt summaryBlock consume it directly.
 const int kRecapMaxWords = 200;
 
+/// Prompt-side ask for new memories per pass. Verbose models (GLM-5.2 on
+/// Nano-GPT planted ~40 adds per pass) blow the 4000-token response budget,
+/// and because the recap is instructed LAST, truncation decapitates exactly
+/// the recap — every pass, forever ("Where we are" never persisted). The cap
+/// keeps the response comfortably inside budget and the journal readable.
+const int kJournalMaxNewMemories = 6;
+
 /// The Journal — maintenance-pass prompt building (extracted from
 /// journal_maintenance.dart so that file stays under the size cap; pure
 /// functions, all context passed in).
@@ -89,11 +96,16 @@ String buildJournalPrompt({
   );
   b.writeln(
     '- Capture what mattered: add a memory for each promise made, thing '
-    'learned about $userName, relationship shift, or moment that stood out. '
-    'The annotated lines above are the significant beats — when any line is '
-    'annotated, write at least one memory for it. Skip idle small talk, but '
-    'do not finish a pass with no new memory when something worth '
-    'remembering happened.',
+    'learned about $userName, relationship shift, or moment that stood out — '
+    'the annotated lines above are the significant beats. If there are more '
+    'beats than the cap below allows, keep the most important and let the '
+    'rest wait. Skip idle small talk, but do not finish a pass with no new '
+    'memory when something worth remembering happened.',
+  );
+  b.writeln(
+    '- Add at most $kJournalMaxNewMemories new memories in this update — '
+    'pick the beats that mattered most; the rest can wait for your next '
+    'entry.',
   );
   b.writeln(
     '- Each memory is one sentence, first person, at most 40 words. '
@@ -115,7 +127,8 @@ String buildJournalPrompt({
       b.writeln(
         'Add your memories first with add_memory, then finish with exactly '
         'one write_recap call: where things stand now — present tense, your '
-        'voice, at most $kRecapMaxWords words.',
+        'voice, at most $kRecapMaxWords words. Never skip the write_recap '
+        'call, even when you add few or no memories.',
       );
     } else {
       b.writeln('Do not call write_recap.');
@@ -141,7 +154,8 @@ String buildJournalPrompt({
       );
       b.writeln();
       b.writeln('Write your <memory> tags first, then end with exactly one '
-          '<recap> tag.');
+          '<recap> tag. Never skip the recap, even when you add few or no '
+          'memories.');
     } else {
       b.writeln();
       b.writeln('Do not write a <recap> tag.');

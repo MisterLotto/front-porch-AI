@@ -243,7 +243,14 @@ class JournalMaintenance {
         final ownerProposals = JournalOwnerProposals(
           ownerId: ownerId,
           ownerName: owner.name,
-          ops: _resolveOps(ops, cards, window, start),
+          // Clamp add-floods (double the prompt-side ask as headroom) so one
+          // verbose model can't churn the card cap in a single evening.
+          ops: _resolveOps(
+            clampJournalAdds(ops, kJournalMaxNewMemories * 2),
+            cards,
+            window,
+            start,
+          ),
         );
 
         if (reviewMode) {
@@ -253,6 +260,14 @@ class JournalMaintenance {
           await review.applyOwnerProposals(sessionToken, ownerProposals);
           if (i == 0 && recapText != null && getSessionId() == sessionToken) {
             setRecap(recapText);
+          } else if (i == 0 &&
+              recapText == null &&
+              ownerProposals.ops.isNotEmpty) {
+            debugPrint(
+              '[Journal] ⚠ ${owner.name}: pass produced ops but NO recap — '
+              'likely response-budget truncation (the recap is last in the '
+              'reply); "Where we are" stays stale this pass.',
+            );
           }
         }
         anySucceeded = true;

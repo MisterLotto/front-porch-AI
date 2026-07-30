@@ -6837,3 +6837,33 @@ getLastSessionThemeOverrides now filters to sessions that actually carry
 overrides (the query's intent — "the last theme the user used") with a
 rowid tie-break. Verified 5 consecutive runs of the test + full suite
 (2828 pass, 0 fail) before push.
+## 2026-07-30 (UTC) — "Where we are" recap never persisted on GLM-5.2 (and verbose tool-callers generally)
+
+**Files:** `lib/services/chat/journal_prompt.dart`,
+`lib/services/chat/journal_ops.dart`,
+`lib/services/chat/journal_maintenance.dart`,
+`test/services/chat/journal_test.dart`
+
+**What:** Maintainer report: the sidebar's "Where we are" recap doesn't
+survive an app restart. Traced with the live DB: the active chat (Misty,
+1:1, Nano-GPT `zai-org/glm-5.2:thinking`) had 74 messages, cursor 73, **200
+journal cards (cap saturated in one evening)** and `Sessions.summary` NULL —
+passes ran and persisted fine; the recap text specifically never arrived.
+Save/load/UI plumbing all verified correct. Live-fired the exact pass
+payload at the user's provider: with the old prompt GLM returns add_memory
+calls and **omits the final write_recap even when the response isn't
+truncated** (finish=tool_calls, 4 adds, no recap); on the real chat its
+~40-adds-per-pass flood also ran into the 4000-token response budget, and
+recap-last means truncation always kills exactly the recap. Fix, shared
+prompt body (both transports, 1:1↔group parity by construction): cap the
+ask at kJournalMaxNewMemories (6) new memories per pass, and both closings
+now say "Never skip the (write_)recap, even when you add few or no
+memories". Defense in depth: `clampJournalAdds` (journal_ops, pure) caps
+parsed add-ops at 2× the ask at the ONE shared resolve site so a flooding
+model can't churn the card cap; owner-0 passes that return ops but no recap
+now debugPrint a loud warning. Live re-verified: fixed prompt → 5 adds +
+write_recap present. New tests: clamp behavior + both prompt lines in both
+transports.
+Grok follow-ups applied same-commit: warning gated on ops.isNotEmpty
+(quiet passes no longer log a false truncation alarm); capture rule
+reworded to defer to the cap on dense windows instead of contradicting it.
