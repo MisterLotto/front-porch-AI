@@ -6902,3 +6902,18 @@ NOT yet done (queued next): the group-chat creation wizard's character
 picker is a flat list that ignores the folder hierarchy — needs a
 folder-aware picker on desktop AND the web wizard; too large to bundle
 safely into this commit. Full suite green before push (2832 pass).
+
+## 2026-07-30 (UTC) — Handoff spec: groups must be movable through folders
+
+Files: docs/design/folder-groups.md (new)
+
+Maintainer report: group cards are pinned to the Home Screen top level —
+no folder membership exists for groups at all (Characters.folderId has no
+group_chats counterpart, and the grid renders groups unconditionally).
+Proper fix needs an additive nullable group_chats.folder_id migration +
+FolderService group membership + grid filtering + context menu +
+multi-select + web-library parity — too large to execute safely at this
+session's context tail, so the executable spec (8 ordered work items,
+including the CCF-safety note that group_chats is not an
+externally-written table) is committed for the next session, alongside
+the already-queued folder-aware wizard picker item.
