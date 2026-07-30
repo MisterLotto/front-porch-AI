@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ⚡ **Chat feels dramatically smoother while the AI is typing** — Under the hood, every streamed word used to force the entire chat screen (all bubbles, the sidebar, the input bar) to redraw up to 80 times a second, re-highlighting every message's dialogue colors from scratch each time — and characters with multiple expression images kept re-rolling their portrait mid-reply, so the background face never stopped cross-fading. Streaming updates are now batched to a smooth 30 fps, messages that haven't changed skip all that re-work, the expression portrait stays put until the emotion actually changes, and auto-scroll glides instead of stuttering. Long replies also no longer get slower as they grow.
+
 - 🏷️ **Stoop listings can have fancy titles now** — When you share a character, the "Display name on The Stoop" is its own field: name the listing "Misty Meadows, Misguided Meteorologist" while in chat she stays plain "Misty" (nothing inside the card changes). Custom titles also survive when you publish an update — they no longer quietly reset to the character's name.
 
 - 🏮 **The Stoop got its glow-up** — The in-app community hub now looks like the real thing at hub.frontporchai.app: a warm "porch at dusk" makeover with amber lamplight buttons, cream serif headings, cinematic Mod's Picks hero, richer card tiles (art up top, name/creator/summary/stats below, with a gentle lift when you hover), a proper ▲/▼ vote box, teal tag pills, moderation status pills, and a cozy pulsing-lamp loading light. Light-theme users get a matching warm-daylight version. Same Stoop, much nicer porch — on desktop and the web UI alike.

@@ -18,6 +18,11 @@
 
 part of '../chat_service.dart';
 
+// Sentence/clause boundary regexes for TTS sentence streaming — hoisted:
+// these used to be constructed (and recompiled) inside the per-token loop.
+final RegExp _sentenceEndRe = RegExp(r'[.!?]\s|[.!?]$|\n');
+final RegExp _clauseEndRe = RegExp(r',\s|;\s|\s[—–-]\s');
+
 /// Absolute ceiling on the RAG memories block, applied on top of the
 /// percentage budget (1:1's 10% / the group's configurable %). The block is
 /// verbatim old transcript injected AFTER the history; past ~2,500 tokens
@@ -1225,12 +1230,20 @@ extension ChatServiceGeneration on ChatService {
         _pendingRealismMetadata = null;
       }
 
-      // Helper to update the visible message from buffer
+      // Helper to update the visible message from buffer. Incremental: only
+      // tokens newly admitted to display are appended to the running buffer
+      // (the old `.take(n).join()` re-joined the ENTIRE response per token —
+      // O(n²) over a long reply and the largest allocator on this path).
+      final displayedBuf = StringBuffer();
+      var displayedInBuf = 0;
       void _flushBufferToDisplay() {
         if (epoch != _generationEpoch) return; // stale generation
         if (_tokenBuffer.isEmpty && _displayedTokenCount == 0) return;
-        // Build displayed text from all tokens up to _displayedTokenCount
-        final displayTokens = _tokenBuffer.take(_displayedTokenCount).join();
+        while (displayedInBuf < _displayedTokenCount &&
+            displayedInBuf < _tokenBuffer.length) {
+          displayedBuf.write(_tokenBuffer[displayedInBuf++]);
+        }
+        final displayTokens = displayedBuf.toString();
         String displayText;
         if (mode == GenerationMode.continue_) {
           displayText = originalText + displayTokens;
@@ -1241,7 +1254,7 @@ extension ChatServiceGeneration on ChatService {
         // _messages.last — the list can shift mid-turn) to preserve
         // thinkingStartTime and other metadata.
         streamTarget.text = displayText;
-        notifyListeners();
+        _notifyStreamListeners();
       }
 
       // Read display buffer settings — disable for remote APIs (they're fast enough)
@@ -1273,12 +1286,27 @@ extension ChatServiceGeneration on ChatService {
         });
       }
 
+      // Scan window for stop sequences / think tags: only the newly-appended
+      // token can COMPLETE a match, so scanning the trailing
+      // (token + longestNeedle - 1) chars finds exactly what a full scan
+      // would — without re-reading the whole response per token (O(n²)).
+      final maxStopLen = stopList.fold<int>(0, (m, s) => s.length > m ? s.length : m);
+      // Cursor for the rolling-TPS window: timestamps are appended in order,
+      // so entries before the cutoff can be skipped permanently instead of
+      // re-filtered with two O(n) where() passes per token.
+      var tpsWindowStart = 0;
+
       // Consume the stream — tokens go into buffer (or display immediately)
       await for (final token in stream) {
         if (_cancelRequested) break;
         accumulatedResponse += token;
         _tokensGenerated++;
         _tokenTimestamps.add(DateTime.now());
+        final tailStart = (accumulatedResponse.length -
+                token.length -
+                (maxStopLen > 8 ? maxStopLen : 8) +
+                1)
+            .clamp(0, accumulatedResponse.length);
 
         // ── Phase transition: first token marks end of prefill ──
         if (_tokensGenerated == 1) {
@@ -1313,9 +1341,8 @@ extension ChatServiceGeneration on ChatService {
           emitted = false;
 
           // First try sentence boundaries
-          final sentenceEnd = RegExp(r'[.!?]\s|[.!?]$|\n');
-          if (sentenceEnd.hasMatch(_sentenceBuffer)) {
-            final match = sentenceEnd.firstMatch(_sentenceBuffer)!;
+          if (_sentenceEndRe.hasMatch(_sentenceBuffer)) {
+            final match = _sentenceEndRe.firstMatch(_sentenceBuffer)!;
             final sentence = _sentenceBuffer.substring(0, match.end).trim();
             _sentenceBuffer = _sentenceBuffer.substring(match.end);
             if (sentence.isNotEmpty) {
@@ -1327,11 +1354,10 @@ extension ChatServiceGeneration on ChatService {
 
           // For long buffers, split at clause boundaries to keep TTS fast
           if (_sentenceBuffer.length > 80) {
-            final clauseEnd = RegExp(r',\s|;\s|\s[—–-]\s');
-            if (clauseEnd.hasMatch(_sentenceBuffer)) {
+            if (_clauseEndRe.hasMatch(_sentenceBuffer)) {
               // Find the LAST clause boundary to maximize chunk size
               Match? lastMatch;
-              for (final m in clauseEnd.allMatches(_sentenceBuffer)) {
+              for (final m in _clauseEndRe.allMatches(_sentenceBuffer)) {
                 if (m.start > 30) lastMatch = m; // at least 30 chars per chunk
               }
               if (lastMatch != null) {
@@ -1348,10 +1374,11 @@ extension ChatServiceGeneration on ChatService {
           }
         }
 
-        // Client-side safety trim check (mid-stream)
+        // Client-side safety trim check (mid-stream). Tail-window scan: a
+        // match ending before this token was already caught last iteration.
         for (final stop in stopList) {
-          if (accumulatedResponse.contains(stop)) {
-            int index = accumulatedResponse.indexOf(stop);
+          final index = accumulatedResponse.indexOf(stop, tailStart);
+          if (index != -1) {
             final trimmedTotal = accumulatedResponse.substring(0, index);
             final previousTotal = _tokenBuffer.join();
             final lastTokenContribution = trimmedTotal.substring(
@@ -1370,8 +1397,9 @@ extension ChatServiceGeneration on ChatService {
           _tokenBuffer.add(token);
         }
 
-        // Track think timing
-        if (!_thinkStarted && accumulatedResponse.contains('<think>')) {
+        // Track think timing (tail-window scans, same reasoning as above)
+        if (!_thinkStarted &&
+            accumulatedResponse.indexOf('<think>', tailStart) != -1) {
           _thinkStarted = true;
           _thinkStartTime = DateTime.now();
           _generationPhase = GenerationPhase.thinking;
@@ -1380,7 +1408,7 @@ extension ChatServiceGeneration on ChatService {
         }
         if (_thinkStarted &&
             !_thinkEnded &&
-            accumulatedResponse.contains('</think>')) {
+            accumulatedResponse.indexOf('</think>', tailStart) != -1) {
           _thinkEnded = true;
           // Transition out of thinking to buffering/generating
           _generationPhase = bufferEnabled
@@ -1401,15 +1429,19 @@ extension ChatServiceGeneration on ChatService {
         }
 
         if (bufferEnabled) {
-          // Calculate current rolling TPS (last 3 seconds)
+          // Calculate current rolling TPS (last 3 seconds). Timestamps are
+          // appended in order, so advance a cursor past expired entries once
+          // instead of re-filtering the whole list twice per token.
           final now = DateTime.now();
           final cutoff = now.subtract(const Duration(seconds: 3));
-          final recentCount = _tokenTimestamps
-              .where((t) => t.isAfter(cutoff))
-              .length;
-          final windowStart =
-              _tokenTimestamps.where((t) => t.isAfter(cutoff)).firstOrNull ??
-              _generationStartTime!;
+          while (tpsWindowStart < _tokenTimestamps.length &&
+              !_tokenTimestamps[tpsWindowStart].isAfter(cutoff)) {
+            tpsWindowStart++;
+          }
+          final recentCount = _tokenTimestamps.length - tpsWindowStart;
+          final windowStart = tpsWindowStart < _tokenTimestamps.length
+              ? _tokenTimestamps[tpsWindowStart]
+              : _generationStartTime!;
           final windowElapsed =
               now.difference(windowStart).inMilliseconds / 1000.0;
           final currentTps = (recentCount >= 2 && windowElapsed > 0)
@@ -1461,15 +1493,20 @@ extension ChatServiceGeneration on ChatService {
           _flushBufferToDisplay();
         }
 
-        // Update TPS/progress in the bar even during buffering
-        notifyListeners();
+        // Update TPS/progress in the bar even during buffering — coalesced;
+        // the non-buffered flush above already went through the throttle, so
+        // this is a no-op there unless the interval elapsed.
+        _notifyStreamListeners();
 
         if (stopFound) break;
       }
 
-      // Mark stream as done
+      // Mark stream as done. From here on state changes are terminal, so
+      // drop any pending throttled notify — the finalize paths below (cancel
+      // AND normal) both end in an unthrottled notifyListeners().
       streamDone = true;
       _isBuffering = false;
+      _cancelStreamNotifyThrottle();
 
       if (_cancelRequested) {
         // Cancelled mid-stream: do NOT drain the undisplayed backlog. A

@@ -133,8 +133,8 @@ class _MessageBubbleState extends State<MessageBubble> {
     final isDirectorNote = message.characterId == '__director__';
     final isChanceTimeNarration =
         message.activeMetadata?['is_chance_time_narration'] == true;
-    final bubbleOpacity = Provider.of<StorageService>(context).bubbleOpacity;
     final storage = Provider.of<StorageService>(context);
+    final bubbleOpacity = storage.bubbleOpacity;
     final theme = ThemeBorderResolver.resolve(
       chatService: widget.chatService,
       storage: storage,

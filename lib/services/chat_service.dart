@@ -1067,6 +1067,39 @@ class ChatService extends ChangeNotifier {
   final List<DateTime> _tokenTimestamps =
       []; // Rolling window for TPS measurement
 
+  // ── Streaming rebuild throttle ──
+  // The token loop used to fire notifyListeners() up to twice PER TOKEN
+  // (~55-80 full chat-page rebuilds/sec at local speeds), which was the
+  // single largest source of "the app feels sluggy while generating".
+  // _notifyStreamListeners coalesces those into at most one notify per
+  // ~33 ms (≈30 fps — above the eye's text-reading rate) with a guaranteed
+  // trailing notify so the final token batch always paints. End-of-turn
+  // paths still call plain notifyListeners() directly, so terminal state
+  // (isGenerating=false, chips, perf) is never throttled away.
+  DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _streamNotifyTimer;
+  static const Duration _kStreamNotifyInterval = Duration(milliseconds: 33);
+
+  void _notifyStreamListeners() {
+    if (_streamNotifyTimer != null) return; // trailing notify already queued
+    final elapsed = DateTime.now().difference(_lastStreamNotify);
+    if (elapsed >= _kStreamNotifyInterval) {
+      _lastStreamNotify = DateTime.now();
+      notifyListeners();
+    } else {
+      _streamNotifyTimer = Timer(_kStreamNotifyInterval - elapsed, () {
+        _streamNotifyTimer = null;
+        _lastStreamNotify = DateTime.now();
+        notifyListeners();
+      });
+    }
+  }
+
+  void _cancelStreamNotifyThrottle() {
+    _streamNotifyTimer?.cancel();
+    _streamNotifyTimer = null;
+  }
+
   // ── Web token broadcast ──
   // External consumers (the web server's StreamHub) listen to this for real-time token streaming.
   final StreamController<String> _tokenBroadcast =
@@ -4518,6 +4551,7 @@ class ChatService extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancelIdleTimer();
+    _cancelStreamNotifyThrottle();
     _guestStatusClearTimer?.cancel();
     _characterRepository?.removeListener(_onCharacterLibraryChanged);
     _storageService.removeListener(_onBackendIdentityMaybeChanged);

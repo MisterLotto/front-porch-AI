@@ -6630,3 +6630,50 @@ rollout order: accept WORLD, opt-in visibility (same deploy), tokenCount,
 mod review UI, hub website (badge/filter/detail/.fpworld download; no hub
 submit v1), no-op confirmations, and the flag flip (including the one
 follow-up client patch to send the backend-chosen mixed-view opt-in param).
+
+## 2026-07-30 (UTC) — Perf Phase 1: streaming render path (the "slow and clunky" fix)
+
+Files: lib/services/chat_service.dart,
+lib/services/chat/chat_service_generation.dart,
+lib/services/chat/expression_classifier.dart, lib/models/chat_message.dart,
+lib/ui/chat_components/bubbles/styled_chat_message.dart,
+lib/ui/chat_components/bubbles/message_bubble.dart,
+lib/ui/chat_components/sidebar/journal_memory/summary_section.dart,
+lib/ui/pages/chat_page.dart, docs/Rawhide.md
+
+Four-agent audit traced "app feels slow and clunky" to the streaming path:
+2 unthrottled notifyListeners() per token (~55-80 full chat-page rebuilds/s)
+× every visible bubble re-running full-text regex parsing × an expression
+avatar re-randomized inside build() that kept an AnimatedSwitcher
+cross-fade thrashing all generation. Fixes, all behavior-preserving:
+
+1. _notifyStreamListeners(): 33 ms coalescing throttle with guaranteed
+   trailing notify (the repo's own 150 ms eval-debounce insight, finally
+   applied to the main token loop). End-of-turn paths keep unthrottled
+   notifies so terminal state always paints. Cancelled in dispose.
+2. O(n²) kills in the token loop: incremental StringBuffer display text
+   (was .take(n).join() per token), tail-window stop-sequence and
+   think-tag scans (only the new token can complete a match), hoisted
+   sentence/clause RegExps (were compiled per token), cursor-based TPS
+   window (was two O(n) where() passes per token).
+3. resolveExpressionAvatar: stable pick per character+label via
+   _stableExpressionPicks map (replaces _lastExpressionAvatarId; per-key so
+   group chats can't evict each other); re-rolls only on explicit reroll or
+   label change. Kills the endless full-screen cross-fade.
+4. ChatMessage.displayText/thinkingContent: cached keyed on source string
+   (identical() fast path) + static regexes + no-think fast path. Was up to
+   8 regex compiles + 8 full-text scans per message per rebuild.
+5. StyledChatMessage → StatefulWidget with parse caches (markdown image
+   matches + tokenizeChat results keyed on text, resolved GoogleFonts
+   styles keyed on inputs). Widgets still rebuilt fresh (callbacks never
+   stale); only parsing is cached.
+6. message_bubble: duplicate listening Provider.of<StorageService> removed.
+7. summary_section: guarded listener (rebuild only when summary scalars
+   change — was unconditional setState at full streaming rate; same pattern
+   as journal_panel next door).
+8. chat_page auto-scroll: jumpTo during generation (animateTo restarted a
+   300 ms curve per token batch), animateTo kept for one-shot scrolls.
+
+flutter analyze clean; 1087 tests green (chat + realism + models) + 144 UI
+tests. Realism/Needs behavior untouched — throttling affects only WHEN the
+UI repaints, never what state is computed.
