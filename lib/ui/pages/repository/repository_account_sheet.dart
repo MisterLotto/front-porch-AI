@@ -217,58 +217,57 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
               ],
             ),
             const SizedBox(height: 18),
-            Container(
-              decoration: BoxDecoration(
-                color: stoopBg1(context),
+            // tileColor + shape (not a decorated wrapper): ListTile paints its
+            // fill and ink on the ancestor Material, and a DecoratedBox on top
+            // of that Material trips Flutter's ink-visibility assertion.
+            SwitchListTile(
+              tileColor: stoopBg1(context),
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: SwitchListTile(
-                value: user.nsfwEnabled,
-                onChanged: _nsfwBusy ? null : _toggleNsfw,
-                secondary: Icon(
-                  user.nsfwEnabled
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
+              value: user.nsfwEnabled,
+              onChanged: _nsfwBusy ? null : _toggleNsfw,
+              secondary: Icon(
+                user.nsfwEnabled
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: stoopMute(context),
+              ),
+              title: Text(
+                'Show NSFW content',
+                style: TextStyle(color: stoopCream(context)),
+              ),
+              subtitle: Text(
+                'Off by default. When on, adult cards appear in The Stoop.',
+                style: TextStyle(
                   color: stoopMute(context),
-                ),
-                title: Text(
-                  'Show NSFW content',
-                  style: TextStyle(color: stoopCream(context)),
-                ),
-                subtitle: Text(
-                  'Off by default. When on, adult cards appear in The Stoop.',
-                  style: TextStyle(
-                    color: stoopMute(context),
-                    fontSize: 12,
-                  ),
+                  fontSize: 12,
                 ),
               ),
             ),
             const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: stoopBg1(context),
+            SwitchListTile(
+              tileColor: stoopBg1(context),
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: SwitchListTile(
-                value: context.watch<AuthState>().analyticsEnabled,
-                onChanged: (v) =>
-                    context.read<AuthState>().setAnalyticsEnabled(v),
-                secondary: Icon(
-                  Icons.insights_outlined,
+              value: context.watch<AuthState>().analyticsEnabled,
+              onChanged: (v) =>
+                  context.read<AuthState>().setAnalyticsEnabled(v),
+              secondary: Icon(
+                Icons.insights_outlined,
+                color: stoopMute(context),
+              ),
+              title: Text(
+                'Share anonymous analytics',
+                style: TextStyle(color: stoopCream(context)),
+              ),
+              subtitle: Text(
+                'Coarse device info (platform, app version, GPU tier) to guide '
+                'development. Never your chats or characters. On by default.',
+                style: TextStyle(
                   color: stoopMute(context),
-                ),
-                title: Text(
-                  'Share anonymous analytics',
-                  style: TextStyle(color: stoopCream(context)),
-                ),
-                subtitle: Text(
-                  'Coarse device info (platform, app version, GPU tier) to guide '
-                  'development. Never your chats or characters. On by default.',
-                  style: TextStyle(
-                    color: stoopMute(context),
-                    fontSize: 12,
-                  ),
+                  fontSize: 12,
                 ),
               ),
             ),

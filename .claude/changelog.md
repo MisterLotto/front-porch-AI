@@ -6800,3 +6800,24 @@ carefully"). Scoped to the safe subset of the audit:
 
 Full flutter test suite run before push per maintainer instruction: 2828
 passed, 0 failed. analyze + dart fix clean.
+## 2026-07-30 (UTC) — ListTile ink-visibility assertion (Stoop sheet + 5 older sites)
+
+**Files:** `lib/ui/pages/repository/repository_account_sheet.dart`,
+`lib/ui/pages/repository/stoop_upload_page.dart`,
+`lib/ui/pages/repository/stoop_standards.dart`,
+`lib/ui/settings/tabs/backend/managed_backend_section.dart`,
+`lib/ui/dialogs/byaf_import_dialog.dart`,
+`lib/ui/widgets/group_realism_dynamics_editor.dart`
+
+**What:** Maintainer hit Flutter's "ListTile background color or ink splashes
+may be invisible" assertion (debug) on the Stoop account sheet — the two
+SwitchListTiles sat inside stoopBg1-colored rounded Containers, and ListTile
+paints fill/ink on the nearest Material, which a colored DecoratedBox hides.
+Swept the whole of lib/ui for the pattern (awk BoxDecoration→*ListTile scan):
+8 tiles in 6 files, including 4 pre-existing sites outside the new Stoop
+work. Fix strategy: plain color+radius wrappers became tileColor + shape on
+the tile itself (wrapper deleted — account sheet ×2, backend auto-start ×2,
+group realism toggle via shape-with-side for its border); gradient/tinted
+boxes that can't be tileColor got a transparent Material inside the box
+(upload NSFW switch, standards-card footer slot, BYAF checkbox).
+

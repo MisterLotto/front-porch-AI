@@ -198,32 +198,33 @@ class _GroupRealismDynamicsEditorState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.cardOf(context),
+          // tileColor + bordered shape, not a decorated wrapper — ListTile ink
+          // paints on the ancestor Material and a colored DecoratedBox above
+          // it trips Flutter's ink-visibility assertion.
+          SwitchListTile(
+            tileColor: AppColors.cardOf(context),
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderOf(context)),
+              side: BorderSide(color: AppColors.borderOf(context)),
             ),
-            child: SwitchListTile(
-              title: Text(
-                'Realism & Needs Engine',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary(context),
-                ),
+            title: Text(
+              'Realism & Needs Engine',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary(context),
               ),
-              subtitle: Text(
-                _realismEnabled
-                    ? 'Base bond/trust/emotion, needs, and hidden group feelings apply on new chats & re-entry.'
-                    : 'Off — members use neutral defaults. Turn on to seed each member and their feelings.',
-                style: TextStyle(color: AppColors.textSecondary(context)),
-              ),
-              value: _realismEnabled,
-              onChanged: (v) {
-                setState(() => _realismEnabled = v);
-                _emit();
-              },
             ),
+            subtitle: Text(
+              _realismEnabled
+                  ? 'Base bond/trust/emotion, needs, and hidden group feelings apply on new chats & re-entry.'
+                  : 'Off — members use neutral defaults. Turn on to seed each member and their feelings.',
+              style: TextStyle(color: AppColors.textSecondary(context)),
+            ),
+            value: _realismEnabled,
+            onChanged: (v) {
+              setState(() => _realismEnabled = v);
+              _emit();
+            },
           ),
           if (_realismEnabled) ...[
             const SizedBox(height: 16),

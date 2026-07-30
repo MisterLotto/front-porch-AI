@@ -123,7 +123,10 @@ class StoopStandardsCard extends StatelessWidget {
             ),
           if (footer != null) ...[
             Divider(height: 22, color: stoopBorder(context)),
-            footer!,
+            // Footer slots hold tappable *ListTiles; give them their own
+            // transparent Material so their ink isn't hidden under this
+            // card's DecoratedBox (Flutter's ink-visibility assertion).
+            Material(color: Colors.transparent, child: footer),
           ],
         ],
       ),

@@ -918,17 +918,26 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: stoopBorder(context)),
           ),
-          child: SwitchListTile(
-            value: _nsfw,
-            onChanged: (v) => setState(() => _nsfw = v),
-            activeThumbColor: AppColors.stoopEmber,
-            title: Text(
-              'This content is NSFW (18+)',
-              style: TextStyle(color: stoopCream(context)),
-            ),
-            subtitle: Text(
-              'Mark adult content so it’s hidden from people who haven’t opted in.',
-              style: TextStyle(color: stoopMute(context), fontSize: 12),
+          // The gradient must stay on the box, so the tile gets its own
+          // transparent Material — ink painted on the nearest Material would
+          // otherwise be hidden under the DecoratedBox (Flutter assertion).
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: SwitchListTile(
+              value: _nsfw,
+              onChanged: (v) => setState(() => _nsfw = v),
+              activeThumbColor: AppColors.stoopEmber,
+              title: Text(
+                'This content is NSFW (18+)',
+                style: TextStyle(color: stoopCream(context)),
+              ),
+              subtitle: Text(
+                'Mark adult content so it’s hidden from people who haven’t '
+                'opted in.',
+                style: TextStyle(color: stoopMute(context), fontSize: 12),
+              ),
             ),
           ),
         ),
