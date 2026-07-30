@@ -6504,3 +6504,18 @@ upload). Mine-tab Update button hidden for WORLD posts (worlds are
 new-upload-only v1; routing them to the character update path would
 dead-end). New tests: WORLD card parsing; end-to-end web route test proving
 a WORLD download lands as a local place with provenance + lore intact.
+
+## 2026-07-30 (UTC) — Stoop worlds: endpoint decision + mixed-fleet visibility rule codified
+
+Files: docs/design/living-worlds.md
+
+Maintainer confirmed worlds hit /characters (not a new /worlds endpoint):
+the requirement is the shared moderation PROCESS, and the shared endpoint
+gives it by construction along with the whole social layer (votes,
+downloads, reports, creator pages, mod messaging, stat pushes). Codified in
+§4 with a hard backend requirement before the coming-soon flags flip: WORLD
+items must be opt-in per request on every card list endpoint (browse,
+picks, following, creator profiles, /me/downloads), because shipped clients
+render unknown-type cards as solo characters and fail at download. Rollout
+order documented: backend accepts WORLD + opt-in visibility first, then
+flip kStoopWorldsLive / STOOP_WORLDS_LIVE.

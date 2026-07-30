@@ -637,6 +637,31 @@ rather than retrofitted, and the app side now exists:
   land in the SAME `PENDING → mod review → APPROVED` queue as characters and
   are never visible to users before approval. Mine-tab statuses, rejection
   notes, and mod messaging all work unchanged.
+- **Endpoint decision — `/characters`, not `/worlds` (maintainer-confirmed
+  2026-07-30):** the requirement is the same moderation *process*, and the
+  shared endpoint gives it by construction — along with everything else
+  keyed to the one card store: votes, scores, download counts, mod picks,
+  reports, creator profiles, Mine-tab statuses, mod↔user messaging (which
+  references a `characterId`), and live stat pushes. A separate `/worlds`
+  surface would either duplicate that social layer or alias back to the
+  same tables anyway, and every future feature would be built twice. Do not
+  re-open without maintainer.
+- **Mixed-fleet visibility rule (backend REQUIREMENT before the flags
+  flip):** WORLD items must be **opt-in per request**. Shipped app versions
+  render an unknown-type card as a solo character and fail at download
+  ("parse failed" on the envelope), so no list endpoint may include WORLD
+  items unless the request explicitly asks for them: `type=world` returns
+  worlds only, and mixed views get a new opt-in the updated clients send
+  (e.g. `types=solo,group,world` or `worlds=1` — exact param is the
+  backend's call, but it MUST be one no already-shipped client has ever
+  sent; today's clients send only `type=solo|group|all`). The rule covers
+  every card list: browse, picks, following, creator profile card lists,
+  and `/me/downloads`. Socket stat pushes for world ids are safe as-is (old
+  clients no-op on unknown card ids). Direct detail/download fetches by id
+  need no guard — old clients can only reach ids they were shown. Rollout
+  order: backend accepts `WORLD` + implements opt-in visibility → THEN flip
+  `kStoopWorldsLive` / `STOOP_WORLDS_LIVE` (the client's world-inclusive
+  list calls are part of the same flip).
 - **Client surfaces:** upload wizard Places section + `publishStoopWorld`
   (`stoop_world_share.dart`), browse "Worlds" filter (desktop segment + web
   select), WORLD tile pills/badges, detail-page world sections
