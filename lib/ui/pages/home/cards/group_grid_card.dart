@@ -28,7 +28,13 @@ import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 /// A single group-chat card in the home grid — avatar montage, name, member
 /// count, turn-order badge, and a right-click context menu. Extracted verbatim
 /// from CharacterCardGrid._buildGroupCard (behavior-preserving).
-class GroupGridCard extends StatelessWidget {
+///
+/// Stateful ONLY to hold the member-avatar future: constructing it inline in
+/// build issued a fresh SQLite query per tile on EVERY grid rebuild and
+/// scroll recycle (and flashed an empty montage while each one resolved).
+/// The future is created once per group and refreshed when the group object
+/// changes (repository reloads produce new instances after any edit).
+class GroupGridCard extends StatefulWidget {
   const GroupGridCard({
     super.key,
     required this.group,
@@ -49,12 +55,39 @@ class GroupGridCard extends StatelessWidget {
   final void Function(String action, GroupChat group)? onGroupContextMenuAction;
 
   @override
+  State<GroupGridCard> createState() => _GroupGridCardState();
+}
+
+class _GroupGridCardState extends State<GroupGridCard> {
+  late Future<List<File>> _avatarsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _avatarsFuture = widget.groupRepo.getMemberAvatarFiles(widget.group.id);
+  }
+
+  @override
+  void didUpdateWidget(GroupGridCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Repository reloads hand out new GroupChat instances after any edit, so
+    // an identity change is the "membership may have changed" signal.
+    if (!identical(widget.group, oldWidget.group)) {
+      _avatarsFuture = widget.groupRepo.getMemberAvatarFiles(widget.group.id);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final group = widget.group;
+    final isSelecting = widget.isSelecting;
+    final isOrganizing = widget.isOrganizing;
+    final onTapGroup = widget.onTapGroup;
     // Local shadow so Dart can promote the null-check across the closure below
     // (a field can't be promoted, but a local can).
-    final onGroupContextMenuAction = this.onGroupContextMenuAction;
+    final onGroupContextMenuAction = widget.onGroupContextMenuAction;
     return FutureBuilder<List<File>>(
-      future: groupRepo.getMemberAvatarFiles(group.id),
+      future: _avatarsFuture,
       builder: (context, snapshot) {
         final memberFiles = snapshot.data ?? <File>[];
         return Card(

@@ -6714,3 +6714,41 @@ Phase 2 of the responsiveness work (audit-driven):
 
 flutter analyze clean; 170 UI + session/database tests green; dart fix
 clean.
+
+## 2026-07-30 (UTC) — Perf Phase 3: image decode sizes + grid churn
+
+Files: lib/ui/pages/home/cards/character_grid_card.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/widgets/group_avatar_montage.dart,
+lib/ui/dialogs/avatar_gallery/avatar_tile.dart,
+lib/ui/image_studio/generation_history.dart,
+lib/ui/chat_components/sidebar/journal_memory/memory_sources_list.dart,
+lib/ui/pages/worlds/world_place_card.dart, lib/ui/pages/home_page.dart,
+docs/Rawhide.md
+
+Phase 3 of the responsiveness audit (images + grids). The codebase had ZERO
+cacheWidth/ResizeImage hints — every thumbnail decoded at source
+resolution (~4 MB per 1024² portrait), thrashing Flutter's 100 MB image
+cache on any real library and re-decoding on every scroll:
+
+1. Decode-size hints: home character tiles (512), group montage cells
+   (ResizeImage 256), avatar gallery tiles (384), image-studio history
+   strip (192), journal memory-source 20 px avatars (64), world place-card
+   covers (512).
+2. GroupGridCard → stateful: the member-avatar future was constructed
+   inline in build, issuing a fresh SQLite query per tile per rebuild and
+   scroll recycle (with an empty-montage flash while each resolved). Future
+   now created once per group, refreshed when the group instance changes
+   (repo reloads produce new instances after edits).
+3. World place-card cover: base64+PNG decode ran per build and the fresh
+   byte list defeated MemoryImage's cache identity → full re-decode per
+   rebuild. Memoized on the source string (stoop_world_share pattern).
+4. Home activity cache: CharacterRepository notifies now debounce 250 ms
+   before re-running the two full-table aggregates (was: every mutation —
+   even a favourite toggle — fired both scans immediately, overlapping
+   with the Consumer3 grid rebuild). Timer cancelled in dispose.
+
+Deferred to a later pass (explicitly, not silently): per-character
+coverEpoch (global epoch still invalidates every tile on any cover change)
+and the folder-filter O(n·m) recompute in character_card_grid — both need
+repo-semantics care. flutter analyze clean; 258 UI + golden tests green.

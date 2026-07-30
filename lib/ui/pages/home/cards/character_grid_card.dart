@@ -72,6 +72,11 @@ class CharacterGridCard extends StatelessWidget {
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
       gaplessPlayback: false,
+      // Decode at grid-tile size, not source size: ~1024² portraits are
+      // ~4 MB decoded EACH, which thrashed the 100 MB image cache on any
+      // decent-sized library and forced re-decodes on every scroll. 512px
+      // covers the largest tile at 2x DPR at a quarter of the memory.
+      cacheWidth: 512,
       errorBuilder: (_, _, _) => Container(
         color: AppColors.surfaceContainerOf(context),
         child: Icon(

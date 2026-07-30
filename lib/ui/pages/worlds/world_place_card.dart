@@ -5,6 +5,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/models/world.dart';
@@ -213,20 +214,41 @@ class WorldPlaceCard extends StatelessWidget {
   }
 }
 
-class _CoverBackground extends StatelessWidget {
+class _CoverBackground extends StatefulWidget {
   final World world;
   final Color fallback;
 
   const _CoverBackground({required this.world, required this.fallback});
 
   @override
+  State<_CoverBackground> createState() => _CoverBackgroundState();
+}
+
+class _CoverBackgroundState extends State<_CoverBackground> {
+  // base64-decoding the cover data-URL per build allocated a NEW byte list
+  // every rebuild, which also defeated MemoryImage's identity-based cache —
+  // so the grid re-decoded the full PNG on every rebuild and scroll recycle.
+  // Memoize on the source string (same pattern as stoop_world_share).
+  String? _coverSource;
+  Uint8List? _coverBytes;
+
+  World get world => widget.world;
+  Color get fallback => widget.fallback;
+
+  @override
   Widget build(BuildContext context) {
-    final bytes = decodeWorldCoverBytes(world.coverImage);
+    if (!identical(world.coverImage, _coverSource)) {
+      _coverSource = world.coverImage;
+      _coverBytes = decodeWorldCoverBytes(world.coverImage);
+    }
+    final bytes = _coverBytes;
     if (bytes != null) {
       return Image.memory(
         bytes,
         fit: BoxFit.cover,
         gaplessPlayback: true,
+        // Grid-tile ground — decode small, not at source resolution.
+        cacheWidth: 512,
         errorBuilder: (_, _, _) => _gradientFallback(),
       );
     }

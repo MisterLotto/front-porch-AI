@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -145,9 +146,19 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {}
   }
 
+  // CharacterRepository notifies for every mutation (a favourite toggle, a
+  // cover change…) and the activity refresh runs two full-table aggregates —
+  // so rapid notifies used to fire overlapping DB scans alongside the grid
+  // rebuild the Consumer already does. Coalesce bursts into one refresh.
+  Timer? _activityRefreshDebounce;
+
   void _onCharactersChanged() {
     if (!mounted) return;
-    _refreshLastActivityCache();
+    _activityRefreshDebounce?.cancel();
+    _activityRefreshDebounce = Timer(const Duration(milliseconds: 250), () {
+      _activityRefreshDebounce = null;
+      if (mounted) _refreshLastActivityCache();
+    });
   }
 
   void _onKoboldUpdate() {
@@ -285,6 +296,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    _activityRefreshDebounce?.cancel();
     _searchController.dispose();
     _gridScrollController.dispose();
 
