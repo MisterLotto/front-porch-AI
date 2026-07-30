@@ -1659,6 +1659,12 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .stoop-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+/* The personal tab wears the user's @name — cap it so it can't stretch the bar. */
+.stoop-tab-name {
+  display: inline-block; max-width: 140px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  vertical-align: bottom;
+}
 
 .stoop-auth { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; gap: 10px; }
 .stoop-auth form { display: flex; flex-direction: column; gap: 10px; }

@@ -6567,3 +6567,16 @@ active vote, tinted uppercase status pills. tsc + vitest green; bundle
 rebuilt.
 
 flutter analyze clean; dart fix nothing; stoop test suites green.
+
+## 2026-07-30 (UTC) — Stoop personal tab shows the user's name instead of "Mine"
+
+Files: lib/ui/pages/repository/stoop_signed_in.dart,
+web_ui/src/pages/stoop/StoopSection.tsx, web_ui/src/styles.css,
+assets/web_app/* (rebuild)
+
+Maintainer disliked the "Mine" tab label. The desktop personal tab now wears
+the signed-in display name as "@Name" (context.select on AuthState so an
+Account rename updates it live; ellipsized at 160px so long names can't
+stretch the bar; falls back to "Mine" if the user is somehow null). Web
+parity: the web UI's equivalent personal surface is its Account tab — it now
+shows "@Name" the same way (ellipsized at 140px, falls back to "Account").

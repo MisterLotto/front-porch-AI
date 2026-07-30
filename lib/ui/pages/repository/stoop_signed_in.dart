@@ -9,19 +9,27 @@
 // (at your option) any later version.
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_browse_view.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_home_view.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// The fully signed-in Stoop: a Browse tab (the community grid) and a Mine tab
-/// (your uploads + the Share wizard). The account menu lives in the page app bar.
+/// The fully signed-in Stoop: a Browse tab (the community grid) and a personal
+/// tab labeled with the user's own @name (their uploads + the Share wizard).
+/// The account menu lives in the page app bar.
 class StoopSignedIn extends StatelessWidget {
   const StoopSignedIn({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // The personal tab wears the signed-in display name (like the hub's bar
+    // showing who you are) — and live-updates if it's renamed in Account.
+    final displayName = context.select<AuthState, String>(
+      (a) => a.user?.displayName ?? '',
+    );
     // Hub tab bar (.hub-tab): quiet labels, the active one amber with an
     // amber underline.
     return DefaultTabController(
@@ -41,9 +49,19 @@ class StoopSignedIn extends StatelessWidget {
               indicatorColor: AppColors.stoopAmber,
               dividerColor: Colors.transparent,
               labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-              tabs: const [
-                Tab(text: 'Browse'),
-                Tab(text: 'Mine'),
+              tabs: [
+                const Tab(text: 'Browse'),
+                Tab(
+                  // Long names ellipsize instead of stretching the bar.
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Text(
+                      displayName.isEmpty ? 'Mine' : '@$displayName',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

@@ -46,7 +46,10 @@ function StoopGate() {
 
 function StoopShell() {
   const { wide } = useLayout();
-  const { unread } = useStoop();
+  const { unread, user } = useStoop();
+  // The personal tab wears the signed-in display name (desktop parity) —
+  // ellipsized so a long name can't stretch the tab bar.
+  const accountLabel = user?.displayName ? `@${user.displayName}` : 'Account';
 
   const tab = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'stoop-tab active' : 'stoop-tab';
@@ -72,7 +75,7 @@ function StoopShell() {
           </NavLink>
         )}
         <NavLink to="account" className={tab}>
-          Account
+          <span className="stoop-tab-name">{accountLabel}</span>
         </NavLink>
       </nav>
       <Routes>
