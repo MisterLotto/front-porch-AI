@@ -6752,3 +6752,16 @@ Deferred to a later pass (explicitly, not silently): per-character
 coverEpoch (global epoch still invalidates every tile on any cover change)
 and the folder-filter O(n·m) recompute in character_card_grid — both need
 repo-semantics care. flutter analyze clean; 258 UI + golden tests green.
+
+## 2026-07-30 (UTC) — Hotfix: displayText fast path broke case-insensitive <THINK> stripping
+
+Files: lib/models/chat_message.dart
+
+The Phase-1 parse cache added a `raw.contains('<think>')` fast-path gate,
+but the strip regexes are caseSensitive: false — so an uppercase <THINK>
+block skipped stripping entirely. Caught by CI on Rawhide
+(chat_message_test "displayText case-insensitive tag matching"), which I
+had not run locally (partial suite selection — process failure, not
+flake). Gate is now a case-insensitive hasMatch probe shared by
+displayText and thinkingContent. Full flutter test suite (2828 pass, 0
+fail) now gates every push.

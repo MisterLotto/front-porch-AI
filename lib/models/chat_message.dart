@@ -86,6 +86,9 @@ class ChatMessage {
     r'<think>([\s\S]*?)$',
     caseSensitive: false,
   );
+  // Fast-path probe: MUST be case-insensitive like the strip regexes above
+  // (<THINK> is valid — there's a dedicated test for it).
+  static final RegExp _hasThinkRe = RegExp(r'<think>', caseSensitive: false);
   String? _displayTextSource;
   String? _displayTextCache;
   String? _thinkingSource;
@@ -95,7 +98,7 @@ class ChatMessage {
     final raw = text;
     if (identical(raw, _displayTextSource)) return _displayTextCache!;
     // Fast path: no think tag at all (the overwhelming majority of messages).
-    final result = !raw.contains('<think>')
+    final result = !_hasThinkRe.hasMatch(raw)
         ? raw.trim()
         : raw
               .replaceAll(_closedThinkRe, '')
@@ -131,7 +134,7 @@ class ChatMessage {
     final raw = text;
     if (identical(raw, _thinkingSource)) return _thinkingCache;
     String? result;
-    if (raw.contains('<think>')) {
+    if (_hasThinkRe.hasMatch(raw)) {
       final closed = _closedThinkCaptureRe.firstMatch(raw);
       result = closed != null
           ? closed.group(1)?.trim()
