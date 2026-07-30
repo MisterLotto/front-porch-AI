@@ -248,7 +248,15 @@ void main(List<String> args) async {
   try {
     db = await AppDatabase.instance();
     needsMigration = !await DataMigrationService.isMigrated();
-    dbHealthy = await db.integrityCheck();
+    // Cheap first-query probe: forces the lazily-opened file to actually
+    // open, so a locked/unreadable DB still fails fast into
+    // _DbInitErrorApp. The EXPENSIVE health check (PRAGMA quick_check reads
+    // and validates the whole file — seconds on a big chat DB) used to run
+    // right here, before the window even existed, and was the single
+    // largest fixed startup cost; it now runs post-first-frame in
+    // _checkDbHealth, which owns the corrupt-DB restore overlay anyway.
+    await db.customSelect('SELECT 1').get();
+    dbHealthy = true;
   } catch (e, st) {
     debugPrint('[DB] FATAL: could not open the database: $e\n$st');
     runApp(_DbInitErrorApp(details: e.toString()));
@@ -256,15 +264,9 @@ void main(List<String> args) async {
   }
   _MyAppState._dbHealthy = dbHealthy;
 
-  // Purge rows that were soft-deleted more than 30 days ago
-  try {
-    await db.purgeSoftDeletes();
-  } catch (_) {}
-
-  // Clean up legacy JSON files from pre-0.8.0 (idempotent, safe to run every startup)
-  try {
-    await DataMigrationService.cleanupLegacyFiles();
-  } catch (_) {}
+  // Soft-delete purge + legacy JSON cleanup are idempotent maintenance —
+  // they moved to the post-first-frame block in _MyAppState.initState so
+  // launch doesn't wait on them (they used to run before the window showed).
 
   // TODO: Enable after verifying DatabaseCleanup behaves correctly in production
   // try {
@@ -773,6 +775,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WindowListener {
   static bool _dbHealthy = true; // set from main() before runApp
+
+  /// False for exactly the first frame — gates the service-graph-touching
+  /// overlays so first paint happens before the providers spin up.
+  bool _overlaysArmed = false;
   bool _updateChecked = false;
   bool _isMigrating = false;
   bool _isDbCorrupt = false;
@@ -810,6 +816,8 @@ class _MyAppState extends State<MyApp> with WindowListener {
     }
     // Run migration after first frame, then reunification if needed
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // First frame is up — arm the deferred overlays (see the home Stack).
+      if (mounted) setState(() => _overlaysArmed = true);
       // Capture initial window bounds after restore so tracking is correct
       // even if user maximizes without any interactive resize this session.
       try {
@@ -829,6 +837,15 @@ class _MyAppState extends State<MyApp> with WindowListener {
       await _showStableDbImportIfNeeded();
       await _runMigrationIfNeeded();
       await _runReunificationIfNeeded();
+      // Deferred idempotent maintenance (moved out of main()'s pre-window
+      // path): purge month-old soft-deletes + pre-0.8.0 legacy JSON files.
+      try {
+        final db = await AppDatabase.instance();
+        await db.purgeSoftDeletes();
+      } catch (_) {}
+      try {
+        await DataMigrationService.cleanupLegacyFiles();
+      } catch (_) {}
     });
   }
 
@@ -1256,8 +1273,16 @@ class _MyAppState extends State<MyApp> with WindowListener {
                 child: Stack(
                   children: [
                     const MainLayout(),
-                    const SetupOverlay(),
-                    const RemoteLockOverlay(),
+                    // Mounted one frame late ON PURPOSE: SetupOverlay reads
+                    // SetupService/BackendManager and RemoteLockOverlay
+                    // consumes WebServerHost — whose provider reads ~15
+                    // others — so building them in the FIRST frame defeated
+                    // every lazy provider and constructed the whole service
+                    // graph (process spawns, dir scans, DB loads) before
+                    // anything had painted. One frame (~16 ms) later is
+                    // imperceptible; first paint no longer waits on it.
+                    if (_overlaysArmed) const SetupOverlay(),
+                    if (_overlaysArmed) const RemoteLockOverlay(),
                     if (_isDbCorrupt) _buildCorruptionOverlay(),
                     if (_isMigrating) _buildMigrationOverlay(),
                     if (_isReunifying) _buildReunificationOverlay(),
@@ -1274,6 +1299,18 @@ class _MyAppState extends State<MyApp> with WindowListener {
   // ── DB Health Check ─────────────────────────────────────────────────
 
   Future<void> _checkDbHealth() async {
+    // The full quick_check runs HERE, after first paint (see main() — only a
+    // cheap open-probe runs before the window shows). A corrupt DB now
+    // surfaces its restore overlay a moment after launch instead of holding
+    // the whole window hostage while the file is validated.
+    if (_dbHealthy) {
+      try {
+        final db = await AppDatabase.instance();
+        _dbHealthy = await db.integrityCheck();
+      } catch (_) {
+        _dbHealthy = false;
+      }
+    }
     if (_dbHealthy) return;
 
     // DB is corrupt — load available backups and show overlay

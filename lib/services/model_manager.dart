@@ -180,7 +180,12 @@ class ModelManager extends ChangeNotifier {
 
     if (await modelDir.exists()) {
       try {
-        _models = _safeRecursiveScan(modelDir);
+        // Off the UI isolate: this walk used to listSync + resolve symlinks
+        // recursively on the main thread (a visible startup/settings hitch on
+        // big or networked model dirs). Entities rebuilt from paths — File
+        // objects don't cross isolates.
+        final paths = await compute(_scanGgufPathsSync, modelDir.path);
+        _models = [for (final p in paths) File(p)];
       } catch (e) {
         print('AG_DEBUG: Error scanning models: $e');
         _models = [];
@@ -189,36 +194,6 @@ class ModelManager extends ChangeNotifier {
       _models = [];
     }
     notifyListeners();
-  }
-
-  /// Recursively scans directories for .gguf files.
-  /// Tracks canonical paths to avoid duplicate symlinks.
-  List<FileSystemEntity> _safeRecursiveScan(
-    Directory dir, [
-    Set<String>? _seen,
-  ]) {
-    final seen = _seen ?? <String>{};
-    final results = <FileSystemEntity>[];
-    try {
-      for (final entity in dir.listSync(followLinks: true)) {
-        if (entity is Directory) {
-          results.addAll(_safeRecursiveScan(entity, seen));
-        } else if (entity.path.toLowerCase().endsWith('.gguf')) {
-          String canonical;
-          try {
-            canonical = File(entity.path).resolveSymbolicLinksSync();
-          } catch (_) {
-            canonical = entity.path;
-          }
-          if (seen.add(canonical)) {
-            results.add(entity);
-          }
-        }
-      }
-    } catch (e) {
-      print('AG_DEBUG: Skipping inaccessible directory: ${dir.path} ($e)');
-    }
-    return results;
   }
 
   /// Imports a local .gguf file into the models directory.
@@ -421,4 +396,36 @@ class ModelManager extends ChangeNotifier {
         )
         .toList();
   }
+}
+
+/// Isolate entry for the recursive .gguf scan (used via compute above).
+/// Same traversal the old in-place _safeRecursiveScan did: follow links,
+/// dedupe by canonical path, skip inaccessible directories.
+List<String> _scanGgufPathsSync(String rootPath) {
+  final seen = <String>{};
+  final results = <String>[];
+  void walk(Directory dir) {
+    try {
+      for (final entity in dir.listSync(followLinks: true)) {
+        if (entity is Directory) {
+          walk(entity);
+        } else if (entity.path.toLowerCase().endsWith('.gguf')) {
+          String canonical;
+          try {
+            canonical = File(entity.path).resolveSymbolicLinksSync();
+          } catch (_) {
+            canonical = entity.path;
+          }
+          if (seen.add(canonical)) {
+            results.add(entity.path);
+          }
+        }
+      }
+    } catch (e) {
+      print('AG_DEBUG: Skipping inaccessible directory: ${dir.path} ($e)');
+    }
+  }
+
+  walk(Directory(rootPath));
+  return results;
 }

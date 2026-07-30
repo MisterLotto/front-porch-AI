@@ -6765,3 +6765,38 @@ had not run locally (partial suite selection — process failure, not
 flake). Gate is now a case-insensitive hasMatch probe shared by
 displayText and thinkingContent. Full flutter test suite (2828 pass, 0
 fail) now gates every push.
+
+## 2026-07-30 (UTC) — Perf Phase 4: startup critical path (maintainer-approved main.dart work)
+
+Files: lib/main.dart, lib/services/model_manager.dart, docs/Rawhide.md
+
+Maintainer explicitly approved the delicate main.dart work ("do phase 4
+carefully"). Scoped to the safe subset of the audit:
+
+1. Pre-window DB work deferred: main() kept only a cheap `SELECT 1` open
+   probe (so a locked/unreadable DB still fails fast into _DbInitErrorApp),
+   while the full PRAGMA quick_check — which reads/validates the whole DB
+   file and was the single largest fixed pre-window cost — moved into
+   _checkDbHealth (already post-first-frame, already owns the corrupt-DB
+   restore overlay; the restore path's own integrityCheck at line ~885 is
+   unchanged). purgeSoftDeletes + cleanupLegacyFiles moved to the same
+   post-frame block, after migration/reunification.
+2. First-frame laziness restored: SetupOverlay + RemoteLockOverlay now
+   mount one frame late (_overlaysArmed, set in the existing post-frame
+   callback). They were the two widgets whose provider reads defeated every
+   lazy provider and constructed ~20 services (process spawns, dir scans,
+   full DB collection loads) before anything painted. One frame ≈16 ms —
+   imperceptible; the lock overlay's gate is UX, not auth, so a 1-frame gap
+   is harmless.
+3. ModelManager's recursive .gguf scan moved to a background isolate
+   (compute + top-level _scanGgufPathsSync, same traversal semantics:
+   followLinks, canonical-path dedupe, inaccessible-dir skip). The old
+   in-class sync method deleted; File entities rebuilt from paths.
+4. Checked and deliberately NOT changed: StoryPipelineService's
+   recreate-on-update (CLAUDE.md mandates it; EmbeddingService's ctor is a
+   bare field assignment, so the churn is trivial), service init ORDER in
+   the provider graph (untouched), HardwareService's async detection,
+   window-restore sequence, and the FileConsolidation step.
+
+Full flutter test suite run before push per maintainer instruction: 2828
+passed, 0 failed. analyze + dart fix clean.
