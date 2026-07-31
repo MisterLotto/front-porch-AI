@@ -150,11 +150,20 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
       // Tagged, not hidden: the section announces itself so users know world
       // sharing is on the way. No tiles until the backend accepts WORLD cards.
       if (widget.query.isNotEmpty) return const SizedBox.shrink();
-      return _comingSoonBanner(context);
+      return _noticeBanner(
+        context,
+        badge: 'COMING SOON',
+        body:
+            'Soon you’ll be able to share your worlds here — portable '
+            '.fpworld places with their lore, climate, traits, and cover '
+            'art. Shared places go through the same moderator review as '
+            'characters before anyone sees them.',
+      );
     }
-    final worlds = context
-        .read<WorldRepository>()
-        .placeWorlds
+    final places = context.read<WorldRepository>().placeWorlds;
+    // A place can only be shared with cover art — it's what moderators review
+    // and what every Stoop tile displays.
+    final worlds = places
         .where((w) => w.coverImage != null && w.coverImage!.isNotEmpty)
         .where(
           (w) =>
@@ -162,7 +171,23 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
               w.name.toLowerCase().contains(widget.query),
         )
         .toList();
-    if (worlds.isEmpty) return const SizedBox.shrink();
+    if (worlds.isEmpty) {
+      // Searching: stay quiet, the field filters characters too.
+      if (widget.query.isNotEmpty) return const SizedBox.shrink();
+      // Silently rendering nothing here reads as "world sharing doesn't
+      // exist" — say why instead, since the fix is one step away.
+      if (places.isNotEmpty) {
+        return _noticeBanner(
+          context,
+          badge: 'NEEDS COVER ART',
+          body:
+              'Your places need a cover image before they can be shared — '
+              'it’s what moderators review and what every tile shows. Open '
+              'Worlds, edit a place, add its art, and it’ll appear here.',
+        );
+      }
+      return const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -193,7 +218,11 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
     );
   }
 
-  Widget _comingSoonBanner(BuildContext context) {
+  Widget _noticeBanner(
+    BuildContext context, {
+    required String badge,
+    required String body,
+  }) {
     final amber = stoopAmberText(context);
     return Container(
       margin: const EdgeInsets.only(top: 16),
@@ -233,9 +262,9 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
                         gradient: stoopAmberGradient,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Text(
-                        'COMING SOON',
-                        style: TextStyle(
+                      child: Text(
+                        badge,
+                        style: const TextStyle(
                           color: AppColors.stoopAmberInk,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -247,10 +276,7 @@ class _StoopWorldsPickSectionState extends State<StoopWorldsPickSection> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Soon you’ll be able to share your worlds here — portable '
-                  '.fpworld places with their lore, climate, traits, and '
-                  'cover art. Shared places go through the same moderator '
-                  'review as characters before anyone sees them.',
+                  body,
                   style: TextStyle(
                     color: stoopMute(context),
                     fontSize: 12,
