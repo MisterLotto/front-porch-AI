@@ -29,7 +29,7 @@ export interface StoopCreatorRef {
  * The backend doesn't accept WORLD yet; while false the UI shows Worlds as
  * "coming soon". Flip together with the desktop flag when the backend ships.
  */
-export const STOOP_WORLDS_LIVE = false;
+export const STOOP_WORLDS_LIVE = true;
 
 export interface StoopCard {
   id: string;

@@ -231,7 +231,7 @@ class BackporchApi {
 
   /// The signed-in user's own uploads and their moderation status.
   Future<List<StoopCharacter>> myCharacters(String accessToken) async {
-    final json = await _get('/me/characters', accessToken);
+    final json = await _get('/me/characters?types=$kStoopWorldTypes', accessToken);
     final items = (json['items'] as List?) ?? const [];
     return items
         .map((e) => StoopCharacter.fromJson(e as Map<String, dynamic>))
@@ -247,7 +247,7 @@ class BackporchApi {
   /// Cards the user has downloaded before (newest first), so they can grab them
   /// again on a new device. Returns the same shape as browse items.
   Future<List<StoopCard>> myDownloads(String accessToken) async {
-    final json = await _get('/me/downloads', accessToken);
+    final json = await _get('/me/downloads?types=$kStoopWorldTypes', accessToken);
     final items = (json['items'] as List?) ?? const [];
     return items
         .map((e) => StoopCard.fromJson(e as Map<String, dynamic>))
@@ -275,6 +275,11 @@ class BackporchApi {
     final params = <String, String>{
       'sort': sort,
       'type': type,
+      // Mixed views ask for worlds explicitly. The server keeps `type=all`
+      // meaning solo+group forever, because every already-shipped app sends
+      // it and would render a world as a broken character; `types=` is the
+      // opt-in no old client has ever sent. Older servers ignore the param.
+      if (type == 'all') 'types': kStoopWorldTypes,
       'page': '$page',
       'take': '$take',
       if (q != null && q.isNotEmpty) 'q': q,
@@ -346,7 +351,9 @@ class BackporchApi {
 
   /// A creator's profile + their approved cards.
   Future<StoopCreator> creatorProfile(String accessToken, String id) async {
-    return StoopCreator.fromJson(await _get('/creators/$id', accessToken));
+    return StoopCreator.fromJson(
+      await _get('/creators/$id?types=$kStoopWorldTypes', accessToken),
+    );
   }
 
   /// Follow / unfollow a creator. Returns the new follow state + follower count.

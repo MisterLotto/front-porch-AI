@@ -22,7 +22,12 @@
 /// The backend does not accept `WORLD` yet. The Dart client is fully wired —
 /// upload, browse, download + auto-import — behind this flag; flip it to true
 /// when the backend ships. While false, the UI shows Worlds as "coming soon".
-const bool kStoopWorldsLive = false;
+const bool kStoopWorldsLive = true;
+
+/// The mixed-view opt-in the API expects when a caller understands worlds.
+/// Sent on list endpoints only; `type=all` deliberately still means
+/// solo+group server-side so already-shipped apps never receive a WORLD item.
+const String kStoopWorldTypes = 'solo,group,world';
 
 /// A creator reference as it appears on a card (`@handle`).
 class StoopCreatorRef {

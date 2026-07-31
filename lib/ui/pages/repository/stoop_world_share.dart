@@ -48,6 +48,20 @@ Future<String?> publishStoopWorld({
     return 'This place needs a cover image before it can be shared.';
   }
   final isPng = (world.coverImage ?? '').startsWith('data:image/png');
+
+  // Stable identity for re-shares. The server treats (owner + card's source
+  // id) as "the same post" and turns a repeat upload into a new version
+  // instead of a second pending row — but `encodeFpWorld` only stamps
+  // `meta.sourceId` on worlds that were themselves imported. Without this, a
+  // place you authored here has none, and every re-share would pile up another
+  // duplicate in the moderation queue.
+  final card = repo.fpWorldJson(world);
+  final meta = Map<String, dynamic>.from(
+    (card['meta'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+  );
+  meta['sourceId'] = world.sourceId ?? world.id;
+  card['meta'] = meta;
+
   await api.uploadCharacter(
     accessToken: accessToken,
     payload: {
@@ -58,7 +72,7 @@ Future<String?> publishStoopWorld({
       'tags': tags,
       // Full place package — lore, resolved climate, traits, and the cover
       // (as a data URL) so a download restores the world exactly.
-      'card': repo.fpWorldJson(world),
+      'card': card,
       'changelog': 'Initial upload',
       'originalCreator': originalCreator,
     },
