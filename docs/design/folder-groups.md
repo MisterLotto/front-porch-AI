@@ -62,10 +62,21 @@ per-rebuild-I/O pattern io-lint bans); counts include groups. The
    harness allows. Full `flutter test` suite green before ANY push
    (standing maintainer rule this session).
 
-## Related queued item (same area, not started)
+## Related queued item (same area)
 
 The group-chat creation wizard's character picker (and the Scene Guest
 picker + Stoop share Pick step, which share the flat-grid pattern) ignores
 the folder hierarchy — needs a folder-aware picker on desktop AND the web
 `CreateGroupChatPage`. Design both together so the picker component is
 shared, not duplicated.
+
+**STATUS 2026-07-31: DONE for the group-creation wizard** on desktop and
+web via one shared component per platform:
+`lib/ui/widgets/folder_character_picker.dart` (FolderCharacterPicker) and
+`web_ui/src/components/FolderCharacterPicker.tsx`. Rules mirror the home
+grid: browse = current level + navigable folder tiles (folders with no
+eligible candidates hidden, count badge), search = flat across every
+folder. Still open: adopting the shared picker in the Scene Guest picker
+and the Stoop share Pick step (both currently keep their flat pattern;
+the Stoop Pick step also lists groups, so its adoption needs a group row
+variant).

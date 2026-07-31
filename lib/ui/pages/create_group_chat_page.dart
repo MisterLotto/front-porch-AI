@@ -27,6 +27,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
+import 'package:front_porch_ai/ui/widgets/folder_character_picker.dart';
 import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
@@ -115,11 +116,6 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
   String? _globalStoryStartDate;
   String? _globalStoryStartTime;
 
-  // Search / filter for Members browser
-  final _memberSearchController = TextEditingController();
-  String _memberSearchQuery = '';
-  // (reserved for future folder filter chips in the Members browser)
-
   // Token-ish estimate (lightweight)
   int _contentTokenEstimate = 0;
 
@@ -131,13 +127,6 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
     _scenarioController.addListener(_updateEstimates);
     _firstMessageController.addListener(_updateEstimates);
     _groupSystemController.addListener(_updateEstimates);
-    _memberSearchController.addListener(() {
-      setState(
-        () => _memberSearchQuery = _memberSearchController.text
-            .trim()
-            .toLowerCase(),
-      );
-    });
   }
 
   @override
@@ -150,7 +139,6 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
     for (final ctrl in _characterSystemPrompts.values) {
       ctrl.dispose();
     }
-    _memberSearchController.dispose();
     super.dispose();
   }
 
@@ -176,24 +164,6 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
     final all = repo.characters;
     final memberIds = _members.map(_stableId).toSet();
     return all.where((c) => !memberIds.contains(_stableId(c))).toList();
-  }
-
-  List<CharacterCard> get _filteredAvailable {
-    final q = _memberSearchQuery;
-    var list = _availableCharacters;
-    if (q.isNotEmpty) {
-      list = list
-          .where(
-            (c) =>
-                c.name.toLowerCase().contains(q) ||
-                c.description.toLowerCase().contains(q) ||
-                c.personality.toLowerCase().contains(q),
-          )
-          .toList();
-    }
-    // Simple sort by name
-    list.sort((a, b) => a.name.compareTo(b.name));
-    return list;
   }
 
   /// Delegates to the canonical stable group ID.
@@ -1104,71 +1074,13 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
           ),
           const SizedBox(height: 8),
 
-          // Search
-          TextField(
-            controller: _memberSearchController,
-            decoration: InputDecoration(
-              hintText: 'Search available characters...',
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor: AppColors.surfaceContainerOf(context),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
+          // Folder-aware character browser (shared picker — the same folder
+          // rules as the home grid; search reaches into every folder).
+          FolderCharacterPicker(
+            characters: _availableCharacters,
+            folderService: Provider.of<FolderService>(context),
+            onTapCharacter: _addMember,
           ),
-          const SizedBox(height: 12),
-
-          // Available grid (compact)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _filteredAvailable.map((c) {
-              return InkWell(
-                onTap: () => _addMember(c),
-                child: Container(
-                  width: 140,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardOf(context),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderOf(context)),
-                  ),
-                  child: Row(
-                    children: [
-                      _avatar(c, radius: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          c.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      Icon(
-                        Icons.add,
-                        size: 18,
-                        color: AppColors.resolve(
-                          context,
-                          const Color(0xFF7C3AED),
-                          const Color(0xFF6D28D9),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          if (_filteredAvailable.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'No more characters available.',
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            ),
 
           _buildNavButtons(currentStep: 0),
         ],

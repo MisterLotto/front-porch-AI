@@ -7,25 +7,23 @@
 // POST /api/groups (which duplicates each character into private group members,
 // matching the desktop persist) and opens the new group chat.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { StepIndicator } from '../components/StepIndicator';
-
-interface LibChar {
-  id: string;
-  name: string;
-  hasAvatar: boolean;
-  avatarVersion?: number;
-}
+import {
+  FolderCharacterPicker,
+  type PickerChar,
+  type PickerFolder,
+} from '../components/FolderCharacterPicker';
 
 const STEPS = ['Members', 'Details'];
 
 export function CreateGroupChatPage() {
   const navigate = useNavigate();
-  const [chars, setChars] = useState<LibChar[]>([]);
+  const [chars, setChars] = useState<PickerChar[]>([]);
+  const [folders, setFolders] = useState<PickerFolder[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [search, setSearch] = useState('');
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [turnOrder, setTurnOrder] = useState<'roundRobin' | 'random'>('roundRobin');
@@ -33,16 +31,12 @@ export function CreateGroupChatPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get<LibChar[]>('/api/characters?scope=allCharacters').then(setChars).catch(() => {});
+    api.get<PickerChar[]>('/api/characters?scope=allCharacters').then(setChars).catch(() => {});
+    api.get<{ folders: PickerFolder[] }>('/api/folders').then((r) => setFolders(r.folders)).catch(() => {});
   }, []);
 
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? chars.filter((c) => c.name.toLowerCase().includes(q)) : chars;
-  }, [chars, search]);
 
   const selectedChars = chars.filter((c) => selected.includes(c.id));
   const canAdvance = step !== 0 || selected.length >= 2;
@@ -87,35 +81,13 @@ export function CreateGroupChatPage() {
       <div className="wizard-body">
         {step === 0 && (
           <div className="cg-config">
-            <input
-              className="grp-search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search characters…"
-            />
             <p className="muted small">Pick at least 2 characters — {selected.length} selected.</p>
-            <div className="grp-grid">
-              {filtered.map((c) => (
-                <button
-                  type="button"
-                  key={c.id}
-                  className={`grp-card${selected.includes(c.id) ? ' on' : ''}`}
-                  onClick={() => toggle(c.id)}
-                >
-                  {c.hasAvatar ? (
-                    <img
-                      src={api.avatarUrl(`/api/characters/${c.id}/avatar`, 256, c.avatarVersion)}
-                      alt={c.name}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="grp-initial">{c.name.charAt(0).toUpperCase()}</span>
-                  )}
-                  <span className="grp-name">{c.name}</span>
-                  {selected.includes(c.id) && <span className="grp-check">✓</span>}
-                </button>
-              ))}
-            </div>
+            <FolderCharacterPicker
+              chars={chars}
+              folders={folders}
+              selected={selected}
+              onToggle={toggle}
+            />
           </div>
         )}
 

@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🗂️ **Building a group? Your folders finally came along** — The "Add Characters" browser in the group-creation wizard used to dump your entire library into one flat pile. It now shows your actual folders: step into a folder to browse it (each shows how many picks it holds), and searching still finds anyone no matter how deeply they're filed. Desktop and the web wizard alike.
+
 - 📁 **Group chats can live in folders now** — Group cards were stuck on the Home Screen's top level; now they move through your folder hierarchy exactly like characters. Right-click a group for "Move to Folder" / "Remove from Folder", multi-select mixes characters and groups in one grab (move or delete them together), folder cards count their groups, and folder-scoped search finds groups too. The web library matches: drag a group into a folder, use its card menu, or multi-select — same as characters.
 
 - ✅ **Multi-select can move characters to folders** — The same multi-select you use for mass deletion now has a "Move to Folder" button right beside Delete: pick several characters, choose a folder, done. (The web library already had this; desktop caught up.)

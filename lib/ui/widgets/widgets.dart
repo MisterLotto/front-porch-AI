@@ -30,6 +30,7 @@
 
 export 'ai_engine_status_card.dart';
 export 'app_text_field.dart';
+export 'folder_character_picker.dart';
 export 'styled_text_controller.dart';
 export 'sidebar.dart';
 export 'model_selector.dart';

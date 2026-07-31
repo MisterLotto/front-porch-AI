@@ -6978,3 +6978,40 @@ remains queued (explicitly out of scope in the spec).
 
 Gates: flutter analyze clean (0 issues), dart fix --dry-run clean, web tsc
 + vitest green, full flutter test suite + goldens green before push.
+
+## 2026-07-31 (UTC) — Folder-aware character picker in the group-creation wizard
+
+Files: lib/ui/widgets/folder_character_picker.dart (new),
+lib/ui/widgets/widgets.dart, lib/ui/pages/create_group_chat_page.dart,
+web_ui/src/components/FolderCharacterPicker.tsx (new),
+web_ui/src/pages/CreateGroupChatPage.tsx, web_ui/src/styles.css,
+test/ui/widgets/folder_character_picker_test.dart (new),
+docs/Rawhide.md, docs/design/folder-groups.md (status)
+
+Implements the folder-groups.md "related queued item" for the group-chat
+creation wizard: the Members step's "Add Characters" browser was a flat
+search+Wrap over the whole library. It's now the shared
+FolderCharacterPicker (one component per platform — Dart widget + React
+component — per the spec's "shared, not duplicated" directive), mirroring
+the home grid's rules: browsing shows the current level's characters plus
+navigable folder tiles (folders holding zero eligible candidates are
+hidden; tiles badge their eligible count), searching hides folders and
+matches every eligible character so nested ones stay findable. The web
+wizard fetches /api/folders and uses the same component; the characters
+endpoint already returned folderId.
+
+Cleanup while in there: the wizard's dead _memberSearchController/
+_memberSearchQuery/_filteredAvailable browser state deleted (the picker
+owns its own search), and the old tile's off-palette purple 0xFF7C3AED
+add-icon is gone — the picker uses porch amber per the warm-porch
+standard. Picker avatars degrade gracefully (no decode exception) when a
+portrait file is missing.
+
+Deliberately still open (per design-doc status note): adopting the shared
+picker in the Scene Guest picker and the Stoop share Pick step — both
+keep their existing flat pattern for now; the Stoop step also lists
+groups so its adoption needs a group-row variant.
+
+Widget tests cover folder navigation, empty-folder hiding, and
+folder-crossing search (drift work wrapped in tester.runAsync — real DB
+I/O never completes under the fake-async test zone).
