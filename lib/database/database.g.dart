@@ -5224,6 +5224,17 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _folderIdMeta = const VerificationMeta(
+    'folderId',
+  );
+  @override
+  late final GeneratedColumn<String> folderId = GeneratedColumn<String>(
+    'folder_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -5267,6 +5278,7 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
     baselineRealismState,
     characterSystemPrompts,
     stableId,
+    folderId,
     updatedAt,
     deletedAt,
   ];
@@ -5427,6 +5439,12 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
         stableId.isAcceptableOrUnknown(data['stable_id']!, _stableIdMeta),
       );
     }
+    if (data.containsKey('folder_id')) {
+      context.handle(
+        _folderIdMeta,
+        folderId.isAcceptableOrUnknown(data['folder_id']!, _folderIdMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -5520,6 +5538,10 @@ class $GroupsTable extends Groups with TableInfo<$GroupsTable, Group> {
         DriftSqlType.string,
         data['${effectivePrefix}stable_id'],
       ),
+      folderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder_id'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -5590,6 +5612,11 @@ class Group extends DataClass implements Insertable<Group> {
   /// Nullable + additive; groups is outside the Character Card Forge external-
   /// writer set, so adding it cannot break CCF. Generated lazily in code.
   final String? stableId;
+
+  /// Home-screen folder membership (schema v42), the group analogue of
+  /// Characters.folderId. Null = top level. Nullable + additive; groups is
+  /// outside the Character Card Forge external-writer set.
+  final String? folderId;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   const Group({
@@ -5611,6 +5638,7 @@ class Group extends DataClass implements Insertable<Group> {
     required this.baselineRealismState,
     required this.characterSystemPrompts,
     this.stableId,
+    this.folderId,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -5641,6 +5669,9 @@ class Group extends DataClass implements Insertable<Group> {
     if (!nullToAbsent || stableId != null) {
       map['stable_id'] = Variable<String>(stableId);
     }
+    if (!nullToAbsent || folderId != null) {
+      map['folder_id'] = Variable<String>(folderId);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
       map['deleted_at'] = Variable<DateTime>(deletedAt);
@@ -5670,6 +5701,9 @@ class Group extends DataClass implements Insertable<Group> {
       stableId: stableId == null && nullToAbsent
           ? const Value.absent()
           : Value(stableId),
+      folderId: folderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(folderId),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -5709,6 +5743,7 @@ class Group extends DataClass implements Insertable<Group> {
         json['characterSystemPrompts'],
       ),
       stableId: serializer.fromJson<String?>(json['stableId']),
+      folderId: serializer.fromJson<String?>(json['folderId']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
     );
@@ -5741,6 +5776,7 @@ class Group extends DataClass implements Insertable<Group> {
         characterSystemPrompts,
       ),
       'stableId': serializer.toJson<String?>(stableId),
+      'folderId': serializer.toJson<String?>(folderId),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
     };
@@ -5765,6 +5801,7 @@ class Group extends DataClass implements Insertable<Group> {
     String? baselineRealismState,
     String? characterSystemPrompts,
     Value<String?> stableId = const Value.absent(),
+    Value<String?> folderId = const Value.absent(),
     DateTime? updatedAt,
     Value<DateTime?> deletedAt = const Value.absent(),
   }) => Group(
@@ -5789,6 +5826,7 @@ class Group extends DataClass implements Insertable<Group> {
     characterSystemPrompts:
         characterSystemPrompts ?? this.characterSystemPrompts,
     stableId: stableId.present ? stableId.value : this.stableId,
+    folderId: folderId.present ? folderId.value : this.folderId,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
   );
@@ -5836,6 +5874,7 @@ class Group extends DataClass implements Insertable<Group> {
           ? data.characterSystemPrompts.value
           : this.characterSystemPrompts,
       stableId: data.stableId.present ? data.stableId.value : this.stableId,
+      folderId: data.folderId.present ? data.folderId.value : this.folderId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
     );
@@ -5862,6 +5901,7 @@ class Group extends DataClass implements Insertable<Group> {
           ..write('baselineRealismState: $baselineRealismState, ')
           ..write('characterSystemPrompts: $characterSystemPrompts, ')
           ..write('stableId: $stableId, ')
+          ..write('folderId: $folderId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
           ..write(')'))
@@ -5869,7 +5909,7 @@ class Group extends DataClass implements Insertable<Group> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     name,
     characterIds,
@@ -5888,9 +5928,10 @@ class Group extends DataClass implements Insertable<Group> {
     baselineRealismState,
     characterSystemPrompts,
     stableId,
+    folderId,
     updatedAt,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5913,6 +5954,7 @@ class Group extends DataClass implements Insertable<Group> {
           other.baselineRealismState == this.baselineRealismState &&
           other.characterSystemPrompts == this.characterSystemPrompts &&
           other.stableId == this.stableId &&
+          other.folderId == this.folderId &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
 }
@@ -5936,6 +5978,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
   final Value<String> baselineRealismState;
   final Value<String> characterSystemPrompts;
   final Value<String?> stableId;
+  final Value<String?> folderId;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
   final Value<int> rowid;
@@ -5958,6 +6001,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     this.baselineRealismState = const Value.absent(),
     this.characterSystemPrompts = const Value.absent(),
     this.stableId = const Value.absent(),
+    this.folderId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -5981,6 +6025,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     this.baselineRealismState = const Value.absent(),
     this.characterSystemPrompts = const Value.absent(),
     this.stableId = const Value.absent(),
+    this.folderId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -6005,6 +6050,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     Expression<String>? baselineRealismState,
     Expression<String>? characterSystemPrompts,
     Expression<String>? stableId,
+    Expression<String>? folderId,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
     Expression<int>? rowid,
@@ -6032,6 +6078,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
       if (characterSystemPrompts != null)
         'character_system_prompts': characterSystemPrompts,
       if (stableId != null) 'stable_id': stableId,
+      if (folderId != null) 'folder_id': folderId,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (rowid != null) 'rowid': rowid,
@@ -6057,6 +6104,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     Value<String>? baselineRealismState,
     Value<String>? characterSystemPrompts,
     Value<String?>? stableId,
+    Value<String?>? folderId,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? deletedAt,
     Value<int>? rowid,
@@ -6083,6 +6131,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
       characterSystemPrompts:
           characterSystemPrompts ?? this.characterSystemPrompts,
       stableId: stableId ?? this.stableId,
+      folderId: folderId ?? this.folderId,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       rowid: rowid ?? this.rowid,
@@ -6154,6 +6203,9 @@ class GroupsCompanion extends UpdateCompanion<Group> {
     if (stableId.present) {
       map['stable_id'] = Variable<String>(stableId.value);
     }
+    if (folderId.present) {
+      map['folder_id'] = Variable<String>(folderId.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -6187,6 +6239,7 @@ class GroupsCompanion extends UpdateCompanion<Group> {
           ..write('baselineRealismState: $baselineRealismState, ')
           ..write('characterSystemPrompts: $characterSystemPrompts, ')
           ..write('stableId: $stableId, ')
+          ..write('folderId: $folderId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -18031,6 +18084,7 @@ typedef $$GroupsTableCreateCompanionBuilder =
       Value<String> baselineRealismState,
       Value<String> characterSystemPrompts,
       Value<String?> stableId,
+      Value<String?> folderId,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -18055,6 +18109,7 @@ typedef $$GroupsTableUpdateCompanionBuilder =
       Value<String> baselineRealismState,
       Value<String> characterSystemPrompts,
       Value<String?> stableId,
+      Value<String?> folderId,
       Value<DateTime> updatedAt,
       Value<DateTime?> deletedAt,
       Value<int> rowid,
@@ -18156,6 +18211,11 @@ class $$GroupsTableFilterComposer
 
   ColumnFilters<String> get stableId => $composableBuilder(
     column: $table.stableId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get folderId => $composableBuilder(
+    column: $table.folderId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18269,6 +18329,11 @@ class $$GroupsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get folderId => $composableBuilder(
+    column: $table.folderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -18367,6 +18432,9 @@ class $$GroupsTableAnnotationComposer
   GeneratedColumn<String> get stableId =>
       $composableBuilder(column: $table.stableId, builder: (column) => column);
 
+  GeneratedColumn<String> get folderId =>
+      $composableBuilder(column: $table.folderId, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -18420,6 +18488,7 @@ class $$GroupsTableTableManager
                 Value<String> baselineRealismState = const Value.absent(),
                 Value<String> characterSystemPrompts = const Value.absent(),
                 Value<String?> stableId = const Value.absent(),
+                Value<String?> folderId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -18442,6 +18511,7 @@ class $$GroupsTableTableManager
                 baselineRealismState: baselineRealismState,
                 characterSystemPrompts: characterSystemPrompts,
                 stableId: stableId,
+                folderId: folderId,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,
@@ -18466,6 +18536,7 @@ class $$GroupsTableTableManager
                 Value<String> baselineRealismState = const Value.absent(),
                 Value<String> characterSystemPrompts = const Value.absent(),
                 Value<String?> stableId = const Value.absent(),
+                Value<String?> folderId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -18488,6 +18559,7 @@ class $$GroupsTableTableManager
                 baselineRealismState: baselineRealismState,
                 characterSystemPrompts: characterSystemPrompts,
                 stableId: stableId,
+                folderId: folderId,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 rowid: rowid,

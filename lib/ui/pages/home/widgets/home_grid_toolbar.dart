@@ -33,7 +33,7 @@ class HomeGridToolbar extends StatelessWidget {
     required this.isSelecting,
     required this.isOrganizing,
     required this.activeFolderId,
-    required this.selectedCharacterIds,
+    required this.selectedCount,
     required this.sortMode,
     required this.gridScale,
     required this.modeToggle,
@@ -53,7 +53,9 @@ class HomeGridToolbar extends StatelessWidget {
   final bool isSelecting;
   final bool isOrganizing;
   final String? activeFolderId;
-  final Set<String> selectedCharacterIds;
+
+  /// Characters + groups — groups are selectable alongside characters now.
+  final int selectedCount;
   final String sortMode;
   final double gridScale;
   final Widget modeToggle;
@@ -101,7 +103,7 @@ class HomeGridToolbar extends StatelessWidget {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        '${selectedCharacterIds.length} selected',
+                        '$selectedCount selected',
                         overflow: TextOverflow.ellipsis,
                         softWrap: false,
                         style: Theme.of(context).textTheme.headlineSmall

@@ -6917,3 +6917,64 @@ session's context tail, so the executable spec (8 ordered work items,
 including the CCF-safety note that group_chats is not an
 externally-written table) is committed for the next session, alongside
 the already-queued folder-aware wizard picker item.
+
+## 2026-07-31 (UTC) — Groups move through folders like characters (folder-groups.md implemented)
+
+Files: lib/database/database.dart, lib/database/database.g.dart (generated),
+lib/services/folder_service.dart, lib/services/group_chat_repository.dart,
+lib/ui/widgets/character_card_grid.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/pages/home/cards/folder_grid_card.dart,
+lib/ui/pages/home_page.dart, lib/ui/pages/home/home_page_chrome.dart,
+lib/ui/pages/home/home_page_handlers.dart,
+lib/ui/pages/home/home_page_dialogs.dart,
+lib/services/web/facade/character_library_facade.dart,
+lib/services/web/facade/group_facade.dart,
+lib/services/web/web_server_host.dart,
+web_ui/src/hooks/useLibrary.ts, web_ui/src/pages/CharactersPage.tsx,
+web_ui/src/components/library/LibraryCards.tsx,
+test/services/folder_service_groups_test.dart (new),
+test/golden/widget/home_golden_test.dart, docs/Rawhide.md,
+docs/design/folder-groups.md (status note)
+
+Implements docs/design/folder-groups.md (all 8 work items). Schema v42 adds
+nullable groups.folder_id (additive; groups is NOT a Character-Card-Forge
+table) + onUpgrade step + _repairMissingSchemaColumns entry. FolderService
+now buckets group ids per folder in _load and gains
+addGroupToFolder/removeGroupFromFolder/getFolderForGroup/groupIdsInFolder
+(+Recursive); deleteFolder unassigns groups back to root.
+
+Load-bearing fix: AppDatabase.updateGroup switched from .replace() to
+partial .write() (same rationale as updateCharacter's existing comment) —
+with .replace(), every GroupChatRepository.save() would have nulled
+folder_id since the save companion doesn't carry it. save() now bumps
+updatedAt explicitly (the column default no longer fires). Regression test
+covers a partial write preserving folder membership. New
+updateGroupFolderId helper mirrors updateCharacterImagePath.
+
+Grid: groups filter by active folder / search scope exactly like
+characters (the old bucket pinned all groups to top level and hid them in
+select/organize modes); top-level view hides foldered groups. Group cards
+are now selectable (parallel _selectedGroupIds set, per the spec), the
+move/delete toolbars act on both sets (mass delete extends the ONE
+_runMassDelete pipeline with a groups list), and the group context menu
+gains Move to Folder / Remove from Folder. _showMoveToFolderDialog was
+generalized to take a title + onMove callback (one dialog, three callers)
+instead of being hard-wired to the character selection.
+
+Web parity (same body of work): GroupFacade.list() reports folderId ('' at
+root, additive field); CharacterLibraryFacade.moveToFolder/bulkMove/
+bulkDelete resolve group_-prefixed ids (group ids natively carry the
+prefix) via an optional GroupChatRepository; useLibrary/CharactersPage
+filter groups per folder + search scope, GroupCard is selectable +
+draggable into folders, group card menu gains move/remove, mixed
+selections move and delete in one call.
+
+Deliberately NOT done: folder-preview montages still sample characters
+only (group previews would need per-folder async DB avatar loads inside a
+stateless build — the exact per-rebuild-I/O pattern io-lint exists to
+ban); counts include groups instead. The folder-aware wizard picker
+remains queued (explicitly out of scope in the spec).
+
+Gates: flutter analyze clean (0 issues), dart fix --dry-run clean, web tsc
++ vitest green, full flutter test suite + goldens green before push.

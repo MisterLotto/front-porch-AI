@@ -450,6 +450,7 @@ class WebServerHost extends ChangeNotifier {
             _characterRepository!,
             folderService,
             _storage,
+            _groupChatRepository,
           )
         : null;
 
@@ -473,7 +474,13 @@ class WebServerHost extends ChangeNotifier {
         : null;
 
     final groupFacade = _groupChatRepository != null
-        ? GroupFacade(_groupChatRepository!, _storage, _characterRepository, db)
+        ? GroupFacade(
+            _groupChatRepository!,
+            _storage,
+            _characterRepository,
+            db,
+            _folderService,
+          )
         : null;
 
     final settingsFacade = _llmProvider != null

@@ -81,6 +81,7 @@ class FolderGridCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final charCount = folder.characterPaths.length;
+    final groupCount = folder.groupIds.length;
 
     return DragTarget<CharacterCard>(
       onAcceptWithDetails: (details) {
@@ -153,7 +154,10 @@ class FolderGridCard extends StatelessWidget {
                     if (!isTiny) ...[
                       SizedBox(height: isSmall ? 4 : 8),
                       Text(
-                        '$charCount character${charCount == 1 ? '' : 's'}',
+                        groupCount > 0
+                            ? '$charCount character${charCount == 1 ? '' : 's'}'
+                                  ' · $groupCount group${groupCount == 1 ? '' : 's'}'
+                            : '$charCount character${charCount == 1 ? '' : 's'}',
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
                           fontSize: isSmall ? 11 : 13,

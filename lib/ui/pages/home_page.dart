@@ -77,6 +77,7 @@ class _HomePageState extends State<HomePage> {
   // Multi-select for folder organization
   bool _isOrganizing = false;
   final Set<String> _selectedCharacterIds = {}; // imagePath-based IDs
+  final Set<String> _selectedGroupIds = {}; // GroupChat.id keys
 
   // Sorting
   String _sortMode = 'name'; // 'name', 'recent', 'importDate', 'messages'
@@ -255,7 +256,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _isSelecting = !_isSelecting;
       _isOrganizing = false;
-      if (!_isSelecting) _selectedCharacterIds.clear();
+      if (!_isSelecting) {
+        _selectedCharacterIds.clear();
+        _selectedGroupIds.clear();
+      }
     });
   }
 
@@ -263,7 +267,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _isOrganizing = !_isOrganizing;
       _isSelecting = false;
-      if (!_isOrganizing) _selectedCharacterIds.clear();
+      if (!_isOrganizing) {
+        _selectedCharacterIds.clear();
+        _selectedGroupIds.clear();
+      }
     });
   }
 
@@ -276,7 +283,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       if (_selectedCharacterIds.contains(id)) {
         _selectedCharacterIds.remove(id);
-        if (_selectedCharacterIds.isEmpty) {
+        if (_selectedCharacterIds.isEmpty && _selectedGroupIds.isEmpty) {
           _isSelecting = false;
           _isOrganizing = false;
         }
@@ -286,11 +293,28 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  /// Group analogue of [_toggleSelect] — groups are selected by their id
+  /// (they have no image-filename key).
+  void _toggleSelectGroup(GroupChat group) {
+    setState(() {
+      if (_selectedGroupIds.contains(group.id)) {
+        _selectedGroupIds.remove(group.id);
+        if (_selectedCharacterIds.isEmpty && _selectedGroupIds.isEmpty) {
+          _isSelecting = false;
+          _isOrganizing = false;
+        }
+      } else {
+        _selectedGroupIds.add(group.id);
+      }
+    });
+  }
+
   void _cancelSelection() {
     setState(() {
       _isSelecting = false;
       _isOrganizing = false;
       _selectedCharacterIds.clear();
+      _selectedGroupIds.clear();
     });
   }
 
@@ -412,6 +436,7 @@ class _HomePageState extends State<HomePage> {
             isSelecting: _isSelecting,
             isOrganizing: _isOrganizing,
             selectedCharacterIds: _selectedCharacterIds,
+            selectedGroupIds: _selectedGroupIds,
             searchController: _searchController,
             gridScrollController: _gridScrollController,
             repo: repo,
@@ -421,6 +446,7 @@ class _HomePageState extends State<HomePage> {
             onTapCharacter: _handleTapCharacter,
             onTapGroup: _handleTapGroup,
             onToggleSelect: _toggleSelect,
+            onToggleSelectGroup: _toggleSelectGroup,
             onToggleSelectMode: _toggleSelectMode,
             onToggleOrganizeMode: _toggleOrganizeMode,
             onContextMenuAction: _handleContextMenuAction,

@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📁 **Group chats can live in folders now** — Group cards were stuck on the Home Screen's top level; now they move through your folder hierarchy exactly like characters. Right-click a group for "Move to Folder" / "Remove from Folder", multi-select mixes characters and groups in one grab (move or delete them together), folder cards count their groups, and folder-scoped search finds groups too. The web library matches: drag a group into a folder, use its card menu, or multi-select — same as characters.
+
 - ✅ **Multi-select can move characters to folders** — The same multi-select you use for mass deletion now has a "Move to Folder" button right beside Delete: pick several characters, choose a folder, done. (The web library already had this; desktop caught up.)
 
 - 🧠 **"Where we are" recaps stopped going missing** — Some models (thinking-mode remote models especially) would happily write journal memories but skip the final recap, so the sidebar's "Where we are" stayed blank — and looked like it vanished every time you reopened the app. The Journal now insists on the recap every pass (verified live against GLM-5.2) and keeps each pass to the handful of memories that actually mattered, instead of letting a chatty model flood dozens of near-duplicate entries into the diary.

@@ -144,6 +144,9 @@ class GroupChatRepository extends ChangeNotifier {
       worldIds: Value(jsonEncode(group.worldIds)),
       inheritCharacterLorebooks: Value(group.inheritCharacterLorebooks),
       baselineRealismState: Value(group.baselineRealismState),
+      // updateGroup now uses partial .write() (so folder_id survives saves);
+      // bump updatedAt explicitly since the column default no longer applies.
+      updatedAt: Value(DateTime.now()),
     );
 
     if (existing != null) {

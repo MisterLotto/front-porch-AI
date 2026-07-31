@@ -312,6 +312,11 @@ class Groups extends Table {
   /// writer set, so adding it cannot break CCF. Generated lazily in code.
   TextColumn get stableId => text().nullable()();
 
+  /// Home-screen folder membership (schema v42), the group analogue of
+  /// Characters.folderId. Null = top level. Nullable + additive; groups is
+  /// outside the Character Card Forge external-writer set.
+  TextColumn get folderId => text().nullable()();
+
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -911,6 +916,8 @@ class AppDatabase extends _$AppDatabase {
         'baseline_realism_state TEXT NOT NULL DEFAULT "{}"',
         // v32 — final deprecation of the last blob hack
         'character_system_prompts TEXT NOT NULL DEFAULT "{}"',
+        // v42 — groups foldering (nullable; null = home top level)
+        'folder_id TEXT',
       ],
       'sessions': [
         // v30 — the live per-group-member realism state (clean replacement for hidden checkpoint msgs)
@@ -1185,7 +1192,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 42;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1890,6 +1897,18 @@ class AppDatabase extends _$AppDatabase {
         try {
           await customStatement('ALTER TABLE worlds ADD COLUMN place_traits TEXT');
           debugPrint('[DB] v41: added worlds.place_traits');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
+      }
+      if (from < 42) {
+        // v41→v42: groups foldering (docs/design/folder-groups.md). One
+        // nullable column so group cards can live in the same Home Screen
+        // folder hierarchy as characters; null ⇒ top level. Additive only —
+        // groups is not a Character-Card-Forge-written table.
+        try {
+          await customStatement('ALTER TABLE groups ADD COLUMN folder_id TEXT');
+          debugPrint('[DB] v42: added groups.folder_id');
         } catch (_) {
           // already present (re-run / dual-version)
         }
@@ -2855,9 +2874,27 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<bool> updateGroup(GroupsCompanion group) async {
-    final result = await update(groups).replace(group);
+    // IMPORTANT: Use .write() not .replace() — .replace() overwrites the entire
+    // row, so any column absent from the companion (e.g. folder_id, which is
+    // owned by FolderService rather than the repository's save path) would be
+    // silently reset to null/default on every group save.
+    final rows = await (update(
+      groups,
+    )..where((g) => g.id.equals(group.id.value))).write(group);
     await bumpSyncVersion();
-    return result;
+    return rows > 0;
+  }
+
+  /// Update ONLY the folder membership for a group (preserves all other data).
+  /// The group analogue of [updateCharacter]'s folderId writes; null = top level.
+  Future<void> updateGroupFolderId(String id, String? folderId) async {
+    await (update(groups)..where((g) => g.id.equals(id))).write(
+      GroupsCompanion(
+        folderId: Value(folderId),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    await bumpSyncVersion();
   }
 
   Future<int> deleteGroupById(String id) async {

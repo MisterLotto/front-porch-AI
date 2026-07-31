@@ -28,6 +28,7 @@ import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/models/group_member.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_card_exporter.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
@@ -40,10 +41,14 @@ import 'package:front_porch_ai/utils/character_id.dart';
 /// chat" in one place. Reuses GroupChatRepository / GroupCardExporter /
 /// CharacterRepository directly; no duplicated logic.
 class GroupFacade {
-  GroupFacade(this._groups, this._storage, [this.repo, this.db]);
+  GroupFacade(this._groups, this._storage, [this.repo, this.db, this.folders]);
 
   final GroupChatRepository _groups;
   final StorageService _storage;
+
+  /// Folder membership source so the library list can report each group's
+  /// folder (groups folder like characters now) — null in auth-only boots.
+  final FolderService? folders;
 
   /// Needed for "Extract Characters" (library copies via duplicateCharacter) —
   /// null until the CharacterRepository is injected.
@@ -62,6 +67,8 @@ class GroupFacade {
       result.add({
         'id': g.id,
         'name': g.name,
+        // Same ''-at-root convention as the character list's folderId.
+        'folderId': folders?.getFolderForGroup(g.id)?.id ?? '',
         'memberCount': members.length,
         'members': members
             .map(

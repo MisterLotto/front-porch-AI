@@ -39,17 +39,23 @@ class GroupGridCard extends StatefulWidget {
     super.key,
     required this.group,
     required this.groupRepo,
+    required this.activeFolderId,
     required this.isSelecting,
     required this.isOrganizing,
+    required this.selectedGroupIds,
     required this.onTapGroup,
+    required this.onToggleSelectGroup,
     this.onGroupContextMenuAction,
   });
 
   final GroupChat group;
   final GroupChatRepository groupRepo;
+  final String? activeFolderId;
   final bool isSelecting;
   final bool isOrganizing;
+  final Set<String> selectedGroupIds;
   final Future<void> Function(GroupChat group) onTapGroup;
+  final void Function(GroupChat group) onToggleSelectGroup;
 
   /// Called when the user right-clicks (secondary tap) a group card.
   final void Function(String action, GroupChat group)? onGroupContextMenuAction;
@@ -86,6 +92,7 @@ class _GroupGridCardState extends State<GroupGridCard> {
     // Local shadow so Dart can promote the null-check across the closure below
     // (a field can't be promoted, but a local can).
     final onGroupContextMenuAction = widget.onGroupContextMenuAction;
+    final isSelectedCard = widget.selectedGroupIds.contains(group.id);
     return FutureBuilder<List<File>>(
       future: _avatarsFuture,
       builder: (context, snapshot) {
@@ -96,11 +103,20 @@ class _GroupGridCardState extends State<GroupGridCard> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: AppColors.porchTerracottaOf(context).withValues(alpha: 0.3),
+              color: isSelectedCard
+                  ? AppColors.porchTerracottaOf(context)
+                  : AppColors.porchTerracottaOf(
+                      context,
+                    ).withValues(alpha: 0.3),
+              width: isSelectedCard ? 2.5 : 1,
             ),
           ),
           child: InkWell(
             onTap: () async {
+              if (isSelecting || isOrganizing) {
+                widget.onToggleSelectGroup(group);
+                return;
+              }
               await onTapGroup(group);
             },
             child: Stack(
@@ -187,6 +203,48 @@ class _GroupGridCardState extends State<GroupGridCard> {
                     );
                   },
                 ),
+
+                // Selection check circle — parity with character cards.
+                if (isSelecting || isOrganizing)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: isSelectedCard
+                            ? (isOrganizing
+                                  ? AppColors.porchHoneyOf(context)
+                                  : AppColors.porchTerracottaOf(context))
+                            : AppColors.resolve(
+                                context,
+                                Colors.black54,
+                                Colors.black12,
+                              ),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelectedCard
+                              ? (isOrganizing
+                                    ? AppColors.porchHoneyOf(context)
+                                    : AppColors.porchTerracottaOf(context))
+                              : AppColors.resolve(
+                                  context,
+                                  Colors.white38,
+                                  Colors.black38,
+                                ),
+                          width: 2,
+                        ),
+                      ),
+                      child: isSelectedCard
+                          ? const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
+                          : null,
+                    ),
+                  ),
 
                 // Right-click (secondary tap) context menu for groups — parity with character cards.
                 // Only active when not in bulk select/organize modes (same guard as characters).
@@ -283,6 +341,43 @@ class _GroupGridCardState extends State<GroupGridCard> {
                                 contentPadding: EdgeInsets.zero,
                               ),
                             ),
+                            PopupMenuItem(
+                              value: 'move_folder',
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.drive_file_move,
+                                  color: AppColors.porchAmberOf(context),
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  'Move to Folder',
+                                  style: TextStyle(
+                                    color: AppColors.textPrimary(context),
+                                  ),
+                                ),
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                            if (widget.activeFolderId != null)
+                              PopupMenuItem(
+                                value: 'remove_folder',
+                                child: ListTile(
+                                  leading: Icon(
+                                    Icons.folder_off,
+                                    color: AppColors.porchAmberOf(context),
+                                    size: 20,
+                                  ),
+                                  title: Text(
+                                    'Remove from Folder',
+                                    style: TextStyle(
+                                      color: AppColors.porchAmberOf(context),
+                                    ),
+                                  ),
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                              ),
                             PopupMenuItem(
                               value: 'delete',
                               child: ListTile(

@@ -5,6 +5,13 @@ Screen top level and cannot be moved through the folder hierarchy at all.
 They must be movable exactly like characters. Written as an executable spec
 for the next session; nothing here is implemented yet.*
 
+**STATUS 2026-07-31: IMPLEMENTED** (schema v42, all 8 work items — see
+`.claude/changelog.md` entry of the same date). One deviation: folder-card
+*previews* still sample characters only (a group preview would need
+per-folder async DB avatar loads inside a stateless build — the
+per-rebuild-I/O pattern io-lint bans); counts include groups. The
+"Related queued item" below (folder-aware wizard picker) remains open.
+
 ## How character foldering works today (mirror it)
 
 - Membership lives on the ROW: `Characters.folderId` (nullable). Folder

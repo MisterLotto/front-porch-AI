@@ -277,6 +277,27 @@ extension _HomePageChrome on _HomePageState {
       case 'extract':
         _extractCharactersFromGroup(group);
         break;
+      case 'move_folder':
+        final folderService = Provider.of<FolderService>(
+          context,
+          listen: false,
+        );
+        _showMoveToFolderDialog(
+          context,
+          folderService,
+          title: 'Move "${group.name}" to folder',
+          onMove: (folderId) =>
+              folderService.addGroupToFolder(folderId, group.id),
+        );
+        break;
+      case 'remove_folder':
+        if (_activeFolderId != null) {
+          Provider.of<FolderService>(
+            context,
+            listen: false,
+          ).removeGroupFromFolder(_activeFolderId!, group.id);
+        }
+        break;
       case 'delete':
         _confirmDeleteGroup(context, group);
         break;
@@ -369,7 +390,22 @@ extension _HomePageChrome on _HomePageState {
   void _handleMoveToFolder(Set<String> selectedIds) {
     final repo = Provider.of<CharacterRepository>(context, listen: false);
     final folderService = Provider.of<FolderService>(context, listen: false);
-    _showMoveToFolderDialog(context, repo, folderService);
+    final chars = _selectedCharacterIds.length;
+    final groups = _selectedGroupIds.length;
+    // "N characters" / "N groups" when the selection is homogeneous,
+    // "N items" for a mixed grab.
+    final title = groups == 0
+        ? 'Move $chars character${chars == 1 ? '' : 's'} to folder'
+        : chars == 0
+        ? 'Move $groups group${groups == 1 ? '' : 's'} to folder'
+        : 'Move ${chars + groups} items to folder';
+    _showMoveToFolderDialog(
+      context,
+      folderService,
+      title: title,
+      onMove: (folderId) =>
+          _moveSelectedToFolder(context, folderId, repo, folderService),
+    );
   }
 
   void _handleSortChanged(String mode) {

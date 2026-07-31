@@ -38,6 +38,8 @@ export interface LibGroupMember {
 export interface LibGroup {
   id: string;
   name: string;
+  /** Owning folder id, '' at the root — groups folder like characters now. */
+  folderId: string;
   memberCount: number;
   members: LibGroupMember[];
 }
@@ -117,7 +119,8 @@ export function useLibrary() {
 
   const searching = search.trim().length > 0;
 
-  // Folders + groups load once (groups are shown at the library root only).
+  // Folders + groups load once (the page filters groups by their folderId,
+  // mirroring the desktop grid).
   useEffect(() => {
     api.get<{ folders: LibFolder[] }>('/api/folders').then((r) => setFolders(r.folders)).catch(() => {});
     api.get<{ groups: LibGroup[] }>('/api/groups').then((r) => setGroups(r.groups)).catch(() => {});
@@ -298,10 +301,13 @@ export function useLibrary() {
     async (ids: string[]) => {
       try {
         // One severe-delete endpoint (was N parallel single deletes) — matches
-        // the desktop mass-delete pipeline and keeps the confirm gate meaningful.
+        // the desktop mass-delete pipeline and keeps the confirm gate
+        // meaningful. The server routes `group_…` ids to the group delete, so
+        // a mixed character + group selection deletes in one call.
         await api.post('/api/characters/bulk-delete', { ids });
         const drop = new Set(ids);
         setChars((cs) => cs.filter((c) => !drop.has(c.id)));
+        setGroups((gs) => gs.filter((g) => !drop.has(g.id)));
         cancelSelecting();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not delete selection');

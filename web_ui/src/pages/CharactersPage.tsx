@@ -8,7 +8,7 @@
 // size + import-date sort, and group export/extract). The page is a thin shell;
 // data + actions live in useLibrary and the library/* components.
 
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InstallHint } from '../components/InstallHint';
 import { useLayout } from '../hooks/useBreakpoint';
@@ -97,6 +97,16 @@ export function CharactersPage() {
   const groupMenu = (g: LibGroup): CardMenuItem[] => [
     { label: 'Export Group PNG', icon: '🖼', onClick: () => lib.exportGroupPng(g) },
     { label: 'Extract characters', icon: '👥', onClick: () => setDialog({ kind: 'extractGroup', group: g }) },
+    { label: 'Move to folder…', icon: '📁', onClick: () => setDialog({ kind: 'move', ids: [g.id] }) },
+    ...(lib.folderId
+      ? [
+          {
+            label: 'Remove from folder',
+            icon: '📤',
+            onClick: () => lib.moveToFolder([g.id], null),
+          },
+        ]
+      : []),
     { label: 'Delete', icon: '🗑', danger: true, onClick: () => setDialog({ kind: 'deleteGroup', group: g }) },
   ];
 
@@ -122,7 +132,38 @@ export function CharactersPage() {
   };
 
   const gridStyle = { ['--lib-card-min']: `${lib.gridMin}px` } as CSSProperties;
-  const showGroups = !lib.searching && lib.folderId === null && lib.groups.length > 0;
+
+  // Groups follow the folder hierarchy exactly like characters (desktop grid
+  // parity): browse shows the current folder's groups ('' folderId = root);
+  // searching matches by name — folder-scoped (recursive) unless scope=All.
+  const subtreeFolderIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!lib.folderId) return ids;
+    ids.add(lib.folderId);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of lib.folders) {
+        if (f.parentId && ids.has(f.parentId) && !ids.has(f.id)) {
+          ids.add(f.id);
+          grew = true;
+        }
+      }
+    }
+    return ids;
+  }, [lib.folders, lib.folderId]);
+  const visibleGroups = useMemo(() => {
+    if (lib.searching) {
+      const q = lib.search.trim().toLowerCase();
+      let gs = lib.groups;
+      if (lib.scope !== 'allCharacters' && lib.folderId) {
+        gs = gs.filter((g) => subtreeFolderIds.has(g.folderId));
+      }
+      return gs.filter((g) => g.name.toLowerCase().includes(q));
+    }
+    return lib.groups.filter((g) => (g.folderId || null) === lib.folderId);
+  }, [lib.groups, lib.searching, lib.search, lib.scope, lib.folderId, subtreeFolderIds]);
+  const showGroups = visibleGroups.length > 0;
   const showSubfolders = !lib.searching && lib.subfolders.length > 0;
 
   // Reveal the character grid in chunks so a large library doesn't mount
@@ -222,12 +263,17 @@ export function CharactersPage() {
         <>
           <h3 className="section-label">Group chats</h3>
           <div className="lib-grid" style={gridStyle}>
-            {lib.groups.map((g) => (
+            {visibleGroups.map((g) => (
               <GroupCard
                 key={g.id}
                 group={g}
+                selecting={lib.selecting}
+                selected={lib.selectedIds.has(g.id)}
                 onOpen={() => lib.openGroup(g)}
+                onToggleSelect={() => lib.toggleSelect(g.id)}
                 onMenu={(e) => openMenu(e, groupMenu(g))}
+                dndEnabled={wide}
+                onDragStart={() => setDraggedId(g.id)}
               />
             ))}
           </div>
@@ -292,7 +338,7 @@ export function CharactersPage() {
       {dialog?.kind === 'deleteFolder' && (
         <ConfirmDialog
           title="Delete folder"
-          message={`Delete "${dialog.folder.name}"? Subfolders are also removed and the characters inside move back to the root (the characters themselves are kept).`}
+          message={`Delete "${dialog.folder.name}"? Subfolders are also removed and the characters and groups inside move back to the root (the characters and groups themselves are kept).`}
           confirmLabel="Delete folder"
           danger
           onConfirm={() => lib.deleteFolder(dialog.folder.id)}
@@ -302,7 +348,7 @@ export function CharactersPage() {
       {dialog?.kind === 'deleteFolderDeep' && (
         <TypeConfirmDialog
           title="Delete folder + characters"
-          message={`This will PERMANENTLY delete the folder "${dialog.folder.name}", its subfolders, and EVERY character inside them — cards, images, and chat histories. There is no undo and no recycle bin.`}
+          message={`This will PERMANENTLY delete the folder "${dialog.folder.name}", its subfolders, and EVERY character inside them — cards, images, and chat histories. Group chats inside are kept and move back to the root. There is no undo and no recycle bin.`}
           confirmLabel="Delete everything"
           onConfirm={() => lib.deleteFolderDeep(dialog.folder.id)}
           onClose={() => setDialog(null)}
@@ -320,8 +366,12 @@ export function CharactersPage() {
       )}
       {dialog?.kind === 'deleteSelected' && (
         <TypeConfirmDialog
-          title={`Delete ${dialog.ids.length} character${dialog.ids.length === 1 ? '' : 's'}`}
-          message={`This will PERMANENTLY delete ${dialog.ids.length} selected character${dialog.ids.length === 1 ? '' : 's'} — their cards, images, and chat histories. There is no undo and no recycle bin.`}
+          title={`Delete ${dialog.ids.length} ${
+            dialog.ids.some((id) => id.startsWith('group_'))
+              ? `item${dialog.ids.length === 1 ? '' : 's'}`
+              : `character${dialog.ids.length === 1 ? '' : 's'}`
+          }`}
+          message={`This will PERMANENTLY delete the ${dialog.ids.length} selected item${dialog.ids.length === 1 ? '' : 's'} — character cards, images, chat histories, and group chats (deleting a group keeps its member characters). There is no undo and no recycle bin.`}
           confirmLabel={`Delete ${dialog.ids.length}`}
           onConfirm={() => lib.bulkDelete(dialog.ids)}
           onClose={() => setDialog(null)}

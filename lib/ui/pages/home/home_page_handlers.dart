@@ -55,11 +55,16 @@ extension _HomePageHandlers on _HomePageState {
 
   // ─── Group Creation Dialog ──────────────────────────────────────
 
+  /// The ONE warm folder-picker dialog. Callers supply the [title] and what
+  /// actually moves via [onMove] — the multi-select toolbar moves the whole
+  /// selection (characters + groups) while a group card's context menu moves
+  /// just that group. Generalized instead of duplicated per surface.
   void _showMoveToFolderDialog(
     BuildContext context,
-    CharacterRepository repo,
-    FolderService folderService,
-  ) {
+    FolderService folderService, {
+    required String title,
+    required Future<void> Function(String folderId) onMove,
+  }) {
     final folders = folderService.folders.toList()
       ..sort((a, b) {
         final pathA = folderService.getFolderPath(a.id).toLowerCase();
@@ -69,8 +74,7 @@ extension _HomePageHandlers on _HomePageState {
 
     showWarmDialog(
       context,
-      title:
-          'Move ${_selectedCharacterIds.length} character${_selectedCharacterIds.length == 1 ? '' : 's'} to folder',
+      title: title,
       icon: Icons.drive_file_move,
       accent: AppColors.porchHoneyOf(context),
       content: SingleChildScrollView(
@@ -88,6 +92,8 @@ extension _HomePageHandlers on _HomePageState {
             ...folders.map((folder) {
               final folderPath = folderService.getFolderPath(folder.id);
               final isSubfolder = folder.parentId != null;
+              final memberCount =
+                  folder.characterPaths.length + folder.groupIds.length;
               return ListTile(
                 leading: Icon(
                   isSubfolder ? Icons.subdirectory_arrow_right : Icons.folder,
@@ -98,7 +104,7 @@ extension _HomePageHandlers on _HomePageState {
                   style: TextStyle(color: AppColors.textPrimary(context)),
                 ),
                 subtitle: Text(
-                  '${folder.characterPaths.length} characters',
+                  '$memberCount item${memberCount == 1 ? '' : 's'}',
                   style: TextStyle(
                     color: AppColors.textTertiary(context),
                     fontSize: 12,
@@ -109,12 +115,7 @@ extension _HomePageHandlers on _HomePageState {
                 ),
                 onTap: () async {
                   Navigator.pop(context);
-                  await _moveSelectedToFolder(
-                    context,
-                    folder.id,
-                    repo,
-                    folderService,
-                  );
+                  await onMove(folder.id);
                 },
               );
             }),
@@ -136,12 +137,7 @@ extension _HomePageHandlers on _HomePageState {
                 final name = await _promptFolderName(context);
                 if (name != null && name.isNotEmpty && context.mounted) {
                   final folder = await folderService.createFolder(name);
-                  await _moveSelectedToFolder(
-                    context,
-                    folder.id,
-                    repo,
-                    folderService,
-                  );
+                  await onMove(folder.id);
                 }
               },
             ),
@@ -192,12 +188,15 @@ extension _HomePageHandlers on _HomePageState {
         await folderService.addToFolder(folderId, card!.imagePath!);
       }
     }
+    // Groups ride the same move — their selection ids ARE their group ids.
+    for (final groupId in _selectedGroupIds) {
+      await folderService.addGroupToFolder(folderId, groupId);
+    }
+    final moved = _selectedCharacterIds.length + _selectedGroupIds.length;
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Moved ${_selectedCharacterIds.length} character${_selectedCharacterIds.length == 1 ? '' : 's'} to folder',
-          ),
+          content: Text('Moved $moved item${moved == 1 ? '' : 's'} to folder'),
         ),
       );
     }
@@ -299,6 +298,7 @@ extension _HomePageHandlers on _HomePageState {
     final charCount = folderService
         .getCharactersInFolderRecursive(folder.id)
         .length;
+    final groupCount = folderService.groupIdsInFolderRecursive(folder.id).length;
     showWarmDialog(
       context,
       title: 'Delete Folder',
@@ -306,9 +306,12 @@ extension _HomePageHandlers on _HomePageState {
       content: WarmDialogText(
         'Delete "${folder.name}"?\n\n'
         '• Delete Folder Only: the $charCount character'
-        '${charCount == 1 ? '' : 's'} inside return to the top level.\n'
+        '${charCount == 1 ? '' : 's'}'
+        '${groupCount > 0 ? ' and $groupCount group${groupCount == 1 ? '' : 's'}' : ''}'
+        ' inside return to the top level.\n'
         '• Delete Folder + Characters: PERMANENTLY deletes the folder AND '
-        'every character inside it (including subfolders).',
+        'every character inside it (including subfolders)'
+        '${groupCount > 0 ? '; groups are kept and return to the top level' : ''}.',
       ),
       actions: [
         warmDialogCancel(context),
